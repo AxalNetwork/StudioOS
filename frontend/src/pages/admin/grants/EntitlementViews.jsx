@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { programEntitlementsApi } from '../../../lib/api/programEntitlements.js';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, Pill, actionGhost, usePhoneWidth } from '../../../ui';
+import { ReasonDialog } from './GrantDialogs';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { LEDGER_PATH } from '../../../lib/programGrants';
 import {
@@ -16,7 +17,7 @@ import {
  *     and program, filtered by licence type (chips) and holder (name, email or licence reference).
  *   · `UserLicenceEntitlements`: one user licence at /admin/licences/programs/licence/:uid, with the Licences v2 addendum's L37
  *     Programs card: Program, Eligible, Granted, In force and Source licence, and what blocks each program.
- * Both are reads. Granting a program to an account is the Worker's write (`changeGrant`); its screen is a follow-up.
+ * The user licence page also manages the account's program grant.
  */
 
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -81,8 +82,26 @@ function SourceCell({ p, thisUid }) {
   );
 }
 
+const GRANT_ACTION_LABELS = { grant: 'Grant', pause: 'Pause', resume: 'Resume', end: 'End' };
+
+function GrantActions({ program, onAction }) {
+  const state = program.grant?.state;
+  const actions = state === 'granted' ? ['pause', 'end']
+    : state === 'paused' ? (program.eligible ? ['resume', 'end'] : ['end'])
+      : program.eligible ? ['grant'] : [];
+  return (
+    <div className="flex flex-wrap gap-1">
+      {actions.map((action) => (
+        <button type="button" key={action} className={actionGhost} data-testid={`user-grant-${program.program_key}-${action}`} onClick={() => onAction(program, action)}>
+          {GRANT_ACTION_LABELS[action]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The L37 Programs table, or one card per program on a phone. `holder` adds the Holder column (Program access). */
-export function ProgramsTable({ rows, thisUid = null, holder = false, testId }) {
+export function ProgramsTable({ rows, thisUid = null, holder = false, testId, onAction }) {
   const phone = usePhoneWidth();
   if (!rows.length) return <p className={SUB} data-testid={`${testId}-none`}>No program is eligible or granted for {holder ? 'these filters' : 'this licence'}.</p>;
   if (phone) {
@@ -97,6 +116,7 @@ export function ProgramsTable({ rows, thisUid = null, holder = false, testId }) 
             {holder ? <span className={SUB}>{p.holder.name || p.holder.email || `Account ${p.holder.id}`}</span> : null}
             <span className="text-[12.5px]">Eligible: {p.eligible ? 'Yes' : 'No'} · {grantWord(p)}</span>
             <span className="text-[12.5px]">Source: {sourceWords(p, thisUid).join('; ')}</span>
+            {onAction && <GrantActions program={p} onAction={onAction} />}
             {blockerLines(p).map((l) => <small key={l} className={SUB} data-testid="entitlement-blocker">{l}</small>)}
           </li>
         ))}
@@ -111,6 +131,7 @@ export function ProgramsTable({ rows, thisUid = null, holder = false, testId }) 
             {holder ? <th className={TH}>Holder</th> : null}
             <th className={TH}>Program</th><th className={TH}>Eligible</th><th className={TH}>Granted</th>
             <th className={TH}>In force</th><th className={TH}>Source licence</th>
+            {onAction && <th className={TH}>Grant actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -122,6 +143,7 @@ export function ProgramsTable({ rows, thisUid = null, holder = false, testId }) 
               <td className={TD}>{p.grant ? <Pill tone={p.grant.state === 'granted' ? 'info' : 'neutral'}>{grantWord(p)}</Pill> : <span className="text-axal-muted dark:text-gray-400">{grantWord(p)}</span>}</td>
               <td className={TD}><InForceCell p={p} /></td>
               <td className={TD}><SourceCell p={p} thisUid={thisUid} /></td>
+              {onAction && <td className={TD}><GrantActions program={p} onAction={onAction} /></td>}
             </tr>
           ))}
         </tbody>
@@ -130,8 +152,86 @@ export function ProgramsTable({ rows, thisUid = null, holder = false, testId }) 
   );
 }
 
+const RULE_INPUT = 'rounded-md border border-axal-hairline bg-white px-2 py-1 dark:border-gray-700 dark:bg-gray-900';
+const LICENCE_RULE_TYPES = LICENCE_TYPES.filter(({ key }) => key !== 'all');
+
+function EntitlementRules() {
+  const [read, reload] = useRead(() => programEntitlementsApi.rules(), [], 'rules');
+  const [editing, setEditing] = useState(null);
+  const items = read.data?.items ?? [];
+  const programs = read.data?.programs ?? [];
+  function openRule(item) {
+    const latest = item?.versions[0];
+    setEditing({
+      program_key: item?.program_key ?? programs[0]?.key ?? '',
+      licence_type: item?.licence_type ?? LICENCE_RULE_TYPES[0].key,
+      eligible: latest?.eligible ?? true,
+      agreement_required: latest?.agreement_required ?? false,
+      effective_from: [read.data.on, latest?.effective_from].filter(Boolean).sort().at(-1),
+    });
+  }
+  const change = (fields) => setEditing((previous) => ({ ...previous, ...fields }));
+  return (
+    <section className={`${CARD} flex flex-col gap-3 px-4 py-3`} aria-label="Licence eligibility rules">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className={H2}>Licence eligibility rules</h2>
+        {programs.length > 0 && <button type="button" className={actionGhost} data-testid="entitlement-rule-add" onClick={() => openRule(null)}>Add rule version</button>}
+      </div>
+      {read.status === 'error' && <ReadFailed text="Eligibility rules could not be read." onRetry={reload} testId="entitlement-rules-error" />}
+      {read.status === 'loading' && !read.data && <p className={SUB}>Reading rules…</p>}
+      {read.status === 'ready' && items.length === 0 && <p className={SUB}>No eligibility rules are recorded.</p>}
+      {items.length > 0 && (
+        <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
+          {items.map((item) => (
+            <li key={`${item.program_key}:${item.licence_type}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div>
+                <p className="text-sm font-semibold">{item.program_name} · {typeLabel(item.licence_type)}</p>
+                <p className={SUB}>
+                  {item.in_force ? `v${item.in_force.version} · ${item.in_force.eligible ? 'Eligible' : 'Eligibility withdrawn'}` : 'No version in force'}
+                  {item.in_force?.agreement_required ? ' · Agreement required' : ''}
+                  {item.scheduled.length > 0 && ` · ${item.scheduled.length} scheduled`}
+                </p>
+              </div>
+              <button type="button" className={actionGhost} onClick={() => openRule(item)}>New version</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {editing && (
+        <ReasonDialog title="Record eligibility rule version" button="Record version"
+          frozen={editing.effective_from ? null : 'Choose an effective date.'}
+          body={(
+            <div className="grid gap-3">
+              <label className="grid gap-1">Program
+                <select className={RULE_INPUT} value={editing.program_key} onChange={(e) => change({ program_key: e.target.value })}>
+                  {programs.map(({ key, name }) =>
+                    <option key={key} value={key}>{name}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1">Licence type
+                <select className={RULE_INPUT} value={editing.licence_type} onChange={(e) => change({ licence_type: e.target.value })}>
+                  {LICENCE_RULE_TYPES.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1">Effective from
+                <input className={RULE_INPUT} type="date" value={editing.effective_from} onChange={(e) => change({ effective_from: e.target.value })} />
+              </label>
+              <label><input type="checkbox" checked={editing.eligible}
+                onChange={(e) => change(e.target.checked ? { eligible: true } : { eligible: false, agreement_required: false })} /> Eligible</label>
+              <label><input type="checkbox" disabled={!editing.eligible} checked={editing.agreement_required}
+                onChange={(e) => change({ agreement_required: e.target.checked })} /> Agreement required</label>
+            </div>
+          )}
+          run={(reason) => programEntitlementsApi.addRuleVersion({ ...editing, reason })}
+          onClose={() => setEditing(null)} onDone={() => { setEditing(null); reload(); }} testId="entitlement-rule-version" />
+      )}
+    </section>
+  );
+}
+
 /** Program access › User licences: the filters and one row per account and program. */
 export function HolderAccessView() {
+  const [showRules, setShowRules] = useState(false);
   const [type, setType] = useState('all');
   const [draft, setDraft] = useState('');
   const [q, setQ] = useState('');
@@ -140,6 +240,12 @@ export function HolderAccessView() {
   const note = agreementsNote(d?.agreements);
   return (
     <section className="flex flex-col gap-3" data-testid="holder-access">
+      <div>
+        <button type="button" className={actionGhost} aria-expanded={showRules} data-testid="entitlement-rules-toggle" onClick={() => setShowRules((shown) => !shown)}>
+          {showRules ? 'Hide eligibility rules' : 'Manage eligibility rules'}
+        </button>
+      </div>
+      {showRules && <EntitlementRules />}
       <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Licence type" data-testid="holder-type-filter">
         {LICENCE_TYPES.map((t) => (
           <button key={t.key} type="button" role="radio" aria-checked={type === t.key} className={`${CHIP} ${type === t.key ? CHIP_ON : CHIP_OFF}`} onClick={() => setType(t.key)} data-testid={`holder-type-${t.key}`}>{t.label}</button>
@@ -174,6 +280,7 @@ function Fact({ k, children }) {
 
 /** One user licence: its overview and its Programs card (L37). */
 function UserLicencePage({ uid }) {
+  const [grantChange, setGrantChange] = useState(null);
   const [read, reload] = useRead(() => programEntitlementsApi.licence(uid), [uid], 'licence');
   const d = read.data;
   const header = (title) => (
@@ -210,7 +317,22 @@ function UserLicencePage({ uid }) {
       <section className={`${CARD} flex flex-col gap-2 px-[18px] py-4`}>
         <h2 className={H2}>Programs</h2>
         <p className={SUB}>Eligible is this licence type’s rule; granted is HQ’s; in force also needs a valid licence and any agreement the program requires.</p>
-        <ProgramsTable rows={d.programs} thisUid={l.uid} testId="user-licence-programs" />
+        <ProgramsTable rows={d.programs} thisUid={l.uid} testId="user-licence-programs"
+          onAction={d.account?.id ? (program, action) => setGrantChange({ program, action, accountId: d.account.id }) : undefined} />
+        {grantChange && (
+          <ReasonDialog
+            title={`${GRANT_ACTION_LABELS[grantChange.action]} ${grantChange.program.program_name}`}
+            body={`This changes the program grant for ${holder} across their licences.`}
+            button={GRANT_ACTION_LABELS[grantChange.action]}
+            danger={grantChange.action === 'end'}
+            run={(reason) => programEntitlementsApi.changeGrant(grantChange.accountId, grantChange.program.program_key, {
+              action: grantChange.action, expected_revision: grantChange.program.grant?.revision ?? 0, reason,
+            })}
+            onClose={() => setGrantChange(null)}
+            onDone={() => { setGrantChange(null); reload(); }}
+            testId="user-program-grant-change"
+          />
+        )}
       </section>
     </div>
   );
@@ -220,7 +342,7 @@ export function UserLicenceEntitlements() {
   const { uid } = useParams();
   return (
     <AdminBoardFrame workspace="Licences" note="Eadwyn reads this licence’s programs. It changes nothing." data-testid="admin-board-user-licence">
-      <UserLicencePage uid={uid} />
+      <UserLicencePage key={uid} uid={uid} />
     </AdminBoardFrame>
   );
 }

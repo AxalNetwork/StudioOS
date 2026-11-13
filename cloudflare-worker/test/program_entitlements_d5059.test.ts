@@ -26,6 +26,8 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { mount as entitlementsMount } from '../src/routes/admin_program_entitlements.ts';
 import { mount as memberEntitlementsMount } from '../src/routes/member_program_entitlements.ts';
+import learningPrograms from '../src/routes/learning_programs.ts';
+import spinoutLab from '../src/routes/spinout_lab.ts';
 import programGrantsRouter from '../src/routes/admin_program_grants.ts';
 import { transitionLicence } from '../src/services/userLicences.ts';
 import {
@@ -70,6 +72,8 @@ function fixture() {
   app.route(entitlementsMount.path, entitlementsMount.router);
   app.route(memberEntitlementsMount.path, memberEntitlementsMount.router);
   app.route('/api/admin/program-grants', programGrantsRouter);
+  app.route('/api/learning', learningPrograms);
+  app.route('/api/spinout-lab', spinoutLab);
   async function call(who: number, method: string, path: string, body?: unknown) {
     const token = await new SignJWT({ user_id: who, jti: `s-${who}` }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(SECRET));
@@ -393,4 +397,23 @@ test('members read only their own program access and the public source fields', 
   assert.equal(lab.sources[0].agreement, 'missing');
   assert.equal(lab.blockers[0].code, 'agreement_missing');
   assert.equal((await call(FOUNDER, 'GET', `${url}/${MULTI}`)).status, 404);
+});
+
+test('opt-in entry checks block a new enrolment and Lab start until the program is in force', async () => {
+  const { db, env, call } = fixture();
+  const enrol = '/api/learning/programs/course-1/enrol';
+  const lab = '/api/spinout-lab/start';
+  db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES ('course-1', 'Course', 'open', 'published', ?)").run(SUPER);
+  env.PROGRAM_ENTITLEMENT_ENFORCEMENT = 'true';
+  assert.equal((await call(FOUNDER, 'POST', enrol)).body.error, 'program_entitlement_required');
+  assert.equal((await call(FOUNDER, 'POST', lab)).body.error, 'program_entitlement_required');
+  grantRow(db, 'gate-learning', FOUNDER, 'learning');
+  grantRow(db, 'gate-lab', FOUNDER, 'spinout-lab');
+  assert.equal((await call(FOUNDER, 'POST', lab)).body.error, 'program_entitlement_required', 'Lab still needs the executed agreement');
+  assert.equal((await call(FOUNDER, 'POST', enrol)).status, 201);
+
+  executed(db, 'gate-lab-agreement', 'ul_f10', 'spinout-lab');
+  const admitted = await call(FOUNDER, 'POST', lab);
+  assert.equal(admitted.status, 403, 'the Lab’s own admission check still applies');
+  assert.equal(admitted.body.code, 'lab_not_admitted');
 });

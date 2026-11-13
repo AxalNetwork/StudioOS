@@ -25,6 +25,7 @@ import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
+import { checkMemberProgramEntry } from '../services/programEntitlements';
 import { isAssignedAdmin } from '../services/learningAccess';
 import { weekAxis } from '../services/activeAccounts';
 import { learningEnrolmentWeeks, parseProgramWeeks } from '../services/programCatalogue';
@@ -228,6 +229,13 @@ r.post('/programs/:uid/enrol', async (c) => {
     // Only the Super Admin removes a member, and a member cannot undo that.
     return refuse(c, 403, { code: 'removed', message: 'You were removed from this program; ask its administrator.' });
   }
+  const entitlement = await checkMemberProgramEntry(c.env, user.id, 'learning');
+  if (entitlement === 'unavailable') return refuse(c, 503, {
+    code: 'program_entitlement_unavailable', message: 'Your Learning access could not be checked. Try again.',
+  });
+  if (entitlement === 'blocked') return refuse(c, 403, {
+    code: 'program_entitlement_required', message: 'Learning access is not in force. Check Program access in your Account.',
+  });
   const t = new Date().toISOString();
   // The member's own row only: the user id is the session's. The enrolment
   // event (D954 §6) lands in the same batch, so neither lands without the other.

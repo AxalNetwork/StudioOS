@@ -16,7 +16,7 @@ import { filterQuery, inForceWord, sourceWords } from '../src/pages/admin/grants
 import { viewOf } from '../src/pages/admin/grants/grantsModel.js';
 import AccountProgramAccess from '../src/pages/account/AccountProgramAccess.jsx';
 import ProgramGrants from '../src/pages/admin/grants/ProgramGrants.jsx';
-import { UserLicenceEntitlements } from '../src/pages/admin/grants/EntitlementViews.jsx';
+import { HolderAccessView, UserLicenceEntitlements } from '../src/pages/admin/grants/EntitlementViews.jsx';
 
 const h = React.createElement;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -28,7 +28,7 @@ function stub(routes) {
     const u = new URL(String(url), 'http://x');
     seen.push(`${init.method || 'GET'} ${u.pathname}${u.search}`);
     const hit = routes[u.pathname];
-    return hit ? hit(u) : json({});
+    return hit ? hit(u, init) : json({});
   };
   return { seen, restore() { globalThis.fetch = original; } };
 }
@@ -124,8 +124,8 @@ test('mounted user licence detail: type, eligible, granted, in force, the source
     assert.match(v.of('user-licence-overview'), /Type\s*Advisor.*UL-FND-0042 · Founder.*suspended/s);
     const rows = v.rows();
     assert.equal(rows.length, 2);
-    assert.match(rows[0], /^Mentor cohort access\s*Yes\s*Granted\s*Not in force.*needs an executed program licence agreement on UL-ADV-0031.*This licence$/s);
-    assert.match(rows[1], /^Learning\s*Yes\s*Granted\s*In force\s*This licence\s*UL-FND-0042 · Founder$/s);
+    assert.match(rows[0], /^Mentor cohort access\s*Yes\s*Granted\s*Not in force.*needs an executed program licence agreement on UL-ADV-0031.*This licencePauseEnd$/s);
+    assert.match(rows[1], /^Learning\s*Yes\s*Granted\s*In force\s*This licence\s*UL-FND-0042 · FounderPauseEnd$/s);
     assert.ok(!v.has('user-licence-agreements-note'));
   } finally { await v.unmount(); s.restore(); }
 });
@@ -193,4 +193,45 @@ test('mounted Account program access shows the member’s status, source licence
     await view.unmount();
     s.restore();
   }
+});
+
+test('HQ pauses the holder’s grant with a reason and the loaded revision', async () => {
+  let write;
+  const s = stub({
+    '/api/admin/program-entitlements/licences/ul_a': () => json(DETAIL),
+    '/api/admin/program-entitlements/accounts/31/programs/learning': (url, init) => {
+      write = { method: init.method, ...JSON.parse(init.body) };
+      return json({});
+    },
+  });
+  const path = '/admin/licences/programs/licence/ul_a';
+  const v = await render(h(Routes, null, h(Route, { path: '/admin/licences/programs/licence/:uid', element: h(UserLicenceEntitlements) })), path);
+  try {
+    await v.click('user-grant-learning-pause');
+    await v.type('user-program-grant-change-reason', 'Paused pending member review.');
+    await v.click('user-program-grant-change-confirm');
+    assert.deepEqual(write, { method: 'POST', action: 'pause', expected_revision: 1, reason: 'Paused pending member review.' });
+  } finally { await v.unmount(); s.restore(); }
+});
+
+test('HQ records a licence rule for a program loaded from the catalogue', async () => {
+  let write;
+  const s = stub({
+    '/api/admin/program-entitlements': () => json({ items: [], holders: 0, agreements: 'read' }),
+    '/api/admin/program-entitlements/rules': (url, init) => {
+      if (init.method === 'POST') write = JSON.parse(init.body);
+      return json({ on: '2026-11-13', items: [], programs: [{ key: 'custom-program', name: 'Custom program' }] });
+    },
+  });
+  const v = await render(h(HolderAccessView), '/admin/licences/programs/holders');
+  try {
+    await v.click('entitlement-rules-toggle');
+    await v.click('entitlement-rule-add');
+    await v.type('entitlement-rule-version-reason', 'Approved at the HQ review.');
+    await v.click('entitlement-rule-version-confirm');
+    assert.deepEqual(write, {
+      program_key: 'custom-program', licence_type: 'founder', eligible: true, agreement_required: false,
+      effective_from: '2026-11-13', reason: 'Approved at the HQ review.',
+    });
+  } finally { await v.unmount(); s.restore(); }
 });
