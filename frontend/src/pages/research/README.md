@@ -37,6 +37,8 @@ zones: one record each, reached from a zone's list.
 | `companyCandidateRead.js` | The readings that page and its tests share. |
 | `CompanyDirectoryZone.jsx` | `/research/companies`. The company directory, searched, filtered, sorted and paged on the Worker (D534); it prints the API's total, coverage and facet counts, never a count of its own. A Saved analyses tab holds the competitor analyses and is where `/build/competitors` lands. |
 | `CompanyProfile.jsx` | `/research/companies/company/:uid`. One directory company: metrics with source and date or Not recorded, market context, same-label competitors, funds by focus and HQ, signals, and the sources table. Each read fails on its own. |
+| `ProjectFindings.jsx` | D5157 part 2: a Research Project's Findings tab (`/research/projects/:uid/findings`, RS-02 C) and the Overview's Most recent findings. Source fact, Eadwyn interpretation and Your conclusion as words; Accept / Edit / Discard on Eadwyn's words from the project's Ask answers; the citation panel with the recorded passage, a bottom sheet on a phone. An unreadable read is Unavailable, never empty. |
+| `researchFindings.js` | The readings that tab and card share: kind and state words, chip counts with discarded kept apart, the badge (absent, never 0, on a failed read), the citation panel's lines and the forms' checks and bodies. |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score
