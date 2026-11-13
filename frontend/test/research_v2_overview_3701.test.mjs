@@ -1,8 +1,8 @@
 /**
  * D3701 (Research v2, #3701), part 2 — the RS-01 Overview: the house header,
  * a question whose examples fill the field and never run, and cards that each
- * read, fail and retry on their own. Briefs have no store, so they say Not
- * recorded with the reason; projects read their store since D5157 (#5157),
+ * read, fail and retry on their own. Projects and briefs read their stores
+ * since D5157 (#5157),
  * whose own test is `research_projects_5157.test.mjs`.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/research_v2_overview_3701.test.mjs
@@ -15,6 +15,7 @@ import ResearchHome from '../src/pages/research/ResearchHome.jsx';
 import FounderResearchDesk from '../src/pages/founder/FounderResearchDesk.jsx';
 import { api } from '../src/lib/api.js';
 import { researchProjectsApi } from '../src/lib/api/researchProjects.js';
+import { researchProjectBriefsApi } from '../src/lib/api/researchProjectBriefs.js';
 import {
   EXAMPLES, NOT_RECORDED_REASONS, briefsCard, continueCard, evidenceCard, projectsCard, shortDate, trackingCard,
 } from '../src/pages/research/researchHome.js';
@@ -37,7 +38,7 @@ test('each card is loading, unreadable or ok — a failed read is never an empty
   assert.deepEqual(evidenceCard(ok({ items: [] })).rows, []);
 });
 
-test('Continue is the newest Ask exchange; briefs are Not recorded, with the reason; projects read their store (D5157)', () => {
+test('Continue is the newest Ask exchange; briefs and projects read their stores (D5157)', () => {
   const c = continueCard(ok({ items: [
     { question: 'Newest', reason: 'no_source', created_at: '2026-11-08 10:00:00' },
     { question: 'Older', reason: 'answered', created_at: '2026-11-01 10:00:00' },
@@ -45,8 +46,8 @@ test('Continue is the newest Ask exchange; briefs are Not recorded, with the rea
   assert.deepEqual(c.last, { question: 'Newest', at: '2026-11-08 10:00:00', answered: false });
   assert.equal(projectsCard({ status: 'failed' }).state, 'unreadable');
   assert.deepEqual(projectsCard(ok({ items: [] })).cards, []);
-  assert.equal(briefsCard().state, 'not_recorded');
-  assert.match(NOT_RECORDED_REASONS.briefs, /not stored yet/);
+  assert.equal(briefsCard({ status: 'failed' }).state, 'unreadable');
+  assert.deepEqual(briefsCard(ok({ items: [] })), { state: 'ok', rows: [] });
 });
 
 test('recent evidence is newest first, three rows, each with index state and answerability apart', () => {
@@ -85,8 +86,14 @@ function stub(over) {
   api.research.documents = over.documents || (async () => ({ items: [] }));
   api.research.funds = over.funds || (async () => ({ items: [] }));
   const realList = researchProjectsApi.list;
+  const realBriefs = researchProjectBriefsApi.list;
   researchProjectsApi.list = over.projects || (async () => ({ items: [], archived_count: 0 }));
-  return { calls, restore() { Object.assign(api.research, real); researchProjectsApi.list = realList; } };
+  researchProjectBriefsApi.list = over.briefs || (async () => ({ items: [] }));
+  return { calls, restore() {
+    Object.assign(api.research, real);
+    researchProjectsApi.list = realList;
+    researchProjectBriefsApi.list = realBriefs;
+  } };
 }
 const settle = async (m) => { for (let i = 0; i < 4; i += 1) await m.flush(); };
 
@@ -103,7 +110,7 @@ test('one unreadable card retries alone, and the others still draw', async () =>
     assert.doesNotMatch(textOf(byTid(m, 'rh-continue')), /Nothing to continue yet/, 'a failed read is not an empty history');
     assert.match(textOf(byTid(m, 'rh-evidence-a')), /EU Data Act.*✓ Indexed.*✓ Answerable/);
     assert.match(textOf(byTid(m, 'rh-projects')), /No research yet/);
-    assert.match(textOf(byTid(m, 'rh-briefs')), /Not recorded/);
+    assert.match(textOf(byTid(m, 'rh-briefs')), /No saved briefs yet/);
     const before = s.calls.askSessions;
     fail = false;
     await act(async () => { m.props(byTid(m, 'rh-continue-retry')).onClick(); });

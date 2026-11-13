@@ -26,7 +26,7 @@ export const PROJECT_TABS = [
   { slug: 'evidence', label: 'Evidence', built: true },
   { slug: 'findings', label: 'Findings', built: true },
   { slug: 'comparisons', label: 'Comparisons', built: true },
-  { slug: 'brief', label: 'Brief', built: false },
+  { slug: 'brief', label: 'Brief', built: true },
 ];
 
 export const NOT_STORED = {

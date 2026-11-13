@@ -13,8 +13,9 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { d1Over } from './_d1_sqlite.mjs';
 import projects, { defaultTitle, mount, passagesUsed, readField } from '../src/routes/research_projects.ts';
+import briefs from '../src/routes/research_project_briefs.ts';
 
-const app = new Hono().route('/api/research/projects', projects);
+const app = new Hono().route('/api/research/projects', projects).route('/api/research/projects', briefs);
 app.onError((error, c) => c.json({ detail: error.message }, error.message === 'Unauthorized' ? 401 : 500));
 const SECRET = 'unit-research-projects-0123456789012345678';
 const sql = (name: string) => readFileSync(new URL(`../sql/${name}`, import.meta.url), 'utf8');
@@ -30,6 +31,7 @@ function fixture() {
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql(MIGRATION));
+  db.exec(sql('migrations/202611131239_5157_research_project_briefs.sql'));
   db.exec("INSERT INTO users (id,email,name,role) VALUES (701,'owner@example.test','Owner','founder'),(702,'other@example.test','Other','founder')");
   db.exec(`INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state,created_at) VALUES
     (1,'doc-indexed',701,'EU Data Act','r/1','indexed','2026-11-01 10:00:00'),
@@ -69,6 +71,31 @@ test('the router mounts itself at /api/research/projects (#4105 registry)', () =
   assert.equal(mount.router, projects);
   const registry = readFileSync(new URL('../src/routes/_registry.ts', import.meta.url), 'utf8');
   assert.match(registry, /research_projects/);
+});
+
+test('a private brief can be saved and listed, with stale and archived writes refused', async () => {
+  const f = fixture();
+  const uid = await create(f);
+  const path = `/${uid}/brief`;
+  const sections = Array.from({ length: 8 }, (_, i) => ({ text: i === 0 ? 'My assessment' : '', reviewed: true }));
+  assert.deepEqual((await call(f, 'GET', path)).body, { brief: null });
+  assert.equal((await call(f, 'PUT', path, { version: 1, sections })).status, 409);
+  assert.equal((await call(f, 'PUT', path, { version: 0, sections: [] })).status, 400);
+  assert.equal((await call(f, 'PUT', path, { version: 0, sections }, 702)).status, 404);
+  const created = await call(f, 'PUT', path, { version: 0, sections });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.brief.version, 1);
+  assert.deepEqual(created.body.brief.sections[0], sections[0]);
+  assert.equal(created.body.brief.sections[1].reviewed, false);
+  assert.equal((await call(f, 'GET', path, undefined, 702)).status, 404);
+  assert.deepEqual((await call(f, 'GET', '/briefs/saved', undefined, 702)).body, { items: [] });
+  assert.equal((await call(f, 'GET', '/briefs/saved')).body.items[0].project_uid, uid);
+  assert.equal((await call(f, 'PUT', path, { version: 0, sections })).status, 409);
+  const updated = await call(f, 'PUT', path, { version: 1, sections });
+  assert.equal(updated.body.brief.version, 2);
+  await call(f, 'POST', `/${uid}/archive`);
+  assert.equal((await call(f, 'PUT', path, { version: 2, sections })).body.error, 'project_archived');
+  assert.equal((await call(f, 'GET', path)).body.brief.version, 2);
 });
 
 test('the migration refuses an empty title, an unknown status and an archive without its date', () => {
