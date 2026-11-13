@@ -4,6 +4,7 @@
 //
 //   · a cycle read is kept under the full venture + cycle key: A → B → A asks again for A and never shows B's under A;
 //   · a delayed success or failure for A that lands after B is selected changes nothing on B;
+//   · only the latest request for a venture and cycle may land: an answer from an earlier visit or a retried read is dropped;
 //   · a supplied project ID the member cannot open is an unavailable-venture state, never another venture;
 //   · with no ID supplied, the first accessible venture is read.
 import test from 'node:test';
@@ -128,6 +129,47 @@ test('a delayed success for A that lands while B is still loading is dropped, an
     t.take(22).resolve(reply({ marker: 'B2' }));
     await t.settle();
     assert.equal(t.cell(), 'ok:B2');
+  } finally { console.error = quiet; await t.close(); }
+});
+
+test('back on A, a late answer from A\'s first visit cannot replace the answer read on return', async () => {
+  const t = await mountHook(A);
+  const quiet = console.error; console.error = () => {};
+  try {
+    const firstA = t.take(11);
+    await t.show(undefined);
+    await t.show(B);
+    t.take(22).resolve(reply({ marker: 'B' }));
+    await t.settle();
+    await t.show(undefined);
+    await t.show(A);
+    const secondA = t.take(11);
+    secondA.resolve(reply({ marker: 'A2' }));
+    await t.settle();
+    assert.equal(t.cell(), 'ok:A2');
+    firstA.resolve(reply({ error: 'down', message: 'A was down.' }, 503));
+    await t.settle();
+    // Mutation checked: committing whenever the hook is mounted (dropping the context and latest-request check in `commit`,
+    // while keeping the context in the key) turns this into "failed:A was down."; restored, it passes.
+    assert.equal(t.cell(), 'ok:A2', 'the first visit\'s read is obsolete: the read made on return owns A');
+  } finally { console.error = quiet; await t.close(); }
+});
+
+test('after Retry, the superseded read\'s late answer cannot replace the retried one', async () => {
+  const t = await mountHook(B);
+  const quiet = console.error; console.error = () => {};
+  try {
+    const first = t.take(22);
+    await t.m.click('Retry');
+    await t.settle();
+    const second = t.take(22);
+    second.resolve(reply({ marker: 'B2' }));
+    await t.settle();
+    assert.equal(t.cell(), 'ok:B2');
+    first.resolve(reply({ marker: 'B-old' }));
+    await t.settle();
+    // Mutation checked: the same mounted-only `commit` draws "ok:B-old" here; restored, it passes.
+    assert.equal(t.cell(), 'ok:B2', 'only the latest request for a venture and cycle may land');
   } finally { console.error = quiet; await t.close(); }
 });
 

@@ -233,6 +233,31 @@ const TABLES = [
    BEGIN
        SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
    END`,
+
+  // D5315: cancellation evidence and credential revocation are one write.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_cancellations (
+     consent_id   INTEGER PRIMARY KEY,
+     cancelled_by INTEGER NOT NULL,
+     cancelled_at TEXT NOT NULL
+   )`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_revoke
+   AFTER INSERT ON advisor_proof_consent_cancellations
+   BEGIN
+     UPDATE advisor_proof_consents SET request_token = NULL, updated_at = NEW.cancelled_at
+      WHERE id = NEW.consent_id;
+     UPDATE advisor_proof_consent_codes SET used_at = NEW.cancelled_at
+      WHERE consent_id = NEW.consent_id AND used_at IS NULL;
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_update
+   BEFORE UPDATE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_delete
+   BEFORE DELETE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
 ];
 
 /** 202611062216 (D4670) — the claim a confirmation was asked about. */
@@ -374,6 +399,21 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
     await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
     await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisor_services', [
+      ['publication_state', `ALTER TABLE advisor_services ADD COLUMN publication_state TEXT NOT NULL DEFAULT 'draft'  CHECK (publication_state IN ('draft', 'published', 'hidden'))`],
+    ]);
+    await addMissingColumns(env, 'advisor_proof_items', [
+      ['published_consent_id', 'ALTER TABLE advisor_proof_items ADD COLUMN published_consent_id INTEGER'],
+    ]);
+    // SQLite validates existing trigger bodies during ALTER TABLE. Install
+    // this after the legacy renames and after its target column exists.
+    await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_proof_withdrawal_unpublishes
+   AFTER UPDATE OF consent_given, withdrawn_at ON advisor_proof_consents
+   WHEN NEW.consent_given <> 1 OR COALESCE(NEW.withdrawn_at, '') <> ''
+   BEGIN
+     UPDATE advisor_proof_items SET published_consent_id = NULL
+      WHERE id = NEW.proof_item_id AND published_consent_id = NEW.id;
+   END`).run();
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
     await addMissingColumns(env, 'advisor_deliverables', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],

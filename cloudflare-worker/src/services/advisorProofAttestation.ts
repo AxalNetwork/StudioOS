@@ -97,8 +97,9 @@ export const attestationMailer = {
 };
 
 /** What a consent row says, as the advisor and the attester both read it. */
-export type ConsentState = 'pending' | 'confirmed' | 'declined' | 'withdrawn' | 'needs_reconfirmation';
-export function consentState(row: { consent_given: number; withdrawn_at: string | null; consent_given_at: string | null; claim_sha256: string | null }, currentClaimSha: string): ConsentState {
+export type ConsentState = 'pending' | 'confirmed' | 'declined' | 'withdrawn' | 'needs_reconfirmation' | 'cancelled';
+export function consentState(row: { consent_given: number; withdrawn_at: string | null; consent_given_at: string | null; claim_sha256: string | null; cancelled_at?: string | null }, currentClaimSha: string): ConsentState {
+  if (row.cancelled_at) return 'cancelled';
   if (row.withdrawn_at) return row.consent_given_at ? 'withdrawn' : 'declined';
   if (Number(row.consent_given) !== 1) return 'pending';
   // Confirmed through a link the advisor held (before D4670), or about a claim that has since changed.
