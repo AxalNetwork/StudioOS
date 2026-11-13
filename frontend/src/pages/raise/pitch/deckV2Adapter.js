@@ -65,6 +65,7 @@ import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckNarrativeApi } from '../../../lib/api/deckNarrative.js';
+import { deckRecordingsApi } from '../../../lib/api/deckRecordings.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
@@ -357,7 +358,13 @@ export const cardStatus = (deckId, filter) => through(() => deckCardStatusApi.re
  * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.
  */
 export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
-export const walkthrough = off('walkthrough');
+/**
+ * D4599 part 2 (#4599, D1590 F11 #3837): the founder's walkthrough of this version — each card's newest take or
+ * null, how many are recorded, and the share links it is attached to (`GET /api/decks/:id/recordings`). With
+ * `deck:walkthrough` off the route answers 404 `not_switched_on`, so this reads "Not switched on yet." Present ›
+ * Record and pd35's column record, delete and attach through `deckRecordingsApi`.
+ */
+export const walkthrough = (deckId) => through(() => deckRecordingsApi.list(deckId), SURFACES.walkthrough.issue);
 /**
  * D1600 (#3879): retry only a run's failed areas, as a new run under what is left of its hold (pd2b); the deck's
  * finished runs nobody has opened, for the return banner (pd2c); and clearing one when its Review is opened.

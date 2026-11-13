@@ -14,6 +14,7 @@ import {
   cardsOf, clock, countLabel, dotsOf, exitHref, notesOf, stepFor, swipeLine, swipeStep,
 } from './presentExportModel';
 import { REHEARSE } from './rehearseModel';
+import { RECORD, slideNumbers } from './walkthroughModel';
 import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remoteMove, remoteSocketPath } from './presentTimingModel';
 import { useWebSocket } from '../../../hooks/useWebSocket';
 import { deckRemoteApi } from '../../../lib/api/deckRemote';
@@ -28,6 +29,8 @@ import {
 
 // D1580 F1 (#3827): Present › Rehearse, loaded when it is opened.
 const RehearsePanel = lazy(() => import('./RehearsePanel'));
+// D4599 part 2 (#4599, D1590 F11): Present › Record (pd36), loaded when it is opened.
+const RecordPanel = lazy(() => import('./RecordPanel'));
 
 /**
  * D901 (#2680) — present mode at /raise/pitch/present (PD16; PD26 frame 2 on
@@ -61,6 +64,13 @@ const RehearsePanel = lazy(() => import('./RehearsePanel'));
  * D1580 F1 (#3827): Rehearse, beside the two views, times the founder card by
  * card against the pitch length and writes a rehearsal and its report
  * (`RehearsePanel.jsx`). While it is open the keys are Rehearse's.
+ *
+ * D4599 part 2 (#4599, D1590 F11): Record, beside Rehearse, is pd36's "Record
+ * a pitch": a take per card, sent to the Worker as each card ends, played
+ * back, retaken, deleted and attached to an investor link (`RecordPanel.jsx`).
+ * `?view=record` opens on it (pd35's "Record ›"). While it is open the keys are
+ * Record's. HQ's `deck:walkthrough` switch is the Worker's: off, the panel
+ * says "Not switched on yet." and nothing is recorded.
  *
  * D1112 (#2992): a card the editor laid out on D898's 12 × 6 grid is drawn
  * from its blocks, each at its range: text, metric tiles with their source
@@ -147,7 +157,7 @@ export default function PitchPresent() {
   const [pos, setPos] = useState({ card: 0, shown: 0 });
   const i = pos.card;
   const reduced = useReducedMotion();
-  const [view, setView] = useState(() => startView(params));
+  const [view, setView] = useState(() => (params.get('view') === 'record' ? 'record' : startView(params)));
   const [sources, setSources] = useState(false);
   const [seconds, setSeconds] = useState(0);
   // D1581: the pitch length, and when each card came up (Rehearse's marks).
@@ -156,6 +166,8 @@ export default function PitchPresent() {
   const touch = useRef(null);
   const cards = useMemo(() => (status === 'ok' ? cardsOf(deck) : []), [status, deck]);
   // D1569 (#3816): each shown card's uid, in `cardsOf`'s order, and the links that play the accepted AI voice-overs.
+  // D4599 part 2: each shown card's number as the Worker counts a take's card (its place among all the slides).
+  const slideNos = useMemo(() => (status === 'ok' ? slideNumbers(deck) : []), [status, deck]);
   const uids = useMemo(() => (status === 'ok' && Array.isArray(deck?.slides) ? deck.slides.filter((s) => !(s && typeof s === 'object' && s.hidden === true)).map((s) => (typeof s?.uid === 'string' ? s.uid : null)) : []), [status, deck]);
   const [voices, setVoices] = useState(null);
   useEffect(() => {
@@ -177,6 +189,8 @@ export default function PitchPresent() {
   useEffect(() => {
     const onKey = (e) => {
       if (view === 'rehearse') return;
+      // D4599 part 2: Record moves its own cards; each move ends one take and starts the next.
+      if (view === 'record') return;
       const s = stepFor(e.key);
       if (!s) return;
       e.preventDefault();
@@ -208,7 +222,7 @@ export default function PitchPresent() {
   const onRemote = useCallback((frame) => {
     if (frame?.type === 'paired') { setRemotePaired(true); return; }
     if (frame?.type === 'unpaired') { setRemotePaired(false); return; }
-    if (frame?.type !== 'step' || view === 'rehearse') return;
+    if (frame?.type !== 'step' || view === 'rehearse' || view === 'record') return;
     setPos((at) => (frame.step && typeof frame.step === 'object' ? { card: remoteMove(at.card, frame.step, n), shown: 0 } : presentStep(at, frame.step, cards)));
   }, [view, n, cards]);
   useWebSocket(status === 'ok' && deck?.id && !phone ? remoteSocketPath(deck.id) : null, { enabled: status === 'ok' && !!deck?.id && !phone, onMessage: onRemote });
@@ -274,6 +288,7 @@ export default function PitchPresent() {
           <button type="button" className={sources ? ON : OFF} aria-pressed={sources} onClick={() => setSources((v) => !v)} data-testid="pitch-present-sources">{SHOW_SOURCES}</button>
           <button type="button" className={view === 'teleprompter' ? ON : OFF} aria-pressed={view === 'teleprompter'} onClick={() => setView('teleprompter')} data-testid="pitch-present-teleprompter">{TELEPROMPTER}</button>
           <button type="button" className={view === 'rehearse' ? ON : OFF} aria-pressed={view === 'rehearse'} onClick={() => setView('rehearse')} data-testid="pitch-present-rehearse">{REHEARSE}</button>
+          <button type="button" className={view === 'record' ? ON : OFF} aria-pressed={view === 'record'} onClick={() => setView('record')} data-testid="pitch-present-record">{RECORD}</button>
         </div>
         <span className="flex flex-wrap items-center gap-2">
           {deck?.id ? <RemotePair deckId={deck.id} paired={remotePaired} onUnpaired={() => setRemotePaired(false)} /> : null}
@@ -288,6 +303,16 @@ export default function PitchPresent() {
             deck={deck}
             cards={cards}
             renderCard={(k) => <Card card={cards[k]} sources={false} aspect={aspect} chrome={chromeOf(deck, k)} />}
+            onClose={() => setView('presenter')}
+          />
+        </Suspense>
+      ) : view === 'record' ? (
+        <Suspense fallback={<span className="mx-4 h-6 w-48 animate-pulse rounded bg-gray-800" aria-label="Loading" />}>
+          <RecordPanel
+            deck={deck}
+            cards={cards}
+            slideNos={slideNos}
+            renderCard={(k) => <Card card={cards[k]} sources={false} aspect={aspect} chrome={chromeOf(deck, k)} theme={deck?.theme} />}
             onClose={() => setView('presenter')}
           />
         </Suspense>

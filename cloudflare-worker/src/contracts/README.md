@@ -53,6 +53,7 @@ reply against its schema, not only that the route exists.
 | `deckNarrativeOutline.schema.json` | `POST /api/decks/narrative/outline` and `POST /api/decks/narrative/build` (D1516, #3768): the outline from the narrative (its version, the stage's cards with their grid plan, the cards left out, the theme and template picked, the `deck_build` quote), or the build (the version, not current, bound to its narrative version; the one run, its hold and its proposals). |
 | `deckOrgLocks.schema.json` | The same reply's `locks` key (D1549; the adapter row is #3786's): each element group HQ locked, with "Set by Axal VC HQ". |
 | `deckDiagramCheck.schema.json` | `POST /api/decks/:id/diagrams/check` (D1542, #3780): an edited diagram as it would be saved, whether it fits its area, each fit problem, the numbers its labels name and the steps the area holds. |
+| `deckWalkthrough.schema.json` | `GET /api/decks/:id/recordings` (D1590, #3837; swapped by D4599 part 2, #4599): the maker's walkthrough of the version, each card's newest take or null, how many are recorded, and the investor links it is attached to. |
 
 ## Rule for adding here
 
