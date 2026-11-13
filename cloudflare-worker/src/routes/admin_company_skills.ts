@@ -12,12 +12,22 @@
  *   POST /:uid/clear    { reason }  lifts the open flag or suspension; the editors are told
  *
  * A Row is { uid, name, company: { uid, name }, project: null, author: { uid, name } | null,
- * area: { slug, label } | null, tools, status, version }. Company skills belong to
+ * area: { slug, label } | null, tools, status, version, based_on }. Company skills belong to
  * the whole company (migration 759 has no project column), so `project` is
  * null. `status` is `suspended` or `flagged` while one is open, else the
  * skill's own (`draft`, `published`, `retired`); `in_review` is HQ's review
  * state (H2) and no company skill is ever in it. `version` is null before the
  * first publish, never 0.
+ *
+ * LINEAGE (D4538 part 3). `based_on` is null on a standalone skill. On an
+ * extension (`POST /api/teams/skills/:uid/extend`, D4538-p2.md) it is
+ * { skill_uid, version, name, base_readable }: `name` is the HQ skill's name
+ * at that published version, read by a bound lookup within `scope = 'hq'`.
+ * When that HQ row or version cannot be read, `name` is null and
+ * `base_readable` is false, so the queue says "Base not readable" and never
+ * passes the extension off as standalone. The detail also carries the
+ * company's `fork_reason` (null on a standalone skill), as it already shows
+ * the company's SKILL.md.
  *
  * GATES. Super Admin only (`requireSuperAdmin`, 403 otherwise). Every action
  * takes a reason of 10 to 500 characters (400 `reason_required`) and writes
@@ -91,6 +101,22 @@ function areaOf(tags: readonly Tag[], category: ReadonlyMap<string, string>) {
   return null;
 }
 
+type BasedOn = { skill_uid: string; version: number | null; name: string | null; base_readable: boolean } | null;
+
+/**
+ * D4538 part 3: an extension's HQ base for the moderation queue. The uid is looked up within `scope = 'hq'` only
+ * (as `team_skills.ts` `baseOf` does), so a lineage column never leads to another company's skill.
+ */
+async function basedOnOf(env: Env, s: SkillRow): Promise<BasedOn> {
+  if (!s.based_on_skill_uid) return null;
+  const version = s.based_on_version ?? null;
+  const base = version == null ? null : await env.DB.prepare(
+    `SELECT v.name FROM agent_skills b JOIN agent_skill_versions v ON v.skill_id = b.id AND v.version = ?
+      WHERE b.uid = ? AND b.scope = 'hq'`,
+  ).bind(version, s.based_on_skill_uid).first<{ name: string }>().catch(() => null);
+  return { skill_uid: s.based_on_skill_uid, version, name: base?.name ?? null, base_readable: base != null };
+}
+
 type ListRow = SkillRow & { company_uid: string; company_name: string; author_uid: string | null; author_name: string | null; effective: string };
 
 adminCompanySkills.get('/', async (c) => {
@@ -138,6 +164,7 @@ adminCompanySkills.get('/', async (c) => {
       tools: p.tools,
       status: s.effective,
       version: s.current_version || null,
+      based_on: await basedOnOf(c.env, s),
     });
   }
   return c.json({ skills, page, per_page: PER_PAGE, total });
@@ -180,6 +207,7 @@ adminCompanySkills.get('/:uid', async (c) => {
       author: await personOf(c.env, s.created_by),
       area: areaOf(p.tags, tax.category),
       status: statusOf(s, open), version: s.current_version || null,
+      based_on: await basedOnOf(c.env, s), fork_reason: s.based_on_skill_uid ? s.fork_reason ?? null : null,
       // Read-only: the published SKILL.md, or the draft's before the first publish.
       skill_md: current?.skill_md ?? toSkillMd(p, 0),
       read_only: true,

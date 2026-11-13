@@ -149,6 +149,7 @@ test('D4161: the queue lists every company\'s skills, the author by name and nev
     uid: acme, name: 'Acme board brief', company: { uid: 'co-uid-1', name: 'Acme' }, project: null,
     author: { uid: 'u-editor', name: 'Eve Editor' }, area: { slug: 'finance_ops', label: 'Finance / Ops' },
     tools: [], status: 'published', version: 1,
+    based_on: null, // D4538 part 3: a standalone company skill has no lineage
   });
   // Mutation checked: `version: s.current_version || null` → `s.current_version` makes the draft read 0 and this fails.
   assert.equal(all.body.skills.find((s: any) => s.uid === draft).version, null, 'an unpublished skill has no version, never 0');
