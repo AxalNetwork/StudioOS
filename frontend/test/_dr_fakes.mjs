@@ -12,6 +12,14 @@ import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+/** Reproduce the BSD utility differences on Linux runners too. */
+export function bsdShellTools(dir) {
+  const systemShell = '#!/bin/sh\nPATH=/usr/bin:/bin\n';
+  writeFileSync(join(dir, 'date'), systemShell + 'for arg; do [ "$arg" != "-d" ] || exit 64; done\nexec date "$@"\n', { mode: 0o755 });
+  writeFileSync(join(dir, 'stat'), systemShell + 'case "$1" in -c*) exit 64 ;; esac\nexec stat "$@"\n', { mode: 0o755 });
+  writeFileSync(join(dir, 'wc'), systemShell + 'count=$(wc "$@") || exit $?\nprintf "       %s\\n" "$count"\n', { mode: 0o755 });
+}
+
 export function keypair(dir) {
   const id = join(dir, 'owner.key');
   execFileSync('age-keygen', ['-o', id], { stdio: 'ignore' });

@@ -143,7 +143,10 @@ test('D755 the tile: loading, unreadable, not ready and ready each say their sen
   assert.match(card(ready(topUp())), /Runs use your included allowance first, then your top-up balance\./);
 });
 
-test('D755 the tile: waiting, credited, overdue and refunded', () => {
+test('D755 the tile: waiting, credited, overdue and refunded', (t) => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'Europe/Zurich';
+  t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   assert.match(card(ready(topUp({ latest: latest('waiting') }))),
     /Adding \$21\.00 from order AX-SYN-9\. It appears here once Stripe confirms the payment\./);
   assert.match(card(ready(topUp({ latest: latest('credited', { credited_at: '2026-10-18 11:41:00' }) }))),
