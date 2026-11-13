@@ -1,0 +1,51 @@
+Solid addition. Since Cloudflare Workers do not have a native outbound SMTP server, the modern standard for sending transactional emails (like confirmation links) from a Hono/Worker backend is using a lightweight API like **Resend**. 
+
+To handle the confirmation logic, we will instruct the Replit Agent to use **Cloudflare KV**, which is perfect for this because it has built-in auto-expiring keys (TTL) to easily manage 15-minute confirmation tokens.
+
+Here is the **updated, comprehensive prompt** you should feed to the Replit Agent.
+
+### 1. The Updated Replit Agent Prompt
+
+Copy and paste this directly into your Replit AI chat:
+
+> "I have imported the StudioOS repository from Axal Network, which is a Hono-based backend for Cloudflare Workers. I need to configure this environment for local development and build an email confirmation flow. 
+> 
+> Please execute the following:
+> 1. **Environment & Dependencies:** Ensure `replit.nix` includes `nodejs_20` and `nodePackages.wrangler`. Run `npm install`, and add the `resend` package (`npm install resend`).
+> 2. **Wrangler Configuration:** Update `wrangler.toml` to set the `name` and `main` entry point. Add a KV namespace binding called `CONFIRMATION_TOKENS`.
+> 3. **Email Confirmation Logic (Hono):** Create the following routes using Hono and the Resend SDK:
+>    - `POST /register`: Generates a random secure token, stores it in the `CONFIRMATION_TOKENS` KV namespace with a 15-minute expiration (TTL), and uses Resend to email a confirmation link (`https://<your-domain>/confirm?token=<token>`) to the user.
+>    - `GET /confirm`: Extracts the token from the query params, checks the KV namespace to see if it exists, marks the user as verified in the primary database, and deletes the token from KV.
+> 4. **Run Command:** Update the `.replit` file so the 'Run' button executes `npm run dev` or the `wrangler dev` equivalent.
+> 5. **Secrets Mapping:** Give me a list of all environment variables I need to add to the Replit Secrets tool (including `RESEND_API_KEY`)."
+
+---
+
+### 2. Your Manual Setup Checklist
+
+Once the Replit Agent writes the code, you will need to wire up the infrastructure. Run these steps in your Replit Shell:
+
+**Step 1: Create the Cloudflare KV Namespace**
+You need to provision the storage for the temporary tokens. Run:
+```bash
+npx wrangler kv:namespace create "CONFIRMATION_TOKENS"
+```
+*Wrangler will output a block of code. Paste that exact block into your `wrangler.toml` file.*
+
+**Step 2: Get a Resend API Key**
+1. Go to [resend.com](https://resend.com) and create a free account.
+2. Generate an API Key.
+3. Add it to Replit's **Secrets** tool as `RESEND_API_KEY` so your local dev server can use it.
+
+**Step 3: Sync Secrets to Cloudflare**
+To ensure the email functionality works in production, push your new Resend key securely to Cloudflare:
+```bash
+npx wrangler secret put RESEND_API_KEY
+```
+
+**Step 4: Authenticate and Deploy**
+If you haven't already, log in to Cloudflare and deploy the updated backend:
+```bash
+npx wrangler login
+npx wrangler deploy
+```

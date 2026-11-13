@@ -1,0 +1,761 @@
+// `import type`, not a value import — every sibling middleware (csrf,
+// lastActive, cfAccess) already writes it this way and this file was the
+// outlier. Node's --experimental-strip-types erases annotations without
+// resolving types, so a plain named import of a type stays in the output and
+// the module throws "does not provide an export named 'MiddlewareHandler'"
+// the moment anything imports it under `npm run test:worker`'s loader.
+import type { MiddlewareHandler } from 'hono';
+import type { Env } from '../types';
+import { getCurrentUser } from '../auth';
+import { withDeadline, DeadlineExceeded } from '../util/deadline';
+// D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
+import { redactPath } from '../util/pathRedaction';
+
+// A KV round trip that has not answered in this long is treated exactly like a
+// KV error. Two seconds is far above a healthy bump (single-digit ms) and far
+// below anything a person would sit through — and the alternative is not "a
+// slower answer", it is no answer at all, because nothing below can run until
+// this one returns.
+const KV_DEADLINE_MS = 2_000;
+
+// Rate limit buckets — sliding-ish window via KV with per-window counter keys
+type Bucket = {
+  name: string;
+  limit: number;
+  windowSec: number;
+  test: (path: string, method: string, role?: string) => boolean;
+  scope: 'user' | 'global' | 'ip';
+  // When true, a KV outage REJECTS the request with 503 instead of failing
+  // open. Reserved for abuse-prone / money-adjacent buckets so the limiter
+  // can't be bypassed by knocking out KV.
+  failClosed?: boolean;
+};
+
+// #3841: the account search, and a project invitation's resend.
+export const PEOPLE_SEARCH = /^\/api\/account\/people\/search\/?$/;
+export const PROJECT_INVITE_RESEND = /^\/api\/projects\/\d+\/invitations\/\d+\/resend\/?$/;
+
+// The two company-invitation routes that put a link in somebody's inbox:
+// `/api/company/<uid>/invitations` and `.../invitations/<inviteUid>/resend`.
+// Anchored at both ends so it cannot widen to a path that merely contains
+// the word, and `[^/]+` rather than `.+` so it cannot span a segment.
+export const COMPANY_INVITE_SEND = /^\/api\/company\/[^/]+\/invitations(\/[^/]+\/resend)?$/;
+
+// The e-sign routes that mail a signed PDF onward: POST
+// `/api/legal/esign/<id>/forward` (and the `/api/esign` remount index.ts warns
+// against). D410 opened forwarding to the envelope's sender as well as its
+// subject, so it joins origination in the `esign_send` bucket rather than
+// riding the generic fail-open one. Anchored, digits only for the id.
+export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
+
+// The sender's two actions on an envelope (D411): POST `/:id/remind` mails the
+// signing link again, and POST `/:id/void` is a write on a legal record. Both
+// join origination and forwarding in `esign_send`. Same anchoring as above.
+export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$/;
+
+// D691 — the deck share link's signup (routes/deck_share_actions.ts), mounted
+// under /api/decks. Exported so the test executes the pattern itself.
+export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
+// D1502 part 2 (#3753): starting a deck generation run. A run holds the
+// member's allowance for its whole quote, so a script starting runs in a loop
+// would lock it up; A3's area routes (#3764) and the one-click build (#3768)
+// admit runs under these paths, and `admitDeckRun` is reached only from them.
+// D1581 (#3828): pairing a phone remote to Present. A code is six digits, so
+// both the presenter's pair and the phone's join are capped, failing closed.
+export const DECK_REMOTE_PAIR = /^\/api\/decks\/\d+\/remote\/pair\/?$/;
+export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
+// D1512 (#3764): `POST /api/decks/:id/areas` is A3's admission path.
+// D1600 (#3879): retrying a run's failed areas starts a run too.
+export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|instruct|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
+// D1525 (#3783): ranking an area's variants runs one Clef decision; the quote runs nothing.
+export const DECK_JUDGE = /^\/api\/decks\/areas\/[0-9a-f-]{36}\/judge\/?$/;
+// D1516 (#3768): the narrative build admits one run for the whole deck; its outline runs nothing.
+export const DECK_NARRATIVE_BUILD = /^\/api\/decks\/narrative\/build\/?$/;
+
+// D810 — three of the four public newsletter routes, and nothing else under
+// the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
+// one-click POSTs arrive from the mailbox provider's servers, many people's
+// from a few addresses, so a per-IP cap would drop real unsubscribes. Its
+// HMAC-signed token cannot be guessed, so the cap bought nothing there.
+export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences)$/;
+
+// D1075 — the trust center's public reads, and the subprocessor notices'
+// subscribe and confirm. Unsubscribe is outside, as the newsletter's is.
+export const TRUST_PUBLIC_READS = /^\/api\/public\/trust(?:\/changes|\/matrix)?$/;
+export const TRUST_SUBSCRIBE = /^\/api\/public\/trust\/subprocessors\/(subscribe|confirm)$/;
+
+/**
+ * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
+ *
+ * BOTH MOUNTS, AND THAT IS NOT DEFENSIVE PADDING. `index.ts` routes the same
+ * advisors router at `/api/advisors` AND `/api/mentors`, so a pattern naming
+ * only the first would leave `/api/mentors/bookings/1/pay` on the generic
+ * 60/min fail-open bucket — the limiter present and bypassable by spelling the
+ * prefix the other way. That is the `ai` bucket's recorded bug exactly
+ * (`/api/advisor` vs `/api/advisory`), and both prefixes are live today rather
+ * than hypothetical.
+ *
+ * Anchored at both ends with `[^/]+` for the id, so it cannot widen to a path
+ * that merely contains the word or span a segment.
+ */
+export const ADVISOR_SESSION_CHARGE = /^\/api\/(advisors|mentors)\/bookings\/[^/]+\/pay$/;
+
+/**
+ * D708 — the writes and the reveal of `/api/admin/bank-accounts` (the bare
+ * path too), and an LP's reveal of their own capital-call line's payment
+ * instructions. Anchored at both ends, the id with `[^/]+`.
+ */
+export const BANK_ACCOUNT_WRITES = /^\/api\/admin\/bank-accounts(\/[^/]+(\/(retire|reveal))?)?$/;
+/** D1080 (#2945): a record's public client ID metadata document. */
+export const MCP_CLIENT_METADATA = /^\/api\/integrations\/mcp\/[A-Za-z0-9_]{1,64}\/client\.json$/;
+export const LP_PAY_INSTRUCTIONS = /^\/api\/funds\/[^/]+\/capital-calls\/lines\/[^/]+\/pay-instructions$/;
+
+const BUCKETS: Bucket[] = [
+  // #3841: the member-facing account search reads names across the caller's companies and connections;
+  // 30 a minute is a person typing, not a crawl. A project invitation's resend mails a link again, like
+  // the company's (`company_invite_send`): 10 an hour, fail-closed.
+  {
+    name: 'people_search', limit: 30, windowSec: 60, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'GET' && PEOPLE_SEARCH.test(p),
+  },
+  {
+    name: 'project_invite_resend', limit: 10, windowSec: 3600, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'POST' && PROJECT_INVITE_RESEND.test(p),
+  },
+  // D1100: Confirm can read a payment intent from Stripe; budget all alert IDs together.
+  {
+    name: 'billing_alert_confirm', limit: 10, windowSec: 60, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'POST' && /^\/api\/billing\/alerts\/[^/]+\/confirm\/?$/.test(p),
+  },
+  // D573: public link resolution records one accepted open request.
+  {
+    name: 'advisor_booking_link', limit: 20, windowSec: 60, scope: 'ip', failClosed: true,
+    test: (p, m) => m === 'POST' && /^\/api\/(advisors|mentors)\/booking-links\/open$/.test(p),
+  },
+  // 5 spin-out executions / hour, admin/partner only
+  {
+    name: 'spinout',
+    limit: 5,
+    windowSec: 3600,
+    test: (p, m, r) => p.startsWith('/api/spinout/') && m !== 'GET' && (r === 'admin' || r === 'partner' || r === 'investor'),
+    scope: 'user',
+  },
+  // 10 AI scoring / matching calls per minute per user
+  {
+    name: 'ai',
+    limit: 10,
+    windowSec: 60,
+    // NICE-ADV-06 — burst guard for the Workers-AI advisor.
+    //
+    // `/api/advisor` and `/api/advisory` are DIFFERENT routers (index.ts
+    // mounts both). This bucket named only `/api/advisory/`, so the LLM route
+    // — POST /api/advisor/explain, the one call that actually spends Workers
+    // AI per request — matched no AI bucket and fell through to the generic
+    // `user` bucket: 60/min, and fail-OPEN, so a KV outage removed even that.
+    //
+    // The router's per-member allowance bounds total spend (D629, D762), but at
+    // 60/min a day's allowance is exhaustible in minutes. This is the missing
+    // per-window guard. (aiClient.ts's daily turn cap never had a caller; D766
+    // deleted it.)
+    //
+    // Scoped to /explain deliberately: /answer, /skip, /next-question and
+    // /progress advance the state machine without calling the model, and
+    // capping them at 10/min would throttle a founder answering quickly.
+    test: (p) =>
+      p.startsWith('/api/scoring/') ||
+      p.startsWith('/api/matches/') ||
+      p.startsWith('/api/advisory/') ||
+      p === '/api/advisor/explain' ||
+      p.startsWith('/api/monitoring/anomalies'),
+    scope: 'user',
+    failClosed: true,
+  },
+  // E-sign origination. This route sends an Axal-branded email containing a
+  // signing link to an ARBITRARY recipient address, so opening it beyond
+  // admins turns it into an outbound-mail surface. While it was
+  // requireAdmin-only it fell through to the generic 60/min/user bucket,
+  // fail-OPEN — acceptable for admins, an unmetered spam relay for everyone
+  // else, and bypassable by knocking out KV.
+  //
+  // 10/hour/user is well above any real workflow (a founder sending a SAFE,
+  // an advisory agreement, a co-founder agreement) and far below anything
+  // useful to an abuser. failClosed because the whole point of the limit is
+  // that it cannot be removed by making KV unavailable.
+  //
+  // Only /api/legal/esign is mounted today — index.ts is explicit that the
+  // router goes there and NOT under /api/esign. Both are listed anyway, the
+  // same way COOL_OFF_PREFIXES lists both, so a future remount cannot quietly
+  // land outside the limit.
+  {
+    name: 'esign_send',
+    limit: 10,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send' || ESIGN_FORWARD.test(p) || ESIGN_SENDER_ACTION.test(p)),
+    scope: 'user',
+    failClosed: true,
+  },
+  // Task #121 — company invitations. Same shape as `esign_send` above and
+  // the same reasoning: POST /api/company/:uid/invitations and its /resend
+  // sibling send an Axal-BRANDED EMAIL TO AN ARBITRARY RECIPIENT ADDRESS
+  // typed into a form. Left on the generic 60/min/user bucket that is an
+  // outbound-mail relay at 3,600 messages an hour, fail-OPEN, and any member
+  // whose role is Owner/Admin/Founder of any company can drive it.
+  //
+  // 10/hour/user is far above a real workflow — inviting a team is a handful
+  // of addresses, and a resend is a rare correction — and far below anything
+  // worth abusing. GET is excluded: reading the pending list sends nothing.
+  // failClosed, because a limit that a KV outage removes is not a limit on
+  // the surface it is protecting.
+  {
+    name: 'company_invite_send',
+    limit: 10,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && COMPANY_INVITE_SEND.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  // Task #9 — promo-code validation. Stricter than the default user bucket so
+  // the redeemable-code space can't be enumerated at checkout. 20/min/user is
+  // ample for a shopper typing and re-typing a code.
+  {
+    name: 'promo_validate',
+    limit: 20,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/payments/promo/validate',
+    scope: 'user',
+    failClosed: true,
+  },
+  // Task #16 — admin catalog + stripe-config writes. Mutations here are
+  // money-adjacent (creating products, registering webhooks, pushing secrets)
+  // so a tighter limit than the default 60/min/user is warranted. 20/min is
+  // ample for any legitimate admin workflow and prevents any tool misuse.
+  {
+    name: 'admin_catalog_writes',
+    limit: 20,
+    windowSec: 60,
+    test: (p, m) =>
+      (m === 'POST' || m === 'PATCH' || m === 'PUT') &&
+      (p.startsWith('/api/admin/catalog/') || p.startsWith('/api/admin/stripe/')),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D708 — payment instructions: every non-GET under /api/admin/bank-accounts
+  // and the LP's GET of their own line's instructions. 10/min per user, and
+  // failClosed: a limit on the one place a full account number is shown that
+  // goes away when KV does is not a limit.
+  {
+    name: 'bank_accounts',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => (m !== 'GET' && BANK_ACCOUNT_WRITES.test(p)) || (m === 'GET' && LP_PAY_INSTRUCTIONS.test(p)),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D81 — the founder's advisory-session charge. Each accepted call asks Stripe
+  // to create a PaymentIntent against a connected account, which is the most
+  // money-adjacent write this worker has; `promo_validate` and
+  // `admin_catalog_writes` above are both tighter than the default for less.
+  // Left on the generic bucket it would be 60 intent creations a minute per
+  // user, fail-OPEN, so a KV outage removed even that.
+  //
+  // 10/min is far above any real workflow — paying for a session is one call,
+  // and a declined card is a handful of retries — and far below anything worth
+  // driving. `chargeSession`'s idempotency key is derived from the booking uid,
+  // so repeat calls for the SAME booking return the same intent; the surface
+  // this caps is a script walking many bookings. failClosed for the reason the
+  // type's own comment gives: a money-adjacent limit that goes away when KV
+  // does is not a limit.
+  {
+    name: 'advisor_session_charge',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && ADVISOR_SESSION_CHARGE.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D755 (#1919) — the public plans-and-packs read, like the other public
+  // reads: per IP, fail-open (a read must not go away with KV), and tighter than
+  // the general 200/min/IP bucket because it reads D1 on every edge miss.
+  {
+    name: 'public_plans',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && p === '/api/public/plans-and-packs',
+    scope: 'ip',
+  },
+  // D1075 (#2967) — the public trust center's reads: per IP and fail-open,
+  // as the other public reads (a trust page must not go away with KV).
+  {
+    name: 'public_trust',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && TRUST_PUBLIC_READS.test(p),
+    scope: 'ip',
+  },
+  // D786 (#2211) — the Pricing page's public models read: per IP and
+  // fail-open, as the other public reads. Its origin is the bundle, so the
+  // bucket only bounds scraping.
+  {
+    name: 'public_ai_models',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && p === '/api/public/ai/models',
+    scope: 'ip',
+  },
+  // D1080 (#2945) — the client ID metadata document an authorization server
+  // fetches: public, per IP and fail-open like the other public reads, and
+  // tighter than the general 200/min/IP bucket.
+  {
+    name: 'mcp_client_metadata',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && MCP_CLIENT_METADATA.test(p),
+    scope: 'ip',
+  },
+  // 60 requests/min per user — default
+  {
+    name: 'user',
+    limit: 60,
+    windowSec: 60,
+    test: (p) => p.startsWith('/api/'),
+    scope: 'user',
+  },
+  // Epic 11 — per-IP sliding window. Applies to EVERY /api/* request,
+  // authenticated or not, so a single source IP cannot DoS the API by
+  // cycling through many anonymous requests (which would otherwise only
+  // hit the global 1000/min cap and starve real users). 200/min/IP is
+  // generous enough that legitimate dashboard polling never trips it.
+  {
+    name: 'ip',
+    limit: 200,
+    windowSec: 60,
+    test: (p) => p.startsWith('/api/'),
+    scope: 'ip',
+  },
+  // Epic 11 — abuse cap on the unauthenticated registration endpoint.
+  // Without this an attacker can churn through email signups (each one
+  // costs us a Turnstile verify + a D1 INSERT + an outbound verification
+  // email). 10/min/IP lets a real user retry after a typo without
+  // letting a script create thousands of accounts. This bucket co-exists
+  // with the 200/min general IP bucket above; the stricter limit wins.
+  {
+    name: 'register',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/register',
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D722 — the code from Google's sign-in window. Unauthenticated, and each
+  // accepted call is an outbound exchange with Google's token endpoint, so it
+  // gets a ceiling of its own below the generic 200/min/IP: 60/min/IP, room
+  // for a whole office or event network behind one address. FAIL-OPEN, like
+  // every other sign-in path (/start, /callback, magic link, passkey): this is
+  // the main way in, the redirect beside it creates accounts by the same rules
+  // with no fail-closed bucket, and every account it creates needs a real
+  // Google account and a single-use code, so a KV outage that refused it would
+  // close the front door and protect nothing. The page answers a 429 here by
+  // continuing through the redirect. Exact path and POST only.
+  {
+    name: 'google_popup',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/google/popup',
+    scope: 'ip',
+  },
+  // D691 — a deck share link's signup. Unauthenticated, and every accepted
+  // POST creates a user (plus an activity_logs and an onboarding_progress
+  // row) for whoever holds a live share token, and a link with no expiry and
+  // no view cap is usable by anyone it is forwarded to. Under the generic
+  // 200/min/IP bucket alone, one IP could mint about 200 accounts a minute
+  // from a leaked link. 6/min/IP, as the landing waitlist: room for a typo
+  // retry, nothing for a script. Anchored so no sibling share route
+  // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
+  // down the account-creating write waits rather than running uncapped.
+  // D811 — Mail reads and feedback, a separate fail-closed service bucket.
+  {
+    name: 'testing_mail_public',
+    limit: 30,
+    windowSec: 60,
+    test: (p) => p === '/api/testing/mail' || p.startsWith('/api/testing/mail/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  {
+    name: 'mail_link',
+    limit: 120,
+    windowSec: 60,
+    test: (p) => p === '/api/mail-link' || p.startsWith('/api/mail-link/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D810 — the newsletter's public routes: a signup mails whatever address it
+  // is given, and the confirm and preferences routes take a token a script
+  // could try to guess. Unsubscribe is outside it (see NEWSLETTER_PUBLIC).
+  // 10/min/IP across the three: room for a
+  // person and a typo, nothing for a script. Each address is also paced to one
+  // signup email per ten minutes in the route itself. failClosed: if KV is
+  // down a public mail-sending write waits rather than running uncapped.
+  {
+    name: 'newsletter_public',
+    limit: 10,
+    windowSec: 60,
+    test: (p) => NEWSLETTER_PUBLIC.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D1075 — the subprocessor notices' subscribe (mails whatever address it
+  // is given) and confirm (takes a token a script could try): 10/min/IP, and
+  // fail-closed, as the newsletter's are.
+  {
+    name: 'trust_subscribe',
+    limit: 10,
+    windowSec: 60,
+    test: (p) => TRUST_SUBSCRIBE.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D1502 part 2 (#3753): 6 runs a minute and 20 an hour per member.
+  // failClosed: a limit on holding the allowance that a KV outage removes is
+  // no limit; the run waits a minute instead.
+  // D1581 (#3828): ten pairings and ten joins a minute per member; a guess at a
+  // code costs a join, so a million codes take far longer than one lives.
+  {
+    name: 'deck_remote_pair',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_REMOTE_PAIR.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_remote_join',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_REMOTE_JOIN.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_generate',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_generate_hour',
+    limit: 20,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_judge',
+    limit: 30,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_JUDGE.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_share_signup',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_SHARE_SIGNUP.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // Public founder-landing-page signup. This is an UNAUTHENTICATED write that
+  // any visitor can reach on any published page, and every accepted call costs
+  // two D1 INSERTs (waitlist_signups + contacts). Before this bucket the only
+  // ceiling was the generic 200/min/IP above, which is not a limit on a form
+  // whose legitimate use is one submission per visitor — a script could add
+  // 288,000 junk leads a day per IP into a founder's inbox.
+  //
+  // 6/min/IP leaves room for a genuine retry after a typo, or a handful of
+  // people behind one office NAT, while making bulk stuffing pointless.
+  // failClosed because this is spam control: if KV is down we would rather
+  // reject signups for a moment than leave the only real barrier open.
+  // D1312 (#3432): a Lovable landing page's sign-up address. The same
+  // unauthenticated write as the landing waitlist above, so the same ceiling.
+  {
+    name: 'lovable_signup',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && /^\/api\/validate\/lovable-signups\/[^/]+$/.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  {
+    name: 'landing_signup',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && /^\/api\/brand\/landing\/[^/]+\/waitlist$/.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D441 — accepting a branch move invitation. Unauthenticated, and a
+  // successful POST creates or reactivates a user. The generic 200/min/IP
+  // bucket is not a limit on that. 10/min/IP covers the preview plus the
+  // click, and a retry, and stops a script minting accounts from a list of
+  // stolen links. failClosed: if KV is down the account-creating write
+  // waits, rather than running with no ceiling.
+  {
+    name: 'branch_invitation',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => (m === 'GET' || m === 'POST')
+      && /^\/api\/branch\/invitations\/(preview|accept)$/.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // Landing-page creation. Authenticated and already hard-capped at
+  // MAX_PAGES_PER_PROJECT (brand.ts), but the cap counts CURRENT pages —
+  // create/delete/create in a loop stays under it forever while churning
+  // globally-unique public slugs and D1 rows. This bounds the churn itself.
+  // Scoped per user, not per IP: the actor is a known account.
+  {
+    name: 'landing_page_create',
+    limit: 10,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && /^\/api\/brand\/landing\/by-project\/\d+\/pages$/.test(p),
+    scope: 'user',
+  },
+  // Task #10 — unauthenticated client-error telemetry sink. Bounded per-IP so a
+  // runaway error loop in one browser tab can't flood the Worker logs. 60/min/IP
+  // is far above any legitimate client (the frontend self-throttles + dedupes).
+  // Fail-open: telemetry must never be the reason a request is rejected.
+  {
+    name: 'client_error',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/client-error',
+    scope: 'ip',
+  },
+  // Task #2 — unauthenticated funnel-event sink (POST /api/track). Same
+  // philosophy as client_error: bounded per-IP so a runaway tab can't flood
+  // D1, fail-open because telemetry must never be the reason a request is
+  // rejected. Each request carries ≤20 events, so 60/min/IP caps a single
+  // source at ~1.2k rows/min worst case — negligible for D1.
+  {
+    name: 'track',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/track',
+    scope: 'ip',
+  },
+  {
+    name: 'meta_data_deletion',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/meta/data-deletion',
+    scope: 'ip',
+  },
+  // 1000 req/min global burst protection
+  {
+    name: 'global',
+    limit: 1000,
+    windowSec: 60,
+    test: (p) => p.startsWith('/api/'),
+    scope: 'global',
+  },
+];
+
+// Skip rate limiting on health and the monitoring read endpoints (admins
+// hit these frequently from the dashboard).
+//
+// Epic 11 — `/api/auth/register` was REMOVED from this list. It's now
+// covered by the dedicated 10/min/IP `register` bucket above so an
+// unauthenticated client cannot flood the signup endpoint. Other auth
+// routes (login, verify, me) stay exempt because the 200/min/IP general
+// bucket already covers them and they have their own brute-force
+// protections (Turnstile on login + JWT verification cost on me).
+//
+// D722 — `/api/auth/google/config` is a constant read of the deployment's
+// config: no D1, no KV, no session, and its only effect is whether /login
+// opens Google's window or redirects. A limiter in front of it could only ever
+// turn the window off. `/api/auth/google/start` and `/popup` stay limited
+// (D74; the `google_popup` bucket above).
+const RATE_LIMIT_EXEMPT = [
+  '/api/health',
+  '/api/auth/login',
+  '/api/auth/verify',
+  '/api/auth/me',
+  '/api/auth/google/config',
+  '/api/monitoring/metrics',
+  '/api/monitoring/rate-limits',
+];
+
+// NOTE: KV is eventually consistent and the read-modify-write below is not
+// strictly atomic. For a venture-studio scale workload (dozens of partners,
+// double-digit RPS), the worst case is a small over-allowance at window
+// boundaries — acceptable. If/when traffic grows, swap this for a Durable
+// Object token-bucket or D1 transactional counter.
+// Fail-open is the DEFAULT: a KV outage should not lock out admins/partners
+// from running spinouts, and most buckets have their own RBAC checks
+// downstream. Buckets marked `failClosed` (abuse-prone / money-adjacent:
+// ai, register, promo_validate, admin_catalog_writes) instead REJECT with a
+// 503 on a KV outage so a KV failure can't be used to bypass the limiter.
+async function bumpCounter(kv: KVNamespace, key: string, windowSec: number): Promise<number> {
+  const raw = await kv.get(key);
+  const next = (raw ? parseInt(raw, 10) : 0) + 1;
+  // expirationTtl must be ≥ 60 in CF KV
+  await kv.put(key, String(next), { expirationTtl: Math.max(60, windowSec) });
+  return next;
+}
+
+async function logBlock(env: Env, ctx: ExecutionContext | undefined, opts: {
+  user_id: number | null;
+  endpoint: string;
+  bucket: string;
+  count: number;
+  blocked: boolean;
+}) {
+  const work = (async () => {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO rate_limit_logs (user_id, endpoint, requests_in_window, blocked, bucket)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(opts.user_id, opts.endpoint, opts.count, opts.blocked ? 1 : 0, opts.bucket).run();
+    } catch (e) {
+      console.error('rate_limit_logs insert failed', e);
+    }
+  })();
+  if (ctx) ctx.waitUntil(work); else await work;
+}
+
+export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
+  return async (c, next) => {
+    const path = new URL(c.req.url).pathname;
+    if (!path.startsWith('/api/')) return next();
+    if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();
+
+    const method = c.req.method;
+    // RFC 8058 mailbox bursts and KV outages must not prevent signed opt-outs.
+    // The route still verifies the programme-scoped token before any write.
+    if (path === '/api/testing/mail/unsubscribe' && (method === 'POST' || method === 'PUT')) return next();
+    const env = c.env;
+    const ctx = c.executionCtx as any;
+
+    // Resolve user (may be null for unauthenticated paths) and cache on the
+    // request context so observability + downstream route handlers don't have
+    // to re-query the DB.
+    let user: any = (c as any).get('currentUser');
+    if (user === undefined) {
+      try { user = await getCurrentUser(c); } catch { user = null; }
+      (c as any).set('currentUser', user);
+    }
+    const userId: number | null = user?.id ?? null;
+    const role: string | undefined = user?.role;
+
+    const windowMinute = Math.floor(Date.now() / 1000 / 60);
+    const windowHour = Math.floor(Date.now() / 1000 / 3600);
+
+    // Epic 11 — resolve the source IP once per request. Cloudflare always
+    // sets `cf-connecting-ip`; we fall back to the first hop of
+    // `x-forwarded-for` if the worker is reached via a non-CF proxy in
+    // testing. If neither is set we still rate-limit (using the literal
+    // string 'unknown' as the scope key) so a missing-IP path can't
+    // unilaterally bypass the IP bucket.
+    const clientIp =
+      c.req.header('cf-connecting-ip') ||
+      (c.req.header('x-forwarded-for') || '').split(',')[0].trim() ||
+      'unknown';
+
+    // Resolved up front because a stalled namespace has to be answered ONCE for
+    // the whole request, not once per bucket. Several buckets match a typical
+    // path (a specific one plus the global 1000/min burst), and with a deadline
+    // per KV call a namespace that answers nothing would cost the deadline
+    // again for every one of them — three matching buckets turning a 2s stall
+    // into 6s, on the exact route where the budget is 30s and already shared
+    // with two more limiters and a schema bootstrap.
+    const matching = BUCKETS.filter(
+      (b) => (b.test(path, method, role) || (user?.licences || []).some((licence: string) => b.test(path, method, licence)))
+        && !(b.scope === 'user' && !userId),
+    );
+
+    for (let i = 0; i < matching.length; i++) {
+      const b = matching[i];
+
+      const windowKey = b.windowSec >= 3600 ? windowHour : windowMinute;
+      let key: string;
+      if (b.scope === 'global') {
+        key = `rl:g:${b.name}:${windowKey}`;
+      } else if (b.scope === 'ip') {
+        key = `rl:i:${clientIp}:${b.name}:${windowKey}`;
+      } else {
+        key = `rl:u:${userId}:${b.name}:${windowKey}`;
+      }
+
+      let count = 0;
+      try {
+        // THE DEADLINE IS WHAT MAKES THE POLICY BELOW REACHABLE. `bumpCounter`
+        // is a KV read followed by a KV write, and KV takes no AbortSignal, so
+        // a namespace that answers neither leaves this `await` pending for as
+        // long as the request lives. Every line under the catch — the
+        // fail-open, the 503 for an abuse-prone bucket — was already correct
+        // and simply never ran: a stall is not an error, so nothing threw. On
+        // 2026-09-12 sign-in returned "The server did not respond within 30s"
+        // with nothing in the log, which is what that looks like from outside.
+        count = await withDeadline(
+          bumpCounter(env.RATE_LIMITS, key, b.windowSec), KV_DEADLINE_MS, `ratelimit:${b.name}`,
+        );
+      } catch (e) {
+        // KV outage OR a KV that never answered — deliberately the same branch,
+        // because the right response to both is the bucket's declared policy
+        // and a second branch would be one more thing to keep in step.
+        // Default = fail-open (continue); buckets marked `failClosed` instead
+        // reject with 503 so a KV failure can't be used to bypass an
+        // abuse-prone limiter. Either way it is observable.
+        console.error('[ratelimit] KV bumpCounter failed', { bucket: b.name, failClosed: !!b.failClosed }, e);
+        // A STALL CONDEMNS THE WHOLE NAMESPACE, NOT JUST THIS BUCKET. Once a
+        // deadline has expired there is no reason to believe the next bucket's
+        // read will answer, so we decide the request here from what the
+        // REMAINING matching buckets declare rather than paying the deadline
+        // again for each. Reading them all keeps the security posture exact: a
+        // fail-open bucket earlier in the list cannot smuggle a request past a
+        // fail-closed one later in it.
+        const stalled = e instanceof DeadlineExceeded;
+        const closesDoor = stalled
+          ? matching.slice(i).some((r) => r.failClosed)
+          : !!b.failClosed;
+        if (closesDoor) {
+          const named = (stalled ? matching.slice(i).find((r) => r.failClosed) : b)!;
+          await logBlock(env, ctx, {
+            user_id: userId, endpoint: redactPath(path), bucket: named.name, count: -1, blocked: true,
+          });
+          c.header('Retry-After', '30');
+          c.header('X-RateLimit-Bucket', named.name);
+          return c.json({
+            detail: 'Rate limiting is temporarily unavailable; this request was rejected for safety. Try again shortly.',
+            bucket: named.name,
+            code: 'rate_limit_unavailable',
+            retry_after: 30,
+          }, 503);
+        }
+        if (stalled) break;
+        continue;
+      }
+
+      if (count > b.limit) {
+        await logBlock(env, ctx, {
+          user_id: userId, endpoint: redactPath(path), bucket: b.name, count, blocked: true,
+        });
+        const retryAfter = b.windowSec >= 3600 ? 3600 : 60;
+        c.header('Retry-After', String(retryAfter));
+        c.header('X-RateLimit-Bucket', b.name);
+        c.header('X-RateLimit-Limit', String(b.limit));
+        return c.json({
+          detail: `Rate limit exceeded for ${b.name} bucket. Try again in ${retryAfter} seconds.`,
+          bucket: b.name,
+          limit: b.limit,
+          retry_after: retryAfter,
+        }, 429);
+      }
+    }
+    return next();
+  };
+};

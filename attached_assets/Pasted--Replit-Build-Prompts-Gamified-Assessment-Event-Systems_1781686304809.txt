@@ -1,0 +1,366 @@
+# Replit Build Prompts — Gamified Assessment + Event Systems
+
+These are copy-paste prompts to drive the build in Replit, in order. They
+reference the design specs and schema already committed on this branch:
+
+- **Branch:** `claude/affectionate-keller-67zuhb`
+- **PR:** the draft PR opened from this branch (see its description for the file list)
+- **Designs:** `design/GAMIFIED_ASSESSMENT_SYSTEM.md`, `design/EVENT_SYSTEM.md`
+- **Schema (already written):**
+  `cloudflare-worker/sql/migrations/107_assessment_engine.sql`,
+  `108_assessment_play.sql`, `109_events_core.sql`
+
+## How to use
+
+1. Open the Replit workspace on the branch above (pull it first).
+2. Run **Prompt 0** once (orientation + apply migrations).
+3. Then run the phase prompts in order: **A1 → A2 → A3 → A4** (assessment),
+   **E1 → E2 → E3 → E4** (events), **F** (cross-system + polish). You can
+   interleave A and E, but keep each phase's backend (worker) prompt before its
+   frontend prompt.
+4. After every prompt, Replit must run `npm run test:drift` and `cd
+   cloudflare-worker && npx tsc --noEmit` and report green before moving on.
+
+---
+
+## ⚠️ GLOBAL RULES — paste this block at the top of EVERY prompt
+
+```
+NON-NEGOTIABLE REPO RULES (from CLAUDE.md / replit.md / GOTCHAS.md):
+1. PROD = Cloudflare Worker (Hono, TypeScript) on D1. The FastAPI in backend/
+   is DEV-ONLY and is NEVER deployed. Implement EVERY feature in
+   cloudflare-worker/src/routes/ FIRST. A backend/ port is optional and only
+   for local dev parity — never the source of truth.
+2. Every method added to frontend/src/lib/api.js MUST have a matching worker
+   route, or `npm run test:drift` (check-api-drift) fails. Add the route first.
+3. NEVER run `ALTER TABLE users` — it is at D1's 100-column ALTER limit and
+   will fail. New user-attached state goes in a side table keyed by
+   `user_id PRIMARY KEY` (e.g. user_xp). This is already done in the schema.
+4. D1 migrations are additive-only, `IF NOT EXISTS` / `INSERT OR IGNORE`, in
+   cloudflare-worker/sql/migrations/NNN_*.sql. For each new feature add a lazy
+   bootstrap `services/<feature>Schema.ts::ensure<Feature>Schema()` that
+   CREATE-TABLE-IF-NOT-EXISTS on the cold path so routes self-heal before the
+   migration is applied (reference: services/skillsTaxonomySchema.ts,
+   ensureTelegramSchema). The ensure* helper creates SHAPE only — never seeds.
+5. Admin sub-routers (e.g. /api/admin/assessment, /api/admin/events) MUST be
+   mounted in src/index.ts BEFORE the catch-all `app.route('/api/admin', admin)`
+   — same rule as /api/admin/telegram and /api/admin/x. Enforce admin per-route
+   with requireAdmin(c).
+6. Auth: requireAuth(c) / requireAdmin(c) / requireRole(c, ...) from src/auth.ts.
+   D1 access via getSQL(c.env) tagged-template SQL; call sql.end() when done.
+   Public (anonymous) routes must be mounted OUTSIDE the auth/tier middleware
+   and gated with Turnstile where they accept writes (mirror the contact form).
+7. Frontend: React 19 + Vite + Tailwind 4 + react-router 7. New components MUST
+   carry `dark:` variants on hardcoded bg-white/text-gray-* (the check-dark-mode
+   drift guard fails otherwise). Use useToast, useEscapeClose (modals),
+   PageExplainer (page headers), recharts (radar), lucide-react (icons),
+   qrcode (check-in). No new data-fetching lib — useEffect + useState + api.js.
+8. Reuse, don't duplicate: write value scores to user_values (094) and skill
+   self-levels to user_skills (091); read the taxonomy from skill_categories /
+   skills / value_dimensions (089/090). Reuse notifications_inbox /
+   notification_outbox, the Stripe PaymentIntent flow, and admin_audit_log.
+9. Integrity: sign computed assessment results with SCORING_HMAC_SECRET, the
+   same helper the scoring engine uses.
+10. After your changes: run `npm run test:drift` and
+    `cd cloudflare-worker && npx tsc --noEmit`. Both must pass. Update BOTH
+    CHANGELOG.md (technical) and frontend/public/CHANGELOG-user.md (plain
+    English) for any user-facing change.
+```
+
+---
+
+## Prompt 0 — Orientation & apply migrations
+
+```
+[Paste GLOBAL RULES]
+
+TASK: Orientation only — do not write feature code yet.
+1. Read design/GAMIFIED_ASSESSMENT_SYSTEM.md and design/EVENT_SYSTEM.md in full.
+2. Read the three new migrations: cloudflare-worker/sql/migrations/107_assessment_engine.sql,
+   108_assessment_play.sql, 109_events_core.sql. Confirm you understand every table.
+3. Apply all three to the D1 dev database (and note the prod apply command for
+   later): for each file run
+   `npx wrangler d1 execute studioos-db --config wrangler.toml --remote --file=<path>`
+   (wrangler needs Node 22+ — `export PATH` per GOTCHAS "Migrations & schema").
+   Confirm each is idempotent by running it twice (second run must be a no-op).
+4. Reply with: the list of tables created, the canonical tables the assessment
+   will write into (user_values, user_skills, investor_profiles), and a one-paragraph
+   restatement of how `track`, `visibility/status/admin_published`, and the comp
+   eligibility engine work. Do NOT proceed to A1 until I confirm.
+```
+
+---
+
+## Phase A — Gamified Assessment
+
+### Prompt A1 — Assessment backend (worker)
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Implement the assessment ENGINE in the Cloudflare Worker. Spec:
+design/GAMIFIED_ASSESSMENT_SYSTEM.md (§4 scoring, §7 API). Schema is in
+migrations 107/108 (already applied).
+
+CREATE:
+- cloudflare-worker/src/services/assessmentSchema.ts
+    ensureAssessmentSchema(env): CREATE TABLE IF NOT EXISTS for all 107+108
+    tables (shape only, no seed). Export ASSESSMENT_TRACKS + MECHANICS consts.
+- cloudflare-worker/src/services/assessmentScoring.ts
+    Pure scoring: responses + item loads → { valueVector:{slug:−2..+2},
+    skillVector:{axis:0..5}, confidence:{slug:0..1}, flags:[] }. Implements
+    contradiction checks (same dimension via ≥2 mechanics), latency weighting
+    for `speed`, card_sort rank scaling, sjt seniority_hint → self_level.
+    signResult(env, result) → HMAC via SCORING_HMAC_SECRET (reuse the scoring
+    engine's helper). assignArchetype(track, vectors) → nearest centroid.
+- cloudflare-worker/src/routes/assessment.ts  (auth'd) — endpoints per §7:
+    GET /games, POST /sessions, GET /sessions/:id, GET /sessions/:id/next,
+    POST /sessions/:id/respond, POST /sessions/:id/complete,
+    GET /results/me, GET /results/:userId (consent-gated),
+    POST /results/publish, GET /badges/me.
+    On /complete: compute → persist assessment_results (+integrity_hash) →
+    UPSERT user_values & user_skills (and investor_profiles for investor_lp) →
+    bump user_xp + insert user_badges (idempotent) → award archetype badge.
+- cloudflare-worker/src/routes/admin_assessment.ts (admin) — CRUD+version+publish
+    games/chapters/items/archetypes/badges; preview; analytics (completion %,
+    chapter drop-off, archetype distribution, axis coverage); admin re-score.
+
+MOUNT in src/index.ts: app.route('/api/assessment', assessment); and
+app.route('/api/admin/assessment', adminAssessment) BEFORE the catch-all
+'/api/admin'. Call ensureAssessmentSchema() lazily on first hit.
+
+FRONTEND API: add an `assessment` namespace to frontend/src/lib/api.js with one
+method per route above (no UI yet — that's A2). Every method maps 1:1 to a route.
+
+TESTS: add cloudflare-worker/test/assessment.scoring.test.ts covering: a full
+founder_origin_v1 playthrough resolves all 5 founder spectrums in [−2,2];
+contradiction lowers confidence; integrity hash verifies; archetype assignment
+is deterministic. Run `npm run test:drift` + tsc --noEmit → green.
+
+ACCEPTANCE: I can curl POST a founder_origin_v1 session, answer the seeded
+items, complete it, and see rows in assessment_results + user_values +
+user_skills + user_xp, with a verifying integrity_hash.
+```
+
+### Prompt A2 — Assessment player (frontend)
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Build the player UI. Spec: design/GAMIFIED_ASSESSMENT_SYSTEM.md §9.
+Backend (A1) is live. NO survey look — one decision per screen, motion, reveal.
+
+CREATE pages (lazy-loaded, wired in App.jsx with role guards; add to sidebarConfig.js):
+- /play  → AssessmentHubPage: the caller's track game, XP/level bar, badge wall,
+  current archetype card, "Play / Continue" CTA.
+- /play/:gameSlug → AssessmentGamePage: full-screen player. Render per mechanic:
+    dilemma → big choice cards (tap to pick, satisfying transition);
+    card_sort → drag the deck, keep top N (config.pick_n);
+    sjt → "which lever?" cards + optional confidence wager slider;
+    speed → timed binary with a countdown ring (config.timer_ms), record latency;
+    allocation → sliders summing to config.total;
+    reflection → the Scout Report reveal (recharts radar fills in + archetype).
+  Progress bar across chapters; XP pops + badge-unlock toasts (useToast).
+- /play/card → ProfileCardPage: shareable archetype trading card (radar +
+  archetype + top values + top skills + badges). PNG export + reuse the
+  deck-share CTA for sharing.
+
+INTEGRATE: after onboarding persona classification, offer "Discover your
+{archetype}" that routes into the track game (don't force; make it the fun path).
+All new components carry dark: variants. Mobile-first, swipeable.
+
+ACCEPTANCE: a new founder can play Founder Origin end-to-end on mobile, watch
+their radar fill, get an archetype + badge, and view/share the card. drift+tsc green.
+```
+
+### Prompt A3 — Assessment admin authoring + analytics
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Admin authoring + analytics UI over routes/admin_assessment.ts (A1).
+CREATE /admin/assessment → AdminAssessmentPage (admin-guarded):
+- Manage games/chapters/items/archetypes/badges (create, edit, version, publish/
+  archive). Item editor exposes mechanic, options_json (with a loads picker over
+  value_dimensions + skill_categories), measures_json, display_order.
+- Preview a game (plays it without writing results).
+- Analytics: completion %, per-chapter drop-off, archetype distribution per
+  track, 8-axis coverage, median latency. Use recharts.
+ACCEPTANCE: an admin can author a new dilemma, publish it, preview it, and see
+it appear in a fresh session. drift+tsc green. dark: variants present.
+```
+
+### Prompt A4 — Assessment → matching + content bank
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Wire the canonical vectors into matching, and expand content.
+1. MATCHING: extend routes/matches.ts, cofounder.ts, mentors.ts,
+   investor_signals.ts to read user_values / user_skills / investor_profiles:
+   - co-founder/key-hire: skill-vector complementarity (cosine distance);
+   - values alignment: closeness on founder spectrums + Schwartz, surface top
+     1–2 divergences as "watch-outs";
+   - investor↔founder: thesis × value alignment × stage/sector;
+   - mentor/coach↔founder: domain radar overlap / focus-area fit × style.
+   Down-weight extreme self-claims lacking confidence/evidence/endorsement.
+2. CONTENT: author the full item bank for all six tracks (operators_path_v1,
+   thesis_lab_v1, partner_playbook_v1, mentor_compass_v1, coachs_lens_v1) as a
+   new seed migration 110_seed_assessment_content.sql (INSERT OR IGNORE on slug),
+   following the founder_origin_v1 pattern. ≥12 items per track, covering each
+   track's emphasis (see spec §2). Keep value_dimension/skill slugs canonical.
+ACCEPTANCE: a co-founder match score visibly changes after two users complete
+their games; every track has a playable, scored game. drift+tsc green.
+```
+
+---
+
+## Phase E — Event System
+
+### Prompt E1 — Events backend (worker)
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Implement the event ENGINE in the Worker. Spec: design/EVENT_SYSTEM.md
+(§1 visibility/status, §2 invitations, §3 capacity, §8 API). Schema = migration
+109 (already applied).
+
+CREATE:
+- cloudflare-worker/src/services/eventsSchema.ts → ensureEventsSchema(env)
+  (CREATE TABLE IF NOT EXISTS for all 109 tables; shape only).
+- cloudflare-worker/src/services/eventAudience.ts → evaluate
+  events.audience_rules_json against partners (official/KYB-verified),
+  limited_partners (invested_amount>0), investors, project founders, and host
+  connections; return the set of comp-eligible principals; helper to auto-mint
+  comp event_invitations (source auto_partner / auto_lp).
+- cloudflare-worker/src/services/eventCapacity.ts → seat math (seats_taken,
+  waitlist promote on cancel, approval gating).
+- cloudflare-worker/src/routes/events.ts (auth'd) — §8 host/attendee endpoints,
+  incl. POST /:id/invitations (network picker or emails), roster management,
+  /:id/register (comp auto-applied via eventAudience), /:id/eligibility,
+  /:id/checkin/:code (QR → attended), /:id/event.ics, /:id/export.
+- cloudflare-worker/src/routes/events_public.ts (NO auth) — §8 public endpoints:
+  GET /api/public/events(+/:slug), POST /:slug/register (Turnstile-gated,
+  capacity/approval aware), GET /api/public/events.ics, GET /api/public/invite/:token,
+  POST /api/public/invite/:token/respond. MOUNT OUTSIDE auth/tier middleware.
+- cloudflare-worker/src/routes/admin_events.ts (admin) — review queue, create
+  official Axal events, edit/override capacity, publish/unpublish/feature/approve/
+  reject/cancel (each writes admin_audit_log report_type='events'), analytics.
+
+PUBLISH GATE: a public listing requires visibility='public' AND status='published'
+AND admin_published=1. Founder "publish public" only sets status='pending_review';
+admin approve sets published + admin_published=1. private/unlisted self-publish.
+
+MOUNT in index.ts: events_public OUTSIDE auth middleware; '/api/events' auth'd;
+'/api/admin/events' BEFORE the catch-all '/api/admin'. Lazy ensureEventsSchema().
+Add the `events` namespace to frontend/src/lib/api.js (routes only; UI in E2/E3).
+
+TESTS: cloudflare-worker/test/events.test.ts — capacity cap → waitlist →
+auto-promote; comp eligibility for an official partner + invested LP; the public
+calendar excludes pending_review/private events. drift+tsc green.
+
+ACCEPTANCE: curl create a private demo_day, invite an email, RSVP via the token;
+create a public event, see it hidden until admin approve; cap a 2-seat event and
+watch the 3rd registrant waitlist then auto-promote on a cancel.
+```
+
+### Prompt E2 — Host management UI (frontend)
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Host/attendee UI over routes/events.ts. Spec: design/EVENT_SYSTEM.md §10.
+CREATE (lazy routes in App.jsx + sidebarConfig.js entry "Events"):
+- /my/events → MyEventsPage: hosting + attending tabs; tickets show a QR.
+- /events/new and /events/:id/edit → EventEditorPage: title, type, schedule+tz,
+  location_kind, cover, capacity, waitlist, approval_required, visibility, and an
+  audience-rules builder (toggle "free seats for official partners" / "for
+  invested LPs"). "Submit for review" when visibility=public.
+- /events/:id/manage → EventManagePage: roster (approve/decline/waitlist/promote),
+  send invites (InvitePeopleModal: pick from network/connections OR paste emails
+  + personal message; show comp badges), and a QR CHECK-IN SCANNER (device camera
+  → /:id/checkin/:code).
+Reuse qrcode, useToast, useEscapeClose, PageExplainer. dark: variants required.
+ACCEPTANCE: a founder creates a private demo day, invites 3 people from their
+network + 1 email, approves a registrant, and checks someone in by QR. drift+tsc green.
+```
+
+### Prompt E3 — Public calendar + RSVP + routing
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Public surface. Spec: design/EVENT_SYSTEM.md §9–§10.
+CREATE public pages (no auth guard):
+- /events → PublicEventsPage: calendar/list of published public events, filters
+  (type/date), "Add to calendar" (.ics), register CTA.
+- /events/:slug → EventDetailPage: detail + registration form (capacity/approval
+  aware; Turnstile).
+- /invite/:token → InviteRsvpPage: accept/decline + add-to-calendar.
+Add an "Events" link to the public landing nav.
+
+ROUTING (replit.md "Apex routing"): add to wrangler.toml [[env.production.routes]]
+BOTH exact + /* patterns for axal.vc/events and axal.vc/invite so the SPA (not
+Jekyll) serves them. Note in the PR that routes only take effect on `npm run
+deploy` (ops step). Verify the public feed excludes non-public/non-published events.
+ACCEPTANCE: an anonymous visitor browses /events, opens one, registers from the
+landing page, and RSVPs via an /invite/:token link. drift+tsc green.
+```
+
+### Prompt E4 — Admin moderation, analytics, reminders, tickets
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Close the loop. Spec: design/EVENT_SYSTEM.md §5–§8.
+1. /admin/events → AdminEventsPage (admin-guarded): pending-review queue with
+   approve/reject, publish/unpublish/feature, capacity override, cancel; analytics
+   (registrations, attendance, capacity utilisation, conversion) via recharts.
+2. REMINDERS: enqueue invite + T-24h/T-1h reminders + waitlist-promotion +
+   cancellation notices via notification_outbox; drain in the existing cron in
+   index.ts scheduled(). Attach .ics to invite emails.
+3. COMP AUTOMATION: on publish, auto-mint comp invitations for official partners
+   and invested LPs via eventAudience.ts; show them in attendees' inboxes.
+4. (OPTIONAL) PAID TICKETS: if price_cents>0, embedded Stripe PaymentIntent with
+   metadata.kind='event_ticket', fulfil in the payment_intent.succeeded webhook
+   (mark registration confirmed). Comp invites skip payment. Default free.
+ACCEPTANCE: admin approves a pending public event and it appears on /events;
+an official partner and an invested LP each receive an automatic free invite;
+reminders fire from the cron. drift+tsc green.
+```
+
+---
+
+## Phase F — Cross-system + polish
+
+```
+[Paste GLOBAL RULES]
+
+GOAL: Tie the two systems together and finish.
+1. Award the Demo Day Presenter badge to founders in an event's agenda; award
+   Networker (5 check-ins) and Founding Attendee badges from event check-ins
+   (insert user_badges, idempotent).
+2. Surface the attendee's archetype card on event roster / networking views.
+3. Suggest events to users based on their archetype/track; suggest who to invite
+   based on matching.
+4. Docs: add admin docs sections (roles:['admin']) for both systems; update
+   CHANGELOG.md + CHANGELOG-user.md; add a "Discover your archetype" + "Upcoming
+   events" teaser to the landing page.
+5. Final: full `npm run test:drift`, `cd cloudflare-worker && npx tsc --noEmit`,
+   and `npm run build`. All green. Summarise the prod migration apply + the
+   wrangler.toml route deploy as the only manual ops steps.
+```
+
+---
+
+## Ops checklist (do these once, outside Replit's agent)
+
+- [ ] Apply migrations 107, 108, 109 (and 110 after A4) to **prod** D1:
+      `npx wrangler d1 execute studioos-db --config wrangler.toml --remote --file=cloudflare-worker/sql/migrations/<file>.sql`
+- [ ] Add the `axal.vc/events`, `axal.vc/events/*`, `axal.vc/invite/*` route
+      patterns to `wrangler.toml` `[[env.production.routes]]`, then `npm run deploy`.
+- [ ] Confirm `SCORING_HMAC_SECRET` and `TURNSTILE_SECRET_KEY` are set in prod
+      (both already required by existing features).
+- [ ] (If paid tickets) ensure the Stripe webhook delivers
+      `payment_intent.succeeded` (already required by bookings/à-la-carte).

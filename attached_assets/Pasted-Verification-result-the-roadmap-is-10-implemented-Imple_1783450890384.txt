@@ -1,0 +1,26 @@
+Verification result: the roadmap is ~10% implemented
+
+✅ Implemented — the product thesis (Critical #1) The lifecycle module + Command Center restructure is genuinely built and matches the spec:
+
+Migration 139_lifecycle_stage.sql adds founder-editable lifecycle_stage / lifecycle_manual_checks, kept separate from the privileged stage/status trio
+Worker progress.ts + FastAPI progress.py both expose GET/PUT /api/progress/lifecycle/:projectId with per-project auth and derived checklist completion (landing published, interviews ≥5, MRR>0, prospects) — not stored, exactly as designed
+LifecycleModule.jsx: 6-stage rail (Idea→Validate→Build→Launch→Grow→Raise), next-best-action card, deep-linked checklist, suggestion chips (advancement suggested, not automatic)
+CommandCenterPage.jsx: 4 founder-language tabs (Overview default / Startups / Roadmap / Operations); Execution unstacked; Spin-Outs folded to a status filter; intake is a "New startup" action
+Overview has the 4-tile metrics strip → /build/metrics + venture snapshot
+The other 11 items — partial or not started:
+
+#	Roadmap item	Status	Evidence
+2	Discovery unification	❌ Missing	DiscoveryPage.jsx still a single interview log (no Leads/Interviews/Insights tabs); /customer-discovery still renders — no redirect (App.jsx:1254)
+3	Complete lead routing	🟡 Partial	routeFor() (contacts.ts) only handles customer/investor → rest default to network; cofounder/partner still dead-end. Advisory strip done; Team/Marketplace strips missing
+4	Team defaults + flattening	🟡 Partial	3 tabs exist, but default isn't Advisors (free users still land on Jobs); no blurred preview on locked tabs; Co-Founder inner tabs still present + gated before browse; H1 still "Team Building"
+5	Branded URLs + multi-page + templates	❌ Missing	project_id UNIQUE intact; random {name}-{rand6} slugs; no /p/{startup}/{page} route; no custom_templates
+6	Raise Pipeline v1	❌ Missing	No round header, no add-investor form, no kanban, no investor updates ("Promote from Contacts hub" stub remains)
+7	Legal Engine	🟡 Skeleton	Jurisdiction picker + status pills still TODO / hardcoded; 4 groups not 6; /legal still founder-accessible. Templates were already seeded (pre-existing)
+8	Advisory human-first inversion	❌ Missing	Still AI-first tab order; fake advisory.ts stub (ai_generated:false) still powers "AI Advisor"; real PersonalAdvisor not wired in
+9	Metrics strip + venture card	🟡 Partial	Metrics strip in CC Overview ✅; Studio venture card ❌
+10	Shared primitives + single accent	🟡 Partial	PersonCard exists but unused in Team/Advisory; accent still mixes violet/indigo/blue
+11	CSV export + Stripe nudge	❌ Mostly missing	No Contacts CSV export; Stripe import exists on Metrics but no Grow-stage nudge
+12	Naming sweep	❌ Mostly missing	"Refresh Scores", "kill" verdicts, "Founder Portal/Studio Ops/Execution" names all remain
+Two small gaps even inside the ✅ item: Studio Dashboard.jsx still shows "Refresh Scores" to all roles and lacks the compact founder venture card (roadmap #9's Studio half).
+
+On the doc + git deliverable: FOUNDER_UX_AUDIT.md is present at repo root and is accurate as a plan (its "no such column exists" claim was true when written — item #1 was built afterward). The plan's branch claude/axal-founder-ux-audit-hvf5a1 and draft PR aren't here, which is expected — on GitHub import only main comes across, not feature branches/PRs.

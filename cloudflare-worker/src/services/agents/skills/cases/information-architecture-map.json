@@ -1,0 +1,36 @@
+{
+  "skill": "information-architecture-map",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "nav": [
+          {
+            "label": "Bookings",
+            "children": [
+              "Calendar",
+              "Waitlist"
+            ]
+          }
+        ],
+        "screens": [
+          "Calendar",
+          "Waitlist",
+          "Old reports"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Bookings",
+      "Old reports"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "perfectly organised"
+    ]
+  }
+}

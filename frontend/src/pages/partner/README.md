@@ -1,0 +1,26 @@
+# frontend/src/pages/partner — the partner (service firm) licence's pages
+
+The Partner Operator Canvas's pages, plus the shared kit every partner zone
+imports. The bucket roots and the zone routing live in
+`frontend/src/workspaces/partner/`, not here.
+
+| Where | What it is |
+| --- | --- |
+| `pipeline/` | Pipeline zones: Leads, Proposals, Negotiations, Retainers, Analytics. |
+| `delivery/` | Delivery zones: Board (with the engagement lifecycle and invoice ledger, D395), Deliverables, Capacity, Status reports, Health (with Founder reviews, D390). |
+| `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. Visibility, Proof and Audience fit write through `useGuardedWrite.jsx` (#4688): a failed write keeps its editor and fields and offers Retry, cleanup runs only once the write persisted, and a saved write whose refresh failed offers a reload and never a second write. Their editors are mounted outside `ZoneBody`, so the first record can be created from an empty store. |
+| `earnings/` | The three earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals` and `/partner/relationships/:id` (the leaderboard was removed, #2297). Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
+| `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
+| `PartnerStudioHome.jsx` | Partner Studio, what `/studio` renders for a partner: the masthead, Eadwyn (`StudioInterview`) and the profile band, around `PartnerHomeP2` (D564). |
+| `PartnerHomeP2.jsx` | Partner Studio's body, the canvas's P2 (D394), mounted by `PartnerStudioHome` since the owner signed it off on #981 (D564). |
+| `PartnerFirmProfileCard.jsx` | The firm's partner profile, introductions switch and agreement summary (D390), mounted on Firm Settings (`/company-settings`) for partner sign-ins (D395). |
+| `PartnerWorkspaceShell.jsx`, `PartnerWorkspaceTabs.jsx` | The legacy tabbed shell a few older pages (`/needs`, `/services`, `/partner/insights` and others) still wrap themselves in. |
+| `OrganizationsZone.jsx` | Network · Organizations for this licence. |
+
+**Adding a page.** A zone body goes in the subfolder of its bucket and
+imports from `kit.jsx`. A page that is built but not yet mounted says so in
+its own header and names the decision it waits on.
+
+**Retired.** `operations/` (`/partner/operations/*`) was deleted in D395. Its
+six addresses redirect in `App.jsx` to the pages that took each job; do not
+recreate the folder.

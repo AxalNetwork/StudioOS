@@ -1,0 +1,1273 @@
+#:schema node_modules/wrangler/config-schema.json
+# ---------------------------------------------------------------------------
+# Axal StudioOS – Cloudflare Worker configuration (root, canonical)
+# ---------------------------------------------------------------------------
+# This is the production-ready Wrangler config for the StudioOS API Worker.
+#
+# NOTE on architecture:
+#   * The Cloudflare Worker is a TypeScript Hono app at
+#     `cloudflare-worker/src/index.ts`. That is the live API at axal.vc.
+#   * The Python FastAPI in `backend/` is a Replit-only dev backend used for
+#     local iteration; it is NOT deployed to Cloudflare (Workers do not run
+#     FastAPI). Do not change `main` to a Python file.
+#
+# Deploy (from the repo root — never `npx wrangler deploy` by hand: it
+# skips the `predeploy` hook that applies D1 migrations, so the Worker
+# would ship ahead of its schema):
+#   npm run deploy            # build docs/, migrate D1 (predeploy), then
+#                             # `wrangler deploy --config ../wrangler.toml
+#                             # --env production`; postdeploy runs
+#                             # scripts/check-spa-live.mjs
+#   npm run deploy:preview    # `--env preview` (studioos-preview)
+# CI does the same on every push to `main`:
+# .github/workflows/cloudflare-worker-deploy.yml (build → migrate → deploy).
+#
+# Secrets are managed via `wrangler secret put <NAME>` (see .env.example).
+# ---------------------------------------------------------------------------
+
+name = "studioos"
+main = "cloudflare-worker/src/index.ts"
+compatibility_date = "2026-04-01"
+compatibility_flags = ["nodejs_compat"]
+# Task #36 — workers.dev subdomain disabled. The worker is reachable
+# only through its Workers Custom Domains `axal.vc` and `app.axal.vc`
+# (see [[routes]] below; both since 2026-09-01, 1d320dda9). Re-enabling
+# this also requires removing `app.axal.vc` from the OAuth-callback
+# workers.dev guard in cloudflare-worker/src/index.ts.
+workers_dev = false
+
+# Epic 11 — minified production bundle. Wrangler runs esbuild with
+# `minify: true`, which strips comments, mangles identifiers, and (most
+# importantly here) drops dead-code branches so leftover console.log
+# statements that we want kept for dev observability don't bloat the
+# production bundle. It also reduces the worker startup latency on cold
+# isolates by ~10-15% on a deploy this size.
+# (Must live ABOVE any [[routes]]/[table] section — TOML doesn't end a
+# table on blank lines, so a top-level key placed below `[[routes]]` is
+# parsed as a member of that route entry and rejected by Wrangler 4.x.)
+minify = true
+
+# ---------- Worker Custom Domains ----------
+# The canonical production app is served by this Worker on both
+# `axal.vc` and `app.axal.vc`. Each is a whole-host custom domain, not a
+# path-scoped zone route, so the same SPA asset binding and API handlers
+# serve every URL on either hostname.
+#
+# `custom_domain = true` makes Wrangler manage the binding through the
+# Workers domains API on deploy, including automatic DNS record creation
+# on the proxied zone. Do NOT replace either hostname with path-scoped
+# routes — those conflict with the assets binding and break the SPA
+# fallback for unmatched paths.
+[[routes]]
+pattern        = "axal.vc"
+custom_domain  = true
+[[routes]]
+pattern        = "app.axal.vc"
+custom_domain  = true
+
+# ---------- Static Assets (SPA) ----------
+# Task #36 — Worker Static Assets binding. The worker serves the
+# Vite-built SPA from the repo-root `./docs` (see below) — on BOTH
+# `axal.vc` and `app.axal.vc` since 2026-09-01 (1d320dda9), which is
+# why one build sits behind both hosts. With `not_found_handling =
+# "single-page-application"`, any request the worker's fetch handler
+# doesn't match (i.e. anything NOT under `/api/*`, `/landing/:slug`,
+# or the few other handlers in `cloudflare-worker/src/index.ts`)
+# falls through to assets, which serves `index.html` for unknown
+# paths so the SPA's client-side router can take over.
+#
+# `run_worker_first = false` (the default) means assets are checked
+# BEFORE the worker fetch handler — so static files (.js/.css/.png)
+# are served directly from the edge without invoking the worker.
+# Only requests for paths not present in `docs/` reach the worker.
+#
+# `run_worker_first` lists path patterns where the worker MUST run
+# before any asset lookup. Without this, the SPA fallback in
+# `not_found_handling = "single-page-application"` would intercept
+# `/api/*` and `/landing/*` and serve `index.html` instead of
+# invoking the Hono router. `/mcp` and `/mcp/*` are the MCP server
+# (D784), answered before the Hono app. `/account/developer` and
+# `/account/developer/*` are D1315's 308s to `/account/builder`, so a page load
+# of an old address is redirected by the Worker. The eight record prefixes, and D4289's `/@*` (#4291),
+# (`/events/*` … `/insights/public/*`) are D1439's social cards: the Worker
+# reads the record behind the page's own public gate and rewrites the shell's
+# Open Graph tags (`services/socialCards.ts`), setting the `_headers` values
+# itself. These are `[assets]` globs, never a path-scoped apex route. Patterns
+# use the same syntax as Workers routes (`*` wildcards, not regex).
+# The five token-link prefixes (`/esign/*` … `/join/*`) are #3916's Part D:
+# the Worker gives them the static "Sign in to view" card, with no D1 call.
+# `/embed/*` is D1564's embed (#3811): the Worker answers a published deck
+# only to a frame from an origin its founder listed, with `frame-ancestors`
+# for those origins; everything else there is refused with frames denied.
+# `/skill-library/*` is D4574 H3's (#4574): the skill library's entries are a
+# static asset the Worker reads through its own binding for three Super Admin
+# routes. Listed here, a browser's request reaches the Worker, which has no
+# such route and answers 404, so the entries are never served to the public.
+#
+# Vite is configured (frontend/vite.config.js) to build into the
+# repo-root `./docs/` directory. The path dates from when GitHub Pages
+# published it (GitHub Pages no longer serves any production host) and
+# is kept because `docs/` is committed by hand for review and for
+# scripts/check-docs-fresh.mjs; the deploy workflow rebuilds it from
+# source at deploy time, so the committed bytes are what reviewers read,
+# not necessarily what ships. `docs/_headers` (from frontend/public/) is
+# read by Workers static assets and sets the security headers on every
+# response this binding serves; it is parsed, never served, and does not
+# apply to the `run_worker_first` paths below (the Worker sets its own).
+#
+# Build + deploy: root `npm run deploy` (see the Deploy note at the top
+# of this file) — it runs `node scripts/build-frontend.mjs` (Vite +
+# hashed-asset retention + OG prerender) before `wrangler deploy`.
+
+[assets]
+directory = "./docs"
+binding   = "ASSETS"
+not_found_handling = "single-page-application"
+# Prerender writes `docs/login/index.html` (and the same for every other
+# public route). The default `auto-trailing-slash` turns `GET /login` into a
+# 307 to `/login/`. Safari crashes in a loop when the service worker returns
+# that redirect, and the page it gives up on is exactly `/login/`.
+# `drop-trailing-slash` serves `/login` as 200 from that file — the canonical
+# URL, and the one every `location.replace('/login')` uses — and sends
+# `/login/` to `/login` once.
+html_handling = "drop-trailing-slash"
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*", "/skill-library/*"]
+
+# ---------- Module Rules ----------
+# Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
+# as text modules so legalTemplates.ts and friends can `import nda from
+# '../templates/legal/foo.md?raw'` to inline contract markdown into the
+# bundle. Without this, esbuild fails with "No loader is configured for
+# .md files" on `wrangler deploy`. fallthrough=true keeps esbuild's
+# defaults for everything else.
+[[rules]]
+type    = "Text"
+# Scope the markdown text loader to the legal-template directory only so
+# a stray transitive `import readme from 'some-pkg/README.md'` can't
+# accidentally inline third-party markdown into the production bundle.
+# Wrangler module rule globs match against the absolute filesystem path
+# esbuild resolves to, so we anchor on the trailing path segments rather
+# than a project-relative prefix.
+# Wrangler module-rule globs are matched by Cloudflare's `glob-to-regexp`
+# helper, which (a) compares against the path esbuild resolved to —
+# query suffix `?raw` and all — and (b) handles `**` at the START of the
+# pattern unreliably for this anchor. The pragmatic, narrow form is to
+# anchor with a leading `**/legal/` wildcard and a trailing `*md*` so
+# both `foo.md` and `foo.md?raw` are covered without enabling text
+# loading for arbitrary `.md` files anywhere in node_modules. The
+# `legal/` segment ensures only the bundled-contract directory matches.
+globs   = ["**/legal/*md*"]
+fallthrough = true
+
+# D711 (#1776) — the legal paper's faces and mark, bundled as ArrayBuffers
+# (`import face from '../templates/legal/paper/x.woff2'`) and inlined as
+# data: URIs into every legal PDF and preview, so no render fetches a font.
+# Scoped to the paper folder only, the way the Text rule above is.
+[[rules]]
+type    = "Data"
+globs   = ["**/legal/paper/*.woff2", "**/legal/paper/*.png"]
+fallthrough = true
+
+# ---------- Public (non-secret) variables ----------
+[vars]
+# D1496 (#3840): team agents (/api/teams). Enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
+# D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
+AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
+# D1528 (#3847, #3742 E3): "manual" admits nothing on its own; "self_start" only after E3 and E5 merge (owner Q1 B).
+AGENT_AUTONOMY = "manual"
+# D1528: the runtime behind the seam (src/agents/runtime.ts). "do" is the only one built.
+AGENT_RUNTIME = "do"
+# D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
+DECK_GEN_RUNTIME = "do"
+# D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
+# D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
+MEETING_BOT = "canary"
+# D1451 (#5297): Teams joins stay off until the bot's Teams page driver is measured; only "on" lets the bot take a Teams link.
+MEETING_BOT_TEAMS = "off"
+# Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
+# now point at axal.vc (the canonical host). All post-login redirects
+# and user-facing links (email verification, magic links, etc.) will
+# use axal.vc.
+#
+# OAUTH_CALLBACK_BASE_URL pins OAuth redirect_uri registrations at
+# app.axal.vc until every provider dashboard is updated. Integration
+# providers (Calendar, LinkedIn, HubSpot, Salesforce, DocuSign, Carta,
+# Slack, Stripe, Calendly) read OAUTH_CALLBACK_BASE_URL via callbackBase()
+# in cloudflare-worker/src/util/url.ts. Once all provider registrations
+# are updated to axal.vc, delete OAUTH_CALLBACK_BASE_URL and the
+# callbackBase() fallback converges to APP_URL automatically.
+APP_URL = "https://axal.vc"
+PUBLIC_BASE_URL = "https://axal.vc"
+OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
+PUBLIC_MARKETING_URL = "https://axal.vc"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME  = "StudioOS"
+# D655 follow-up (#1884): public GitHub App slug, not a secret. Empty means
+# no install link. Set BOTH default and production values in one PR.
+# The owner registered "Axal VC StudioOS" on 2026-10-20 (#2110, #2113).
+GITHUB_APP_SLUG = "axal-vc-studioos"
+# D1096 (#2961): the Vercel Integration's public slug, not a secret. Empty means
+# no install page, so Vercel reads as not set up. Set BOTH values in one PR.
+VERCEL_INTEGRATION_SLUG = ""
+# D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
+# separated; empty means nobody's. Session 1 labels as the owner account.
+BOUNTY_GRANTERS = "guillaumelauzier"
+ENVIRONMENT       = "production"
+# D653: owner and counsel must authorize enablement (#1008).
+ROUND_CALLS_ENABLED = "false"
+# D722: "on" lets /login open Google's own sign-in window (GIS code client,
+# POST /api/auth/google/popup); "canary" offers it only to
+# /login?google_window=1; "off" keeps every click on the /start redirect and
+# closes /popup. Change BOTH this block and the production vars block below,
+# in one PR, and only after https://axal.vc and https://app.axal.vc are
+# Authorized JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client: first
+# "canary", checked on both hosts, then "on". Rollback: "off" and deploy.
+GOOGLE_SIGNIN_POPUP = "off"
+# D720 §3 / D762 — what members pay for an AI run. "charged": Cloudflare's
+# cost × AI_MARKUP (1.25, services/ai/pricing.ts); unset, "cost" or anything
+# else: cost. The owner chose "charged" on 2026-10-19 (#1008 item 41). The
+# switch takes effect when D760's billingMode (#2017) reads it; from that
+# deploy every quote, hold, settlement and receipt uses the billed price, and
+# allowances count in billed dollars. The admin licence always pays cost.
+# Change BOTH this block and the production vars block below, in one PR.
+# Rollback: "cost" and deploy.
+AI_BILLING = "charged"
+# D754 / D756 — who may use the interview chat channels once their platform
+# secrets are set (services/channels/connections.ts). "on": every member;
+# "canary": Super Admins only, so the owner can connect and check a channel
+# while members still read "Not available yet"; "off": nobody, and the
+# channel's webhook verifies, answers 200 and stores nothing. An absent, empty
+# or unknown value reads as "canary". Missing secrets still switch a channel
+# off whatever this says. Ships "canary"; S01 moves a channel to "on" only
+# after the owner's live check, in one PR that changes BOTH this block and the
+# production vars block below. Rollback: "off" and deploy. Nothing reads
+# these until D754 w1 (#1892) merges.
+WHATSAPP_CHANNEL = "canary"
+TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
+# D754 way B — Axal's own WhatsApp number in E.164, for the wa.me link a member
+# opens to link their WhatsApp and send recordings. Empty until the owner has
+# set up the number (#1008 item 31); S01 then sets it in BOTH vars blocks.
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
+# D757 — who can authorize Axal's Zoom app. "own_account" (the default):
+# only users of Axal's own Zoom account, as Zoom allows for an unpublished
+# app; "beta" once Zoom approves Beta Test sharing; "public" once the app is
+# published on the Zoom Marketplace. The Zoom connector page words follow it.
+# Nothing reads this or MEET_TRANSCRIPTS_ENABLED until D757's tasks merge.
+ZOOM_APP_AUDIENCE = "own_account"
+# D757 — "on" offers Google Meet transcript import; "off" (also when unset)
+# hides "Allow transcript import" and the connect route answers 503. "on" only
+# after the owner has added the meetings.space.readonly scope to the Calendar
+# OAuth client, passed Google's verification and enabled the Meet REST API.
+# Switched on once all three were done (ZOOM_AND_MEET_TRANSCRIPTS.md §2).
+MEET_TRANSCRIPTS_ENABLED = "on"
+# D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
+# The lasting switch-off is one PR to main that sets this flag and production's
+# MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
+# cloudflare-worker/test/mcp_server_d666.test.ts to 'false'. A hand deploy with
+# --var lasts only until the next CI deploy: a push to main, a dispatched or
+# re-run deploy, or one already running or queued. So disable the deploy
+# workflow first, until that PR is ready, and let any run in progress or queued
+# finish before the hand deploy; re-enable it so the PR's merge deploys
+# (PRODUCTION.md, "MCP enablement").
+MCP_SERVER_ENABLED = "true"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
+# Feature flag for the Queues migration. While "true" the worker enqueues
+# new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
+# `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
+# jobs finish. Flip to "false" to roll back to D1-only.
+USE_CF_QUEUE      = "true"
+# Task #4 (CG) — Personal Advisor AI Gateway slug. The advisor calls
+# `env.AI.run(model, payload, { gateway: { id: CF_AI_GATEWAY_SLUG_ADVISOR } })`
+# so its analytics, cache, and rate limits are tracked independently of
+# the onboarding chatbot. The gateway must be created in the Cloudflare
+# dashboard (slug `advisor-ongoing`, cache TTL 5m / 0, RL 60-rpm/user
+# 200-rpm/account) before deploy; when the slug is missing or unknown
+# Cloudflare silently treats the call as un-gatewayed (no breakage).
+CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK    = ""
+# Task #4 (CG) — daily turn cap per user for the advisor. Soft-warn at
+# 80%, hard-block at 100%. Counted in KV under
+# `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`. The "USD_DAY" suffix is a
+# misnomer in the spec — the value is a TURN count, not dollars.
+WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
+# D538 (#1078) — Market Intelligence. A source that cannot report live data
+# stores NOTHING and its run says why; MI_STUB_ROWS = "on" (set in .dev.vars,
+# never here) brings back the synthetic stubs for local development. The six
+# MI_FLAG_* below are the keyless connectors whose fetchLive calls a real
+# provider; the "Market-Intelligence free connectors" comment further down
+# names the ones that are still drafts or need a key.
+MI_STUB_ROWS           = "off"
+MI_FLAG_OPENALEX       = "live"
+MI_FLAG_CROSSREF       = "live"
+MI_FLAG_ARXIV          = "live"
+MI_FLAG_WORLD_BANK     = "live"
+MI_FLAG_OECD           = "live"
+MI_FLAG_EUROSTAT       = "live"
+
+# ---------- Cloudflare Turnstile (bot protection) ----------
+# The Worker only needs the SECRET (set via `wrangler secret put TURNSTILE_SECRET_KEY`);
+# it's read in cloudflare-worker/src/services/turnstile.ts.
+# When the secret is unset, verifyTurnstile() fails-open with a console warning so
+# local dev / preview deploys aren't blocked. The frontend reads the public site
+# key from the build-time env var VITE_TURNSTILE_SITE_KEY (see frontend/.env.example).
+
+# ---------- D1 Database ----------
+[[d1_databases]]
+binding       = "DB"
+database_name = "studioos-db"
+database_id   = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
+
+# ---------- KV Namespaces ----------
+# TOKENS      – session / refresh tokens, short-lived caches
+# RATE_LIMITS – sliding-window rate-limit counters
+[[kv_namespaces]]
+binding = "TOKENS"
+id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "be811f14b6f342be961b8daa4513fb5b"
+
+# D681 (#1555): owner-provisioned OAuth storage for MCP clients, grants,
+# tokens and parked consent requests. Namespace ids are public configuration.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id      = "a536c75e7461447a89b1967d367c13ad"
+
+# ---------- Workers AI ----------
+[ai]
+binding = "AI"
+
+# ---------- Optional: dedicated KV namespace for AI router spend / cache ----------
+# Task #1 (AX) — When present, services/aiRouter.ts uses this namespace
+# for per-user $/day + $/month spend buckets, content-hash cache, and
+# the org-wide kill switch. When absent the router falls back to the
+# existing TOKENS namespace with `ai_spend:` / `ai_cache:` / `ai_killswitch:`
+# key prefixes — so this binding is *optional* and the router is
+# deployable without provisioning a new namespace. To attach a real
+# namespace later:
+#   npx wrangler kv namespace create AI_SPEND --env production
+# then uncomment + paste the returned id below.
+# [[kv_namespaces]]
+# binding = "AI_SPEND"
+# id      = "<paste-id-here>"
+
+# ---------- Queues (job queue) ----------
+# Native Cloudflare Queues replace the D1-polling job queue for true async
+# processing with retry + dead-letter semantics. The D1 `queue_jobs` table
+# and its cron drain remain in place during the migration window so
+# in-flight legacy jobs continue to drain (controlled by the USE_CF_QUEUE
+# feature flag — see [vars] above).
+#
+# Queues created on the account:
+#   studioos-job-queue       (main)
+#   studioos-job-queue-dlq   (dead letter)
+
+[[queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue"
+
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue"
+
+[[queues.consumers]]
+queue              = "studioos-job-queue"
+max_batch_size     = 25
+max_batch_timeout  = 10
+# Task #9 (AO) — cap retries at 3 then route to DLQ for forensic review.
+# Higher retry counts mask poison messages; 3 attempts is enough to ride
+# out transient D1/upstream blips while still surfacing real failures.
+max_retries        = 3
+dead_letter_queue  = "studioos-job-queue-dlq"
+
+# Task #7 (IE) — DLQ consumer mirrors exhausted CF Queue messages to D1
+# so the admin panel can inspect and retry them.
+[[queues.consumers]]
+queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[queues.consumers]]
+queue              = "studioos-agent-queue"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-dlq"
+
+[[queues.consumers]]
+queue              = "studioos-agent-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# ---------- Durable Objects (real-time fan-out) ----------
+# PIPELINE_ROOM   – one DO instance per pipeline deal_id; broadcasts stage /
+#                   metric / AI-recommendation events to every connected
+#                   admin/partner WebSocket viewer.
+# ONBOARDING_CHAT – one DO instance per founder user_id; broadcasts new
+#                   /api/profiling/chat messages so admins watching the
+#                   ProfileReviewModal see the transcript update live.
+#
+# Both classes use Hibernatable WebSockets so idle connections incur no
+# duration billing. Class registrations live in
+# `cloudflare-worker/src/durable-objects/`; index.ts re-exports them so the
+# Workers runtime can find them at the bound class names.
+# D886: independent private bot host.
+[[durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot"
+
+[[durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
+
+[[migrations]]
+tag                = "v1-realtime"
+# Cloudflare requires `new_sqlite_classes` for all newly created Durable
+# Object namespaces (the legacy `new_classes` is no longer accepted).
+# SQLite-backed storage is the default and only supported mode going forward.
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
+
+[[migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
+[[migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
+# D1528: append-only; no jurisdiction in v1.
+[[migrations]]
+tag = "v5-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[workflows]]
+name       = "studioos-agent-task"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
+
+# ---------- Vectorize (semantic search) ----------
+# Index `axal-search` (768-dim, cosine) backs the global search bar on the
+# Dashboard. Embeddings are produced by Workers AI `@cf/baai/bge-base-en-v1.5`.
+# Vector IDs follow `{type}:{id}` so we can scope deletes by entity.
+[[vectorize]]
+binding    = "VECTORIZE"
+index_name = "axal-search"
+
+# D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions,
+# cosine; metadata index on project_id). Approved under owner decision L = A on
+# 2026-11-02. The index must exist before this deploys:
+#   npx wrangler vectorize create axal-deck-quotes --dimensions=1024 --metric=cosine
+#   npx wrangler vectorize create-metadata-index axal-deck-quotes --property-name=project_id --type=number
+[[vectorize]]
+binding    = "DECK_QUOTES"
+index_name = "axal-deck-quotes"
+
+# ---------- R2 (object storage) ----------
+# Stores KYC documents (passport / ID images) under key prefix `kyc/{user_id}/`.
+# Bucket is private — access is gated by Worker routes that re-check auth on
+# every read. We deliberately do NOT use S3-compat presigned URLs (which would
+# require separate R2 access keys + introduce a leak vector).
+[[r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files"
+
+# Task #2 (AU) — Admin Publication Exports. Holds rendered PDF/CSV/PNG
+# artifacts under key prefix `publications/<id>/<isoTs>-<rand>.<ext>`.
+# Bucket is private — downloads are gated through the Worker via 24h
+# HMAC-signed URLs (no S3-compat presigning, no public R2 access).
+# Provision: `npx wrangler r2 bucket create studioos-publications`.
+[[r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications"
+
+# Task #5 (IE) — Backup + DR. Holds daily D1 SQL exports under
+# `d1/backup-YYYY-MM-DD.sql` (written by .github/workflows/backup-d1.yml)
+# and daily KV JSONL snapshots under `kv/<namespace>/YYYY-MM-DD.jsonl`
+# (written by services/backup.ts at 02:00 UTC). The bucket is private;
+# object-lock (compliance mode, 365-day retention) and lifecycle to
+# Standard-IA after 30 days are configured one-time in the dashboard —
+# see documentation/operations/INCIDENT_RESPONSE.md § Backups for the checklist. The binding is
+# OPTIONAL at runtime: services/backup.ts logs and no-ops when missing
+# so dev/preview deploys without the bucket created still boot cleanly.
+[[r2_buckets]]
+binding     = "BACKUPS"
+bucket_name = "studioos-backups"
+
+# #4201 (#4152 G1) — company logos. Holds one uploaded PNG or SVG per company
+# under `companies/<uid>/logo-<random>.<ext>`; `company_profiles.logo_url`
+# names the served path `/api/company/<uid>/logo?v=<random>.<ext>`. Private:
+# `GET /api/company/:uid/logo` serves it to the company's members only. The
+# routes answer 503 `storage_unconfigured` while the binding is absent.
+# The bucket must exist before this deploys (an operator creates it):
+#   npx wrangler r2 bucket create studioos-company-logos
+[[r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos"
+
+# ---------- Workers Analytics Engine ----------
+# Task #13 — write a data point per HTTP request from the observability
+# middleware (cloudflare-worker/src/middleware/observability.ts) so the
+# Admin Analytics Technical sub-tab can read true edge-level traffic and
+# latency, independent of D1's `system_metrics` table (which we still
+# write as a fallback for the historical period this dataset doesn't
+# cover yet). Reads via Cloudflare's GraphQL/SQL API are gated by
+# CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AE_API_TOKEN secrets — when either
+# is missing, loadTechnical() falls back to D1.
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_metrics"
+
+# ---------- Browser Rendering ----------
+# Powers true PDF generation for Admin Analytics exports
+# (cloudflare-worker/src/routes/monitoring_analytics.ts). Without this binding
+# the /export endpoint returns 503 for format=pdf and the audit row records
+# `pdf_unavailable` — see Task #9.
+[browser]
+binding = "BROWSER"
+
+# ---------- Images ----------
+# D1544 (#3784): resizes a deck image to a model's reference size (each side at
+# most 512 px, FLUX.2) before an edit sends it (services/decks/imageEdits.ts).
+# Without it an edit answers 503 resize_unavailable and nothing is run.
+[images]
+binding = "IMAGES"
+
+# ---------- Stream ----------
+# #4176 (D4176): Learning video on Cloudflare Stream — direct uploads, signed
+# playback tokens, captions and thumbnails (routes/learning_stream.ts). Until
+# the owner turns Stream on (owner step A, #1008) every Stream route answers
+# 503 stream_unavailable, so the code can ship ahead of it.
+[stream]
+binding = "STREAM"
+
+# ---------- Cron Triggers ----------
+# The cron handler in cloudflare-worker/src/index.ts uses a per-minute
+# RATE_LIMITS lease so concurrent firings (e.g. when the every-minute
+# trigger and a once-daily trigger collide on the same wall-clock minute)
+# dedupe to a single execution. Internal time gating (now.getUTCHours/
+# Minutes) inside the handler routes per-cadence work, so adding additional
+# cron lines here is for dashboard observability + Cloudflare's "next run"
+# UI rather than for new behaviour. Task #9 (AO) declares the canonical
+# set so operators can see all cadences at a glance.
+#
+# D201 — every firing now leaves a row in cron_run_history, including the
+# one that finds the lease held (`deduped`, or `skipped` when an earlier
+# tick overran), so HQ · Platform can tell a trigger that fired from one
+# that stopped. The list is mirrored in CRON_TRIGGERS
+# (cloudflare-worker/src/util/cronHistory.ts), and cron_record_d201.test.ts
+# fails when that list and either table here disagree.
+#
+# WEEKDAYS ARE CLOUDFLARE'S NUMBERING: 1 = Sunday … 7 = Saturday, not the
+# 0 = Sunday most cron systems use. The weekly line was "0 9 * * 1" until
+# D201 and fired on SUNDAYS (production's last row before D201: 2026-08-23
+# 09:00:24, a Sunday). "2" is Monday. No digest ever moved: the digests gate
+# on the wall clock inside the handler, never on which expression fired.
+[triggers]
+crons = [
+  "* * * * *",     # queue drain + sub-minute internal dispatch
+  "0 3 * * *",     # daily cleanup (legacy)
+  "0 */6 * * *",   # market-intel free connectors refresh
+  "0 4 * * *",     # market-intel composite + daily snapshot window
+  "0 9 * * *",     # daily digest emails
+  "0 9 * * 2",     # weekly digest emails (Monday — Cloudflare's 2)
+]
+
+# ---------- Market-Intelligence free connectors ----------
+# A source calls its real provider only when flipped LIVE via
+# `MI_FLAG_<KEY>=live` (see registry.ts::isLive). Since D538 a source that is
+# off, out of quota or failing stores nothing in production and the run logs
+# why; its deterministic stub runs only where MI_STUB_ROWS = "on" (dev, tests).
+# LIVE (D538, set in both var tables, top level and production) — keyless, real fetchLive:
+#   OPENALEX, CROSSREF, ARXIV (research); WORLD_BANK, OECD, EUROSTAT (macro).
+# NOT live, and why:
+#   NEWS_GDELT, PAPERSWITHCODE, STACK_EXCHANGE, PATENT_EPO — fetchLive is still a
+#     draft that returns stub rows (D538 never stores those as live).
+#   PATENT_USPTO — PatentsView needs PATENTSVIEW_API_KEY.
+#   BLS — needs BLS_API_KEY.   FRED — needs FRED_API_KEY.
+# Optional: MI_CONTACT_EMAIL (polite-pool mailto/UA; defaults market-intel@axal.vc).
+# Key secrets (free keys; Worker secrets only — never in this file or .replit):
+#   wrangler secret put PATENTSVIEW_API_KEY --env production
+#   wrangler secret put BLS_API_KEY  --env production
+#   wrangler secret put FRED_API_KEY --env production
+# then add the matching MI_FLAG_<KEY> = "live" to both var tables.
+
+# ---------- Observability ----------
+[observability]
+enabled            = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled            = true
+head_sampling_rate = 1
+persist            = true
+invocation_logs    = true
+
+[observability.traces]
+enabled            = true
+persist            = true
+head_sampling_rate = 1
+
+# ---------- Tail consumer (top-level / default deploy target) ----------
+# `npx wrangler deploy` (no --env flag) deploys this top-level config as
+# the production `studioos` worker (see header comment). The tail
+# consumer must therefore be declared here too — env tables don't
+# inherit. Mirror under [[env.production.tail_consumers]] below for the
+# `--env production` deploy path.
+[[tail_consumers]]
+service = "studioos-tail"
+
+# ===========================================================================
+# Environment: production
+# ---------------------------------------------------------------------------
+# IMPORTANT — Wrangler v2+ does NOT inherit binding tables (d1_databases,
+# kv_namespaces, ai, queues, durable_objects, vectorize, r2_buckets,
+# migrations, triggers) from the top-level config into a named environment.
+# Every binding must be re-declared under `[env.production.*]` or the
+# `--env production` deploy will produce a worker with NO bindings — which
+# breaks every DB-touching route (login, /me, etc.) and is exactly why
+# 2026-05-05 login outage happened. Keep this block in sync with the
+# top-level binding tables above when adding new bindings.
+#
+# Top-level keys (compatibility_date, compatibility_flags, main, minify,
+# workers_dev, observability) DO inherit and don't need duplicating.
+#
+# Secrets set via `wrangler secret put NAME --env production` are scoped
+# to this environment (LINKEDIN_CLIENT_ID / SECRET / REDIRECT_URI live here).
+# ===========================================================================
+[env.production]
+name = "studioos"
+
+# Mirror the top-level route table. Wrangler environments do not inherit
+# routes, so both deploy paths explicitly bind both whole-host custom domains.
+[[env.production.routes]]
+pattern        = "axal.vc"
+custom_domain  = true
+[[env.production.routes]]
+pattern        = "app.axal.vc"
+custom_domain  = true
+
+[env.production.vars]
+# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
+# D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
+AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
+# D1528 (#3847): mirrored from [vars].
+AGENT_AUTONOMY = "manual"
+AGENT_RUNTIME = "do"
+# D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
+DECK_GEN_RUNTIME = "do"
+# D886 B9: vars do not inherit into named environments.
+MEETING_BOT = "canary"
+# D1451 (#5297): mirrored from [vars]; the owner turns it on in its own PR.
+MEETING_BOT_TEAMS = "off"
+# Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
+# axal.vc. OAUTH_CALLBACK_BASE_URL keeps OAuth redirect_uri registrations
+# pinned to app.axal.vc until all provider dashboards are updated.
+APP_URL              = "https://axal.vc"
+PUBLIC_BASE_URL      = "https://axal.vc"
+OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
+PUBLIC_MARKETING_URL = "https://axal.vc"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME  = "StudioOS"
+# D655 follow-up (#1884): mirrored from [vars]; environment vars do not inherit.
+GITHUB_APP_SLUG = "axal-vc-studioos"
+# D1096: mirrored from [vars]; environment vars do not inherit.
+VERCEL_INTEGRATION_SLUG = ""
+# D542 — redeclared here: an env table does not inherit the top-level vars.
+BOUNTY_GRANTERS = "guillaumelauzier"
+ENVIRONMENT       = "production"
+# D653: owner and counsel must authorize enablement (#1008).
+ROUND_CALLS_ENABLED = "false"
+# D722 — see top-level [vars]. Mirrored because env tables don't inherit.
+GOOGLE_SIGNIN_POPUP = "off"
+# D720 §3 / D762 — see top-level [vars]. Mirrored because env tables don't inherit.
+AI_BILLING = "charged"
+# D1366: the custom amount. A member buys any whole $5–$500 of AI tokens as N of
+# this $1 one-time USD price (the sandbox "AI tokens, any amount" product, the
+# same Stripe mode as STRIPE_SECRET_KEY). Not a secret. The packs themselves
+# are rows of ai_token_packs (migration 654), managed in HQ › Token packs.
+STRIPE_PRICE_AI_TOPUP_UNIT = "price_1UVb4zF1hAXeCvFjIoEfL73w"
+# D1434: the live account's $1 one-time price ("AI tokens, any amount ($1 each)",
+# prod_VYn7gLAnruyWiU, created 2026-11-03), read only under live keys.
+STRIPE_PRICE_AI_TOPUP_UNIT_LIVE = "price_1UXfXFFA2hGHNbZ5ATCdUAgr"
+# D754 / D756 / D757 — see top-level [vars]. Mirrored because env tables
+# don't inherit.
+WHATSAPP_CHANNEL = "canary"
+TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
+ZOOM_APP_AUDIENCE = "own_account"
+MEET_TRANSCRIPTS_ENABLED = "on"
+# D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
+# The lasting switch-off is one PR to main that sets this flag and the top-level
+# MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
+# cloudflare-worker/test/mcp_server_d666.test.ts to 'false'. A hand deploy with
+# --var lasts only until the next CI deploy: a push to main, a dispatched or
+# re-run deploy, or one already running or queued. So disable the deploy
+# workflow first, until that PR is ready, and let any run in progress or queued
+# finish before the hand deploy; re-enable it so the PR's merge deploys
+# (PRODUCTION.md, "MCP enablement").
+MCP_SERVER_ENABLED = "true"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
+USE_CF_QUEUE      = "true"
+# Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
+# branchOps health returns it so HQ can persist licence_deployments.last_version.
+WORKER_DEPLOY_VERSION = ""
+# Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
+# because Wrangler env tables don't inherit from the top-level [vars].
+CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
+WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
+# D538 (#1078) — see top-level [vars]. Mirrored because env tables don't inherit.
+MI_STUB_ROWS           = "off"
+MI_FLAG_OPENALEX       = "live"
+MI_FLAG_CROSSREF       = "live"
+MI_FLAG_ARXIV          = "live"
+MI_FLAG_WORLD_BANK     = "live"
+MI_FLAG_OECD           = "live"
+MI_FLAG_EUROSTAT       = "live"
+# T22.4 — leave EXTRA_DEV_ORIGINS UNSET in production. The CORS allowlist
+# in cloudflare-worker/src/index.ts only adds origins from this var when
+# present; an empty value here ensures the workers.dev sandbox URL never
+# leaks into the prod allowlist. Set it on the preview env instead.
+EXTRA_DEV_ORIGINS = ""
+
+[[env.production.d1_databases]]
+binding       = "DB"
+database_name = "studioos-db"
+database_id   = "16a23acd-c82e-4ff1-a6c0-408e3eb014c8"
+
+[[env.production.kv_namespaces]]
+binding = "TOKENS"
+id      = "8dc26ed83d154d0ebbfcbc51f592d67c"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "be811f14b6f342be961b8daa4513fb5b"
+
+# D681 (#1555): owner-provisioned OAuth storage for MCP clients, grants,
+# tokens and parked consent requests. Namespace ids are public configuration.
+[[env.production.kv_namespaces]]
+binding = "OAUTH_KV"
+id      = "a536c75e7461447a89b1967d367c13ad"
+
+[env.production.ai]
+binding = "AI"
+
+[[env.production.queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue"
+
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[env.production.queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue"
+
+[[env.production.queues.consumers]]
+queue              = "studioos-job-queue"
+max_batch_size     = 25
+max_batch_timeout  = 10
+# Mirror of the top-level consumer block (Wrangler env tables don't inherit).
+max_retries        = 3
+dead_letter_queue  = "studioos-job-queue-dlq"
+
+# Task #7 (IE) — production DLQ consumer
+[[env.production.queues.consumers]]
+queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[env.production.queues.consumers]]
+queue              = "studioos-agent-queue"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-dlq"
+
+[[env.production.queues.consumers]]
+queue              = "studioos-agent-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D886: independent private bot host.
+[[env.production.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot"
+
+[[env.production.durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[env.production.durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[env.production.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.production.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.production.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.production.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[env.production.durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[env.production.durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.production.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
+
+[[env.production.migrations]]
+tag                = "v1-realtime"
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.production.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.production.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
+[[env.production.migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
+# D1528: append-only; no jurisdiction in v1.
+[[env.production.migrations]]
+tag = "v5-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.production.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[env.production.migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[env.production.workflows]]
+name       = "studioos-agent-task"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
+
+[[env.production.vectorize]]
+binding    = "VECTORIZE"
+index_name = "axal-search"
+
+[[env.production.vectorize]]
+binding    = "DECK_QUOTES"
+index_name = "axal-deck-quotes"
+
+[[env.production.r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files"
+
+[[env.production.r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications"
+
+# Task #5 (IE) — mirror of the top-level BACKUPS R2 binding. See the
+# top-level [[r2_buckets]] block for rationale + operator setup.
+[[env.production.r2_buckets]]
+binding     = "BACKUPS"
+bucket_name = "studioos-backups"
+
+# #4201 — mirror of the top-level COMPANY_LOGOS binding; see it for setup.
+[[env.production.r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos"
+
+[[env.production.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_metrics"
+
+[env.production.browser]
+binding = "BROWSER"
+
+# D1544 (#3784): mirror of the top-level [images] binding.
+[env.production.images]
+binding = "IMAGES"
+
+# #4176 (D4176): mirror of the top-level [stream] binding.
+[env.production.stream]
+binding = "STREAM"
+
+# Task #36 — Mirror of the top-level [assets] binding. Env tables
+# don't inherit, so the `--env production` deploy path needs its own.
+[env.production.assets]
+directory = "./docs"
+binding   = "ASSETS"
+not_found_handling = "single-page-application"
+# Same as the top-level [assets] block. Env tables do not inherit, and a
+# production deploy that kept the default would 307 `/login` back to
+# `/login/` — the URL Safari crashes on.
+html_handling = "drop-trailing-slash"
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*", "/skill-library/*"]
+
+# Task #9 (AO) — wire the studioos-tail consumer worker
+# (cloudflare-worker-tail/) so all production worker tail events get
+# forwarded to R2 (`studioos-logs`) for 7-year retention. The consumer
+# worker MUST be deployed at least once before this binding goes live;
+# until then `wrangler deploy` will warn "tail consumer service does not
+# exist". The dry-run validation in CI does NOT make this network call,
+# so the binding is safe to declare ahead of the first consumer deploy.
+[[env.production.tail_consumers]]
+service = "studioos-tail"
+
+[env.production.triggers]
+# Mirror of top-level [triggers] — Wrangler envs do not inherit cron tables.
+# Weekday 2 is Monday on Cloudflare (1 = Sunday); see the note above [triggers].
+crons = [
+  "* * * * *",
+  "0 3 * * *",
+  "0 */6 * * *",
+  "0 4 * * *",
+  "0 9 * * *",
+  "0 9 * * 2",
+]
+
+# ===========================================================================
+# Environment: preview / staging
+# ---------------------------------------------------------------------------
+# Task #9 (AO) — preview env declared for a full-stack preview deploy
+# (`npm run deploy:preview`). Operator must provision the preview D1 + KV
+# namespaces and replace the REPLACE_WITH_PREVIEW_* placeholders below
+# before `wrangler deploy --env preview` will succeed:
+#
+#   npx wrangler d1 create studioos-db-preview
+#   npx wrangler kv namespace create TOKENS-PREVIEW
+#   npx wrangler kv namespace create RATE_LIMITS-PREVIEW
+#   npx wrangler kv namespace create OAUTH_KV-PREVIEW
+#
+# No CI job deploys this environment (the `CLOUDFLARE_PREVIEW_READY` gate
+# an earlier version of this comment described was never wired), and
+# Workers preview URLs cannot exist for it regardless: Cloudflare
+# generates none for a Worker that implements a Durable Object, and this
+# one implements two. Pull-request previews are therefore a separate
+# Worker per PR with no bindings — documentation/architecture/DECISIONS.md
+# D36.
+# ===========================================================================
+[env.preview]
+name = "studioos-preview"
+workers_dev = true
+
+[env.preview.vars]
+# D886: preview needs its own explicit enablement.
+MEETING_BOT = "off"
+# D1451 (#5297): Teams joins off, as everywhere.
+MEETING_BOT_TEAMS = "off"
+# D1528 (#3847): the agent engine stays off in preview until the owner's account steps are done.
+AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
+AGENT_AUTONOMY = "manual"
+AGENT_RUNTIME = "do"
+# D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
+DECK_GEN_RUNTIME = "do"
+# D867: private captures require explicit enablement in each environment.
+TELEGRAM_CAPTURE = "off"
+APP_URL           = "https://studioos-preview.workers.dev"
+ENVIRONMENT       = "preview"
+# D653: owner and counsel must authorize enablement (#1008).
+ROUND_CALLS_ENABLED = "false"
+# D681 (#1555): MCP stays off in preview, whatever HQ's two flags say.
+MCP_SERVER_ENABLED = "false"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
+USE_CF_QUEUE      = "true"
+# Task #4 (CG) — preview env can use a separate gateway slug (e.g.
+# `advisor-ongoing-preview`) created in the dashboard. #4566: empty (inert,
+# calls go direct, `advisorGatewaySlug`) until that gateway exists. It used to
+# default to production's `advisor-ongoing`, which shares production's gateway
+# logs, cache and rate limits; `scripts/check-preview-isolation.mjs` refuses that.
+CF_AI_GATEWAY_SLUG_ADVISOR     = ""
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
+WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
+# Preview is allowed to widen CORS so PR review deploys can talk to
+# localhost SPAs and the workers.dev sandbox URL.
+EXTRA_DEV_ORIGINS = "https://studioos-preview.workers.dev,http://localhost:5000,http://localhost:5173"
+
+[[env.preview.d1_databases]]
+binding       = "DB"
+database_name = "studioos-db-preview"
+database_id   = "REPLACE_WITH_PREVIEW_D1_ID"
+
+[[env.preview.kv_namespaces]]
+binding = "TOKENS"
+id      = "REPLACE_WITH_PREVIEW_KV_TOKENS_ID"
+
+[[env.preview.kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "REPLACE_WITH_PREVIEW_KV_RATE_LIMITS_ID"
+
+# D681 (#1555): preview's own OAuth store, never HQ's. Grants are keyed by
+# numeric user id, and preview has its own D1, so sharing HQ's namespace would
+# let a preview "sign out everywhere" revoke an HQ member's assistant grants.
+[[env.preview.kv_namespaces]]
+binding = "OAUTH_KV"
+id      = "REPLACE_WITH_PREVIEW_KV_OAUTH_ID"
+
+[env.preview.ai]
+binding = "AI"
+
+[[env.preview.queues.producers]]
+binding = "JOB_QUEUE"
+queue   = "studioos-job-queue-preview"
+
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[env.preview.queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue-preview"
+
+[[env.preview.queues.consumers]]
+queue              = "studioos-job-queue-preview"
+max_batch_size     = 25
+max_batch_timeout  = 10
+max_retries        = 3
+dead_letter_queue  = "studioos-job-queue-preview-dlq"
+
+# Task #7 (IE) — preview DLQ consumer
+[[env.preview.queues.consumers]]
+queue              = "studioos-job-queue-preview-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[env.preview.queues.consumers]]
+queue              = "studioos-agent-queue-preview"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-preview-dlq"
+
+[[env.preview.queues.consumers]]
+queue              = "studioos-agent-queue-preview-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D886: independent private bot host.
+[[env.preview.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot-preview"
+
+[[env.preview.durable_objects.bindings]]
+name       = "PIPELINE_ROOM"
+class_name = "PipelineRoom"
+
+[[env.preview.durable_objects.bindings]]
+name       = "ONBOARDING_CHAT"
+class_name = "OnboardingChat"
+
+[[env.preview.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.preview.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[env.preview.durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.preview.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
+
+[[env.preview.migrations]]
+tag                = "v1-realtime"
+new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.preview.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.preview.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
+[[env.preview.migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
+# D1528: append-only; no jurisdiction in v1.
+[[env.preview.migrations]]
+tag = "v5-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.preview.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[env.preview.migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[env.preview.workflows]]
+name       = "studioos-agent-task-preview"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
+
+[[env.preview.r2_buckets]]
+binding     = "FILES"
+bucket_name = "studioos-files-preview"
+
+[[env.preview.r2_buckets]]
+binding     = "PUBLICATIONS"
+bucket_name = "studioos-publications-preview"
+
+# #4201 — company logos on preview; created like the other preview buckets.
+[[env.preview.r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos-preview"
+
+[[env.preview.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "studioos_metrics_preview"
+
+[env.preview.browser]
+binding = "BROWSER"
+
+[env.preview.triggers]
+# Preview env keeps only the every-minute drain + market-intel cadences
+# so PR review deploys exercise the cron path. Daily 09:00 digests are
+# omitted to avoid sending real emails from preview workers.
+crons = ["* * * * *", "0 */6 * * *", "0 4 * * *"]

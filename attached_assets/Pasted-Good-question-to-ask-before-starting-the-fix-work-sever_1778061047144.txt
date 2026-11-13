@@ -1,0 +1,379 @@
+Good question to ask before starting the fix work — several of those audit tasks (T1 smoke test in CI, T3 Cloudflare Access, T22 logging) get materially cheaper or more reliable if the infra below is in place first. Here's the read on what you have, what to add, and what to skip.
+
+## Current state — what you have, what's missing
+
+**Cloudflare bindings (9 — solid foundation):**
+✅ Worker `studioos` with Workers Logs (good — 7-day retention by default)
+✅ D1 `studioos-db`, R2 `studioos-files`, KV `RATE_LIMITS` + `TOKENS`, Vectorize `axal-search`, Workers AI, Queue `studioos-job-queue`, Durable Objects (Onboarding, PipelineRoom)
+❌ **0 Tail Workers** — no log forwarding to SIEM/observability
+❌ **0 sub-Workers** — single failure domain, no isolation between AI/auth/admin
+❌ **No DLQ** — your queue has no dead-letter destination; bad jobs ping-pong forever
+❌ **Workers Traces disabled** — distributed tracing off, harder to debug perf
+❌ **No second environment** — preview/staging not visible (wrangler.toml supports it but doesn't seem deployed)
+
+**GitHub:**
+⚠️ **12 Security and quality alerts** — investigate these BEFORE adding new surface area
+✅ Dependency Graph + pages-build-deployment
+❌ **No CI workflow** for typecheck/lint/test/wrangler dry-run
+❌ **No CodeQL** — most valuable free static analysis you're missing
+❌ **No secret-scanning push protection** (GitHub default off for private repos until enabled)
+❌ **No branch protection** visible — anyone with write can force-push to main
+❌ **No CODEOWNERS** — sensitive files (auth.ts, schema.sql) get unreviewed changes
+❌ **No Dependabot config** (you have Dependency Graph but need the auto-PR companion)
+
+---
+
+## Highest-leverage additions
+
+### Tier 1 — close known gaps (do these alongside / before audit fixes)
+
+| # | Addition | Why | Where |
+|---|---|---|---|
+| **A1** | **Tail Worker → Logpush to R2** | Workers Logs only retains 7 days. For compliance + incident forensics you need long-lived audit logs. Pipe through a Tail Worker that scrubs PII first, then to a separate R2 bucket `studioos-logs` with object lock | New worker `studioos-tail` + new R2 bucket |
+| **A2** | **Dead-letter queue (DLQ)** | Your job consumer retries forever on parse failures (audit found this). Add `studioos-job-dlq` and configure JOB_QUEUE with `dead_letter_queue` after 5 retries | wrangler.toml + dashboard |
+| **A3** | **Cloudflare Access for backoffice** | The audit's C2 critical finding. The middleware is one part; the *actual policy* must be configured in the Zero Trust dashboard for `/api/admin/*`, `/api/monitoring/*`, `/api/infra/*`, plus the workers.dev hostname | Zero Trust dashboard + T3 code |
+| **A4** | **Branch protection on `main`** | Without it, every audit fix can get force-pushed away. Require: PR review (1 approval), CI green, signed commits, no force-push, no direct pushes | GitHub Settings → Branches |
+| **A5** | **CodeQL workflow** | Catches SQLi, XSS, prototype pollution, regex DoS in TS + Python automatically on every PR. Free for public repos and Advanced Security customers; private repos need GHAS license — confirm your plan | `.github/workflows/codeql.yml` |
+| **A6** | **CI workflow** that runs T1 smoke test, typecheck, lint, `wrangler deploy --dry-run` on every PR | The T1 audit task only matters if it actually runs. This is the harness | `.github/workflows/ci.yml` |
+| **A7** | **Secret scanning push protection** | GitHub blocks commits containing AWS keys, Cloudflare tokens, OpenAI keys, etc. before they hit history | Settings → Code security → Push protection |
+| **A8** | **Dependabot** with grouped updates | Auto-PRs for npm + pip + GitHub Actions vulnerabilities | `.github/dependabot.yml` |
+| **A9** | **Preview environment** in wrangler.toml | `[env.preview]` with separate D1 (`studioos-db-preview`), separate KV namespaces, separate Queue. Lets you test migrations against real Cloudflare without touching prod data | wrangler.toml + new D1 db |
+
+### Tier 2 — security & privacy hardening
+
+| # | Addition | Why | Where |
+|---|---|---|---|
+| **B1** | **Transform Rules for security headers at edge** | CSP, HSTS, X-Content-Type-Options, Permissions-Policy applied at the edge instead of in worker code = saves CPU and works even if worker errors | Rules → Transform Rules → HTTP Response Header Modification |
+| **B2** | **WAF managed rules + custom rules** | Block OWASP top 10 patterns before they reach the worker. Custom rule example: rate-limit `/api/auth/login` POST to 30/min/IP at the edge (cheaper than KV bucket) | Security → WAF |
+| **B3** | **Cloudflare Rate Limiting (network-layer)** | Distinct from your KV-based app rate-limiter. Use for: brute-force protection on `/api/auth/*` endpoints (50 req/min/IP), abuse on signup, expensive AI endpoints. Cheaper than KV writes | Security → Rate Limiting Rules |
+| **B4** | **Bot Fight Mode + Turnstile pre-clearance** | You already have Turnstile in code. Enable Bot Fight Mode at the zone for additional fingerprinting on registration / login pages. Free tier covers most needs | Security → Bots |
+| **B5** | **DNSSEC + CAA records** | DNSSEC prevents DNS hijacking. CAA limits which CAs can issue certs for axal.vc (only Cloudflare's). Set once, forget | DNS settings |
+| **B6** | **HSTS preload submission** | After Transform Rules ship HSTS with `preload` directive for 6 months, submit axal.vc to https://hstspreload.org. Browsers force HTTPS without ever sending a plaintext request | One-time form submission |
+| **B7** | **D1 Time Travel verified + scheduled exports** | D1 Time Travel gives 30-day point-in-time restore on Workers Paid plan. Add a weekly cron-triggered export to R2 for 7-year retention (financial recordkeeping per DocsPage line 396) | Cron Trigger + worker code |
+| **B8** | **GDPR delete cascade endpoint** | DocsPage promises 30-day deletion. Today there's no implementation. New endpoint `POST /api/admin/users/:id/erase` that cascades through D1 (12+ tables), R2 (user files), KV (sessions, rate limits), and Vectorize (embeddings tied to user_id) | Worker code (T-new) |
+| **B9** | **CODEOWNERS for sensitive paths** | Auto-request specific reviewer for `cloudflare-worker/src/auth.ts`, `cloudflare-worker/sql/*`, `wrangler.toml`, `.github/workflows/*` | `.github/CODEOWNERS` |
+| **B10** | **Cloudflare Audit Logs export** | Track who changed Worker secrets, KV values, D1 schema, DNS. Export to Logpush / R2 alongside A1 | Audit Logs API |
+
+### Tier 3 — efficiency / future
+
+| # | Addition | Why |
+|---|---|---|
+| **C1** | **Smart Placement** for the worker | Auto-locates the worker near D1 for hot read paths. One toggle in wrangler.toml: `placement = { mode = "smart" }` |
+| **C2** | **Cache API for D1 reads** | Common reads (e.g. `/api/dashboard` aggregates) can sit in `caches.default` for 60s. Saves D1 reads — your free-tier budget is finite |
+| **C3** | **Workers Analytics Engine** | Replace the `monitoring_*` D1 tables with WAE for free. WAE accepts ~25 dimensions per write at near-zero cost; D1 writes you're paying for | New binding |
+| **C4** | **Email Workers** for inbound support tickets | Today tickets sync to GitHub via API. Email Workers let `support@axal.vc` route directly into the worker, skip Gmail OAuth entirely. Reduces secret surface area |
+| **C5** | **Browser Rendering API** | If pitch deck PDF / share-card generation today goes through a third-party, replace with Browser Rendering inside the worker. Removes one external dependency |
+| **C6** | **Sub-Worker for AI traffic** | Move OpenAI/Workers AI calls to a separate sub-worker `studioos-ai`. Why: isolates AI failures (timeouts, rate limits) from auth/UI traffic, lets you scale CPU limits independently |
+
+### What to skip / defer
+
+- **Hyperdrive** — only useful for external Postgres/MySQL; you're on D1, irrelevant
+- **Cloudflare Stream** — only if you ship video; you don't
+- **R2 Object Lock** — useful for ransomware-protection on log buckets, but only if you do A1 first
+- **mTLS / Service Tokens** — overkill until you have multiple workers calling each other
+- **Hosting Pages on a custom domain with Argo** — you're already getting most benefits from CF's free tier
+
+---
+
+## What you do vs what Replit does
+
+A lot of this is **Cloudflare/GitHub dashboard config you must do yourself** — Replit can't access either. The split:
+
+| You (dashboard) | Replit (code) |
+|---|---|
+| A2 DLQ creation | A2 wire `dead_letter_queue` in wrangler.toml |
+| A3 Access policies | A3 verification middleware (= audit task T3) |
+| A4 Branch protection | — |
+| A7 Push protection | — |
+| A9 Preview D1/KV provisioning | A9 wrangler.toml `[env.preview]` block |
+| B1 Transform Rules | (also remove duplicated header logic from worker code) |
+| B2 WAF rules | — |
+| B3 Rate Limiting Rules | (eventually, simplify worker rateLimit.ts) |
+| B4 Bot Fight Mode | — |
+| B5 DNSSEC | — |
+| B6 HSTS submission | (Worker must already serve HSTS w/ preload) |
+| B7 Time Travel verify | B7 cron-triggered backup worker |
+| B10 Audit Logs export | — |
+| C1 Smart Placement (one wrangler.toml line) | C1 enable in wrangler.toml |
+| C3 WAE binding creation | C3 wire binding + emit datapoints |
+| Investigate the 12 Security alerts | (depends what they are) |
+
+---
+
+## Replit prompt — infrastructure additions
+
+Run this **before** the T0–T24 audit fixes. It establishes the harness so the audit tasks are safe to ship.
+
+```
+ARCHITECTURE — read first.
+
+axal.vc production runs on Cloudflare ONLY:
+  - Frontend → Cloudflare Pages from /frontend
+  - API      → Cloudflare Worker `studioos` at cloudflare-worker/src/index.ts
+  - DB       → D1 `studioos-db` (id 16a23acd-c82e-4ff1-a6c0-408e3eb014c8)
+  - Bindings: AI, DB, FILES (R2), JOB_QUEUE, ONBOARDING_C..., PIPELINE_ROOM,
+              RATE_LIMITS (KV), TOKENS (KV), VECTORIZE
+  - GitHub repo: AxalNetwork/StudioOS
+  - FastAPI in /backend is dev-only on Replit; not deployed.
+
+GOAL — Add the infrastructure scaffolding that the upcoming audit fix
+work (tasks T0–T24) depends on. Do NOT start any of T0–T24 in this PR.
+This task is exclusively about scaffolding: CI, environments, tail
+logging, DLQ, branch hygiene.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 1 — GitHub workflows + branch hygiene  (no Cloudflare changes)
+═══════════════════════════════════════════════════════════════════
+
+A) Create .github/workflows/ci.yml
+   Triggers: pull_request to main, push to main.
+   Jobs (run in parallel where independent):
+     - typecheck-frontend: cd frontend && npm ci && npm run build
+     - typecheck-worker:   cd cloudflare-worker && npm ci &&
+                           npx tsc --noEmit
+     - lint:               eslint frontend/src cloudflare-worker/src
+                           (skip if no eslint config — flag for me)
+     - drift-test:         the api.js↔worker drift smoke test that
+                           audit task T1 will create. Until T1 lands,
+                           make this job a no-op that prints "T1
+                           pending" and exits 0.
+     - wrangler-dryrun:    cd cloudflare-worker && npx wrangler deploy
+                           --dry-run --outdir dist
+                           (validates the worker bundles cleanly)
+   Use Node 20. Cache npm via actions/setup-node@v4 cache:'npm'.
+   Concurrency: cancel in-progress runs on the same PR head.
+
+B) Create .github/workflows/codeql.yml
+   Use github/codeql-action@v3 with languages: javascript-typescript,
+   python. Schedule: weekly (Sunday 02:00 UTC) + on push to main + on
+   PR. Upload SARIF.
+   If the repo isn't on GitHub Advanced Security, this will fail —
+   stop and tell me; I'll confirm whether GHAS is enabled before
+   merging.
+
+C) Create .github/dependabot.yml
+   Updates for: npm (frontend/, cloudflare-worker/), pip (root, for
+   the dev FastAPI), github-actions. Schedule: weekly Monday. Open
+   max 5 PRs. Group all minor+patch updates per ecosystem into one
+   PR; major updates separate. Auto-rebase enabled.
+
+D) Create .github/CODEOWNERS
+   Use @AxalNetwork/security as the owner for these paths (I'll set
+   up the team — write the file referencing the team name; if it
+   doesn't exist, GitHub fails open silently which is fine for now):
+     /cloudflare-worker/src/auth.ts          @AxalNetwork/security
+     /cloudflare-worker/src/middleware/      @AxalNetwork/security
+     /cloudflare-worker/sql/                 @AxalNetwork/security
+     /wrangler.toml                          @AxalNetwork/security
+     /.github/workflows/                     @AxalNetwork/security
+     /CLAUDE.md                              @AxalNetwork/security
+
+E) Create .github/pull_request_template.md
+   Sections: Summary, Risk (low/medium/high), Test plan, Migration
+   needed (yes/no), Secrets needed (list).
+
+F) Create .gitleaks.toml + .github/workflows/gitleaks.yml
+   Run gitleaks/gitleaks-action@v2 on every PR. Block merges that
+   leak common secret shapes (sk-..., AKIA..., AIza..., ghp_...,
+   xoxb-..., postgres://...). Allowlist .env.example.
+
+After phase 1: ASK ME to:
+  1. Enable "Require a pull request before merging" + "Require status
+     checks: typecheck-frontend, typecheck-worker, drift-test,
+     wrangler-dryrun, codeql-analyze, gitleaks" on the `main` branch.
+  2. Enable Settings → Code security → Push protection (secret
+     scanning).
+  3. Enable Settings → Code security → Dependabot alerts +
+     Dependabot security updates.
+  4. Tell me whether the repo has GitHub Advanced Security
+     (so I can finalize codeql.yml).
+  5. Investigate and resolve the 12 existing "Security and quality"
+     alerts on the repo BEFORE merging this PR — the new CI gate
+     would block any future PR if more accumulate.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 2 — wrangler.toml: preview env, DLQ, smart placement
+═══════════════════════════════════════════════════════════════════
+
+A) Add a [env.preview] block to wrangler.toml that mirrors production
+   bindings but uses separate resources:
+     [env.preview]
+     name = "studioos-preview"
+     [env.preview.vars]
+     APP_URL     = "https://preview.axal.vc"
+     ENVIRONMENT = "preview"
+     [[env.preview.d1_databases]]
+     binding       = "DB"
+     database_name = "studioos-db-preview"
+     database_id   = "<ASK ME — I will create this>"
+     # Repeat KV namespaces + Queue + R2 + DO for preview-scoped names.
+
+   Do NOT invent IDs. List the resources I need to create:
+     - D1 database `studioos-db-preview`
+     - KV namespaces RATE_LIMITS_PREVIEW, TOKENS_PREVIEW
+     - R2 bucket `studioos-files-preview`
+     - Queue `studioos-job-queue-preview`
+     - Vectorize index `axal-search-preview`
+   Tell me the dashboard steps + the wrangler commands to provision
+   each, then wait for me to paste the IDs.
+
+B) Add Smart Placement to the production worker:
+     [placement]
+     mode = "smart"
+   And to env.preview block. Document in wrangler.toml comments that
+   Smart Placement co-locates the worker isolate near D1.
+
+C) Configure DLQ for the existing JOB_QUEUE.
+   Today there's one queue and no dead-letter sink. Add a new queue
+   binding and consumer config:
+     [[queues.consumers]]
+     queue                = "studioos-job-queue"
+     max_batch_size       = 10
+     max_batch_timeout    = 5
+     max_retries          = 5
+     dead_letter_queue    = "studioos-job-dlq"
+     retry_delay          = 60
+   Tell me to:
+     1. Dashboard → Workers & Pages → Queues → Create queue
+        `studioos-job-dlq`
+     2. (Optional) Create a tiny separate worker `studioos-dlq-handler`
+        that consumes the DLQ and posts a Slack/email alert. Out of
+        scope for this PR — open a follow-up issue.
+
+D) Document a third environment for staging if needed (don't create
+   it yet; just leave a commented-out [env.staging] block as a
+   marker). Production stays as the default top-level config.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 3 — Tail Worker for log forwarding
+═══════════════════════════════════════════════════════════════════
+
+A) New directory cloudflare-worker-tail/ with its own wrangler.toml
+   and a single TypeScript file src/index.ts that:
+     1. Receives tail events from `studioos`.
+     2. Filters out events with severity < info.
+     3. Redacts PII (emails, JWT tokens, signed_ip values, anything
+        matching /[A-Za-z0-9+/]{40,}=*/ that looks base64-ish).
+     4. Writes the cleaned event to R2 bucket `studioos-logs` keyed
+        by yyyy/mm/dd/hh/<random>.json (NDJSON-friendly).
+   Bindings:
+     - R2 bucket `studioos-logs` (ASK ME to create)
+     - KV `RATE_LIMITS` (read-only, optional — for sampling)
+
+B) Wire the tail consumer in the production wrangler.toml:
+     [[tail_consumers]]
+     service     = "studioos-tail"
+     environment = "production"
+
+C) Provide me the deploy commands:
+     cd cloudflare-worker-tail && npx wrangler deploy
+     cd .. && npx wrangler deploy
+
+DO NOT create the R2 bucket from code. ASK me to:
+  1. Create R2 bucket `studioos-logs` in the dashboard.
+  2. Enable Object Lock with 7-year governance retention (financial
+     recordkeeping requirement per DocsPage:396).
+  3. Set bucket lifecycle: transition to infrequent-access after 30
+     days, no auto-delete.
+
+═══════════════════════════════════════════════════════════════════
+PHASE 4 — minimum viable observability
+═══════════════════════════════════════════════════════════════════
+
+A) Enable Workers Traces in production by setting
+     [observability]
+     enabled = true
+     head_sampling_rate = 0.1   # 10% of requests
+   in wrangler.toml. (The dashboard shows Traces=Disabled today.)
+
+B) Add an Analytics Engine binding for cheap custom metrics:
+     [[analytics_engine_datasets]]
+     binding = "ANALYTICS"
+     dataset = "studioos_events"
+   Provide a tiny helper cloudflare-worker/src/util/metrics.ts:
+     export function recordEvent(env, event, dims = {}) {
+       try {
+         env.ANALYTICS?.writeDataPoint({
+           blobs: [event, dims.userId ?? '', dims.role ?? ''],
+           doubles: [dims.durationMs ?? 0],
+           indexes: [event],
+         });
+       } catch {}
+     }
+   DO NOT instrument the codebase yet — that's a follow-up. Just
+   wire the binding and helper.
+
+═══════════════════════════════════════════════════════════════════
+WHAT THIS TASK DOES NOT TOUCH
+═══════════════════════════════════════════════════════════════════
+
+- No application logic changes.
+- No D1 schema changes.
+- No frontend changes.
+- No T0–T24 audit work — those start in the NEXT PR after this lands.
+- No Cloudflare Access, WAF, Transform Rules, Rate Limiting Rules —
+  those are dashboard-only and belong to me, not Replit.
+
+═══════════════════════════════════════════════════════════════════
+ORDER OF OPERATIONS
+═══════════════════════════════════════════════════════════════════
+
+1. Echo back: (a) the files you will create, (b) the resources you
+   need me to provision, (c) the dashboard actions you will ask of me.
+2. Phase 1 — open as draft PR, show me the workflow files. Wait for
+   me to enable branch protection + push protection + Dependabot.
+3. Phase 2 — wait for me to provision preview-environment resources
+   and paste IDs. Then update wrangler.toml.
+4. Phase 3 — wait for me to create the studioos-logs R2 bucket. Then
+   ship the tail worker.
+5. Phase 4 — flip observability on, ship.
+6. Verify CI is green on the resulting PR (wrangler-dryrun must pass
+   on both production and preview environments).
+
+DO NOT MERGE WITHOUT MY APPROVAL.
+```
+
+---
+
+## Things only you can do (parallel to Replit)
+
+While Replit works on the prompt above, you handle these in order:
+
+1. **GitHub Settings → Security → click each of the 12 alerts.** They're either Dependabot vulns (mostly easy to bump) or code-scanning. Resolve before adding more. This is the #1 finding.
+2. **GitHub Settings → Branches → add ruleset for `main`** — require PR, require linear history, require status checks (T1 smoke + CI), block force push, require signed commits.
+3. **GitHub Settings → Code security → enable** Push protection, Secret scanning, Dependabot alerts, Dependabot security updates.
+4. **Cloudflare Zero Trust dashboard:**
+   - Create an Access application for `studioos.axal.vc/api/admin/*`, `monitoring/*`, `infra/*`
+   - Identity providers: Google or your IdP
+   - Policy: only your `@axal.vc` emails
+   - This pairs with audit task T3 (Worker-side JWT verification)
+5. **Cloudflare Security → WAF**:
+   - Enable Cloudflare Managed Ruleset (free)
+   - Add custom rate-limiting rules for `/api/auth/login` POST (30/min/IP) and `/api/auth/register` POST (5/hour/IP)
+6. **Cloudflare Security → Bots** — flip Bot Fight Mode on.
+7. **Cloudflare DNS → enable DNSSEC** + add CAA record `0 issue "letsencrypt.org"` and `0 issue "comodoca.com"` (or whichever CAs Cloudflare uses; the dashboard suggests).
+8. **Cloudflare → Rules → Transform Rules → Add HTTP response header rule:**
+   - `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+   - `X-Content-Type-Options: nosniff`
+   - `Referrer-Policy: strict-origin-when-cross-origin`
+   - `Permissions-Policy: geolocation=(), camera=(), microphone=()`
+   - These belong at the edge — saves your worker CPU on every request.
+9. **After 6 months of HSTS in prod**, submit `axal.vc` to https://hstspreload.org.
+10. **Cloudflare → Audit Logs → API token** — set up a daily export to the new `studioos-logs` R2 bucket once Phase 3 of the Replit prompt ships.
+
+---
+
+## Where this fits with the audit task plan
+
+```
+Wave A (this prompt) — 2–3 days
+  Phase 1 (GitHub) → Phase 2 (preview env) → Phase 3 (tail worker) → Phase 4 (observability)
+  ↓
+Wave B (your dashboard work — Cloudflare + GitHub UI) — 1 day
+  Branch protection, Access policies, WAF, DNSSEC, Transform Rules,
+  Push protection, resolve the 12 Security alerts
+  ↓
+Wave C — audit fixes T0 → T1 → T2…T24 (the plan from the previous turn)
+```
+
+End-of-turn: The infra prompt above gets you a CI gate, a preview environment, a DLQ, a tail worker that ships logs to retained R2 (privacy + audit compliance), and observability — all of which are prerequisites that make the subsequent T0–T24 audit fixes safe to ship. The Cloudflare/GitHub dashboard work is yours; everything else goes to Replit. **Highest-priority item before any of this: investigate and clear the 12 GitHub Security and quality alerts.**

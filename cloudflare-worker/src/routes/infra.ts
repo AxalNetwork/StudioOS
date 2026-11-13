@@ -1,0 +1,535 @@
+/**
+ * Admin-only infrastructure routes — queue inspection, metrics, manual trigger.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAdmin, selectJwt } from '../auth';
+import { Jobs, type JobType } from '../models/jobs';
+import { cfQueueEnabled, enqueueJob } from '../services/queue';
+import { processQueueBatch } from '../services/queueWorker';
+import { getRealtimeStats } from '../services/realtime';
+import { doNamespace } from '../util/doNamespace';
+import { bindingKey } from '../util/schemaBootstrap';
+import { CRON_HISTORY_RETENTION_DAYS, latestRunPerTrigger, triggersFor } from '../util/cronHistory';
+import { nextCronRun } from '../util/cronSchedule';
+
+const infra = new Hono<{ Bindings: Env }>();
+
+// Defensive self-heal — the three tables /queue and /dlq read from were
+// created by migrations, but if any deploy lands on a D1 instance where
+// those migrations didn't run, every infra route 500s with "no such table".
+const INFRA_MIGRATED = new WeakMap<object, boolean>();
+async function ensureInfraSchema(env: Env) {
+  if (INFRA_MIGRATED.get(bindingKey(env))) return;
+  // queue_jobs MUST match the canonical shape used by models/jobs.ts
+  // (max_retries / updated_at / dead_at). A defensive CREATE TABLE IF NOT
+  // EXISTS that omitted these would let the table win the race on a fresh
+  // DB and break Jobs.enqueue/markFailed downstream.
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS queue_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_retries INTEGER NOT NULL DEFAULT 3,
+      error TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      started_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      dead_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_qj_status ON queue_jobs(status, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_qj_type ON queue_jobs(job_type, status)`,
+    `CREATE TABLE IF NOT EXISTS dead_letter_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_job_id INTEGER,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      last_error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      moved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_dlq_type ON dead_letter_queue(job_type, moved_at)`,
+    // Task #7 (IE) — mirror table for CF Queue DLQ messages.
+    `CREATE TABLE IF NOT EXISTS cf_dlq_mirror (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL,
+      job_type TEXT NOT NULL,
+      payload TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error TEXT,
+      received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_cf_dlq_time ON cf_dlq_mirror(received_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_cf_dlq_type ON cf_dlq_mirror(job_type, received_at)`,
+    `CREATE TABLE IF NOT EXISTS system_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metric_name TEXT NOT NULL,
+      value REAL NOT NULL,
+      labels TEXT DEFAULT '{}',
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_sm_name_time ON system_metrics(metric_name, timestamp)`,
+    // Task #7 (IE) — cron run history for observability dashboard.
+    `CREATE TABLE IF NOT EXISTS cron_run_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_name TEXT NOT NULL,
+      started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TIMESTAMP,
+      status TEXT NOT NULL DEFAULT 'started',
+      summary TEXT,
+      error TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_crh_trigger_time ON cron_run_history(trigger_name, started_at)`,
+  ];
+  // Only flip infraMigrated=true when every statement succeeds — otherwise
+  // a transient D1 hiccup would lock the warm isolate into a partial schema.
+  let allOk = true;
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); }
+    catch (e: any) {
+      allOk = false;
+      console.error('infra ensureSchema:', e?.message);
+    }
+  }
+  if (allOk) INFRA_MIGRATED.set(bindingKey(env), true);
+}
+
+// GET /api/infra/queue — admin queue dashboard.
+// Reports both the legacy D1 queue (still drained by cron during the
+// migration window) AND the native CF Queue throughput. CF doesn't expose
+// a "depth" via the message API, so we approximate by counting cf_queue
+// completions/failures recorded in `system_metrics` over the last hour.
+infra.get('/queue', async (c) => {
+  await requireAdmin(c);
+  await ensureInfraSchema(c.env);
+  const stats = await Jobs.stats(c.env);
+
+  const cfWindow = await c.env.DB.prepare(
+    `SELECT json_extract(labels,'$.status') AS status, COUNT(*) AS n
+       FROM system_metrics
+      WHERE metric_name = 'job'
+        AND timestamp >= datetime('now','-1 hour')
+        AND json_extract(labels,'$.transport') = 'cf_queue'
+      GROUP BY status`
+  ).all<{ status: string; n: number }>();
+
+  const realtime = await getRealtimeStats(c.env);
+
+  return c.json({
+    ok: true,
+    // The transport enqueueJob actually uses, asked of the function that
+    // decides it rather than restated here (D202).
+    transport_active: cfQueueEnabled(c.env) ? 'cf_queue' : 'd1',
+    use_cf_queue_flag: c.env.USE_CF_QUEUE === 'true',
+    cf_queue_binding_present: !!c.env.JOB_QUEUE,
+    cf_queue_1h: cfWindow.results || [],
+    realtime,
+    ...stats,
+  });
+});
+
+// GET /api/infra/metrics — high-throughput stats
+infra.get('/metrics', async (c) => {
+  await requireAdmin(c);
+  await ensureInfraSchema(c.env);
+  const minutes = Math.max(5, Math.min(1440, parseInt(c.req.query('minutes') || '60', 10)));
+  const since = new Date(Date.now() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19);
+
+  const jobsPerMin = await c.env.DB.prepare(
+    `SELECT strftime('%Y-%m-%dT%H:%M:00Z', timestamp) AS bucket,
+            json_extract(labels, '$.status') AS status,
+            COUNT(*) AS n
+     FROM system_metrics
+     WHERE metric_name = 'job' AND timestamp >= ?
+     GROUP BY bucket, status ORDER BY bucket`
+  ).bind(since).all();
+
+  const parallel = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM queue_jobs WHERE status = 'processing'`
+  ).first<{ n: number }>();
+
+  const projectsActive = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM projects WHERE status NOT IN ('archived','rejected')`
+  ).first<{ n: number }>();
+
+  const aiHealth = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM system_metrics
+     WHERE metric_name = 'job' AND timestamp >= datetime('now','-5 minutes')
+       AND json_extract(labels,'$.status') = 'completed'
+       AND (json_extract(labels,'$.job_type') = 'ai_scoring'
+         OR json_extract(labels,'$.job_type') = 'traction_review')`
+  ).first<{ n: number }>();
+
+  return c.json({
+    ok: true,
+    jobs_per_min: jobsPerMin.results || [],
+    in_flight: parallel?.n ?? 0,
+    projects_active: projectsActive?.n ?? 0,
+    ai_calls_5m: aiHealth?.n ?? 0,
+  });
+});
+
+// POST /api/infra/process — manual queue drain trigger (admin)
+infra.post('/process', async (c) => {
+  await requireAdmin(c);
+  const batch = Math.max(1, Math.min(50, parseInt(c.req.query('batch') || '10', 10)));
+  const result = await processQueueBatch(c.env, batch);
+  return c.json({ ok: true, ...result });
+});
+
+// POST /api/infra/enqueue — admin can manually enqueue any job (for testing/ops)
+infra.post('/enqueue', async (c) => {
+  await requireAdmin(c);
+  const body = await c.req.json<{ job_type: JobType; payload?: any; max_retries?: number; idempotency_key?: string }>();
+  if (!body?.job_type) return c.json({ error: 'job_type required' }, 400);
+  // T8 — manual enqueues MUST carry an explicit idempotency_key so an
+  // operator who fat-fingers two POSTs gets dedup'd at the SQL layer
+  // instead of double-running side-effecting jobs (capital_call,
+  // returns_distribution, lpa_generation, …). Internal callers of
+  // `enqueueJob()` still default to crypto.randomUUID(); only this admin
+  // surface enforces the contract.
+  const idempotency_key = typeof body.idempotency_key === 'string' ? body.idempotency_key.trim() : '';
+  if (!idempotency_key) {
+    return c.json({ error: 'idempotency_key required (non-empty string)' }, 400);
+  }
+  const result = await enqueueJob(c.env, body.job_type, body.payload ?? {}, {
+    max_retries: body.max_retries,
+    idempotency_key,
+  });
+  return c.json({ ok: true, job: result.job, transport: result.transport, idempotency_key: result.idempotency_key });
+});
+
+// POST /api/infra/cleanup — purge old completed/failed jobs (>7 days) and old DLQ (>30 days)
+infra.post('/cleanup', async (c) => {
+  await requireAdmin(c);
+  await Jobs.cleanup(c.env);
+  return c.json({ ok: true });
+});
+
+// GET /api/infra/dlq — dead letter inspection with pagination/filtering.
+// Reads both the legacy D1 dead_letter_queue AND the CF Queue DLQ mirror.
+// Query params: job_type, source (cf|d1), limit (max 200), offset.
+infra.get('/dlq', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const jobType = c.req.query('job_type') || '';
+  const source = c.req.query('source') || ''; // 'cf' | 'd1' | ''
+  const limit = Math.max(1, Math.min(200, parseInt(c.req.query('limit') || '50', 10)));
+  const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
+
+  const buildWhere = (baseTable: string) => {
+    const clauses: string[] = [];
+    const params: (string | number)[] = [];
+    if (jobType) { clauses.push('job_type = ?'); params.push(jobType); }
+    const sql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    return { sql, params };
+  };
+
+  // If source filter is active, query only one table; otherwise UNION.
+  let count = 0;
+  let items: any[] = [];
+
+  if (source === 'd1') {
+    const { sql, params } = buildWhere('dead_letter_queue');
+    const cRow = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM dead_letter_queue ${sql}`).bind(...params).first<{ c: number }>();
+    count = Number(cRow?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, original_job_id, job_type, payload, last_error, attempts, moved_at AS created_at, 'd1' AS source
+       FROM dead_letter_queue ${sql} ORDER BY moved_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+    items = rows.results || [];
+  } else if (source === 'cf') {
+    const { sql, params } = buildWhere('cf_dlq_mirror');
+    const cRow = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM cf_dlq_mirror ${sql}`).bind(...params).first<{ c: number }>();
+    count = Number(cRow?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, message_id AS original_job_id, job_type, payload, error AS last_error, attempts, received_at AS created_at, 'cf' AS source
+       FROM cf_dlq_mirror ${sql} ORDER BY received_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+    items = rows.results || [];
+  } else {
+    // No source filter — UNION both tables.
+    const { sql: w1, params: p1 } = buildWhere('dead_letter_queue');
+    const { sql: w2, params: p2 } = buildWhere('cf_dlq_mirror');
+    const c1 = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM dead_letter_queue ${w1}`).bind(...p1).first<{ c: number }>();
+    const c2 = await c.env.DB.prepare(`SELECT COUNT(*) AS c FROM cf_dlq_mirror ${w2}`).bind(...p2).first<{ c: number }>();
+    count = Number(c1?.c ?? 0) + Number(c2?.c ?? 0);
+    const rows = await c.env.DB.prepare(
+      `SELECT id, original_job_id, job_type, payload, last_error, attempts, created_at, source FROM (
+        SELECT id, original_job_id, job_type, payload, last_error, attempts, moved_at AS created_at, 'd1' AS source
+        FROM dead_letter_queue ${w1}
+        UNION ALL
+        SELECT id, message_id AS original_job_id, job_type, payload, error AS last_error, attempts, received_at AS created_at, 'cf' AS source
+        FROM cf_dlq_mirror ${w2}
+      ) ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...p1, ...p2, limit, offset).all();
+    items = rows.results || [];
+  }
+
+  return c.json({
+    ok: true,
+    items,
+    total: count,
+    limit,
+    offset,
+  });
+});
+
+// POST /api/infra/dlq/:id/retry — re-enqueue a dead-letter job and remove it from DLQ.
+// Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
+infra.post('/dlq/:id/retry', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const source = (c.req.query('source') || '').trim();
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
+
+  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
+  const errorCol = source === 'cf' ? 'error' : 'last_error';
+  const row = await c.env.DB.prepare(
+    `SELECT job_type, payload, ${errorCol} AS last_error, attempts FROM ${table} WHERE id = ?`
+  ).bind(id).first<{ job_type: string; payload: string | null; last_error: string | null; attempts: number }>();
+
+  if (!row) return c.json({ error: 'DLQ item not found' }, 404);
+
+  // Re-enqueue with a fresh idempotency key so the dedup layer won't
+  // silently skip it if the original key is still in job_idempotency.
+  const payload = row.payload ? JSON.parse(row.payload) : {};
+  const result = await enqueueJob(c.env, row.job_type as JobType, payload, {
+    idempotency_key: `dlq-retry-${source}-${id}-${crypto.randomUUID()}`,
+  });
+
+  // Remove from the correct table.
+  await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+
+  return c.json({ ok: true, requeued: true, source, transport: result.transport, idempotency_key: result.idempotency_key });
+});
+
+// DELETE /api/infra/dlq/:id — discard a dead-letter entry (admin only).
+// Requires ?source=d1|cf to avoid ambiguous ID collisions between the two tables.
+infra.delete('/dlq/:id', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const source = (c.req.query('source') || '').trim();
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid id' }, 400);
+  if (source !== 'd1' && source !== 'cf') return c.json({ error: 'source query param required (d1|cf)' }, 400);
+
+  const table = source === 'cf' ? 'cf_dlq_mirror' : 'dead_letter_queue';
+  const r = await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+  if ((r.meta?.changes ?? 0) === 0) return c.json({ error: 'DLQ item not found' }, 404);
+
+  return c.json({ ok: true, deleted: true });
+});
+
+// GET /api/infra/cron-history — list recent cron run history + trigger metadata.
+infra.get('/cron-history', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const limit = Math.max(1, Math.min(200, parseInt(c.req.query('limit') || '100', 10)));
+  const offset = Math.max(0, parseInt(c.req.query('offset') || '0', 10));
+  const trigger = c.req.query('trigger') || '';
+
+  const where = trigger ? 'WHERE trigger_name = ?' : '';
+  const countStmt = `SELECT COUNT(*) AS c FROM cron_run_history ${where}`;
+  const listStmt = `SELECT * FROM cron_run_history ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`;
+
+  const count = await c.env.DB.prepare(countStmt)
+    .bind(...(trigger ? [trigger] : []))
+    .first<{ c: number }>();
+
+  const rows = await c.env.DB.prepare(listStmt)
+    .bind(...(trigger ? [trigger, limit, offset] : [limit, offset]))
+    .all();
+
+  // Last run and next run per DECLARED trigger. The store keys rows by the
+  // raw expression the scheduled handler received, so the map is by expr
+  // rather than display name. D201 — one indexed read per trigger through the
+  // helper HQ · Platform also reads, in place of a GROUP BY over the whole
+  // table; and the next run comes from the matcher that speaks Cloudflare's
+  // weekday numbering (1 = Sunday), which the copy that lived here did not.
+  //
+  // D238 — the triggers THIS deployment fires. A branch fires only its own
+  // two (BRANCH_CRONS); graded against HQ's six, four would read "never
+  // fired" for ever.
+  const declared = triggersFor(c.env);
+  const latest = await latestRunPerTrigger(c.env, declared.map((t) => t.expr));
+  const triggers = declared.map(t => ({
+    name: t.name,
+    expr: t.expr,
+    last_run_at: latest.get(t.expr)?.started_at || null,
+    next_run_at: nextCronRun(t.expr) || null,
+  }));
+
+  return c.json({
+    ok: true,
+    items: rows.results || [],
+    total: Number(count?.c ?? 0),
+    // D237 — `total` counts what the table holds, and since the retention
+    // sweep that is the last RETENTION days plus each trigger's newest row,
+    // not every tick ever recorded. Sent beside it so no screen can present
+    // the figure as all-time.
+    retention_days: CRON_HISTORY_RETENTION_DAYS,
+    limit,
+    offset,
+    triggers,
+  });
+});
+
+// GET /api/infra/reembed-metrics — per-type search re-index counts over the last
+// N hours. Surfaces whether the hourly axal-search sweep is keeping up: summed
+// enqueued / failed / skipped per entity type, tick count, and last-run stamp.
+// Backed by the 'reembed' rows the cron sweep writes to system_metrics.
+infra.get('/reembed-metrics', async (c) => {
+  await ensureInfraSchema(c.env);
+  await requireAdmin(c);
+  const hoursRaw = parseInt(c.req.query('hours') || '24', 10);
+  const hours = Math.max(1, Math.min(168, Number.isFinite(hoursRaw) ? hoursRaw : 24));
+  const since = new Date(Date.now() - hours * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT json_extract(labels,'$.type') AS type,
+            COALESCE(SUM(json_extract(labels,'$.enqueued')), 0) AS enqueued,
+            COALESCE(SUM(json_extract(labels,'$.failed')), 0) AS failed,
+            COALESCE(SUM(json_extract(labels,'$.skipped')), 0) AS skipped,
+            COUNT(*) AS ticks,
+            MAX(timestamp) AS last_run_at
+       FROM system_metrics
+      WHERE metric_name = 'reembed' AND timestamp >= ?
+      GROUP BY type
+      ORDER BY type`
+  ).bind(since).all();
+
+  return c.json({ ok: true, hours, items: rows.results || [] });
+});
+
+// GET /api/infra/ws-check — real authenticated WebSocket upgrade spot-check.
+// Probes both the DO internal upgrade path and the worker-facing route.
+// For the route probe, we mint a synthetic admin JWT and send upgrade headers.
+// The probe is fire-and-close (101 is accepted, then we immediately close).
+// The real user-facing route requires ?token= or Sec-WebSocket-Protocol;
+// we use the protocol header for the probe.
+infra.get('/ws-check', async (c) => {
+  await requireAdmin(c);
+  const checks: Record<string, { ok: boolean; detail: string }> = {};
+
+  // The probe presents the caller's OWN session token to the auth-protected
+  // upgrade routes; it is never returned. D4669 — it used to mint a fresh
+  // admin token with no session row: a token outside every session list that
+  // no per-session revoke could reach.
+  let probeToken = '';
+  try {
+    await requireAdmin(c);
+    probeToken = (await selectJwt(c))?.token ?? '';
+    if (!probeToken) checks.token = { ok: false, detail: 'No session token on this request to probe with.' };
+  } catch (e: any) {
+    checks.token = { ok: false, detail: `Session token unavailable: ${e?.message || e}` };
+  }
+
+  // 1. PipelineRoom DO internal upgrade probe (no user auth needed — DO
+  //     trusts the worker because the DO is only accessible via the binding).
+  if (c.env.PIPELINE_ROOM) {
+    try {
+      const rooms = doNamespace(c.env, c.env.PIPELINE_ROOM);
+      const id = rooms.idFromName('healthcheck');
+      const stub = rooms.get(id);
+      // DO count (reachability)
+      const count = await stub.fetch('https://do/count');
+      const countOk = count.status === 200;
+      // DO upgrade probe (synthetic admin)
+      const upgrade = await stub.fetch('https://do/ws', {
+        headers: {
+          upgrade: 'websocket',
+          'x-auth-user-id': '0',
+          'x-auth-role': 'admin',
+        },
+      });
+      checks.pipeline = {
+        ok: countOk && upgrade.status === 101,
+        detail: `count=${count.status} upgrade=${upgrade.status}`,
+      };
+    } catch (e: any) {
+      checks.pipeline = { ok: false, detail: e?.message || 'unreachable' };
+    }
+  } else {
+    checks.pipeline = { ok: false, detail: 'PIPELINE_ROOM binding missing' };
+  }
+
+  // 2. OnboardingChat DO internal upgrade probe.
+  if (c.env.ONBOARDING_CHAT) {
+    try {
+      const chats = doNamespace(c.env, c.env.ONBOARDING_CHAT);
+      const id = chats.idFromName('healthcheck');
+      const stub = chats.get(id);
+      const count = await stub.fetch('https://do/count');
+      const countOk = count.status === 200;
+      const upgrade = await stub.fetch('https://do/ws', {
+        headers: {
+          upgrade: 'websocket',
+          'x-auth-user-id': '0',
+          'x-auth-role': 'admin',
+        },
+      });
+      checks.onboarding = {
+        ok: countOk && upgrade.status === 101,
+        detail: `count=${count.status} upgrade=${upgrade.status}`,
+      };
+    } catch (e: any) {
+      checks.onboarding = { ok: false, detail: e?.message || 'unreachable' };
+    }
+  } else {
+    checks.onboarding = { ok: false, detail: 'ONBOARDING_CHAT binding missing' };
+  }
+
+  // 3. Worker-facing route probes — real authenticated upgrade requests.
+  // We self-request the actual Hono routes so the full auth+RBAC+rate-limit
+  // pipeline is exercised. The DO layer is verified by the stub probes above.
+  if (probeToken) {
+    const origin = c.env.APP_URL || new URL(c.req.url).origin;
+
+    // /api/pipeline/ws/overview — any authenticated active user may subscribe.
+    try {
+      const req = new Request(`${origin}/api/pipeline/ws/overview`, {
+        headers: {
+          upgrade: 'websocket',
+          'sec-websocket-protocol': `bearer.${probeToken}`,
+        },
+      });
+      const resp = await fetch(req);
+      checks.pipeline_route = {
+        ok: resp.status === 101,
+        detail: `handshake=${resp.status}`,
+      };
+    } catch (e: any) {
+      checks.pipeline_route = { ok: false, detail: e?.message || 'probe-failed' };
+    }
+
+    // /api/onboarding/ws/0 — admin or self; admin JWT (user_id=0) passes.
+    try {
+      const req = new Request(`${origin}/api/onboarding/ws/0`, {
+        headers: {
+          upgrade: 'websocket',
+          'sec-websocket-protocol': `bearer.${probeToken}`,
+        },
+      });
+      const resp = await fetch(req);
+      checks.onboarding_route = {
+        ok: resp.status === 101,
+        detail: `handshake=${resp.status}`,
+      };
+    } catch (e: any) {
+      checks.onboarding_route = { ok: false, detail: e?.message || 'probe-failed' };
+    }
+  } else {
+    checks.pipeline_route = { ok: false, detail: 'probe skipped: no token' };
+    checks.onboarding_route = { ok: false, detail: 'probe skipped: no token' };
+  }
+
+  return c.json({ ok: true, checks });
+});
+
+export default infra;

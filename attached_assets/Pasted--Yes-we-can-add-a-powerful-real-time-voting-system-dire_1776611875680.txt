@@ -1,0 +1,76 @@
+**✅ Yes – we can add a powerful, real-time voting system directly into the pipeline.**
+
+### Strategic Recommendation (before the prompt)
+
+**Where to place it:**
+- After the **AI Scoring Engine** and **Diligence** step.
+- Right before the **Decision Gate** in the Pipeline Board.
+
+**Why this is strategically strong:**
+- It turns the pipeline into a **collective intelligence engine** — not just founder + AI validation, but real input from founders, partners, and investors.
+- Increases **credibility** with LPs (shows network validation).
+- Creates **network effects** (users feel ownership).
+- Fits perfectly with your “Signal-to-Action” Market Intelligence philosophy.
+
+**Recommended voting design:**
+- **Simple weighted vote**: “Strong Buy / Buy / Hold / Pass”
+- **Weighted by role** (e.g. Investors 3x, Partners 2x, Founders 1x)
+- **Real-time tally** using Durable Objects (already in your codebase)
+- **Anonymous option** + public vote leaderboard
+- **Auto-triggers** Decision Gate review when vote threshold is reached
+
+This is **highly feasible** with your current infrastructure (D1 + Durable Objects + Pipeline Board).
+
+---
+
+**Ready-to-copy prompt for Replit Agent**
+
+Paste this **exactly** into the Agent tab:
+
+```
+You are the senior product engineer for Axal StudioOS. Add a complete **real-time voting system** into the Pipeline Board for all platform users (founders, partners, investors).
+
+Placement: After the AI Scoring / Diligence step and before the final Decision Gate.
+
+Exact requirements:
+
+1. **Database**
+   - Create table `pipeline_votes`:
+     - id, deal_id (FK), user_id (FK), vote_type (Strong_Buy / Buy / Hold / Pass), weight (auto-calculated by role), timestamp, comment (optional)
+
+2. **Real-time (Durable Objects)**
+   - Use existing Durable Objects (or extend PipelineRoom) to broadcast live vote updates.
+
+3. **Voting UI in Pipeline Board**
+   - On each project card in /pipeline.html, add a "Community Vote" section.
+   - Show current tally (Strong Buy %, total weighted score, number of voters).
+   - Allow authenticated users to cast one vote with optional comment.
+   - Real-time updates via WebSocket.
+
+4. **Backend**
+   - POST /api/pipeline/vote/{deal_id}
+   - GET /api/pipeline/votes/{deal_id} (live tally)
+   - Automatically recalculate weighted score based on user role (Investor=3, Partner=2, Founder=1).
+
+5. **Strategy & UX**
+   - Show "Vote threshold reached" banner when enough votes are in.
+   - Option for anonymous voting.
+   - Leaderboard of top voters (optional, in Refer & Earn or Profile).
+
+Build this step-by-step:
+1. First create the pipeline_votes D1 table.
+2. Then extend the Durable Object for real-time vote broadcasting.
+3. Then add the voting UI and backend endpoint.
+4. Then integrate it into the Pipeline Board page.
+5. Finally test end-to-end with multiple users voting on the same deal.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+This prompt will give you a clean, real-time, role-weighted voting system that fits naturally into your existing pipeline.
+
+Would you like me to adjust the voting mechanics (e.g. add a 0-100 score instead of categorical votes) or add the prompt for **R2 document storage** next? Just let me know.

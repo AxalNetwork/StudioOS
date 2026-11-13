@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .dd-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .dd-page{background:#f6f5f8;color:#18181b}
+    .dd-surface{background:#ffffff}
+    .dd-sunken{background:#faf9fc}
+    .dd-border{border-color:#e5e3ec}
+    .dd-bd-b{border-bottom-color:#e5e3ec}
+    .dd-bd-t{border-top-color:#e5e3ec}
+    .dd-bd-l{border-left-color:#e5e3ec}
+    .dd-text{color:#18181b}
+    .dd-muted{color:#6b6577}
+    .dd-strong{color:#3f3f46}
+    .dd-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .dd-track{background:#e5e3ec}
+
+    .dd-page.dd-dark{background:#0a090e;color:#ececf1}
+    .dd-dark .dd-surface{background:#17161d}
+    .dd-dark .dd-sunken{background:#1d1b25}
+    .dd-dark .dd-border{border-color:#2a2833}
+    .dd-dark .dd-bd-b{border-bottom-color:#2a2833}
+    .dd-dark .dd-bd-t{border-top-color:#2a2833}
+    .dd-dark .dd-bd-l{border-left-color:#2a2833}
+    .dd-dark .dd-text{color:#ececf1}
+    .dd-dark .dd-muted{color:#a5a0b2}
+    .dd-dark .dd-strong{color:#dcd9e4}
+    .dd-dark .dd-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .dd-dark .dd-track{background:#26232f}
+
+    .dd-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .dd-btn:hover{filter:brightness(1.05)}
+    .dd-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .dd-seg{cursor:pointer;transition:background .13s,color .13s}
+    .dd-row{transition:background .12s}
+    .dd-row:hover{background:#faf9fc}
+    .dd-dark .dd-row:hover{background:#1d1b25}
+    .dd-pick{cursor:pointer;transition:border-color .13s,box-shadow .13s,transform .13s}
+    .dd-pick:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(10,9,14,.08)}
+    .dd-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .dd-fade{animation:ddFade .2s ease}
+    @keyframes ddFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input,select,textarea{font-family:inherit;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:1080px){.dd-2{grid-template-columns:1fr!important}.dd-3{grid-template-columns:1fr!important}.dd-4{grid-template-columns:1fr 1fr!important}.dd-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="dd-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="dd-surface dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1400px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="dd-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Due Diligence</div>
+            <div class="dd-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="{{ caseVerdictChip }}">{{ caseVerdict }}</span>
+          <div class="dd-btn dd-border dd-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:22px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+          <div class="dd-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1400px;margin:0 auto;padding:22px 24px 90px">
+
+  <!-- ============ 1 · SETUP ============ -->
+  <sc-if value="{{ tabSetup }}">
+  <div class="dd-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+      <div style="min-width:0">
+        <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Case setup</div>
+        <div class="dd-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Scope is set by check size and stage, not by taste. The template you pick is the process you will be asked to defend — it is recorded on the case and cannot be silently narrowed later.</div>
+      </div>
+      <div class="dd-muted dd-num" style="font-size:11.5px;flex:none">{{ setupContext }}</div>
+    </div>
+
+    <div class="dd-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <sc-for list="{{ templates }}" as="t" hint-placeholder-count="3">
+        <div class="dd-pick dd-surface" data-tpl="{{ t.k }}" onClick="{{ pickTemplate }}" style="{{ t.cardStyle }}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+            <div>
+              <div class="dd-text" style="font-size:16px;font-weight:800;letter-spacing:-.018em">{{ t.name }}</div>
+              <div class="dd-muted" style="font-size:11.5px;margin-top:3px">{{ t.scope }}</div>
+            </div>
+            <sc-if value="{{ t.on }}">
+              <span style="width:16px;height:16px;display:flex;flex:none;color:#7c3aed;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+            </sc-if>
+            <sc-if value="{{ t.recommended }}">
+              <span style="{{ recChip }}">Recommended</span>
+            </sc-if>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:7px;margin-top:14px">
+            <div class="dd-num" style="font-size:26px;font-weight:700;letter-spacing:-.03em;color:{{ t.tone }}">{{ t.items }}</div>
+            <div class="dd-muted" style="font-size:11.5px">items</div>
+          </div>
+          <div class="dd-muted" style="font-size:12px;line-height:1.6;margin-top:8px">{{ t.blurb }}</div>
+          <div class="dd-bd-t" style="margin-top:14px;padding-top:12px;border-top-width:1px;border-top-style:solid">
+            <div class="dd-muted dd-th" style="margin-bottom:8px">Sections</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ t.sections }}" as="s" hint-placeholder-count="6">
+                <span style="{{ s.chip }}">{{ s.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div class="dd-bd-t" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:11px;border-top-width:1px;border-top-style:solid">
+            <div class="dd-muted dd-num" style="font-size:10.5px">{{ t.effort }}</div>
+            <div class="dd-muted" style="font-size:11px;font-weight:700">{{ t.cta }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- template editor -->
+    <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+      <div class="dd-sunken dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div class="dd-muted dd-th">Section weighting · {{ tplName }}</div>
+          <div class="dd-muted" style="font-size:11px;margin-top:3px">Editable per fund. Changes version the template rather than restating open cases.</div>
+        </div>
+        <div class="dd-muted dd-num" style="font-size:11px">{{ tplVersion }}</div>
+      </div>
+      <sc-for list="{{ tplSections }}" as="s" hint-placeholder-count="6">
+        <div class="dd-bd-b" style="display:flex;align-items:center;gap:16px;padding:13px 22px;border-bottom-width:1px;border-bottom-style:solid;flex-wrap:wrap">
+          <span style="{{ s.iconWrap }}">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span>
+          </span>
+          <div style="min-width:130px;flex:none">
+            <div class="dd-strong" style="font-size:12.5px;font-weight:700">{{ s.name }}</div>
+            <div class="dd-muted dd-num" style="font-size:10.5px;margin-top:1px">{{ s.itemLabel }}</div>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <div class="dd-track" style="height:6px;border-radius:99px;overflow:hidden">
+              <div style="{{ s.barStyle }}"></div>
+            </div>
+          </div>
+          <div class="dd-muted" style="flex:1;min-width:180px;font-size:11.5px;line-height:1.5">{{ s.note }}</div>
+          <sc-if value="{{ s.blocking }}">
+            <span style="{{ blockChip }}">Blocking</span>
+          </sc-if>
+        </div>
+      </sc-for>
+      <div class="dd-sunken" style="padding:13px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div class="dd-muted" style="font-size:11.5px;line-height:1.55;max-width:640px">Blocking sections cannot carry an open flag at IC. Non-blocking sections can, provided the flag is recorded with severity and an owner.</div>
+        <div class="dd-btn" onClick="{{ goChecklist }}" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;flex:none">Open checklist →</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 2 · CHECKLIST ============ -->
+  <sc-if value="{{ tabChecklist }}">
+  <div class="dd-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Checklist</div>
+        <div class="dd-muted" style="font-size:13px;margin-top:5px">{{ checklistSub }}</div>
+      </div>
+      <div class="dd-sunken dd-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ statusFilters }}" as="f" hint-placeholder-count="4">
+          <div class="dd-seg" onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- progress strip -->
+    <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:11px">
+        <div class="dd-muted dd-th">Case completion</div>
+        <div class="dd-muted dd-num" style="font-size:11px">{{ completionLine }}</div>
+      </div>
+      <div class="dd-track" style="height:9px;border-radius:99px;overflow:hidden;display:flex">
+        <sc-for list="{{ progressBars }}" as="p" hint-placeholder-count="4">
+          <div style="{{ p.style }}" title="{{ p.label }}"></div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+        <sc-for list="{{ progressLegend }}" as="l" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span>
+            <div class="dd-muted" style="font-size:11px">{{ l.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- sections -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="6">
+        <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="dd-sunken dd-bd-b dd-btn" data-sec="{{ sec.k }}" onClick="{{ toggleSection }}" style="border-bottom-width:1px;border-bottom-style:solid;padding:13px 20px;display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+            <span class="dd-muted" style="width:12px;height:12px;display:flex;flex:none;transform:{{ sec.caretRot }};transition:transform .15s" dangerouslySetInnerHTML="{{ caretIcon }}"></span>
+            <span style="{{ sec.iconWrap }}">
+              <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ sec.icon }}"></span>
+            </span>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <div class="dd-text" style="font-size:14px;font-weight:800;letter-spacing:-.012em">{{ sec.name }}</div>
+                <sc-if value="{{ sec.blocking }}"><span style="{{ blockChip }}">Blocking</span></sc-if>
+              </div>
+              <div class="dd-muted dd-num" style="font-size:11px;margin-top:2px">{{ sec.meta }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex:none;flex-wrap:wrap">
+              <div style="width:88px">
+                <div class="dd-track" style="height:5px;border-radius:99px;overflow:hidden">
+                  <div style="{{ sec.barStyle }}"></div>
+                </div>
+                <div class="dd-muted dd-num" style="font-size:9.5px;margin-top:4px;text-align:right">{{ sec.pct }}</div>
+              </div>
+              <div style="{{ sec.ownerAv }}" title="{{ sec.owner }}">{{ sec.ownerInitials }}</div>
+              <span style="{{ sec.verdictChip }}">{{ sec.verdict }}</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ sec.open }}">
+            <div class="dd-fade dd-wide">
+              <div class="dd-sunken dd-bd-b" style="display:grid;grid-template-columns:auto 2.5fr 1.1fr .85fr 1.5fr;border-bottom-width:1px;border-bottom-style:solid;min-width:800px">
+                <div class="dd-muted dd-th" style="padding:8px 12px 8px 20px">Status</div>
+                <div class="dd-muted dd-th" style="padding:8px 12px">Item</div>
+                <div class="dd-muted dd-th" style="padding:8px 12px">Owner</div>
+                <div class="dd-muted dd-th" style="padding:8px 12px">Due</div>
+                <div class="dd-muted dd-th" style="padding:8px 20px 8px 12px">Evidence</div>
+              </div>
+              <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="4">
+                <div class="dd-row dd-bd-b" style="display:grid;grid-template-columns:auto 2.5fr 1.1fr .85fr 1.5fr;align-items:flex-start;border-bottom-width:1px;border-bottom-style:solid;min-width:800px;background:{{ it.rowBg }}">
+                  <div style="padding:12px 12px 12px 20px">
+                    <span style="{{ it.dotStyle }}" title="{{ it.statusLabel }}">
+                      <sc-if value="{{ it.glyph }}"><span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ it.icon }}"></span></sc-if>
+                    </span>
+                  </div>
+                  <div style="padding:12px 12px;min-width:0">
+                    <div class="dd-strong" style="font-size:12.5px;font-weight:600;line-height:1.5">{{ it.name }}</div>
+                    <sc-if value="{{ it.flagNote }}">
+                      <div style="{{ it.flagWrap }}">
+                        <span style="width:11px;height:11px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+                        <div style="min-width:0">
+                          <span style="font-weight:700">{{ it.severityLabel }}</span> — {{ it.flagNote }}
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <div style="padding:12px 12px;display:flex;align-items:center;gap:7px;min-width:0">
+                    <div style="{{ it.ownerAv }}">{{ it.ownerInitials }}</div>
+                    <div class="dd-muted" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.ownerShort }}</div>
+                  </div>
+                  <div class="dd-num" style="padding:12px 12px;font-size:11px;color:{{ it.dueTone }}">{{ it.due }}</div>
+                  <div style="padding:12px 20px 12px 12px;min-width:0">
+                    <sc-if value="{{ it.hasEvidence }}">
+                      <div style="display:flex;flex-direction:column;gap:5px">
+                        <sc-for list="{{ it.evidence }}" as="e" hint-placeholder-count="2">
+                          <div class="dd-btn dd-sunken dd-border" style="display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:7px;border-width:1px;border-style:solid;min-width:0">
+                            <span style="width:11px;height:11px;display:flex;flex:none;color:{{ e.tone }}" dangerouslySetInnerHTML="{{ e.icon }}"></span>
+                            <div class="dd-strong" style="font-size:10.5px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.name }}</div>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ it.noEvidence }}">
+                      <div class="dd-muted" style="font-size:10.5px">{{ it.evidenceNote }}</div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ sec.filteredEmpty }}">
+                <div style="padding:22px 20px;text-align:center">
+                  <div class="dd-muted" style="font-size:11.5px">No {{ filterLabel }} items in this section.</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 3 · FLAGS ============ -->
+  <sc-if value="{{ tabFlags }}">
+  <div class="dd-fade">
+    <div style="margin-bottom:18px">
+      <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Red flags</div>
+      <div class="dd-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">Severity drives the case verdict, not count. One deal-breaker outranks a dozen minors — the roll-up is written that way deliberately.</div>
+    </div>
+
+    <!-- risk summary -->
+    <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+      <div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+        <div style="flex:none">
+          <div class="dd-muted dd-th">Case verdict</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <span style="{{ caseVerdictChipLg }}">{{ caseVerdict }}</span>
+          </div>
+          <div class="dd-muted" style="font-size:11px;margin-top:7px">Rolled up from {{ sectionCount }} sections</div>
+        </div>
+        <div class="dd-bd-l" style="flex:1;min-width:280px;padding-left:22px;border-left-width:1px;border-left-style:solid">
+          <div class="dd-muted dd-th">Risk summary</div>
+          <div class="dd-text" style="font-size:14.5px;font-weight:700;line-height:1.55;margin-top:8px;max-width:600px">{{ riskSummary }}</div>
+          <div class="dd-muted" style="font-size:12px;line-height:1.6;margin-top:8px;max-width:620px">{{ riskDetail }}</div>
+        </div>
+        <div style="flex:none;display:flex;gap:18px;flex-wrap:wrap">
+          <sc-for list="{{ severityCounts }}" as="s" hint-placeholder-count="3">
+            <div style="text-align:right">
+              <div class="dd-num" style="font-size:20px;font-weight:700;letter-spacing:-.024em;color:{{ s.tone }}">{{ s.n }}</div>
+              <div class="dd-muted dd-th" style="margin-top:3px">{{ s.k }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ranked flags -->
+    <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+      <div class="dd-sunken dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div class="dd-muted dd-th">Ranked by severity</div>
+        <div class="dd-muted" style="font-size:11px">{{ flagsCountLine }}</div>
+      </div>
+      <sc-for list="{{ flags }}" as="f" hint-placeholder-count="5">
+        <div class="dd-bd-b" style="padding:16px 22px;border-bottom-width:1px;border-bottom-style:solid;background:{{ f.rowBg }}">
+          <div style="display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap">
+            <span style="{{ f.iconWrap }}">
+              <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+            </span>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="{{ f.sevChip }}">{{ f.severity }}</span>
+                <div class="dd-text" style="font-size:13.5px;font-weight:700">{{ f.item }}</div>
+                <span style="{{ f.secChip }}">{{ f.section }}</span>
+              </div>
+              <div class="dd-muted" style="font-size:12px;line-height:1.65;margin-top:7px;max-width:700px">{{ f.explanation }}</div>
+              <div class="dd-bd-t" style="display:flex;align-items:center;gap:14px;margin-top:11px;padding-top:10px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div style="{{ f.ownerAv }}">{{ f.ownerInitials }}</div>
+                  <div class="dd-muted" style="font-size:11px">{{ f.owner }}</div>
+                </div>
+                <div class="dd-muted dd-num" style="font-size:11px">Raised {{ f.raised }}</div>
+                <div class="dd-muted" style="font-size:11px;min-width:0;flex:1"><strong class="dd-strong" style="font-weight:700">Resolution:</strong> {{ f.resolution }}</div>
+                <span style="{{ f.stateChip }}">{{ f.state }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 4 · REQUEST LIST ============ -->
+  <sc-if value="{{ tabRequests }}">
+  <div class="dd-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Request list</div>
+        <div class="dd-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">{{ reqSub }}</div>
+      </div>
+      <div class="dd-sunken dd-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ reqSides }}" as="s" hint-placeholder-count="2">
+          <div class="dd-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- INVESTOR SIDE -->
+    <sc-if value="{{ reqInvestor }}">
+      <div class="dd-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <sc-for list="{{ reqStats }}" as="r" hint-placeholder-count="4">
+          <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:14px 18px">
+            <div class="dd-muted dd-th">{{ r.k }}</div>
+            <div class="dd-num" style="font-size:20px;font-weight:700;letter-spacing:-.024em;margin-top:6px;color:{{ r.tone }}">{{ r.v }}</div>
+            <div class="dd-muted" style="font-size:10.5px;margin-top:2px">{{ r.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="dd-sunken dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="dd-muted dd-th">Requests to NorthPeak</div>
+          <div class="dd-btn" onClick="{{ openCompose }}" style="padding:7px 13px;border-radius:8px;background:rgba(124,58,237,.1);color:#6d28d9;font-size:11.5px;font-weight:700">+ Compose request</div>
+        </div>
+        <div class="dd-wide">
+          <div class="dd-sunken dd-bd-b" style="display:grid;grid-template-columns:2.4fr 1fr 1.1fr .9fr 1.4fr;border-bottom-width:1px;border-bottom-style:solid;min-width:840px">
+            <div class="dd-muted dd-th" style="padding:8px 22px">Request</div>
+            <div class="dd-muted dd-th" style="padding:8px 12px">Section</div>
+            <div class="dd-muted dd-th" style="padding:8px 12px">State</div>
+            <div class="dd-muted dd-th" style="padding:8px 12px">Due</div>
+            <div class="dd-muted dd-th" style="padding:8px 22px 8px 12px">What arrived</div>
+          </div>
+          <sc-for list="{{ requests }}" as="r" hint-placeholder-count="7">
+            <div class="dd-row dd-bd-b" style="display:grid;grid-template-columns:2.4fr 1fr 1.1fr .9fr 1.4fr;align-items:flex-start;border-bottom-width:1px;border-bottom-style:solid;min-width:840px">
+              <div style="padding:13px 22px;min-width:0">
+                <div class="dd-strong" style="font-size:12.5px;font-weight:600;line-height:1.5">{{ r.name }}</div>
+                <div class="dd-muted dd-num" style="font-size:10.5px;margin-top:2px">{{ r.ref }} · asked {{ r.asked }}</div>
+              </div>
+              <div style="padding:13px 12px"><span style="{{ r.secChip }}">{{ r.section }}</span></div>
+              <div style="padding:13px 12px">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="{{ r.stateDot }}"></span>
+                  <div style="font-size:11.5px;font-weight:700;color:{{ r.stateTone }}">{{ r.state }}</div>
+                </div>
+                <div class="dd-muted dd-num" style="font-size:10px;margin-top:3px">{{ r.stateWhen }}</div>
+              </div>
+              <div class="dd-num" style="padding:13px 12px;font-size:11px;color:{{ r.dueTone }}">{{ r.due }}</div>
+              <div style="padding:13px 22px 13px 12px;min-width:0">
+                <sc-if value="{{ r.hasFile }}">
+                  <div style="display:flex;flex-direction:column;gap:5px">
+                    <sc-for list="{{ r.files }}" as="f" hint-placeholder-count="2">
+                      <div class="dd-btn dd-sunken dd-border" style="display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:7px;border-width:1px;border-style:solid;min-width:0">
+                        <span style="width:11px;height:11px;display:flex;flex:none;color:{{ f.tone }}" dangerouslySetInnerHTML="{{ f.icon }}"></span>
+                        <div class="dd-strong" style="font-size:10.5px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ r.noFile }}">
+                  <div class="dd-muted" style="font-size:10.5px;line-height:1.5">{{ r.fileNote }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- FOUNDER SIDE -->
+    <sc-if value="{{ reqFounder }}">
+      <div style="max-width:720px">
+        <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <div style="{{ founderAv }}">AV</div>
+            <div style="min-width:0;flex:1">
+              <div class="dd-text" style="font-size:16px;font-weight:800;letter-spacing:-.018em">Diligence requests from Axal VC</div>
+              <div class="dd-muted" style="font-size:12.5px;line-height:1.6;margin-top:5px">{{ founderIntro }}</div>
+            </div>
+          </div>
+          <div class="dd-bd-t" style="display:flex;align-items:center;gap:16px;margin-top:18px;padding-top:16px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <div class="dd-muted dd-th">Your progress</div>
+                <div class="dd-muted dd-num" style="font-size:11px">{{ founderProgressLine }}</div>
+              </div>
+              <div class="dd-track" style="height:8px;border-radius:99px;overflow:hidden;margin-top:8px">
+                <div style="{{ founderBar }}"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+          <sc-for list="{{ founderRequests }}" as="r" hint-placeholder-count="7">
+            <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 20px;{{ r.wrapExtra }}">
+              <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+                <span style="{{ r.dotStyle }}">
+                  <sc-if value="{{ r.glyph }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ r.icon }}"></span></sc-if>
+                </span>
+                <div style="min-width:0;flex:1">
+                  <div class="dd-text" style="font-size:13.5px;font-weight:700;line-height:1.45">{{ r.name }}</div>
+                  <div class="dd-muted" style="font-size:11.5px;line-height:1.55;margin-top:4px">{{ r.ask }}</div>
+                  <sc-if value="{{ r.hasFile }}">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
+                      <sc-for list="{{ r.files }}" as="f" hint-placeholder-count="2">
+                        <div class="dd-sunken dd-border" style="display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;border-width:1px;border-style:solid">
+                          <span style="width:11px;height:11px;display:flex;flex:none;color:{{ f.tone }}" dangerouslySetInnerHTML="{{ f.icon }}"></span>
+                          <div class="dd-strong" style="font-size:10.5px;font-weight:600">{{ f.name }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="flex:none;text-align:right">
+                  <span style="{{ r.stateChip }}">{{ r.stateLabel }}</span>
+                  <div class="dd-num" style="font-size:10.5px;margin-top:5px;color:{{ r.dueTone }}">{{ r.dueLabel }}</div>
+                </div>
+              </div>
+              <sc-if value="{{ r.actionable }}">
+                <div class="dd-bd-t" style="display:flex;align-items:center;gap:9px;margin-top:12px;padding-top:11px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+                  <div class="dd-btn" style="padding:8px 15px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12px;font-weight:700">{{ r.actionLabel }}</div>
+                  <div class="dd-btn dd-muted" style="font-size:11.5px;font-weight:600">Ask a question</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ 5 · CROSS-CHECKS ============ -->
+  <sc-if value="{{ tabChecks }}">
+  <div class="dd-fade">
+    <div style="margin-bottom:18px">
+      <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Cross-checks</div>
+      <div class="dd-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">What has been verified outside this checklist, and by whom. Anything the fund asserts without an independent rail behind it is marked as such.</div>
+    </div>
+
+    <div class="dd-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <sc-for list="{{ rails }}" as="r" hint-placeholder-count="4">
+        <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="dd-sunken dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:13px 20px;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+            <span style="{{ r.iconWrap }}">
+              <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ r.icon }}"></span>
+            </span>
+            <div style="min-width:0;flex:1">
+              <div class="dd-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.012em">{{ r.name }}</div>
+              <div class="dd-muted" style="font-size:11px;margin-top:2px">{{ r.sub }}</div>
+            </div>
+            <span style="{{ r.chip }}">{{ r.status }}</span>
+          </div>
+          <div style="padding:6px 20px 14px">
+            <sc-for list="{{ r.rows }}" as="row" hint-placeholder-count="3">
+              <div class="dd-bd-t" style="display:flex;align-items:center;gap:11px;padding:11px 0;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+                <sc-if value="{{ row.hasAv }}">
+                  <div style="{{ row.avStyle }}">{{ row.initials }}</div>
+                </sc-if>
+                <div style="min-width:0;flex:1">
+                  <div class="dd-strong" style="font-size:12px;font-weight:600">{{ row.label }}</div>
+                  <div class="dd-muted" style="font-size:10.5px;margin-top:1px">{{ row.meta }}</div>
+                </div>
+                <span style="{{ row.chip }}">{{ row.state }}</span>
+              </div>
+            </sc-for>
+            <div class="dd-bd-t" style="margin-top:4px;padding-top:11px;border-top-width:1px;border-top-style:solid">
+              <div class="dd-muted" style="font-size:11.5px;line-height:1.6">{{ r.note }}</div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 6 · REPORT ============ -->
+  <sc-if value="{{ tabReport }}">
+  <div class="dd-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+      <div style="min-width:0">
+        <div class="dd-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">DD report</div>
+        <div class="dd-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Print-clean, generated from the case. Every figure below traces to a checklist item, a flag, or a sign-off — nothing is typed for the report.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+        <div class="dd-btn dd-border dd-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:7px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ linkIcon }}"></span>
+          Copy link
+        </div>
+        <div class="dd-btn" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+          <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+          Export DD report
+        </div>
+      </div>
+    </div>
+
+    <div class="dd-surface dd-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+      <div class="dd-sunken dd-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:22px 30px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div style="display:flex;gap:14px;min-width:0">
+          <div style="{{ coAvLg }}">NP</div>
+          <div style="min-width:0">
+            <div class="dd-muted dd-th">Due diligence report</div>
+            <div class="dd-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em;margin-top:5px">{{ co.name }}</div>
+            <div class="dd-muted" style="font-size:12px;margin-top:3px">{{ co.line }}</div>
+          </div>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div class="dd-muted dd-th">Prepared</div>
+          <div class="dd-strong dd-num" style="font-size:12.5px;font-weight:600;margin-top:5px">{{ report.prepared }}</div>
+          <div class="dd-muted dd-num" style="font-size:11px;margin-top:2px">{{ report.ref }}</div>
+        </div>
+      </div>
+
+      <div style="padding:26px 30px">
+        <!-- headline -->
+        <div class="dd-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+          <sc-for list="{{ report.headline }}" as="h" hint-placeholder-count="4">
+            <div>
+              <div class="dd-muted dd-th">{{ h.k }}</div>
+              <div class="dd-num" style="font-size:21px;font-weight:700;letter-spacing:-.028em;margin-top:6px;color:{{ h.tone }}">{{ h.v }}</div>
+              <div class="dd-muted" style="font-size:10.5px;margin-top:3px;line-height:1.45">{{ h.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- recommendation -->
+        <div class="dd-sunken dd-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:16px 20px;margin-top:22px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span style="{{ caseVerdictChip }}">{{ caseVerdict }}</span>
+            <div class="dd-strong" style="font-size:12.5px;font-weight:700">{{ riskSummary }}</div>
+          </div>
+          <div class="dd-muted" style="font-size:12px;line-height:1.65;margin-top:9px">{{ report.recBody }}</div>
+        </div>
+
+        <!-- section verdicts + sign-offs -->
+        <div class="dd-bd-t" style="margin-top:22px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+          <div class="dd-muted dd-th" style="margin-bottom:12px">Section verdicts &amp; sign-offs</div>
+          <div class="dd-wide">
+            <div class="dd-bd-b" style="display:grid;grid-template-columns:1.3fr .8fr .9fr 1.1fr 1.4fr;border-bottom-width:1px;border-bottom-style:solid">
+              <div class="dd-muted dd-th" style="padding:0 0 8px">Section</div>
+              <div class="dd-muted dd-th" style="padding:0 8px 8px;text-align:right">Items</div>
+              <div class="dd-muted dd-th" style="padding:0 8px 8px">Verdict</div>
+              <div class="dd-muted dd-th" style="padding:0 8px 8px">Owner</div>
+              <div class="dd-muted dd-th" style="padding:0 0 8px 8px">Sign-off</div>
+            </div>
+            <sc-for list="{{ report.sections }}" as="s" hint-placeholder-count="6">
+              <div class="dd-bd-b" style="display:grid;grid-template-columns:1.3fr .8fr .9fr 1.1fr 1.4fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="padding:10px 0">
+                  <div class="dd-strong" style="font-size:12px;font-weight:600">{{ s.name }}</div>
+                  <sc-if value="{{ s.blocking }}"><div class="dd-muted" style="font-size:10px;margin-top:1px">blocking</div></sc-if>
+                </div>
+                <div class="dd-num dd-muted" style="padding:10px 8px;font-size:11.5px;text-align:right">{{ s.items }}</div>
+                <div style="padding:10px 8px"><span style="{{ s.chip }}">{{ s.verdict }}</span></div>
+                <div style="padding:10px 8px;display:flex;align-items:center;gap:7px">
+                  <div style="{{ s.avStyle }}">{{ s.initials }}</div>
+                  <div class="dd-muted" style="font-size:11px">{{ s.ownerShort }}</div>
+                </div>
+                <div style="padding:10px 0 10px 8px">
+                  <sc-if value="{{ s.signed }}">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span style="width:12px;height:12px;display:flex;flex:none;color:{{ grnTone }}" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                      <div class="dd-strong dd-num" style="font-size:11px;font-weight:600">{{ s.signedWhen }}</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.unsigned }}">
+                    <div class="dd-muted" style="font-size:11px">{{ s.signNote }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- flags -->
+        <div class="dd-bd-t" style="margin-top:20px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+          <div class="dd-muted dd-th" style="margin-bottom:12px">Flags by severity</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ report.flags }}" as="f" hint-placeholder-count="4">
+              <div class="dd-bd-b" style="padding:10px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="{{ f.sevChip }}">{{ f.severity }}</span>
+                  <div class="dd-strong" style="font-size:12px;font-weight:600;min-width:0;flex:1">{{ f.item }}</div>
+                  <span style="{{ f.stateChip }}">{{ f.state }}</span>
+                </div>
+                <div class="dd-muted" style="font-size:11px;line-height:1.55;margin-top:5px">{{ f.short }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- unresolved requests -->
+        <div class="dd-2 dd-bd-t" style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+          <div>
+            <div class="dd-muted dd-th" style="margin-bottom:11px">Unresolved requests</div>
+            <sc-for list="{{ report.openRequests }}" as="r" hint-placeholder-count="3">
+              <div class="dd-bd-b" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div class="dd-strong" style="font-size:11.5px;font-weight:600;min-width:0;flex:1">{{ r.name }}</div>
+                <span style="{{ r.chip }}">{{ r.state }}</span>
+                <div class="dd-muted dd-num" style="font-size:10.5px;flex:none">{{ r.due }}</div>
+              </div>
+            </sc-for>
+            <div class="dd-muted" style="font-size:11px;line-height:1.55;margin-top:10px">{{ report.reqNote }}</div>
+          </div>
+          <div>
+            <div class="dd-muted dd-th" style="margin-bottom:11px">Independent verification</div>
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ report.verification }}" as="v" hint-placeholder-count="4">
+                <div class="dd-bd-b" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom-width:1px;border-bottom-style:solid">
+                  <div class="dd-muted" style="font-size:11.5px;min-width:0;flex:1">{{ v.k }}</div>
+                  <span style="{{ v.chip }}">{{ v.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div class="dd-muted" style="font-size:11px;line-height:1.55;margin-top:10px">{{ report.verifNote }}</div>
+          </div>
+        </div>
+
+        <div class="dd-bd-t" style="margin-top:20px;padding-top:16px;border-top-width:1px;border-top-style:solid;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <span style="width:14px;height:14px;display:flex;flex:none;margin-top:1px;color:{{ ambTone }}" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+          <div class="dd-muted" style="font-size:11.5px;line-height:1.6;min-width:0;flex:1">{{ report.footer }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+
+  <!-- COMPOSE MODAL -->
+  <sc-if value="{{ composeOpen }}">
+    <div onClick="{{ closeCompose }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="dd-surface" onClick="{{ stop }}" style="width:100%;max-width:460px;border-radius:18px;padding:26px 28px;box-shadow:0 24px 70px rgba(10,9,14,.34);max-height:88vh;overflow-y:auto">
+        <div class="dd-text" style="font-size:16.5px;font-weight:800;letter-spacing:-.02em">Compose request</div>
+        <div class="dd-muted" style="font-size:12px;line-height:1.6;margin-top:6px">Requests are logged against a checklist section, so the report can show what was asked and whether it arrived.</div>
+        <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div class="dd-muted dd-th" style="margin-bottom:6px">Section</div>
+            <select class="dd-field" onChange="{{ setComposeSection }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+              <sc-for list="{{ composeSections }}" as="s" hint-placeholder-count="6">
+                <option selected="{{ s.selected }}">{{ s.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+          <div>
+            <div class="dd-muted dd-th" style="margin-bottom:6px">What you need</div>
+            <input class="dd-field" value="{{ composeName }}" onChange="{{ setComposeName }}" placeholder="e.g. Signed customer contracts, top 5 by ARR" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+          </div>
+          <div>
+            <div class="dd-muted dd-th" style="margin-bottom:6px">Why · shown to the founder</div>
+            <textarea class="dd-field" value="{{ composeWhy }}" onChange="{{ setComposeWhy }}" rows="3" placeholder="Founders answer faster when they know what the question is for." style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;resize:vertical;line-height:1.6"></textarea>
+          </div>
+        </div>
+        <div class="dd-btn" onClick="{{ sendCompose }}" style="{{ composeBtnStyle }}">{{ composeBtnLabel }}</div>
+        <div class="dd-btn dd-muted" onClick="{{ closeCompose }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Cancel</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'checklist', tpl:'standard', filter:'All',
+    open:{ legal:true, financial:true }, reqSide:'investor',
+    composeOpen:false, composeSection:'Commercial', composeName:'', composeWhy:'', sent:[] };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const BLU = dark ? '#93b4fc' : '#1e40af';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      shield: this.ic('<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      layers: this.ic('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'),
+      list: this.ic('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      inbox: this.ic('<path d="M3 12h5l2 3h4l2-3h5"/><path d="M3 12 5.5 5h13L21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+      link2: this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      doc: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.6),
+      x: this.ic('<path d="M6 6l12 12M18 6 6 18"/>', 2.4),
+      dash: this.ic('<path d="M6 12h12"/>', 2.4),
+      dot: this.ic('<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>'),
+      scale: this.ic('<path d="M12 3v18M5 7h14"/><path d="m5 7-2.5 6h5zM19 7l-2.5 6h5z"/>'),
+      coin: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      team: this.ic('<path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>'),
+      box: this.ic('<path d="m12 3 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v10"/>'),
+      cart: this.ic('<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12h11L21 7H6"/>'),
+      phone: this.ic('<path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a1 1 0 0 1-1 1A18 18 0 0 1 4 4a1 1 0 0 1 1-1z"/>'),
+      id: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="12" r="2.4"/><path d="M15 10h4M15 14h4"/>'),
+      gauge: this.ic('<path d="M12 14a2 2 0 1 0 2-2"/><path d="M3.5 18a10 10 0 1 1 17 0"/>'),
+      sheet: this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
+      image: this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="m21 15-5-5L5 21"/>'),
+      caret: this.ic('<path d="m9 6 6 6-6 6"/>', 2.2),
+      down: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      link: this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      upload: this.ic('<path d="M12 17V5"/><path d="m7 10 5-5 5 5"/><path d="M4 21h16"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', dark ? '#c4b5fd' : V7);
+    const cBlue = chip('rgba(29,78,216,.1)', BLU);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const av = (bg, sz) => 'width:'+(sz||24)+'px;height:'+(sz||24)+'px;border-radius:7px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'15px':sz>=30?'11px':'9px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:28px;height:28px;border-radius:8px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap';
+
+    // ============ CASE ============
+    const co = { name:'NorthPeak Analytics', line:'Series A · $6.0M at $34M post · B2B revenue intelligence · Austin, TX' };
+    const TEAM = [
+      { k:'hk', name:'Hana Kaur', short:'H. Kaur', initials:'HK', bg:'#0f766e' },
+      { k:'lz', name:'Lin Zhang', short:'L. Zhang', initials:'LZ', bg:'#b45309' },
+      { k:'gl', name:'Guillaume Lauzier', short:'G. Lauzier', initials:'GL', bg:'#7c3aed' },
+      { k:'dr', name:'David Reyes', short:'D. Reyes', initials:'DR', bg:'#1d4ed8' },
+    ];
+    const per = (k) => TEAM.find(t => t.k === k);
+
+    // ============ TEMPLATES ============
+    const SEC_META = {
+      Legal:      { color:'#7c3aed', icon:I.scale },
+      Financial:  { color:'#116632', icon:I.coin },
+      Team:       { color:'#1d4ed8', icon:I.team },
+      Market:     { color:'#0f766e', icon:I.globe },
+      Product:    { color:'#b45309', icon:I.box },
+      Commercial: { color:'#be185d', icon:I.cart },
+      Compliance: { color:'#334155', icon:I.shield },
+    };
+    const TPL = {
+      lite:     { name:'Lite', scope:'Pre-seed · under $500k', secs:['Team','Legal'],
+        blurb:'Founder references, cap table integrity, and clean incorporation. Enough to write a small first cheque without pretending to more rigour than the round supports.',
+        effort:'~4 hours · 1 owner', version:'v3 · updated Feb 2026' },
+      standard: { name:'Standard', scope:'Seed & Series A · $500k–$8M', secs:['Legal','Financial','Team','Market','Product'],
+        blurb:'Adds audited-adjacent financials, product depth, market sizing, and structured reference calls. The default for a priced round we are leading or co-leading.',
+        effort:'~3 weeks · 3 owners', version:'v7 · updated Jul 2026' },
+      deep:     { name:'Deep', scope:'Series B+ · over $8M', secs:['Legal','Financial','Team','Market','Product','Commercial','Compliance'],
+        blurb:'Adds commercial contract review, IP chain of title, and compliance posture, and deepens every existing section. Required where our cheque exceeds 15% of fund or the company holds regulated data.',
+        effort:'~6 weeks · 4 owners + counsel', version:'v4 · updated May 2026' },
+    };
+    const tplKey = st.tpl;
+    const tpl = TPL[tplKey];
+
+    // ============ CHECKLIST DATA (Standard, Series A) ============
+    // status: pass | flag | fail | pending | na
+    const ITEMS = {
+      Legal: { owner:'lz', blocking:true, items:[
+        { n:'Certificate of incorporation and all amendments', s:'pass', due:'Aug 4', ev:[{n:'COI + 3 amendments.pdf', t:'doc'}] },
+        { n:'Cap table reconciled to stock ledger', s:'flag', due:'Aug 8', sev:'material',
+          note:'Ledger shows 240,000 options granted that do not appear on the cap table. Company believes it is a Carta sync lag.',
+          ev:[{n:'Stock ledger export.xlsx', t:'sheet'},{n:'Carta cap table.pdf', t:'doc'}] },
+        { n:'Prior financing documents (seed SAFE, bridge note)', s:'pass', due:'Aug 5', ev:[{n:'Seed SAFE executed.pdf', t:'doc'}] },
+        { n:'Founder IP assignment agreements — all four founders', s:'flag', due:'Aug 11', sev:'material',
+          note:'Three of four executed. Fourth founder departed in 2024; assignment was never countersigned.',
+          ev:[{n:'IP assignments (3 of 4).pdf', t:'doc'}] },
+        { n:'Litigation and dispute disclosure', s:'pass', due:'Aug 6', ev:[{n:'Officer certificate.pdf', t:'doc'}] },
+        { n:'83(b) elections filed for all restricted grants', s:'pass', due:'Aug 6', ev:[{n:'83(b) filings + USPS.pdf', t:'doc'}] },
+        { n:'Employee option plan and board approvals', s:'pending', due:'Aug 20', ev:[] },
+        { n:'Delaware franchise tax standing', s:'pass', due:'Aug 4', ev:[{n:'DE good standing.pdf', t:'doc'}] },
+        { n:'IP chain of title — patents and applications', s:'pending', due:'Sep 2', ev:[], tier:'deep' },
+        { n:'Trademark registrations and oppositions', s:'pending', due:'Sep 2', ev:[], tier:'deep' },
+        { n:'Open-source licence audit for copyleft exposure', s:'pending', due:'Sep 4', ev:[], tier:'deep' },
+        { n:'Insurance policies — D&O, E&O, cyber', s:'pending', due:'Sep 3', ev:[], tier:'deep' },
+      ] },
+      Financial: { owner:'hk', blocking:true, items:[
+        { n:'Monthly P&L, 24 months', s:'pass', due:'Aug 7', ev:[{n:'P&L Jan24–Jul26.xlsx', t:'sheet'}] },
+        { n:'Revenue recognition policy and ARR bridge', s:'flag', due:'Aug 12', sev:'minor',
+          note:'ARR includes $180k of annual prepayments booked as recognised at invoice. Restating on a monthly basis takes ARR from $2.4M to $2.28M.',
+          ev:[{n:'ARR bridge.xlsx', t:'sheet'}] },
+        { n:'Bank statements reconciled to P&L, 12 months', s:'pass', due:'Aug 8', ev:[{n:'Bank recs 12mo.pdf', t:'doc'}] },
+        { n:'Burn rate and runway calculation', s:'pass', due:'Aug 8', ev:[{n:'Runway model.xlsx', t:'sheet'}] },
+        { n:'Payroll register and contractor schedule', s:'pass', due:'Aug 9', ev:[{n:'Payroll Jul 2026.pdf', t:'doc'}] },
+        { n:'Tax filings, federal and state, 2 years', s:'pending', due:'Aug 22', ev:[] },
+        { n:'Accounts receivable ageing', s:'pass', due:'Aug 9', ev:[{n:'AR ageing.xlsx', t:'sheet'}] },
+        { n:'Debt, leases, and off-balance-sheet obligations', s:'pass', due:'Aug 10', ev:[{n:'Obligations schedule.xlsx', t:'sheet'}] },
+        { n:'Audited financial statements, 2 years', s:'pending', due:'Sep 3', ev:[], tier:'deep' },
+        { n:'Cohort retention and net revenue retention build', s:'pending', due:'Sep 5', ev:[], tier:'deep' },
+        { n:'Unit economics — CAC, payback, gross margin by segment', s:'pending', due:'Sep 5', ev:[], tier:'deep' },
+        { n:'Deferred revenue schedule and cut-off testing', s:'pending', due:'Sep 6', ev:[], tier:'deep' },
+      ] },
+      Team: { owner:'gl', blocking:false, items:[
+        { n:'Founder background verification', s:'pass', due:'Aug 5', ev:[{n:'Background checks x3.pdf', t:'doc'}] },
+        { n:'Reference calls — 3 prior colleagues per founder', s:'pass', due:'Aug 12', ev:[{n:'Reference notes (9 calls).pdf', t:'doc'}] },
+        { n:'Reference calls — 2 prior investors', s:'pass', due:'Aug 12', ev:[{n:'Investor refs (2).pdf', t:'doc'}] },
+        { n:'Departed co-founder circumstances', s:'flag', due:'Aug 13', sev:'minor',
+          note:'Fourth founder left in 2024 over strategy disagreement. Two independent references corroborate an amicable exit; equity was repurchased at cost.',
+          ev:[{n:'Repurchase agreement.pdf', t:'doc'}] },
+        { n:'Key-person dependency assessment', s:'pass', due:'Aug 13', ev:[{n:'Org + dependency memo.pdf', t:'doc'}] },
+        { n:'Employment agreements for senior team', s:'pass', due:'Aug 10', ev:[{n:'Senior agreements.pdf', t:'doc'}] },
+        { n:'Open senior roles and hiring plan', s:'pass', due:'Aug 14', ev:[{n:'Hiring plan H2.pdf', t:'doc'}] },
+        { n:'Compensation benchmarking against market', s:'pending', due:'Sep 4', ev:[], tier:'deep' },
+        { n:'Attrition analysis, 24 months', s:'pending', due:'Sep 4', ev:[], tier:'deep' },
+        { n:'Restrictive covenants and non-compete enforceability', s:'pending', due:'Sep 6', ev:[], tier:'deep' },
+      ] },
+      Market: { owner:'gl', blocking:false, items:[
+        { n:'Market sizing methodology and sources', s:'pass', due:'Aug 11', ev:[{n:'TAM build.xlsx', t:'sheet'}] },
+        { n:'Competitive landscape and win/loss', s:'flag', due:'Aug 15', sev:'minor',
+          note:'Win rate against the largest incumbent is 22% across 41 contested deals. Management characterised this as "we win most head-to-heads".',
+          ev:[{n:'Win-loss export.xlsx', t:'sheet'}] },
+        { n:'Customer concentration analysis', s:'pass', due:'Aug 12', ev:[{n:'Concentration.xlsx', t:'sheet'}] },
+        { n:'Pricing benchmarks against comparables', s:'pass', due:'Aug 13', ev:[{n:'Pricing benchmark.pdf', t:'doc'}] },
+        { n:'Regulatory exposure in target segments', s:'na', due:'—', ev:[], naNote:'Not applicable — no regulated data at this stage' },
+        { n:'Channel and partnership dependencies', s:'pass', due:'Aug 14', ev:[{n:'Channel memo.pdf', t:'doc'}] },
+        { n:'Independent customer interviews — 6 accounts', s:'pending', due:'Sep 8', ev:[], tier:'deep' },
+        { n:'Churned-customer interviews — 3 accounts', s:'pending', due:'Sep 8', ev:[], tier:'deep' },
+        { n:'Analyst and expert-network calls', s:'pending', due:'Sep 9', ev:[], tier:'deep' },
+      ] },
+      Product: { owner:'lz', blocking:false, items:[
+        { n:'Architecture review and scalability assessment', s:'pass', due:'Aug 14', ev:[{n:'Architecture review.pdf', t:'doc'}] },
+        { n:'Code quality and test coverage review', s:'pass', due:'Aug 15', ev:[{n:'Coverage report.pdf', t:'doc'},{n:'Repo audit.pdf', t:'doc'}] },
+        { n:'Security posture and penetration test', s:'flag', due:'Aug 18', sev:'material',
+          note:'No third-party penetration test has ever been run. Company holds customer revenue data for 140 accounts.',
+          ev:[] },
+        { n:'Third-party dependencies and licence compliance', s:'pass', due:'Aug 15', ev:[{n:'SBOM + licences.pdf', t:'doc'}] },
+        { n:'Uptime history and incident log', s:'pass', due:'Aug 16', ev:[{n:'Incident log 18mo.pdf', t:'doc'}] },
+        { n:'Product roadmap credibility against team capacity', s:'pass', due:'Aug 16', ev:[{n:'Roadmap review.pdf', t:'doc'}] },
+        { n:'Data model and customer data segregation', s:'pending', due:'Aug 21', ev:[] },
+        { n:'Disaster recovery and backup restore test', s:'pending', due:'Sep 5', ev:[], tier:'deep' },
+        { n:'Infrastructure cost per account and scaling curve', s:'pending', due:'Sep 6', ev:[], tier:'deep' },
+        { n:'Access controls and privileged-account review', s:'pending', due:'Sep 7', ev:[], tier:'deep' },
+        { n:'Model and data lineage documentation', s:'pending', due:'Sep 9', ev:[], tier:'deep' },
+      ] },
+      Commercial: { owner:'dr', blocking:false, items:[
+        { n:'Top 10 customer contracts reviewed', s:'pending', due:'Sep 8', ev:[] },
+        { n:'MSA and DPA standard terms', s:'pending', due:'Sep 8', ev:[] },
+        { n:'Change-of-control provisions in top contracts', s:'pending', due:'Sep 9', ev:[] },
+        { n:'Auto-renewal and termination-for-convenience terms', s:'pending', due:'Sep 9', ev:[] },
+        { n:'Uncapped liability or unusual indemnities', s:'pending', due:'Sep 10', ev:[] },
+        { n:'Service-level commitments and credit exposure', s:'pending', due:'Sep 10', ev:[] },
+        { n:'Supplier and vendor concentration', s:'pending', due:'Sep 11', ev:[] },
+        { n:'Reseller and referral agreements', s:'pending', due:'Sep 11', ev:[] },
+        { n:'Pricing exceptions and most-favoured-nation clauses', s:'pending', due:'Sep 12', ev:[] },
+        { n:'Outstanding customer disputes or credits', s:'pending', due:'Sep 12', ev:[] },
+        { n:'Contracted vs recognised revenue reconciliation', s:'pending', due:'Sep 15', ev:[] },
+      ] },
+      Compliance: { owner:'lz', blocking:true, items:[
+        { n:'SOC 2 Type II report or readiness assessment', s:'pending', due:'Sep 10', ev:[] },
+        { n:'GDPR and CCPA posture, data subject request process', s:'pending', due:'Sep 11', ev:[] },
+        { n:'Sub-processor register and data residency', s:'pending', due:'Sep 11', ev:[] },
+        { n:'Records retention and deletion policy', s:'pending', due:'Sep 12', ev:[] },
+        { n:'Incident response and breach notification plan', s:'pending', due:'Sep 12', ev:[] },
+        { n:'Employee security training and offboarding controls', s:'pending', due:'Sep 15', ev:[] },
+        { n:'Third-party risk assessments on critical vendors', s:'pending', due:'Sep 15', ev:[] },
+        { n:'Export control and sanctions screening of customers', s:'pending', due:'Sep 16', ev:[] },
+        { n:'AI/ML governance and customer disclosure', s:'pending', due:'Sep 16', ev:[] },
+      ] },
+    };
+
+    const SEC_ORDER = ['Legal','Financial','Team','Market','Product','Commercial','Compliance'];
+    // Items tagged tier:'deep' only enter scope on the Deep template, so a card's count
+    // and the checklist it produces are the same number by construction.
+    const activeItems = (k, key) => ITEMS[k].items.filter(i => (key || tplKey) === 'deep' || i.tier !== 'deep');
+    const tplItemCount = (key) => TPL[key].secs.reduce((a,s) => a + activeItems(s, key).length, 0);
+
+    const templates = Object.keys(TPL).map(k => {
+      const t = TPL[k], on = tplKey === k;
+      return { k, name:t.name, scope:t.scope, items:String(tplItemCount(k)), blurb:t.blurb, effort:t.effort,
+        on, recommended: k === 'standard' && !on,
+        tone: on ? (dark ? '#c4b5fd' : V7) : INK,
+        cta: on ? 'In use on this case' : 'Switch template',
+        sections: t.secs.map(s => ({ label:s, chip: chip(SEC_META[s].color+(dark?'2e':'16'), dark ? '#dcd9e4' : SEC_META[s].color) })),
+        cardStyle:'border-radius:16px;padding:20px 22px;border:1px solid '+(on ? V : (dark ? '#2a2833' : '#e5e3ec'))
+          + (on ? ';background:'+(dark ? 'rgba(124,58,237,.06)' : 'rgba(124,58,237,.03)') : ''),
+      };
+    });
+    const inScope = SEC_ORDER.filter(s => tpl.secs.indexOf(s) > -1);
+
+    // ---- derive counts, verdicts, flags from ITEMS (single source) ----
+    const SEV_RANK = { 'deal-breaker':3, material:2, minor:1 };
+    const evIcon = (t) => t === 'sheet' ? I.sheet : t === 'image' ? I.image : I.doc;
+    const evTone = (t) => t === 'sheet' ? GRN : t === 'image' ? AMB : BLU;
+
+    const secDerived = {};
+    SEC_ORDER.forEach(k => {
+      const d = ITEMS[k];
+      const its = activeItems(k);
+      const counts = { pass:0, flag:0, fail:0, pending:0, na:0 };
+      its.forEach(i => { counts[i.s] += 1; });
+      const active = its.length - counts.na;
+      const done = counts.pass + counts.flag + counts.fail;
+      const worst = its.filter(i => i.s === 'flag' && i.sev)
+        .reduce((a,i) => Math.max(a, SEV_RANK[i.sev] || 0), 0);
+      const verdict = counts.fail ? 'Fail'
+        : worst === 3 ? 'Deal-breaker'
+        : counts.pending ? (worst >= 2 ? 'Flagged · open' : 'In progress')
+        : worst >= 2 ? 'Conditions'
+        : worst === 1 ? 'Pass with notes'
+        : active === 0 ? 'Out of scope' : 'Pass';
+      secDerived[k] = { counts, active, done, worst, verdict,
+        pct: active ? Math.round(done / active * 100) : 0 };
+    });
+
+    const scoped = inScope.map(k => secDerived[k]);
+    const totalActive = scoped.reduce((a,s) => a + s.active, 0);
+    const totalDone = scoped.reduce((a,s) => a + s.done, 0);
+    const totalPass = scoped.reduce((a,s) => a + s.counts.pass, 0);
+    const totalFlag = scoped.reduce((a,s) => a + s.counts.flag, 0);
+    const totalPending = scoped.reduce((a,s) => a + s.counts.pending, 0);
+    const totalNa = inScope.reduce((a,k) => a + secDerived[k].counts.na, 0);
+
+    // flags list, ranked by severity then section
+    const FLAG_RES = {
+      'Cap table reconciled to stock ledger':{ res:'Company to produce a reconciled ledger signed by counsel before close.', state:'In progress' },
+      'Founder IP assignment agreements — all four founders':{ res:'Retroactive assignment or a release from the departed founder. Counsel drafting.', state:'In progress' },
+      'Security posture and penetration test':{ res:'Third-party test scoped; close conditioned on a clean report or a remediation plan.', state:'Condition to close' },
+      'Revenue recognition policy and ARR bridge':{ res:'Accepted. We underwrite the restated $2.28M, not the reported figure.', state:'Accepted' },
+      'Departed co-founder circumstances':{ res:'Closed. Two independent references corroborate; repurchase documented.', state:'Closed' },
+      'Competitive landscape and win/loss':{ res:'Noted for the IC discussion. Does not change the entry decision.', state:'Noted' },
+    };
+    const flagsRaw = [];
+    inScope.forEach(k => {
+      ITEMS[k].items.filter(i => i.s === 'flag' && (tplKey === 'deep' || i.tier !== 'deep')).forEach(i => {
+        const r = FLAG_RES[i.n] || { res:'—', state:'Open' };
+        flagsRaw.push({ section:k, item:i.n, severity:i.sev, explanation:i.note,
+          owner:ITEMS[k].owner, raised:i.due, resolution:r.res, state:r.state });
+      });
+    });
+    flagsRaw.sort((a,b) => (SEV_RANK[b.severity] || 0) - (SEV_RANK[a.severity] || 0));
+
+    const sevN = { 'deal-breaker':0, material:0, minor:0 };
+    flagsRaw.forEach(f => { sevN[f.severity] += 1; });
+    const worstOverall = flagsRaw.length ? SEV_RANK[flagsRaw[0].severity] : 0;
+
+    const caseVerdict = sevN['deal-breaker'] ? 'Do not proceed'
+      : sevN.material ? 'Proceed with conditions'
+      : sevN.minor ? 'Proceed'
+      : totalPending ? 'In progress' : 'Proceed';
+    const caseVerdictChipOf = (sz) => {
+      const base = sevN['deal-breaker'] ? cRed : sevN.material ? cAmber : cGreen;
+      return sz ? base.replace('font-size:9.5px','font-size:12px').replace('padding:3px 9px','padding:5px 13px') : base;
+    };
+
+    // risk summary line — severity-led, and names the sections
+    const matSecs = {};
+    flagsRaw.filter(f => f.severity === 'material').forEach(f => { matSecs[f.section] = 1; });
+    const matSecList = Object.keys(matSecs);
+    const blockingSecs = inScope.filter(k => ITEMS[k].blocking);
+    const blockingMat = blockingSecs.filter(k => matSecs[k]);
+    const nonBlockingMat = matSecList.filter(k => !ITEMS[k].blocking);
+    const lowerList = (arr) => arr.length === 0 ? 'none'
+      : arr.length === 1 ? arr[0].toLowerCase()
+      : arr.slice(0,-1).map(x => x.toLowerCase()).join(', ') + ' and ' + arr[arr.length-1].toLowerCase();
+    const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+    const riskSummary = sevN['deal-breaker']
+      ? plural(sevN['deal-breaker'], 'deal-breaker') + ' — the case cannot clear as scoped.'
+      : sevN.material
+        ? plural(sevN.material, 'material flag') + ', '
+          + (matSecList.length === 1 ? 'all ' + matSecList[0].toLowerCase() : 'across ' + matSecList.join(', ').toLowerCase())
+          + ' — resolvable pre-close.'
+        : sevN.minor ? plural(sevN.minor, 'minor flag') + ', none blocking.' : 'No flags raised.';
+    const riskDetail = sevN.material
+      ? plural(sevN.material, 'material flag') + ' sit' + (sevN.material === 1 ? 's' : '') + ' in ' + lowerList(matSecList) + '. '
+        + (blockingMat.length
+            ? lowerList(blockingMat).charAt(0).toUpperCase() + lowerList(blockingMat).slice(1) + ' '
+              + (blockingMat.length === 1 ? 'is a blocking section, so its flag must close as a condition' : 'are blocking sections, so their flags must close as conditions')
+              + ' rather than be accepted as noted. '
+            : 'No blocking section carries a material flag, so none of these gates IC on its own. ')
+        + (nonBlockingMat.length
+            ? lowerList(nonBlockingMat).charAt(0).toUpperCase() + lowerList(nonBlockingMat).slice(1) + ' '
+              + (nonBlockingMat.length === 1 ? 'is' : 'are') + ' not blocking, but the severity carries into the IC discussion regardless. '
+            : '')
+        + plural(sevN.minor, 'minor flag') + ' recorded and accepted.'
+      : 'No material flags outstanding. ' + plural(sevN.minor, 'minor flag') + ' recorded for the IC discussion.';
+
+    const severityCounts = [
+      { k:'Deal-breaker', n:String(sevN['deal-breaker']), tone: sevN['deal-breaker'] ? RED : MUT },
+      { k:'Material', n:String(sevN.material), tone: sevN.material ? AMB : MUT },
+      { k:'Minor', n:String(sevN.minor), tone: sevN.minor ? BLU : MUT },
+    ];
+
+    const secChipOf = (k) => chip(SEC_META[k].color+(dark?'2e':'16'), dark ? '#dcd9e4' : SEC_META[k].color);
+    const sevChipOf = (s) => s === 'deal-breaker' ? cRed : s === 'material' ? cAmber : cBlue;
+    const stateChipOf = (s) => /Closed|Accepted/.test(s) ? cGreen : /Condition/.test(s) ? cAmber : /Noted/.test(s) ? cGrey : cBlue;
+
+    const flags = flagsRaw.map(f => {
+      const o = per(f.owner);
+      const tone = f.severity === 'deal-breaker' ? RED : f.severity === 'material' ? AMB : BLU;
+      return { section:f.section, item:f.item, severity:f.severity, explanation:f.explanation,
+        sevChip: sevChipOf(f.severity), secChip: secChipOf(f.section),
+        iconWrap: iconWrap(f.severity === 'material' ? '#b45309' : f.severity === 'deal-breaker' ? '#b91c1c' : '#1d4ed8'),
+        owner:o.name, ownerInitials:o.initials, ownerAv: av(o.bg, 22),
+        raised:f.raised, resolution:f.resolution, state:f.state, stateChip: stateChipOf(f.state),
+        rowBg: f.severity === 'material' ? (dark ? 'rgba(180,83,9,.05)' : 'rgba(180,83,9,.028)')
+          : f.severity === 'deal-breaker' ? (dark ? 'rgba(185,28,28,.06)' : 'rgba(185,28,28,.03)') : 'transparent' };
+    });
+
+    // ---- checklist render ----
+    const STATUS_META = {
+      pass:    { label:'Pass', tone:GRN, icon:I.check, bg:'rgba(17,102,50,.13)' },
+      flag:    { label:'Flag', tone:AMB, icon:I.alert, bg:'rgba(180,83,9,.14)' },
+      fail:    { label:'Fail', tone:RED, icon:I.x, bg:'rgba(185,28,28,.13)' },
+      pending: { label:'Pending', tone:MUT, icon:null, bg: dark ? '#2a2833' : '#eceaf2' },
+      na:      { label:'N/A', tone:MUT, icon:I.dash, bg: dark ? '#221f2b' : '#f1f0f5' },
+    };
+    const FILTERS = ['All','Flagged','Pending','Passed'];
+    const filterMatch = (s) => st.filter === 'All' ? true
+      : st.filter === 'Flagged' ? (s === 'flag' || s === 'fail')
+      : st.filter === 'Pending' ? s === 'pending'
+      : s === 'pass';
+    const statusFilters = FILTERS.map(f => ({ label:f, style: seg(st.filter === f), go: () => this.setState({ filter:f }) }));
+
+    const verdictChipOf = (v) => /^Pass$/.test(v) ? cGreen
+      : /Pass with notes/.test(v) ? cGreen
+      : /Conditions|Flagged/.test(v) ? cAmber
+      : /Fail|Deal-breaker/.test(v) ? cRed
+      : /Out of scope/.test(v) ? cGrey : cBlue;
+
+    const sections = inScope.map(k => {
+      const d = ITEMS[k], dv = secDerived[k], o = per(d.owner);
+      const shown = activeItems(k).filter(i => filterMatch(i.s));
+      return {
+        k, name:k, open: !!st.open[k], blocking: !!d.blocking,
+        caretRot: st.open[k] ? 'rotate(90deg)' : 'none',
+        iconWrap: iconWrap(SEC_META[k].color), icon: SEC_META[k].icon,
+        meta: dv.done + ' of ' + dv.active + ' complete · ' + dv.counts.flag + ' flagged · ' + dv.counts.pending + ' pending'
+          + (dv.counts.na ? ' · ' + dv.counts.na + ' n/a' : ''),
+        pct: dv.pct + '%',
+        barStyle:'height:100%;width:'+dv.pct+'%;border-radius:99px;background:'+(dv.counts.flag ? AMB : GRN),
+        owner:o.name, ownerInitials:o.initials, ownerAv: av(o.bg, 24),
+        verdict: dv.verdict, verdictChip: verdictChipOf(dv.verdict),
+        filteredEmpty: shown.length === 0,
+        items: shown.map(i => {
+          const m = STATUS_META[i.s], io = per(d.owner);
+          const overdue = /pending/.test(i.s) && (i.due === 'Aug 20' || i.due === 'Aug 21' || i.due === 'Aug 22');
+          return {
+            name:i.n, statusLabel:m.label,
+            dotStyle:'width:22px;height:22px;border-radius:50%;background:'+m.bg+';color:'+m.tone+';display:flex;align-items:center;justify-content:center;flex:none',
+            glyph: !!m.icon, icon: m.icon || I.dot,
+            flagNote: i.note || '', severityLabel: i.sev ? i.sev.charAt(0).toUpperCase() + i.sev.slice(1) : '',
+            flagWrap:'display:flex;gap:8px;align-items:flex-start;margin-top:7px;padding:8px 11px;border-radius:9px;font-size:11px;line-height:1.55;color:'
+              + (i.sev === 'material' ? AMB : BLU) + ';background:' + (i.sev === 'material' ? 'rgba(180,83,9,.07)' : 'rgba(29,78,216,.06)'),
+            ownerInitials:io.initials, ownerShort:io.short, ownerAv: av(io.bg, 20),
+            due:i.due, dueTone: overdue ? AMB : MUT,
+            hasEvidence: i.ev.length > 0, noEvidence: i.ev.length === 0,
+            evidenceNote: i.naNote || (i.s === 'pending' ? 'Awaiting document' : 'No evidence attached'),
+            evidence: i.ev.map(e => ({ name:e.n, icon: evIcon(e.t), tone: evTone(e.t) })),
+            rowBg: i.s === 'flag' ? (dark ? 'rgba(180,83,9,.04)' : 'rgba(180,83,9,.022)') : 'transparent',
+          };
+        }),
+      };
+    });
+
+    const progressLegend = [
+      { label: totalPass + ' pass', color:'#116632' },
+      { label: totalFlag + ' flagged', color:'#b45309' },
+      { label: totalPending + ' pending', color: dark ? '#3a3648' : '#d4d0dc' },
+      { label: totalNa + ' n/a', color: dark ? '#221f2b' : '#eceaf2' },
+    ];
+    const progressBars = [
+      { label:totalPass + ' pass', n:totalPass, color:'#116632' },
+      { label:totalFlag + ' flagged', n:totalFlag, color:'#b45309' },
+      { label:totalPending + ' pending', n:totalPending, color: dark ? '#3a3648' : '#d4d0dc' },
+    ].filter(b => b.n > 0).map(b => ({ label:b.label,
+      style:'width:'+(b.n / totalActive * 100).toFixed(1)+'%;height:100%;background:'+b.color }));
+
+    // ============ REQUESTS ============
+    const REQ = [
+      { name:'Reconciled stock ledger, signed by counsel', sec:'Legal', state:'received', asked:'Aug 8', due:'Aug 15',
+        stateWhen:'Aug 12', files:[{n:'Ledger v2 (unsigned).xlsx', t:'sheet'}],
+        why:'The ledger and cap table disagree on 240,000 options. We need one document both sides accept as authoritative.' },
+      { name:'Retroactive IP assignment or release — departed founder', sec:'Legal', state:'requested', asked:'Aug 11', due:'Aug 20',
+        stateWhen:'—', files:[],
+        why:'Three of four founder assignments are executed. Without the fourth, there is a gap in the company\u2019s title to its own code.' },
+      { name:'Monthly ARR bridge, invoice to recognised', sec:'Financial', state:'reviewed', asked:'Aug 10', due:'Aug 14',
+        stateWhen:'Aug 13', files:[{n:'ARR bridge.xlsx', t:'sheet'}],
+        why:'We need to underwrite recognised revenue, not invoiced. Please show the restatement rather than the summary.' },
+      { name:'Federal and state tax filings, 2024 and 2025', sec:'Financial', state:'requested', asked:'Aug 12', due:'Aug 22',
+        stateWhen:'—', files:[],
+        why:'Standard for a priced round. Your accountant should be able to send these directly.' },
+      { name:'Third-party penetration test report or scoping quote', sec:'Product', state:'requested', asked:'Aug 13', due:'Aug 21',
+        stateWhen:'—', files:[],
+        why:'You hold revenue data for 140 accounts and have never had an external test. If none exists, a scoping quote is enough for now.' },
+      { name:'Win/loss detail against the top incumbent, 24 months', sec:'Market', state:'reviewed', asked:'Aug 9', due:'Aug 15',
+        stateWhen:'Aug 14', files:[{n:'Win-loss export.xlsx', t:'sheet'},{n:'Deal notes 41 deals.pdf', t:'doc'}],
+        why:'We want the raw export rather than the summary — including deals lost on price.' },
+      { name:'Customer data segregation architecture note', sec:'Product', state:'received', asked:'Aug 13', due:'Aug 21',
+        stateWhen:'Aug 14', files:[{n:'Segregation note.pdf', t:'doc'}],
+        why:'How is one customer\u2019s revenue data isolated from another\u2019s? A short written answer is fine.' },
+    ].concat(st.sent);
+
+    const reqStateMeta = {
+      requested: { label:'Requested', tone:MUT, dotBg: dark ? '#3a3648' : '#d4d0dc' },
+      received:  { label:'Received', tone:BLU, dotBg:'#1d4ed8' },
+      reviewed:  { label:'Reviewed', tone:GRN, dotBg:'#116632' },
+    };
+    const reqCount = { requested:0, received:0, reviewed:0 };
+    REQ.forEach(r => { reqCount[r.state] += 1; });
+
+    const requests = REQ.map((r,i) => {
+      const m = reqStateMeta[r.state];
+      const overdue = r.state === 'requested' && (r.due === 'Aug 20' || r.due === 'Aug 21' || r.due === 'Aug 22');
+      return { name:r.name, ref:'REQ-' + String(i+1).padStart(2,'0'), asked:r.asked,
+        section:r.sec, secChip: secChipOf(r.sec),
+        state:m.label, stateTone:m.tone, stateWhen: r.stateWhen === '—' ? 'awaiting' : m.label.toLowerCase() + ' ' + r.stateWhen,
+        stateDot:'width:8px;height:8px;border-radius:50%;background:'+m.dotBg+';flex:none',
+        due:r.due, dueTone: overdue ? AMB : MUT,
+        hasFile: r.files.length > 0, noFile: r.files.length === 0,
+        fileNote: r.state === 'requested' ? 'Nothing received yet' : 'Received, pending upload',
+        files: r.files.map(f => ({ name:f.n, icon: evIcon(f.t), tone: evTone(f.t) })) };
+    });
+
+    const reqStats = [
+      { k:'Total requests', v:String(REQ.length), note:'across ' + Object.keys(REQ.reduce((a,r) => { a[r.sec]=1; return a; }, {})).length + ' sections', tone:INK },
+      { k:'Outstanding', v:String(reqCount.requested), note: reqCount.requested ? 'oldest asked Aug 11' : 'nothing outstanding', tone: reqCount.requested ? AMB : GRN },
+      { k:'Received', v:String(reqCount.received), note:'awaiting our review', tone:BLU },
+      { k:'Reviewed', v:String(reqCount.reviewed), note:'closed out', tone:GRN },
+    ];
+
+    const founderRequests = REQ.map(r => {
+      const m = reqStateMeta[r.state];
+      const overdue = r.state === 'requested' && (r.due === 'Aug 20' || r.due === 'Aug 21' || r.due === 'Aug 22');
+      const done = r.state !== 'requested';
+      return { name:r.name, ask:r.why,
+        dotStyle:'width:22px;height:22px;border-radius:50%;background:'+(done ? 'rgba(17,102,50,.13)' : (dark ? '#2a2833' : '#eceaf2'))+';color:'+(done ? GRN : MUT)+';display:flex;align-items:center;justify-content:center;flex:none',
+        glyph: done, icon: I.check,
+        stateLabel: r.state === 'requested' ? 'Needs your answer' : m.label,
+        stateChip: r.state === 'requested' ? cAmber : r.state === 'received' ? cBlue : cGreen,
+        dueLabel: r.state === 'requested' ? 'due ' + r.due : 'sent ' + r.stateWhen,
+        dueTone: overdue ? AMB : MUT,
+        hasFile: r.files.length > 0,
+        files: r.files.map(f => ({ name:f.n, icon: evIcon(f.t), tone: evTone(f.t) })),
+        actionable: r.state === 'requested',
+        actionLabel: /note|answer|architecture/i.test(r.name) ? 'Write an answer' : 'Upload document',
+        wrapExtra: r.state === 'requested' ? 'border-color:'+(dark ? 'rgba(180,83,9,.32)' : 'rgba(180,83,9,.28)') : '' };
+    });
+    const founderDone = REQ.length - reqCount.requested;
+
+    // ============ CROSS-CHECKS ============
+    const rails = [
+      { name:'Reference calls', sub:'11 calls logged · consent recorded per call', icon:I.phone, color:'#1d4ed8',
+        status:'Complete', chip:cGreen,
+        rows:[
+          { label:'Founder references · 9 calls', meta:'3 per founder · written consent on file', state:'Consented', chip:cGreen, hasAv:false },
+          { label:'Prior investor references · 2 calls', meta:'Seed lead and a bridge participant', state:'Consented', chip:cGreen, hasAv:false },
+          { label:'Departed co-founder', meta:'Contacted via seed lead; declined a call, confirmed in writing', state:'Declined call', chip:cAmber, hasAv:false },
+        ],
+        note:'Every call was made with the founder\u2019s written consent, logged with date and participant. The departed founder declined a live call but confirmed the exit account in writing — that written confirmation is what the Team flag rests on.' },
+      { name:'KYC / KYB', sub:'Entity and beneficial owners', icon:I.id, color:'#116632',
+        status:'Cleared', chip:cGreen,
+        rows:[
+          { label:'NorthPeak Analytics, Inc.', meta:'Delaware · EIN verified · registered agent confirmed', state:'Verified', chip:cGreen, hasAv:false },
+          { label:'Beneficial owners above 25%', meta:'3 individuals · ID and address verified', state:'Verified', chip:cGreen, hasAv:false },
+          { label:'Sanctions and PEP screening', meta:'OFAC, EU, UN lists · no matches', state:'Clear', chip:cGreen, hasAv:false },
+        ],
+        note:'Run Aug 6 through the platform KYB rail, independent of anything the company supplied. Re-screening is automatic at close.' },
+      { name:'Prior scoring runs', sub:'Same company, earlier rubrics', icon:I.gauge, color:'#7c3aed',
+        status:'3 runs', chip:cViolet,
+        rows:[
+          { label:'Panel re-score · 71.4', meta:'Aug 13, 2026 · Seed–A rubric v7 · panel of 3', state:'Current', chip:cViolet, hasAv:false },
+          { label:'Single-scorer · 66.8', meta:'Mar 2026 · rubric v6 · H. Kaur', state:'Superseded', chip:cGrey, hasAv:false },
+          { label:'Screening · 59.2', meta:'Nov 2025 · rubric v5 · G. Lauzier', state:'Superseded', chip:cGrey, hasAv:false },
+        ],
+        note:'Trajectory is +12.2 over nine months across three rubric versions. Scores are not restated when a rubric changes, so the trend is comparable only in direction, not in absolute terms.' },
+      { name:'Assertions without a rail', sub:'What we are taking on trust', icon:I.alert, color:'#b45309',
+        status:'3 items', chip:cAmber,
+        rows:[
+          { label:'Security posture', meta:'No third-party penetration test has ever been run', state:'Unverified', chip:cAmber, hasAv:false },
+          { label:'Carta sync explanation', meta:'Company\u2019s account of the 240,000-option discrepancy', state:'Unverified', chip:cAmber, hasAv:false },
+          { label:'Pipeline for H2 2026', meta:'Management-reported; no CRM export provided', state:'Unverified', chip:cAmber, hasAv:false },
+        ],
+        note:'Listed deliberately. A report that only shows what was verified overstates the work — these three are where the fund is relying on management\u2019s account rather than an independent source.' },
+    ];
+
+    // ============ REPORT ============
+    const SIGNOFF = { Legal:null, Financial:'Aug 13, 2026', Team:'Aug 14, 2026', Market:'Aug 15, 2026', Product:null, Commercial:null, Compliance:null };
+    const reportSections = inScope.map(k => {
+      const dv = secDerived[k], o = per(ITEMS[k].owner), signed = SIGNOFF[k];
+      return { name:k, blocking: !!ITEMS[k].blocking,
+        items: dv.done + ' / ' + dv.active,
+        verdict: dv.verdict, chip: verdictChipOf(dv.verdict),
+        initials:o.initials, ownerShort:o.short, avStyle: av(o.bg, 22),
+        signed: !!signed, unsigned: !signed, signedWhen: signed || '',
+        signNote: dv.counts.pending ? 'Blocked · ' + dv.counts.pending + ' pending' : 'Awaiting sign-off' };
+    });
+    const signedN = reportSections.filter(s => s.signed).length;
+    const unsignedSecs = reportSections.filter(s => s.unsigned).map(s => s.name);
+
+    const openReqs = REQ.filter(r => r.state !== 'reviewed').map(r => ({
+      name:r.name, state: reqStateMeta[r.state].label,
+      chip: r.state === 'requested' ? cAmber : cBlue, due:r.due }));
+
+    const report = {
+      prepared:'Aug 15, 2026 · 11:20 CT', ref:'DD-2026-047',
+      headline:[
+        { k:'Items complete', v: totalDone + ' / ' + totalActive, note: totalPending + ' pending · ' + totalNa + ' out of scope', tone:INK },
+        { k:'Flags', v: String(flagsRaw.length), note: sevN.material + ' material · ' + sevN.minor + ' minor', tone: sevN.material ? AMB : GRN },
+        { k:'Sections signed', v: signedN + ' / ' + inScope.length, note: (inScope.length - signedN) + ' awaiting owner sign-off', tone: signedN === inScope.length ? GRN : AMB },
+        { k:'Open requests', v: String(openReqs.length), note: reqCount.requested + ' not yet answered', tone: reqCount.requested ? AMB : GRN },
+      ],
+      recBody:'Scoped as ' + tpl.name + ' (' + tpl.version + ') for a $6.0M Series A. ' + totalDone + ' of ' + totalActive
+        + ' in-scope items are complete. ' + plural(sevN.material, 'material flag') + ' outstanding in ' + lowerList(matSecList) + '. '
+        + 'Blocking sections on this template are ' + lowerList(blockingSecs) + '; '
+        + (blockingMat.length
+            ? 'of those, ' + lowerList(blockingMat) + ' carr' + (blockingMat.length === 1 ? 'ies' : 'y') + ' a material flag. '
+            : 'none carries a material flag. ')
+        + (unsignedSecs.length
+            ? plural(unsignedSecs.length, 'section') + ' await owner sign-off (' + lowerList(unsignedSecs) + '). '
+            : 'All sections are signed off. ')
+        + 'Recommend IC proceed on the basis that the material flags convert to conditions to close, with the penetration test scoped before signature and the ledger reconciled by counsel.',
+      sections: reportSections,
+      flags: flagsRaw.map(f => ({ severity:f.severity, sevChip: sevChipOf(f.severity), item:f.item,
+        state:f.state, stateChip: stateChipOf(f.state),
+        short: f.explanation.split('. ')[0] + '.' })),
+      openRequests: openReqs,
+      reqNote: reqCount.requested + ' of ' + REQ.length + ' requests remain unanswered. The two Legal requests are the ones that gate the conditions above.',
+      verification:[
+        { k:'Reference calls', v:'11 logged', chip:cGreen },
+        { k:'KYC / KYB', v:'Cleared', chip:cGreen },
+        { k:'Sanctions screening', v:'Clear', chip:cGreen },
+        { k:'Penetration test', v:'None', chip:cAmber },
+        { k:'Prior scoring runs', v:'3 · trending +12.2', chip:cViolet },
+      ],
+      verifNote:'Three assertions are recorded as unverified in the case: security posture, the Carta sync explanation, and management-reported H2 pipeline.',
+      footer:'This report is generated from case DD-2026-047 and reflects its state at the time of export. Sections without an owner sign-off are shown as such rather than omitted. Two blocking sections carry material flags — this report supports a conditional recommendation, not an unconditional one.',
+    };
+
+    // ============ COMPOSE ============
+    const composeSections = inScope.map(s => ({ label:s, selected: st.composeSection === s }));
+    const composeOk = st.composeName.trim().length > 3;
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'setup', l:'Setup', i:I.layers },
+      { k:'checklist', l:'Checklist', i:I.list, flag: totalPending ? String(totalPending) : '' },
+      { k:'flags', l:'Flags', i:I.alert, flag: sevN.material ? String(sevN.material) : '' },
+      { k:'requests', l:'Requests', i:I.inbox, flag: reqCount.requested ? String(reqCount.requested) : '' },
+      { k:'checks', l:'Cross-checks', i:I.link2 },
+      { k:'report', l:'Report', i:I.doc },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? (dark ? '#c4b5fd' : V7) : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'dd-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      shieldIcon:I.shield, checkIcon:I.check, alertIcon:I.alert, caretIcon:I.caret,
+      downloadIcon:I.down, linkIcon:I.link,
+      chromeSub: co.name + ' · DD-2026-047 · ' + tpl.name + ' template',
+      caseVerdict, caseVerdictChip: caseVerdictChipOf(false), caseVerdictChipLg: caseVerdictChipOf(true),
+      tabs, tabSetup: st.tab === 'setup', tabChecklist: st.tab === 'checklist', tabFlags: st.tab === 'flags',
+      tabRequests: st.tab === 'requests', tabChecks: st.tab === 'checks', tabReport: st.tab === 'report',
+      ambTone:AMB, grnTone:GRN, co,
+      recChip: cViolet, blockChip: cAmber,
+
+      // setup
+      setupContext:'NorthPeak Analytics · $6.0M Series A · our cheque $2.0M',
+      templates, tplName: tpl.name, tplVersion: tpl.version,
+      tplSections: inScope.map(k => {
+        const d = ITEMS[k], dv = secDerived[k];
+        return { name:k, icon: SEC_META[k].icon, iconWrap: iconWrap(SEC_META[k].color),
+          itemLabel: activeItems(k).length + ' items',
+          barStyle:'height:100%;width:'+Math.min(100, activeItems(k).length / 11 * 100).toFixed(0)+'%;border-radius:99px;background:'+SEC_META[k].color,
+          note: k === 'Legal' ? 'Cap table, incorporation, IP assignment, prior financings'
+            : k === 'Financial' ? 'P&L, bank reconciliation, ARR bridge, tax standing'
+            : k === 'Team' ? 'Background checks, structured references, key-person risk'
+            : k === 'Market' ? 'Sizing methodology, win/loss, concentration'
+            : k === 'Product' ? 'Architecture, security, dependencies, uptime'
+            : k === 'Compliance' ? 'SOC 2, privacy posture, sub-processors, incident response'
+            : 'Contracts, IP chain, supplier concentration',
+          blocking: !!d.blocking };
+      }),
+      goChecklist: () => this.setState({ tab:'checklist' }),
+      pickTemplate: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-tpl]');
+        const k = n && n.getAttribute('data-tpl');
+        if (k) this.setState({ tpl:k });
+      },
+
+      // checklist
+      checklistSub: tpl.name + ' template · ' + tpl.version + ' · ' + totalActive + ' items in scope, ' + totalNa + ' out of scope',
+      statusFilters, filterLabel: st.filter.toLowerCase(), sections,
+      completionLine: totalDone + ' of ' + totalActive + ' complete · ' + Math.round(totalDone / totalActive * 100) + '%',
+      progressBars, progressLegend,
+      toggleSection: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-sec]');
+        const k = n && n.getAttribute('data-sec');
+        if (k) this.setState(s => ({ open: Object.assign({}, s.open, { [k]: !s.open[k] }) }));
+      },
+
+      // flags
+      riskSummary, riskDetail, severityCounts, flags,
+      sectionCount: String(inScope.length),
+      flagsCountLine: flagsRaw.length + ' flags across ' + Object.keys(flagsRaw.reduce((a,f) => { a[f.section]=1; return a; }, {})).length + ' sections',
+
+      // requests
+      reqSub: st.reqSide === 'investor'
+        ? 'What we have asked for and what arrived. Every request is logged against a section so the report can show the ask, not just the answer.'
+        : 'The founder-facing view. Same requests, stripped of our internal notes, with the reason for each ask visible.',
+      reqSides: [{ k:'investor', l:'Investor tracker' }, { k:'founder', l:'Founder view' }].map(s => ({
+        label:s.l, style: seg(st.reqSide === s.k), go: () => this.setState({ reqSide:s.k }) })),
+      reqInvestor: st.reqSide === 'investor', reqFounder: st.reqSide === 'founder',
+      reqStats, requests, founderRequests,
+      founderAv: av('#7c3aed', 44),
+      founderIntro:'Series A diligence, ' + REQ.length + ' items. Each request says why we are asking — if a question is unclear or the document does not exist, say so rather than guessing.',
+      founderProgressLine: founderDone + ' of ' + REQ.length + ' answered',
+      founderBar:'height:100%;width:'+(founderDone / REQ.length * 100).toFixed(0)+'%;border-radius:99px;background:'+V,
+      composeOpen: st.composeOpen,
+      openCompose: () => this.setState({ composeOpen:true, composeName:'', composeWhy:'' }),
+      closeCompose: () => this.setState({ composeOpen:false }),
+      composeSections, composeName: st.composeName, composeWhy: st.composeWhy,
+      setComposeSection: (e) => this.setState({ composeSection:e.target.value }),
+      setComposeName: (e) => this.setState({ composeName:e.target.value }),
+      setComposeWhy: (e) => this.setState({ composeWhy:e.target.value }),
+      composeBtnLabel: composeOk ? 'Send request to NorthPeak' : 'Describe what you need',
+      composeBtnStyle:'margin-top:16px;padding:12px 0;border-radius:11px;text-align:center;font-size:13px;font-weight:700;'
+        + (composeOk ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#8b8798')+';cursor:not-allowed'),
+      sendCompose: () => { if (composeOk) this.setState(s => ({
+        composeOpen:false,
+        sent: s.sent.concat([{ name:s.composeName, sec:s.composeSection, state:'requested',
+          asked:'Aug 15', due:'Aug 25', stateWhen:'—', files:[],
+          why: s.composeWhy || 'No context provided.' }]),
+      })); },
+
+      // cross-checks
+      rails,
+
+      // report
+      report, coAvLg: av('#1d4ed8', 44),
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

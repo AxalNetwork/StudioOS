@@ -1,0 +1,235 @@
+/** D886 B8: private container host. B1 alone owns consent, billing and status. */
+import { preparePreviewCanary, reconcilePreviewCanaryAlarm, type CanaryEnv } from './previewCanary';
+import type { Env } from '../../cloudflare-worker/src/types';
+import { runtimeHeaders, runtimeKey, runtimeOrigin, runtimeUid, type RuntimeStart } from '../../cloudflare-worker/src/services/meetingBotRuntime';
+import { HOST_COMMAND_MS, HOST_READY_MS, logRuntimeStage, runtimeVersion, type MeetingBotRuntimeStage, type RuntimeErrorCode } from '../../cloudflare-worker/src/services/meetingBotStartup';
+
+interface Lease { uid: string; deadline: number; funded: number; fingerprint: string; started: boolean; stopped: boolean; stopAt?:number }
+const reply = (status: number, code: string) => Response.json({code},{status});
+const integer = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
+const pause = () => new Promise(resolve=>setTimeout(resolve,100));
+/** D5153: a startup failure stops at a named boundary; the site Worker persists the code and stage, never a reason in words. */
+type Stopped = { code: RuntimeErrorCode; stage: MeetingBotRuntimeStage };
+/** #3708: a diagnostic's container lives at most this long. */
+export const DIAGNOSE_MS = 8 * 60_000;
+export class MeetingBotContainer implements DurableObject {
+  private readonly state: DurableObjectState;
+  private readonly env: Env;
+  /** D5153: set when this instance's container process ends, from `monitor()`; a boot that exits is not a cold start. */
+  private exited = false;
+  constructor(state: DurableObjectState, env: Env) { this.state=state; this.env=env; }
+  async fetch(request: Request): Promise<Response> {
+    const result = await this.state.blockConcurrencyWhile(async(): Promise<Response | (() => Promise<Response>)>=>{
+      try {
+        const container=this.state.container;
+        // D5153: an older site Worker reads `container_unavailable`; a current one reads the code and stage too.
+        if (!container) return Response.json({ok:false,code:'container_unavailable',stage:'container_starting',runtime_version:null},{status:503});
+        const path=new URL(request.url).pathname;
+        if(path==='/canary/run'||/^\/canary\/[a-f0-9-]{36}\/callback$/.test(path))return preparePreviewCanary(request,this.env as Env&CanaryEnv,this.state);
+        // #3708: the deployed commit answers the owner's diagnostic (`--var` in meeting-bot-deploy.yml).
+        if (request.method==='GET' && path==='/health') return Response.json({running:container.running,version:/^[a-f0-9]{7,40}$/.test(this.env.MEETING_BOT_VERSION ?? '') ? this.env.MEETING_BOT_VERSION : null});
+        if (request.method!=='POST' || !['/start','/stop','/heartbeat','/diagnose'].includes(path)) return reply(404,'not_found');
+        const raw=await request.text();
+        if (raw.length>16_384) return reply(413,'invalid_command');
+        let body;
+        try { body=JSON.parse(raw); } catch { return reply(400,'invalid_command'); }
+        if (!body || !runtimeUid(body.uid)) return reply(400,'invalid_command');
+        let lease=await this.state.storage.get<Lease>('lease');
+        if (lease && lease.uid!==body.uid) return reply(409,'run_mismatch');
+        if (path==='/stop') {
+          lease=lease ?? {uid:body.uid,deadline:Date.now(),funded:Date.now(),fingerprint:'',started:false,stopped:false};
+          // Tombstone first: a delayed/replayed start can never undo Stop.
+          lease.stopped=true;
+          lease.stopAt ??= Date.now()+30_000;
+          await this.state.storage.put('lease',lease);
+          if (container.running) {
+            await this.state.storage.setAlarm(lease.stopAt);
+            return async () => {
+              try { await this.command('/stop',{uid:body.uid},1000); } catch { /* SIGTERM is the fallback. */ }
+              // SIGTERM uses B2's same bounded leave/upload drain, never a hard kill.
+              container.signal(15);
+              return reply(200,'stop_requested');
+            };
+          }
+          return reply(200,'stop_requested');
+        }
+        if (lease?.stopped) return reply(409,'run_stopped');
+        if (path==='/diagnose') {
+          // #3708: one owner diagnostic per id, on its own instance; no meeting run, no heartbeat.
+          if (lease || container.running) return reply(409,'runtime_busy');
+          if (!['zoom','google_meet'].includes(body.platform) || typeof body.meeting_url!=='string' || body.meeting_url.length>2048) return reply(400,'invalid_command');
+          const image=container.images.runtime;
+          if (!image) return reply(503,'image_unavailable');
+          const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),origin=runtimeOrigin(this.env);
+          const input={uid:body.uid,platform:body.platform,meeting_url:body.meeting_url},end=Date.now()+DIAGNOSE_MS;
+          lease={uid:body.uid,deadline:end,funded:end,fingerprint:'diagnose',started:false,stopped:false};
+          await this.state.storage.put('lease',lease);
+          let booted=false;
+          try { await this.boot(image,key,origin,lease); booted=true; } catch { await this.destroy(lease); }
+          if (!booted) return reply(503,'container_start_failed');
+          // A run's heartbeats keep its container awake; a diagnostic has none, and waits minutes for admission.
+          await container.setInactivityTimeout(Math.max(1,end+30_000-Date.now()));
+          return async () => {
+            try { await this.command('/diagnose',input,20_000); return reply(202,'started'); }
+            catch (e) {
+              await this.state.blockConcurrencyWhile(async()=>{ const current=await this.state.storage.get<Lease>('lease'); if (current) await this.destroy(current); });
+              // Refused: the image answered and said no. Unavailable: it never answered (no boot).
+              return reply(503,e instanceof Error && e.message==='command_refused' ? 'runtime_refused' : 'runtime_no_answer');
+            }
+          };
+        }
+        if (lease && Date.now()>=Math.min(lease.deadline,lease.funded)+30_000) {
+          await this.destroy(lease); return reply(409,'run_expired');
+        }
+        if (path==='/heartbeat') {
+          if (!lease?.started || !container.running) return reply(409,'runtime_lost');
+          if (body.deadline_at!==lease.deadline || !integer(body.budget_deadline_at) || body.budget_deadline_at<=Date.now()
+            || body.budget_deadline_at<lease.funded || body.budget_deadline_at>lease.deadline) return reply(400,'invalid_lease');
+          lease.funded=body.budget_deadline_at;
+          await this.state.storage.put('lease',lease);
+          await this.arm(lease); return reply(200,'alive');
+        }
+        if (!['zoom','google_meet','teams'].includes(body.platform) || ![30,120].includes(body.limit_minutes)
+          || !integer(body.deadline_at) || body.deadline_at<=Date.now() || body.deadline_at>Date.now()+body.limit_minutes*60_000
+          || !integer(body.budget_deadline_at) || body.budget_deadline_at<=Date.now() || body.budget_deadline_at>body.deadline_at
+          || typeof body.meeting_url!=='string' || body.meeting_url.length>2048 || typeof body.notice!=='string' || body.notice.length>4096
+          || !(body.venture_name===null || typeof body.venture_name==='string' && body.venture_name.length<=500)) return reply(400,'invalid_command');
+        const input: RuntimeStart={uid:body.uid,platform:body.platform,meeting_url:body.meeting_url,limit_minutes:body.limit_minutes,
+          deadline_at:body.deadline_at,budget_deadline_at:body.budget_deadline_at,notice:body.notice,venture_name:body.venture_name};
+        const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(input)));
+        const fingerprint=[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');
+        if (lease) {
+          if (lease.fingerprint!==fingerprint) return reply(409,'run_mismatch');
+          // Restart would reset B2's sequence/capture cursor. Refuse it until a
+          // persisted resume contract exists, including after DO reconstruction.
+          return lease.started && container.running ? reply(200,'already_started') : reply(409,'runtime_lost');
+        }
+        if (container.running) return reply(409,'runtime_busy');
+        // D5153: from here every answer is a startup fact: {ok, code, stage, runtime_version}.
+        const version=runtimeVersion(this.env.MEETING_BOT_VERSION),began=Date.now();
+        const mark=(stage: MeetingBotRuntimeStage, error: RuntimeErrorCode | null=null) => logRuntimeStage({run_uid:body.uid,platform:body.platform,
+          stage,runtime_version:version,elapsed_ms:Date.now()-began,result:error?'fail':'ok',error_code:error});
+        const failed=(f: Stopped) => { mark(f.stage,f.code); return Response.json({ok:false,code:f.code,stage:f.stage,runtime_version:version},{status:503}); };
+        mark('container_binding_resolved');
+        const image=container.images.runtime;
+        if (!image) return failed({code:'image_unavailable',stage:'image_resolved'});
+        mark('image_resolved');
+        const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),origin=runtimeOrigin(this.env);
+        lease={uid:body.uid,deadline:body.deadline_at,funded:body.budget_deadline_at,fingerprint,started:false,stopped:false};
+        await this.state.storage.put('lease',lease);
+        try { await this.boot(image,key,origin,lease); }
+        catch { await this.destroy(lease); return failed({code:'container_start_failed',stage:'container_starting'}); }
+        mark('container_starting');
+        // Boot/HTTP waits must run outside the critical section so Stop can
+        // persist its tombstone immediately, even while the process is cold.
+        return async () => {
+          const abandon=async (f: Stopped) => {
+            const stopped=await this.state.blockConcurrencyWhile(async()=>{
+              const current=await this.state.storage.get<Lease>('lease');
+              if (current && !current.stopped) { await this.destroy(current); return false; }
+              return true;
+            });
+            // A Stop that landed during startup is the member's, not a startup failure.
+            return stopped ? reply(409,'run_stopped') : failed(f);
+          };
+          const unready=await this.ready(version);
+          if (unready) return abandon(unready);
+          mark('runtime_health_ready');
+          try { await this.command('/start',input,HOST_COMMAND_MS); }
+          catch (e) {
+            const message=e instanceof Error ? e.message : '';
+            return abandon(message==='command_refused' ? {code:'runtime_refused',stage:'runtime_command_accepted'}
+              : this.exited ? {code:'runtime_process_exited',stage:'runtime_command_accepted'}
+              : {code:'runtime_command_timeout',stage:'runtime_command_accepted'});
+          }
+          return await this.state.blockConcurrencyWhile(async () => {
+            const current=await this.state.storage.get<Lease>('lease');
+            if (!current || current.stopped) return reply(409,'run_stopped');
+            current.started=true;await this.state.storage.put('lease',current);
+            mark('runtime_command_accepted');
+            return Response.json({ok:true,code:'started',stage:'runtime_command_accepted',runtime_version:version,start_ms:Date.now()-began},{status:202});
+          });
+        };
+      } catch { return reply(503,'runtime_unavailable'); }
+    });
+    return typeof result === 'function' ? result() : result;
+  }
+  /** The run's and the diagnostic's one way to start the image: its own key, its callback origin, egress on. */
+  private async boot(image: string, key: string, origin: string, lease: Lease) {
+    this.state.container!.start({image,instance:'standard-2',enableInternet:true,
+      // D5153: the runtime echoes its build on /healthz, so a host/image mismatch is caught before the command.
+      env:{MEETING_BOT_SECRET:key,MEETING_BOT_CALLBACK_ORIGIN:origin,PORT:'8080',...(runtimeVersion(this.env.MEETING_BOT_VERSION) ? {MEETING_BOT_VERSION:this.env.MEETING_BOT_VERSION!} : {})}});
+    this.exited=false;
+    this.state.waitUntil(this.state.container!.monitor().then(()=>{ this.exited=true; },()=>{ this.exited=true; }));
+    await this.arm(lease);
+  }
+  /**
+   * D5153: before the signed command, the runtime must answer `/healthz` with
+   * `ready: true` and, when it reports one, the host's own version. Never sends
+   * the meeting link. Port silence until the budget ends is `runtime_no_answer`;
+   * a process that ended is `runtime_process_exited`; an answer that is not
+   * ready (or a different build) is `runtime_health_failed`.
+   */
+  private async ready(expected: string | null): Promise<Stopped | null> {
+    const port=this.state.container!.getTcpPort(8080),until=Date.now()+HOST_READY_MS;
+    let answered=false;
+    do {
+      if ((await this.state.storage.get<Lease>('lease'))?.stopped) return {code:'runtime_refused',stage:'runtime_port_waiting'};
+      if (this.exited) return {code:'runtime_process_exited',stage:'runtime_port_waiting'};
+      try {
+        const response=await port.fetch(new Request('http://runtime.internal/healthz',{method:'GET',
+          signal:AbortSignal.timeout(Math.max(1,Math.min(1500,until-Date.now())))}));
+        answered=true;
+        const health=await response.json().catch(()=>null) as {ready?:unknown;version?:unknown}|null;
+        if (response.ok && health?.ready===true) {
+          const reported=runtimeVersion(health.version);
+          // An older image reports no version; only a reported different build fails.
+          return expected && reported && reported!==expected ? {code:'runtime_health_failed',stage:'runtime_health_ready'} : null;
+        }
+        // `ready: false` is the runtime's own final answer (an unpublished notice), not a cold start.
+        if (response.ok && health?.ready===false) return {code:'runtime_health_failed',stage:'runtime_health_ready'};
+      } catch { /* cold: the port is not open yet */ }
+      if (Date.now()>=until) break;
+      await pause();
+    } while (Date.now()<until);
+    if (this.exited) return {code:'runtime_process_exited',stage:'runtime_port_waiting'};
+    return answered ? {code:'runtime_health_failed',stage:'runtime_health_ready'} : {code:'runtime_no_answer',stage:'runtime_port_waiting'};
+  }
+  private async command(path: string, body: {uid:string}, timeout: number) {
+    const port=this.state.container!.getTcpPort(8080),raw=JSON.stringify(body);
+    const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),until=Date.now()+timeout;
+    do {
+      if (path==='/start' && (await this.state.storage.get<Lease>('lease'))?.stopped) throw new Error('command_refused');
+      try {
+        const response=await port.fetch(new Request(`http://runtime.internal${path}`,{method:'POST',body:raw,
+          headers:await runtimeHeaders(key,path,raw),signal:AbortSignal.timeout(Math.max(1,Math.min(750,until-Date.now())))}));
+        if (response.ok) return;
+        // A command refusal (including unpublished notice) is final, not cold start.
+        throw new Error('command_refused');
+      } catch (e) {
+        if (e instanceof Error && e.message==='command_refused') throw e;
+        if (Date.now()>=until) break;
+        await pause();
+      }
+    } while (Date.now()<until);
+    throw new Error('runtime_unavailable');
+  }
+  private async arm(lease: Lease) {
+    const end=Math.min(lease.deadline,lease.funded)+30_000;
+    await this.state.storage.setAlarm(end);
+    await this.state.container!.setInactivityTimeout(Math.max(1,Math.min(120_000,end-Date.now())));
+  }
+  private async destroy(lease: Lease) {
+    await this.state.storage.put('lease',{...lease,stopped:true});
+    await this.state.container?.destroy();
+  }
+  async alarm() {
+    await this.state.blockConcurrencyWhile(async()=>{
+      if(await reconcilePreviewCanaryAlarm(this.state))return;
+      const lease=await this.state.storage.get<Lease>('lease');
+      if (!lease) return;
+      if (lease.stopped || Date.now()>=Math.min(lease.deadline,lease.funded)+30_000) await this.destroy(lease);
+      else await this.arm(lease);
+    });
+  }
+}

@@ -1,0 +1,481 @@
+Axal StudioOS — Global VC Network Roadmap
+Target: Next-generation global venture partner network for AI-era tech VC. Stack discipline: GitOps (every change via PR → CI → Cloudflare deploy), Cloudflare-first (Workers, D1, R2, KV, Durable Objects, Vectorize, Zero Trust, Queues), React 19 frontend on GitHub Pages. Existing baseline (do not rebuild): TOTP auth, 7 engines, LPA pipeline, Liquidity marketplace, Integrations module, Zero Trust perimeter on /api/admin/*, signed-URL contract delivery, Pipeline voting, Vectorize semantic search.
+
+EPIC 0 — Quick wins from user feedback (ship first, 1–2 days)
+#
+Task
+Acceptance criteria
+0.1
+Add Copy button next to the manual TOTP secret on /register and /auth/setup-totp
+Click → secret copied to clipboard, toast confirms, ARIA label set
+0.2
+Add an "I can't scan the QR" disclosure block with step-by-step manual entry instructions for Google Authenticator, Authy, 1Password, Bitwarden
+Each app has its own collapsible card with screenshots-equivalent text
+0.3
+On the manual-instructions block, link the phrase "already set up? Sign in" to /login
+Anchor visible on hover, keyboard-focusable
+0.4
+On /market-intel, add inline tooltips/explainers: "Private rounds = direct competitors' funding signals. Public comps = exit benchmarks for your sector."
+Tooltip on each card, also a short "Why this matters" panel at top of page
+0.5
+Defer founder KYC until MVP stage (projects.stage IN ('BUILD','LAUNCH')) — do not gate intake/scoring on KYC
+Founder portal hides KYC CTA until project crosses stage threshold; admin override still works
+
+
+EPIC 1 — Onboarding chatbot persona expansion
+Problem: Current onboarding chat treats every user like founder-or-partner. The Axal network needs to recognize and route ~12 personas.
+1.1 Persona taxonomy (canonical list)
+Store in cloudflare-worker/src/data/personas.ts as the single source of truth.
+Founder — pre-seed to Series A, building
+Repeat / Serial Founder — exited once+, often advises
+Limited Partner (Individual) — HNWI, family-office principal
+Limited Partner (Institutional) — pension, endowment, fund-of-funds
+General Partner / Fund Manager — running another fund, looking to co-invest or syndicate
+Angel / Scout — small-check, deal-flow contributor
+Corporate VC / Strategic — BD + investment mandate
+Sovereign / Government Vehicle — regional mandate, policy-aligned capital
+Academician / Research Lead — university lab, deep-tech IP source
+Operator / Executive-in-Residence — CXO available for portfolio
+Service Provider — lawyer, accountant, recruiter, banker (separate role already exists in _ensure_role)
+Press / Analyst — read-only, quotable insights
+1.2 Chatbot branching
+OnboardingChat Durable Object already exists — extend it.
+New file: cloudflare-worker/ai-workers/persona-router.ts
+Input: free-form first message + signup name/email + email domain enrichment (Clearbit-style; we have no Clearbit, so use a heuristic: corporate email TLD, company suffix lookup against private_rounds cache).
+Output: { persona_id, confidence, follow_up_questions[] }
+Confidence < 0.6 → ask one disambiguating question before proceeding.
+Question banks per persona (3–5 q each), e.g.:
+LP Institutional → AUM band, allocation to early-stage VC, geographic mandate, ESG constraints, existing GP relationships
+Academician → field, lab, IP licensing posture, willingness to be technical advisor, sabbatical availability
+Corporate VC → parent company, strategic theses, check-size band, board-seat policy
+Operator → last role, sectors of expertise, time available (advisor / fractional / full-time), comp expectations (cash/equity)
+Each answer writes to user_profile_extras (new table) keyed by persona_field. Admins see the full transcript via the existing ProfileReviewModal.
+1.3 Schema
+sql
+-- cloudflare-worker/sql/personas.sql
+CREATE TABLE IF NOT EXISTS user_personas (
+  user_id INTEGER PRIMARY KEY,
+  persona_id TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  detected_at INTEGER NOT NULL,
+  manual_override INTEGER DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS user_profile_extras (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  field_key TEXT NOT NULL,
+  field_value TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, field_key),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+1.4 Routing rules
+Founder + Operator → can be founder + advisor (multi-persona allowed; max 2).
+Persona drives sidebar nav, dashboard widgets, and which feature paywalls show.
+Admin can manually re-tag a persona (writes manual_override = 1).
+
+EPIC 2 — Agreement Management System (admin)
+Problem: Contracts get sent ad hoc; there's no admin view of "what's out, what's pending, what expires next quarter, in which jurisdiction, with which platform partner."
+2.1 Storage architecture
+Move contract bodies from D1 (legal_documents.content) to Cloudflare R2 bucket axal-contracts-prod.
+Bucket policy: only worker bindings can read/write; no public access.
+Object key: contracts/{contract_id}/{version}/{filename}.pdf.
+Signed-URL retrieval already exists (mint_signed_token / verify_signed_token) — port it to the worker (the replit.md flagged this as a TODO). Use crypto.subtle.sign('HMAC', key, ...) with a key in wrangler.toml [vars] CONTRACT_URL_SIGNING_KEY.
+eSignature artifacts (signed PDFs, audit log JSON) stored in a separate R2 bucket axal-signatures-prod behind Cloudflare Access (Zero Trust). Direct fetch from origin returns 403 unless the request carries a Cf-Access-Jwt-Assertion from an admin policy.
+2.2 Schema additions
+sql
+-- cloudflare-worker/sql/contracts_v2.sql
+ALTER TABLE legal_documents ADD COLUMN status TEXT DEFAULT 'draft';
+  -- draft | in_review | pending_signature | active | expired | terminated
+ALTER TABLE legal_documents ADD COLUMN jurisdiction TEXT;
+  -- ISO-style: 'US-DE', 'GB', 'SG', 'CH', 'AE-DU'
+ALTER TABLE legal_documents ADD COLUMN effective_date INTEGER;
+ALTER TABLE legal_documents ADD COLUMN expiration_date INTEGER;
+ALTER TABLE legal_documents ADD COLUMN renewal_terms TEXT;
+ALTER TABLE legal_documents ADD COLUMN platform_partner_id INTEGER;
+ALTER TABLE legal_documents ADD COLUMN r2_key TEXT;
+ALTER TABLE legal_documents ADD COLUMN r2_signature_key TEXT;
+ALTER TABLE legal_documents ADD COLUMN counterparty_email TEXT;
+ALTER TABLE legal_documents ADD COLUMN counterparty_name TEXT;
+
+CREATE TABLE IF NOT EXISTS platform_partners (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  category TEXT,  -- legal | banking | accounting | infra | recruiting
+  jurisdiction TEXT,
+  contact_email TEXT,
+  active INTEGER DEFAULT 1
+);
+
+CREATE INDEX idx_doc_status ON legal_documents(status);
+CREATE INDEX idx_doc_expiration ON legal_documents(expiration_date);
+CREATE INDEX idx_doc_jurisdiction ON legal_documents(jurisdiction);
+2.3 Admin UI — /admin/contracts
+Single page, four tabs:
+In Review — drafts + counterparty redlines pending
+Pending Signature — sent, not yet signed
+Active — countersigned, in force
+Expired / Renewing — auto-populated from expiration_date
+Filter rail: jurisdiction, platform partner, contract type, signer, value tier.
+Each row → drawer with: full lifecycle timeline, version history, R2 download (signed URL, 5-min TTL), audit log (who viewed, who signed, IP, UA), renewal CTA.
+2.4 Lifecycle automation
+Cron Trigger (wrangler.toml [triggers]): daily 09:00 UTC.
+90 days from expiration_date → status expiring_soon, email admin + counterparty.
+30 days → second reminder.
+0 days → status expired, lock signing flow, surface in dashboard.
+All status transitions write to activity_logs (already present) with entity_type='legal_document'.
+2.5 Access gating
+Add Zero Trust application for https://<domain>/api/admin/contracts/* (already partially listed in replit.md item #6 — finish it). Email allowlist, MFA required, WARP optional, device-posture preferred.
+
+EPIC 3 — Settings page (the one Replit didn't ship)
+Add /settings to the left sidebar for ALL roles. Single React route with role-conditional sections.
+3.1 Universal sections (every user)
+Profile — name, headshot upload (R2), bio, LinkedIn, X/Twitter, website
+Jurisdictions — multi-select chips (US-DE, US-NY, GB, SG, CH, AE-DU, …); drives deal eligibility
+Email — change email → re-verification email → must re-confirm; old email gets a "your account email was changed" notice for 24h reversal window
+Authentication — re-pair TOTP, view active sessions, revoke, download recovery codes (one-time view, hashed at rest)
+Notifications matrix — per channel (email / in-app / future SMS) × per event type
+Privacy — control which fields show on public profile; data export request; delete-account flow
+3.2 Founder-specific section
+Deal Preferences — ticket-size range (min/max), preferred jurisdictions, sectors, stage, board posture (yes/no/observer)
+Notification triggers:
+New offer received
+LP proposal sent
+Term-sheet redline
+Diligence request
+Capital call
+Co-founder seats — invite up to N co-founders linked to same Project
+3.3 Partner / LP-specific section
+Investment mandate — ticket band, sector blacklist/whitelist, geography, vintage preference, fund size cap
+Risk profile — slider for risk_appetite (0–100); maps to scoring filter
+Notification triggers — new high-conviction deal, new tier-1 score, new co-invest opportunity, capital-call notice, distribution
+Auto-pass rules — JSON-driven (e.g., {"sector": ["adtech"], "stage": ["pre-seed"]}) → deals matching are auto-archived from their feed
+3.4 Implementation notes
+Backend: cloudflare-worker/src/routes/settings.ts — GET /api/settings, PATCH /api/settings, POST /api/settings/email-change, POST /api/settings/email-change/confirm.
+Use existing user_profile_extras table (Epic 1) for arbitrary key/value preferences; structured fields go on usersdirectly.
+Frontend: frontend/src/pages/SettingsPage.jsx, sidebar entry above "Sign out".
+
+EPIC 4 — Founder paywall: incorporation as a service
+Goal: Founder pays once → entity is incorporated → the platform's downstream services (banking, cap-table, payroll, legal, accounting) are pre-wired.
+4.1 Five jurisdiction packages
+Jurisdiction
+Why founders pick it
+Recommended package
+Local legal partner type
+Delaware C-Corp (US)
+VC-standard, board mechanics, QSBS
+Stripe Atlas–equivalent or direct via partner law firm
+Cooley / Gunderson / Wilson Sonsini partner channel
+United Kingdom (Ltd)
+EIS/SEIS investor incentives, EMI option pool
+Companies House registration + HMRC + EMI scheme
+Magic Circle (Linklaters / Slaughter) or boutique (Bristows, Taylor Wessing)
+Singapore (Pte Ltd)
+APAC HQ, EDB grants, low corporate tax
+ACRA + IRAS + nominee director if non-resident
+Drew & Napier / Rajah & Tann partner
+Switzerland (GmbH / AG)
+Crypto/deep-tech, banking, IP regimes
+Commercial register + cantonal tax ruling
+Walder Wyss / Lenz & Staehelin partner
+Dubai (DIFC / ADGM Ltd)
+MENA gateway, common-law within UAE, no income tax
+DIFC or ADGM registration + visa allocation
+Al Tamimi / Baker McKenzie ME partner
+
+4.2 Tiered pricing (recommendation, validate with finance)
+Foundation — incorporation + standard docs + 1 yr registered agent: $1.5–4k depending on jurisdiction
+Growth — Foundation + cap-table (Pulley/Carta-equivalent) + bank intro + payroll setup + accounting templates: $5–8k + $200/mo
+VC-Ready — Growth + Delaware flip option + EMI/ISO option pool + 83(b) filings + IC-ready data room + diligence kit: $10–15k + $500/mo
+All packages include access to:
+Standard SAFE / Convertible / Term-sheet / SPA / Bylaws (already in legal_templates)
+Cap-table tracker linked to entities and vc_funds
+Quarterly compliance calendar by jurisdiction
+Founder office hours (1 hr/mo) with platform legal partner
+4.3 Implementation
+Stripe Billing — Products: inc_de, inc_uk, inc_sg, inc_ch, inc_ae × 3 tiers each. One-time + monthly subscription where applicable.
+New table:
+sql
+ CREATE TABLE founder_incorporations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    jurisdiction TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    stripe_subscription_id TEXT,
+    status TEXT,  -- payment_pending | filed | registered | active | dissolved
+    legal_partner_id INTEGER,
+    started_at INTEGER,
+    completed_at INTEGER,
+    entity_id INTEGER,  -- back-ref to entities table once registered
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (legal_partner_id) REFERENCES platform_partners(id)
+  );
+New route group: cloudflare-worker/src/routes/incorporation.ts
+New page: frontend/src/pages/IncorporationPage.jsx with the wizard:
+Pick jurisdiction (decision tree: tax residency, target investors, banking needs)
+Pick tier
+KYC the founder (Sumsub — already integrated; gated on MVP stage per Epic 0.5 unless founder explicitly requests early)
+Pay
+Track filing status (pulls from legal partner's webhook → integrations)
+Paywall enforcement: server-side, in routes/projects.ts middleware — gates "Generate term sheet", "Open data room", "Request capital call" until founder_incorporations.status='active' exists for the project.
+
+EPIC 5 — Anti-cheat for Diligence & Scoring Engine
+Problem stated: users can hack the scoring engine. Goal: scores LPs see are tamper-proof, but founders still get a sandbox to self-test.
+5.1 Server-authoritative scoring
+Move all scoring math out of the frontend. Frontend submits raw inputs only; worker calculates score in services/scoring.ts.
+Reject any request body that contains score, tier, or score_breakdown as input fields (defense-in-depth).
+Sign every score record with HMAC-SHA256 over (project_id, score, version, timestamp). Store the signature in score_snapshots.integrity_hash. On read, recompute and compare; mismatch → flag in error_logs, hide from LP view.
+5.2 Two-track scoring: Sandbox vs Score-of-Record
+New column: score_snapshots.is_sandbox INTEGER DEFAULT 0.
+Sandbox runs are unlimited, do not appear in LP views, do not trigger TIER_1 BUILD promotion. They DO appear in the founder's own portal under "Practice runs".
+Score-of-Record runs are rate-limited (1 official run per 7 days per project; admin override available), require all required fields filled, and are the only ones surfaced to partners/LPs and the Pipeline board.
+Frontend UX: a clear toggle "Practice mode" vs "Submit official run". Submitting official locks the inputs from edit for 7 days.
+5.3 Anomaly detection
+New worker job score_anomaly_check runs after every official score. Heuristics:
+Inputs change >50% across two runs within 14 days → flag
+Identical text strings in qualitative fields across multiple projects → flag (template farming)
+Score jumps >25 pts between successive practice runs → flag
+Flags surface in admin MonitoringPage and require admin sign-off before LPs see the score.
+5.4 Audit trail
+Every score read by a partner/LP is logged in activity_logs with the score's integrity_hash. If a founder later disputes a score, admin can replay the exact inputs and recompute.
+
+EPIC 6 — Market Intelligence: free vs Pro paywall
+6.1 Tier matrix
+Feature
+Free
+Pro ($X/mo)
+Sector pulse (top-line)
+✅
+✅
+Macro snapshot (P/E, IPO windows)
+✅
+✅
+Private rounds — last 30 days, public sources
+✅
+✅
+Private rounds — full history, source-attributed
+—
+✅
+Competitive intelligence — top 3 plays
+✅
+✅
+Competitive intelligence — full deck + AI memo
+—
+✅
+Studio benchmarks vs peer studios
+—
+✅
+Custom watchlists with alerts
+—
+✅
+Vectorize semantic search across deal universe
+—
+✅
+CSV/API export
+—
+✅
+White-label briefing PDF (weekly)
+—
+✅
+
+6.2 Implementation
+Stripe product mi_pro_monthly and mi_pro_annual.
+Middleware on /api/market-intel/* checks users.mi_subscription_status and feature flag.
+Add the "Why this matters" copy from Epic 0.4 to Free tier as the conversion hook.
+
+EPIC 7 — CRM integrations (real, not stubbed)
+The Integrations module ships with provider catalogue + HMAC webhooks. Now finish the actual sync logic for the four highest-value CRMs in VC.
+7.1 Priority CRMs
+Affinity — VC-native, relationship intelligence
+Attio — modern object-based, popular with newer funds
+HubSpot — already in catalogue; finish bidirectional contact + deal sync
+Salesforce — enterprise LPs
+7.2 Sync model
+Outbound (Axal → CRM): when a deal hits status='active' or a partner is matched → push as a Deal/Opportunity record.
+Inbound (CRM → Axal): webhook on contact update → upsert into partners or users if matched by email.
+Field mapping is per-integration JSON, editable in the existing IntegrationsPage modal.
+7.3 Worth-noting nuances
+Affinity uses list-based scoping → user must select which Affinity list = "Axal pipeline".
+Attio's API is GraphQL-flavored REST hybrid; use their official SDK once available, otherwise raw fetch with idempotency keys.
+HubSpot needs OAuth2, not API key — extend integrations.api_key_encrypted to also store oauth_refresh_token_encrypted.
+Salesforce needs JWT bearer flow for non-interactive sync; document the connected-app setup in docs/integrations/salesforce.md.
+7.4 Sync queue
+New job types in services/queueWorker.ts: crm_outbound_push, crm_inbound_upsert. Both rate-capped at 30/min/integration.
+Failures retry with exponential backoff up to 5 attempts, then surface in IntegrationsPage with a "Retry" button.
+
+EPIC 8 — Personality typology for the Axal network
+Goal: A repeatable, defensible personality framework specifically for venture capital so partners can find compatible co-investors, advisors, and operators. Eventually publishable as a reference book.
+8.1 Working name: Axal Capital Archetypes (ACA-12)
+Built on two axes plus a third modifier:
+Axis 1 — Conviction stance: Convictor (concentrated, high-conviction bets) ↔ Indexer (portfolio breadth, optionality)
+Axis 2 — Engagement depth: Operator-investor (rolls up sleeves) ↔ Capital allocator (board + capital, hands-off)
+Modifier — Discovery posture: Thesis-led (top-down) vs Founder-led (bottom-up)
+That yields 8 quadrant archetypes; add 4 specialty roles (Scout, Architect-Academic, Steward-LP, Catalyst-Operator) → 12 total.
+Working archetype names (rename for marketability):
+The Conviction Hunter — concentrated, thesis-led, hands-off
+The Builder-Backer — concentrated, thesis-led, operator
+The Founder Whisperer — concentrated, founder-led, operator
+The Quiet Backer — concentrated, founder-led, hands-off
+The Portfolio Architect — diversified, thesis-led, hands-off
+The Sector Operator — diversified, thesis-led, operator
+The Network Multiplier — diversified, founder-led, operator
+The Index Allocator — diversified, founder-led, hands-off
+The Scout — specialty: deal-flow generator, sub-$100k checks
+The Architect-Academic — specialty: research-rooted, deep-tech
+The Steward-LP — specialty: institutional capital, governance-first
+The Catalyst-Operator — specialty: portfolio CXO, fractional
+8.2 Methodology
+Quiz: 24 forced-choice questions (2 per axis-position), Likert 1–5. ~6 minutes.
+AI inference: passive — the onboarding chat + activity patterns (which deals they engage with, voting behavior, hold times on liquidity listings) feed a Workers-AI classifier that suggests an archetype with confidence. User can accept/override.
+Recompute quarterly — archetypes drift as users mature.
+8.3 Schema
+sql
+CREATE TABLE user_archetypes (
+  user_id INTEGER PRIMARY KEY,
+  archetype_id TEXT NOT NULL,
+  axis1_score REAL, axis2_score REAL, modifier_score REAL,
+  source TEXT,  -- quiz | ai_inferred | manual
+  confidence REAL,
+  computed_at INTEGER NOT NULL,
+  history_json TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+8.4 Match scoring between users
+Cosine similarity over (axis1, axis2, modifier) vector → compatibility_score.
+Surface in PartnersPage and LiquidityPage ("This buyer is a Founder Whisperer — strong fit with your Builder-Backer profile").
+Privacy: archetype is opt-in to display. Stored regardless for internal matchmaking but never wire-returned without consent.
+8.5 Book-readiness deliverables
+Each archetype gets a 1-page profile in docs/archetypes/{slug}.md: signature behaviors, famous examples (with their public consent or pure analogy), failure modes, ideal co-investor pairings.
+Quarterly aggregate report: distribution of archetypes across the network, anonymized.
+
+EPIC 9 — Cross-feature contextual chatbot
+A single floating assistant present on every page, persona-aware and feature-aware.
+9.1 Architecture
+New Durable Object: ContextualAssistant (one per user:<id>:session:<id>). Reuses Hibernatable WebSocket pattern from existing OnboardingChat.
+Context payload sent on each message: { page, route_params, user_persona, user_archetype, recent_actions[] }.
+Tool-use: the assistant can call read-only worker endpoints on the user's behalf (e.g., "what's my last score?", "show me LPs in Singapore"). Wrapped through the same access_policy.py predicates — no privilege escalation.
+9.2 Per-feature playbooks
+On Scoring page → "Want me to explain why your Market score dropped from your last practice run?"
+On Legal page → "I see you're in Delaware. Want me to flag the 83(b) deadline for your last hire?"
+On Liquidity → "There are 3 buyers whose archetype matches your selling profile. Want intros?"
+On Settings → "I notice you haven't set deal alerts. Most LPs in your archetype set ticket band $250k–$2M. Want me to apply that?"
+9.3 Personality enrichment loop
+Every conversation feeds back into the user's persona/archetype confidence (Epic 1 + Epic 8) — a slow, passive refinement.
+Privacy: assistant transcripts are owned by the user. Admin can only view if the user files a support ticket referencing the conversation (paper trail).
+
+EPIC 10 — KYC: stage-gated, not signup-gated
+(Already covered in 0.5 as a quick win — this is the deeper version.)
+KYC required for: capital deployment, official scoring submission, contract counter-signature.
+KYC NOT required for: onboarding, browsing market intel, practicing scoring, joining community discussions.
+Sumsub already integrated — wire users.kyc_status to gating middleware in services/access_policy.py (new predicate requires_kyc).
+Founder KYC trigger: project.stage = 'BUILD' OR founder_incorporations row created → in-app prompt + email.
+
+EPIC 11 — Security & bug audit
+11.1 Active issues to verify and fix
+Area
+Check
+Fix if failing
+HMAC for worker contract URLs
+Replit.md flags "worker doesn't yet have its own HMAC signing primitive"
+Implement using Web Crypto crypto.subtle.sign('HMAC', …) matching the FastAPI scheme
+Vectorize legacy snippets
+POST /api/search/backfill flagged as "run once after deploy"
+Verify it has been run in prod; add a CI check that fails if any vector has a non-neutral snippet
+lp_investorsdeprecation
+Old table retained read-only; any new write is a regression
+Add an INSTEAD OF trigger or worker assertion that throws on insert
+CORS on axal.vc
+Confirm only https://axal.vc and https://www.axal.vc whitelisted
+Audit cors() config, remove any wildcards
+Turnstile
+Optional today — make required in prod
+Hard-fail registration when TURNSTILE_SECRET_KEY is unset in ENVIRONMENT=production
+Rate limits
+Sliding-window per-user but also need per-IP
+Add IP bucket: 200/min, 10/min for unauth registration POST
+CSP headers
+X-Content-Type-Options, X-Frame-Options, Referrer-Policy already set; no CSP
+Add Content-Security-Policy with nonces for inline scripts
+Email change flow
+New in Epic 3 — make sure 24-hour reversal token actually exists
+Add email_change_requests table with revocation token
+WebSocket auth via ?token=
+Token in query strings can leak via referer/proxy logs
+Move to subprotocol header (Sec-WebSocket-Protocol: bearer.<jwt>); fall back only for browsers that don't support it
+Score integrity hash
+New from Epic 5
+Add nightly job that re-verifies all is_sandbox=0snapshots; alert on any mismatch
+R2 bucket policies
+New from Epic 2
+Public-access disabled, lifecycle rule to move signed PDFs to Standard-IA after 90 days
+JWT secret rotation
+JWT_SECRET defaults to dev key — any prod env without explicit secret = prod token forgery risk
+Add boot-time assertion: refuse to start if ENVIRONMENT=production and JWT_SECRET is unset/short
+
+11.2 Generic audit checklist for Replit to run
+npm audit --omit=dev on every package.json
+pip-audit on requirements.txt
+Cloudflare Workers — check secret bindings via wrangler secret list
+Verify D1_DATABASE_ID is unique per environment (no shared dev/prod DB)
+Confirm all dependencies= Zero Trust gates in main.py survive when worker handles the request (perimeter is layered, not exclusive)
+Ensure no PII (email, phone, signed_ip) in error_logs, system_metrics, activity_logs.detail text fields
+Ensure no console.log in worker prod build (Vite + Wrangler can be configured to strip)
+Add npm run lint + tsc --noEmit to CI as required gates
+
+EPIC 12 — GitOps + global Cloudflare-first delivery
+12.1 Repo discipline
+Default branch main is protected. Required reviewers: 1.
+Required CI checks: typecheck, lint, schema migration dry-run, Wrangler deploy --dry-run, R2 policy lint.
+Every wrangler.toml change requires a tagged infra: PR label and a second reviewer.
+12.2 Environments
+dev — Replit live preview, points at studioos-db-dev
+staging — Workers env staging, branch staging, separate D1, R2, KV namespaces
+prod — Workers env production, branch main, real bindings
+12.3 Pipeline (GitHub Actions)
+.github/workflows/
+  ci.yml           — runs on every PR: lint, typecheck, test, build, dry-run wrangler
+  deploy-staging.yml  — on push to staging branch
+  deploy-prod.yml     — on push to main, requires manual approval gate
+  schema-migrate.yml  — runs `wrangler d1 execute … --file=sql/<latest>.sql` only when sql/ changes, with dry-run preview in PR
+12.4 Observability is the GitOps feedback loop
+Already have MonitoringPage. Add:
+Per-PR canary metric: error rate in first 30 minutes after deploy. Auto-rollback if 5xx > 1% for 5 consecutive minutes.
+Alert routing: PagerDuty (or email if PD not in budget) on MonitoringPage.GET /errors returning > 10 in 5 min.
+12.5 Cloudflare global posture
+Frontend already on GitHub Pages — consider migrating to Cloudflare Pages for unified deployment + access controls + Workers binding (lets you call worker functions without CORS).
+D1 is already at the edge. For users with large historical reads, layer Cloudflare Cache API with 60s TTL on GET /api/market-intel/* and GET /api/funds/lp-portal.
+Add Smart Placement to the worker (wrangler.toml [placement] mode = "smart") so heavy DB calls run in the region closest to D1.
+
+EPIC 13 — Things you didn't ask for but should ship
+Public investor profiles — opt-in vanity URL axal.vc/p/<handle> showing archetype, visible deals, public theses. Drives organic SEO + recruitment of new LPs.
+Deal-flow referral economy — a Scout submits a deal → if it tier-1's → Scout earns equity-like points redeemable for fund LP-ish allocation in a future vehicle. Compliant version: structure as a carry side-letter, not a security. Have securities counsel review before launch.
+Co-investment SPV-in-a-box — when a deal hits TIER_1, generate a draft SPV operating agreement with the LP cap table pre-populated from RSVP'd partners. Reuses LPA infra.
+AI memo voice mode — investment memos generated from a 10-min founder voice note (Whisper → Claude/Llama summarize → existing generateMemo). Removes the "founder writes pitch deck" friction.
+Press / Analyst gated room — separate persona (already in #12 of taxonomy), gated content drops, embargo workflow. Differentiator vs other VC platforms.
+Status page — status.axal.vc driven by a Cloudflare Worker reading system_metrics. Public-facing, builds counterparty trust during diligence.
+Multilingual onboarding — at minimum EN/ES/FR/AR/CN. Personas/archetypes are already culture-coded; localize the question banks first, UI second.
+Data residency awareness — for EU users, default to EU D1 region (when D1 ships region pinning publicly). For UAE/SG/CH users, document data-flow disclosures in the privacy page so it survives DIFC / PDPA / FADP scrutiny.
+Annual Axal Capital Archetype report — turn Epic 8 into a yearly publication. Network effect: every new user wants to see where they fall in the latest cohort.
+
+Suggested execution order (for Replit prompt sequencing)
+EPIC 0 (1–2 days, ships goodwill)
+EPIC 3 Settings (2–3 days, unlocks Epic 1 data and Epic 5 sandbox toggle)
+EPIC 1 Persona expansion (4–5 days, foundational for everything else)
+EPIC 11 Security audit (do in parallel; some items are P0)
+EPIC 5 Anti-cheat (3–4 days, must precede Epic 4 paywall to keep founders honest)
+EPIC 2 Agreement Management (5–7 days)
+EPIC 4 Founder paywall (5–7 days)
+EPIC 6 MI paywall (2–3 days)
+EPIC 7 CRM finish (5–7 days, can run in parallel)
+EPIC 8 Archetypes (3–4 days, ship quiz first, AI inference later)
+EPIC 9 Contextual chatbot (3–4 days)
+EPIC 10 KYC gating polish (1–2 days)
+EPIC 12 GitOps (ongoing, start the workflows now)
+EPIC 13 the "didn't ask for" pile — pick what your investors care about
+
+What to paste into Replit per epic
+For each epic, the prompt template is:
+Implement Epic <N> from REPLIT_TASKS.md. Read replit.md first to understand the existing architecture. Create a new SQL migration file under cloudflare-worker/sql/, add the new routes under cloudflare-worker/src/routes/, the new page under frontend/src/pages/, and the sidebar entry in App.jsx. Do NOT modify the deprecated tables (lp_investors, entities.vc_fund). Do NOT log PII to error_logs or activity_logs.detail. After implementation, list every file you touched, every env var you added, and every SQL migration to run.
+Replace <N> with the epic number and you're off.

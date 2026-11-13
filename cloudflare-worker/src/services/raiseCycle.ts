@@ -1,0 +1,2208 @@
+import { holdsLicence } from './accountLicences';
+import { posthogFigure } from './posthog/raise';
+import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
+/**
+ * D663 — the Raise cycle's reads: four figures, seven cards, seven record
+ * tables. Mounted by `routes/cycle_raise.ts` at `/api/cycles/raise`.
+ *
+ * THE SHAPES ARE D656's AND D661's. `Card`, `Figure` and the five states come
+ * from `services/cycleCards.ts`. A card's `series` is D661's list of chart
+ * specs, and a module's records are D661's `{ cols: [{key, label}], rows:
+ * [{id, cells}] }` with their `filters`, `sorts` and `add`.
+ *
+ * EVERY CARD READS ITS OWN STORES AND FAILS ON ITS OWN. A throw reaches
+ * `safeCard`, which makes that card `unreadable` and leaves the other six.
+ *
+ * NOTHING HERE IS GUESSED. A value no store holds is `null` ("Not recorded"),
+ * never 0. A prospect's last contact is its stored contact's
+ * `last_activity_at`; a prospect with no contact has none. Planned monthly
+ * allocation is Modelled; D1174's private record reads accepted Mercury spend.
+ *
+ * THE SPIN-OUT LAB READS THROUGH THE SAME FUNCTIONS. A Lab venture is an
+ * ordinary `projects` row. The computed readiness detectors below are the
+ * Lab capital page's data-room readiness rules, moved here and stored, so a
+ * Lab venture and a founder see the same scores.
+ *
+ * A RECEIVED WIRE (D752 §5, decision 12). Capital relationships' stage cell
+ * reads a stored raise receipt's posted date only (`receivedDates`), never a
+ * Mercury connection, a last four, a counterparty or a bank figure.
+ */
+import type { Env, User } from '../types';
+import { PLAN_KEY, PLAN_NAME, userMeetsTier } from '../middleware/requireTier';
+import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
+export { FUND_SECTIONS } from '../util/useOfFunds';
+import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
+import { daysBefore, recordQuery, type RecordQuery } from './cycleValidate';
+import { roundCallsEnabled } from './roundCallPolicy';
+import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
+import { SERVED_FUNDS } from './researchFundDirectory';
+import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
+import { deckReaders, readBySentence } from './narrative/readers';
+import { readObjections } from './narrative/objections';
+import { inputsFrom, readCapTable } from './capTableToday';
+import { simulate } from './captable';
+import { deckShareMetrics } from './deckShareUse';
+
+export { recordQuery };
+export type { RecordQuery };
+
+export const CYCLE = 'raise';
+export const QUESTION = 'What resources does this venture need?';
+
+/** D691 (#1699): each module's list is titled as the canvas titles it (CO:623-629). */
+export const MODULES = [
+  { slug: 'fundraising-readiness', name: 'Fundraising readiness', records_title: 'Readiness items' },
+  { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' },
+  { slug: 'pitch-deck', name: 'Pitch', records_title: 'Investor links' },
+  { slug: 'data-room', name: 'Data room', records_title: 'Files' },
+  { slug: 'cap-table', name: 'Cap table', records_title: 'Holders' },
+  { slug: 'use-of-funds', name: 'Use of funds', records_title: 'Categories' },
+  { slug: 'capital-relationships', name: 'Capital relationships', records_title: 'Investors' },
+] as const;
+export type ModuleSlug = (typeof MODULES)[number]['slug'];
+
+export type Ctx = { env: Env; projectId: number; today: string };
+
+// #4853: the deck's module page IS the Pitch Studio, so its address is the Studio's (see `pitchHref`).
+const href = (ctx: Ctx, slug: string) => (slug === 'pitch-deck' ? pitchHref(ctx) : `/raise/${slug}?project=${ctx.projectId}`);
+/**
+ * D695 (#1657) decision 11: a module's Add form, which its empty card and its
+ * records' Add both open (D688: a card and its module page's Add go to one place).
+ */
+const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.projectId}`;
+/**
+ * #4853: the Pitch Studio is one route family, `/raise/pitch` (D4254), and it reads the venture as
+ * `?project_id=`. The deck's entries name it, not the module cycle's `/raise/pitch-deck` addresses,
+ * whose Add form was a second sharing flow. `frontend/src/pages/raise/pitch/pitchRoutes.js` keeps the
+ * two legacy addresses as redirects, and maps any href still naming them.
+ */
+const pitchHref = (ctx: Ctx) => `/raise/pitch?project_id=${ctx.projectId}`;
+const shareHref = (ctx: Ctx) => `/raise/pitch/share?project_id=${ctx.projectId}`;
+/**
+ * The full tools the module pages summarise; the pages link to them.
+ * D1109 (#2989): the Data room has no tool beside its module any more: the
+ * module page is the tool, and its Access tab holds grants and the NDA
+ * (`DATA_ROOM_ACCESS`).
+ */
+export const DATA_ROOM_ACCESS = '/raise/data-room/access';
+export const TOOL_HREF = {
+  pitch: '/raise/pitch',
+  capTable: '/raise/cap-table',
+  pipeline: '/raise/capital-relationships/pipeline', // D1194: the old pipeline page is retired
+  // D1178 (#3105): the financial model is Use of funds › Runway › Forecast.
+  model: '/raise/use-of-funds/runway/forecast',
+  metrics: '/build/kpi',
+} as const;
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const num = (v: unknown): number | null => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+const day = (v: unknown): string | null => {
+  const s = String(v ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+};
+
+// ---------------------------------------------------------------------------
+// Fundraising readiness
+// ---------------------------------------------------------------------------
+
+/** The readiness items, in the order the card draws them. */
+export const READINESS_ITEMS = [
+  { key: 'narrative', label: 'Investor narrative' },
+  { key: 'deck', label: 'Pitch deck' },
+  { key: 'data_room', label: 'Data room' },
+  { key: 'cap_table', label: 'Cap table' },
+  { key: 'use_of_funds', label: 'Use of funds' },
+  { key: 'traction', label: 'Traction proof' },
+  { key: 'team', label: 'Team' },
+  { key: 'pmf', label: 'Product-market fit' },
+] as const;
+export type ReadinessKey = (typeof READINESS_ITEMS)[number]['key'];
+export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.key);
+export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
+/**
+ * D1610 W4 (owner pick D1): each of the four evidence values has its own
+ * shade, strongest first. Stated is a founder's typed claim: weaker than a
+ * measurement, stronger than a pattern.
+ */
+export const EVIDENCE_TONE: Record<(typeof EVIDENCE)[number], string> = { measured: 'v1', stated: 'v4', pattern: 'v2', anecdote: 'v3' };
+export const EVIDENCE_LEGEND = [
+  { label: 'Measured', tone: 'v1' }, { label: 'Stated', tone: 'v4' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' },
+] as const;
+
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string; input_hash?: string | null };
+export type ItemRow = { id: number; item_key: string; label: string; position: number };
+
+export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
+  const items = await ctx.env.DB.prepare(
+    `SELECT id, item_key, label, position FROM readiness_items WHERE project_id = ? ORDER BY position, id`,
+  ).bind(ctx.projectId).all<ItemRow>();
+  const scores = await ctx.env.DB.prepare(
+    `SELECT s.item_id, i.item_key, s.score, s.evidence, s.missing, s.source, s.scored_at, s.input_hash
+       FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+      WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
+  ).bind(ctx.projectId).all<ScoreRow>();
+  return { items: items.results || [], scores: (scores.results || []).filter(s => READINESS_KEYS.includes(s.item_key) && (s.item_key === 'team' || s.source === 'computed') && !(s.source === 'manual' && s.evidence === 'measured')) };
+}
+
+/** The newest score each item has, as of the end of `asOf` (or now). */
+export function latestScores(scores: ScoreRow[], asOf?: string): Map<number, ScoreRow> {
+  const out = new Map<number, ScoreRow>();
+  for (const s of scores) {
+    if (asOf && String(s.scored_at).slice(0, 10) > asOf) continue;
+    out.set(Number(s.item_id), s); // scores arrive oldest first, so the last wins
+  }
+  return out;
+}
+
+/** The overall score out of 100: the mean of each scored item's newest score. Null with none. */
+export function overallReadiness(latest: Iterable<{ score: number | null }>): number | null {
+  const xs = [...latest].filter(s => s.score != null).map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
+  if (xs.length === 0) return null;
+  return Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10);
+}
+
+/** The overall score at the end of each day a score was given, oldest first. */
+export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score: number }> {
+  const days = [...new Set(scores.map((s) => String(s.scored_at).slice(0, 10)))].sort();
+  const out: Array<{ day: string; score: number }> = [];
+  for (const d of days) {
+    const v = overallReadiness(latestScores(scores, d).values());
+    if (v != null) out.push({ day: d, score: v });
+  }
+  return out;
+}
+
+/** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
+export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable' | 'Shown'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
+export type ComputedScore = {
+  compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[];
+  /** D5071: SHA-256 of the canonical JSON of the exact inputs this check read. Null where the check has none (Team, PMF). */
+  input_hash?: string | null;
+};
+
+/** Canonical JSON: object keys sorted at every depth, so equal inputs always serialise to the same text. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v === undefined ? null : v) ?? 'null';
+}
+/** D5071: the fingerprint of what a check read. Two runs over the same inputs give the same hash. */
+export async function inputHash(inputs: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(canonicalJson(inputs));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'muted' });
+/** Display current or previously stored source labels without storage identifiers. */
+const sourceWords = (source: string | null | undefined) => String(source ?? 'source not recorded')
+  .replaceAll('project_metrics.mrr', 'MRR').replaceAll('project_metrics.paying_accounts', 'paying accounts')
+  .replaceAll('raise_rounds.target_amount (active round)', 'active round target').replaceAll('_', ' ');
+
+type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; connector: boolean; measured: boolean; fresh: boolean; observed_on: string };
+type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
+const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verification === 'verified') || (r.source === 'mercury' && ['verified', 'supported'].includes(r.verification))
+  ? `Connector · ${r.source === 'stripe' ? 'Stripe' : 'Mercury'}`
+  : r.verification === 'supported' && r.has_document ? 'Document · revenue proof' : `Typed · ${sourceWords(r.source)} · Founder's figure`;
+
+/** Latest recorded value of each kind, separately for every stored source. */
+async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const cutoff = daysBefore(today, 90);
+  const mrr = await env.DB.prepare(`SELECT mrr, snapshot_date, source FROM (
+    SELECT mrr, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
+    FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL AND snapshot_date <= ?
+  ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
+    .bind(projectId, today).all<{ mrr: number; snapshot_date: string; source: string }>();
+  const paying = await env.DB.prepare(`SELECT paying_accounts, snapshot_date, source FROM (
+    SELECT paying_accounts, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
+    FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL AND snapshot_date <= ?
+  ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
+    .bind(projectId, today).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
+  const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
+    figure, value: Number(value), connector: ['stripe', 'mercury'].includes(row.source), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
+    source: `${row.source === 'stripe' ? 'Stripe (measured)' : row.source === 'mercury' ? 'Mercury (stated)' : `Metrics (stated: ${sourceWords(row.source || 'source not recorded')})`} · ${figure === 'mrr' ? 'MRR' : 'paying accounts'} on ${row.snapshot_date}`,
+  });
+  return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];
+}
+
+/** Last complete month's receipts, without reading customers, notes or bank lines. */
+async function revenueProofs(env: Env, projectId: number): Promise<RevenueProof[]> {
+  return (await env.DB.prepare(`SELECT source, verification, CASE WHEN proof_document_id IS NULL THEN 0 ELSE 1 END AS has_document,
+    substr(received_on, 1, 7) AS month, MAX(received_on) AS observed_on, SUM(amount_cents) AS cents
+    FROM revenue_entries WHERE project_id = ? AND currency = 'usd'
+      AND received_on >= date('now', 'start of month', '-1 month') AND received_on < date('now', 'start of month')
+    GROUP BY source, verification, CASE WHEN proof_document_id IS NULL THEN 0 ELSE 1 END, substr(received_on, 1, 7)
+    ORDER BY source, verification, has_document`).bind(projectId).all<RevenueProof>()).results || [];
+}
+
+/** Team facts accompany the person's assessment; counts do not invent a competence score. */
+export async function teamReadiness(env: Env, projectId: number): Promise<ComputedScore> {
+  const reads: ReadRow[] = [];
+  try {
+    const team = await env.DB.prepare(`SELECT COUNT(DISTINCT h.id) AS founders,
+      COUNT(DISTINCT CASE WHEN v.start_date IS NOT NULL AND v.total_months > 0 THEN h.id END) AS vesting,
+      COUNT(DISTINCT CASE WHEN LOWER(COALESCE(h.source, 'manual')) NOT IN ('manual', 'typed') THEN h.id END) AS fed
+      FROM cap_table_holders h LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
+      WHERE h.project_id = ? AND h.founder_role IS NOT NULL`).bind(projectId).first<{ founders: number; vesting: number; fed: number }>();
+    // D1264: the label of what was read. A holding a connector did not feed was typed by a founder.
+    const founders = Number(team?.founders ?? 0), fed = Number(team?.fed ?? 0);
+    const label = founders === 0 ? '' : fed === 0 ? ' · Typed' : fed === founders ? ' · Connector' : ' · Connector and Typed';
+    const vesting = Number(team?.vesting ?? 0);
+    reads.push({ a: 'Build · Founding team', b: founders ? `${plural(founders, 'founder', 'founders')} recorded${label}` : 'No founders recorded yet', ...met(founders > 0),
+      next: { text: founders ? 'Open founding team' : 'Add founders', href: `/build/founding-team?project=${projectId}` } });
+    reads.push({ a: 'Founders with vesting', b: vesting ? `${plural(vesting, 'founder', 'founders')} with vesting${label}` : 'No vesting recorded', ...met(vesting > 0),
+      next: { text: vesting ? 'Open cap table' : 'Add vesting', href: `/raise/cap-table?project=${projectId}` } });
+  } catch {
+    reads.push({ a: 'Build · Founding team and vesting', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' });
+  }
+  try {
+    const github = await env.DB.prepare(`SELECT COUNT(DISTINCT login) AS contributors, SUM(commits) AS commits FROM (
+      SELECT LOWER(g.login) AS login, g.repository, g.commits_90d AS commits,
+        ROW_NUMBER() OVER (PARTITION BY LOWER(g.login), g.repository ORDER BY g.updated_at DESC, g.id DESC) AS position
+      FROM github_contributors g JOIN integrations i ON i.id = g.integration_id
+      WHERE g.project_id = ? AND i.provider_key = 'github' AND i.status = 'active'
+        AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+          WHERE p.id = g.project_id AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+            OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))
+    ) WHERE position = 1`).bind(projectId).first<{ contributors: number; commits: number | null }>();
+    const contributors = Number(github?.contributors ?? 0);
+    reads.push({ a: 'GitHub activity', b: `GitHub · ${plural(contributors, 'contributor', 'contributors')} in the last 90 days`,
+      note: `${plural(Number(github?.commits ?? 0), 'commit', 'commits')} · dates not available`, ...met(contributors > 0) });
+  } catch {
+    reads.push({ a: 'GitHub activity', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' });
+  }
+  return { key: 'team', score: null, evidence: null, missing: 'Team is assessed by a person; recorded counts are not a score.', reads };
+}
+
+/**
+ * D1264 (#3287): the Source labels a consistency check compared with, so a
+ * readiness cell says what it read. Stripe and Mercury are Connector, including
+ * a connector named inside a verified-revenue source; the round target and any
+ * metric typed into StudioOS are Typed.
+ */
+export function checkedLabels(metrics: Partial<Record<FigureKey, { source: string }>>, stated: Stated[]): string {
+  const labels = new Set<string>();
+  for (const s of stated) {
+    const m = metrics[s.figure];
+    if (!m) continue;
+    // Stripe and Mercury are anchored at the start. A connector or document
+    // named later (`Verified revenue · Connector · Stripe`) is a separate
+    // literal, so the leading anchor applies to every alternative.
+    const connector = /^(?:Stripe|Mercury)\b/.test(m.source) || m.source.includes('Connector · ');
+    labels.add(connector ? 'Connector' : m.source.includes('Document · ') ? 'Document' : 'Typed');
+  }
+  return ['Connector', 'Document', 'Typed'].filter((l) => labels.has(l)).join(' and ') || 'Typed';
+}
+
+/**
+ * The computed readiness checks — the Lab capital page's data-room readiness
+ * rules (`SpinoutLabCapitalPage.jsx` `buildDataroom`), now stored. Each reads
+ * its recorded stores. Team facts accompany the person's assessment.
+ */
+export async function computeReadiness(env: Env, projectId: number): Promise<ComputedScore[]> {
+  const p = await env.DB.prepare(
+    `SELECT use_of_funds, funding_needed, mrr, paying_customers, revenue FROM projects WHERE id = ?`,
+  ).bind(projectId).first<{ use_of_funds: string | null; funding_needed: number | null; mrr: number | null; paying_customers: number | null; revenue: number | null }>();
+  const deckRows = (await env.DB.prepare('SELECT id, version, is_current, created_at, slides FROM pitch_decks WHERE project_id = ? ORDER BY id')
+    .bind(projectId).all<{ id: number; version: number; is_current: number | null; created_at: string | null; slides: string | null }>()).results || [];
+  const accessible = await readableRoomFiles(env, projectId);
+  const mapped = { results: accessible.filter(f => f.checklist_item != null) };
+  const latestVersion = await env.DB.prepare(
+    `SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0`,
+  ).bind(projectId).first<{ v: number | null }>();
+  const staged = { files: accessible.length, folders: new Set(accessible.map(f => f.folder_id).filter(f => f != null)).size };
+
+  // Each check says what it read beside its score (decision 8); no score changes.
+  const out: ComputedScore[] = [];
+  // D5071. Pitch: 10 only while the CURRENT saved version holds at least one card. A deck row alone
+  // (no current version, or an empty one) is 3: it exists, an investor could not read it. The deck's
+  // preflight findings are computed per request and not stored, so they are not part of this score.
+  const cardsOf = (raw: string | null) => { try { const v = JSON.parse(String(raw ?? '[]')); return Array.isArray(v) ? v.length : 0; } catch { return 0; } };
+  const deckCount = deckRows.length;
+  const current = deckRows.filter((d) => Number(d.is_current) === 1).sort((x, y) => Number(y.version) - Number(x.version))[0] ?? null;
+  const cards = current ? cardsOf(current.slides) : 0;
+  const deckReady = cards > 0;
+  out.push({
+    key: 'deck', score: deckReady ? 10 : deckCount > 0 ? 3 : 0, evidence: 'measured',
+    missing: deckReady ? null : deckCount === 0 ? 'Build the pitch deck.' : current ? 'Add cards to the current deck.' : 'Make a saved version the current deck.',
+    reads: [
+      { a: 'Pitch decks', b: deckCount ? `${plural(deckCount, 'deck saved', 'decks saved')} · Typed` : 'none saved', ...met(deckCount > 0) },
+      { a: 'Current version', b: current ? `v${Number(current.version)} · ${plural(cards, 'card', 'cards')}` : 'none is current', ...met(deckReady, deckCount > 0) },
+    ],
+    input_hash: await inputHash({ decks: await Promise.all(deckRows.map(async (d) => ({ id: d.id, version: d.version, current: Number(d.is_current) === 1, created_at: d.created_at, slides: await inputHash(d.slides ?? '') }))) }),
+  });
+
+  const hasAlloc = parseUseOfFundsValue(p?.use_of_funds).length > 0;
+  const hasTarget = (num(p?.funding_needed) ?? 0) > 0;
+  out.push({
+    key: 'use_of_funds', score: hasAlloc && hasTarget ? 10 : hasAlloc || hasTarget ? 5 : 0, evidence: 'measured',
+    missing: hasAlloc && hasTarget ? null : 'Set a raise target and a 100% allocation.',
+    reads: [
+      { a: 'Raise target', b: hasTarget ? `${usd(Number(p!.funding_needed))} · Typed` : 'not set', ...met(hasTarget) },
+      { a: 'Allocation', b: hasAlloc ? 'split stored · Typed' : 'Not recorded', ...met(hasAlloc) },
+    ],
+    input_hash: await inputHash({ use_of_funds: p?.use_of_funds ?? null, funding_needed: p?.funding_needed ?? null }),
+  });
+
+  // D5071. Cap table: 10 for a RECORDED ownership (holders with shares, from the issuance record); 6 for a
+  // saved model with founders and shares but no recorded holders (the record is what investors diligence);
+  // 3 for a scenario with no usable ownership in it; 0 for none. A read that fails is Unavailable, not 0.
+  let capScore: ComputedScore;
+  try {
+    const cap = await readCapTable(env, projectId);
+    const sharesOf = (rows: unknown) => (Array.isArray(rows) ? rows.filter((h: any) => Number(h?.shares) > 0).length : 0);
+    const recorded = cap.source === 'record' ? sharesOf((cap as any).today?.founding) : 0;
+    const modelHolders = cap.source === 'model' ? Math.max(sharesOf((cap as any).model?.result?.founding), sharesOf((cap as any).model?.inputs?.founders)) : 0;
+    const score = recorded > 0 ? 10 : modelHolders > 0 ? 6 : cap.source === 'model' ? 3 : 0;
+    capScore = {
+      key: 'cap_table', score, evidence: recorded > 0 ? 'measured' : cap.source === 'none' ? 'measured' : 'stated',
+      missing: recorded > 0 ? null : cap.source === 'none' ? 'Set up the cap table.' : modelHolders > 0 ? 'Record your holders so investors see a recorded ownership, not a model.' : 'Add founders and shares to the cap table.',
+      reads: [
+        { a: 'Recorded ownership', b: recorded > 0 ? `${plural(recorded, 'holder', 'holders')} with shares · Typed` : 'no holders recorded', ...met(recorded > 0, cap.source === 'model') },
+        { a: 'Cap table model', b: cap.source === 'model' ? (modelHolders > 0 ? `${plural(modelHolders, 'holder', 'holders')} with shares in the saved scenario · Typed` : 'a scenario is saved, with no shares in it') : cap.source === 'record' ? 'the record is the start' : 'no scenario saved', ...met(modelHolders > 0, cap.source === 'model') },
+      ],
+      input_hash: await inputHash({ source: cap.source, recorded: (cap as any).today?.founding ?? null, model: (cap as any).model?.inputs ?? null }),
+    };
+  } catch {
+    capScore = { key: 'cap_table', score: null, evidence: null, missing: 'Unavailable · the cap table could not be read.', reads: [{ a: 'Cap table', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' }], input_hash: null };
+  }
+  out.push(capScore);
+
+  const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
+  const verifiedRevenue = await verifiedMonthlyRevenue(env, projectId);
+  const metricRows = await metricProofs(env, projectId);
+  const revenueRows = await revenueProofs(env, projectId);
+  const measuredRevenue = revenueRows.some(r => r.cents > 0 && r.verification === 'verified' && revenueSource(r).startsWith('Connector'));
+  const measured = measuredRevenue || metricRows.some(r => r.measured && r.fresh && r.value > 0);
+  const documented = revenueRows.some(r => r.cents > 0 && r.verification === 'supported' && (r.has_document || r.source === 'mercury'));
+  const posthogLines = (await Promise.all((['active_users', 'retention'] as const).map(async (role) => {
+    const f = await posthogFigure(env, projectId, role);
+    const label = role === 'active_users' ? 'Active users' : 'Retention';
+    return f ? { a: `${label} · From PostHog`, b: `${f.unit === 'pct' ? `${Math.round(f.value * 10) / 10}%` : Math.round(f.value).toLocaleString('en-US')} · ${f.name} · as of ${f.as_of}`, c: 'Shown' as const, tone: 'muted' as const, note: 'Shown beside the score; it does not change it.' } : null;
+  }))).filter((x): x is NonNullable<typeof x> => x !== null);
+  const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.fresh && r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  // D5071. Traction is scored by the quality of its proof, not by a signal being present:
+  //   10  measured: connector-verified revenue (Stripe or Mercury) or a fresh measured MRR / paying-accounts figure;
+  //    8  documented: revenue backed by a proof document or a Mercury receipt;
+  //    5  stated: a typed figure or an unverified entry. It is a claim; it can be recorded but not scored as proof;
+  //    0  nothing recorded.
+  // PostHog's figures are shown beside the score and never count (D1607).
+  const tractionScore = measured ? 10 : documented ? 8 : traction ? 5 : 0;
+  out.push({
+    key: 'traction', score: tractionScore, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated',
+    missing: measured ? null : traction ? (documented ? 'Connect Stripe or Mercury to measure it.' : 'Connect Stripe or Mercury, or attach a proof document, to raise this above a stated figure.') : 'Log revenue or update your proof fields.',
+    input_hash: await inputHash({ fields: { revenue: p?.revenue ?? null, mrr: p?.mrr ?? null, paying_customers: p?.paying_customers ?? null }, revenue: revenueRows, metrics: metricRows }),
+    reads: [
+      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
+      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received on ${r.observed_on} · ${sourceWords(r.verification)} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
+      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.connector ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
+      { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
+      { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
+      { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.paying_customers), num(p?.paying_customers) != null) },
+      // D1607 (#2409 decision E, a): PostHog's figures are read lines only; `traction` above never counts them.
+      ...posthogLines,
+    ],
+  });
+  out.push(await teamReadiness(env, projectId));
+
+  const known = new Set((mapped.results || []).map((r) => r.checklist_item).filter((k) => CHECKLIST_KEYS.has(k)));
+  const open = DILIGENCE_CHECKLIST.length - known.size;
+  const files = Number(staged?.files ?? 0);
+  out.push({
+    key: 'data_room', score: Math.round((known.size / DILIGENCE_CHECKLIST.length) * 10), evidence: 'measured',
+    missing: open === 0 ? null : `${plural(open, 'checklist item has', 'checklist items have')} no file.`,
+    reads: [
+      { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')} · Document` : 'none downloadable', ...met(files > 0) },
+      { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items${known.size ? ' · Document' : ''}`, ...met(open === 0, known.size > 0) },
+    ],
+    input_hash: await inputHash({ files: accessible.map((f: any) => ({ id: f.id, checklist_item: f.checklist_item ?? null, folder_id: f.folder_id ?? null, visibility: f.visibility ?? null, updated_at: f.updated_at ?? null })).sort((x: any, y: any) => Number(x.id) - Number(y.id)) }),
+  });
+
+  const v = num(latestVersion?.v);
+  if (v == null) {
+    out.push({
+      key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
+      reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
+      input_hash: await inputHash({ version: null }),
+    });
+  } else {
+    const inputs = await checkInputs(env, projectId, v);
+    // D1607: the score compares its four figures only; PostHog's active users never move it (decision E, a).
+    const scored = new Set<FigureKey>(NARRATIVE_CHECK_FIGURES);
+    const stated = inputs.stated.filter((s) => scored.has(s.figure));
+    const metrics = inputs.metrics;
+    const compared = stated.filter((s) => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+    // Re-score compares the current evidence itself; an empty or stale stored
+    // mismatch list is not proof that a version agrees with today's figures.
+    const mismatches = consistencyCheck(stated, metrics).length;
+    out.push({
+      input_hash: await inputHash({ version: v, stated: stated.map((x) => ({ figure: x.figure, value: x.value })), metrics: Object.fromEntries(Object.entries(metrics).map(([k, m]) => [k, (m as any)?.value ?? null])) }),
+      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
+      missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
+      reads: [
+        { a: 'Newest version', b: `v${v}`, ...met(true) },
+        { a: 'Consistency check', b: compared === 0 ? 'Not enough recorded · nothing compared yet' : `${compared} compared · ${plural(mismatches, 'mismatch', 'mismatches')} · ${checkedLabels(metrics, stated)}`, ...met(compared > 0 && mismatches === 0, compared > 0) },
+      ],
+    });
+  }
+  return out;
+}
+
+/**
+ * `since: 'last'`: whether a computed item needs a new score. D5071: it does when it has none, when
+ * its newest score kept no input hash (a score from before the hash, or from a person), when a fresh
+ * run of the check reads other inputs (its hash differs), or when the check now finds something other
+ * than that score. The hash is of the exact rows and fields the check read, so this no longer rests on
+ * a table's newest timestamp: a deleted row, a typed `projects` field and a date window all change it.
+ */
+export async function changedSinceScored(
+  _env: Env, _projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string; input_hash?: string | null } | undefined,
+): Promise<boolean> {
+  if (!newest) return true;
+  if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
+  if (!newest.input_hash || !c.input_hash) return true;
+  return newest.input_hash !== c.input_hash;
+}
+
+/**
+ * D5071: where a readiness item is fixed. The destination comes from here, from the item's key and what
+ * its score says is missing, never from the readiness page the item is listed on.
+ */
+export type FixTarget = { module_slug: ModuleSlug; href: string; label: string };
+export function readinessFix(ctx: Ctx, key: string, score?: { score: number | null; missing: string | null } | null): FixTarget | null {
+  const base = (slug: ModuleSlug) => href(ctx, slug);
+  const q = `project=${ctx.projectId}`;
+  switch (key) {
+    case 'narrative': {
+      const missing = String(score?.missing ?? '');
+      // No saved version: New version. A version that disagrees with the metrics: the Check tab.
+      if (score == null || score.score == null && /save an investor narrative version/i.test(missing)) return { module_slug: 'investor-narrative', href: `/raise/investor-narrative/new?${q}`, label: 'Save a narrative version' };
+      if (/differ|compared|enough recorded/i.test(missing)) return { module_slug: 'investor-narrative', href: `/raise/investor-narrative/check?${q}`, label: 'Open the narrative check' };
+      return { module_slug: 'investor-narrative', href: base('investor-narrative'), label: 'Open the investor narrative' };
+    }
+    case 'deck': return { module_slug: 'pitch-deck', href: pitchHref(ctx), label: 'Open the Pitch Studio' };
+    case 'data_room': return { module_slug: 'data-room', href: `/raise/data-room/checklist?${q}`, label: 'Open the data room checklist' };
+    case 'cap_table': return { module_slug: 'cap-table', href: base('cap-table'), label: 'Open the cap table' };
+    case 'use_of_funds': return { module_slug: 'use-of-funds', href: base('use-of-funds'), label: 'Open Use of funds' };
+    case 'traction': return { module_slug: 'fundraising-readiness', href: `${TOOL_HREF.metrics}?${q}`, label: 'Open Metrics' };
+    case 'team': return { module_slug: 'fundraising-readiness', href: `/build/founding-team?${q}`, label: 'Open the founding team' };
+    case 'pmf': return { module_slug: 'fundraising-readiness', href: base('fundraising-readiness'), label: 'Open Product-market fit' };
+    default: return null;
+  }
+}
+
+/**
+ * D5071: whether each computed item's newest score still matches the inputs it was scored from.
+ *   current        a fresh run of the check reads the same inputs (same hash)
+ *   stale          it reads other inputs; re-score it
+ *   not_recorded   the newest score kept no hash (older than the column, or no check has scored it)
+ *   unavailable    the check could not be run just now: neither current nor stale is known
+ * Team and PMF are not hashed, so they are absent from the map. Not scored is its own state (no entry).
+ */
+export type Freshness = 'current' | 'stale' | 'not_recorded' | 'unavailable';
+export async function readinessFreshness(ctx: Ctx, latest: Map<number, ScoreRow>, items: ItemRow[]): Promise<Map<string, Freshness>> {
+  const out = new Map<string, Freshness>();
+  let computed: ComputedScore[] | null = null;
+  try { computed = await computeReadiness(ctx.env, ctx.projectId); } catch { computed = null; }
+  for (const i of items) {
+    const s = latest.get(Number(i.id));
+    if (!s || i.item_key === 'team' || i.item_key === 'pmf') continue;
+    if (computed == null) { out.set(i.item_key, 'unavailable'); continue; }
+    const c = computed.find((x) => x.key === i.item_key);
+    if (!c || !c.input_hash) { out.set(i.item_key, 'unavailable'); continue; }
+    out.set(i.item_key, !s.input_hash ? 'not_recorded' : s.input_hash === c.input_hash ? 'current' : 'stale');
+  }
+  return out;
+}
+export const FRESHNESS_WORDS: Record<Freshness, string> = {
+  current: 'Current', stale: 'Stale · its inputs changed', not_recorded: 'Not recorded', unavailable: 'Unavailable',
+};
+
+export async function readinessCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('fundraising-readiness', 'All time', 'Each readiness item by its score out of 10, shaded by evidence; the overall score over time.', 'Readiness scores'), async (): Promise<CardBody> => {
+    const { items, scores } = await loadReadiness(ctx);
+    if (items.length === 0) {
+      return {
+        state: 'empty', series: null,
+        next: { text: 'Score readiness', href: `${href(ctx, 'fundraising-readiness')}&add=1` },
+        reason: 'No readiness score yet. Readiness by evidence appears here.',
+      };
+    }
+    const latest = latestScores(scores);
+    const history = readinessHistory(scores);
+    const series: unknown[] = [{
+      kind: 'hbar',
+      items: items.map((i) => {
+        const s = latest.get(Number(i.id));
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? (EVIDENCE_TONE as Record<string, string>)[s.evidence] ?? 'grey' : 'grey' };
+      }),
+      legend: EVIDENCE_LEGEND.map((l) => ({ ...l })),
+    }];
+    if (history.length > 0) {
+      series.push({
+        kind: 'line', values: history.map((h) => h.score), target: 100, target_label: 'ready · 100',
+        labels: [{ at: 0, label: history[0].day }, { at: history.length - 1, label: history[history.length - 1].day }],
+      });
+    }
+    series.push(await benchmarkSpec(ctx));
+    const team = await teamReadiness(ctx.env, ctx.projectId);
+    series.push({ kind: 'rows', items: team.reads.map(r => ({ label: r.a, value: r.b, tone: r.tone, ...(r.note ? { note: r.note } : {}), ...(r.next ? { next: r.next } : {}) })) });
+    const unscored = items.filter((i) => !latest.has(Number(i.id)));
+    const gapItem = items.find((i) => { const s = latest.get(Number(i.id)); return !!(s && s.missing); });
+    const gap = gapItem ? latest.get(Number(gapItem.id)) : undefined;
+    // D5071: the step opens the workflow that fixes that item, not the readiness page it is listed on.
+    const gapFix = gapItem && gap ? readinessFix(ctx, gapItem.item_key, { score: gap.score != null ? Number(gap.score) : null, missing: gap.missing ?? null }) : null;
+    const next = gap
+      ? { text: String(gap.missing), href: gapFix?.href ?? href(ctx, 'fundraising-readiness') }
+      : unscored.length > 0
+        ? { text: `Score ${plural(unscored.length, 'item', 'items')} no check can measure`, href: href(ctx, 'fundraising-readiness') }
+        : null;
+    return { state: countState(latest.size), series, next, reason: null };
+  });
+}
+
+/**
+ * The peer benchmark beside the founder's own venture score, as a rows spec
+ * (#1524). Its own failure is said in its own row: the readiness card does
+ * not become unreadable because the benchmark could not be read.
+ */
+export function benchmarkRows(b: PeerBenchmark): Array<{ label: string; value: string | number | null; tone?: string }> {
+  const own = { label: 'Your Lab score', value: b.own_score };
+  if (b.state === 'ok' && b.group) {
+    return [
+      own,
+      { label: `Peer median · ${b.group.size} ${b.group.label}`, value: b.p50 },
+      { label: 'Middle half of peers', value: `${b.p25}–${b.p75}` },
+      { label: 'Your percentile', value: `${b.percentile}th`, tone: 'v1' },
+    ];
+  }
+  return [own, { label: 'Peer benchmark', value: b.reason, tone: 'muted' }];
+}
+
+async function benchmarkSpec(ctx: Ctx): Promise<unknown> {
+  try {
+    return { kind: 'rows', items: benchmarkRows(await peerBenchmark(ctx.env, ctx.projectId)) };
+  } catch (e) {
+    console.warn('[raiseCycle] peer benchmark unreadable:', (e as Error)?.message);
+    return { kind: 'rows', items: [{ label: 'Peer benchmark', value: 'The peer benchmark could not be read.', tone: 'bad' }] };
+  }
+}
+
+const READINESS_STATES = [{ value: 'scored', label: 'Scored' }, { value: 'gap', label: 'Has a gap' }, { value: 'not_scored', label: 'Not scored' }];
+
+async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const { items, scores } = await loadReadiness(ctx);
+  const latest = latestScores(scores);
+  let rows = items.map((i) => ({ i, s: latest.get(Number(i.id)) ?? null })).filter(({ i }) => has(rq.q, i.label));
+  const state = rq.filter.state;
+  if (state === 'scored') rows = rows.filter(({ s }) => s?.score != null);
+  else if (state === 'gap') rows = rows.filter(({ s }) => s != null && String(s.missing ?? '').trim() !== '');
+  else if (state === 'not_scored') rows = rows.filter(({ s }) => s?.score == null);
+  // Score, highest first, is the default; an item no one scored comes last.
+  if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
+  const fresh = await readinessFreshness(ctx, latest, items);
+  return paged(
+    [col('item', 'Item'), col('score', 'Score'), col('evidence', 'Evidence'), col('missing', 'Missing'), col('freshness', 'Freshness'), col('updated', 'Updated')],
+    rows.map(({ i, s }) => ({
+      // D691 decision 3: the item's key, the same in every list, record and write.
+      id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
+      cells: {
+        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
+        missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
+        // D5071: Stale / Current / Not recorded / Unavailable; an item no check scored has none (it is Not scored).
+        freshness: fresh.has(i.item_key) ? FRESHNESS_WORDS[fresh.get(i.item_key)!] : null,
+        // D5071: the workflow that fixes this item, from the domain table, never inferred from this page.
+        fix_href: readinessFix(ctx, i.item_key, s ? { score: s.score != null ? Number(s.score) : null, missing: s.missing ?? null } : null)?.href ?? null,
+      },
+    })),
+    rq.page,
+    {
+      filters: [{ key: 'state', label: 'State', options: READINESS_STATES }],
+      sorts: [{ key: 'score', label: 'Score' }, { key: 'order', label: 'Order' }],
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Investor narrative — versions and the consistency check
+// ---------------------------------------------------------------------------
+
+export const INVESTOR_TYPES = ['angel', 'pre_seed_fund', 'seed_fund', 'series_a_fund', 'strategic', 'grant', 'other'] as const;
+export const INVESTOR_TYPE_LABEL: Record<string, string> = {
+  angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
+  strategic: 'Strategic', grant: 'Grant', other: 'Other',
+};
+/** The marker row every saved version carries, so a version with no override still exists. */
+export const VERSION_MARKER_KEY = '_version';
+
+/**
+ * Every figure a Raise claim states, read by fixed patterns (D1264, #3287:
+ * #2430's list, MRR to the raise). The narrative check (`narrative_checks`,
+ * kept for readiness) still compares only `NARRATIVE_CHECK_FIGURES`, the ones
+ * its metric side reads; `raise_claims` checks every figure against the
+ * pinned evidence (`raiseClaims.ts`).
+ */
+export const FIGURES = [
+  'mrr', 'arr', 'paying_customers', 'revenue', 'revenue_growth', 'net_burn', 'runway', 'churn', 'cac',
+  'interviews', 'lois', 'waitlist', 'pilots', 'headcount', 'raise',
+  // D1607 (#3731): active users, which the narrative check reads from the founder's PostHog.
+  'active_users',
+] as const;
+export type FigureKey = (typeof FIGURES)[number];
+/** The figures readiness' narrative score compares. D1607: `active_users` is checked and shown, never scored (#2409 decision E, a). */
+export const NARRATIVE_CHECK_FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const satisfies readonly FigureKey[];
+export const FIGURE_LABEL: Record<FigureKey, string> = {
+  mrr: 'MRR', arr: 'ARR', paying_customers: 'Paying customers', revenue: 'Monthly revenue', revenue_growth: 'Revenue growth',
+  net_burn: 'Net burn', runway: 'Runway', churn: 'Churn', cac: 'CAC', interviews: 'Customer interviews', lois: 'Letters of intent',
+  waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise', active_users: 'Active users',
+};
+/** What a figure counts: dollars, a percentage, months, or a whole number. */
+export const FIGURE_UNIT: Record<FigureKey, 'money' | 'percent' | 'months' | 'count'> = {
+  mrr: 'money', arr: 'money', paying_customers: 'count', revenue: 'money', revenue_growth: 'percent', net_burn: 'money',
+  runway: 'months', churn: 'percent', cac: 'money', interviews: 'count', lois: 'count', waitlist: 'count', pilots: 'count',
+  headcount: 'count', raise: 'money', active_users: 'count',
+};
+
+export type Stated = { figure: FigureKey; value: number; source: string };
+export type Mismatch = { figure: FigureKey; stated_value: number; stated_source: string; metric_value: number; metric_source: string };
+
+const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, billion: 1e9 };
+const amount = (digits: string, scale?: string) => {
+  const n = Number(digits.replace(/,/g, ''));
+  return Number.isFinite(n) ? n * (scale ? SCALE[scale.toLowerCase()] ?? 1 : 1) : NaN;
+};
+
+/**
+ * The figures a piece of narrative wording states, read by fixed patterns —
+ * never by a model. Only a figure stated in a recognisable form is read; a
+ * sentence with no figure states none.
+ */
+export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
+  const out: Stated[] = [];
+  const src = `Narrative · ${fieldKey}`;
+  const t = String(text ?? '');
+  const MONEY = String.raw`\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k|m|b|thousand|million|billion)?\b`;
+  const mrr = new RegExp(`${MONEY}\\s*(?:in\\s+)?(?:MRR|monthly recurring revenue)`, 'i').exec(t)
+    || new RegExp(`(?:MRR|monthly recurring revenue)\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i').exec(t);
+  if (mrr) { const v = amount(mrr[1], mrr[2]); if (Number.isFinite(v)) out.push({ figure: 'mrr', value: v, source: src }); }
+  const cust = /(\d[\d,]*)\s+paying\s+(?:customers|accounts)/i.exec(t);
+  if (cust) { const v = amount(cust[1]); if (Number.isFinite(v)) out.push({ figure: 'paying_customers', value: v, source: src }); }
+  const raise = new RegExp(`rais(?:e|ing)\\s+(?:a\\s+|an\\s+|our\\s+)?${MONEY}`, 'i').exec(t);
+  if (raise) { const v = amount(raise[1], raise[2]); if (Number.isFinite(v)) out.push({ figure: 'raise', value: v, source: src }); }
+  const revenue = new RegExp(`${MONEY}\\s*(?:in\\s+)?monthly revenue`, 'i').exec(t)
+    || new RegExp(`monthly revenue\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i').exec(t);
+  if (revenue) { const v = amount(revenue[1], revenue[2]); if (Number.isFinite(v)) out.push({ figure: 'revenue', value: v, source: src }); }
+  // D1264 (#3287): the rest of #2430's figures. Each needs its words beside
+  // the number, so a bare number is never read as any of them.
+  const PCT = String.raw`(\d{1,3}(?:\.\d+)?)\s*%`;
+  const COUNT = String.raw`(\d[\d,]*)`;
+  const more: Array<[FigureKey, RegExp[], boolean]> = [
+    ['arr', [new RegExp(`${MONEY}\\s*(?:in\\s+)?(?:ARR|annual recurring revenue)`, 'i'), new RegExp(`(?:ARR|annual recurring revenue)\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i')], true],
+    ['revenue_growth', [new RegExp(`${PCT}\\s*(?:month[- ]over[- ]month\\s+|MoM\\s+|monthly\\s+)?(?:revenue\\s+)?growth`, 'i'), new RegExp(`revenue growth\\s*(?:of|is|at|:|=)?\\s*${PCT}`, 'i')], false],
+    ['net_burn', [new RegExp(`(?:net\\s+)?burn(?:\\s+rate)?\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i'), new RegExp(`${MONEY}\\s*(?:a month\\s+|per month\\s+|monthly\\s+)?(?:net\\s+)?burn`, 'i')], true],
+    ['runway', [/(\d{1,3}(?:\.\d+)?)\s*months?\s+of\s+runway/i, /runway\s*(?:of|is|:|=)?\s*(\d{1,3}(?:\.\d+)?)\s*months?/i], false],
+    ['churn', [new RegExp(`${PCT}\\s*(?:monthly\\s+)?(?:customer\\s+|logo\\s+|revenue\\s+)?churn`, 'i'), new RegExp(`churn(?:\\s+rate)?\\s*(?:of|is|at|:|=)?\\s*${PCT}`, 'i')], false],
+    ['cac', [new RegExp(`(?:CAC|customer acquisition cost)\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i'), new RegExp(`${MONEY}\\s*(?:CAC|customer acquisition cost)`, 'i')], true],
+    ['interviews', [new RegExp(`${COUNT}\\s+(?:customer\\s+|discovery\\s+|user\\s+)?interviews`, 'i')], false],
+    ['lois', [new RegExp(`${COUNT}\\s+(?:signed\\s+)?(?:letters? of intent|LOIs?)\\b`, 'i')], false],
+    ['waitlist', [new RegExp(`${COUNT}\\s+(?:people\\s+)?(?:on\\s+(?:the|our)\\s+waitlist|waitlist sign-?ups)`, 'i'), new RegExp(`waitlist of\\s+${COUNT}`, 'i')], false],
+    ['pilots', [new RegExp(`${COUNT}\\s+(?:paid\\s+|active\\s+|signed\\s+)?pilots?\\b`, 'i')], false],
+    // D1607: "1,240 weekly active users", "MAU of 3,000"; the words beside the number, never a bare number.
+    ['active_users', [new RegExp(`${COUNT}\\s+(?:weekly\\s+|monthly\\s+|daily\\s+)?active users`, 'i'), new RegExp(`(?:WAU|MAU|DAU)\\s*(?:of|is|at|:|=)\\s*${COUNT}`, 'i')], false],
+    ['headcount', [new RegExp(`team of\\s+${COUNT}`, 'i'), new RegExp(`headcount\\s*(?:of|is|:|=)?\\s*${COUNT}`, 'i'), new RegExp(`${COUNT}\\s+(?:full-time\\s+)?(?:employees|team members)`, 'i')], false],
+  ];
+  for (const [figure, patterns, money] of more) {
+    const m = patterns.map((p) => p.exec(t)).find(Boolean);
+    if (!m) continue;
+    const v = money ? amount(m[1], m[2]) : amount(m[1]);
+    if (Number.isFinite(v)) out.push({ figure, value: v, source: src });
+  }
+  return out;
+}
+
+/** Two figures agree within 2% (or within 1 for small counts). */
+export function agrees(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(1, 0.02 * Math.max(Math.abs(a), Math.abs(b)));
+}
+
+/**
+ * Every stated figure that differs from the stored metric for the same
+ * figure. Each mismatch carries both values and both sources; a figure with
+ * no stored metric is not a mismatch, because there is nothing to compare.
+ */
+export function consistencyCheck(stated: Stated[], metrics: Partial<Record<FigureKey, { value: number; source: string }>>): Mismatch[] {
+  const out: Mismatch[] = [];
+  for (const s of stated) {
+    const m = metrics[s.figure];
+    if (!m || !Number.isFinite(m.value) || !Number.isFinite(s.value)) continue;
+    if (agrees(s.value, m.value)) continue;
+    out.push({ figure: s.figure, stated_value: s.value, stated_source: s.source, metric_value: m.value, metric_source: m.source });
+  }
+  return out;
+}
+
+/**
+ * The sections whose words live in `narrative_sections.body`, not in the deck
+ * overrides (D908): `narrative/store.ts`'s `store: 'section'` rows, which a
+ * parity test holds to this list. A figure typed there is stated by the
+ * narrative like any other, under the field key `section:<key>`.
+ */
+export const SECTION_STORE_KEYS = Object.freeze(['solution', 'business_model', 'team'] as const);
+
+/** One version's section-store words, as `section:<key>` fields; an empty body states nothing. */
+export async function narrativeSectionWords(env: Env, projectId: number, version: number): Promise<Array<{ field_key: string; value: string }>> {
+  const r = await env.DB.prepare(
+    "SELECT section, body FROM narrative_sections WHERE project_id = ? AND version = ? AND section IN (SELECT value FROM json_each(?)) AND body IS NOT NULL AND body <> '' ORDER BY section",
+  ).bind(projectId, version, JSON.stringify(SECTION_STORE_KEYS)).all<{ section: string; body: string }>();
+  return (r.results || []).map((x) => ({ field_key: `section:${x.section}`, value: x.body }));
+}
+
+/** What this narrative version states and what its metric stores hold. */
+export async function checkInputs(env: Env, projectId: number, version: number) {
+  const stated: Stated[] = [];
+  // A deck is not compared until it binds a narrative version (#2434).
+  const words = await env.DB.prepare(
+    'SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key != ? ORDER BY field_key',
+  ).bind(projectId, version, VERSION_MARKER_KEY).all<{ field_key: string; value: string }>();
+  for (const w of words.results || []) stated.push(...parseStatedFigures(w.field_key, w.value));
+  // Why now has no deck key: it lives in the version's meta (D691 decision 7).
+  const meta = await env.DB.prepare('SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+    .bind(projectId, version).first<{ why_now: string | null; check_against_json: string | null }>();
+  if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
+  for (const w of await narrativeSectionWords(env, projectId, version)) stated.push(...parseStatedFigures(w.field_key, w.value));
+
+  const metrics = selectedCheckSources(meta?.check_against_json).includes('metrics') ? await narrativeMetrics(env, projectId) : {};
+  const compared = stated.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+  return { stated, metrics, compared };
+}
+
+/** Read the common metric side once when several versions are listed. */
+async function narrativeMetrics(env: Env, projectId: number) {
+  const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
+  const proofs = await metricProofs(env, projectId);
+  for (const key of ['mrr', 'paying_customers'] as const) {
+    const proof = proofs.find(r => r.figure === key);
+    if (proof) metrics[key] = { value: proof.value, source: proof.source };
+  }
+  const round = await env.DB.prepare(
+    `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
+  ).bind(projectId).first<{ target_amount: number }>();
+  if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · active round target' };
+  // D1607 (#3731): active users from the founder's PostHog, the metric they said measures them.
+  const users = await posthogFigure(env, projectId, 'active_users');
+  if (users) metrics.active_users = { value: users.value, source: users.source };
+  const verified = await verifiedMonthlyRevenue(env, projectId);
+  if (verified) {
+    const sources = (await revenueProofs(env, projectId)).filter(r => r.verification === 'verified').map(revenueSource);
+    metrics.revenue = { value: verified.cents / 100, source: `Verified revenue · ${[...new Set(sources)].join(', ')} · ${verified.month}` };
+  }
+  else {
+    const bank = (await mercuryFacts(env, projectId, 'revenue')).filter(f => f.fact_key !== 'revenue:growth' && f.amount_cents != null).sort((a,b) => String(b.label).localeCompare(String(a.label)))[0];
+    if (bank) metrics.revenue = { value: Number(bank.amount_cents) / 100, source: `Mercury revenue credits · ${bank.label} · measured ${bank.as_of}` };
+  }
+  return metrics;
+}
+
+export type VersionRow = {
+  version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number;
+  /** D909: where the version started (`narrative_version_meta`), null when it was saved before 463 recorded it. */
+  start_from: string | null; based_on_version: number | null;
+  /** D909: who saved it, by name; null when no name is recorded. */
+  by: string | null;
+};
+
+export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
+  const res = await ctx.env.DB.prepare(
+    `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at
+       FROM spinout_deck_overrides o
+      WHERE o.project_id = ? AND o.version > 0
+      GROUP BY o.version ORDER BY o.version DESC`,
+  ).bind(ctx.projectId).all<Pick<VersionRow, 'version' | 'investor_type' | 'deck_version' | 'saved_at'>>();
+  const versions = res.results || [];
+  if (!versions.length) return [];
+  const words = await ctx.env.DB.prepare(
+    'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
+  ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
+  const meta = await ctx.env.DB.prepare(
+    `SELECT m.version, m.why_now, m.check_against_json, m.start_from, m.based_on_version, u.name AS by_name
+       FROM narrative_version_meta m LEFT JOIN users u ON u.id = m.created_by
+      WHERE m.project_id = ? AND m.version > 0`,
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null; start_from: string | null; based_on_version: number | null; by_name: string | null }>();
+  const metaOf = new Map((meta.results || []).map((m) => [Number(m.version), m]));
+
+  const stated = new Map<number, Stated[]>();
+  for (const word of words.results || []) {
+    const key = Number(word.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures(word.field_key, word.value)]);
+  }
+  for (const row of meta.results || []) if (row.why_now) {
+    const key = Number(row.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures('why_now', row.why_now)]);
+  }
+  const choices = new Map((meta.results || []).map(m => [Number(m.version), selectedCheckSources(m.check_against_json)]));
+  const commonMetrics = versions.some(v => (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics')) ? await narrativeMetrics(ctx.env, ctx.projectId) : {};
+  return versions.map((v) => {
+    const metrics = (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics') ? commonMetrics : {};
+    const values = stated.get(Number(v.version)) || [];
+    const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+    const m = metaOf.get(Number(v.version));
+    return {
+      ...v, compared, mismatches: consistencyCheck(values, metrics).length,
+      start_from: m?.start_from ?? null, based_on_version: m?.based_on_version == null ? null : Number(m.based_on_version),
+      by: String(m?.by_name ?? '').trim() || null,
+    };
+  });
+}
+
+/**
+ * D909: where a version started, as the versions table and the Versions tab
+ * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
+ * a Spin-Out venture reads it by that name; any other venture's earlier
+ * versions copied it under today's name, "The live deck".
+ */
+export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
+  if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
+  if (v.start_from === 'blank') return 'Blank';
+  if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
+  return null;
+}
+
+export const fmtFigure = (f: FigureKey, v: number) => {
+  const unit = FIGURE_UNIT[f];
+  if (unit === 'count') return Math.round(v).toLocaleString('en-US');
+  if (unit === 'percent') return `${Number(v.toFixed(2))}%`;
+  if (unit === 'months') return `${Number(v.toFixed(1))} months`;
+  return usd(v);
+};
+/** One mismatch as a sentence that names both figures and both sources. */
+export function mismatchSentence(m: Mismatch): string {
+  return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${sourceWords(m.stated_source)}, ${fmtFigure(m.figure, m.metric_value)} in ${sourceWords(m.metric_source)}`;
+}
+
+export async function narrativeCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('investor-narrative', 'All versions', 'Saved narrative versions by investor type, and what the consistency check found in the newest.', 'Narrative versions'), async (): Promise<CardBody> => {
+    const versions = await loadVersions(ctx);
+    if (versions.length === 0) {
+      return { state: 'empty', series: null, next: { text: 'New version', href: `${href(ctx, 'investor-narrative')}&add=1` }, reason: 'No narrative saved yet. Each version appears here.' };
+    }
+    const byType = new Map<string, number>();
+    for (const v of versions) {
+      const k = v.investor_type ?? 'other';
+      byType.set(k, (byType.get(k) ?? 0) + 1);
+    }
+    const newest = versions[0];
+    const inputs = await checkInputs(ctx.env, ctx.projectId, newest.version);
+    const found = consistencyCheck(inputs.stated, inputs.metrics);
+    const series: unknown[] = [
+      { kind: 'hbar', items: [...byType.entries()].map(([k, n]) => ({ label: INVESTOR_TYPE_LABEL[k] ?? k, value: n, tone: 'v1' })) },
+      {
+        kind: 'rows',
+        items: [
+          { label: `Newest · v${newest.version} · ${INVESTOR_TYPE_LABEL[newest.investor_type ?? 'other'] ?? 'Other'}`, value: day(newest.saved_at) },
+          { label: 'Comparison', value: inputs.compared ? `${inputs.compared} compared · ${plural(found.length, 'mismatch', 'mismatches')}` : 'Nothing compared yet', tone: !inputs.compared ? 'muted' : found.length ? 'warn' : 'ok' },
+          ...found.map((m) => ({ label: FIGURE_LABEL[m.figure as FigureKey] ?? m.figure, value: mismatchSentence(m), tone: 'warn' })),
+        ],
+      },
+    ];
+    const next = found.length
+      ? { text: `Reconcile ${plural(found.length, 'figure', 'figures')} the narrative states differently from the metrics`, href: `/raise/investor-narrative/check?project_id=${ctx.projectId}` }
+      : null;
+    return { state: 'ok', series, next, reason: null };
+  });
+}
+
+/**
+ * D909 (#2693, NAR1 and NAR12): what Home's tiles, "Needs you" and the
+ * Versions tab read, in one part of the module read (`parts.narrative`):
+ *   - `versions`: every saved version, newest first, with where it started,
+ *     when and by whom it was saved, and which cards of the current deck read
+ *     it (`services/narrative/readers.ts`);
+ *   - `newest`: the newest version's check, as the card states it: how many
+ *     figures were compared and each mismatch, figure by figure;
+ *   - `deck`: the current deck, and whether any of its cards reads a version;
+ *   - `spinout`: whether New version offers the Spin-Out deck wording;
+ *   - `objections` (D913): the objections investors raised, project-wide,
+ *     `{ state: 'unreadable' }` on its own when the feedback cannot be read.
+ * Claims backed (#2430) has no store, so the part carries none; the page says why.
+ */
+export async function narrativeHome(ctx: Ctx) {
+  const [versions, readers, objections] = await Promise.all([
+    loadVersions(ctx), deckReaders(ctx.env, ctx.projectId),
+    readObjections(ctx.env, ctx.projectId).catch((e) => {
+      console.warn('[raiseCycle] objections unreadable:', (e as Error)?.message);
+      return { state: 'unreadable' as const };
+    }),
+  ]);
+  const newest = versions[0] ?? null;
+  const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
+  const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  return {
+    state: 'ok' as const,
+    versions: versions.map((v) => {
+      const cards = readers.deck ? readers.byVersion.get(Number(v.version)) ?? [] : [];
+      return {
+        version: Number(v.version), audience: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout), saved: day(v.saved_at), by: v.by,
+        read_by: cards.length ? { deck_version: readers.deck!.version, cards } : null,
+      };
+    }),
+    newest: newest && {
+      version: Number(newest.version), compared: inputs!.compared,
+      mismatches: found.map((m) => ({ figure: FIGURE_LABEL[m.figure], sentence: mismatchSentence(m) })),
+    },
+    deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
+    spinout: readers.spinout,
+    objections,
+  };
+}
+
+async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const readers = await deckReaders(ctx.env, ctx.projectId);
+  let rows = (await loadVersions(ctx)).filter((v) => has(rq.q, INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'], `v${v.version}`));
+  if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
+  if (rq.sort === 'oldest') rows.reverse();
+  // D909 (NAR1): the canvas's columns less Claims backed, which waits for #2430's claim check.
+  return paged(
+    [col('version', 'Version'), col('investor_type', 'Audience'), col('based_on', 'Based on'), col('mismatches', 'Mismatches'),
+      col('deck', 'Read by deck'), col('date', 'Saved'), col('by', 'By')],
+    rows.map((v) => ({
+      id: v.version,
+      cells: {
+        version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout),
+        mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: readBySentence(readers, Number(v.version)),
+        date: day(v.saved_at),
+        by: v.by,
+      },
+    })),
+    rq.page,
+    {
+      filters: [{ key: 'investor_type', label: 'Audience', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
+      sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pitch deck — views and per-slide time
+// ---------------------------------------------------------------------------
+
+export { MAX_SLIDE_INDEX, capSlideSeconds, slideTotals, recordSlideSeconds } from './deckSlideDwell';
+
+/** Views per week, oldest first, over the last `n` weeks. */
+async function weeklyViews(ctx: Ctx, n: number): Promise<number[]> {
+  const res = await ctx.env.DB.prepare(
+    `SELECT CAST((julianday(?) - julianday(substr(v.created_at, 1, 10))) / 7 AS INTEGER) AS wk, COUNT(*) AS n
+       FROM deck_share_views v JOIN pitch_decks d ON d.id = v.deck_id
+      WHERE d.project_id = ? AND julianday(substr(v.created_at, 1, 10)) <= julianday(?)
+        AND julianday(?) - julianday(substr(v.created_at, 1, 10)) < ? * 7
+      GROUP BY wk`,
+  ).bind(ctx.today, ctx.projectId, ctx.today, ctx.today, n).all<{ wk: number; n: number }>();
+  const out = new Array(n).fill(0);
+  for (const r of res.results || []) {
+    const wk = Number(r.wk);
+    if (wk >= 0 && wk < n) out[n - 1 - wk] = Number(r.n);
+  }
+  return out;
+}
+
+export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('pitch-deck', 'Last 8 weeks', 'Share-link views per week, and the seconds investors spent on each slide.', 'Deck share views'), async (): Promise<CardBody> => {
+    const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
+    if (!deck) return { state: 'empty', series: null, next: { text: 'Build your deck', href: TOOL_HREF.pitch }, reason: 'No deck yet. Views per week appear here.' };
+    const total = await ctx.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM deck_share_views v JOIN pitch_decks d ON d.id = v.deck_id WHERE d.project_id = ?',
+    ).bind(ctx.projectId).first<{ n: number }>();
+    if (Number(total?.n ?? 0) === 0) {
+      return { state: 'empty', series: null, next: { text: 'Share the deck with an investor', href: shareHref(ctx) }, reason: 'No one has opened a deck link yet.' };
+    }
+    const weeks = await weeklyViews(ctx, 8);
+    const slides = await ctx.env.DB.prepare(
+      `SELECT s.slide_index, SUM(s.seconds) AS seconds
+         FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id JOIN pitch_decks d ON d.id = v.deck_id
+        WHERE d.project_id = ? GROUP BY s.slide_index ORDER BY s.slide_index`,
+    ).bind(ctx.projectId).all<{ slide_index: number; seconds: number }>();
+    const per = (slides.results || []).filter((r) => Number(r.seconds) > 0);
+    const series: unknown[] = [{ kind: 'vbars', values: weeks, labels: [{ at: 0, label: '8 wk ago' }, { at: 7, label: 'This wk' }] }];
+    series.push(per.length
+      ? { kind: 'hbar', items: per.map((r) => ({ label: `Slide ${Number(r.slide_index) + 1}`, value: Number(r.seconds), tone: 'v2' })) }
+      : { kind: 'rows', items: [{ label: 'Seconds per slide', value: null }] });
+    return { state: 'ok', series, next: null, reason: null };
+  });
+}
+
+/**
+ * A link's time on deck, in the seconds the viewer reported (D1111): m:ss for
+ * the eye, and the seconds themselves. None reported is null, "Not recorded",
+ * never "0 min": a view that sends no time stores 0.
+ */
+export function timeOnDeck(seconds: unknown): Cell {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return null;
+  return { text: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, seconds: s };
+}
+
+/** A link made with "Never" stores this expiry: the column is NOT NULL (D691 decision 5). */
+export const NEVER_EXPIRES = '9999-12-31 23:59:59';
+
+async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const res = await ctx.env.DB.prepare(
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.last_viewed_at, t.investor_label,
+            p.name AS prospect_name, p.firm AS prospect_firm,
+            (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
+            (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
+              WHERE v.share_token_id = t.id GROUP BY s.slide_index HAVING SUM(s.seconds) > 0
+              ORDER BY SUM(s.seconds) DESC, s.slide_index LIMIT 1) AS top_slide
+       FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id
+       LEFT JOIN raise_prospects p ON p.id = t.prospect_id AND p.project_id = d.project_id
+      WHERE d.project_id = ? ORDER BY t.created_at DESC, t.id DESC`,
+  ).bind(ctx.projectId).all<any>();
+  // A link needs a deck: with none, the Add builds one first (D695 decision 11).
+  const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  // Used up is the engagement read's own rule (D895, deckShareUse.ts): part 1's
+  // promise, so every version's links say it, not only the current one's (D1111).
+  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired'
+    : deckShareMetrics(t).exhausted ? 'used_up' : 'active');
+  // The investor a link was made for: a prospect still of this venture, else the
+  // name typed in. A link made before 463 recorded neither, so it is named by its day.
+  const investor = (t: any) => [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
+    || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
+  const expires = (t: any): Cell => {
+    const st = status(t);
+    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : st === 'used_up' ? 'Used up' : 'Expired', tone: 'muted' };
+    return { text: String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10)) ? 'Never' : day(t.expires_at) ?? '', tone: 'ok' };
+  };
+  let rows = (res.results || []).filter((t) => has(rq.q, investor(t), day(t.created_at)));
+  if (rq.filter.status) rows = rows.filter((t) => status(t) === rq.filter.status);
+  if (rq.sort === 'views') rows.sort((a, b) => Number(b.view_count) - Number(a.view_count));
+  else if (rq.sort !== 'newest') {
+    // Last viewed, the default: the most recent open first, a link never opened last.
+    rows.sort((a, b) => String(b.last_viewed_at ?? '').localeCompare(String(a.last_viewed_at ?? '')));
+  }
+  return paged(
+    [col('link', 'Investor'), col('expires', 'Expires'), col('views', 'Views'), col('time', 'Time on deck'), col('most_read', 'Most read')],
+    rows.map((t) => ({
+      id: t.id,
+      cells: {
+        link: investor(t),
+        expires: expires(t),
+        views: Number(t.view_count) || 0,
+        time: timeOnDeck(t.seconds),
+        most_read: t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`,
+      },
+    })),
+    rq.page,
+    {
+      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'used_up', label: 'Used up' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
+      sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
+      add: deck ? { text: 'New link', href: shareHref(ctx) } : { text: 'Build your deck', href: TOOL_HREF.pitch },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data room — the diligence checklist
+// ---------------------------------------------------------------------------
+
+/** The diligence checklist a data-room file can answer. Fixed; `data_room_files.checklist_item` holds a key. */
+export const DILIGENCE_CHECKLIST = [
+  { key: 'incorporation', area: 'Company', label: 'Certificate of incorporation' },
+  { key: 'board_consents', area: 'Company', label: 'Bylaws and board consents' },
+  { key: 'financial_statements', area: 'Financials', label: 'Financial statements' },
+  { key: 'financial_model', area: 'Financials', label: 'Financial model' },
+  { key: 'ip_assignment', area: 'Legal', label: 'IP assignment agreements' },
+  { key: 'material_contracts', area: 'Legal', label: 'Material contracts' },
+  { key: 'customer_contracts', area: 'Customers', label: 'Customer contracts and LOIs' },
+  { key: 'sales_pipeline', area: 'Customers', label: 'Sales pipeline' },
+  { key: 'employment', area: 'Team', label: 'Employment and contractor agreements' },
+  { key: 'option_plan', area: 'Team', label: 'Option plan and grants' },
+  { key: 'product_overview', area: 'Product', label: 'Product overview and roadmap' },
+  { key: 'security', area: 'Product', label: 'Security and privacy' },
+] as const;
+export const CHECKLIST_KEYS: Set<string> = new Set(DILIGENCE_CHECKLIST.map((c) => c.key));
+export const CHECKLIST_AREAS: string[] = [...new Set(DILIGENCE_CHECKLIST.map((c) => c.area))];
+export const checklistLabel = (k: string | null) => DILIGENCE_CHECKLIST.find((c) => c.key === k)?.label ?? null;
+
+/** Each area's share of its checklist items that at least one file answers. */
+export function checklistCoverage(mapped: Iterable<string>): Array<{ area: string; pct: number }> {
+  const have = new Set([...mapped].filter((k) => CHECKLIST_KEYS.has(k)));
+  return CHECKLIST_AREAS.map((area) => {
+    const items = DILIGENCE_CHECKLIST.filter((c) => c.area === area);
+    return { area, pct: Math.round((items.filter((c) => have.has(c.key)).length / items.length) * 100) };
+  });
+}
+
+export async function dataRoomCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
+    const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
+    if (!accessible.length) {
+      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const reason = 'No files are currently downloadable by a granted investor.';
+      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${DATA_ROOM_ACCESS}?project_id=${ctx.projectId}` }, reason };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
+    }
+    const mapped = { results: accessible.filter(f => f.checklist_item != null) };
+    const viewers = await ctx.env.DB.prepare(
+      `SELECT l.user_id, u.name, COUNT(*) AS n FROM data_room_access_log l LEFT JOIN users u ON u.id = l.user_id
+        WHERE l.project_id = ? AND l.action IN ('open_room', 'download') AND substr(l.created_at, 1, 10) > ?
+        GROUP BY l.user_id ORDER BY n DESC, l.user_id LIMIT 6`,
+    ).bind(ctx.projectId, daysBefore(ctx.today, 90)).all<{ user_id: number; name: string | null; n: number }>();
+    const coverage = checklistCoverage((mapped.results || []).map((r) => r.checklist_item));
+    const unmapped = { n: accessible.filter(f => f.checklist_item == null).length };
+    const v = viewers.results || [];
+    const series = [
+      { kind: 'progress', items: coverage.map((c) => ({ label: c.area, pct: c.pct })) },
+      v.length
+        ? { kind: 'rows', items: v.map((r) => ({ label: r.name ?? `User ${r.user_id}`, value: plural(Number(r.n), 'open', 'opens') })) }
+        : { kind: 'rows', items: [{ label: 'Opens in the last 90 days', value: 0 }] },
+    ];
+    const open = Number(unmapped?.n ?? 0);
+    const next = open > 0 ? { text: `Match ${plural(open, 'file', 'files')} to the diligence checklist`, href: href(ctx, 'data-room') } : null;
+    return { state: 'ok', series, next, reason: null };
+  });
+}
+
+/** Who outside the founder sees a file (migration 463, D691 decision 6). */
+export const ACCESS_TIERS = [
+  { value: 'invited', label: 'Invited investors' },
+  { value: 'committed', label: 'Committed investors only' },
+  { value: 'nobody', label: 'Nobody yet' },
+] as const;
+export const TIER_LABEL: Record<string, string> = Object.fromEntries(ACCESS_TIERS.map((t) => [t.value, t.label]));
+
+/**
+ * A file's Access cell: its stored tier, whether an NDA gates it, and the day
+ * access ends. It says who may open the file, not how many do: counting them
+ * is decision 6's shared predicate, which #1700 builds.
+ */
+export function accessText(f: { access_tier?: string | null; visibility?: string | null; access_expires_at?: string | null }): string {
+  const tier = TIER_LABEL[String(f.access_tier ?? 'invited')] ?? TIER_LABEL.invited;
+  const until = day(f.access_expires_at);
+  return [tier, f.visibility === 'nda' ? 'NDA' : null, until ? `until ${until}` : null].filter(Boolean).join(' · ');
+}
+
+/**
+ * The diligence requests the files name, by id: only a request of a case
+ * about this venture (`subject_type 'project'`), so a foreign id names nothing.
+ */
+export async function requestTitles(ctx: Ctx, ids: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (ids.length === 0) return out;
+  const res = await ctx.env.DB.prepare(
+    `SELECT r.id, r.title FROM dd_requests r JOIN dd_cases c ON c.id = r.case_id
+      WHERE c.subject_type = 'project' AND c.subject_id = ? AND r.id IN (SELECT value FROM json_each(?))`,
+  ).bind(ctx.projectId, JSON.stringify(ids)).all<{ id: number; title: string }>();
+  for (const r of res.results || []) out.set(Number(r.id), String(r.title));
+  return out;
+}
+
+async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const res = await ctx.env.DB.prepare(
+    `SELECT f.id, f.name, f.visibility, f.checklist_item, f.updated_at, f.folder_id, d.name AS folder,
+            f.access_tier, f.access_expires_at, f.dd_request_id
+       FROM data_room_files f LEFT JOIN data_room_folders d ON d.id = f.folder_id
+      WHERE f.project_id = ? ORDER BY f.updated_at DESC, f.id DESC`,
+  ).bind(ctx.projectId).all<any>();
+  const all = res.results || [];
+  const requested = [...new Set(all.map((f) => Number(f.dd_request_id)).filter((n) => Number.isInteger(n) && n > 0))];
+  const titles = await requestTitles(ctx, requested);
+  const answers = (f: any) => titles.get(Number(f.dd_request_id)) ?? checklistLabel(f.checklist_item);
+  const answerKind = (f: any) => (titles.has(Number(f.dd_request_id)) ? 'request' : checklistLabel(f.checklist_item) ? 'checklist' : 'none');
+  let rows = all.filter((f) => has(rq.q, f.name, f.folder));
+  const fl = rq.filter;
+  if (fl.folder) rows = rows.filter((f) => (fl.folder === 'top' ? f.folder_id == null : String(f.folder_id) === fl.folder));
+  if (fl.access === 'nda') rows = rows.filter((f) => f.visibility === 'nda');
+  else if (fl.access) rows = rows.filter((f) => String(f.access_tier ?? 'invited') === fl.access);
+  if (fl.answers) rows = rows.filter((f) => answerKind(f) === fl.answers);
+  if (fl.area) rows = rows.filter((f) => DILIGENCE_CHECKLIST.find((c) => c.key === f.checklist_item)?.area === fl.area);
+  if (rq.sort === 'name') rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const folders = new Map<string, string>();
+  for (const f of all) if (f.folder_id != null) folders.set(String(f.folder_id), String(f.folder ?? 'Folder'));
+  return paged(
+    [col('file', 'File'), col('folder', 'Folder'), col('answers', 'Answers request'), col('access', 'Access'), col('updated', 'Updated')],
+    rows.map((f) => ({
+      id: f.id,
+      cells: {
+        file: f.name, folder: f.folder ?? 'Top level', answers: answers(f),
+        access: accessText(f), updated: day(f.updated_at),
+      },
+    })),
+    rq.page,
+    {
+      filters: [
+        { key: 'folder', label: 'Folder', options: [{ value: 'top', label: 'Top level' }, ...[...folders].map(([value, label]) => ({ value, label }))] },
+        { key: 'access', label: 'Access', options: [...ACCESS_TIERS, { value: 'nda', label: 'NDA required' }] },
+        { key: 'answers', label: 'Answers', options: [{ value: 'request', label: 'A diligence request' }, { value: 'checklist', label: 'A checklist item' }, { value: 'none', label: 'Nothing yet' }] },
+        { key: 'area', label: 'Area', options: CHECKLIST_AREAS.map((a) => ({ value: a, label: a })) },
+      ],
+      sorts: [{ key: 'updated', label: 'Updated' }, { key: 'name', label: 'Name' }],
+      add: { text: 'Upload', href: addHref(ctx, 'data-room') },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cap table — before and after the planned round
+// ---------------------------------------------------------------------------
+
+export const HOLDER_GROUPS = ['Founders', 'Option pool', 'Investors'] as const;
+export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type === 'option_pool' || type === 'options' ? 'Option pool' : 'Investors');
+// `options` is a recorded grant (D1018): options granted from a pool, counted in the pool's group.
+const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', options: 'Options', safe: 'SAFE', preferred: 'Preferred' };
+
+type Holder = { holder: string; type: string; shares: number };
+/**
+ * `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list.
+ * D1018: a row read from the record carries its own `id` (`h-<holder>`), which `capIdOf` returns.
+ */
+export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null; id?: string | null };
+
+/** One row per holder with their percentage before and after the first planned round. */
+export function capRows(before: Holder[], after: Holder[] | null): CapRow[] {
+  const sum = (l: Holder[]) => l.reduce((a, h) => a + (Number(h.shares) || 0), 0);
+  const tb = sum(before);
+  const ta = after ? sum(after) : 0;
+  const pct = (n: number, t: number) => (t > 0 ? Math.round((n / t) * 10000) / 100 : null);
+  const keys = new Map<string, CapRow>();
+  for (const h of before) keys.set(`${h.type}\u0000${h.holder}`, { holder: h.holder, type: h.type, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: pct(Number(h.shares) || 0, tb), after: after ? 0 : null });
+  for (const h of after || []) {
+    const k = `${h.type}\u0000${h.holder}`;
+    const row = keys.get(k) ?? { holder: h.holder, type: h.type, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: 0, after: 0 };
+    row.after = pct(Number(h.shares) || 0, ta);
+    keys.set(k, row);
+  }
+  return [...keys.values()];
+}
+
+/** Each holder group's share, in `HOLDER_GROUPS` order. */
+export function groupShares(rows: CapRow[], side: 'before' | 'after'): number[] {
+  return HOLDER_GROUPS.map((g) => Math.round(rows.filter((r) => r.group === g).reduce((a, r) => a + (r[side] ?? 0), 0) * 100) / 100);
+}
+
+/** The planned round as `simulate` stored it: its pre-money and the lines saying how each instrument converted. */
+export type PlannedRound = { name: string; preMoney: number | null; events: string[] };
+
+export type CapSource = 'record' | 'model' | null;
+type LoadedCap = {
+  exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null;
+  /** D1018: where "before" comes from. "After" is always a scenario, so always Modelled. */
+  source: CapSource;
+};
+
+const plannedOf = (round: any): PlannedRound | null => (round ? {
+  name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
+  events: Array.isArray(round.events) ? round.events.map(String) : [],
+} : null);
+
+/**
+ * D1018 (#2855): through the one cap table reader. On record, "before" is
+ * Today from the record and "after" is the model's planned round run from
+ * Today (Modelled). Otherwise both come from the saved model, as before.
+ */
+export async function loadCap(ctx: Ctx): Promise<LoadedCap> {
+  const cap = await readCapTable(ctx.env, ctx.projectId);
+  if (cap.source === 'none') return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null, source: null };
+  if (cap.source === 'record') {
+    const inputs: any = cap.model?.inputs ?? null;
+    const rounds = Array.isArray(inputs?.rounds) ? inputs.rounds.slice(0, 1) : [];
+    const sim: any = rounds.length ? simulate(inputsFrom(cap.start, { rounds })) : null;
+    const round = sim && !sim.errors && sim.rounds?.length ? sim.rounds[0] : null;
+    const planned = plannedOf(round);
+    const rows = capRows(cap.today.founding ?? [], round && Array.isArray(round.ledger) ? round.ledger : null)
+      .map((row) => ({ ...row, id: row.type === 'option_pool' ? 'pool' : cap.start.ids[row.holder] ?? capIdOf(row, inputs) }));
+    return { exists: true, computed: true, roundName: planned ? planned.name : null, rows, inputs, round: planned, source: 'record' };
+  }
+  const r: any = cap.model.result;
+  const inputs: any = cap.model.inputs;
+  const founding: Holder[] | null = Array.isArray(r?.founding) ? r.founding : null;
+  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null, source: 'model' };
+  const round = Array.isArray(r?.rounds) && r.rounds.length ? r.rounds[0] : null;
+  const after: Holder[] | null = round && Array.isArray(round.ledger) ? round.ledger : null;
+  const planned = plannedOf(round);
+  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned, source: 'model' };
+}
+
+const ENTRY_KEY = /^e-[1-9][0-9]{0,8}$/;
+const entryName = (e: any) => String(e?.name ?? '').trim();
+
+/** The `inputs_json` entry a ledger row comes from, matched the way `simulate` names the ledger. */
+export function capEntryOf(row: { holder: string; type: string }, inputs: any): any | null {
+  const holder = String(row.holder ?? '').trim();
+  const list = row.type === 'founder' ? inputs?.founders : row.type === 'safe' ? inputs?.safes : row.type === 'preferred' ? inputs?.rounds : null;
+  if (!Array.isArray(list)) return null;
+  // A round's new investors are "<round> Investors" (`services/captable.ts`), matched in any case.
+  return list.find((e: any) => (row.type === 'preferred'
+    ? `${entryName(e)} investors`.toLowerCase() === holder.toLowerCase()
+    : entryName(e) === holder)) ?? null;
+}
+
+/**
+ * A cap-table row's id (D691 decision 4): `h-<holder_id>` for an entry that
+ * carries a register row, its `e-<n>` key otherwise, and `pool` for the option
+ * pool. A row of a scenario saved before keys has none: null, drawn plain, and
+ * the read never writes one.
+ */
+export function capIdOf(row: { holder: string; type: string; id?: string | null }, inputs: any): string | null {
+  if (row.id !== undefined) return row.id;
+  if (row.type === 'option_pool') return 'pool';
+  const entry = capEntryOf(row, inputs);
+  if (!entry) return null;
+  const holderId = Number(entry.holder_id);
+  if (Number.isInteger(holderId) && holderId > 0) return `h-${holderId}`;
+  return typeof entry.key === 'string' && ENTRY_KEY.test(entry.key) ? entry.key : null;
+}
+
+/** The instrument filter's values, as Add holder's form names them (CO:321). */
+const INSTRUMENTS = [
+  { value: 'common', label: 'Common' }, { value: 'safe', label: 'SAFE' }, { value: 'note', label: 'Convertible note' },
+  { value: 'options', label: 'Options' }, { value: 'preferred', label: 'Preferred' },
+] as const;
+
+/** A row's instrument key and its cell: a SAFE or a note says its cap when the entry has one. */
+export function instrumentOf(row: CapRow, inputs: any): { key: string; text: string } {
+  if (row.type === 'founder') return { key: 'common', text: 'Common' };
+  if (row.type === 'option_pool') return { key: 'options', text: 'Options' };
+  if (row.type === 'preferred') return { key: 'preferred', text: 'Preferred' };
+  if (row.type !== 'safe') return { key: String(row.type), text: row.instrument };
+  const entry = capEntryOf(row, inputs);
+  const note = entry?.instrument === 'note';
+  const cap = num(entry?.cap);
+  const label = note ? 'Convertible note' : 'SAFE';
+  return { key: note ? 'note' : 'safe', text: cap != null && cap > 0 ? `${label} · ${usd(cap)} cap` : label };
+}
+
+export async function capTableCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('cap-table', 'Planned round', 'Ownership by holder group, before and after the planned round.', 'Cap table'), async (): Promise<CardBody> => {
+    const cap = await loadCap(ctx);
+    if (!cap.exists) {
+      return { state: 'empty', series: null, next: { text: 'Add holder', href: addHref(ctx, 'cap-table') }, reason: 'No holders yet. Ownership before and after the round appears here.' };
+    }
+    if (!cap.computed) {
+      return { state: 'not_recorded', series: null, next: { text: 'Compute the cap table', href: TOOL_HREF.capTable }, reason: 'The cap table has not been computed yet.' };
+    }
+    const tones = ['v1', 'v2', 'v3'];
+    // D1018: on record, "Today" is what was issued and the round after it is Modelled.
+    const recorded = cap.source === 'record';
+    const rows = [{ label: recorded ? 'Today' : 'Before', parts: groupShares(cap.rows, 'before') }];
+    if (cap.roundName) rows.push({ label: recorded ? `After ${cap.roundName} · Modelled` : `After ${cap.roundName}`, parts: groupShares(cap.rows, 'after') });
+    return {
+      state: 'ok',
+      series: [{ kind: 'stack', rows, tones, legend: HOLDER_GROUPS.map((g, i) => ({ label: g, tone: tones[i] })) }],
+      next: cap.roundName ? null : { text: 'Plan the round in the cap table', href: TOOL_HREF.capTable },
+      reason: null,
+    };
+  });
+}
+
+async function capRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const cap = await loadCap(ctx);
+  let rows = cap.rows.map((r) => ({ r, inst: instrumentOf(r, cap.inputs) })).filter(({ r }) => has(rq.q, r.holder));
+  if (rq.filter.group) rows = rows.filter(({ r }) => r.group === rq.filter.group);
+  if (rq.filter.instrument) rows = rows.filter(({ inst }) => inst.key === rq.filter.instrument);
+  // Ownership, the default: largest before the round, then largest after it.
+  if (rq.sort === 'after') rows.sort((a, b) => (b.r.after ?? -1) - (a.r.after ?? -1));
+  else rows.sort((a, b) => (b.r.before ?? -1) - (a.r.before ?? -1) || (b.r.after ?? -1) - (a.r.after ?? -1));
+  return paged(
+    [col('holder', 'Holder'), col('group', 'Group'), col('instrument', 'Instrument'), col('before', 'Before'), col('after', 'After round')],
+    rows.map(({ r, inst }) => ({
+      id: capIdOf(r, cap.inputs),
+      cells: { holder: r.holder, group: r.group, instrument: inst.text, before: r.before, after: r.after },
+    })),
+    rq.page,
+    {
+      filters: [
+        { key: 'group', label: 'Group', options: HOLDER_GROUPS.map((g) => ({ value: g, label: g })) },
+        { key: 'instrument', label: 'Instrument', options: [...INSTRUMENTS] },
+      ],
+      sorts: [{ key: 'ownership', label: 'Ownership' }, { key: 'after', label: 'Largest after the round' }],
+      add: { text: 'Add holder', href: addHref(ctx, 'cap-table') },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Use of funds
+// ---------------------------------------------------------------------------
+
+/**
+ * D1174 shares the five section keys and split reader with the deck.
+ * These tones preserve the existing section order.
+ */
+const FUND_TONES = ['v1', 'v2', 'v3', 'grey', 'muted'];
+
+export function parseAllocation(raw: unknown): number[] | null {
+  const parsed = parseUseOfFundsValue(typeof raw === 'string' ? raw : null);
+  return parsed.length ? FUND_SECTIONS.map((s) => parsed.find((r) => r.label === s.label)?.pct ?? 0) : null;
+}
+
+/** Cash at the end of each of the next `months` months, from cash now and a monthly burn. Null with either missing. */
+export function cashPath(cash: number | null, burn: number | null, months = 18, extra = 0, closeMonth: number | null = null): number[] | null {
+  if (cash == null || burn == null || !Number.isFinite(cash) || !Number.isFinite(burn)) return null;
+  if (extra !== 0 && (closeMonth == null || !Number.isInteger(closeMonth) || closeMonth < 0 || closeMonth > months)) return null;
+  return Array.from({ length: months + 1 }, (_, m) => Math.max(0, Math.round(cash + (closeMonth != null && m >= closeMonth ? extra : 0) - burn * m)));
+}
+
+/** A recorded active-round close date, as a UTC month offset; never an assumed month zero. */
+export function raiseCloseMonth(today: string, closeDate: string | null): number | null {
+  if (!closeDate || !/^\d{4}-\d{2}-\d{2}$/.test(closeDate)) return null;
+  const parsed = new Date(`${closeDate}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== closeDate) return null;
+  const offset = (parsed.getUTCFullYear() - Number(today.slice(0, 4))) * 12 + parsed.getUTCMonth() - (Number(today.slice(5, 7)) - 1);
+  return offset < 0 ? null : offset;
+}
+
+export async function loadFunds(ctx: Ctx) {
+  const p = await ctx.env.DB.prepare('SELECT use_of_funds, funding_needed, use_of_funds_meta FROM projects WHERE id = ?')
+    .bind(ctx.projectId).first<{ use_of_funds: string | null; funding_needed: number | null; use_of_funds_meta: string | null }>();
+  const m = await ctx.env.DB.prepare(
+    `SELECT cash_balance, net_burn, snapshot_date FROM project_metrics
+      WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
+  ).bind(ctx.projectId).first<{ cash_balance: number; net_burn: number; snapshot_date: string }>();
+  let round: { close_date: string | null } | null = null;
+  let closeUnreadable = false;
+  try {
+    round = await ctx.env.DB.prepare(
+      `SELECT close_date FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+    ).bind(ctx.projectId).first<{ close_date: string | null }>();
+  } catch { closeUnreadable = true; }
+  let metaObj: any = {};
+  try { metaObj = p?.use_of_funds_meta ? JSON.parse(p.use_of_funds_meta) : {}; } catch { metaObj = {}; }
+  const costs: Record<string, { bucket?: string; cost?: unknown }> = metaObj && typeof metaObj.milestone_costs === 'object' && metaObj.milestone_costs ? metaObj.milestone_costs : {};
+  // D691 decision 9: the runway the raise buys and each section's milestone, kept in the same meta.
+  const runway = num(metaObj?.runway_months);
+  const milestones: Record<string, { label?: unknown; by?: unknown }> = metaObj && typeof metaObj.milestones === 'object' && metaObj.milestones ? metaObj.milestones : {};
+  return {
+    alloc: parseAllocation(p?.use_of_funds), target: num(p?.funding_needed), costs, metrics: m ?? null,
+    runway: runway != null && runway > 0 ? runway : null, milestones, closeUnreadable, closeDate: round?.close_date ?? null, closeMonth: raiseCloseMonth(ctx.today, round?.close_date ?? null),
+  };
+}
+
+export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('use-of-funds', 'Next 18 months', 'The planned split of the raise, and cash over the next 18 months with and without it.', 'Use of funds'), async (): Promise<CardBody> => {
+    const f = await loadFunds(ctx);
+    if (!f.alloc) {
+      return { state: 'empty', series: null, next: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') }, reason: 'Not recorded: no valid five-section split. Record a 100% allocation.' };
+    }
+    const series: unknown[] = [{
+      kind: 'stack', bare: true, rows: [{ label: 'Planned split · Source: Typed', parts: f.alloc }], tones: FUND_TONES,
+      legend: FUND_SECTIONS.map((s, i) => ({ label: s.label, tone: FUND_TONES[i] })),
+    }];
+    const burn = f.metrics ? Number(f.metrics.net_burn) : null;
+    const path = f.metrics && burn != null && burn >= 0 ? cashPath(Number(f.metrics.cash_balance), burn) : null;
+    if (path) {
+      const plan = f.target ? cashPath(Number(f.metrics!.cash_balance), burn, 18, f.target, f.closeMonth) : null;
+      series.push({ kind: 'line', values: path, ...(plan ? { plan } : {}), labels: [{ at: 0, label: 'Now' }, { at: 18, label: '18 mo' }] });
+      series.push({ kind: 'rows', items: [{ label: 'Source', value: plan
+        ? `Modelled · Raise enters in ${f.closeDate?.slice(0, 7)} (month ${f.closeMonth}); cash and burn from the recorded snapshot.`
+        : f.closeUnreadable ? 'Modelled · Without raise only. With raise is Unreadable: the close date could not be read. Try again.'
+          : !f.target ? 'Modelled · Without raise only. With raise is Not recorded: no raise target.'
+          : f.closeMonth != null && f.closeMonth > 18 ? 'Modelled · Without raise only. The recorded close date is beyond the 18-month horizon; no raise enters this chart.'
+          : 'Modelled · Without raise only. With raise is Not recorded: record an active round close date in this or a future month.' }] });
+    } else {
+      series.push({ kind: 'rows', items: [{ label: 'Cash over 18 months', value: null }] });
+    }
+    const next = !f.target
+      ? { text: 'Set the raise target', href: `${TOOL_HREF.model}?project_id=${ctx.projectId}` }
+      : !path ? { text: 'Record cash and net burn in a metrics snapshot', href: TOOL_HREF.metrics } : null;
+    return { state: 'ok', series, next, reason: null };
+  });
+}
+
+/** "<label> by <date>" when the section's milestone is recorded (decision 9). */
+export function milestoneText(m: { label?: unknown; by?: unknown } | undefined): string | null {
+  const label = String(m?.label ?? '').trim();
+  if (!label) return null;
+  const by = String(m?.by ?? '').trim();
+  return by ? `${label} by ${by}` : label;
+}
+
+/** One use-of-funds section's cells, read the same way by its list row and its record (decision 9). */
+export function fundCells(f: Awaited<ReturnType<typeof loadFunds>>, i: number) {
+  const s = FUND_SECTIONS[i];
+  const pct = f.alloc ? f.alloc[i] : null;
+  const priced = s.bucket
+    ? Object.values(f.costs).filter((c) => c?.bucket === s.bucket && c.cost != null && c.cost !== '' && Number.isFinite(Number(c.cost)))
+    : [];
+  const cost = priced.reduce((a, c) => a + Number(c.cost), 0);
+  const amount = f.target != null && pct != null ? Math.round((pct / 100) * f.target) : null;
+  return {
+    category: s.label, share: pct, amount,
+    // The amount over the runway it buys; with no runway set, Not recorded.
+    monthly: amount != null && f.runway != null ? Math.round(amount / f.runway) : null,
+    milestone: milestoneText(f.milestones[s.key])
+      ?? (priced.length ? `${plural(priced.length, 'milestone', 'milestones')} · ${usd(cost)}` : null),
+  };
+}
+
+async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const f = await loadFunds(ctx);
+  let rows = (f.alloc ?? []).map((_pct, i) => ({ id: FUND_SECTIONS[i].key, cells: fundCells(f, i) }))
+    .filter((r) => (r.cells.share ?? 0) > 0 && has(rq.q, r.cells.category));
+  if (rq.filter.category) rows = rows.filter((r) => r.id === rq.filter.category);
+  // Share, largest first, is the default.
+  if (rq.sort !== 'order') rows.sort((a, b) => (b.cells.share ?? 0) - (a.cells.share ?? 0));
+  return paged(
+    [col('category', 'Category'), col('share', 'Share'), col('amount', 'Amount'), col('monthly', 'Monthly'), col('milestone', 'Milestone')],
+    rows, rq.page,
+    {
+      filters: [{ key: 'category', label: 'Category', options: FUND_SECTIONS.map((s) => ({ value: s.key, label: s.label })) }],
+      sorts: [{ key: 'share', label: 'Share' }, { key: 'order', label: 'Order' }],
+      add: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Capital relationships
+// ---------------------------------------------------------------------------
+
+export const STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed'] as const;
+const STAGE_LABEL: Record<string, string> = { to_contact: 'To contact', contacted: 'Contacted', meeting: 'Meeting', diligence: 'Diligence', committed: 'Committed', passed: 'Passed' };
+/** The list names the first stage as the canvas does (D691 decision 10); the stored value stays `to_contact`. */
+export const LIST_STAGE_LABEL: Record<string, string> = { ...STAGE_LABEL, to_contact: 'Identified' };
+export const IN_CONVERSATION = ['contacted', 'meeting', 'diligence'];
+
+export type ProspectRow = {
+  id: number; name: string | null; firm: string | null; stage: string; contact_id: number | null;
+  next_step: string | null; next_step_due: string | null; warm_path: string | null; last_contact: string | null; updated_at: string | null;
+  commit_status: string | null;
+  /** True when this investor responded to one of the venture's round calls (D653); always false with the flag off. */
+  via_call: boolean;
+};
+
+/**
+ * The project's prospects with their last contact, which is the stored
+ * contact's `last_activity_at` and nothing else: a prospect with no contact,
+ * or a contact with no activity, has no last contact.
+ *
+ * A CALL'S RESPONDERS ARE ALREADY PROSPECTS. `services/roundCalls.ts`
+ * `respond()` upserts each response into `raise_prospects` in the same batch
+ * that records it (`routes/contacts.ts` `roundCallPipelineStatements`), so
+ * nothing here writes a second path into the pipeline. What this read adds is
+ * which prospects came through a call: an investor whose verified account
+ * (matched by email, as the call's audience is) responded to one of this
+ * venture's calls. With `ROUND_CALLS_ENABLED` off the call tables are not
+ * read at all, and no prospect is marked.
+ */
+export async function loadProspects(env: Env, projectId: number): Promise<ProspectRow[]> {
+  const calls = roundCallsEnabled(env);
+  const res = await env.DB.prepare(
+    `SELECT p.id, p.name, p.firm, p.stage, p.contact_id, p.next_step, p.next_step_due, p.warm_path, p.updated_at, p.commit_status,
+            c.last_activity_at AS last_contact,
+            ${calls
+    ? `EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls rc ON rc.id = r.call_id JOIN users u ON u.id = r.investor_user_id
+                       WHERE rc.project_id = p.project_id AND r.responded_at IS NOT NULL AND LOWER(u.email) = LOWER(p.email))`
+    : '0'} AS via_call
+       FROM raise_prospects p LEFT JOIN contacts c ON c.id = p.contact_id AND c.project_id = p.project_id
+      WHERE p.project_id = ? ORDER BY p.id`,
+  ).bind(projectId).all<Omit<ProspectRow, 'via_call'> & { via_call: number }>();
+  return (res.results || []).map((r) => ({ ...r, via_call: Number(r.via_call) === 1 }));
+}
+
+/** What the venture's round calls brought into the pipeline: responders, and their soft commitments. */
+export function callResponders(prospects: ProspectRow[]): { responders: number; soft: number } {
+  const via = prospects.filter((p) => p.via_call);
+  return { responders: via.length, soft: via.filter((p) => p.stage === 'committed' && p.commit_status === 'soft').length };
+}
+
+/** How many prospects reached each stage (passed ones excluded). */
+export function funnelOf(prospects: Array<{ stage: string }>): Array<{ label: string; value: number }> {
+  const idx = (s: string) => STAGES.indexOf(s as any);
+  const live = prospects.filter((p) => idx(p.stage) >= 0);
+  return STAGES.map((s, i) => ({ label: STAGE_LABEL[s], value: live.filter((p) => idx(p.stage) >= i).length }));
+}
+
+export function followUps(prospects: ProspectRow[], today: string): { overdue: number; due: number } {
+  const soon = daysBefore(today, -7);
+  let overdue = 0, due = 0;
+  for (const p of prospects) {
+    if (!p.next_step_due || p.stage === 'passed' || p.stage === 'committed') continue;
+    if (p.next_step_due < today) overdue += 1;
+    else if (p.next_step_due <= soon) due += 1;
+  }
+  return { overdue, due };
+}
+
+export async function capitalCard(ctx: Ctx): Promise<Card> {
+  return safeCard(meta('capital-relationships', 'Current round', 'Investors by the furthest pipeline stage they reached, and the follow-ups due.', 'Raise pipeline'), async (): Promise<CardBody> => {
+    const prospects = await loadProspects(ctx.env, ctx.projectId);
+    if (prospects.length === 0) {
+      return { state: 'empty', series: null, next: { text: 'Add investor', href: addHref(ctx, 'capital-relationships') }, reason: 'No investors yet. The pipeline by stage appears here.' };
+    }
+    const fu = followUps(prospects, ctx.today);
+    const series = [
+      { kind: 'funnel', steps: funnelOf(prospects) },
+      { kind: 'rows', items: [{ label: 'Follow-ups overdue', value: fu.overdue, tone: fu.overdue ? 'warn' : 'ok' }, { label: 'Due in 7 days', value: fu.due }] },
+    ];
+    // Shown only while round calls are on: with the flag off no call can be
+    // sent, so a "0 responders" row would describe a feature nobody has.
+    if (roundCallsEnabled(ctx.env)) {
+      const rc = callResponders(prospects);
+      series.push({ kind: 'rows', items: [{ label: 'Responded to a round call', value: rc.responders }, { label: 'Soft commitments through a call', value: rc.soft, tone: rc.soft ? 'warn' : 'muted' }] } as any);
+    }
+    const noStep = prospects.filter((p) => IN_CONVERSATION.includes(p.stage) && !p.next_step).length;
+    const next = fu.overdue
+      ? { text: `Follow up with ${plural(fu.overdue, 'investor whose next step is', 'investors whose next step is')} overdue`, href: href(ctx, 'capital-relationships') }
+      : noStep
+        ? { text: `Set a next step for ${plural(noStep, 'investor', 'investors')} in conversation`, href: href(ctx, 'capital-relationships') }
+        : null;
+    return { state: 'ok', series, next, reason: null };
+  });
+}
+
+/**
+ * A prospect's stage, and how it came: "Committed · soft" for a commitment
+ * made through a call (D653 writes those as `soft`, never signed), and
+ * "· via call" for any responder. D752: a committed prospect with a confirmed
+ * raise receipt reads "Committed · received <posted date>", which replaces
+ * "· soft" because the bank line outranks the word.
+ */
+export function stageCell(p: ProspectRow, receivedOn: string | null = null): Cell {
+  const label = LIST_STAGE_LABEL[p.stage] ?? p.stage;
+  if (p.stage === 'committed' && receivedOn) return { text: `${label} · received ${receivedOn.slice(0, 10)}${p.via_call ? ' · via call' : ''}` };
+  const soft = p.stage === 'committed' && p.commit_status === 'soft';
+  const text = `${label}${soft ? ' · soft' : ''}${p.via_call ? ' · via call' : ''}`;
+  return soft || p.via_call ? { text, tone: soft ? 'warn' : undefined } : label;
+}
+
+export type Fit = 'fits' | 'outside' | 'unclear';
+export const FIT_LABEL: Record<Fit | 'not_recorded', string> = {
+  fits: 'Fits', outside: 'Outside its focus', unclear: 'Unclear', not_recorded: 'Not recorded',
+};
+
+/**
+ * A fund's thesis against the venture's sector (D691 decision 10), through the
+ * Research crosswalk and never by substring: "Fits" when the two map to a
+ * shared market or the fund is Generalist, "Outside its focus" when both map
+ * and share none, "Unclear" when either maps to nothing.
+ */
+export function fundFit(focus: string | null | undefined, sector: string | null | undefined): Fit {
+  if (focusTokens(focus).some((t) => normalizeLabel(t) === 'generalist')) return 'fits';
+  const fund = mapFundFocus(focus).targets;
+  const venture = mapCompanySector(sector).targets;
+  if (fund.length === 0 || venture.length === 0) return 'unclear';
+  return fund.some((m) => venture.includes(m)) ? 'fits' : 'outside';
+}
+
+/** A prospect's linked fund, as the directory serves it, and its Fit against the venture. */
+export type ProspectFund = { fit: Fit; focus: string | null; fundSizeCents: number | null; sector: string | null };
+
+/**
+ * Each prospect's fund and Fit, by prospect id. Only a prospect linked to a
+ * fund the directory still serves has one: the funds are read `FROM
+ * SERVED_FUNDS`, so a list whose terms say 'not allowed' is never read. No
+ * link, no Fit.
+ */
+export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>> {
+  const out = new Map<number, ProspectFund>();
+  const linked = await ctx.env.DB.prepare(
+    'SELECT id, research_fund_uid FROM raise_prospects WHERE project_id = ? AND research_fund_uid IS NOT NULL',
+  ).bind(ctx.projectId).all<{ id: number; research_fund_uid: string }>();
+  const rows = linked.results || [];
+  if (rows.length === 0) return out;
+  const funds = await ctx.env.DB.prepare(
+    `SELECT f.uid, f.sector_focus, f.fund_size_cents FROM ${SERVED_FUNDS} AS f WHERE f.uid IN (SELECT value FROM json_each(?))`,
+  ).bind(JSON.stringify([...new Set(rows.map((r) => r.research_fund_uid))])).all<{ uid: string; sector_focus: string | null; fund_size_cents: number | null }>();
+  const served = new Map((funds.results || []).map((f) => [String(f.uid), f]));
+  const p = await ctx.env.DB.prepare('SELECT sector FROM projects WHERE id = ?').bind(ctx.projectId).first<{ sector: string | null }>();
+  for (const r of rows) {
+    const f = served.get(r.research_fund_uid);
+    if (f) out.set(Number(r.id), { fit: fundFit(f.sector_focus, p?.sector), focus: f.sector_focus, fundSizeCents: num(f.fund_size_cents), sector: p?.sector ?? null });
+  }
+  return out;
+}
+
+/** D752: each prospect's confirmed raise receipt, by its posted date. Stored matches only. */
+export async function receivedDates(env: Env, projectId: number): Promise<Map<number, string>> {
+  const rows = (await env.DB.prepare(
+    `SELECT m.target_id, m.posted_on FROM mercury_personal_matches m JOIN raise_prospects p ON p.id = m.target_id
+      WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND p.project_id = ?`,
+  ).bind(projectId).all<{ target_id: number; posted_on: string }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.target_id), String(r.posted_on)]));
+}
+
+/**
+ * D1190 (#3124): the founder's own confirmed raise receipts (D752) on this
+ * venture's prospects, with their amounts, for Capital relationships'
+ * commitments read. Only the matches `founderUserId` made; the caller checks
+ * that they are the venture's founder (`mercuryFounderOnly`) first.
+ */
+export async function receivedCredits(env: Env, projectId: number, founderUserId: number, limit: number):
+  Promise<Array<{ uid: string; target_id: number; amount_cents: number | null; posted_on: string | null }>> {
+  return ((await env.DB.prepare(
+    `SELECT m.uid, m.target_id, m.amount_cents, m.posted_on
+       FROM mercury_personal_matches m
+       JOIN raise_prospects p ON p.id = m.target_id
+      WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND m.user_id = ? AND p.project_id = ?
+      ORDER BY m.posted_on DESC LIMIT ?`,
+  ).bind(founderUserId, projectId, limit).all<{ uid: string; target_id: number; amount_cents: number | null; posted_on: string | null }>()).results || []);
+}
+
+/** D1150: an investor's own receiving-side commitment evidence, metadata only.
+ * Same stored-receipt boundary as receivedDates; no connection or bank fields.
+ * The caller passes its verified company scope. Role and ownership are checked
+ * here too, so using this projection cannot become an admin or cross-firm read.
+ */
+export async function receivedCommitment(
+  env: Pick<Env, 'DB'>, actor: { id: number; role: string }, companyId: number | null, commitmentId: number,
+): Promise<{ id: number; at: string } | null> {
+  if (!holdsLicence(actor, 'investor')) return null;
+  return env.DB.prepare(`SELECT m.id, m.confirmed_at AS at FROM mercury_personal_matches m
+    JOIN commitments c ON c.id = m.target_id WHERE m.target_kind = 'deal_commitment'
+    AND m.state = 'confirmed' AND c.id = ? AND c.investor_user_id = ?
+    AND (c.company_id = ? OR c.company_id IS NULL) ORDER BY m.id DESC LIMIT 1`)
+    .bind(commitmentId, actor.id, companyId).first<{ id: number; at: string }>();
+}
+
+async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const funds = await prospectFunds(ctx);
+  const received = await receivedDates(ctx.env, ctx.projectId);
+  const fitOf = (p: ProspectRow): Fit | 'not_recorded' => funds.get(Number(p.id))?.fit ?? 'not_recorded';
+  let rows = (await loadProspects(ctx.env, ctx.projectId)).filter((p) => has(rq.q, p.name, p.firm, p.warm_path));
+  if (rq.filter.stage) rows = rows.filter((p) => p.stage === rq.filter.stage);
+  if (rq.filter.fit) rows = rows.filter((p) => fitOf(p) === rq.filter.fit);
+  if (rq.filter.path === 'has') rows = rows.filter((p) => String(p.warm_path ?? '').trim() !== '');
+  if (rq.filter.path === 'none') rows = rows.filter((p) => String(p.warm_path ?? '').trim() === '');
+  const calls = roundCallsEnabled(ctx.env);
+  if (calls && rq.filter.source === 'call') rows = rows.filter((p) => p.via_call);
+  if (rq.sort === 'due') rows.sort((a, b) => String(a.next_step_due ?? '9999').localeCompare(String(b.next_step_due ?? '9999')));
+  else if (rq.sort === 'name') rows.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
+  else if (rq.sort === 'recent') rows.sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
+  else {
+    // Last contact, the default: the most recent first, a prospect with none last.
+    rows.sort((a, b) => String(b.last_contact ?? '').localeCompare(String(a.last_contact ?? ''))
+      || String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
+  }
+  return paged(
+    [col('investor', 'Investor'), col('stage', 'Stage'), col('last_contact', 'Last contact'), col('next_step', 'Next step'), col('warm_path', 'Warm path')],
+    rows.map((p) => ({
+      id: p.id,
+      cells: {
+        investor: [p.name, p.firm].filter(Boolean).join(' · ') || null,
+        stage: stageCell(p, received.get(Number(p.id)) ?? null),
+        last_contact: day(p.last_contact),
+        next_step: p.next_step
+          ? { text: p.next_step_due ? `${p.next_step} · ${p.next_step_due}` : p.next_step, tone: p.next_step_due && p.next_step_due < ctx.today ? 'bad' : undefined }
+          : null,
+        warm_path: p.warm_path,
+      },
+    })),
+    rq.page,
+    {
+      filters: [
+        { key: 'stage', label: 'Stage', options: [...STAGES, 'passed'].map((s) => ({ value: s, label: LIST_STAGE_LABEL[s] })) },
+        { key: 'fit', label: 'Fit', options: (['fits', 'outside', 'unclear', 'not_recorded'] as const).map((f) => ({ value: f, label: FIT_LABEL[f] })) },
+        { key: 'path', label: 'Path', options: [{ value: 'has', label: 'Has a warm path' }, { value: 'none', label: 'No path' }] },
+        ...(calls ? [{ key: 'source', label: 'Source', options: [{ value: 'call', label: 'Responded to a call' }] }] : []),
+      ],
+      sorts: [{ key: 'last_contact', label: 'Last contact' }, { key: 'recent', label: 'Recently updated' }, { key: 'due', label: 'Next step due' }, { key: 'name', label: 'Name' }],
+      add: { text: 'Add investor', href: addHref(ctx, 'capital-relationships') },
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Figures
+// ---------------------------------------------------------------------------
+
+const sparkOrNone = (points: number[]) => (points.filter((p) => Number.isFinite(p)).length >= 3 ? points : []);
+
+async function readinessFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'Readiness scores' }, async () => {
+    const { scores } = await loadReadiness(ctx);
+    const latest = latestScores(scores);
+    const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
+    const now = overallReadiness(latest.values());
+    if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
+    const cut = daysBefore(ctx.today, 30);
+    const then = scores.some((s) => String(s.scored_at).slice(0, 10) <= cut) ? overallReadiness(latestScores(scores, cut).values()) : null;
+    return {
+      value: now, coverage, delta_30d: then == null ? null : now - then,
+      spark: sparkOrNone(readinessHistory(scores).slice(-8).map((h) => h.score)), state: 'ok', as_of: ctx.today, reason: null,
+    };
+  });
+}
+
+async function committedFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'committed', label: 'Received, wired and signed against target', unit: 'of', source: 'Confirmed raise receipts · typed commitments · active round' }, async () => {
+    // The confirmed target index permits only one receipt for each prospect.
+    const res = await ctx.env.DB.prepare(`SELECT p.commit_status, p.amount, m.id AS receipt_id
+      FROM raise_prospects p LEFT JOIN mercury_personal_matches m ON m.target_kind = 'raise_prospect' AND m.target_id = p.id AND m.state = 'confirmed'
+        AND p.amount > 0 AND p.amount = ROUND(p.amount, 2) AND m.amount_cents = ROUND(p.amount * 100)
+        AND EXISTS (SELECT 1 FROM users owner JOIN projects own ON own.id = p.project_id
+          WHERE owner.id = m.user_id AND owner.founder_id IS NOT NULL AND owner.founder_id = own.founder_id)
+        AND NOT EXISTS (SELECT 1 FROM integrations i WHERE i.id = m.integration_id
+          AND (i.user_id != m.user_id OR i.provider_key != 'mercury'))
+      WHERE p.project_id = ? AND p.stage = 'committed'`).bind(ctx.projectId)
+      .all<{ commit_status: string | null; amount: number | null; receipt_id: number | null }>();
+    const commitments = res.results || [];
+    const breakdown: Record<'received' | 'wired' | 'signed' | 'soft' | 'unclassified', number | null> = { received: 0, wired: 0, signed: 0, soft: 0, unclassified: 0 };
+    let firmRows = 0, firmMissing = 0, incomplete = 0, unclassified = 0;
+    for (const c of commitments) {
+      // A matched receipt supersedes the typed status. It is counted once,
+      // from the matching prospect amount, never again as wired, signed or
+      // soft. The receipt's bank amount is compared in SQL, not projected.
+      // A removed connection does not erase a previously confirmed receipt.
+      const category = c.receipt_id != null ? 'received' : c.commit_status === 'wired' ? 'wired'
+        : c.commit_status === 'signed' ? 'signed' : c.commit_status === 'soft' ? 'soft' : 'unclassified';
+      const value = num(c.amount);
+      const firm = ['received', 'wired', 'signed'].includes(category);
+      if (firm) firmRows++;
+      if (category === 'unclassified') unclassified++;
+      if (value == null || category === 'unclassified') incomplete++;
+      if (value == null && firm) firmMissing++;
+      if (value == null) breakdown[category] = null;
+      else if (breakdown[category] != null) breakdown[category] += value;
+    }
+    const r = await ctx.env.DB.prepare(
+      `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' LIMIT 1`,
+    ).bind(ctx.projectId).first<{ target_amount: number | null }>();
+    const amt = firmMissing > 0 || (firmRows === 0 && unclassified > 0) ? null : Number(breakdown.received) + Number(breakdown.wired) + Number(breakdown.signed);
+    const valueOf = (key: keyof typeof breakdown) => breakdown[key] == null ? 'Not recorded' : usd(breakdown[key]);
+    const split = `Received: ${valueOf('received')} (bank-matched) · Wired: ${valueOf('wired')} (Founder's figure) · Signed: ${valueOf('signed')} (Founder's figure) · Soft: ${valueOf('soft')} (Founder's figure) · Status not recorded: ${valueOf('unclassified')} · Firm amounts not recorded: ${firmMissing} · Incomplete commitments: ${incomplete}`;
+    const target = num(r?.target_amount);
+    if (target == null || target <= 0) {
+      if (commitments.length === 0) return { value: null, breakdown, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };
+      return { value: amt, breakdown, unit: 'usd', delta_30d: null, spark: [], state: amt == null ? 'not_recorded' : 'ok', as_of: ctx.today, reason: `${split}; no active round target is recorded` };
+    }
+    if (amt == null) return { value: null, breakdown, delta_30d: null, spark: [], state: 'not_recorded', as_of: ctx.today, reason: split };
+    return { value: [Math.round(amt), Math.round(target)] as any, breakdown, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: split };
+  });
+}
+
+async function conversationFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'investors_in_conversation', label: 'Investors in conversation', unit: 'count', source: 'Capital relationships' }, async () => {
+    const r = await ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS total, SUM(CASE WHEN stage IN ('contacted', 'meeting', 'diligence') THEN 1 ELSE 0 END) AS live
+         FROM raise_prospects WHERE project_id = ?`,
+    ).bind(ctx.projectId).first<{ total: number; live: number | null }>();
+    if (Number(r?.total ?? 0) === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No investor is in the pipeline yet' };
+    // No stage history is stored, so the change over 30 days is not recorded.
+    return { value: Number(r?.live ?? 0), delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: null };
+  });
+}
+
+/** Months of runway: cash over monthly net burn. Null when either is missing or nothing burns. */
+export function runwayMonths(cash: number | null, burn: number | null): number | null {
+  if (cash == null || burn == null || !(burn > 0)) return null;
+  return Math.round((cash / burn) * 10) / 10;
+}
+
+async function runwayFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'Project metrics · stated' }, async () => {
+    const bank = await mercuryRunway(ctx.env, ctx.projectId);
+    if (bank && bank.as_of >= daysBefore(ctx.today, 90) && bank.as_of.slice(0, 10) <= ctx.today) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
+    }
+    const res = await ctx.env.DB.prepare(
+      `WITH chosen AS (SELECT source FROM project_metrics
+        WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY CASE WHEN source = 'mercury' AND snapshot_date >= ? THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1)
+        SELECT cash_balance, net_burn, snapshot_date, source FROM project_metrics
+        WHERE project_id = ? AND source IS (SELECT source FROM chosen)
+          AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY snapshot_date DESC, id DESC LIMIT 8`,
+    ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90), ctx.projectId, ctx.today).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
+    const rows = res.results || [];
+    const snaps = rows.filter(r => r.source === rows[0]?.source);
+    if (bank && bank.as_of.slice(0, 10) <= ctx.today && (!snaps.length || bank.as_of.slice(0, 10) >= snaps[0].snapshot_date)) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: `Stale · the newest runway observation is older than 90 days.${value == null ? ' Mercury has no positive recorded net burn.' : ''}` };
+    }
+    if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: bank?.as_of ?? null, reason: bank ? 'Stored Mercury runway fact is outside the current 90-day window; no eligible metrics snapshot records cash and net burn' : 'No metrics snapshot records cash and net burn' };
+    const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · measured cash and net burn' : `Project metrics · stated: ${sourceWords(snaps[0].source || 'source not recorded')} · Founder's figure`;
+    const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
+    if (now == null) return { value: null, source, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };
+    const spark = snaps.map((s) => runwayMonths(Number(s.cash_balance), Number(s.net_burn))).filter((v): v is number => v != null).reverse();
+    return { value: now, source, delta_30d: null, spark: sparkOrNone(spark), state: 'ok', as_of: snaps[0].snapshot_date, reason: snaps[0].snapshot_date < daysBefore(ctx.today, 90) ? 'Stale · the newest runway snapshot is older than 90 days.' : null };
+  });
+}
+
+/**
+ * D1610 W1: deck share-link views over the last 8 weeks. No deck is `empty`
+ * with a null value; a deck nobody opened is a real 0, the one place a 0 is
+ * shown, with its flat 8-week spark.
+ */
+async function deckViewsFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'deck_views_8w', label: 'Deck views', unit: 'count', source: 'Pitch deck share links' }, async () => {
+    const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
+    if (!deck) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No deck yet' };
+    const weeks = await weeklyViews(ctx, 8);
+    return { value: weeks.reduce((a, b) => a + b, 0), delta_30d: null, spark: weeks, state: 'ok', as_of: ctx.today, reason: null };
+  });
+}
+
+/**
+ * How the data-room file count is read. The room's owner counts the files
+ * (D1102: the owner's room); anyone else reads the room's summary, which only
+ * counts. Neither returns a file name. A reader throws when it cannot read.
+ */
+export type RoomFileCount = (ctx: Ctx) => Promise<number>;
+export const ownerRoomFileCount: RoomFileCount = async (ctx) => {
+  const row = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+  const n = Number(row?.n);
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error('Data room file count unavailable');
+  return n;
+};
+
+/** D1610 W1: files in the data room, a count only. */
+async function dataRoomFilesFigure(ctx: Ctx, count: RoomFileCount): Promise<Figure> {
+  return safeFigure({ key: 'data_room_files', label: 'Data room files', unit: 'count', source: 'Data room' }, async () => {
+    const n = await count(ctx);
+    if (n === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No files uploaded yet' };
+    return { value: n, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: null };
+  });
+}
+
+/** A member's six figures (D1610 W1): the four, then deck views and data-room files. */
+export async function figures(ctx: Ctx, roomFiles: RoomFileCount = ownerRoomFileCount): Promise<Figure[]> {
+  return Promise.all([readinessFigure(ctx), committedFigure(ctx), conversationFigure(ctx), runwayFigure(ctx), deckViewsFigure(ctx), dataRoomFilesFigure(ctx, roomFiles)]);
+}
+
+/**
+ * D1191: keep the other tools' figures without reading pipeline amounts.
+ * D1610 W1 (owner pick B1): four, never Committed or Investors in conversation.
+ */
+export async function nonCapitalFigures(ctx: Ctx, roomFiles: RoomFileCount): Promise<Figure[]> {
+  return Promise.all([readinessFigure(ctx), runwayFigure(ctx), deckViewsFigure(ctx), dataRoomFilesFigure(ctx, roomFiles)]);
+}
+
+/**
+ * D1610 W5 (RO13): the Cap table card's plan. Recording holders and running
+ * scenarios sit behind the Raise + Grow plan (`ensureTier(user, 'studio')` in
+ * `routes/captable.ts` and `addCapHolder`); reading the card does not. The card
+ * carries the lock so the overview draws it without a second read.
+ */
+export type CardPlan = { locked: boolean; tier: 'studio'; name: string; plan_key: string };
+export function capTablePlan(user: User): CardPlan {
+  return { locked: !userMeetsTier(user, 'studio'), tier: 'studio', name: PLAN_NAME.studio, plan_key: PLAN_KEY.studio };
+}
+
+// ---------------------------------------------------------------------------
+// D1610 W2: next steps, from the readiness scores
+// ---------------------------------------------------------------------------
+
+/** Where each readiness item is fixed is `readinessFix` (D5071), the one table. Team is never a step. */
+
+export type NextStep = { item_key: string; label: string; text: string; module_slug: string; href: string; gain_points: number | null };
+export type NextSteps = { state: 'ok' | 'empty' | 'unreadable'; items: NextStep[] };
+export const NEXT_STEPS_MAX = 3;
+
+/**
+ * The readiness items whose fix raises the overall score most. An item's gain
+ * is the overall score with that item at 10, minus the overall score now. An
+ * item already at 10 gains nothing and is no step. Ordered by gain, then the
+ * card's order; at most three. With no item scored, the one step is to score
+ * readiness, and its gain is not known: null, never 0.
+ */
+export async function nextSteps(ctx: Ctx): Promise<NextSteps> {
+  try {
+    const { items, scores } = await loadReadiness(ctx);
+    const latest = latestScores(scores);
+    const now = overallReadiness(latest.values());
+    if (now == null) {
+      return { state: 'empty', items: [{ item_key: 'readiness', label: 'Fundraising readiness', text: 'No readiness item is scored yet', module_slug: 'fundraising-readiness', href: `${href(ctx, 'fundraising-readiness')}&add=1`, gain_points: null }] };
+    }
+    const order = (k: string) => READINESS_KEYS.indexOf(k);
+    const steps: NextStep[] = [];
+    for (const i of items) {
+      if (i.item_key === 'team' || !READINESS_KEYS.includes(i.item_key)) continue;
+      const s = latest.get(Number(i.id));
+      const score = s?.score != null && Number.isFinite(Number(s.score)) ? Number(s.score) : null;
+      if (score != null && score >= 10) continue;
+      const withTen = new Map(latest);
+      withTen.set(Number(i.id), { ...(s ?? { item_id: i.id, item_key: i.item_key, evidence: null, missing: null, source: 'computed', scored_at: ctx.today }), score: 10 });
+      const gain = (overallReadiness(withTen.values()) as number) - now;
+      if (!(gain > 0)) continue;
+      const target = readinessFix(ctx, i.item_key, s ? { score: s.score != null ? Number(s.score) : null, missing: s.missing ?? null } : null);
+      if (!target) continue;
+      steps.push({
+        item_key: i.item_key, label: READINESS_ITEMS.find((r) => r.key === i.item_key)!.label,
+        text: s?.missing ? String(s.missing) : score == null ? 'Not scored yet' : `Scored ${score} of 10`,
+        module_slug: target.module_slug, href: target.href, gain_points: gain,
+      });
+    }
+    steps.sort((a, b) => (b.gain_points as number) - (a.gain_points as number) || order(a.item_key) - order(b.item_key));
+    return { state: 'ok', items: steps.slice(0, NEXT_STEPS_MAX) };
+  } catch (e) {
+    console.warn('[raiseCycle] next steps unreadable:', (e as Error)?.message);
+    return { state: 'unreadable', items: [] };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// D1610 W3: the connected tools Raise reads, and when each was last read
+// ---------------------------------------------------------------------------
+
+export type Connector = { key: 'mercury' | 'github' | 'google'; label: string; fact: string | null; as_of: string | null; state: 'connected' | 'not_connected' | 'unreadable' };
+
+/*
+ * An integration counts for the venture when its member is active and is the
+ * venture's founder or an accepted member, as `mercuryFacts` and
+ * `teamReadiness` read it. The statements below spell it out in full: bound
+ * SQL only, nothing interpolated.
+ */
+/** A stored timestamp as written, only when it is one; anything else is null, never a made-up date. */
+const stamp = (v: unknown): string | null => {
+  const t = String(v ?? '');
+  return /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?)?$/.test(t) ? t : null;
+};
+
+async function connectedTo(ctx: Ctx, provider: 'mercury' | 'github' | 'google_workspace'): Promise<boolean> {
+  const row = await ctx.env.DB.prepare(`SELECT 1 AS x FROM integrations i WHERE i.provider_key = ?2 AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted'))) LIMIT 1`)
+    .bind(ctx.projectId, provider).first<{ x: number }>();
+  return row != null;
+}
+
+async function connectorRow(key: Connector['key'], label: string, read: () => Promise<Omit<Connector, 'key' | 'label'>>): Promise<Connector> {
+  try { return { key, label, ...await read() }; }
+  catch (e) {
+    console.warn('[raiseCycle] connector unreadable:', key, (e as Error)?.message);
+    return { key, label, fact: null, as_of: null, state: 'unreadable' };
+  }
+}
+
+const notConnected = { fact: null, as_of: null, state: 'not_connected' } as const;
+
+/**
+ * Mercury, GitHub and Google Workspace: the tools Raise reads (D840, D1094,
+ * D1264). Each row fails on its own. A fact is a count, or the runway the
+ * figure row already shows: never a login, account, counterparty, file name
+ * or other amount. `as_of` is the source's last read, null when none is
+ * stored. When no row can be read, the list as a whole is `{ state: 'unreadable' }`.
+ */
+export async function connectors(ctx: Ctx): Promise<Connector[] | { state: 'unreadable' }> {
+  try {
+    const rows = await Promise.all([
+      connectorRow('mercury', 'Mercury', async () => {
+        if (!await connectedTo(ctx, 'mercury')) return notConnected;
+        const fact = await mercuryRunway(ctx.env, ctx.projectId);
+        const months = fact ? runwayMonths(fact.amount_cents, fact.burn_cents) : null;
+        return { state: 'connected', as_of: stamp(fact?.as_of),
+          fact: !fact ? 'No runway read yet' : months == null ? 'Cash read · no positive net burn' : `${months} months of runway · cash and net burn` };
+      }),
+      connectorRow('github', 'GitHub', async () => {
+        if (!await connectedTo(ctx, 'github')) return notConnected;
+        const row = await ctx.env.DB.prepare(`SELECT COUNT(DISTINCT g.repository) AS repos, MAX(g.updated_at) AS as_of
+          FROM github_contributors g JOIN integrations i ON i.id = g.integration_id
+          WHERE g.project_id = ?1 AND i.provider_key = 'github' AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))`)
+          .bind(ctx.projectId).first<{ repos: number; as_of: string | null }>();
+        const repos = Number(row?.repos ?? 0);
+        return { state: 'connected', as_of: stamp(row?.as_of), fact: repos ? `Contributors to ${plural(repos, 'repository', 'repositories')}` : 'No repository read yet' };
+      }),
+      connectorRow('google', 'Google Workspace', async () => {
+        if (!await connectedTo(ctx, 'google_workspace')) return notConnected;
+        const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS files, MAX(f.last_synced_at) AS as_of
+          FROM google_workspace_files f JOIN integrations i ON i.id = f.integration_id
+          WHERE f.project_id = ?1 AND f.status <> 'stopped' AND f.module IN ('pitch_deck', 'data_room', 'capital_relationships')
+            AND i.provider_key = 'google_workspace' AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))`)
+          .bind(ctx.projectId).first<{ files: number; as_of: string | null }>();
+        const files = Number(row?.files ?? 0);
+        return { state: 'connected', as_of: stamp(row?.as_of), fact: files ? `${plural(files, 'chosen file', 'chosen files')} for Raise` : 'No file chosen for Raise yet' };
+      }),
+    ]);
+    // No row could be read (the connections themselves are unreadable): the list as a whole is.
+    return rows.every((r) => r.state === 'unreadable') ? { state: 'unreadable' } : rows;
+  } catch (e) {
+    console.warn('[raiseCycle] connectors unreadable:', (e as Error)?.message);
+    return { state: 'unreadable' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cards and records, by module
+// ---------------------------------------------------------------------------
+
+type CardBody = Omit<Card, 'slug' | 'name' | 'range' | 'caption'>;
+const meta = (slug: ModuleSlug, range: string, caption: string, source: string) => ({
+  slug, name: MODULES.find((m) => m.slug === slug)!.name, range, caption, source,
+});
+
+export async function cards(ctx: Ctx): Promise<Card[]> {
+  return Promise.all(MODULES.map((m) => CARD_FOR[m.slug](ctx)));
+}
+
+export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
+  'fundraising-readiness': readinessCard,
+  'investor-narrative': narrativeCard,
+  'pitch-deck': pitchDeckCard,
+  'data-room': dataRoomCard,
+  'cap-table': capTableCard,
+  'use-of-funds': useOfFundsCard,
+  'capital-relationships': capitalCard,
+};
+
+export type Cell = string | number | null | { text: string; tone?: string; href?: string; seconds?: number };
+export type Records = {
+  cols: Array<{ key: string; label: string }>;
+  /** Null only where decision 4 says so: a cap-table row of a scenario saved before keys. */
+  rows: Array<{ id: number | string | null; cells: Record<string, Cell> }>;
+  total: number; page: number; page_size: number;
+  filters?: Array<{ key: string; label: string; options: Array<{ value: string; label: string }> }>;
+  sorts?: Array<{ key: string; label: string }>;
+  add?: { text: string; href: string };
+};
+
+const col = (key: string, label: string) => ({ key, label });
+const has = (q: string, ...vals: Array<unknown>) => !q || vals.some((v) => String(v ?? '').toLowerCase().includes(q));
+
+function paged(cols: Records['cols'], rows: Records['rows'], page: number, extra: Pick<Records, 'filters' | 'sorts' | 'add'> = {}): Records {
+  const start = (page - 1) * PAGE_SIZE;
+  return { cols, rows: rows.slice(start, start + PAGE_SIZE), total: rows.length, page, page_size: PAGE_SIZE, ...extra };
+}
+
+export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {
+  'fundraising-readiness': readinessRecords,
+  'investor-narrative': narrativeRecords,
+  'pitch-deck': pitchRecords,
+  'data-room': dataRoomRecords,
+  'cap-table': capRecords,
+  'use-of-funds': fundsRecords,
+  'capital-relationships': capitalRecords,
+};
+
+/** D686 #1594: the venture's Calls history, separate from the founder-only list route. */
+export async function callsHistory(ctx: Ctx) {
+  if (!roundCallsEnabled(ctx.env)) return {enabled:false};
+  try {
+    const rows = await ctx.env.DB.prepare(
+      `SELECT c.uid,c.name,c.state,c.sent_at,c.target_close,c.amount_cents,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id) AS recipients,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.opened_at IS NOT NULL) AS opened,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.data_room_requested_at IS NOT NULL) AS data_room_requests,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.commitment_cents IS NOT NULL) AS commitments,
+        (SELECT COALESCE(SUM(r.commitment_cents),0) FROM round_call_recipients r WHERE r.call_id=c.id) AS committed_cents,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.responded_at IS NOT NULL) AS responded,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.delivery_state='not_delivered') AS not_delivered,
+        (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=c.id AND q.answer IS NULL) AS unanswered_questions
+       FROM round_calls c WHERE c.project_id=? ORDER BY c.created_at DESC,c.id DESC`,
+    ).bind(ctx.projectId).all<{state:string;target_close:string} & Record<string,unknown>>();
+    return {enabled:true,items:(rows.results || []).map(row=>({...row,
+      // D1222: a draft has sent no invitation, so how many failed is null, never 0.
+      not_delivered:row.state==='draft'?null:row.not_delivered,
+      effective_state:row.state==='sent'?(row.target_close>=ctx.today?'open':'expired'):row.state}))};
+  } catch {
+    return {state:'unreadable'};
+  }
+}

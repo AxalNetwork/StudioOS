@@ -1,0 +1,34 @@
+{
+  "skill": "safe-convertible-instrument-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "synthetic_fixture": true,
+        "skill_name": "SAFE and Convertible Instrument Review",
+        "task_scope": "Reviews SAFE and convertible terms for valuation cap, discount, triggers, maturity, interest and dilution implications.",
+        "evidence": [
+          "conversion trigger and valuation cap"
+        ],
+        "omitted_field": "discount rate"
+      },
+      "cap_table.read": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for conversion trigger and valuation cap."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "conversion trigger and valuation cap"
+    ],
+    "must_say_not_recorded": [
+      "discount rate"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

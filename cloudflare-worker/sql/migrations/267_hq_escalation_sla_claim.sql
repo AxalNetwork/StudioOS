@@ -1,0 +1,70 @@
+-- 267 — the claim that lets a breached HQ SLA be reported exactly once.
+--
+-- WHAT IS BROKEN. `hq_escalations` (259) stores a `due_at` per row and
+-- `slaBand()` (rpc/hqOps.ts) derives `ok` / `due_soon` / `past` from it on every
+-- read, so S3 and H1 both draw the band correctly. Nothing acts on it. There is
+-- no reader of `due_at` anywhere in the scheduled handler, so an escalation a
+-- branch raised and HQ has not answered simply turns a badge red and tells
+-- nobody. A subsidiary that escalated something is waiting on an answer that no
+-- clock is chasing.
+--
+-- WHY A COLUMN AND NOT A STATUS. `status` is the escalation's own lifecycle —
+-- open, then answered. Adding a `breached` value would conflate "nobody replied
+-- in time" with "this is closed", and the row would stop appearing in
+-- `openEscalations()`, which reads `status = 'open'`. A breach does not end an
+-- escalation; it is a fact about one that is still open, so it gets its own
+-- column and leaves the lifecycle alone.
+--
+-- THE SWEEP'S IDEMPOTENCY IS THIS COLUMN. Every minute-cadence sweep in this
+-- repo is idempotent by construction rather than by a `scheduled_jobs_audit`
+-- claim, which is reserved for side effects that are not a state flip. Sending
+-- mail IS such a side effect, so a flip alone cannot carry it: the pre-state the
+-- sweep would otherwise key on (`status = 'open'`) is still true after the
+-- notification, and a second pass would warn again every minute forever.
+-- `sla_breach_notified_at IS NULL` is therefore the claim, and the insert of a
+-- value IS the decision to send.
+--
+-- IT HOLDS THE SWEEP'S OWN CLOCK, AND THAT IS NOT A BREACH OF THE D122 RULE.
+-- `services/complianceLadder.ts` states that rule in its own header — "`froze_at`
+-- IS THE COMPUTED DEADLINE, NEVER THE SWEEP'S OWN CLOCK" — because an account
+-- stopped being able to write at `respond_by`, so stamping the sweep's clock
+-- would record the freeze late and make the audit untrue in the one direction
+-- that flatters the operator. Here the recorded act is the NOTIFICATION, which
+-- genuinely happened when the sweep ran. The breach's own moment already has a
+-- column and needs no second one: it is `due_at`.
+--
+-- FORMAT: `datetime('now')`, MATCHING THE TABLE'S OTHER TWO STAMPS, AND `due_at`
+-- IS THE ODD ONE OUT. 259 declares `created_at` and `updated_at` as
+-- `DEFAULT (datetime('now'))` — SQLite's 'YYYY-MM-DD HH:MM:SS' — while `due_at`
+-- is written from JavaScript as an ISO-8601 string
+-- (`new Date(...).toISOString()`, rpc/hqOps.ts). So one row carries both
+-- formats. That is why the sweep binds an ISO value against `due_at` on BOTH
+-- sides and never reaches for `CURRENT_TIMESTAMP`: comparing ISO against
+-- SQLite's format is the bound-parameter defect this repo has been bitten by
+-- repeatedly, and it is invisible until a UTC date rolls over. The guard that
+-- watches for it, `scripts/check-timestamp-comparisons.mjs`, learns `due_at` in
+-- the same change that creates this column — otherwise it would watch every
+-- deadline column except the newest one.
+--
+-- NULLABLE, NO DEFAULT. An escalation that has not breached, or has breached and
+-- not yet been reported, has nothing to record; NULL is the honest value and it
+-- is also the predicate the sweep selects on. Backfilling would claim HQ had
+-- been told about breaches it was never told about.
+--
+-- WHY A NEW MIGRATION RATHER THAN A CORRECTION TO 259, in 257's words and 265's:
+-- 259 is applied and is in the ledger of every database that has run migrations
+-- since, and editing an applied migration changes what a FRESH build produces
+-- without changing any existing database — which is how two databases claiming
+-- one schema version come to have different schemas. Measured read-only against
+-- production `studioos-db` before writing this: `hq_escalations` holds 0 rows,
+-- 0 of them open, 0 with a `due_at`. So this ALTER copies nothing and costs
+-- nothing, which is both why it is safe and why now is the cheapest moment it
+-- will ever have — and the additive rule holds anyway, because the rule is what
+-- makes that emptiness something we can stop having to check.
+--
+-- No BEGIN/COMMIT: D1 rejects transaction statements in a migration file.
+
+ALTER TABLE hq_escalations ADD COLUMN sla_breach_notified_at TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_hq_escalations_sla_due
+  ON hq_escalations(status, sla_breach_notified_at, due_at);

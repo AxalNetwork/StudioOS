@@ -1,0 +1,946 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
+import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+import { api } from '../../../lib/api';
+import { partnerDeliveryReviewsApi } from '../../../lib/api/partnerDeliveryReviews';
+import {
+  ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own now, and one of its tiles has to draw an absence rather than a number.
+  Section, Field, NotComputable, SeamRead,
+  NoPartnerProfile, isNoPartnerProfile,
+  inputClass, buttonClass, ghostButtonClass, formatDay,
+} from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
+import FounderReviews from './FounderReviews';
+import { BlockerRow, blockerDeleteQuestion, DeliveryNote } from './deliveryEdits';
+
+/**
+ * Delivery · Health — `/delivery/health`.
+ *
+ * NOTHING RECORDED MEANS NOT RATED. Never "on track". That is the one rule this
+ * zone is built around, and it is the rule the old no-store card named: "a
+ * health pill computed from status alone would rate every live engagement
+ * identically and call it a judgement". An engagement with no milestone, no
+ * blocker, no deliverable and no retainer gets `health: null` from the worker
+ * and renders as *Not rated* with the reason. Silence is not good news, and a
+ * green strip over an empty book is the most confident wrong answer this
+ * product could give.
+ *
+ * The unrated count sits on the stat strip for the same reason. A reader
+ * looking at "6 on track" needs to know whether the other nine are at risk or
+ * simply empty.
+ *
+ * UTILISATION IS A READ, NOT A SECOND CALCULATION. The figure carries a
+ * "Read · Pipeline · Retainers" chip and comes from the worker helper that
+ * zone also calls. The canvas is explicit about why: "two pages disagreeing
+ * about the same client's utilisation is worse than either number". The chip
+ * is how a reader can tell which page owns it.
+ *
+ * HEALTH IS COMPUTED IN THE WORKER over five tables and stored nowhere. A
+ * stored score would be a second source of truth for something five tables
+ * already say, and the first time one of them moved the two would disagree.
+ * The zone renders the pill and the reasons the worker used — a judgement that
+ * cannot be explained is not one a person should act on.
+ *
+ * THREE OF THE ARTBOARD'S ELEMENTS ARE NOT FACTS ABOUT THE WORK, and none of
+ * the five stores could hold them: an OWNER (who at the firm runs it), a SCOPE
+ * ASSESSMENT (a blocker is something stopping the work; drift is the work
+ * quietly becoming a different job) and a SATISFACTION score. Migration 232
+ * holds all three, and each is absent until somebody states it — `scope_state`
+ * in particular is never defaulted to "within", because an engagement nobody
+ * has assessed has not been cleared of drift.
+ *
+ * A SCORE NEVER APPEARS WITHOUT ITS SOURCE. 208:160 made `opened_at` the
+ * client's to set, on the grounds that a partner-side write would be the firm
+ * reporting a metric about itself. Satisfaction is nearly that, and provenance
+ * is the difference: a number typed by the person who wants the renewal, shown
+ * on the renewal-risk page as the client's opinion, is exactly that failure.
+ * 232's CHECK makes a score impossible without a stated source and every row
+ * prints it — a remark somebody heard, not a metric this product measured.
+ *
+ * THE FIRM-WIDE AVERAGE STAYS REFUSED while any live engagement is unscored.
+ * That is the artboard's own rule and its own reason: averaging the rest would
+ * present a few opinions as a fact about all of them.
+ */
+
+const HEALTH_TONE = { on_track: 'ok', at_risk: 'warn', blocked: 'danger' };
+const HEALTH_LABEL = { on_track: 'On track', at_risk: 'At risk', blocked: 'Blocked' };
+
+/** The strip tile, in the anatomy the artboards share. */
+function HealthTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+/**
+ * The three facts nothing derives, written by the firm (migration 232).
+ *
+ * ONE FORM RATHER THAN THREE, because they are one sentence a firm writes about
+ * a client — who runs it, has it drifted, what did they say — and the route
+ * takes them together. Every key is sent explicitly so an omitted one cannot
+ * silently clear another; the route treats an absent key as untouched, and this
+ * form always knows all three.
+ */
+function factsOf(row) {
+  return {
+    owner_user_id: row.owner_user_id ? String(row.owner_user_id) : '',
+    scope_state: row.scope_state || '',
+    scope_note: row.scope_note || '',
+    satisfaction: row.satisfaction == null ? '' : String(row.satisfaction),
+    satisfaction_source: row.satisfaction_source || '',
+  };
+}
+
+function StatedFacts({ row, roster, busy, onSave, note }) {
+  const [draft, setDraft] = useState(() => factsOf(row));
+  // Re-seeded only when THIS engagement's stated facts change on the server.
+  // Keying on the row object re-seeded every open form on every refetch, so
+  // saving one engagement discarded what was typed into another (#4698).
+  const seed = signature(factsOf(row));
+  useEffect(() => { setDraft(factsOf(row)); }, [seed]);
+
+  return (
+    <div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Field label="Owner" hint="Who at this firm runs it. Your own people only.">
+          <select className={inputClass} value={draft.owner_user_id}
+            onChange={(e) => setDraft({ ...draft, owner_user_id: e.target.value })}>
+            <option value="">Unassigned</option>
+            {roster.map((p) => (
+              <option key={p.user_id} value={p.user_id}>{p.name || p.email}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Scope" hint="Left unset means nobody has assessed it — which is not the same as in scope.">
+          <select className={inputClass} value={draft.scope_state}
+            onChange={(e) => setDraft({ ...draft, scope_state: e.target.value })}>
+            <option value="">Not assessed</option>
+            <option value="within">Within scope</option>
+            <option value="drift">Scope drift</option>
+          </select>
+        </Field>
+        <Field label="What drifted" hint="In your words — “requests beyond SOW §2”.">
+          <input className={inputClass} value={draft.scope_note} maxLength={600}
+            onChange={(e) => setDraft({ ...draft, scope_note: e.target.value })} />
+        </Field>
+        <Field label="Satisfaction" hint="1–5, as the client said it. Empty clears.">
+          <input className={inputClass} value={draft.satisfaction} inputMode="decimal" placeholder="e.g. 4.2"
+            onChange={(e) => setDraft({ ...draft, satisfaction: e.target.value })} />
+        </Field>
+        <Field
+          label="Where they said it"
+          hint="Required beside a score. A number with no source is the firm scoring itself on the page that decides a renewal."
+        >
+          <input className={inputClass} value={draft.satisfaction_source} maxLength={300}
+            placeholder="quarterly review call, 14 Aug"
+            onChange={(e) => setDraft({ ...draft, satisfaction_source: e.target.value })} />
+        </Field>
+        <div className="flex items-end">
+          <button
+            type="button" className={buttonClass} aria-disabled={busy || undefined}
+            onClick={() => { if (!busy) onSave({
+              owner_user_id: draft.owner_user_id ? Number(draft.owner_user_id) : null,
+              scope_state: draft.scope_state || null,
+              scope_note: draft.scope_note,
+              satisfaction: draft.satisfaction.trim() === '' ? null : Number(draft.satisfaction),
+              satisfaction_source: draft.satisfaction_source,
+            }); }}
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+      <DeliveryNote note={note} />
+    </div>
+  );
+}
+
+function HealthPill({ health }) {
+  if (!health) return <Pill tone="neutral">Not rated</Pill>;
+  return <Pill tone={HEALTH_TONE[health] || 'neutral'} dot>{HEALTH_LABEL[health] || health}</Pill>;
+}
+
+function Utilisation({ row }) {
+  if (row.utilisation_pct === null || row.utilisation_pct === undefined) {
+    return <NotComputable why={row.utilisation_note}>No utilisation</NotComputable>;
+  }
+  return (
+    <span className="inline-flex items-baseline">
+      <span className="text-[12.5px] font-semibold tabular-nums">{row.utilisation_pct}%</span>
+      <span className="ml-1 text-[11px] text-axal-faint tabular-nums">
+        ({row.hours_used}h of {row.retained_hours}h)
+      </span>
+      <SeamRead>Pipeline · Retainers</SeamRead>
+    </span>
+  );
+}
+
+function MilestoneEditor({ engagementId, pending, mutate }) {
+  // `rows` is SEEDED WITH `[]`, and "have we read it yet" is a separate flag.
+  // Holding a list as null and dereferencing it is the crash `_zoneGuards.mjs`
+  // rule 2 exists for — React builds children before ZoneBody decides whether
+  // to show them — and the three states this needs (loading / failed / read and
+  // empty) are exactly the three `ZoneBody` itself keeps apart.
+  const [rows, setRows] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [draft, setDraft] = useState({ title: '', due_at: '' });
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.listPartnerMilestones(engagementId);
+      setRows(Array.isArray(r?.items) ? r.items : []);
+      setError('');
+      setReady(true);
+    } catch (e) {
+      // A list already read stays on screen: a failed reload after a save is a
+      // stale list with a warning, not an empty one and not a lost draft.
+      setError(e?.message || 'The milestones did not load.');
+    }
+  }, [engagementId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!ready && error) {
+    return <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>;
+  }
+  if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
+  // `mutate` resolves true only for a confirmed write. The list re-reads on
+  // that and on nothing else, and a form resets on that and on nothing else.
+  const change = async (key, fn) => {
+    // #5314 part 3: Reload or Keep my edits on a conflict re-reads this list too.
+    fn.after = load;
+    const ok = await mutate(key, fn);
+    if (ok) await load();
+    return ok;
+  };
+  const addPending = pending('ms:new');
+
+  return (
+    <div>
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
+      {rows.length === 0 && (
+        <p className="text-[12px] leading-relaxed text-axal-faint">
+          No milestone recorded. Without one, nothing here can be overdue — which
+          is why this engagement may be unrated rather than healthy.
+        </p>
+      )}
+      {rows.map((m) => (
+        <div key={m.id} className="flex flex-wrap items-center gap-2 border-t border-axal-hairline py-1.5 first:border-t-0 text-[12.5px]">
+          <span className={m.completed_at ? 'text-axal-faint line-through' : 'font-semibold'}>{m.title}</span>
+          <span className="text-[11px] text-axal-faint">
+            {m.due_at ? `due ${m.due_at}` : 'no due date'}
+            {m.days_overdue > 0 && !m.completed_at && (
+              <span className="ml-1 font-semibold text-amber-700 dark:text-amber-400">
+                {m.days_overdue}d overdue
+              </span>
+            )}
+          </span>
+          <button
+            type="button" className={`${ghostButtonClass} ml-auto`}
+            aria-disabled={pending(`ms:${m.id}`) || undefined}
+            onClick={() => change(`ms:${m.id}`, (rev) => api.updatePartnerMilestone(m.id, {
+              completed_at: m.completed_at ? null : new Date().toISOString(),
+              expected_revision: stated(rev, m.revision),
+            }))}
+          >
+            {m.completed_at ? 'Reopen' : 'Complete'}
+          </button>
+          <button
+            type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`}
+            aria-disabled={pending(`ms:${m.id}`) || undefined}
+            onClick={() => change(`ms:${m.id}`, (rev) => api.deletePartnerMilestone(m.id, stated(rev, m.revision)))}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        <Field label="New milestone">
+          <input className={inputClass} value={draft.title} maxLength={200}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+        </Field>
+        <Field label="Due" hint="YYYY-MM-DD">
+          <input className={inputClass} value={draft.due_at} maxLength={40} placeholder="2026-10-15"
+            onChange={(e) => setDraft({ ...draft, due_at: e.target.value })} />
+        </Field>
+        <div className="flex items-end">
+          <button
+            type="button" className={buttonClass} disabled={!draft.title.trim()}
+            aria-disabled={addPending || undefined}
+            onClick={async () => {
+              if (addPending) return;
+              const sending = draft;
+              const ok = await change('ms:new', () => api.createPartnerMilestone(engagementId, sending));
+              if (ok) setDraft({ title: '', due_at: '' });
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockerEditor({ engagementId, pending, mutate }) {
+  // Seeded with `[]` for the reason above: a list held as null is a crash
+  // waiting for the first render, whatever the guard above it says.
+  const [rows, setRows] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [draft, setDraft] = useState({ summary: '', side: 'ours' });
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.listPartnerBlockers(engagementId);
+      setRows(Array.isArray(r?.items) ? r.items : []);
+      setError('');
+      setReady(true);
+    } catch (e) {
+      // Same rule as the milestones: a list already read is kept.
+      setError(e?.message || 'The blockers did not load.');
+    }
+  }, [engagementId]);
+  useEffect(() => { load(); }, [load]);
+
+  if (!ready && error) {
+    return (
+      <div className="text-[12px]" data-testid="blockers-unreadable">
+        <p role="alert" className="text-red-700 dark:text-red-300">Blockers could not be read just now. {error}</p>
+        <button type="button" className={`${ghostButtonClass} mt-1`} onClick={load}>Try again</button>
+      </div>
+    );
+  }
+  if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
+  const act = async (key, fn) => {
+    // #5314 part 3: Reload or Keep my edits on a conflict re-reads this list too.
+    fn.after = load;
+    const ok = await mutate(key, fn);
+    if (ok) await load();
+    return ok;
+  };
+  const addPending = pending('bl:new');
+
+  return (
+    <div>
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">Blockers could not be refreshed just now. {error}</p>}
+      {rows.length === 0 && (
+        <p className="text-[12px] leading-relaxed text-axal-faint">Nothing blocked.</p>
+      )}
+      {/* D637 — Clear keeps a blocker on record with its date; Delete removes
+          it. The side is shown, always: a list with no side makes every delay
+          the firm's. */}
+      {rows.map((b) => (
+        <BlockerRow
+          key={b.id} b={b} busy={pending(`bl:${b.id}`)}
+          onClear={() => act(`bl:${b.id}`, (rev) => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString(), expected_revision: stated(rev, b.revision) }))}
+          onReopen={() => act(`bl:${b.id}`, (rev) => api.updatePartnerBlocker(b.id, { cleared_at: null, expected_revision: stated(rev, b.revision) }))}
+          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(`bl:${b.id}`, (rev) => api.deletePartnerBlocker(b.id, stated(rev, b.revision))); }}
+        />
+      ))}
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        <Field label="New blocker">
+          <input className={inputClass} value={draft.summary} maxLength={600}
+            onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
+        </Field>
+        <Field label="Whose side" hint="Naming a client-side blocker is not an excuse — it is the fact.">
+          <select className={inputClass} value={draft.side}
+            onChange={(e) => setDraft({ ...draft, side: e.target.value })}>
+            <option value="ours">Ours</option>
+            <option value="client">Client</option>
+          </select>
+        </Field>
+        <div className="flex items-end">
+          <button
+            type="button" className={buttonClass} disabled={!draft.summary.trim()}
+            aria-disabled={addPending || undefined}
+            onClick={async () => {
+              if (addPending) return;
+              const sending = draft;
+              const ok = await act('bl:new', () => api.createPartnerBlocker(engagementId, sending));
+              if (ok) setDraft({ summary: '', side: 'ours' });
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * #5314 part 2: what the client said, each time it was recorded. Read from the
+ * append-only history; an unreadable read says Unreadable, and a score saved
+ * before the history was kept says earlier reviews are Not recorded.
+ */
+export function reviewHistoryView(read) {
+  if (!read) return { kind: 'loading', items: [] };
+  if (read?.error || read?.available === false) {
+    return { kind: 'unreadable', items: [], text: read?.reason || 'Unreadable: the review history could not be read.' };
+  }
+  const items = Array.isArray(read?.items) ? read.items : [];
+  return {
+    kind: items.length ? 'list' : 'empty',
+    items: items.map((r) => ({
+      key: r.id,
+      score: r.cleared ? 'Score cleared' : `${Number(r.satisfaction).toFixed(1)} / 5`,
+      source: r.source || null,
+      said: r.said_at || null,
+      recorded: r.recorded_at,
+      by: r.recorded_by_name || null,
+    })),
+    earlier: read?.earlier_not_recorded ? (read?.earlier_note || 'Not recorded: earlier reviews were not kept.') : null,
+  };
+}
+
+function ReviewHistory({ engagementId, seed }) {
+  // null while the read is out; reviewHistoryView draws that as loading.
+  const [reviews, setReviews] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setReviews(null);
+    partnerDeliveryReviewsApi.partnerEngagementReviews(engagementId)
+      .then((r) => { if (live) setReviews(r || { available: false }); })
+      .catch(() => { if (live) setReviews({ error: true }); });
+    return () => { live = false; };
+  }, [engagementId, seed]);
+  const view = reviewHistoryView(reviews);
+  if (view.kind === 'loading') return <p className="text-[12px] text-axal-faint">Reading the history…</p>;
+  if (view.kind === 'unreadable') return <p className="text-[12px] text-red-700 dark:text-red-300">{view.text}</p>;
+  return (
+    <div className="space-y-1">
+      {view.kind === 'empty' && !view.earlier && (
+        <p className="text-[12px] text-axal-faint">No client review recorded yet.</p>
+      )}
+      {view.kind === 'list' && (
+        <ul className="space-y-1 text-[12px] text-axal-muted">
+          {(Array.isArray(view?.items) ? view.items : []).map((r) => (
+            <li key={r.key}>
+              <span className="font-bold tabular-nums">{r.score}</span>
+              {r.source && <> · {r.source}</>}
+              {r.said && <span className="text-axal-faint"> · said {formatDay(r.said)}</span>}
+              <span className="text-axal-faint"> · recorded {formatDay(r.recorded)}{r.by ? ` by ${r.by}` : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {view.earlier && <p className="text-[11.5px] text-axal-faint">{view.earlier}</p>}
+    </div>
+  );
+}
+
+function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-axal-hairline p-4 dark:border-gray-700">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <HealthPill health={row.health} />
+            <span className="text-sm font-extrabold tracking-tight">
+              {row.founder_name || row.need_title || <Unrecorded>Unnamed client</Unrecorded>}
+            </span>
+            {row.shape === 'embedded_seat' && <Pill tone="neutral">Embedded seat</Pill>}
+          </div>
+          <div className="mt-0.5 text-[11.5px] text-axal-faint">
+            {row.engagement_uid} · {row.status}
+            {row.need_title && row.founder_name && <> · {row.need_title}</>}
+          </div>
+        </div>
+        <button type="button" className={ghostButtonClass} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {open ? 'Hide' : 'Record'}
+        </button>
+      </div>
+
+      {/* The reasons the worker used, always shown. A judgement a reader cannot
+          explain is not one they should act on — and where health is null this
+          is where the "nothing recorded" sentence lands. */}
+      <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
+        {row.health_note || (row.health_reasons || []).join(' · ')}
+      </p>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Milestones</div>
+          <div className="mt-0.5 text-[12.5px] tabular-nums">
+            {row.milestone_count === 0
+              ? <Unrecorded>None recorded</Unrecorded>
+              : <>{row.milestone_count} · {row.overdue_count} overdue</>}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blockers</div>
+          <div className="mt-0.5 text-[12.5px]">
+            {row.open_blockers.length === 0
+              ? <span className="text-axal-muted">None open</span>
+              : row.open_blockers.map((b, i) => (
+                <span key={`${b.side}-${i}`} className="mr-1.5">
+                  <Pill tone={b.side === 'client' ? 'info' : 'warn'}>
+                    {b.side === 'client' ? 'Client' : 'Ours'}
+                  </Pill>
+                </span>
+              ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Sent, unopened</div>
+          <div className="mt-0.5 text-[12.5px] tabular-nums">
+            {row.deliverables_sent === 0
+              ? <Unrecorded>Nothing sent</Unrecorded>
+              : (row.deliverables_unopened == null
+                ? <Unrecorded>{row.deliverables_sent} sent · opens not recorded</Unrecorded>
+                : <>{row.deliverables_unopened} of {row.deliverables_sent}</>)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Utilisation</div>
+          <div className="mt-0.5"><Utilisation row={row} /></div>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-4 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Milestones</div>
+            <div className="mt-1">
+              <MilestoneEditor engagementId={row.engagement_id} pending={pending} mutate={mutate} />
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blockers</div>
+            <div className="mt-1">
+              <BlockerEditor engagementId={row.engagement_id} pending={pending} mutate={mutate} />
+            </div>
+          </div>
+          {/* THE THREE FACTS NOTHING DERIVES. Owner, scope assessment and the
+              client's score are none of them readable from milestones,
+              blockers, deliverables, seats or the retainer record — each is a
+              sentence somebody at the firm states, and this is where they
+              state it. */}
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              What this firm says about it
+            </div>
+            <div className="mt-1">
+              <StatedFacts
+                row={row}
+                roster={roster}
+                busy={pending('facts')}
+                note={note?.scope === `facts:${row.engagement_id}` ? note : null}
+                onSave={(data) => onSaveFacts(row, data)}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              Client review history
+            </div>
+            <div className="mt-1">
+              <ReviewHistory
+                engagementId={row.engagement_id}
+                seed={`${row.satisfaction ?? ''}|${row.satisfaction_source ?? ''}|${row.satisfaction_at ?? ''}`}
+              />
+            </div>
+          </div>
+          <DeliveryNote note={note?.scope === `eng:${row.engagement_id}` ? note : null} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PartnerHealthZone() {
+  // The roster is what the owner picker offers, and it is the firm's own
+  // people only — an owner naming anybody else would be as false as a seat
+  // register naming them. The skeleton is for the FIRST read: a later one
+  // (every save) keeps the rows, and the editors open on them, mounted.
+  const { state: read, load } = useZoneRead(async () => {
+    const [r, ppl] = await Promise.all([
+      api.getPartnerDeliveryHealth(),
+      api.listPartnerPeople().catch(() => ({ items: [] })),
+    ]);
+    return { data: r || {}, people: Array.isArray(ppl?.items) ? ppl.items : [] };
+  }, 'The delivery record did not load.');
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    people: read.data?.people ?? null,
+  };
+  const [view, setView] = useState('at_risk');
+  const [note, setNote] = useState(null);
+  const { run: runMutation, isPending } = useMutations();
+
+  // One operation, one key, and the key carries the engagement: two engagements
+  // save independently, and a second click on the same operation while its
+  // request is out starts nothing. Resolves true only for a CONFIRMED write.
+  const act = useCallback(async (key, fn, ok, scope) => {
+    setNote((n) => (n?.scope === scope ? null : n));
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => act(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
+      return false;
+    }
+    setNote({ ok: true, text: ok, scope });
+    load();
+    if (fn.retried) fn.after?.();
+    return true;
+  }, [runMutation, load]);
+
+  const d = state.data;
+  // D4822 part 2: `?engagement=` narrows Health to the one engagement the Sheet opened it for.
+  const focus = useEngagementFocus();
+  const allItems = Array.isArray(d?.items) ? d.items : [];
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
+  const roster = state.people || [];
+  const counts = items.reduce((acc, r) => {
+    acc[r.health || 'unrated'] = (acc[r.health || 'unrated'] || 0) + 1;
+    return acc;
+  }, {});
+  // The artboard's `At risk` tile names them rather than only counting them:
+  // "Verwood, Thornfield" is a page a reader can act on, "2" is not.
+  const atRiskNames = items
+    .filter((r) => r.health === 'at_risk' || r.health === 'blocked')
+    .map((r) => r.founder_name || r.need_title)
+    .filter(Boolean)
+    .join(', ');
+
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  // ══ THE `pd5` CHIP ROW ═══════════════════════════════════════════════════
+  // `At risk` IS THE DEFAULT because the artboard selects it, and it is the two
+  // RATED-bad states rather than "anything not green": an engagement with
+  // nothing recorded is unrated, not at risk, and the read says so separately.
+  //
+  // `Renewing soon` IS THIRTY DAYS, and the date is `partner_retainers
+  // .renews_at` — stored and indexed by migration 208, and returned by the
+  // health read so this chip has something to select on.
+  //
+  // `By owner` WAS PROSE UNTIL MIGRATION 232. Its reason was true and precise:
+  // "nothing records who at the firm owns an engagement; the firm owner
+  // migration 224 added belongs to a book contact, which is a person the firm
+  // knows rather than work it is running." 232 records the second thing, so the
+  // chip becomes a real ordering — UNASSIGNED FIRST, because an engagement
+  // nobody owns is the one this grouping exists to surface, and hiding it under
+  // a "no owner" heading at the bottom would defeat the point.
+  const soon = new Date();
+  soon.setUTCDate(soon.getUTCDate() + 30);
+  const soonIso = soon.toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const visible = (() => {
+    if (view === 'at_risk') return items.filter((r) => r.health === 'at_risk' || r.health === 'blocked');
+    if (view === 'renewing') {
+      return items.filter((r) => r.renews_at
+        && String(r.renews_at).slice(0, 10) >= todayIso
+        && String(r.renews_at).slice(0, 10) <= soonIso);
+    }
+    if (view === 'owner') {
+      return items.slice().sort((a, b) => {
+        const an = a.owner_name || '';
+        const bn = b.owner_name || '';
+        if (!an !== !bn) return an ? 1 : -1;
+        return an.localeCompare(bn) || String(a.founder_name || '').localeCompare(String(b.founder_name || ''));
+      });
+    }
+    if (view === 'all') return items;
+    return items;
+  })();
+
+  // THE CARDS BELOW ARE THE SELECTED CHIP'S RECORDS, the same set the table and
+  // the export read. They drew every engagement whatever was chosen, so the
+  // page said "At risk" above a list of the book and offered record-specific
+  // actions on rows the filter had excluded (#4698). `By owner` is an ordering
+  // and keeps its own; the other chips lead with blocked, then at risk.
+  const engagementRows = view === 'owner' ? visible : visible.slice().sort((a, b) => {
+    const rank = { blocked: 0, at_risk: 1, on_track: 3 };
+    return (rank[a.health] ?? 2) - (rank[b.health] ?? 2);
+  });
+
+  const rowActions = partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Health', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers', 'Renews'], rows: visible, cells: (r) => [r.need_title, r.founder_name, r.health, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0, r.renews_at] } });
+
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  const unlinked = isNoPartnerProfile(state.error);
+
+  return (
+    <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={unlinked ? [] : partnerZoneFilters('delivery/health', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
+    <ZoneBody
+      loading={state.loading}
+      error={unlinked ? null : state.error}
+      onRetry={load}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
+      empty={(
+        <div className="space-y-3">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel(allItems, focus.key)} shown={0} total={allItems.length} noun="engagements" onClear={focus.clear} />
+        {/* D4822 (canvas `No engagement health yet`): one state, no 0-of-0 commentary. */}
+        <NothingYet
+          title="No engagement health yet"
+          body="Health appears once Delivery records contain enough evidence."
+          action={<Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
+        />
+        </div>
+      )}
+    >
+      <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+        {read.refreshError && (
+          <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+            The delivery record could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+          </p>
+        )}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel(allItems, focus.key)} shown={items.length} total={allItems.length} noun="engagements" onClear={focus.clear} />
+        <ZoneHeading
+          title="Renewal and delivery risk"
+          blurb="Find delivery, scope and relationship risks early enough to act. Utilisation is read from Pipeline · Retainers — the same number, not a second one."
+        />
+
+        {/* ══ THE `pd5` STRIP ═══════════════════════════════════════════════
+            `At risk · Scope drift · Lowest utilisation · Firm satisfaction
+            avg`, each over the whole book rather than the chip-narrowed list. */}
+        {/* D4822 part 2: these are firm-wide figures, so they are not drawn over one focused engagement. */}
+        {!focus.key && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <HealthTile
+            label="At risk"
+            value={String(d?.at_risk_count ?? 0)}
+            note={atRiskNames || `${counts.unrated || 0} more rated on nothing at all`}
+          />
+          <HealthTile
+            label="Scope drift"
+            value={String(d?.drift_count ?? 0)}
+            note={d?.scope_unassessed_count
+              ? `${d.scope_unassessed_count} not assessed either way`
+              : 'every engagement assessed'}
+          />
+          {/* LOWEST, NOT AVERAGE. The renewal risk is the one client not using
+              what they pay for, and an average hides them behind four who are. */}
+          <HealthTile
+            label="Lowest utilisation"
+            value={`${d?.lowest_utilisation_pct ?? 0}%`}
+            nr={d?.lowest_utilisation_pct == null}
+            note={d?.lowest_utilisation_client
+              ? `${d.lowest_utilisation_client} · read from Pipeline · Retainers`
+              : 'no retainer records hours yet'}
+          />
+          {/* REFUSED WHILE ANY LIVE ENGAGEMENT IS UNSCORED. Averaging the rest
+              would present a few opinions as a fact about all of them. */}
+          <HealthTile
+            label="Firm satisfaction avg"
+            value={d?.satisfaction_avg == null ? '' : `${d.satisfaction_avg} / 5`}
+            nr={d?.satisfaction_avg == null}
+            note={d?.satisfaction_note
+              || `every engagement scored · ${d?.satisfaction_scored_count ?? 0} of ${d?.satisfaction_scored_count ?? 0}`}
+          />
+        </div>
+        )}
+
+        {d?.unrated_note && (
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unrated_note}</p>
+        )}
+
+        {/* THE ARTBOARD'S LEGEND, two entries — drawn only where the table
+            carries the marks it explains. A legend over rows that are all one
+            kind explains a distinction the reader cannot see. */}
+        {(items.some((r) => r.utilisation_pct != null) || items.some((r) => r.mode === 'embedded')) && (
+          <Legend
+            items={[
+              ...(items.some((r) => r.utilisation_pct != null)
+                ? [{ chip: 'Read · Pipeline', tone: 'seam', note: 'utilisation read from the retainer record, not recomputed' }]
+                : []),
+              ...(items.some((r) => r.mode === 'embedded')
+                ? [{ chip: 'Granted · scope', grant: true, note: 'scoped, revocable operator grant' }]
+                : []),
+            ]}
+          />
+        )}
+
+        <Instrument
+          testid="renewal-watch"
+          title="Renewal watch"
+          meta="Utilisation is a read, not a second record"
+          cols="1fr .8fr 1.5fr 1.5fr .9fr .9fr"
+          head={['Client', 'Mode', 'Scope state', 'Utilisation', 'Satisfaction', 'Health']}
+          rows={visible.map((r) => {
+            const clientBlocked = (r.open_blockers || []).some((b) => b.side === 'client');
+            return {
+              key: r.engagement_id,
+              rowClass: r.health === 'at_risk' || r.health === 'blocked'
+                ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+              cells: [
+                r.founder_name ? { text: r.founder_name, sub: r.owner_name ? `owner ${r.owner_name}` : 'unassigned' } : { nr: true },
+                // From the engagement's whole set of seats, as the Board reads it
+                // (#4690) — a seat with no scope is still a seat.
+                { mode: r.mode === 'embedded' ? 'Embedded' : 'Project' },
+                // THREE STATES AND A FOURTH THAT IS NO STATE. Not-assessed is
+                // absent rather than "within scope": an engagement nobody has
+                // looked at has not been cleared of drift.
+                r.scope_state === 'drift'
+                  ? { text: 'Scope drift', pill: 'Drift', pillTone: 'danger', sub: r.scope_note || undefined }
+                  : (clientBlocked
+                    ? { text: 'Client-side block', pill: 'Blocked', pillTone: 'warn' }
+                    : (r.scope_state === 'within' ? { text: 'Within scope' } : { nr: true })),
+                // SEAM-MARKED BECAUSE IT IS A READ. Two pages disagreeing about
+                // one client's utilisation is worse than either number.
+                r.utilisation_pct == null
+                  ? { nr: true }
+                  : { text: `${r.utilisation_pct}%`, seam: 'Read · Pipeline · Retainers', sub: `${r.hours_used}h of ${r.retained_hours}h` },
+                // A SCORE ALWAYS SHOWS ITS SOURCE. It is a remark somebody
+                // heard, not a metric this product measured.
+                r.satisfaction == null
+                  ? { nr: true }
+                  : { text: `${r.satisfaction.toFixed(1)} / 5`, sub: r.satisfaction_source || undefined },
+                r.health
+                  ? { pill: HEALTH_LABEL[r.health], pillTone: HEALTH_TONE[r.health] }
+                  : { nr: true },
+              ],
+            };
+          })}
+          note={'Utilisation is seam-marked because it is read from the retainer record on Pipeline · Retainers rather than recalculated here: two pages disagreeing about the same client’s utilisation is worse than either number, and the lowest one — a client not using what they pay for — is the near-term renewal risk this page exists to surface. Scope state is absent rather than “within scope” where nobody has assessed it, because an engagement no one has looked at has not been cleared of drift. A satisfaction score is shown with where it was said, every time, and the firm-wide average stays refused while any live engagement has none: averaging the rest would present a few opinions as a fact about all of them.'}
+        />
+
+        {items.length > 0 && visible.length === 0 && (
+          <p className="text-[12px] text-axal-muted">
+            No engagement is in this state. {items.length} in the book in total.
+          </p>
+        )}
+
+        <ZoneDraft
+          surface="delivery/health"
+          railOption="draft:renewal-risk"
+          label="Draft · renewal risk read"
+          accept="Accept read"
+          run="Read the book"
+          foot="Utilisation traced to Pipeline · Retainers."
+          empty="Per engagement: drift against the SOW, utilisation against the retainer record, and where satisfaction is absent rather than low — because the two call for different conversations, and only one of them is a renewal one."
+          nothingToDraft="No engagement is in the book, so there is nothing to read."
+        />
+
+        <Section title="Engagements">
+          <div className="space-y-3">
+            {engagementRows.map((row) => (
+                <HealthRow
+                  key={row.engagement_id}
+                  row={row}
+                  roster={roster}
+                  note={note}
+                  pending={(k) => isPending(`${row.engagement_id}:${k}`)}
+                  mutate={(k, fn) => act(`${row.engagement_id}:${k}`, fn, 'Saved.', `eng:${row.engagement_id}`)}
+                  onSaveFacts={(r, data) => act(
+                    `${r.engagement_id}:facts`,
+                    (rev) => api.savePartnerEngagementHealth(r.engagement_id, {
+                      ...data, expected_revision: stated(rev, r.health_revision ?? null),
+                    }),
+                    'Saved.', `facts:${r.engagement_id}`,
+                  )}
+                />
+              ))}
+            {items.length > 0 && engagementRows.length === 0 && (
+              <p className="text-[12px] text-axal-muted">
+                No engagement is in this state, so there is nothing to record against here.
+                Choose All to reach every one of the {items.length}.
+              </p>
+            )}
+          </div>
+        </Section>
+
+        {/* D390 — WHAT THE FOUNDER RECORDED, beside what the firm heard. The
+            reviews moved here from the retired /partner/operations/performance
+            and /portfolio tabs; FounderReviews.jsx says why this is their home
+            and how the read is bounded. Inside the live branch only, so an
+            unlinked sign-in (an admin with no firm) never reads every firm's
+            reviews through the admin-wide engagement list. */}
+        {!unlinked && <FounderReviews />}
+
+        <StatedLimit title="How this rating is made, and what it cannot see">
+          <p>
+            <strong>Nothing recorded is never “on track”.</strong> An engagement
+            with no milestone, blocker, deliverable or retainer is not rated at
+            all, and the count above says how many those are. A pill computed
+            from status alone would rate every live engagement identically and
+            call it a judgement.
+          </p>
+          <p className="mt-2">
+            <strong>Utilisation is read, not recomputed.</strong> The figure and
+            its chip come from the same worker helper Pipeline · Retainers uses.
+            Two pages disagreeing about one client’s utilisation would be worse
+            than either number, so there is one calculation and this page is not
+            it.
+          </p>
+          <p className="mt-2">
+            <strong>A satisfaction score is a remark, not a measurement.</strong>{' '}
+            Nothing here asks a client anything. A score is what somebody at this
+            firm heard and wrote down, so it cannot be saved without saying where
+            it was said — a number typed by the person who wants the renewal,
+            shown on the page that decides one, is the firm scoring itself. The
+            firm-wide average stays absent while any live engagement has no
+            score, because averaging the rest would present a few opinions as a
+            fact about all of them.
+          </p>
+          <p className="mt-2">
+            <strong>Scope is assessed or it is absent — never “within” by
+            default.</strong> An engagement nobody has looked at has not been
+            cleared of drift, and the strip counts how many those are rather
+            than folding them into the clean side.
+          </p>
+          {/* NO “CLIENT HAS GONE QUIET” SIGNAL, AND NO PARAGRAPH ABOUT IT.
+              The canvas asks for one. Nothing in this product records contact
+              with a client — no message log, no last-touched date — so a quiet
+              client and an active one look identical here. The nearest true
+              thing is a deliverable sent and not opened, which IS shown, on
+              Delivery · Deliverables, and reads there as "we do not know"
+              rather than "they ignored it". The rating rules above stay on the
+              page because they explain a pill the reader can see; this
+              explained a pill that is not drawn. */}
+        </StatedLimit>
+      </div>
+    </ZoneBody>
+    </>
+  );
+}

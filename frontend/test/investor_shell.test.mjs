@@ -1,0 +1,506 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+import { INVESTOR_FULL_BLEED } from '../src/sidebarConfig.js';
+import { routeBlock } from './_routes.mjs';
+import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const src = codeOnly(read('frontend/src/sidebarConfig.js'));
+const investor = src.slice(src.indexOf('\n  investor: ['), src.indexOf('\n  advisor: ['));
+const rows = [...investor.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
+  .map((m) => ({ to: m[1], label: m[2] }));
+const targets = rows.map((r) => r.to);
+const labels = rows.map((r) => r.label);
+
+test('investor sidebar matches the canvas rows exactly', () => {
+  // Two corrections to what this used to assert. The first row has been
+  // labelled 'Studio' in the live config all along, not 'Home' — the test was
+  // pinning a label that never shipped, and had been failing on it. The second
+  // is that the canvas's Firm Settings row is deliberately NOT here:
+  // /company-settings is the sidebar's pinned footer for every role, and a row
+  // as well would render it twice — which is why the row was removed.
+  //
+  // Spin-Out Lab stays. The canvas drops it as a top-level row, but removing a
+  // licence's door into the Lab is exactly the kind of change this migration
+  // is not permitted to make, so it is kept and counted here deliberately.
+  assert.deepEqual(labels, [
+    'Studio',
+    'Spin-Out Lab',
+    'Deals',
+    'Portfolio',
+    'Axal VC Fund',
+    'Fund',
+    'Network',
+    'Research',
+    'Trust',
+  ]);
+  assert.equal(rows.length, 9);
+  assert.doesNotMatch(investor, /label:\s*'Workspace'/);
+  assert.ok(!labels.includes('Messages'));
+});
+
+test('investor rows use the approved destinations', () => {
+  // EVERY WORKSPACE ROW POINTS AT ITS ROOT. Deals, Portfolio and Research used
+  // to point at `/deals/pipeline`, `/portfolio/health` and `/research/ask` —
+  // one level below their own overviews, which is exactly how the founder
+  // overviews were lost before #388. `/portfolio` had no route at all, so the
+  // row could not have pointed at it; `/research` was founder-gated and bounced
+  // every other licence to `/research/ask`.
+  assert.deepEqual(targets, [
+    '/studio',
+    '/spinout-lab',
+    '/deals',
+    '/portfolio',
+    '/spinout-lab/investor-workspace',
+    '/funds',
+    '/network',
+    '/research',
+    '/trust/me',
+  ]);
+
+  const app = readRoutesSource();
+  const registered = new Set([...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]));
+  for (const t of targets) {
+    assert.ok(registered.has(t), `investor row points at ${t}, which has no route`);
+  }
+
+  // Spin-Out Lab and Axal VC Fund keep their own tree — this migration does
+  // not rename, re-bucket or retarget either.
+  assert.ok(targets.includes('/spinout-lab'), 'the Spin-Out Lab row was dropped');
+  assert.ok(targets.includes('/spinout-lab/investor-workspace'),
+    'the Axal VC Fund row was retargeted out of the Lab tree');
+});
+
+test('Fund remains discoverable but requires the Institutional investor tier', () => {
+  assert.match(
+    investor,
+    /to: '\/funds'[^}]*label: 'Fund'[^}]*requiredInvestorTier: 'institutional'/,
+  );
+});
+
+test('Axal VC Fund and Spin-Out Lab are separate destinations', () => {
+  assert.equal(rows.find((r) => r.label === 'Spin-Out Lab')?.to, '/spinout-lab');
+  assert.equal(rows.find((r) => r.label === 'Axal VC Fund')?.to, '/spinout-lab/investor-workspace');
+});
+
+test('legacy investor deep links still highlight their owning workspace', () => {
+  // Order within a match array carries no meaning — SidebarNav tests
+  // membership — so this asserts the paths are present rather than pinning
+  // the sequence a formatting change would break.
+  const dealsMatch = /label: 'Deals',\s*\n?\s*match: \[([^\]]*)\]/.exec(investor);
+  assert.ok(dealsMatch, 'the Deals row has no match array');
+  for (const p of ['/pipeline', '/deals', '/raise/data-room']) {
+    assert.ok(dealsMatch[1].includes(`'${p}'`),
+      `legacy path ${p} no longer highlights the Deals row`);
+  }
+  // Research absorbed /market-intel, which was its own row's target before;
+  // D670 retired that page, and its route only redirects to /research now.
+  const researchMatch = /label: 'Research',\s*\n?\s*match: \[([^\]]*)\]/.exec(investor);
+  assert.ok(researchMatch, 'the Research row has no match array');
+  assert.ok(researchMatch[1].includes("'/research'") && !researchMatch[1].includes("'/market-intel'"),
+    'the Research row matches /research, and not the retired /market-intel');
+  // Watchlist, Capital and Liquidity were removed (owner, 2026-10-20).
+  assert.match(investor, /label: 'Portfolio', match: \['\/portfolio'\]/);
+  // LP Reporting (/lp-reports) was removed (owner, 2026-10-20).
+  assert.match(investor, /label: 'Fund', match: \['\/funds'\]/);
+  assert.match(investor, /label: 'Network', match: \['\/network', '\/relationships', '\/contacts'\]/);
+});
+
+test('investors keep the global settings footer (D4152: one "Settings" entry for every role)', () => {
+  const nav = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(nav, /<div className="flex-none border-t border-gray-200 dark:border-gray-700">\s*\{settingsScope \? <SettingsScopeBlock /);
+});
+/* ────────────────────────────────────────────────────────────────────────────
+ * The five defect classes the investor shell shipped, one check each.
+ *
+ * Every one of these is the investor half of a check `founder_shell.test.mjs`
+ * already makes, and every one is here because the same defect was reported
+ * twice — once per licence, in the same words. The founder suite could not see
+ * the investor half: it walks `frontend/src/pages/founder` by name.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+// label → [root, the component the root must render for an investor]
+//
+// Deals names `InvestorDealsRoutes` rather than `InvestorDealsWorkspace`, and
+// the change is the fix rather than a loosening. `/deals` used to reach its
+// overview through `InvestorWorkspacePage`'s `ownsDealsRoute` short-circuit,
+// which rendered `InvestorDealsWorkspace` — the page that stacked all four
+// decision panels as the bucket overview. ID1–ID4 then moved each panel onto
+// its own zone route and the file's own comment records the end state: "All
+// four decision panels are gone." The root kept rendering it and rendered
+// nothing. `InvestorDealsRoutes` is the bucket router the four zone routes
+// already use, and its root is the bucket board.
+const WORKSPACES = {
+  Deals: ['/deals', 'InvestorDealsRoutes'],
+  Portfolio: ['/portfolio', 'InvestorPortfolioCanvas'],
+  Fund: ['/funds', 'InvestorFundLanding'],
+  Network: ['/network', 'InvestorNetworkWorkspace'],
+  Research: ['/research', 'InvestorResearchWorkspace'],
+};
+
+// The five overview files, and the bucket prefix each one's zone row belongs to.
+const OVERVIEWS = {
+  InvestorDealsWorkspace: '/deals',
+  InvestorPortfolioCanvas: '/portfolio',
+  InvestorFundLanding: '/funds',
+  InvestorNetworkWorkspace: '/network',
+  InvestorResearchWorkspace: '/research',
+};
+
+const app = readRoutesSource();
+const investorDir = 'frontend/src/pages/investor';
+
+test('every investor row lands on its own workspace overview', () => {
+  for (const [label, [root]] of Object.entries(WORKSPACES)) {
+    const row = rows.find((r) => r.label === label);
+    assert.ok(row, `the ${label} row is gone from the investor sidebar`);
+    assert.equal(row.to, root,
+      `the ${label} row points at ${row.to}, one level below its overview — `
+      + 'that is exactly how the founder overviews were lost the first time');
+    const block = routeBlock(app, root);
+    assert.ok(block, `${root} has no route — /portfolio had none at all, so the row could not point at it`);
+    // The route may still redirect OTHER licences to a zone — /research sends
+    // advisors and operators to /research/ask, and must. What it may not do is
+    // send an investor there, so the investor arm has to name the overview.
+    const [, component] = WORKSPACES[label];
+    assert.ok(block.includes(`<${component} `) || block.includes(`<${component}/>`)
+      || block.includes(`investorWorkspace('${root.slice(1)}'`)
+      || block.includes('<PortfolioWorkspace'),
+      `${root} does not render ${component} for an investor — it redirects past its own overview`);
+  }
+  // AND THE OVERVIEW IT RENDERS MUST NOT BE EMPTY. The line above proves the
+  // row lands on the root; this proves the root draws something. `/deals` was
+  // reported as a blank page under a live heading, and every assertion in this
+  // file passed while it was — because each one checked the chain and none
+  // checked the destination.
+  const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
+  assert.match(dealsShell, /function DealsRoot\(/, 'the /deals root has no overview component');
+  // D4815 (canvas DX1): the root is My Deal Flow. It WAS the zones' bucket
+  // board, which read as three mini-apps under the flow; the zones are now one
+  // "Other deal activity" line inside DealFlow, each linking to its route.
+  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} \/>/,
+    'the /deals root no longer renders Deal flow');
+  assert.doesNotMatch(dealsShell, /<BucketBoard|<BucketOverview/,
+    'the /deals root stacks the zone mini-boards under Deal flow again');
+  const flow = codeOnly(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'));
+  assert.match(flow, /<OtherDealActivity surviving=\{flowUnreadable\}/,
+    'Deal flow no longer links the other zones, so the root would draw only the flow');
+});
+
+test('an investor pill navigates — it is not an anchor onto the page', () => {
+  // The user's words, twice: "the buttons don't work and aren't attached to
+  // LPs Calls Accounting Reporting". Four overviews shipped their zone row as
+  // `href="#lps"`, `href="#deals-pipeline"`, `href="#relationship-book"` and
+  // `href="#research-ask"` — anchors that scrolled the page while the routes
+  // they named were reachable from no control in the product.
+  //
+  // ZoneNav is stronger than a `doesNotMatch(/href="#/)`: every target is
+  // composed from shellConfig, so a label cannot drift from its route, and
+  // `workspace_shell_routes.test.mjs` already asserts every zone route in that
+  // config is registered in App.jsx. Both are checked.
+  for (const [name, prefix] of Object.entries(OVERVIEWS)) {
+    let page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    // D4817 part 1 (#5311): the Portfolio Overview draws in the shared
+    // Portfolio frame, which owns the zone row for every Portfolio board.
+    if (name === 'InvestorPortfolioCanvas') {
+      assert.match(page, /<PortfolioFrame\b/, 'the Portfolio Overview must draw in the Portfolio frame');
+      page = codeOnly(read('frontend/src/pages/portfolio/PortfolioFrame.jsx'));
+    }
+    assert.match(page, /<ZoneNav /, `${name} must render the shared zone row`);
+    assert.ok(page.includes(`bucketForPath('investor', '${prefix}')`),
+      `${name} must take its zone row's targets from the shell config`);
+    for (const nav of page.matchAll(/<nav[^>]*>[\s\S]*?<\/nav>/g)) {
+      assert.doesNotMatch(nav[0], /href=\{?[`'"]#/,
+        `${name} still has an in-page anchor row`);
+    }
+  }
+});
+
+test('every bucket root can be linked to by section', () => {
+  // `/portfolio` was the one root of five whose sections carried no anchor at
+  // all: twelve `id=` attributes on the page and every one of them a button, a
+  // link or a status testid. Deals has `#deals-pipeline` and its three
+  // siblings, Research `#research-ask` and four more, Fund and Network the
+  // same — so a reader handed "the Positions section" had no URL for it on the
+  // one root that needed it most, since Portfolio's three sections are the
+  // longest on the profile.
+  //
+  // This is NOT the anchor row the test above forbids. That one made a PILL
+  // scroll instead of navigating, which hid four whole routes; this gives a
+  // section a name so a link from elsewhere can reach it. The pills on
+  // `/portfolio` still go to `/portfolio/positions` and its siblings.
+  const anchors = {
+    InvestorPortfolioCanvas: ['portfolio-positions', 'portfolio-updates', 'portfolio-value-add'],
+    // `deals-pipeline` IS NOT HERE ANY MORE, AND ITS ABSENCE IS THE POINT.
+    // Canvas ID1 gave `/deals/pipeline` its own body — `pages/investor/deals/
+    // PipelineZone.jsx` — so the section a link would have scrolled to is now
+    // a route a link can simply open. An anchor kept beside it would have to
+    // be on a card this workspace no longer draws. The other three stay until
+    // ID2–ID4 land and take theirs the same way.
+    // AND NOW IT IS NONE. All four Deals sections became routes — ID1 through
+    // ID4 — so `InvestorDealsWorkspace` has no section anchor left to check and
+    // is off this map entirely. The check that replaces it is the inverse, just
+    // below: the workspace must not draw a stage section AT ALL, because a
+    // second copy of one would mount a zone row twice.
+  };
+  for (const [name, ids] of Object.entries(anchors)) {
+    const page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    for (const id of ids) {
+      assert.ok(page.includes(`id="${id}"`), `${name} has no section anchor #${id}`);
+    }
+  }
+  // THE INVERSE, for the workspace that has none left. Its four sections are
+  // four routes, and a stage anchor reappearing here would mean the panel came
+  // back beside the zone that replaced it — two chip rows and two export
+  // buttons for one route, which is the defect `profile_zone_actions` catches
+  // one layer up. Checked as an id, not as a word: the file DISCUSSES the four
+  // slugs in comments, and must go on being able to.
+  const deals = codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`));
+  for (const slug of ['pipeline', 'screening', 'commit', 'closing']) {
+    assert.ok(!deals.includes(`id="deals-${slug}"`),
+      `InvestorDealsWorkspace draws #deals-${slug} again — that section is a route now`);
+  }
+});
+
+test('an investor never gets two headings, two pill rows or two rails on one page', () => {
+  // /deals/pipeline and /network/relationships wrap the WHOLE overview in a
+  // WorkspaceShell that draws its own title, ZoneNav and rail — so the page
+  // drew a second of each inside them. `embedded` is how a page says the shell
+  // above it already owns the chrome.
+  for (const name of ['InvestorDealsWorkspace', 'InvestorNetworkWorkspace']) {
+    const page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    // `embedded` must be the first destructured prop and must default false —
+    // but the signature is allowed to take more after it. Network now also
+    // takes `zone`, which is what stopped its three zone routes rendering the
+    // identical stacked body; pinning the signature to exactly one prop would
+    // have made that fix fail a test about a different defect.
+    assert.match(page, /export default function \w+\(\{ embedded = false\s*[,}]/,
+      `${name} must accept an embedded flag`);
+    assert.match(page, /\{!embedded && <header/, `${name} must not draw its header when embedded`);
+    assert.match(page, /\{!embedded && \(\s*<WorkerRail/, `${name} must not draw a rail when embedded`);
+  }
+  // Deals now passes the zone too, for the same reason Network does and after
+  // the same defect: all four stage routes rendered the identical stacked body
+  // and differed only in what a `useEffect` scrolled to — a poll every 100 ms,
+  // up to twenty tries, because the section is not mounted on first paint.
+  const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
+  // WAS `zone={isRoot ? null : zone?.slug}`. `null` meant "the root — stack all
+  // four sections", and the root does not come here any more: ID1–ID4 moved
+  // every one of those sections onto its own page, leaving this file drawing
+  // nothing but the invitation queue, and `/deals` rendering a heading over an
+  // empty column. The root is the bucket board now; this expression is reached
+  // only on a zone route, so the slug is never null and the ternary is gone.
+  // The invariant the message names is unchanged: embedded, and the zone.
+  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{zone\?\.slug\} \/>/,
+    'the Deals shell must pass embedded and the zone slug');
+  assert.doesNotMatch(dealsShell, /scrollIntoView/,
+    'the Deals shell scrolls to a section again instead of rendering only that section');
+  // WAS a match on `const shows = (section) => !known || zone === section;`,
+  // and D164 re-aimed it, because that assertion had stopped being able to fail
+  // for the defect it names. Two things were true at once: this same test
+  // asserts twenty lines up that the four stage sections are GONE from this
+  // file (ID1–ID4 moved each onto its own route), and the page draws exactly
+  // one section — the invitation queue. So there was nothing left to narrow,
+  // `shows` was never called, and a source scan for its DECLARATION could not
+  // see that. A predicate declared and uninvoked passes a text match exactly
+  // like a working one; only scope analysis separates them, which is what
+  // armed `no-unused-vars` and found it.
+  //
+  // The invariant that IS load-bearing is the one below: this page draws a
+  // single section, so the stacking defect this test's name describes cannot
+  // recur without a second one appearing. If that happens, zone narrowing has
+  // to come back WITH it — and this assertion is what says so.
+  const dealsBody = codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`));
+  const sectionHeads = [...dealsBody.matchAll(/<SectionHeading\b/g)].length;
+  assert.equal(sectionHeads, 1,
+    `InvestorDealsWorkspace draws ${sectionHeads} sections, not 1 — if it stacks sections again `
+    + 'it must narrow to the zone it was given, which it no longer does at all');
+  // `embedded` AND the zone. The second half is the fix for the defect this
+  // test's own name half-describes: the page renders all three sections
+  // stacked, so mounted without a slug it drew the identical body on all three
+  // zone routes — one heading, but the wrong one on two of them.
+  // MATCHED AS TWO FACTS, NOT AS ONE LITERAL. This read
+  // `<InvestorNetworkWorkspace embedded zone={slug} />` including the closing
+  // slash, so it broke the moment the mount gained the filter builder — a test
+  // of formatting rather than of behaviour, which is the third one of those
+  // this workstream has had to loosen. What it defends is that the mount says
+  // `embedded` and passes the resolved slug; both are asserted, and any other
+  // prop may join them.
+  const networkShell = codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx'));
+  const investorMount = networkShell.split('<InvestorNetworkWorkspace')[1] || '';
+  const investorProps = investorMount.slice(0, investorMount.indexOf('/>'));
+  assert.match(investorProps, /\bembedded\b/, 'the Network shell must pass embedded');
+  assert.match(investorProps, /\szone=\{slug\}/, 'the Network shell must pass the zone slug');
+  assert.match(codeOnly(read('frontend/src/pages/investor/InvestorNetworkWorkspace.jsx')),
+    /const shows = \(section\) => !known \|\| zone === section;/,
+    'the investor Network page must narrow to the zone it was given');
+  // And the fund zone pages own their own composition, so the generic investor
+  // chrome must not be stacked on top of them either.
+  assert.match(codeOnly(read(`${investorDir}/InvestorWorkspacePage.jsx`)),
+    /key === 'fund' && fundUnlocked && children\) return children/,
+    'the four Fund zone pages get the generic header stacked above their own');
+});
+
+test('the Worker AI rail is one component, and every investor workspace has it', () => {
+  // Twelve bespoke rails lived under frontend/src/pages/investor, under four
+  // different headings — one said "Deals AI", not "Worker AI" — and not one of
+  // them imported useAiSpend, so none had a meter, a cap or a spend figure.
+  // Four of them claimed "Mode and model are set on the workspace" while the
+  // workspace set neither. That is "it does show anything, it looks blank".
+  const own = [];
+  for (const f of readdirSync(resolve(process.cwd(), investorDir))) {
+    if (!f.endsWith('.jsx')) continue;
+    if (/<aside[^>]*className="[^"]*rail/.test(codeOnly(read(`${investorDir}/${f}`)))) own.push(f);
+  }
+  assert.deepEqual(own, [], 'these pages hand-build a rail again instead of using the shared one');
+
+  // Every surface the investor shell config declares a bucket for renders one.
+  for (const [name] of Object.entries(OVERVIEWS)) {
+    assert.match(codeOnly(read(`${investorDir}/${name}.jsx`)),
+      /<WorkerRail[\s\S]*?role="investor"/, `${name} must mount the shared rail`);
+  }
+  for (const zonePage of [
+    'InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd',
+    'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting',
+  ]) {
+    assert.match(codeOnly(read(`${investorDir}/${zonePage}.jsx`)),
+      /<WorkerRail[\s\S]*?role="investor"/, `${zonePage} has no Worker AI rail`);
+  }
+  assert.match(codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx')),
+    /rail=\{\(\s*<WorkerRail/, 'the four /deals/* zone routes get no rail from their shell');
+
+  // The accent is the LICENCE's. Canvas I1: "Indigo, not violet: side by side
+  // with the founder product these read as two licenses." A rail that took the
+  // founder violet onto an investor page would say the wrong thing quietly.
+  const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
+  assert.match(rail, /ACCENT\[role\] \|\| ACCENT\.founder/,
+    'the rail must take its accent from the shell config, not a fourth copy of the hexes');
+  const shell = codeOnly(read('frontend/src/workspaces/shellConfig.js'));
+  for (const key of ['deepDark', 'tintDark']) {
+    assert.ok(new RegExp(`investor:[^}]*${key}:`).test(shell),
+      `ACCENT.investor has no ${key}; the rail would show its light accent on a dark ground`);
+  }
+  // One model for every licence, and it is the ROUTER'S. The three investor
+  // canvases each name a different one — which is exactly why the card is
+  // derived rather than transcribed: a rail that quoted its own canvas would
+  // give the same page three answers depending on which artboard was read
+  // last.
+  // THE RULE DID NOT LOOSEN, THE FACTS CHANGED. This used to assert that the
+  // rail names no model and no price at all, because `ASSIST_SURFACES` keys a
+  // surface to an aiRouter task class, that key decides the model, and no
+  // workspace ran one — so a card here would have named a model for a page
+  // that never called it.
+  //
+  // `POST /api/ai/workspace/explain` is what changed. The rule is now the
+  // stronger one it always stood for: the rail may name a model only for a
+  // surface that is registered AND has a worker route running that task, and
+  // the figures must come from the router's table rather than from a canvas.
+  // The canvases quote `$0.293 / M in · $2.253 / M out` for this model; the
+  // router's PRICE_USD_PER_1M_TOKENS says 0.50 / 0.50. Whichever is right, the
+  // rail must show the one that will actually be charged.
+  const cfg = codeOnly(read('frontend/src/ui/eadwynConfig.js'));
+  const task = /workspace:\s*\{[^}]*task:\s*'([a-z_]+)'/.exec(cfg)?.[1];
+  assert.ok(task, 'the workspace surface must be registered in ASSIST_SURFACES');
+  const router = read('cloudflare-worker/src/services/aiRouter.ts');
+  assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
+    `${task} must be a real entry in the router's ROUTE table`);
+  assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
+    `a worker route must actually run ${task}, or the card names a model nothing calls`);
+  // Derived, never typed here: since D769 PR 2 (#2088) the cards are the
+  // page's row in the Worker's matrix (`GET /api/ai/rail`), shaped by `railView`.
+  assert.match(rail, /railPrefsApi\.page\(page, option\)/, 'the model comes from the Worker\'s matrix');
+  assert.match(rail, /const rail = railView\(\{/, 'the cards are built from the Worker\'s answer');
+  assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
+    'the canvas figures are not the router figures');
+});
+
+test('the investor full-bleed list covers every investor root and zone route', () => {
+  // `fullWidthSurface` and `flushSurface` held the investor expression written
+  // out TWICE, identically — a `/portfolio/` prefix plus eight literal paths —
+  // so the four /funds/* zone pages were in neither, even though each of their
+  // shells declares min-height:100vh. That is the /grow/focus omission, four
+  // times over.
+  //
+  // THIS USED TO REGEX THE LITERALS out of the source and assert
+  // `listed.size >= 25`. A derived list has no literals to count, so that
+  // check could not survive the derivation — and it was the weaker check
+  // anyway: two of the five buckets take their zones from shared consts
+  // declared elsewhere in the file, so a text scan of the investor block found
+  // eleven of nineteen and passed silently on the rest.
+  const listed = new Set(INVESTOR_FULL_BLEED);
+
+  // THE `/research/*` CARVE-OUT IS GONE, and it is worth saying why rather
+  // than just deleting the assertion. It excluded the five Research zones from
+  // full-bleed because they "render WorkspaceShell around a plain card" and
+  // "a page that does not draw its own canvas does not want the canvas
+  // layout". That was a true statement about a shell that set no padding of
+  // its own — and `/validate/*` has the identical shape and was never carved
+  // out, so one licence held both treatments at once. `WorkspaceShell` now
+  // carries the canvases' `.main { padding }`, so a plain-card zone is padded
+  // by the component that draws it. The carve-out has nothing left to
+  // compensate for, and keeping it would leave Research the one bucket in the
+  // product that is centred at 1280px AND padded twice.
+  const required = [...Object.values(OVERVIEWS), ...allZoneRoutes('investor')];
+  assert.equal(Object.values(OVERVIEWS).length, 5, 'the investor shell no longer declares 5 roots');
+  // 20 since D546 (#1080) added Geographies to the Research bucket; 19 since
+  // D1243 (#3256) retired Deals · Pipeline into Deal flow's table.
+  assert.equal(allZoneRoutes('investor').length, 19, 'the investor shell no longer declares 19 zones');
+  assert.deepEqual(required.filter((p) => !listed.has(p)), [],
+    'these investor surfaces sit in the shell’s centred column instead of owning the page');
+
+  // DERIVED, NOT TYPED — a new zone cannot be added to an investor bucket and
+  // left out of the layout.
+  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
+  assert.match(sidebar, /export const INVESTOR_FULL_BLEED = \[\s*\.\.\.workspaceRoutes\('investor'\)/,
+    'INVESTOR_FULL_BLEED must be derived from the shell config, not re-typed');
+  const block = /export const INVESTOR_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '';
+  assert.ok(block, 'INVESTOR_FULL_BLEED block not found');
+  for (const zone of allZoneRoutes('investor')) {
+    assert.ok(!block.includes(`'${zone}'`),
+      `${zone} is typed into INVESTOR_FULL_BLEED as a literal — it should come from the shell config`);
+  }
+
+  // Both flags read the one list, and the hand-typed expression cannot return.
+  assert.match(app, /investor: INVESTOR_FULL_BLEED/,
+    'the per-role table must map investor to its own list');
+  assert.match(app, /const flushSurface = fullBleedSurface;/);
+  assert.doesNotMatch(app, /activeRole === 'investor' && \(\s*\n?\s*location\.pathname\.startsWith/,
+    'the hand-typed investor path expression is back');
+});
+
+test('a failed read is never rendered as an empty one', () => {
+  // The screenshot showed "Loading propositions" and "Introduction propositions
+  // are unavailable right now." at the same time, permanently: `null` meant
+  // both "not fetched" and "fetch failed", and setIntroductions was called only
+  // on a fulfilled result.
+  const network = codeOnly(read(`${investorDir}/InvestorNetworkWorkspace.jsx`));
+  assert.match(network, /const detailFor = \(error, value, describe\)/,
+    'the three section headings must read the error before the null');
+  for (const source of ['errors.relationships', 'errors.introductions', 'errors.organizations']) {
+    assert.ok(network.includes(`detailFor(${source}`), `${source} is not consulted by its heading`);
+  }
+  assert.ok(!/'Loading propositions'|'Loading relationship records'|'Loading attributed context'/.test(network),
+    'a heading still hard-codes a loading string a failed fetch can never leave');
+  // And a fund with no LP count reads as absent, not as zero.
+  const fund = codeOnly(read(`${investorDir}/InvestorFundLanding.jsx`));
+  assert.ok(!fund.includes('{fund.lp_count || 0}'), 'an absent LP count renders as 0 again');
+  assert.match(fund, /const UNAVAILABLE = Symbol\('unavailable'\)/,
+    'the three detail sources must distinguish unreadable from empty');
+  // EVERY SOURCE THAT CAN CARRY THE SENTINEL MUST READ IT. Storing it and not
+  // reading it is worse than the bug it replaced: a Symbol is truthy and has
+  // no `.length`, so `detail.lps || []` handed it straight to `.slice()` and a
+  // failed LP read went from a misleading "no records exist" to a thrown
+  // TypeError. CodeQL is what catches the general class — it reported `unread`
+  // as written and never read — so these three pin the specific call sites.
+  for (const source of ['detail.lps', 'detail.calls', 'detail.periods']) {
+    assert.ok(fund.includes(`unread(${source})`),
+      `${source} can be the unavailable sentinel and nothing checks for it`);
+  }
+  assert.match(fund, /const lpRows = Array\.isArray\(detail\.lps\)/,
+    'lpRows must reject the sentinel by shape, not by truthiness');
+});

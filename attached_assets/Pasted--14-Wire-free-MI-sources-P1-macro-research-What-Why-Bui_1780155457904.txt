@@ -1,0 +1,53 @@
+#14 - Wire free MI sources (P1 macro/research)
+
+What & Why
+
+Builds on the P0 core to add macro/capital and research-depth free providers so the Sector Compass has real demand/capital/research signal beyond the P0 set. These are all free but several require a no-cost API key. Wiring them brings the live free-source count to a level sufficient for a credible, citation-backed composite.
+
+Done looks like
+
+market_intel_rows contains real rows for world_bank, oecd, eurostat, bls, fred, crossref, and arxiv after a cron tick or recompute — not seeded values.
+Each real row carries a working citation_url to the actual provider resource.
+Each wired source is status: 'live', gated behind its MI_FLAG_<KEY>=live flag, with stub fallback on missing key / error / rate-limit.
+Worker typechecks; aggregator/scoring consume the new rows unchanged.
+Out of scope
+
+P0 core sources (separate task) and any paid source (already removed).
+Frontend provenance UI, retention purge, health endpoint.
+Steps
+
+World Bank — implement fetchLive for macro indicators per sector/geo, normalised rows with the World Bank indicator URL.
+OECD (SDMX-JSON) — implement fetchLive parsing the SDMX-JSON response into normalised rows with the dataset URL.
+Eurostat (JSON-stat) — implement fetchLive parsing JSON-stat into normalised rows with the dataset URL.
+BLS — implement fetchLive (registration key) for US labor series, normalised rows with the series URL.
+FRED (new connector) — add a new source file + register it; implement fetchLive (API key) for macro context series, rows with the FRED series URL.
+Crossref (new connector) — add a new source file + register it; implement fetchLive for scholarly publication velocity by sector, rows with the DOI URL.
+arXiv — implement fetchLive parsing the Atom feed into per-sector preprint volume rows with the arXiv abstract URL (parse XML with a lightweight inline parser — no new dependency).
+Normalisation + safety + flip live — keep 0..1 scale; stub-fallback + quota error recording on failure; set status: 'live', document the flags, recompute, and verify.
+API setup / install
+
+No npm packages required — all providers are REST/JSON (arXiv is Atom XML, parsed inline). Keyless: World Bank, OECD, Eurostat, Crossref (send a mailto for the polite pool), arXiv. Flip each on with its flag: MI_FLAG_WORLD_BANK=live, MI_FLAG_OECD=live, MI_FLAG_EUROSTAT=live, MI_FLAG_CROSSREF=live, MI_FLAG_ARXIV=live.
+
+Key-required (both free):
+
+BLS — register at the BLS public-data site for a free API key, store it as a Worker secret BLS_API_KEY (wrangler secret put BLS_API_KEY --env production; never .replit). Flip on: MI_FLAG_BLS=live.
+FRED — request a free API key from the St. Louis Fed (FRED), store it as a Worker secret FRED_API_KEY (wrangler secret put FRED_API_KEY --env production). Flip on: MI_FLAG_FRED=live.
+When a key is required but unset, the source must stay on its stub (do not throw) — same graceful-degrade pattern as the rest of the registry.
+
+Relevant files
+
+cloudflare-worker/src/services/market_intel/sources/world_bank.ts
+cloudflare-worker/src/services/market_intel/sources/oecd.ts
+cloudflare-worker/src/services/market_intel/sources/eurostat.ts
+cloudflare-worker/src/services/market_intel/sources/bls.ts
+cloudflare-worker/src/services/market_intel/sources/arxiv.ts
+cloudflare-worker/src/services/market_intel/sources/index.ts
+cloudflare-worker/src/services/market_intel/sources/_helpers.ts
+cloudflare-worker/src/services/market_intel/registry.ts:40-98
+cloudflare-worker/src/services/market_intel/aggregator.ts
+cloudflare-worker/src/services/market_intel/quota.ts
+cloudflare-worker/wrangler.toml
+Dependencies
+
+Wire free MI sources (P0 core)
+Open task

@@ -1,0 +1,1 @@
+| Revenue | founder | `/spinout-lab/revenue` | `/spinout-lab/revenue` | `spinout_lab.ts`, `financials.ts`, `metrics.ts`, `revenue.ts` | OUT OF SCOPE | Lab tool, Wk 3. The per-customer entry ledger (migration 311, `/api/revenue`) with the canvas's filters, CSV import and proof (D363); Verified reads Not recorded until a Stripe charge sync exists. |

@@ -1,0 +1,4967 @@
+import { heldLicences } from '../services/accountLicences';
+import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
+/**
+ * `/api/research/*` — the document library, and Ask over it.
+ *
+ * WHAT THIS IS, AND WHAT D12 ACTUALLY WITHDREW. Decisions D9/D12 pulled four
+ * `/advisor/research/*` tabs because each rendered a fixture with no API
+ * behind it, and set one condition for their return: a licensed
+ * PitchBook/Crunchbase-class source. That condition governs THIRD-PARTY
+ * research — companies, AI research, news. It does not govern this. The
+ * surface here is first-party: your own documents, your own playbooks, and
+ * questions answered only from them. Unbuilt, never forbidden.
+ *
+ * EVERY LICENCE HAS THESE ZONES. `library` and `ask` are in all four
+ * `RESEARCH_ZONES` lists, so the store is keyed on `user_id` rather than on
+ * any one role's profile row, and there is no cross-user listing anywhere in
+ * this file by construction — every read is `WHERE owner_user_id = ?`.
+ *
+ * WHAT IS NOT HERE, AND WHAT CHANGED. A founder still cannot push a document
+ * to an advisor FROM THIS FILE, and the library zone still says so. What moved
+ * is the reason: the grant type that did not exist now does — migration 218's
+ * `advisor_client_grants`, one project, one named advisor, revocable, expiring
+ * and scoped — and `advisor_client_document_shares` beside it is the additive
+ * change migration 213's header pre-authorised.
+ *
+ * THAT TABLE NOW HAS A WRITER, AND THIS PARAGRAPH USED TO SAY IT DID NOT.
+ * Task #104 built `POST`/`DELETE /api/advisor-grants/:projectUid/documents`
+ * and the control beside `AdvisorGrantSection`, so a founder can pick a file
+ * and send it to one named advisor who already holds a live grant. An empty
+ * library therefore no longer means "nobody CAN send you a document" — it
+ * means nobody HAS.
+ *
+ * Nothing about the isolation changed. A shared document is still resolved by
+ * id through `advisor_client_document_shares` and no namespace is widened;
+ * D37 and `research_search_isolation.test.ts` are untouched.
+ */
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { Hono } from 'hono';
+import { logAdminAction } from '../services/adminAudit';
+import researchCollections from './research_collections';
+import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
+import type { Env } from '../types';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
+import { Jobs } from '../models/jobs';
+import { mintDownloadToken } from '../services/signedDownload';
+import { searchSemanticOutcome, deleteChunkedEntity, researchNamespace, type SearchHit } from '../services/vectorize';
+import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { orderByRanking, rank } from '../services/ai/decide';
+import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
+import { fundOverlapNote } from '../services/researchFundRead';
+import { markCited, referenceCheck } from '../services/researchCitations';
+import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
+import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
+import { scopedDecisions } from './ic';
+import { investorProjectIds } from './_investorProjectScope';
+import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
+// The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
+// below decides what is expiring, and it has to agree with what the zone shows
+// a reader — so it imports the same helper the partner listing serves from
+// rather than repeating thirty days here.
+import { perkLifecycle } from './perks';
+// The snapshot table gains its board-reporting columns lazily rather than in a
+// migration (`progress.ts:1650`), so a reader that goes straight to SELECT can
+// hit a table that is one deploy behind the columns it names. Every consumer
+// calls this first; the KPI draft surface is a consumer.
+import { ensureProjectMetricsSchema } from './progress';
+import { todayIso } from './_t13t14t15_helpers';
+import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner_workspace_helpers';
+import {
+  googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
+  makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
+  saveSheetsToken, loadSheetsToken, deleteSheetsToken, loadSheetLink, upsertSheetLink,
+  parseSpreadsheetRef, pullFundsToSheet, pushFundsFromSheet, fundsAppBase,
+  SUGGESTED_SHEET_URL,
+} from '../services/fundSheets';
+import { refuse } from '../util/refusal';
+// The data room's own gate, imported rather than retyped: the grant check, the
+// NDA check and the access log live in ONE place, and the D124 expiry tests
+// read their SQL from there.
+import { activeGrant, projectNdaActive, logAccess } from './data_room';
+import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
+import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
+
+const research = new Hono<{ Bindings: Env }>();
+research.route('/collections', researchCollections);
+
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB, matching deck_reviewer.
+const ALLOWED_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+]);
+const EXT_BY_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/plain': 'txt',
+  'text/markdown': 'md',
+  'text/csv': 'csv',
+};
+const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal']);
+
+/**
+ * THE FLOOR BELOW WHICH ASK REFUSES TO ANSWER.
+ *
+ * Cosine similarity from bge-base. A question whose best match scores under
+ * this has no source in the library worth citing, and the honest response is
+ * to say so — not to answer from the model's general knowledge in the same
+ * voice a cited answer uses. That is precisely the failure D12 withdrew a tab
+ * for, and the canvas draws `No source` as a tile beside `Answered` rather
+ * than treating it as an error.
+ *
+ * A CONSTANT, NOT A SETTING. Nothing can change it, so a per-user column
+ * would be a table pretending to be a control. The page states the value.
+ */
+const SCORE_FLOOR = 0.55;
+/** D4605: the index states Ask may answer from. */
+const ANSWERABLE_STATES = ['indexed', 'partial'];
+
+const nowIso = () => new Date().toISOString();
+const newUid = () => crypto.randomUUID().replace(/-/g, '');
+
+interface DocRow {
+  id: number; uid: string; owner_user_id: number; title: string; kind: string; source_year?: number | null;
+  r2_key: string; content_type: string | null; size_bytes: number | null;
+  index_state: string; index_note: string | null; chunk_count: number | null;
+  indexed_at: string | null; created_at: string; updated_at: string;
+}
+
+/**
+ * `source` IS WHERE A DOCUMENT CAME FROM, AND IT IS NOT A COLUMN.
+ *
+ * The `pr4` artboard's fourth tile is `From clients` — "read-only, seam-marked"
+ * — and two of its six rows carry the cyan seam chip. `research_documents` has
+ * `kind`, whose `client` value the upload form calls "About a client": that is
+ * what a document is ABOUT, not where it came from. A teardown the firm wrote
+ * about a prospect and a brief the prospect sent them are both `kind = 'client'`
+ * today, and only one of them is read-only.
+ *
+ * A FIRST DRAFT ADDED `source` AND `source_label` COLUMNS IN A MIGRATION AND
+ * THAT WAS WRONG. Nothing would have written them. `advisor_client_document_shares`
+ * (migration 218) already records exactly this fact — which document, shared
+ * with whom, active or revoked — so the column would have been a second copy of
+ * a truth that already exists, with no writer, which is the first failure D53's
+ * four-step check is for. The list reads both sets instead.
+ *
+ * NOTHING IS COPIED AND NO NAMESPACE WIDENS. A shared document is listed, not
+ * duplicated; it is indexed in the CLIENT's namespace and `searchSemantic` still
+ * only ever searches the caller's own, so `In Ask` reports it as unreachable —
+ * which is true, and is a sharper version of the artboard's own point that index
+ * state is Ask's reach. D37 is untouched.
+ */
+const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null) => ({
+  uid: r.uid,
+  title: r.title,
+  kind: r.kind,
+  source_year: r.source_year ?? null,
+  content_type: r.content_type,
+  size_bytes: r.size_bytes,
+  index_state: r.index_state,
+  index_note: r.index_note,
+  // NULL, not 0. "Never indexed" and "indexed into nothing" are different
+  // facts, and only one of them means Ask can read the file.
+  chunk_count: r.chunk_count,
+  indexed_at: r.indexed_at,
+  created_at: r.created_at,
+  source,
+  source_label: sourceLabel,
+  // Stated by the route rather than derived in the page. The rule is the
+  // route's — a shared document's uid is not in the caller's own set, so every
+  // write path 404s on it already — and a second copy of it in the client would
+  // be the place the two disagree.
+  read_only: source === 'client',
+  // What Ask can actually reach. An own document is answerable when it is
+  // indexed; a shared one never is, because it is indexed somewhere else.
+  // D4605: a partly indexed document answers from the passages it has.
+  in_ask: source === 'own' && ANSWERABLE_STATES.includes(r.index_state),
+});
+
+/**
+ * The caller's OWN row. Every WRITE path here uses this and must keep using it:
+ * metadata, re-index and delete are the owner's, which is exactly what
+ * `read_only` means on a shared row.
+ */
+async function ownDoc(env: Env, userId: number, uid: string): Promise<DocRow | null> {
+  return env.DB.prepare(
+    `SELECT * FROM research_documents WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<DocRow>();
+}
+
+/**
+ * #4610 — A DOCUMENT THIS CALLER MAY READ: their own, or one an ACTIVE share
+ * opens to them. Read authorization only, and deliberately a separate function
+ * from `ownDoc` rather than a flag on it.
+ *
+ * THE BUG. `GET /documents` lists shared documents on purpose — that is what
+ * `source: 'client'` and the "From Verwood" chip are for — and `LibraryZone`
+ * drew an `Open` button on every row. `Open` called the download route, which
+ * resolved through `ownDoc`, so for a shared row it 404'd. The adjacent comment
+ * in that page argues that "a client's document offers neither" Metadata nor
+ * Re-index nor Remove "because drawing either would be a control that cannot
+ * act", and `research_library_shares.test.mjs` asserts that rule by name — and
+ * `Open` sat outside the guard both of them describe. A reader was listed a
+ * document, told where it came from, given a button, and refused. The phone
+ * cards drew no `Open` at all, so the two viewports disagreed about whether the
+ * feature existed.
+ *
+ * WHY A SEPARATE FUNCTION. Read and write are different permissions and the
+ * only safe way to keep them different is for them to be different lookups. If
+ * this were `ownDoc(…, { orShared: true })` then every existing caller would
+ * be one argument away from granting a recipient the owner's delete. There is
+ * no such argument: `PATCH`, `DELETE` and the re-index queue still call
+ * `ownDoc` and are unreachable through a share.
+ *
+ * THE SHARE MUST BE LIVE, not merely to have existed. A revoke is
+ * `status = 'revoked'`, never a delete (migration 218), so `status = 'active'`
+ * is the whole of it and a revoked share stops reading the moment it is
+ * revoked — the same predicate the list uses, so a row that is listed is a row
+ * that opens and the reverse.
+ *
+ * INDEXING IS NOT IMPLIED AND IS NOT TOUCHED. The current policy is that a
+ * client's share is readable but is not indexed into the recipient's Ask
+ * namespace, which is why `dto()` computes `in_ask` as `source === 'own' && …`.
+ * This grants a download; it says nothing about Ask, and `in_ask` is unchanged.
+ */
+async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row: DocRow; source: 'own' | 'client'; projectId: number | null } | null> {
+  const own = await ownDoc(env, userId, uid);
+  if (own) return { row: own, source: 'own', projectId: null };
+  // The project the share came through, by the SAME correlated subquery the
+  // list uses for its "From Verwood" chip — the newest active grant this reader
+  // holds over a project belonging to the document's owner. It is what the
+  // founder's own access log is keyed on, and it is read here rather than
+  // stored on the share so a project renamed after the share still resolves.
+  const shared = await env.DB.prepare(
+    `SELECT d.*, (
+              SELECT g.project_id
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND p.founder_id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS grant_project_id
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+      WHERE d.uid = ? AND s.advisor_user_id = ? AND s.status = 'active'
+      LIMIT 1`
+  ).bind(uid, userId).first<DocRow & { grant_project_id: number | null }>();
+  if (!shared) return null;
+  const projectId = Number.isSafeInteger(Number(shared.grant_project_id)) ? Number(shared.grant_project_id) : null;
+  return { row: shared, source: 'client', projectId };
+}
+
+// ---------------------------------------------------------------------------
+// Library
+// ---------------------------------------------------------------------------
+
+research.get('/documents', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_documents WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
+  ).bind(user.id).all<DocRow>();
+
+  // The documents clients have opened to this reader, through the grants
+  // migration 218 already models. `status = 'active'` because a revoke is a
+  // state rather than a delete, and a revoked share must stop appearing here
+  // the moment it is revoked.
+  //
+  // The project's name is the seam chip's label — "From Verwood" — and it is
+  // taken from the grant rather than stored on the document, so a project
+  // renamed after the share still labels correctly.
+  // A CORRELATED SUBQUERY FOR THE NAME, not a join, because a reader can hold
+  // grants over several projects and joining would return the same document
+  // once per grant. This picks the newest grant this reader holds over a
+  // project belonging to the document's owner, which is the client the file
+  // came from.
+  const shared = await c.env.DB.prepare(
+    `SELECT d.*, (
+              SELECT p.name
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND p.founder_id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS project_name
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+      WHERE s.advisor_user_id = ? AND s.status = 'active'
+      ORDER BY d.created_at DESC LIMIT 200`
+  ).bind(user.id).all<DocRow & { project_name: string | null }>();
+
+  const items = [
+    ...(rows.results || []).map((r) => dto(r, 'own')),
+    ...(shared.results || []).map((r) => dto(r, 'client', r.project_name ? `From ${r.project_name}` : 'From client')),
+  ];
+  return c.json({
+    items,
+    // The library's own reach, stated rather than left for a reader to count.
+    // D4605: `indexed` counts what Ask can answer from, a partly indexed document included.
+    //
+    // #4610 — `answerable` IS `in_ask`, THE SAME FIELD THE ROWS CARRY.
+    // `indexed` counted `ANSWERABLE_STATES.includes(index_state)` over every
+    // item including SHARED ones, while each row's own `in_ask` is
+    // `source === 'own' && …`. So an indexed client share was counted in
+    // "N answerable" and then labelled, correctly, "Indexed in their library,
+    // not yours" on its own row — the header pill and the row disagreed about
+    // the same document, and an account holding only shares was told it had
+    // answerable documents when Ask could use none of them. `answerable` is
+    // now the count of rows whose `in_ask` is true, so the two cannot differ:
+    // one field, counted, not a second rule that happens to resemble it.
+    //
+    // `indexed` is kept, unchanged, beside it: it is a true statement about
+    // INDEX STATE, which is a different question from answerability and is the
+    // one the Index-state column answers. The page reads whichever it means.
+    answerable: items.filter((i) => i.in_ask === true).length,
+    not_answerable: items.filter((i) => i.in_ask !== true).length,
+    indexed: items.filter((i) => ANSWERABLE_STATES.includes(i.index_state)).length,
+    not_indexed: items.filter((i) => !ANSWERABLE_STATES.includes(i.index_state)).length,
+    // D4612: still being read, so the page knows to keep watching and Re-index leaves it alone.
+    pending: items.filter((i) => i.index_state === 'pending').length,
+    // The `pr4` artboard's fourth tile. Counted here rather than in the page so
+    // the tile and the `Client docs` chip cannot disagree about what the word
+    // means: this is provenance (migration 222), NOT `kind = 'client'`, which
+    // is what a document is about.
+    from_clients: items.filter((i) => i.source === 'client').length,
+    score_floor: SCORE_FLOOR,
+  });
+});
+
+/**
+ * Re-index one document — the artboard's `Re-index` op, which was
+ * `unbuilt: 'indexing runs on upload; there is no re-run control'`.
+ *
+ * That was true and is the gap the whole `pr4` composition turns on: its
+ * Thornfield teardown row is a document the firm added and never indexed, so it
+ * answers nothing in Ask, and there was no way to act on it from the page that
+ * reports it. Re-queuing is the act.
+ *
+ * A CLIENT-SOURCED DOCUMENT MAY BE RE-INDEXED. Read-only means the reader
+ * cannot change or delete it; indexing writes nothing to the document and only
+ * touches the reader's own namespace, which is the reason the file is in front
+ * of them at all.
+ */
+research.post('/documents/:uid/reindex', async (c) => {
+  const user = await requireAuth(c);
+  const doc = await ownDoc(c.env, user.id, c.req.param('uid'));
+  if (!doc) return c.json({ detail: 'not_found' }, 404);
+  // Already queued. Re-queuing would put a second job behind the first for the
+  // same file, and the page would report "reading" either way.
+  if (doc.index_state === 'pending') return c.json({ detail: 'already_queued' }, 409);
+  await c.env.DB.prepare(
+    `UPDATE research_documents
+        SET index_state = 'pending', index_note = NULL, updated_at = datetime('now')
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(doc.id, user.id).run();
+  // The SAME job the upload path enqueues, `embed_entity` over `research_doc`
+  // — not a second indexer. Two enqueue shapes for one piece of work is how the
+  // re-run and the first run drift into indexing differently, and the second
+  // one is the one nobody tests.
+  try {
+    await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
+  } catch {
+    // #5350's hourly recovery picks up a pending row after 60 minutes when no
+    // live job exists. The row is already 'pending', so the page reports the
+    // truth while that bounded retry waits.
+  }
+  const fresh = await ownDoc(c.env, user.id, doc.uid);
+  return c.json({ item: fresh ? dto(fresh) : null });
+});
+
+research.post('/documents', async (c) => {
+  const user = await requireAuth(c);
+  // `FILES` is optional in types.ts, so a missing bucket is a 503 with a
+  // reason rather than a crash — same shape as data_room.ts.
+  if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
+
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ detail: 'invalid_form' }, 400);
+  }
+  // Workers-types declares FormData entries as string; at runtime an upload is
+  // a File. Narrowing out the string case is load-bearing, not defensive.
+  const entry = form.get('file') as unknown;
+  if (!entry || typeof entry === 'string') return c.json({ detail: 'file_required' }, 400);
+  const file = entry as File;
+
+  const mime = file.type || 'application/octet-stream';
+  if (!ALLOWED_MIME.has(mime)) {
+    return c.json({ detail: 'unsupported_type', message: 'Upload a PDF, Word, PowerPoint, text, markdown or CSV file.' }, 415);
+  }
+  if (file.size > MAX_BYTES) {
+    return c.json({ detail: 'too_large', message: 'That file is over the 20 MB limit.' }, 413);
+  }
+
+  const kindRaw = form.get('kind');
+  const kind = typeof kindRaw === 'string' && KINDS.has(kindRaw) ? kindRaw : 'document';
+  const titleRaw = form.get('title');
+  const title = (typeof titleRaw === 'string' && titleRaw.trim())
+    ? titleRaw.trim().slice(0, 200)
+    : (file.name || 'Untitled').replace(/\.[^.]+$/, '').slice(0, 200);
+
+  const uid = newUid();
+  // DERIVED SERVER-SIDE, NEVER TAKEN FROM THE REQUEST. A caller-supplied key
+  // is a path-traversal write into another account's prefix.
+  const r2Key = `research/${user.id}/${uid}.${EXT_BY_MIME[mime] || 'bin'}`;
+  // D1170 — a research document counts to its owner (D1169 §1).
+  const storage = await assertStorageRoom(c.env, { userId: user.id }, file.size, user);
+
+  try {
+    await c.env.FILES.put(r2Key, await file.arrayBuffer(), {
+      httpMetadata: { contentType: mime },
+      customMetadata: { owner_user_id: String(user.id), doc_uid: uid, filename: file.name || 'document' },
+    });
+  } catch (e) {
+    console.error('[research] R2 put failed:', (e as Error).message);
+    return c.json({ detail: 'storage_write_failed' }, 502);
+  }
+
+  const ins = await c.env.DB.prepare(
+    `INSERT INTO research_documents
+       (uid, owner_user_id, title, kind, r2_key, content_type, size_bytes, index_state, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  ).bind(uid, user.id, title, kind, r2Key, mime, file.size, nowIso(), nowIso()).run();
+
+  // Indexing runs on the queue, not inline: extraction plus up to 200 embed
+  // calls is far too long to hold a request open, and the row is already
+  // useful (listed, downloadable) while `index_state` is 'pending'.
+  const id = (ins as any).meta?.last_row_id;
+  if (id) {
+    // A failed producer write leaves the row pending; #5350's hourly recovery
+    // enqueues it after 60 minutes when no live job exists.
+    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch {}
+  }
+
+  await noteStorageLanded(c.env, storage);
+  const row = await ownDoc(c.env, user.id, uid);
+  return c.json(row ? dto(row) : { uid, title, index_state: 'pending' });
+});
+
+/** D549: metadata belongs to the document's owner, including a shared row. */
+research.patch('/documents/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownDoc(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => null);
+  if (!body || !['title', 'kind', 'source_year'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+    return c.json({ detail: 'metadata_required' }, 400);
+  }
+  if (body.title !== undefined && (typeof body.title !== 'string' || !body.title.trim() || body.title.trim().length > 300)) {
+    return c.json({ detail: 'invalid_title' }, 400);
+  }
+  if (body.kind !== undefined && (typeof body.kind !== 'string' || !KINDS.has(body.kind))) {
+    return c.json({ detail: 'invalid_kind' }, 400);
+  }
+  if (body.source_year !== undefined && body.source_year !== null &&
+      (!Number.isInteger(body.source_year) || body.source_year < 1000 || body.source_year > new Date().getUTCFullYear() + 1)) {
+    return c.json({ detail: 'invalid_source_year' }, 400);
+  }
+  await c.env.DB.prepare(
+    "UPDATE research_documents SET title = ?, kind = ?, source_year = ?, updated_at = datetime('now') WHERE uid = ? AND owner_user_id = ?"
+  ).bind(body.title === undefined ? row.title : body.title.trim(), body.kind ?? row.kind,
+    body.source_year === undefined ? (row.source_year ?? null) : body.source_year, row.uid, user.id).run();
+  await logAdminAction(c.env, user.id, user.email, 'research_document_metadata_updated', { document_uid: row.uid });
+  return c.json({ item: dto((await ownDoc(c.env, user.id, row.uid))!) });
+});
+
+research.get('/documents/:uid/download', async (c) => {
+  const user = await requireAuth(c);
+  // #4610: ownership OR an active permitted share. A document that is neither
+  // is 404 in the same words whether it belongs to somebody else or does not
+  // exist, so the refusal confirms nothing — and a revoked share is in that
+  // same 404 the instant it is revoked.
+  const readable = await readableDoc(c.env, user.id, c.req.param('uid'));
+  if (!readable) return c.json({ detail: 'Not found' }, 404);
+  const row = readable.row;
+  // The shipped, audited path: one-time HMAC token, TTL clamped to 300s, jti
+  // consumed in KV, every hit written to activity_logs by routes/files.ts.
+  // Deliberately NOT an S3 presigned URL — wrangler.toml says why for this
+  // bucket, and a bespoke stream here would be a second download path to
+  // keep secure.
+  const { token, expires_at } = await mintDownloadToken(c.env, {
+    key: row.r2_key,
+    audience: `research:${row.uid}`,
+    userId: user.id,
+    ttlSec: 120,
+  });
+  /**
+   * #4610 — THE FOUNDER'S OWN RECORD OF THE READ, for a shared document only.
+   *
+   * `advisor_client_access_log` was built by migration 218 as "the founder's
+   * own record of an advisor's reading", `open_document` is one of the two
+   * actions it declares, and `GET /:projectUid/access-log` already LEFT JOINs
+   * `research_documents` to name the file — waiting for rows nothing wrote.
+   * Opening somebody else's document is exactly the event that table exists
+   * for, and until now the only trace was a `signed_download` row in
+   * `activity_logs`, which the founder cannot see.
+   *
+   * Best-effort, after the token is minted: an audit write must not be able to
+   * deny a reader a file they are authorized to read. Own documents write
+   * nothing here — there is no third party whose record it would be.
+   */
+  if (readable.source === 'client' && readable.projectId != null) {
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_client_access_log (project_id, advisor_user_id, action, document_id) VALUES (?, ?, 'open_document', ?)`,
+    ).bind(readable.projectId, user.id, row.id).run().catch(() => {});
+  }
+  return c.json({ url: `/api/files/dl/${token}`, expires_at, name: row.title });
+});
+
+research.delete('/documents/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownDoc(c.env, user.id, c.req.param('uid'));
+  // A CLIENT-SOURCED DOCUMENT CANNOT REACH THIS LINE, and that is the read-only
+  // asymmetry rather than a missing check. `ownDoc` is `WHERE owner_user_id = ?`,
+  // and a shared document is owned by the client — so its uid 404s here, and on
+  // every other write path in this file, by construction. There is nothing to
+  // guard because there is nothing to reach.
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+
+  // VECTORS FIRST, and the order is the point: if the row went first, its
+  // `chunk_count` would be gone and the chunk ids could never be named again,
+  // leaving the document's text answerable after the document was deleted.
+  await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
+  if (c.env.FILES) {
+    try { await c.env.FILES.delete(row.r2_key); } catch (e) {
+      console.warn('[research] R2 delete failed:', (e as Error).message);
+    }
+  }
+  await c.env.DB.prepare('DELETE FROM research_documents WHERE id = ?').bind(row.id).run();
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Ask
+// ---------------------------------------------------------------------------
+
+/**
+ * `no_source` IS AN ANSWER, and it returns 200.
+ *
+ * An Ask box wired to a library that has nothing relevant will still answer if
+ * you let it — from general knowledge, in the same confident voice a cited
+ * answer uses. That is the single worst failure available on a research
+ * surface and the reason a previous Ask tab was withdrawn. So the retrieval
+ * runs first and the model is only called when there is something to quote.
+ *
+ * It is not an error status because it is not an error: the question was
+ * understood, the library was searched, and the honest result is "nothing here
+ * answers this". A 4xx would make the page render it as a failure.
+ */
+// ---------------------------------------------------------------------------
+// Ask — and the session it is now kept in (migration 221)
+// ---------------------------------------------------------------------------
+//
+// EVERY OUTCOME WRITES A ROW, including the two that produce no answer. The
+// `pr1` artboard's third exchange is a question the library could not answer,
+// kept on screen with the gap named — so `no_source` is a record, not a
+// discard, and it is precisely what the `Unanswered` chip selects on.
+// `model_unavailable` is stored apart from it because reporting a model
+// outage as an empty library sends the reader to upload a document that would
+// not have helped.
+
+interface AskSessionRow {
+  id: number; uid: string; owner_user_id: number;
+  last_asked_at: string | null; created_at: string;
+}
+
+interface AskAnswerRow {
+  id: number; uid: string; session_id: number; owner_user_id: number;
+  question: string; answer: string | null; reason: string;
+  best_score: number | null; score_floor: number | null; citations: string;
+  model: string | null; prompt_tokens: number; completion_tokens: number;
+  cached: number; cost_micro_usd: number; saved: number; discarded?: number; use_note?: string | null; created_at: string;
+}
+
+/** The stored citations JSON as an array; a malformed value is no citations. */
+function storedCitations(raw: string | null | undefined): Array<{ n?: number | null }> {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x === 'object') : [];
+  } catch { return []; }
+}
+
+const answerDto = (r: AskAnswerRow) => ({
+  uid: r.uid,
+  question: r.question,
+  answer: r.answer,
+  reason: r.reason,
+  best_score: r.best_score,
+  score_floor: r.score_floor,
+  // Stored as text, returned as the array the page renders. A malformed value
+  // degrades to no citations rather than failing the whole thread — the answer
+  // is still worth reading, and an exception here would take the session with it.
+  // D4613: each citation says whether the answer cites it, so retrieved
+  // context and cited support are told apart on every read, old rows included.
+  citations: markCited(r.answer, storedCitations(r.citations)),
+  // D4613: the answer's bracketed references checked against its own sources.
+  reference_check: referenceCheck(r.answer, storedCitations(r.citations)),
+  model: r.model,
+  prompt_tokens: r.prompt_tokens,
+  completion_tokens: r.completion_tokens,
+  cached: r.cached === 1,
+  // Back to dollars at the boundary, so nothing above this line has to know
+  // the storage unit. Six places is the unit's own resolution, not a rounding.
+  cost_usd: r.cost_micro_usd / 1e6,
+  saved: r.saved === 1,
+  discarded: r.discarded === 1,
+  disposition: r.discarded === 1 ? 'discarded' : r.saved === 1 ? 'saved' : null,
+  use_note: r.use_note ?? null,
+  created_at: r.created_at,
+});
+
+/**
+ * #4610 — THE SCOPE'S WHOLE TOTALS, FROM SQL, NOT FROM THE PAGE.
+ *
+ * `askTotals` below counts whatever array it is handed. That was the only
+ * totals function, and it was handed the 200-row slice — so `asked`, `saved`
+ * and `cost_usd` plateaued at 200 and then stopped moving for ever, while the
+ * Library's "Questions asked" tile and Ask's own strip printed them as the
+ * reader's whole history. A reader with 340 questions was told 200, and the
+ * number stayed 200 no matter how many more they asked.
+ *
+ * These come from one aggregate over the whole selected scope, so they do not
+ * change when the page does — the acceptance criterion in one sentence. The
+ * `discarded` scope is counted here too, which it could not be before: Archived
+ * was a client-side filter over `scope=all`'s 200 rows, so an archived answer
+ * past that window was unreachable from the tab that exists to find it.
+ *
+ * ONE STATEMENT PER SCOPE, no spliced predicate — the rule the three read
+ * queries below already follow, and for the same reason.
+ */
+async function scopeTotals(env: Env, userId: number, scope: string, sessionId: number | null) {
+  const SUMS = `COUNT(*) AS asked,
+        COUNT(CASE WHEN reason = 'answered' THEN 1 END) AS answered,
+        COUNT(CASE WHEN reason = 'no_source' THEN 1 END) AS no_source,
+        COUNT(CASE WHEN reason = 'model_unavailable' THEN 1 END) AS model_unavailable,
+        COUNT(CASE WHEN reason = 'retrieval_unavailable' THEN 1 END) AS retrieval_unavailable,
+        COUNT(CASE WHEN saved = 1 THEN 1 END) AS saved,
+        COUNT(CASE WHEN discarded = 1 THEN 1 END) AS discarded,
+        COALESCE(SUM(cost_micro_usd), 0) AS cost_micro_usd`;
+  type Row = {
+    asked: number; answered: number; no_source: number; model_unavailable: number;
+    retrieval_unavailable: number; saved: number; discarded: number; cost_micro_usd: number;
+  };
+  let row: Row | null = null;
+  if (scope === 'saved') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1`).bind(userId).first<Row>();
+  } else if (scope === 'discarded') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
+  } else if (scope === 'all') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+  } else if (sessionId != null) {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
+  } else {
+    // No session yet is not a failed read: a reader who has never asked has no
+    // thread, and zero is the true answer for a scope that is genuinely empty.
+    return { asked: 0, answered: 0, no_source: 0, model_unavailable: 0, retrieval_unavailable: 0, saved: 0, discarded: 0, cost_usd: 0 };
+  }
+  // AN UNREADABLE AGGREGATE IS NOT ZERO. D1 throws on a failed read, so a null
+  // row means the statement answered without its columns. Throwing sends the
+  // page to its unavailable state instead of letting it print eight zeroes and
+  // a cost of nothing over a history that exists.
+  if (!row || !Number.isSafeInteger(Number(row.asked))) throw new Error('Ask totals unreadable');
+  return {
+    asked: Number(row.asked), answered: Number(row.answered), no_source: Number(row.no_source),
+    model_unavailable: Number(row.model_unavailable), retrieval_unavailable: Number(row.retrieval_unavailable),
+    saved: Number(row.saved), discarded: Number(row.discarded),
+    // Summed in whole micro-dollars by SQLite and divided once, for the same
+    // reason `askTotals` sums in micros: a long history's total must not be the
+    // accumulated error of N float additions.
+    cost_usd: Number(row.cost_micro_usd || 0) / 1e6,
+  };
+}
+
+/**
+ * Totals for the header strip, counted over whatever slice is being returned.
+ * `page_totals` in the response; `totals` is `scopeTotals` above.
+ *
+ * `answered` and `asked` are separate figures rather than one ratio because
+ * the artboard prints "2 of 3" and a single number cannot say that. `no_source`
+ * and `model_unavailable` are counted apart for the reason the store keeps
+ * them apart.
+ */
+function askTotals(items: ReturnType<typeof answerDto>[]) {
+  return {
+    asked: items.length,
+    answered: items.filter((i) => i.reason === 'answered').length,
+    no_source: items.filter((i) => i.reason === 'no_source').length,
+    model_unavailable: items.filter((i) => i.reason === 'model_unavailable').length,
+    // D4605: the library could not be searched. Not an evidence gap.
+    retrieval_unavailable: items.filter((i) => i.reason === 'retrieval_unavailable').length,
+    saved: items.filter((i) => i.saved).length,
+    // Summed from the per-answer receipts, never re-derived from tokens and a
+    // current rate: a price list that moves must not silently restate what a
+    // past session cost. Summed in whole micro-dollars and divided once, so a
+    // long session's total is not the accumulated error of N float additions.
+    cost_usd: items.reduce((sum, i) => sum + Math.round((i.cost_usd || 0) * 1e6), 0) / 1e6,
+  };
+}
+
+/** The caller's session by uid, or null. Owner-scoped like every read here. */
+async function askSession(c: { env: Env }, userId: number, uid: string) {
+  return c.env.DB.prepare(
+    `SELECT * FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<AskSessionRow>();
+}
+
+/**
+ * The session a question belongs to: the one named, else the caller's most
+ * recent, else a new one.
+ *
+ * WHY IT FALLS BACK RATHER THAN 400-ing. A reader who lands on `/research/ask`
+ * and types a question has no session uid to send, and demanding one would put
+ * a "start a session" step in front of the only thing the page does. `New
+ * session` is then a real act — it forces the next question into a fresh
+ * thread — instead of the thing you must do before asking anything at all.
+ */
+async function resolveAskSession(c: { env: Env }, userId: number, wanted: string) {
+  if (wanted) {
+    const named = await askSession(c, userId, wanted);
+    if (named) return named;
+  }
+  const latest = await c.env.DB.prepare(
+    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+  ).bind(userId).first<AskSessionRow>();
+  if (latest) return latest;
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)`
+  ).bind(uid, userId).run();
+  return askSession(c, userId, uid) as Promise<AskSessionRow>;
+}
+
+/** Write one exchange and stamp its session. Returns the row's uid. */
+async function recordAnswer(c: { env: Env }, session: AskSessionRow, row: {
+  question: string; answer: string | null; reason: string;
+  best_score: number | null; citations: unknown[];
+  model?: string | null; prompt_tokens?: number; completion_tokens?: number;
+  cached?: boolean; cost_usd?: number;
+}) {
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_answers
+       (uid, session_id, owner_user_id, question, answer, reason, best_score, score_floor,
+        citations, model, prompt_tokens, completion_tokens, cached, cost_micro_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, session.id, session.owner_user_id, row.question, row.answer, row.reason,
+    row.best_score, SCORE_FLOOR, JSON.stringify(row.citations ?? []),
+    row.model ?? null, Math.max(0, Math.round(row.prompt_tokens ?? 0)),
+    Math.max(0, Math.round(row.completion_tokens ?? 0)),
+    row.cached ? 1 : 0, Math.max(0, Math.round((row.cost_usd ?? 0) * 1e6)),
+  ).run();
+  await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET last_asked_at = datetime('now') WHERE id = ?`
+  ).bind(session.id).run();
+  return uid;
+}
+
+/**
+ * Start a thread. `New session` in the artboard's ops row, which was
+ * `unbuilt: 'the question box below starts one'` — true of the box, and not of
+ * the op: a box that always appends to the same thread cannot start a second.
+ */
+research.post('/ask/sessions', async (c) => {
+  const user = await requireAuth(c);
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)`
+  ).bind(uid, user.id).run();
+  const row = await askSession(c, user.id, uid);
+  return c.json({ session: { uid, created_at: row?.created_at ?? null, last_asked_at: null }, items: [], totals: askTotals([]) }, 201);
+});
+
+/**
+ * A thread, or the whole history, or the saved slice — the three chips, one
+ * read.
+ *
+ * `scope=session` is the artboard's default (`This session`, selected). The
+ * absent-session case returns an empty thread with a null uid rather than a
+ * 404: a reader who has never asked anything has no session, and that is the
+ * page's empty state, not an error.
+ */
+research.get('/ask/sessions', async (c) => {
+  const user = await requireAuth(c);
+  const scope = String(c.req.query('scope') || 'session');
+  const wanted = String(c.req.query('session') || '');
+
+  let session: AskSessionRow | null = null;
+  if (wanted) {
+    session = await askSession(c, user.id, wanted);
+  } else {
+    session = await c.env.DB.prepare(
+      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+    ).bind(user.id).first<AskSessionRow>();
+  }
+
+  /**
+   * #4610 — FOUR WHOLE STATEMENTS, AND EACH IS A KEYSET PAGE.
+   *
+   * FOUR, NOT THREE: `discarded` is a server scope now. Archived was a
+   * client-side filter over `scope=all`'s window, so an archived answer past
+   * the 200th was unreachable from the one tab that exists to find it.
+   *
+   * WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
+   * `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
+   * value is a literal chosen by a ternary, and it is right to: the next person
+   * to add a fifth scope reaches for the same seam with a variable in hand.
+   * The `saved = 1` and `discarded = 1` predicates are written out where they
+   * apply.
+   *
+   * THE 200 WAS A CAP, NOT A PAGE. It truncated silently in both directions:
+   * `saved` and `all` are `id DESC`, so they dropped the OLDEST answers, while
+   * `session` is `id ASC` and dropped the NEWEST — a reader whose thread passed
+   * 200 exchanges stopped seeing the answer they had just been given. Nothing
+   * told them either way, and `research_ask_session.test.mjs` pinned the three
+   * statements' shape without pinning what the bound did to the reader.
+   *
+   * The cursor is the row id, which is unique and monotonic, so the ordering is
+   * already total and no tiebreaker is needed.
+   *
+   * EVERY SCOPE READS NEWEST-FIRST, INCLUDING `session`, AND THAT IS THE POINT.
+   * The session read was `id ASC`, which with a bare cap dropped the newest
+   * exchanges — and simply paginating an ASC read would have made it worse, not
+   * better: the first page a reader is handed would be their OLDEST two hundred
+   * questions and the answer they had just been given would be several pages
+   * away. So the SQL walks back from the newest row in every scope, and the
+   * session's page is reversed below for display, which is where the thread's
+   * oldest-first reading order belongs. "The newest successfully written answer
+   * appears after submission" is then true of the first page by construction,
+   * rather than true only while the history is short.
+   */
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const limit = listLimit(c.req.query('limit'));
+  // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
+  // `index.ts` turns into that response. This handler answers it itself rather
+  // than relying on that plumbing: a cursor read as "the first page" would
+  // restart a walk the caller believes is advancing, so the refusal must be
+  // the one thing that cannot go missing here.
+  let after: ReturnType<typeof decodeCursor> = null;
+  try { after = decodeCursor(c.req.query('cursor'), 1); } catch {
+    return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+  }
+  const from = after ? Number(after[0]) : null;
+  if (after && !Number.isSafeInteger(from)) return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+
+  let rows: { results: AskAnswerRow[] };
+  if (scope === 'saved') {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'discarded') {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'all') {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (session) {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, from, limit + 1).all<AskAnswerRow>();
+  } else {
+    rows = { results: [] };
+  }
+  const read = trimPage((rows.results || []), limit);
+  // The cursor is always the OLDEST row of the page, because every scope walked
+  // back from the newest. That is `read.rows`'s last element before the session
+  // scope is reversed, so it is taken here and not after.
+  const last = read.rows[read.rows.length - 1];
+  // A thread reads oldest-first on screen while being read newest-first from
+  // the store, so the session scope's page is reversed for display. Every other
+  // scope is a log and stays newest-first, as it was.
+  const page = scopeOrder === 'asc' ? [...read.rows].reverse() : read.rows;
+  const items = page.map(answerDto);
+  return c.json({
+    scope,
+    session: session ? { uid: session.uid, created_at: session.created_at, last_asked_at: session.last_asked_at } : null,
+    items,
+    // #4610: `totals` IS THE WHOLE SELECTED SCOPE, from its own aggregate, so
+    // it does not move when the page does. `page_totals` is this page, kept so
+    // a caller that wants the slice's own figures has them under a name that
+    // says which they are — the defect was one object serving as both.
+    totals: await scopeTotals(c.env, user.id, scope, session?.id ?? null),
+    page_totals: askTotals(items),
+    page_size: items.length,
+    has_more: read.hasMore,
+    next_cursor: read.hasMore && last ? encodeCursor([Number(last.id)]) : null,
+    limit,
+    // The scope's order, so a reader paging `session` knows the cursor walks
+    // forward in time while every other scope walks back.
+    order: scopeOrder,
+    score_floor: SCORE_FLOOR,
+  });
+});
+
+/**
+ * Keep or unkeep one answer — `Saved answers` in the ops row.
+ *
+ * A PATCH on the answer rather than a POST to a saved-answers collection,
+ * because there is no second object: saving is one bit on a row the reader
+ * already owns, and a collection endpoint would imply a list that can hold
+ * something the history does not.
+ */
+research.patch('/ask/answers/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => null);
+  if (!body || !['saved', 'discarded', 'use_note'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
+    return c.json({ detail: 'disposition_or_note_required' }, 400);
+  }
+  if ((body.saved !== undefined && typeof body.saved !== 'boolean') ||
+      (body.discarded !== undefined && typeof body.discarded !== 'boolean') ||
+      (body.saved === true && body.discarded === true)) return c.json({ detail: 'invalid_disposition' }, 400);
+  if (body.use_note !== undefined && body.use_note !== null &&
+      (typeof body.use_note !== 'string' || body.use_note.length > 2000)) return c.json({ detail: 'invalid_use_note' }, 400);
+  const before = await c.env.DB.prepare(
+    'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
+  ).bind(uid, user.id).first<AskAnswerRow>();
+  if (!before) return c.json({ detail: 'not_found' }, 404);
+  const saved = body.discarded === true ? false : (body.saved ?? before.saved === 1);
+  const discarded = body.saved === true ? false : (body.discarded ?? before.discarded === 1);
+  const note = body.use_note === undefined ? (before.use_note ?? null) : (body.use_note?.trim() || null);
+  await c.env.DB.prepare(
+    'UPDATE research_ask_answers SET saved = ?, discarded = ?, use_note = ? WHERE uid = ? AND owner_user_id = ?'
+  ).bind(saved ? 1 : 0, discarded ? 1 : 0, note, uid, user.id).run();
+  await logAdminAction(c.env, user.id, user.email, 'research_answer_disposition_updated', { answer_uid: uid, saved, discarded });
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
+  ).bind(uid, user.id).first<AskAnswerRow>();
+  return c.json({ item: row ? answerDto(row) : null });
+});
+
+/**
+ * D4605 — one passage Ask may answer from: the hit, its document, and the text
+ * the model reads (the whole chunk, or the preview of a vector written before
+ * the chunk was stored whole).
+ */
+export interface EligiblePassage { hit: SearchHit; document_uid: string; revision: string | null; text: string; full: boolean }
+
+/** What the reranker reads of each passage, and the model's whole source budget. */
+export const RANK_CONTEXT_CHARS = 2000;
+export const ASK_CONTEXT_BUDGET = 16000;
+
+/**
+ * D4605: the document row is the authority. A hit counts only while its
+ * document is the caller's, is `indexed` or `partial`, and the hit was written
+ * by the document's current index run (`indexed_at`). A vector with no
+ * revision predates revisions and is accepted for a document indexed before
+ * them, reading its preview; it gains its whole passage on its next re-index.
+ */
+export async function eligiblePassages(env: Env, userId: number, hits: SearchHit[]): Promise<EligiblePassage[]> {
+  const docs = new Map<number, { uid: string; index_state: string; indexed_at: string | null } | null>();
+  const out: EligiblePassage[] = [];
+  for (const hit of hits) {
+    if (!docs.has(hit.entity_id)) {
+      const row = await env.DB.prepare(
+        'SELECT uid, index_state, indexed_at FROM research_documents WHERE id = ? AND owner_user_id = ?'
+      ).bind(hit.entity_id, userId).first<{ uid: string; index_state: string; indexed_at: string | null }>();
+      docs.set(hit.entity_id, row ?? null);
+    }
+    const doc = docs.get(hit.entity_id);
+    if (!doc || !ANSWERABLE_STATES.includes(doc.index_state)) continue;
+    if (hit.revision != null && hit.revision !== doc.indexed_at) continue;
+    const full = typeof hit.passage === 'string' && hit.passage.length > 0;
+    out.push({ hit, document_uid: doc.uid, revision: hit.revision ?? null, text: full ? hit.passage! : hit.snippet, full });
+  }
+  return out;
+}
+
+/** D4605: the passages that fit the model's source budget, best first; the first always fits. */
+export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_BUDGET): EligiblePassage[] {
+  const kept: EligiblePassage[] = [];
+  let used = 0;
+  for (const p of passages) {
+    const size = p.text.length + p.hit.title.length + 16;
+    if (kept.length && used + size > budget) break;
+    kept.push(kept.length ? p : { ...p, text: p.text.slice(0, budget) });
+    used += size;
+  }
+  return kept;
+}
+
+/**
+ * D3701 (Research v2, RS-07): how much of the cited passage a citation keeps,
+ * so the answer can show "its exact passage" without the page re-reading the
+ * index. The excerpt is the start of the text the model was given for that
+ * citation, never a summary of it, and `passage_truncated` says when it is
+ * cut. It is stored in the answer's citations JSON (migration 221), which is
+ * read only by the answer's owner, about the owner's own document.
+ */
+export const CITATION_PASSAGE_CHARS = 600;
+
+/** D4605: a citation names the document, the index run, the chunk and its page. */
+export function citationOf(p: EligiblePassage, documentUid: string) {
+  const text = String(p.text || '').trim();
+  return {
+    title: p.hit.title,
+    document_uid: documentUid,
+    revision: p.revision,
+    chunk: p.hit.chunk ?? null,
+    page: p.hit.page ?? null,
+    score: Number(p.hit.score.toFixed(3)),
+    // D3701: the passage itself. Null, not '', when the index gave no text.
+    passage: text ? text.slice(0, CITATION_PASSAGE_CHARS) : null,
+    passage_truncated: text.length > CITATION_PASSAGE_CHARS,
+  };
+}
+
+research.post('/ask', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const question = String(body?.question || '').trim().slice(0, 1000);
+  if (!question) return c.json({ detail: 'question_required' }, 400);
+  const session = await resolveAskSession(c, user.id, String(body?.session_uid || ''));
+
+  const searched = await searchSemanticOutcome(c.env, question, {
+    topK: 8,
+    type: 'research_doc',
+    namespace: researchNamespace(user.id),
+    ownerUserId: user.id,
+  });
+  // D4605: a search that could not run is not a search that found nothing.
+  // It is recorded as its own outcome, so history and the strip keep the gap
+  // in the evidence apart from a service failure, and the reader is told to
+  // try again rather than to upload a document that would not have helped.
+  if (!searched.ok) {
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'retrieval_unavailable', best_score: null, citations: [],
+    });
+    return c.json({
+      question, answer: null, reason: 'retrieval_unavailable', retryable: true,
+      failure: searched.failure, citations: [], score_floor: SCORE_FLOOR,
+      session_uid: session.uid, answer_uid, cost_usd: 0,
+    });
+  }
+  const hits = searched.hits;
+  // D4605: the document row decides eligibility, not the index. A passage
+  // counts only while its document is the caller's, is indexed (wholly or in
+  // part), and the passage was written by the document's current index run; a
+  // removed document, one being re-indexed, and a vector a previous run left
+  // behind contribute nothing.
+  const eligible = await eligiblePassages(c.env, user.id, hits.filter((h) => h.score >= SCORE_FLOOR));
+  // #3938 (task 4): retrieve, then rank, then write. The reranker orders the passages that passed the
+  // floor against the question, so the answer reads (and cites) the best first. A refused or failed
+  // rank keeps the index's order: the answer's own run below states any refusal.
+  let usable = eligible;
+  if (eligible.length > 1) {
+    const ranked = await rank(c.env, {
+      userId: user.id, surface: AI_SURFACE.researchAsk,
+      rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
+    }, { query: question, contexts: eligible.map((p) => `${p.hit.title}\n${p.text}`.slice(0, RANK_CONTEXT_CHARS)) });
+    if (ranked.ok) usable = orderByRanking(eligible, ranked.ranking);
+  }
+  usable = withinBudget(usable);
+  const documentUids = usable.map((p) => p.document_uid);
+
+  if (!usable.length) {
+    const indexed = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state IN ('indexed', 'partial')`
+    ).bind(user.id).first<{ n: number }>();
+    const best = hits.length ? Number(hits[0].score.toFixed(3)) : null;
+    // Nothing was retrieved, so no model ran and nothing is charged. The row
+    // records that as a zero rather than as an absent figure: "charged
+    // nothing" is a fact about this question, and the strip's `No source` tile
+    // says so beside it.
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'no_source', best_score: best, citations: [],
+    });
+    return c.json({
+      question,
+      answer: null,
+      reason: 'no_source',
+      // The difference between "your library is empty" and "your library has
+      // nothing on this" is the whole message, and the page renders each
+      // differently.
+      indexed_documents: indexed?.n ?? 0,
+      best_score: best,
+      score_floor: SCORE_FLOOR,
+      citations: [],
+      session_uid: session.uid,
+      answer_uid,
+      cost_usd: 0,
+    });
+  }
+
+  // D4605: the whole passage, not the 280-character preview a list shows.
+  const context = usable
+    .map((p, i) => `[${i + 1}] ${p.hit.title}${p.hit.page != null ? ` (page ${p.hit.page})` : ''}\n${p.text}`)
+    .join('\n\n');
+  const prompt = [
+    'Answer the question using ONLY the sources below.',
+    'Cite sources by their bracketed number. If the sources do not contain the answer, say so plainly.',
+    'Do not add facts that are not in the sources.',
+    '',
+    `Question: ${question}`,
+    '',
+    'Sources:',
+    context,
+  ].join('\n');
+
+  let answer: string | null = null;
+  let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
+  let off = false;
+  // D3701 part 4 (RS-11): a run the router refused before it ran (out of AI
+  // tokens, a spend limit, a review hold, the guard). Answered in the shared
+  // refusal's words and status (D766, `refuseRun`), and NOT recorded as
+  // `model_unavailable`: that said "the model didn't respond" about a run
+  // that never started, and sent the reader to try again instead of to Add
+  // tokens. Nothing ran, so nothing is charged or stored.
+  let refused: { refusal?: string | null; error?: string } | null = null;
+  try {
+    const out = await runAI(c.env, {
+      task: 'research_ask',
+      userId: user.id,
+      surface: AI_SURFACE.researchAsk,
+      // D778 part 11: the press's page and option win (the founder's Research
+      // desk sends `ask:research`; every profile's Ask sends its own key); the
+      // record is the thread the answer is written to.
+      rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
+      // `text` rather than `messages`: the router hashes it for the cache key
+      // and this task is uncached, but the shape is what every non-chat task
+      // uses. The instructions live in the prompt itself so the retrieved
+      // sources and the rules about them cannot drift apart.
+      text: prompt,
+      maxTokens: 700,
+    });
+    answer = out.ok && out.output ? out.output.trim() : null;
+    off = out.refusal === 'assist_off';
+    if (!out.ok && out.refusal && out.refusal !== 'assist_off') refused = { refusal: out.refusal, error: out.error };
+    // The router's own receipt, already written to `ai_usage_logs`. Taken
+    // whether or not the answer arrived — a model that ran and returned
+    // nothing still cost what it cost, and hiding that would make the session
+    // total disagree with the admin dashboard.
+    usage = out.usage || null;
+  } catch (e) {
+    console.error('[research] ask failed:', (e as Error).message);
+  }
+
+  // D765: off on this page, nothing ran, so no answer is recorded either.
+  if (off) return refuseAssistOff(c);
+  // D3701 part 4: refused before running. `refuseRun` is null for a model that
+  // could not be reached, which stays `model_unavailable` below.
+  if (refused) {
+    const r = refuseRun(c, refused);
+    if (r) return r;
+  }
+
+  const receipt = {
+    model: usage?.model ?? null,
+    prompt_tokens: usage?.prompt_tokens ?? 0,
+    completion_tokens: usage?.completion_tokens ?? 0,
+    cached: usage?.cached === true,
+    cost_usd: usage?.est_cost_usd ?? 0,
+  };
+
+  if (!answer) {
+    // The retrieval worked and the model did not. Reporting that as
+    // `no_source` would blame the library for a failure that is not its.
+    const citations = usable.map((p, i) => citationOf(p, documentUids[i]));
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'model_unavailable',
+      best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
+    });
+    return c.json({
+      question, answer: null, reason: 'model_unavailable',
+      citations,
+      score_floor: SCORE_FLOOR,
+      session_uid: session.uid,
+      answer_uid,
+      cost_usd: receipt.cost_usd,
+    });
+  }
+
+  const citations = usable.map((p, i) => ({ n: i + 1, ...citationOf(p, documentUids[i]) }));
+  const answer_uid = await recordAnswer(c, session, {
+    question, answer, reason: 'answered',
+    best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
+  });
+
+  return c.json({
+    question,
+    answer,
+    reason: 'answered',
+    // D4613: the same marking and check the history read applies.
+    citations: markCited(answer, citations),
+    reference_check: referenceCheck(answer, citations),
+    score_floor: SCORE_FLOOR,
+    session_uid: session.uid,
+    answer_uid,
+    cost_usd: receipt.cost_usd,
+  });
+});
+
+// Market readings, brief notes and proposal attachments (migrations 222 and 223)
+// live in `research_client_prep.ts` (#4574 part 8), mounted just ahead of this router.
+
+// ---------------------------------------------------------------------------
+// Zone drafts — the AI band every Research and Network artboard ends with
+// ---------------------------------------------------------------------------
+//
+// WHY `workspace_explain` AND NOT A NEW TASK CLASS. The band's work is read
+// back what this page is showing and write one paragraph — which is the task
+// `workspace_explain` already names, already has `alternates` and a model menu
+// for, and is already registered as the `workspace` assist surface so the
+// rail's model card is true for it. A `research_draft` class would be the same
+// prompt under a second name, splitting `/api/ai/me/spend` into two figures for
+// one kind of work. The task is the join key; it follows the work, not the URL.
+//
+// SURFACES ARE ALLOW-LISTED, AND THE LIST IS ONE ENTRY LONG ON PURPOSE. A
+// surface here with no band mounted on it would be config for a page that
+// cannot spend it — the failure `ui_assist_rail_and_sidebar` catches on the
+// rail. Each artboard adds its own entry when its band lands.
+
+interface ZoneDraftRow {
+  id: number; uid: string; owner_user_id: number; surface: string;
+  scope_key: string | null; body: string; model: string | null;
+  cost_micro_usd: number; accepted_at: string | null; created_at: string;
+}
+
+const draftDto = (r: ZoneDraftRow) => ({
+  uid: r.uid,
+  surface: r.surface,
+  scope_key: r.scope_key,
+  body: r.body,
+  model: r.model,
+  cost_usd: r.cost_micro_usd / 1e6,
+  accepted: r.accepted_at != null,
+  accepted_at: r.accepted_at,
+  created_at: r.created_at,
+});
+
+/**
+ * What each surface drafts, and over what.
+ *
+ * `label` and `accept` are the artboard's own words for the band — they are
+ * copy, and they live in the frontend beside the rest of the page's copy. What
+ * is here is the part only the worker can hold: the instruction, and the reader
+ * of the rows it is given.
+ */
+/**
+ * The project a FOUNDER draft surface is allowed to read, or null.
+ *
+ * Every surface above this line belongs to a partner and scopes on
+ * `users.partner_id`. The founder surfaces below scope on a PROJECT, and the
+ * `gather` signature hands them a user id rather than the `User` row — so
+ * `ownedProjectScope` in `contacts.ts`, which keys off `user.founder_id`, is
+ * not reachable from here. This is the same check written for the id: the
+ * project must belong to a founder record that belongs to this user, and it
+ * must not be deleted.
+ *
+ * IT IS THE ONLY THING BETWEEN ONE FOUNDER'S DRAFT AND ANOTHER'S RECORDS.
+ * `/research/drafts` authorises on `requireAuth` alone and delegates the
+ * scoping to each surface, which is what makes the mechanism role-agnostic —
+ * and what makes a gather that forgets to scope a cross-account read rather
+ * than a bug on one page. `scope` is the caller's `scopeKey`, so it is
+ * attacker-controlled by construction; nothing here trusts it beyond using it
+ * as a candidate id.
+ *
+ * THE LINK IS `users.founder_id`, NOT A COLUMN ON `founders`. An earlier draft
+ * joined `founders f ON f.id = p.founder_id WHERE f.user_id = ?`, which reads
+ * plausibly and names a column that has never existed — `founders` carries
+ * `uid`, `name` and `email`, and the account behind it is found the other way
+ * round. `schema_guards` caught it; a unit test could not, because its harness
+ * had invented the column to match.
+ *
+ * OWNERSHIP, NOT ACTIVE COMPANY. `ownedProjectScope` in `contacts.ts` also
+ * narrows to the founder's active company, which needs the request headers and
+ * a full Hono context; `gather` is handed `{ env }` alone. Ownership is the
+ * security property and it is enforced here — the company facet only decides
+ * which of the founder's OWN startups is in view, and the desk passes the
+ * project id it is already showing.
+ *
+ * With no scope the founder's single project is used, and a founder with more
+ * than one gets null rather than an arbitrary pick: a draft written about the
+ * wrong startup is worse than no draft.
+ */
+/** "Going cold" (D551): more than this many days since the last recorded activity, as `lib/networkBook.js` says. */
+export const FOUNDER_COLD_AFTER_DAYS = 60;
+
+async function founderProject(
+  c: { env: Env }, userId: number, scope: string,
+): Promise<number | null> {
+  const owned = await c.env.DB.prepare(
+    `SELECT p.id FROM projects p
+       JOIN users u ON u.founder_id = p.founder_id
+      WHERE u.id = ? AND p.deleted_at IS NULL
+      ORDER BY p.id`
+  ).bind(userId).all<{ id: number }>();
+  const ids = (owned.results || []).map((r) => Number(r.id));
+  if (!ids.length) return null;
+  // D912: the narrative-fix band's scope is `<project>:v<version>:<figure>`.
+  // The project id is still the key that was sent; the rest names the mismatch.
+  const picked = /^(\d+):v[1-9]\d{0,8}:[a-z_]+$/.exec(scope);
+  if (picked) return founderProject(c, userId, picked[1]);
+  // A SCOPE KEY THAT WAS SENT MUST RESOLVE OR REFUSE — it may never fall
+  // through to the lone-project branch below. An earlier draft tested
+  // `Number.isFinite(Number(scope))` first, so `scope_key: "null"`, or any
+  // other unparseable string, read as "no scope key was sent" and drafted over
+  // whatever single project the caller happened to own. That is a draft about
+  // a startup nobody asked about, produced by a request that named one.
+  if (scope !== '') {
+    const asked = Number(scope);
+    return Number.isInteger(asked) && ids.includes(asked) ? asked : null;
+  }
+  return ids.length === 1 ? ids[0] : null;
+}
+
+const DRAFT_SURFACES: Record<string, {
+  instruction: string;
+  gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * What Accept writes BESIDES stamping the draft, for a surface whose canvas
+   * says Accept writes somewhere ("Accept writes the note"). It runs before
+   * the stamp; a string it returns is a refusal code, and then nothing is
+   * written at all — neither the record nor `accepted_at`.
+   */
+  accept?: (c: { env: Env }, userId: number, scope: string, body: string) => Promise<string | null>;
+  /**
+   * What is stored for a run, given the model's text, for a surface that holds
+   * the wording to its material after the model writes. Null means no draft:
+   * the run is refused as `draft_unfaithful` and nothing is stored.
+   */
+  finish?: (c: { env: Env }, userId: number, scope: string, text: string) => Promise<string | null>;
+}> = {
+  'research/ask': {
+    instruction: [
+      'Write one short brief gathering the answers below into a single passage.',
+      'Carry every bracketed citation through to the claim it supports.',
+      'Name any question that went unanswered as a gap. Do not answer it.',
+      'Add no fact that is not in the material below.',
+    ].join(' '),
+    // The session's own exchanges, in order. A question that came back with no
+    // source is INCLUDED and marked — it is the gap the brief has to name, and
+    // dropping it here would produce a brief that reads as though the session
+    // answered everything it was asked.
+    gather: async (c, userId, scope) => {
+      const session = scope
+        ? await c.env.DB.prepare(
+            `SELECT id FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
+          ).bind(scope, userId).first<{ id: number }>()
+        : await c.env.DB.prepare(
+            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+          ).bind(userId).first<{ id: number }>();
+      if (!session) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT question, answer, reason, citations FROM research_ask_answers
+          WHERE session_id = ? AND owner_user_id = ? ORDER BY id ASC LIMIT 50`
+      ).bind(session.id, userId).all<{ question: string; answer: string | null; reason: string; citations: string }>();
+      return (rows.results || []).map((r) => {
+        if (r.reason !== 'answered') return `Q: ${r.question}\nA: (no retrievable source — unanswered)`;
+        // D4613: only the sources the answer actually cites carry through as
+        // its sources; a passage it was given and never cited is not support.
+        // A malformed citation list costs the brief its sources, not its answer.
+        const list = markCited(r.answer, storedCitations(r.citations) as Array<{ n?: number | null; title?: string; cited?: boolean }>);
+        const cited = list.filter((x) => x.cited);
+        const cites = cited.length ? `\nSources: ${cited.map((x) => `[${x.n}] ${x.title}`).join(', ')}` : '';
+        return `Q: ${r.question}\nA: ${r.answer}${cites}`;
+      });
+    },
+  },
+
+  // ── THE FIVE THAT WERE MOUNTED AND NOT ALLOW-LISTED ──────────────────────
+  //
+  // `research/ask` stood here alone while `ZoneDraft` was mounted on five more
+  // zones, and the failure was silent in exactly the way this file's own rules
+  // are written against. `GET /drafts` 400s an unknown surface; the band
+  // catches and renders its empty state, which is indistinguishable from "no
+  // draft yet". So five artboards showed their AI band, their cost line and
+  // their run button, and the button 400'd. The band is config that follows a
+  // mount — and a mount without its config is a control that does nothing.
+  //
+  // EVERY `gather` READS THE ZONE'S OWN ROWS AND NOTHING ELSE. That is what
+  // makes the drafts grounded rather than written from the model's knowledge in
+  // the voice of a grounded one, and it is why each returns `[]` rather than a
+  // placeholder when there is nothing: `POST /drafts` turns an empty gather into
+  // a 409 that never reaches the model.
+
+  'research/library': {
+    // The artboard: "Points to the unindexed document and what it would unlock
+    // in Ask". So the material is the index state, and the instruction forbids
+    // the one thing a model would otherwise volunteer — guessing at what a
+    // document it has never read contains.
+    instruction: [
+      'List which documents are not indexed and are therefore invisible to Ask.',
+      'For each, name the document by its title and say only what its title and kind state.',
+      'Do not speculate about contents. If every document is indexed, say so in one line.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT title, kind, index_state, chunk_count FROM research_documents
+          WHERE owner_user_id = ? ORDER BY id DESC LIMIT 60`
+      ).bind(userId).all<{ title: string; kind: string; index_state: string; chunk_count: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.title} — filed as ${r.kind}; index state ${r.index_state}; ${r.chunk_count || 0} passages readable by Ask`);
+    },
+  },
+
+  'research/client-prep': {
+    // The artboard: "keeping founder-sourced facts attributed to Verwood and
+    // firm-written facts to the firm". The seam is the whole point of this zone,
+    // so it is in the instruction and it is in every line of the material.
+    instruction: [
+      'Draft a one-page checkpoint brief from the rows below.',
+      'Keep each fact attributed to the side it came from: rows marked (from the client) are theirs and must be quoted rather than rewritten.',
+      'Name any row still marked open as an item to settle. Add no fact that is not below.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      // Scoped to the client whose brief is on screen. Without a scope there is
+      // nothing to draft — a brief spanning every client is not a brief.
+      if (!scope) return [];
+      // THE GRANT IS THE GATE HERE AS EVERYWHERE ELSE, and `scope_project` is
+      // checked separately from the grant's existence: a founder may open their
+      // sessions and not their project record, and the client half of this
+      // brief is only ever as wide as what they opened.
+      const project = await c.env.DB.prepare(
+        `SELECT p.id AS id, p.name AS name, p.sector AS sector, p.stage AS stage,
+                g.scope_project AS scope_project
+           FROM advisor_client_grants g
+           JOIN projects p ON p.id = g.project_id
+          WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+          ORDER BY g.id DESC LIMIT 1`
+      ).bind(userId, scope).first<{
+        id: number; name: string; sector: string | null; stage: string | null; scope_project: number;
+      }>();
+      if (!project) return [];
+      const ours = await c.env.DB.prepare(
+        `SELECT section, body, open FROM research_brief_notes
+          WHERE owner_user_id = ? AND project_id = ? ORDER BY id ASC LIMIT 60`
+      ).bind(userId, project.id).all<{ section: string; body: string; open: number }>();
+      // The documents the founder pushed — by share, never by namespace, which
+      // is the same read the library list unions in. Titles only: what is
+      // inside them is Ask's job and needs a citation, not a draft.
+      const shared = await c.env.DB.prepare(
+        `SELECT d.title AS title, d.kind AS kind
+           FROM advisor_client_document_shares s
+           JOIN research_documents d ON d.id = s.document_id
+          WHERE s.advisor_user_id = ? AND s.status = 'active'
+            AND d.owner_user_id IN (
+              SELECT id FROM users WHERE founder_id =
+                (SELECT founder_id FROM projects WHERE id = ?))
+          ORDER BY d.id DESC LIMIT 30`
+      ).bind(userId, project.id).all<{ title: string; kind: string }>();
+      const theirs = [
+        ...(project.scope_project
+          ? [`${project.name} (from the client): sector ${project.sector || 'not recorded'}, stage ${project.stage || 'not recorded'}`]
+          : []),
+        ...(shared.results || []).map((r) => `Document shared by the client: ${r.title} (${r.kind})`),
+      ];
+      return [
+        ...theirs,
+        ...(ours.results || []).map((r) => `${r.section} (ours${r.open ? ', open' : ''}): ${r.body}`),
+      ];
+    },
+  },
+
+  'research/market': {
+    // The artboard: "on six comparables — a thin base, which the reading states
+    // rather than smoothing", and "points to the two stale readings as the ones
+    // to re-run". Both halves are instructions, because a model summarising
+    // ranges will otherwise average them and drop the sample size.
+    instruction: [
+      'Summarise what these comparable readings say about the firm’s own service lines.',
+      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
+      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
+           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
+      ).bind(userId).all<{
+        metric: string; range_low_cents: number; range_high_cents: number;
+        comparable_count: number; ran_at: string; scope: string | null;
+      }>();
+      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+      return (rows.results || []).map((r) =>
+        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
+        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
+    },
+  },
+
+  'network/relationships': {
+    // The artboard: "who at the firm has the most recorded interactions with
+    // that organization — Aoife Brennan sits against Thornbury Capital, where
+    // nobody does, which is itself the finding". The last clause is the
+    // instruction that matters: the empty answer is an answer.
+    instruction: [
+      'For each contact below that has no firm owner, say who at the firm has the most recorded interactions with that same organization.',
+      'Where nobody at the firm has any interaction with that organization, say so plainly — that is the finding, not a gap to fill.',
+      'Suggest nothing about contacts that already have an owner.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `bc`, NOT A ONE-LETTER ALIAS. `research_stores_scoping.test.ts` refuses
+      // an owner read off a single-letter identifier in this file, because that
+      // letter is this codebase's habitual name for a parsed request body and an
+      // owner taken from one is how an owner-scoped table stops being one. A SQL
+      // alias reads identically to that guard, so the alias gets a longer name
+      // rather than the ban being loosened around it.
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.name, bc.organization, bc.firm_owner_user_id,
+                COALESCE(u.name, u.email) AS owner_name,
+                (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = bc.id) AS n
+           FROM partner_book_contacts bc
+           LEFT JOIN users u ON u.id = bc.firm_owner_user_id
+          WHERE bc.owner_user_id = ? ORDER BY bc.id ASC LIMIT 200`
+      ).bind(userId).all<{
+        name: string; organization: string | null;
+        firm_owner_user_id: number | null; owner_name: string | null; n: number;
+      }>();
+      const all = rows.results || [];
+      // NOTHING TO DRAFT WHEN NOTHING IS ORPHANED, which is the 409 rather than
+      // a paragraph congratulating the firm on a full book.
+      if (!all.some((r) => !r.firm_owner_user_id)) return [];
+      return all.map((r) =>
+        `${r.name} at ${r.organization || 'no organization recorded'} — `
+        + `${r.firm_owner_user_id ? `owned by ${r.owner_name}` : 'UNASSIGNED'}, ${r.n} recorded interaction${r.n === 1 ? '' : 's'}`);
+    },
+  },
+
+  'network/introductions': {
+    // The artboard: "Every suggestion arrives as a draft ask requiring both
+    // consents before it can move — nothing is introduced by the draft itself."
+    // Which is a statement about this route: it writes a draft row and nothing
+    // else, and the instruction says the same thing to the model so the text it
+    // produces does not read as though an introduction had been made.
+    instruction: [
+      'Suggest possible introductions between the firm’s own contacts, using only the interaction counts below as evidence of who knows whom.',
+      'Write each as a draft ask that still needs both sides to consent. Never write as though an introduction has been made.',
+      'Where the evidence is one or two interactions, say the path is thin rather than proposing it as strong.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.name, bc.organization,
+                (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = bc.id) AS n
+           FROM partner_book_contacts bc
+          WHERE bc.owner_user_id = ? ORDER BY bc.id ASC LIMIT 200`
+      ).bind(userId).all<{ name: string; organization: string | null; n: number }>();
+      // TWO CONTACTS IS THE FLOOR FOR A PATH BETWEEN THEM. One name cannot be
+      // introduced to anybody, and a draft over it would be the model filling
+      // in the second half.
+      const all = (rows.results || []).filter((r) => r.n > 0);
+      if (all.length < 2) return [];
+      return all.map((r) =>
+        `${r.name} at ${r.organization || 'no organization recorded'} — ${r.n} recorded interaction${r.n === 1 ? '' : 's'} with the firm`);
+    },
+  },
+
+  'offers/catalog': {
+    // The artboard: "revenue concentrates in two fixed services while both seat
+    // products sold once each. Points to the retainer draft as the gap." Two
+    // instructions come out of that — read the concentration, and name the
+    // unpriced entries as a SCORING gap rather than a tidying one, because
+    // Pipeline scores leads against exactly these rows.
+    instruction: [
+      'Say where requests concentrate across this catalog and which entries have been requested or booked least. Requests are not sales and no revenue figure exists: do not state one.',
+      'Name any entry with no price as a gap in lead scoring, not as a cosmetic one: an unpriced service scores as a capability and not as a fit.',
+      'Use only the figures below. Do not estimate a price for anything that has none.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT o.title AS title, o.engagement_model AS model, o.price_cents AS cents,
+                o.summary AS summary,
+                (SELECT COUNT(*) FROM service_engagements se
+                  WHERE se.offering_id = o.id) AS requested,
+                (SELECT COUNT(*) FROM service_engagements se
+                  WHERE se.offering_id = o.id AND se.status IN ('accepted', 'in_progress', 'delivered', 'reviewed', 'invoiced', 'paid')) AS booked
+           FROM service_offerings o WHERE o.owner_user_id = ? ORDER BY o.id ASC LIMIT 100`
+      ).bind(userId).all<{
+        title: string; model: string | null; cents: number | null; summary: string | null; requested: number; booked: number;
+      }>();
+      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+      return (rows.results || []).map((r) =>
+        `${r.title} — ${r.model || 'engagement model not recorded'}; `
+        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; requested ${r.requested} time${r.requested === 1 ? '' : 's'}, booked ${r.booked}`
+        + `${r.summary ? `; includes ${r.summary}` : ''}`);
+    },
+  },
+
+  'delivery/deliverables': {
+    // The artboard: "A chase note per unopened deliverable, naming the item, the
+    // date sent, and what the review unblocks … States the milestone consequence
+    // without assigning blame."
+    //
+    // The last clause is the instruction that matters. A model drafting chases
+    // will otherwise write something that reads as an accusation, and the one
+    // thing this zone knows for certain is that it does NOT know whether the
+    // client opened the file: `opened_at` is theirs to set and nothing writes it.
+    instruction: [
+      'Draft one short chase note per unopened deliverable below: the item, when it went out, and what reviewing it unblocks.',
+      'Never say or imply the client ignored it: an unopened row means the client has not opened the shared link here yet, not that they did not look.',
+      'State the milestone consequence plainly and assign no blame. These are drafts for a person to send.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // #5314 part 1: only a deliverable whose open could have been recorded is
+      // chased; one sent before opens were recorded, or with no link, is
+      // "Not recorded", and there is nothing to chase.
+      const tracking = readTrackingFor([], undefined, await deliverableReadsSince(c.env));
+      if (!tracking.available) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at, d.link_url AS link_url,
+                n.title AS need_title, f.name AS client,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS open_milestones
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
+          ORDER BY d.sent_at ASC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        title: string; version: string | null; sent_at: string; link_url: string | null;
+        need_title: string | null; client: string | null; open_milestones: number;
+      }>();
+      return (rows.results || []).filter((r) => readStateFor({ ...r, opened_at: null }, tracking) === 'unopened').map((r) =>
+        `${r.client || 'client not recorded'} — "${r.title}"${r.version ? ` v${r.version}` : ''}, `
+        + `sent ${String(r.sent_at).slice(0, 10)}, not yet opened by the client; `
+        + `${r.need_title ? `engagement: ${r.need_title}; ` : ''}`
+        + `${r.open_milestones} milestone${r.open_milestones === 1 ? '' : 's'} still open on it`);
+    },
+  },
+
+  'delivery/board': {
+    // The artboard: "Across five live engagements, two carry risk and both are
+    // client-facing … Neither is a capacity problem, so neither is solved by
+    // adding people."
+    //
+    // That last clause is the instruction that matters. A model reading a board
+    // of at-risk work will otherwise recommend more people for every one of
+    // them, which is the wrong answer to a client-side blocker and an expensive
+    // one to act on.
+    instruction: [
+      'Say which engagements below carry risk and why, using only the reasons each row states.',
+      'Separate a client-facing problem — an unopened deliverable, a decision the client owes — from a capacity one: the first is not solved by adding people, so never suggest it for one.',
+      'An engagement with nothing recorded against it is not healthy, it is unrated: say it has no signal rather than calling it on track.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT n.title AS scope, f.name AS client,
+                (SELECT COUNT(*) FROM engagement_seats s
+                  WHERE s.engagement_id = e.id AND s.revoked_at IS NULL) AS seats,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ? ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        scope: string | null; client: string | null; seats: number;
+        overdue: number; client_blocked: number; our_blocked: number; unopened: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.client_blocked ? `${r.client_blocked} open blocker(s) on the client's side` : '',
+          r.our_blocked ? `${r.our_blocked} open blocker(s) on ours` : '',
+          r.unopened ? `${r.unopened} deliverable(s) sent and not opened` : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `${r.seats ? 'embedded seat' : 'project'}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
+  'pipeline/retainers': {
+    // The artboard: "Thornfield renews in 17 days at 34% utilization. The draft
+    // opens with what they have NOT USED rather than what they owe — a
+    // right-sizing conversation at $5,000/mo keeps the relationship, where a
+    // renewal notice at the current figure invites them to do the arithmetic
+    // themselves and leave."
+    //
+    // The instruction that matters is the opening move: a model handed a
+    // renewal will write a renewal notice, which is the one thing this page
+    // exists to argue against. The second is that a retainer with no retained
+    // hours has no utilisation — a fee-based deal is a different shape, not a
+    // badly consumed one, and reading it as a churn risk would be a finding
+    // about a number that does not exist.
+    instruction: [
+      'Draft one right-sizing conversation for the retainer below that renews soonest at the lowest utilisation.',
+      'Open with what the client has NOT used, never with what they owe: a renewal notice at the current figure invites them to do the arithmetic themselves.',
+      'Where a retainer has no retained hours, it has no utilisation at all — say so and do not read it as under-consumption.',
+      'Use only the figures given. Never propose a new monthly amount the record cannot support, and never state a renewal date that is not recorded.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS need_title,
+                r.shape, r.cadence, r.amount_cents, r.retained_hours, r.renews_at, r.ended_at,
+                (SELECT u.hours_used FROM retainer_usage u
+                  WHERE u.retainer_id = r.id ORDER BY u.period DESC LIMIT 1) AS hours_used
+           FROM partner_retainers r
+           JOIN engagements e ON e.id = r.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND r.ended_at IS NULL
+          ORDER BY r.renews_at IS NULL, r.renews_at LIMIT 50`
+      ).bind(me.partner_id).all<{
+        client: string | null; need_title: string | null; shape: string; cadence: string;
+        amount_cents: number | null; retained_hours: number | null;
+        renews_at: string | null; ended_at: string | null; hours_used: number | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const util = r.retained_hours
+          ? `${Math.round(((r.hours_used || 0) / Number(r.retained_hours)) * 100)}% of ${r.retained_hours} retained hours`
+          : 'NO RETAINED HOURS — this is not sold by the hour and has no utilisation';
+        return `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+          + `${r.shape === 'embedded_seat' ? 'embedded seat' : 'retainer'}, ${r.cadence}; `
+          + `${r.amount_cents == null ? 'NO AMOUNT RECORDED' : `$${Math.round(Number(r.amount_cents) / 100).toLocaleString('en-US')}`}; `
+          + `${util}; `
+          + `renews ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'NO DATE RECORDED'}`;
+      });
+    },
+  },
+
+  'pipeline/negotiations': {
+    // The artboard: "Aperture has asked for a flexible scope at a fixed price
+    // twice, and has sat in Scoping for nine days. The counter reframes it as a
+    // retainer at the same monthly figure — which gives them the flexibility
+    // they actually want and gives you the utilization data to price the next
+    // quarter. It also names, in one line, why fixed-price and flexible cannot
+    // coexist."
+    //
+    // The instruction that matters is that a counter must be built from the
+    // CLAUSES ALREADY ON THE TABLE. A model handed a stalled deal will
+    // otherwise invent a concession nobody offered — and a counter naming a
+    // term the firm never put in writing is worse than no counter at all,
+    // because a person may send it.
+    instruction: [
+      'Draft one counter for the negotiation that has been still longest, built only from the clauses listed below: what each side asked, what has already been conceded or refused, and where a term is still open.',
+      'Never invent a term, a price or a concession. If the record does not carry a position for a clause, say the position is not recorded rather than supplying one.',
+      'Name in one line why the two positions cannot both hold — that sentence is the counter’s whole job.',
+      'A stalled day count is time since a RECORDED move, not since the client last spoke. Never write as though silence has been measured.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS need_title, q.price,
+                g.stage, g.ball, g.open_question, g.last_moved_at,
+                (SELECT GROUP_CONCAT(
+                    t.label || ': we asked ' || COALESCE(t.our_position, 'NOT RECORDED')
+                    || '; they asked ' || COALESCE(t.their_position, 'NOT RECORDED')
+                    || '; lands ' || COALESCE(t.landing, 'NOT AGREED')
+                    || ' [' || t.state || ']', ' | ')
+                   FROM quote_terms t WHERE t.negotiation_id = g.id) AS terms
+           FROM quote_negotiations g
+           JOIN quotes q ON q.id = g.quote_id
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN founders f ON f.id = n.founder_id
+          WHERE q.partner_id = ? AND g.stage <> 'closed'
+          ORDER BY g.last_moved_at ASC LIMIT 25`
+      ).bind(me.partner_id).all<{
+        client: string | null; need_title: string | null; price: number | null;
+        stage: string; ball: string; open_question: string | null;
+        last_moved_at: string; terms: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+        + `$${Number(r.price || 0).toLocaleString('en-US')}; stage ${r.stage}; `
+        + `${r.ball === 'us' ? 'our move' : 'their move'}; `
+        + `last RECORDED move ${String(r.last_moved_at).slice(0, 10)}; `
+        + `open question: ${r.open_question || 'NONE NAMED — nobody has said what is blocking it'}; `
+        + `terms: ${r.terms || 'NONE RECORDED'}`);
+    },
+  },
+
+  'pipeline/proposals': {
+    // The artboard's own reading of this book: "Aperture has been sent for nine
+    // days with no read receipt at all, which is a different problem from Kelp
+    // Bio opening theirs four times and going quiet. The first is a delivery
+    // failure; the second is a decision in progress."
+    //
+    // THIS BUILD CANNOT MAKE THAT DISTINCTION and the instruction has to say
+    // so, or a model handed a list of silent proposals will confidently sort
+    // them into the two buckets the artboard names. Nothing records an open.
+    // The second instruction is the taxonomy: a loss with no reason recorded is
+    // the finding, not a gap to fill by guessing which reason it probably was.
+    instruction: [
+      'Read the decided proposals below for what they have in common: which loss reasons recur, which shapes close, and at what values.',
+      'Nothing in this product records whether a client opened a proposal. Never say or imply that one was read, ignored or never opened — a silent proposal is silent, and that is all the record says.',
+      'A loss with no reason recorded is a gap in the firm’s own record and the most useful thing you can point at. Never guess which reason it was.',
+      'Use only the reasons as given. Do not invent a category, and do not read a pattern out of fewer than three decided proposals — say the sample is too small instead.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT q.price, q.status, q.loss_reason, q.decided_at, q.timeline_weeks,
+                n.title AS need_title, f.name AS client,
+                r.shape AS retainer_shape,
+                (SELECT COUNT(*) FROM quote_versions v WHERE v.quote_id = q.id) AS versions
+           FROM quotes q
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN founders f ON f.id = n.founder_id
+           LEFT JOIN engagements e ON e.quote_id = q.id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+          WHERE q.partner_id = ?
+          ORDER BY q.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        price: number | null; status: string; loss_reason: string | null;
+        decided_at: string | null; timeline_weeks: number | null;
+        need_title: string | null; client: string | null;
+        retainer_shape: string | null; versions: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const state = r.status === 'accepted' ? 'WON'
+          : (r.status === 'rejected' ? 'LOST' : (r.status === 'withdrawn' ? 'WITHDRAWN' : 'SENT, not decided'));
+        return `${r.client || 'client not recorded'} — ${r.need_title || 'scope not recorded'}; `
+          + `${r.retainer_shape === 'retainer' ? 'retainer' : (r.retainer_shape === 'embedded_seat' ? 'embedded seat' : 'fixed scope')}; `
+          + `$${Number(r.price || 0).toLocaleString('en-US')}`
+          + `${r.timeline_weeks ? ` over ${r.timeline_weeks} weeks` : ''}; `
+          + `${state}`
+          + `${state === 'LOST' ? `; reason: ${r.loss_reason || 'NONE RECORDED — nobody entered one'}` : ''}; `
+          + `${r.versions} revision(s) recorded`;
+      });
+    },
+  },
+
+  'pipeline/analytics': {
+    // The artboard: "You lost 4 of 9 decided bids this quarter and two of those
+    // losses were on price, every one of them fixed-scope, all against smaller
+    // shops. Retainers lost one, and not on price. The forecast of $58,000
+    // assumes the current 56% rate holds across $104,000 still live — reshape
+    // the open fixed-scope bids into retainers and that number moves without
+    // discounting anything."
+    //
+    // THE FAILURE MODE HERE IS NOT INVENTION, IT IS CONFIDENCE. Every figure is
+    // already computed and handed over, so a model has nothing to make up — what
+    // it will do by default is read a pattern out of three decisions and phrase
+    // it as a finding. The instructions are therefore about how many rows a
+    // claim is allowed to rest on, and about the difference between a loss with
+    // a recorded reason and a loss nobody explained.
+    instruction: [
+      'Narrate the quarter from the figures below and nothing else: win rate, median cycle, the shape breakdown, the loss reasons and the weighted forecast.',
+      'Say how many decisions each claim rests on, and where a shape has fewer than three decided bids, say the sample is too small to read rather than stating a pattern.',
+      'A loss with no recorded reason is not a loss on price. Never fold the unexplained losses into the taxonomy, and where they outnumber the explained ones, say the pattern describes only the explained ones.',
+      'The forecast is the open pipeline weighted by the current rate — it is an assumption, not a prediction. Say so, and never propose a discount as the way to move it.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // One row per decided bid, with the shape it was filed under and the
+      // reason it was lost. The narrator is given the RECORD, not the summary,
+      // so it cannot be handed a rounded figure and asked to explain it.
+      const rows = await c.env.DB.prepare(
+        `SELECT q.status, q.price, q.loss_reason, q.created_at, q.decided_at,
+                n.category AS shape, f.name AS client
+           FROM quotes q
+           LEFT JOIN founder_needs n ON n.id = q.need_id
+           LEFT JOIN founders f ON f.id = n.founder_id
+          WHERE q.partner_id = ? AND q.status IN ('accepted', 'rejected', 'submitted')
+          ORDER BY q.decided_at IS NULL, q.decided_at DESC
+          LIMIT 200`
+      ).bind(me.partner_id).all<{
+        status: string; price: number | null; loss_reason: string | null;
+        created_at: string | null; decided_at: string | null;
+        shape: string | null; client: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const value = r.price == null
+          ? 'NO VALUE RECORDED'
+          : `$${Math.round(Number(r.price)).toLocaleString('en-US')}`;
+        const outcome = r.status === 'accepted'
+          ? 'WON'
+          : (r.status === 'rejected'
+            ? `LOST — ${r.loss_reason ? `reason recorded: ${r.loss_reason}` : 'NO REASON RECORDED, do not read this as a price loss'}`
+            : 'STILL OPEN, in no quarter and in no win rate');
+        return `${r.client || 'client not recorded'}; shape ${r.shape || 'NOT RECORDED'}; ${value}; `
+          + `${outcome}; decided ${r.decided_at ? String(r.decided_at).slice(0, 10) : 'not yet'}`;
+      });
+    },
+  },
+
+  'pipeline/leads': {
+    // The artboard: "Accepting <lead> drafts a proposal shaped as a retainer
+    // rather than a project — because retainers are where you win, and their
+    // eight-week framing is a project only by habit. Their stated budget covers
+    // three months at your rate."
+    //
+    // Two instructions carry it. The shape claim must come from the firm's OWN
+    // record — a model that recommends a retainer because retainers are
+    // fashionable is worse than one that recommends nothing — and the budget
+    // arithmetic must use the firm's stated floor rather than a guess at its
+    // rate. Where either is missing, the draft says so instead of inventing it,
+    // which is the same refusal the score itself makes.
+    instruction: [
+      'Draft a proposal outline for the strongest open lead below, using only the firm’s own listed services, stated budget floor and the client’s own words.',
+      'Recommend a shape — retainer or fixed project — only when this firm’s own won work supports it, and name the evidence. Where the record does not say which shape wins, say that and recommend neither.',
+      'Check the client’s stated budget against the firm’s stated floor and say plainly whether it clears it. Where either number is absent, say which is missing rather than estimating it.',
+      'Never invent a capability, a rate or a timeline. A lead the firm’s rules exclude is not a lead to draft for — say so and stop.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // The open leads, plus the two things a shape recommendation needs: what
+      // this firm sells and what it says it will not take.
+      const [leads, offerings, rules] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT n.title, n.description, n.category, n.budget_min, n.budget_max, n.timeline,
+                  f.name AS client
+             FROM founder_needs n
+             LEFT JOIN founders f ON f.id = n.founder_id
+            WHERE n.status = 'open'
+              AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+              AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+            ORDER BY n.created_at DESC LIMIT 25`
+        ).bind(me.partner_id, me.partner_id).all<any>(),
+        // THE SAME `service_offerings` MISTAKE THAT TOOK /pipeline/leads DOWN,
+        // twice in one string. The table keys on `owner_user_id REFERENCES
+        // users(id)` and has never had a `partner_id`, so `o.partner_id` was
+        // "no such column" both in the predicate and in the correlated count —
+        // which meant this gather, the one behind the "draft a proposal" action
+        // on that very page, failed the same way the list did.
+        //
+        // `e.partner_id` IS right: engagements key on `partners(id)`, so only
+        // the `= o.partner_id` half was broken. `firm_wins` counts the whole
+        // firm's engagements and is therefore the same number on every row, so
+        // it takes the bound partner id directly rather than correlating to a
+        // column the offerings table does not have. Offerings are reached the
+        // way migration 200 populated them (200_service_offerings_shape.sql:174):
+        // through `users.partner_id`, for the firm rather than one member.
+        c.env.DB.prepare(
+          `SELECT o.title, o.category,
+                  (SELECT COUNT(*) FROM engagements e
+                     JOIN quotes q ON q.id = e.quote_id
+                    WHERE e.partner_id = ?) AS firm_wins
+             FROM service_offerings o
+            WHERE o.owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+              AND o.is_active = 1 LIMIT 25`
+        ).bind(me.partner_id, me.partner_id).all<any>(),
+        c.env.DB.prepare(
+          `SELECT kind, value, floor_cents, statement FROM partner_fit_rules
+            WHERE partner_id = ? AND is_active = 1 LIMIT 50`
+        ).bind(me.partner_id).all<any>(),
+      ]);
+
+      const floor = (rules.results || []).find((r: any) => r.kind === 'budget_floor' && r.floor_cents != null);
+      const context = [
+        `FIRM SELLS: ${(offerings.results || []).map((o: any) => o.title).join('; ') || 'NOTHING LISTED — no capability on record'}`,
+        `FIRM BUDGET FLOOR: ${floor ? `$${Math.round(Number(floor.floor_cents) / 100).toLocaleString('en-US')}` : 'NOT STATED — do not estimate one'}`,
+        `FIRM EXCLUSIONS: ${(rules.results || []).filter((r: any) => r.kind !== 'budget_floor' && r.kind !== 'best_fit').map((r: any) => r.value).join('; ') || 'none stated'}`,
+      ];
+      return context.concat((leads.results || []).map((l: any) =>
+        `LEAD — ${l.client || 'client not recorded'}: ${l.title}; `
+        + `${l.description || 'no description given'}; `
+        + `budget ${l.budget_max == null ? 'NOT STATED by the client' : `up to $${Number(l.budget_max).toLocaleString('en-US')}`}; `
+        + `timeline ${l.timeline || 'not stated'}`));
+    },
+  },
+
+  'delivery/health': {
+    // The artboard: "Per engagement: drift against SOW, utilization against the
+    // retainer record, and where satisfaction is ABSENT rather than low …
+    // Thornfield reads as the near-term risk on utilization and a decision the
+    // client has not made; Verwood reads as drift plus silence, which is a
+    // scoping conversation and not a renewal one yet."
+    //
+    // "Absent rather than low" is the instruction that matters, and it is the
+    // one a model gets wrong by default: a missing score reads as a bad one,
+    // an unassessed scope reads as a clean one, and an engagement with nothing
+    // recorded reads as healthy. Each of those turns silence into a finding
+    // pointing the wrong way.
+    instruction: [
+      'Read renewal risk per engagement below, using only what each row states.',
+      'Absent is not low and absent is not fine: no satisfaction score means nobody asked, an unassessed scope means nobody looked, and an engagement with nothing recorded is unrated rather than healthy. Say which, never fill it in.',
+      'Utilisation is read from the retainer record on Pipeline · Retainers. Quote it; never recompute it or reason from a different one.',
+      'Separate a scoping conversation from a renewal one: drift plus silence is the first, low utilisation against a near renewal date is the second, and they are not solved the same way.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS scope, r.renews_at AS renews_at,
+                h.scope_state AS scope_state, h.scope_note AS scope_note,
+                h.satisfaction AS satisfaction, h.satisfaction_source AS satisfaction_source,
+                o.name AS owner_name,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+           LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
+           LEFT JOIN users o ON o.id = h.owner_user_id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        client: string | null; scope: string | null; renews_at: string | null;
+        scope_state: string | null; scope_note: string | null;
+        satisfaction: number | null; satisfaction_source: string | null;
+        owner_name: string | null; overdue: number; client_blocked: number; unopened: number;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.client_blocked ? `${r.client_blocked} open blocker(s) on the client's side` : '',
+          r.unopened ? `${r.unopened} deliverable(s) sent and not acknowledged here` : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `owner: ${r.owner_name || 'UNASSIGNED'}; `
+          + `renews: ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'no renewal date recorded'}; `
+          + `scope: ${r.scope_state ? `${r.scope_state}${r.scope_note ? ` (${r.scope_note})` : ''}` : 'NOT ASSESSED — nobody has looked'}; `
+          + `satisfaction: ${r.satisfaction == null ? 'NO SCORE HEARD — absent, not low' : `${r.satisfaction}/5 (${r.satisfaction_source})`}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
+  'delivery/status-reports': {
+    // The artboard: "One report per client drafted from the week's real
+    // activity — shipped items from the deliverables log, next steps from
+    // milestones, blockers from where the work actually stopped … every draft
+    // waits for a person to send."
+    //
+    // The instruction that matters is the copy decision the zone is built
+    // around, and it cuts both ways: a client-side blocker must be NAMED, and
+    // must not be LEANED ON. A model told only the first writes an accusation;
+    // one told only the second writes a report that hides why the work stopped
+    // and makes the delay look like the firm's. The artboard's own instNote is
+    // the target — "not our delay, still our problem".
+    instruction: [
+      'Draft one short status report per engagement below: what shipped, what is next, and what it is blocked on.',
+      'Use only the rows given. Never write a shipped item, a milestone or a blocker that is not listed, and where a section has nothing, say so plainly rather than filling it.',
+      'Where a blocker is on the client’s side, name it plainly and say the deadline does not move because of it — not our delay, still our problem. Never phrase it as an accusation and never use it as an excuse.',
+      'A deliverable sent and not acknowledged means we have not heard, never that the client ignored it.',
+      'These are drafts. Never write as though the report has been sent.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // One line per LIVE ENGAGEMENT, not per existing report: the batch drafts
+      // the reports that are owed, and an engagement with none written yet is
+      // exactly the one that needs drafting.
+      const rows = await c.env.DB.prepare(
+        `SELECT e.id AS engagement_id, f.name AS client, n.title AS scope,
+                (SELECT GROUP_CONCAT(d.title, '; ') FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL
+                    AND d.sent_at >= date('now', '-30 days')) AS shipped,
+                (SELECT COUNT(*) FROM engagement_deliverables d
+                  WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened,
+                (SELECT GROUP_CONCAT(m.title, '; ') FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS next_up,
+                (SELECT GROUP_CONCAT(b.summary, '; ') FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side = 'client') AS client_blocked,
+                (SELECT GROUP_CONCAT(b.summary, '; ') FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 50`
+      ).bind(me.partner_id).all<{
+        engagement_id: number; client: string | null; scope: string | null;
+        shipped: string | null; unopened: number; next_up: string | null;
+        client_blocked: string | null; our_blocked: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+        + `shipped in the last 30 days: ${r.shipped || 'NOTHING RECORDED'}; `
+        + `next: ${r.next_up || 'no open milestone recorded'}; `
+        + `blocked on the client's side: ${r.client_blocked || 'nothing'}; `
+        + `blocked on ours: ${r.our_blocked || 'nothing'}; `
+        + `${r.unopened} deliverable(s) sent and not acknowledged here`);
+    },
+  },
+
+  'delivery/capacity': {
+    // The artboard: "Findings across N people: who is over cap, by how much, and
+    // which overage sits behind a granted seat. Separates schedulable overflow
+    // from seat commitments, since only one of them can be moved without going
+    // back to the founder."
+    //
+    // Two instructions carry the weight. The first is that a person nobody
+    // logged hours for is UNMEASURED, not idle — a model reading a sparse book
+    // will otherwise report a firm with capacity to spare. The second is the
+    // zone's whole argument: an overage behind a granted seat is not fixed by
+    // moving project work, because the seat is what the founder granted and
+    // only they can change it.
+    instruction: [
+      'Say which people below are over the cap their own row states, and by how much, using only the hours each row carries.',
+      'Never infer a cap: a person whose row states none is not over anything, and a person with no hours logged is unmeasured rather than idle or free.',
+      'Where a total is marked a floor because internal hours were not stated, treat it as a lower bound and say so rather than reporting it as the week.',
+      'Separate schedulable overflow from a granted seat: an overage behind a seat inside a client’s systems is a trust exposure and is renegotiated with the founder, never solved by reallocating project work.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      // The same three-table read the zone does, flattened per person: client
+      // hours, the seats that person holds, their internal statement and the
+      // cap that applies to them — their own if they have one, else the firm's.
+      const rows = await c.env.DB.prepare(
+        `SELECT u.id AS user_id, u.name AS name,
+                (SELECT COALESCE(SUM(h.hours), 0) FROM engagement_hours h
+                   JOIN engagements e ON e.id = h.engagement_id
+                  WHERE h.person_user_id = u.id AND e.partner_id = u.partner_id
+                    AND h.period = strftime('%Y-%m', 'now')) AS client_hours,
+                (SELECT COUNT(*) FROM engagement_hours h
+                   JOIN engagements e ON e.id = h.engagement_id
+                  WHERE h.person_user_id = u.id AND e.partner_id = u.partner_id
+                    AND h.period = strftime('%Y-%m', 'now')) AS hour_rows,
+                (SELECT i.hours FROM partner_internal_hours i
+                  WHERE i.partner_id = u.partner_id AND i.person_user_id = u.id
+                    AND i.period = strftime('%Y-%m', 'now')) AS internal_hours,
+                (SELECT COUNT(*) FROM engagement_seats s
+                   JOIN engagements e ON e.id = s.engagement_id
+                  WHERE s.holder_user_id = u.id AND e.partner_id = u.partner_id
+                    AND s.revoked_at IS NULL) AS live_seats,
+                (SELECT GROUP_CONCAT(s.scope, '; ') FROM engagement_seats s
+                   JOIN engagements e ON e.id = s.engagement_id
+                  WHERE s.holder_user_id = u.id AND e.partner_id = u.partner_id
+                    AND s.revoked_at IS NULL) AS seat_scopes,
+                COALESCE(
+                  (SELECT p.weekly_hours FROM partner_capacity p
+                    WHERE p.partner_id = u.partner_id AND p.person_user_id = u.id),
+                  (SELECT p.weekly_hours FROM partner_capacity p
+                    WHERE p.partner_id = u.partner_id AND p.person_user_id IS NULL)
+                ) AS cap_hours
+           FROM users u
+          WHERE u.partner_id = ? ORDER BY u.id LIMIT 100`
+      ).bind(me.partner_id).all<{
+        user_id: number; name: string | null; client_hours: number; hour_rows: number;
+        internal_hours: number | null; live_seats: number; seat_scopes: string | null;
+        cap_hours: number | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        // UNMEASURED IS ITS OWN STATE, and it is not zero. A row with no hours
+        // and no internal statement says so before it says anything else.
+        if (!r.hour_rows && r.internal_hours == null) {
+          return `${r.name || 'name not recorded'} — NO HOURS RECORDED this period; unmeasured, not idle; `
+            + `${r.live_seats} live seat(s)${r.seat_scopes ? ` (${r.seat_scopes})` : ''}`;
+        }
+        const total = Number(r.client_hours || 0) + Number(r.internal_hours ?? 0);
+        return `${r.name || 'name not recorded'} — ${total} h`
+          + `${r.internal_hours == null ? ' (A FLOOR: internal hours not stated)' : ''}`
+          + `; ${r.cap_hours == null ? 'NO CAP STATED for them' : `cap ${r.cap_hours} h`}`
+          + `; ${r.client_hours} h on client work`
+          + `; ${r.live_seats} live seat(s)${r.seat_scopes ? ` (${r.seat_scopes})` : ''}`;
+      });
+    },
+  },
+
+  // ── Session 11 · D394 ────────────────────────────────────────────────────
+  // THE PARTNER HOME'S OPERATING BRIEF (P2, "Where does the firm stand
+  // today?"). The artboard's band reads across the whole firm: what is due this
+  // week, what is at risk and why, who is over a stated cap, and what renews
+  // soon. It is one short passage the firm accepts, edits or discards — built
+  // for the P2 component, which is not mounted until the owner signs P2 off.
+  //
+  // VOICE. The artboard's sample reads like a verdict ("the engagement to
+  // watch", "one of the two has to move"). The instruction below asks for what
+  // the record shows and what falls due, and forbids telling the firm what to
+  // do: the brief states, the firm decides.
+  //
+  // SCOPED ON `users.partner_id` like every partner surface above: the caller's
+  // own firm, or nothing — and nothing is a 409, never a brief written from the
+  // model's own knowledge.
+  'home/brief': {
+    instruction: [
+      "Write today's operating brief for this firm in at most five sentences, from the lines below only.",
+      'Lead with what falls due in the next seven days and what is at risk, naming the client and the recorded reason for each.',
+      'Absent is not fine: an engagement with nothing recorded is unrated, an unassessed scope has not been cleared, and a missing capacity cap means nobody is over one. Say which; never fill it in.',
+      'State what the record shows. Do not tell the firm what to do, and add no fact, figure or name that is not in the lines.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT f.name AS client, n.title AS scope, r.renews_at AS renews_at,
+                h.scope_state AS scope_state,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at < date('now')) AS overdue,
+                (SELECT COUNT(*) FROM engagement_milestones m
+                  WHERE m.engagement_id = e.id AND m.completed_at IS NULL
+                    AND m.due_at IS NOT NULL AND m.due_at >= date('now')
+                    AND m.due_at <= date('now', '+6 days')) AS due_week,
+                (SELECT COUNT(*) FROM engagement_blockers b
+                  WHERE b.engagement_id = e.id AND b.cleared_at IS NULL) AS blockers,
+                (SELECT s.scope FROM engagement_seats s
+                  WHERE s.engagement_id = e.id AND s.revoked_at IS NULL
+                  ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
+           FROM engagements e
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+           LEFT JOIN founders f ON f.id = e.founder_id
+           LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+           LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
+          WHERE e.partner_id = ? AND e.cancelled_at IS NULL
+          ORDER BY e.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        client: string | null; scope: string | null; renews_at: string | null; scope_state: string | null;
+        overdue: number; due_week: number; blockers: number; seat_scope: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const signals = [
+          r.due_week ? `${r.due_week} milestone(s) due in the next seven days` : '',
+          r.overdue ? `${r.overdue} milestone(s) past due` : '',
+          r.blockers ? `${r.blockers} open blocker(s)` : '',
+          r.scope_state === 'drift' ? 'scope recorded as drifting from the SOW' : '',
+        ].filter(Boolean);
+        return `${r.client || 'client not recorded'} — ${r.scope || 'scope not recorded'}; `
+          + `${r.seat_scope ? `embedded seat, scope as recorded by the firm: ${r.seat_scope}; ` : 'project; '}`
+          + `renews: ${r.renews_at ? String(r.renews_at).slice(0, 10) : 'no renewal date recorded'}; `
+          + `${signals.length ? signals.join('; ') : 'NOTHING RECORDED — unrated, not healthy'}`;
+      });
+    },
+  },
+
+  'offers/audience-fit': {
+    // The artboard: "For each stated exclusion, a short pass note a person can
+    // send: the reason, and where relevant a named firm better suited. Points to
+    // the floor as the most-used exclusion, and to the absent capabilities as
+    // the two worth revisiting if demand keeps arriving for them."
+    //
+    // The instruction below refuses the one thing a model will otherwise do
+    // here: soften a pass into a maybe. A pass with a reason is the zone's
+    // entire argument, and a note that leaves the door ajar is the silence it
+    // exists to replace wearing better manners.
+    instruction: [
+      'Draft one short pass note per stated exclusion below, in the firm’s own words, quoting the sentence it already wrote.',
+      'Where an exclusion names a firm to refer to, include it. Where it names none, do not invent one.',
+      'A pass is a no with a reason: never soften it into a maybe, and never promise a revisit the rules do not state.',
+      'An exclusion with no sentence recorded cannot be drafted from — say so rather than writing one for it.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_fit_rules` keys on `partners.id`, so the caller's partner row
+      // is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT r.kind AS kind, r.value AS value, r.floor_cents AS floor_cents,
+                r.statement AS statement, r.referred_to AS referred_to
+           FROM partner_fit_rules r
+          WHERE r.partner_id = ? AND r.is_active = 1 AND r.kind <> 'best_fit'
+          ORDER BY r.kind, r.id LIMIT 100`
+      ).bind(me.partner_id).all<{
+        kind: string; value: string | null; floor_cents: number | null;
+        statement: string | null; referred_to: string | null;
+      }>();
+      return (rows.results || []).map((r) => {
+        const subject = r.kind === 'budget_floor'
+          ? (r.floor_cents == null ? 'a floor with no amount recorded' : `under $${Math.round(r.floor_cents / 100).toLocaleString('en-US')}`)
+          : (r.value || 'unnamed');
+        return `${r.kind.replace('_', ' ')} — ${subject}; `
+          + `${r.statement ? `the firm's words: "${r.statement}"` : 'NO SENTENCE RECORDED'}`
+          + `${r.referred_to ? `; refer to ${r.referred_to}` : '; no alternative named'}`;
+      });
+    },
+  },
+
+  'offers/proof': {
+    // The artboard: "A consent request per held outcome, naming the engagement,
+    // the specific claim, and where it would appear — sent by a person from the
+    // account that did the work. The draft for Verwood notes the unopened
+    // deliverable, so the ask does not arrive before the review does."
+    //
+    // The last clause is the instruction that matters. A model drafting consent
+    // requests will otherwise write one for every held item at the same
+    // urgency, and the artboard's whole point is that some outcomes are not
+    // ready to be asked about yet.
+    instruction: [
+      'Draft one consent request per held outcome below, naming the specific claim it would publish.',
+      'Where the outcome came from no engagement, say the request has nothing on the client’s side to refer to, and do not invent one.',
+      'These are drafts for a person to send: never write as though a request has been sent or a consent obtained.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_proof_items` keys on `partners.id`, so the caller's partner
+      // row is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                -- D4672: a consent counts only about the claim as it now reads (its pinned
+                -- hash is the item's current one), and an ask is pending only while its
+                -- link is live and about that same revision.
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256) AS live,
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256
+                    AND (k.expires_at IS NULL OR datetime(k.expires_at) > datetime('now'))) AS pending,
+                (SELECT COUNT(*) FROM partner_proof_consents k
+                  WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
+           FROM partner_proof_items p
+           LEFT JOIN engagements e ON e.id = p.engagement_id
+           LEFT JOIN founder_needs n ON n.id = e.need_id
+          WHERE p.partner_id = ? ORDER BY p.created_at DESC LIMIT 100`
+      ).bind(me.partner_id).all<{
+        title: string; outcome: string | null; need_title: string | null;
+        live: number; pending: number; withdrawn: number;
+      }>();
+      return (rows.results || []).filter((r) => !r.live).map((r) =>
+        `${r.title} — ${r.need_title ? `from the engagement "${r.need_title}"` : 'NOT FROM ANY ENGAGEMENT'}; `
+        + `${r.outcome ? `claims: ${r.outcome}` : 'no result claimed'}; `
+        + `${r.withdrawn ? 'a consent was withdrawn' : r.pending ? 'asked, no answer yet' : 'nobody has been asked'}`);
+    },
+  },
+
+  'offers/perk-deals': {
+    // The artboard: "For each expiring perk, what its expiry revokes and from
+    // whom … Points to which redeemers lose access, so a notice can go out
+    // before it happens rather than after." The last clause is what the draft
+    // is FOR — it is a warning list, not a summary — and the instruction says so
+    // rather than leaving the model to produce a tidy recap of the whole book.
+    instruction: [
+      'For each perk below that is expiring, say what its expiry revokes and how many redeemers lose it.',
+      'A perk recorded as granting nothing beyond the offer revokes nothing on expiry: say so rather than listing it as a loss.',
+      'Nothing in this product withdraws a scope automatically, so write this as a notice somebody must send, never as something already done.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const today = todayIso();
+      const rows = await c.env.DB.prepare(
+        `SELECT p.offer AS offer, p.ends_at AS ends_at, p.grant_scope AS grant_scope,
+                p.claim_cap AS cap,
+                (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS redeemed
+           FROM perks p
+          WHERE p.partner_user_id = ? AND p.ends_at IS NOT NULL
+          ORDER BY p.ends_at ASC LIMIT 100`
+      ).bind(userId).all<{
+        offer: string; ends_at: string; grant_scope: string | null; cap: number | null; redeemed: number;
+      }>();
+      return (rows.results || []).map((p) =>
+        `${p.offer} — ${perkLifecycle(p.ends_at, today)}, ends ${p.ends_at}; `
+        + `${p.redeemed} redeemed${p.cap == null ? ' (uncapped)' : ` of ${p.cap}`}; `
+        + `${p.grant_scope ? `grants ${p.grant_scope}` : 'grants nothing beyond the offer itself'}`);
+    },
+  },
+
+  'offers/visibility': {
+    // The artboard: "Points to the referral and webinar surfaces as the ones
+    // converting, and to the directory as volume without intent … Where a
+    // surface has no view counter the read says so instead of modelling one."
+    // The last clause is the instruction that matters most here, because this
+    // product has no view counter on ANY surface and a model asked to compare
+    // reach will otherwise supply one.
+    instruction: [
+      'Compare these surfaces by the engagements each produced, and say which are converting.',
+      'There is no view count and no lead count for any of them: say so rather than estimating either, and never rank by reach.',
+      'A surface with no engagement is volume without intent, and is a placement to change rather than a channel to celebrate.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      // `partner_surfaces` keys on `partners.id`, not on the account — the
+      // convention migration 209's header spells out — so the caller's partner
+      // row is resolved first and an account with none has nothing to read.
+      const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
+        .bind(userId).first<{ partner_id: number | null }>();
+      if (!me?.partner_id) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT s.name AS name, s.kind AS kind, s.is_active AS is_active,
+                (SELECT COUNT(*) FROM engagement_sources es WHERE es.surface_id = s.id) AS engagements
+           FROM partner_surfaces s WHERE s.partner_id = ? ORDER BY engagements DESC LIMIT 100`
+      ).bind(me.partner_id).all<{ name: string; kind: string; is_active: number; engagements: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.name} (${r.kind}${r.is_active ? '' : ', retired'}) — `
+        + `${r.engagements} engagement${r.engagements === 1 ? '' : 's'} sourced; no view count and no lead count recorded`);
+    },
+  },
+
+  'network/organizations': {
+    // The artboard: "Points to every client resting on one known contact … Names
+    // the exposure; the second contact is a person's job to make." The last
+    // clause is the instruction that matters — a model asked about thin coverage
+    // will otherwise volunteer who to call, and it does not know anyone.
+    instruction: [
+      'Name every company below that the firm knows through exactly one person, and what that relationship is to the firm.',
+      'State the exposure and stop there: do not suggest who to contact, and do not estimate anything the rows do not state.',
+      'Where a company has more than one contact, say so rather than listing it as exposed.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const rows = await c.env.DB.prepare(
+        `SELECT bc.organization AS org, bc.relationship AS rel, COUNT(*) AS people
+           FROM partner_book_contacts bc
+          WHERE bc.owner_user_id = ? AND bc.organization IS NOT NULL AND TRIM(bc.organization) <> ''
+          GROUP BY LOWER(TRIM(bc.organization))
+          ORDER BY people ASC LIMIT 200`
+      ).bind(userId).all<{ org: string; rel: string | null; people: number }>();
+      return (rows.results || []).map((r) =>
+        `${r.org} — ${r.rel ? `recorded as a ${r.rel.replace('_', ' ')}` : 'relationship not recorded'}, `
+        + `${r.people} contact${r.people === 1 ? '' : 's'} known`);
+    },
+  },
+
+  // ── INVESTOR SURFACES ───────────────────────────────────────────────────
+  //
+  // Scoped by ROLE rather than by a firm column: `deals` carries no investor
+  // id, and the deal list an investor reads is the firm-wide funnel by design
+  // — browsing open deals is the marketplace half of this product. So the
+  // gather below refuses a caller who is not privileged and reads the same
+  // rows `GET /api/deals` would have returned them, rather than inventing a
+  // narrower scope that the page they are looking at does not have.
+
+  // D1243 (#3256): 'deals/pipeline' (ID1's stale-deal notes) retired with the Pipeline zone.
+
+  // D1260 (#3283): 'deals/screening' is retired. Its memo cited the Lab scorer's
+  // snapshots, which are not the scorecard, for every deal, to any investor.
+  // Screening reads the venture scorecard now (owner question 8 A of #2428).
+
+  'deals/commit': {
+    // ID3's band: "Proposal · IC memo from the pipeline — assembled from
+    // everything the pipeline already holds ... Every figure traces to the row
+    // it came from, so the memo can be audited rather than trusted."
+    //
+    // THE ARTBOARD'S OWN MEMO SAYS "1 recused" AND "Approved with conditions",
+    // and neither is a thing this store can say. `ic_votes.vote` is
+    // yes|no|abstain — an abstention is a vote CAST, a recusal is a declared
+    // conflict that leaves the denominator — and no condition is stored
+    // anywhere. A model handed a tally and asked for an IC memo will reach for
+    // both, because that is what IC memos say, so both are forbidden outright
+    // rather than left to judgement.
+    //
+    // The rationale instruction is the other half. A vote with no reason is
+    // the most tempting gap in this material: the model knows the vote and can
+    // write a plausible reason for it, and a plausible reason attributed to a
+    // named partner is a fabricated quote in a governance record.
+    instruction: [
+      'Draft one investment-committee memo for the decision below, from the votes and their rationales.',
+      'Attribute every reason to the partner who wrote it, quoting only what is given. Where a vote carries NO RATIONALE, say the vote was cast without a recorded reason. Never write the reason yourself: a reason put in a named partner’s mouth is a fabricated quote in a governance record.',
+      'Never describe any vote as recused and never reduce the denominator: the record holds yes, no and abstain, an abstention is a vote cast rather than a conflict declared, and nothing stores a recusal.',
+      'Never state a condition, a quorum or an approval-with-conditions: none of the three is stored, so any of them would be invented.',
+      'Where the decision is still open, say so and do not predict the outcome.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
+      // SCOPED THROUGH THE ONE HELPER THAT OWNS THE PREDICATE.
+      // `scopedDecisions` is `routes/ic.ts`'s single list read; a draft surface
+      // running its own `SELECT ... FROM ic_decisions` would be the second copy
+      // that file's header warns about, and an unscoped one would hand another
+      // committee's deliberations to a model on this caller's behalf — the hole
+      // migration 219 closed, reopened through a side door.
+      const found = await scopedDecisions(c.env, { id: userId, role } as any, 1);
+      const d = found[0];
+      if (!d) return [];
+      const company = d.project_id
+        ? await c.env.DB.prepare('SELECT name FROM projects WHERE id = ? AND deleted_at IS NULL')
+          .bind(d.project_id).first<{ name: string }>().catch(() => null)
+        : null;
+      const head = `DECISION: ${d.title || 'title not recorded'}`
+        + ` — ${company?.name || 'company not recorded'}; stage ${d.status || 'not recorded'}`
+        + `; outcome ${d.decision || 'NOT CLOSED'}; ${d.votes.length} vote(s) cast`;
+      return [head, ...d.votes.map((v) => {
+        const reason = String(v.rationale || '').trim();
+        return `${v.user_name || 'partner not recorded'} voted ${v.vote}`
+          + ` — ${reason || 'NO RATIONALE RECORDED'}`;
+      })];
+    },
+  },
+
+  'deals/closing': {
+    // ID4's band: "A one-page cover for counsel: what is executed, what
+    // remains, and the single condition holding the transfer. States plainly
+    // that the platform records the wire and the banks move it — the packet is
+    // evidence, not a payment instruction."
+    //
+    // THE CONDITION IS THE HALF THIS PRODUCT CANNOT HONOUR, and the artboard
+    // makes it the whole point of the note. Nothing stores an IC condition
+    // (see the deals/commit surface above), so a model asked for "the single
+    // condition holding the transfer" would write one — a fabricated legal
+    // impediment in a document going to counsel. Forbidden outright.
+    //
+    // The second instruction is the artboard's own honesty and it must survive
+    // the draft: this is a record of paper, not an instrument of payment. A
+    // cover note that reads as a payment instruction is a different kind of
+    // document with a different kind of consequence.
+    instruction: [
+      'Draft a one-page closing cover note for counsel from the envelopes below: what is executed, what is still out, and what the record does not cover.',
+      'An envelope counts as executed ONLY where its state is completed. A signature count that has reached its recipient count is not the same thing, and an envelope with NO RECIPIENT RECORDED is not partially signed — say its recipients are unrecorded.',
+      'Never state a condition, a blocker or anything holding the transfer: no condition is stored anywhere in this product, so any you name would be invented — and an invented legal impediment in a note to counsel is worse than an omission.',
+      'Say plainly that the platform records the movement of money and does not move it. This note is evidence of paper, never a payment instruction.',
+      'Add nothing the rows below do not support, and do not estimate a closing date.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
+      // The SAME predicate `esign.get('/')` puts in its WHERE clause, from the
+      // same shared helper — not a second copy of it. An envelope carries the
+      // executed paper of a deal; an unscoped read here would hand one firm's
+      // signed instruments to another firm's model.
+      const scope = esignEnvelopeScope({ id: userId, role } as any);
+      const rows = await c.env.DB.prepare(
+        `SELECT e.document_title, e.document_type, e.status, e.completed_at, e.deal_id,
+                (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id) AS recipient_count,
+                (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed') AS signed_count
+           FROM esign_envelopes e
+          WHERE ${scope.sql} AND e.deal_id IS NOT NULL
+          ORDER BY e.created_at DESC LIMIT 40`
+      ).bind(...scope.binds).all<Record<string, unknown>>();
+      const list = (rows.results || []) as Record<string, unknown>[];
+      if (!list.length) return [];
+      return list.map((e) => {
+        const need = Number(e.recipient_count);
+        const sigs = (Number.isFinite(need) && need > 0)
+          ? `${Number(e.signed_count) || 0} of ${need} signed`
+          : 'NO RECIPIENT RECORDED';
+        return `${e.document_title || e.document_type || 'document not titled'}`
+          + ` (deal ${e.deal_id}) — state ${e.status || 'not recorded'}; ${sigs};`
+          + ` ${e.completed_at ? `completed ${e.completed_at}` : 'NOT EXECUTED'}`;
+      });
+    },
+  },
+
+  'portfolio/positions': {
+    // IP1's band: "Proposal · explain the quarter's TVPI move", footed
+    // "Traces to the mark-history rows."
+    //
+    // THE FOOTNOTE IS THE WHOLE DESIGN. A multiple moves because a MARK moved,
+    // and `portfolio_marks` records each one with the date it speaks for, the
+    // event behind it and the basis it was arrived at on. So the gather is the
+    // mark history, and the instruction forbids the two ways a model turns that
+    // into something the record did not say.
+    //
+    // FIRST: blending TVPI and DPI. The artboard's own note says why — an
+    // unrealised multiple is a mark and a realised one is cash. A sentence that
+    // adds them is a sentence about money that does not exist.
+    //
+    // SECOND: momentum. Given a list of marks a model will narrate a trend, and
+    // a position held at last round did not move. Naming it as part of the
+    // change turns two events into portfolio-wide drift.
+    instruction: [
+      'Explain how the portfolio multiple moved, from the marking events below and nothing else.',
+      'Name the specific events that moved it, each with the company, the date the mark speaks for and its basis. A position with no mark in the period did NOT move: never describe it as contributing, and never call the change momentum or a trend when it rests on a handful of events.',
+      'Never blend an unrealised multiple with a realised one — a mark is not cash. If you mention both, report them separately and say which is which.',
+      'A mark whose basis is UNRECORDED has no stated provenance: say so rather than treating it as a GP estimate, which is what the column would otherwise default to.',
+      'Add no figure the rows below do not carry, and do not forecast.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
+      // The same scope every read in `routes/positions.ts` uses. An empty
+      // accessible set means an empty draft, never an unscoped one — the CSV
+      // predicate treats NULL as "all rows", so [] must short-circuit here
+      // rather than reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      const rows = await c.env.DB.prepare(
+        `SELECT m.as_of_date, m.fmv, m.post_money, m.event, m.basis, m.source,
+                p.name AS project_name
+           FROM portfolio_marks m
+           JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
+          ORDER BY m.as_of_date DESC LIMIT 40`
+      ).bind(csv, csv).all<Record<string, unknown>>();
+      const list = (rows.results || []) as Record<string, unknown>[];
+      if (!list.length) return [];
+      return list.map((m) => (
+        `${m.project_name || 'company not recorded'} — marked ${m.as_of_date || 'date not recorded'}`
+        + `; FMV ${m.fmv ?? 'not recorded'}${m.post_money != null ? `, post-money ${m.post_money}` : ''}`
+        + `; event ${m.event || 'not recorded'}`
+        + `; basis ${m.basis || 'UNRECORDED'}`
+        + `${m.source ? `; source ${m.source}` : ''}`
+      ));
+    },
+  },
+
+  'portfolio/updates': {
+    // IP2's band: "Proposal · parse N updates ... arriving as editable
+    // proposals. Where a figure is ambiguous the extractor flags rather than
+    // guesses."
+    //
+    // HALF OF THAT BAND HAS SOMEWHERE TO LAND AND HALF DOES NOT, so half is
+    // built. A proposal queue would need a store for the proposal, its
+    // ambiguity state and its acceptance; none exists, and `POST /drafts/accept`
+    // stamps the draft and writes nowhere else. What DOES exist is both halves
+    // of the comparison: `portfolio_kpi_definitions` is what companies were
+    // asked for, `portfolio_updates.kpis_json` is what arrived. So the draft
+    // reads one against the other and names the gaps. It fills none in.
+    //
+    // THE ONE FAILURE MODE WORTH THE WHOLE INSTRUCTION. Asked which figures are
+    // missing, a model will find them in the narrative — "a team of ~12" becomes
+    // a headcount of 12, and an approximation a founder hedged enters the record
+    // as a reported figure. The artboard's own note is about exactly this
+    // company. Naming the sentence is the deliverable; converting it is the
+    // defect.
+    //
+    // SECOND: a blank is not a zero and not a denial. A KPI absent from an
+    // update means that update does not carry it. It does not mean the company
+    // has none, and it does not make the company late — lateness needs a
+    // deadline, and these rows carry a period, not a due date.
+    instruction: [
+      'Compare what portfolio companies were asked to report against what their stored updates actually carry, using only the rows below.',
+      'For each company, name the required KPIs its stored update does not carry, and name any figure that arrived as prose rather than as a value under its key — quote the wording and stop there. NEVER convert a phrase into a number: an approximation a founder hedged ("about", "~", "roughly", "a team of ~12") is not a reported figure, and writing one as if it were is the single thing this read exists to avoid.',
+      'A KPI absent from an update means that update does not carry it. It does not mean the company has none, it is not a zero, and it does not make the company late — the rows carry the period an update speaks for, never a due date, so never call anything late or overdue.',
+      'Add no figure the rows below do not carry, do not compute a rate or a trend across periods, and do not forecast.',
+      'If the rule set below is empty, say that nothing is recorded as asked-for rather than judging the updates against your own idea of what a KPI set should contain.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
+      // Same scope as every read in `routes/positions.ts` and the same
+      // short-circuit: the CSV predicate reads NULL as "all rows", so an empty
+      // accessible set must never reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      // EVERY CADENCE, unlike the page's own read. The page renders one cadence
+      // at a time because its compliance figure is per-period; a draft asked
+      // what is missing must see the whole of what was asked for, or it reports
+      // a gap-free month against a quarterly-only rule set.
+      const [defs, updates] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT kpi_key, name, unit, cadence, required, applies_to
+             FROM portfolio_kpi_definitions
+            WHERE fund_id IS NULL
+            ORDER BY cadence, sort_order`
+        ).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+        c.env.DB.prepare(
+          `SELECT u.period, u.title, u.body, u.kpis_json,
+                  COALESCE(u.submitted_at, u.updated_at) AS at,
+                  p.name AS project_name
+             FROM portfolio_updates u
+             JOIN projects p ON p.id = u.project_id AND p.deleted_at IS NULL
+            WHERE u.status = 'submitted'
+              AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(u.project_id AS TEXT) || ',') > 0)
+            ORDER BY COALESCE(u.submitted_at, u.updated_at) DESC
+            LIMIT 24`
+        ).bind(csv, csv).all<Record<string, unknown>>(),
+      ]);
+      const stored = (updates.results || []) as Record<string, unknown>[];
+      // No update is nothing to read, whatever the rule set says. The reverse
+      // is not true: updates with an empty rule set still produce a draft, and
+      // the instruction above tells it to report that nothing is asked for
+      // rather than inventing a standard to judge them by.
+      if (!stored.length) return [];
+      const rules = ((defs.results || []) as Record<string, unknown>[]).map((d) => (
+        `ASKED FOR: ${d.name || d.kpi_key} (key ${d.kpi_key})`
+        + `; unit ${d.unit || 'not recorded'}`
+        + `; ${d.cadence || 'cadence not recorded'}`
+        + `; ${Number(d.required) ? 'required' : 'optional'}`
+        + `; applies to ${d.applies_to || 'not recorded'}`
+      ));
+      const arrived = stored.map((u) => {
+        // The keys and values as stored, with no coercion. A value that is
+        // blank stays visible AS blank: an asked-for figure that arrived empty
+        // is a gap, and dropping it would hide the gap being asked about.
+        let carried = 'none recorded';
+        try {
+          const parsed = JSON.parse(String(u.kpis_json || '{}'));
+          const entries = parsed && typeof parsed === 'object' ? Object.entries(parsed) : [];
+          if (entries.length) {
+            carried = entries.map(([k, v]) => (
+              `${k}=${v === null || v === undefined || String(v).trim() === '' ? 'BLANK' : String(v).slice(0, 60)}`
+            )).join(', ');
+          }
+        } catch { carried = 'unreadable'; }
+        return (
+          `ARRIVED: ${u.project_name || 'company not recorded'}`
+          + `; period ${u.period || 'not recorded'}`
+          + `; stored ${String(u.at || 'date not recorded').slice(0, 10)}`
+          + `; title ${u.title || 'not recorded'}`
+          + `; values carried ${carried}`
+          + `; narrative ${String(u.body || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
+        );
+      });
+      return rules.length ? [...rules, ...arrived] : ['ASKED FOR: no KPI is recorded as asked for.', ...arrived];
+    },
+  },
+
+  'portfolio/value-add': {
+    // IP3's band: "Proposal · quarterly support summary", footed "Feeds the LP
+    // reporting pack." The artboard's own words are that it should be "written
+    // for the LP report rather than for internal comfort, so the unmade
+    // promises appear rather than being rounded away".
+    //
+    // WHICH IS THE WHOLE INSTRUCTION. A model asked to summarise a quarter's
+    // support will do three flattering things unless told not to: read a
+    // promised entry as work done, invent an outcome for an entry that records
+    // none, and total the hours as though the untimed entries were zeroes. Each
+    // makes the report better and the record false, and the third is the one a
+    // reader cannot catch by eye.
+    //
+    // FOURTH, AND IT IS THE POINT OF THE ZONE: a company with no entry. The
+    // ledger says nothing was RECORDED for it, which is not the same as nothing
+    // being done — and it is still the row an LP report needs, so it is named,
+    // with that distinction attached rather than dropped.
+    instruction: [
+      'Write a quarterly support summary for the LP reporting pack, from the ledger rows below and nothing else.',
+      'A PROMISED entry is not work done. Report it as still owed, with what was promised and when, and never describe it as delivered, underway, or in progress. A WITHDRAWN entry was retired: say so rather than omitting it, because a promise that was dropped is part of the record.',
+      'Report an outcome only where one is recorded. An entry with no outcome is work whose result is not yet recorded — never invent a result, and never imply one from the description of what was done.',
+      'Hours: total ONLY the entries that carry an hour count, and state how many entries carry none. An entry with no hours is untimed, not zero hours, so never fold it into the total and never report a total as though it covered every entry.',
+      'A company with no entry has nothing RECORDED against it. Name it as such — not as neglected, not as unsupported in fact — because the ledger records what was written down, not everything that happened.',
+      'Add no figure the rows below do not carry, and do not forecast.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
+      // The same scope and the same short-circuit as every Portfolio read: the
+      // CSV predicate reads NULL as "all rows", so an empty accessible set must
+      // never reach the query.
+      const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+      if (ids != null && ids.length === 0) return [];
+      const csv = ids == null ? null : ids.join(',');
+      const [entries, book] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT s.kind, s.state, s.hours, s.promised_at, s.delivered_at, s.withdrawn_at,
+                  s.summary, s.outcome, p.name AS project_name
+             FROM portfolio_support_entries s
+             LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+            WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            ORDER BY s.created_at DESC LIMIT 60`
+        ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+        c.env.DB.prepare(
+          `SELECT DISTINCT pp.project_id, pr.name AS project_name
+             FROM portfolio_positions pp
+             LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+            WHERE s.id IS NULL
+              AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
+        ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+      ]);
+      const rows = (entries.results || []) as Record<string, unknown>[];
+      if (!rows.length) return [];
+      const lines = rows.map((s) => (
+        `${s.project_name || 'company not recorded'} — ${s.kind || 'kind not recorded'}`
+        + `; ${String(s.state || 'state not recorded').toUpperCase()}`
+        // UNTIMED, spelled out, so the model has a word for it that is not a
+        // number. `0` here would be indistinguishable from a measured zero.
+        + `; hours ${s.hours == null ? 'UNTIMED' : s.hours}`
+        + `; promised ${s.promised_at || 'date not recorded'}`
+        + `; delivered ${s.delivered_at || (s.state === 'delivered' ? 'date not recorded' : 'NOT DELIVERED')}`
+        + `${s.withdrawn_at ? `; withdrawn ${s.withdrawn_at}` : ''}`
+        + `; what happened ${String(s.summary || '').replace(/\s+/g, ' ').slice(0, 300)}`
+        + `; outcome ${s.outcome ? String(s.outcome).replace(/\s+/g, ' ').slice(0, 300) : 'NONE RECORDED'}`
+      ));
+      for (const b of (book.results || []) as Record<string, unknown>[]) {
+        lines.push(`${b.project_name || 'company not recorded'} — NO ENTRY RECORDED against this company in the book.`);
+      }
+      return lines;
+    },
+  },
+
+  // ── ADVISOR SURFACES ────────────────────────────────────────────────────
+  //
+  // The first entry for this licence. Scope is the advisor's own row rather
+  // than a company or a project set: `advisors.user_id` is the caller, and a
+  // caller with no advisor row gets [] — never another advisor's inbox.
+
+  'practice/opportunities': {
+    // PR1's band: "Proposal · engagement", drafted from a waiting request
+    // against the advisor's own stored services.
+    //
+    // WHAT IT MAY AND MAY NOT DO. The gather carries two real things — the
+    // request as the founder wrote it, and the services this advisor actually
+    // defined, with the prices and scopes they actually set. Everything a set
+    // of terms needs is therefore on the page already, which is the only
+    // reason a draft here is grounded rather than invented.
+    //
+    // THE PRICE IS THE FAILURE MODE. Asked for terms, a model will name a
+    // number: the request's stated budget, a round figure, or something
+    // "market". Each would be the advisor's own price quoted back to a client
+    // by a machine that made it up. The instruction forbids any figure that is
+    // not one of the advisor's stored prices, and forbids inventing a scope
+    // line the service does not carry.
+    //
+    // AND IT IS A DRAFT, NOT A SEND. Accepting stamps the draft. Nothing here
+    // confirms a booking, writes a decline, or reaches the requester — the
+    // page says so beneath the band, and the label promises terms rather than
+    // an answer.
+    instruction: [
+      'Draft a set of engagement terms for one waiting request, using only the request and the advisor’s own stored services below.',
+      'NEVER invent a price. Use only a price the advisor has actually stored against a service; if none of their services carries a price, say the price is not set rather than proposing one. A budget the requester mentioned is what THEY said they would pay, never what this advisor charges — quote it as theirs if at all, and never as the fee.',
+      'Do not invent scope. The terms may only contain what the chosen service’s stored scope says plus what the request asked for; if the two do not meet, say which part is not covered rather than widening the service to fit.',
+      'Say which stored service the terms are built on, by name. If no service is defined, say that terms cannot be drafted from a template that does not exist.',
+      'This is a draft for the advisor to read. Do not write it as a message to the requester, do not promise a start date the slot does not carry, and do not state that anything has been accepted or sent.',
+    ].join(' '),
+    gather: async (c, userId) => {
+      const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+        .bind(userId).first<{ id: number; role: string | null }>();
+      const role = String(me?.role || '');
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).includes('advisor')) return [];
+      // The caller's OWN advisor row. No row means no practice, which means an
+      // empty gather and a 409 — never a fallback to whichever advisor sorted
+      // first.
+      const advisor = await c.env.DB.prepare('SELECT id FROM advisors WHERE user_id = ?')
+        .bind(userId).first<{ id: number }>();
+      if (!advisor?.id) return [];
+      const [waiting, services] = await Promise.all([
+        c.env.DB.prepare(
+          `SELECT b.topic, b.notes, b.created_at, u.name AS requester,
+                  s.starts_at AS slot_starts_at
+             FROM advisor_bookings b
+             LEFT JOIN users u ON u.id = b.founder_user_id
+             LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+            WHERE b.advisor_id = ? AND b.status = 'pending'
+            ORDER BY COALESCE(s.starts_at, b.created_at) ASC
+            LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>(),
+        c.env.DB.prepare(
+          `SELECT title, kind, duration_note, price_cents, currency, scope
+             FROM advisor_services
+            WHERE advisor_id = ? AND is_active = 1
+            ORDER BY created_at ASC LIMIT 12`
+        ).bind(advisor.id).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
+      ]);
+      const asks = (waiting.results || []) as Record<string, unknown>[];
+      // No waiting request is nothing to draft terms FOR. Services alone would
+      // produce a price list, which is not what the band offers.
+      if (!asks.length) return [];
+      const lines = asks.map((b) => (
+        `REQUEST: ${b.requester || 'requester not recorded'}`
+        + `; arrived ${String(b.created_at || 'not recorded').slice(0, 10)}`
+        + `; slot ${b.slot_starts_at ? String(b.slot_starts_at).slice(0, 16) : 'not recorded'}`
+        + `; asked for ${String(b.topic || '').replace(/\s+/g, ' ').slice(0, 300) || 'not recorded'}`
+        + `; notes ${String(b.notes || '').replace(/\s+/g, ' ').slice(0, 300) || 'none'}`
+      ));
+      const defs = ((services.results || []) as Record<string, unknown>[]).map((s) => (
+        `YOUR SERVICE: ${s.title || 'untitled'}`
+        + `; kind ${s.kind || 'not recorded'}`
+        // The price is spelled as unset rather than zeroed: 0 is a price an
+        // advisor may genuinely mean, and the instruction turns on this word.
+        + `; price ${s.price_cents == null ? 'NOT SET' : suffixAmount(Number(s.price_cents), String(s.currency || 'USD').toUpperCase(), { trimWhole: true })}`
+        + `; duration ${s.duration_note || 'not recorded'}`
+        + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
+      ));
+      return defs.length ? [...lines, ...defs] : [...lines, 'YOUR SERVICE: none is defined.'];
+    },
+  },
+
+  // ── FOUNDER SURFACES ────────────────────────────────────────────────────
+  //
+  // The first non-partner entries in this table. Everything above scopes on
+  // `users.partner_id`; each of these calls `founderProject` and returns []
+  // when it does not resolve, which the route answers as `nothing_to_draft`.
+  // A founder never sees another founder's material through here, and a
+  // founder with two startups and no `scopeKey` gets nothing rather than a
+  // draft about whichever one sorted first.
+
+  'build/this-week': {
+    // A3's band: "Proposal · Monday plan — drafted from what actually moved
+    // last week: two cards shipped, the pricing card slipped twice."
+    //
+    // The instruction that matters is the second one. The store records a key
+    // result's CURRENT and TARGET and nothing about who owns it or whether it
+    // is at risk, so a model asked for a Monday plan will otherwise assign
+    // names and hand out statuses it invented — which is exactly the shape of
+    // the artboard's own fixture ("+ Ship async digest v1 · Amara") and
+    // exactly what must not reach a real founder's week.
+    instruction: [
+      'Propose next week\'s commitments from the current objectives and open cards below.',
+      'Never name an owner and never call a commitment on track or at risk: neither is recorded, and inventing one puts a name against work nobody agreed to.',
+      'Where a key result has moved, say by how much using the figures given; where it has not, say it has not.',
+      'Propose at most five commitments and add nothing the material below does not support.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const okrs = await c.env.DB.prepare(
+        `SELECT objective, key_results_json, kanban_status, updated_at
+           FROM roadmap_okrs WHERE project_id = ? AND kanban_status = 'now'
+          ORDER BY sort_order, id LIMIT 50`
+      ).bind(pid).all<{ objective: string; key_results_json: string | null; kanban_status: string; updated_at: string | null }>();
+      const lines: string[] = [];
+      for (const o of (okrs.results || [])) {
+        let krs: any[] = [];
+        try { krs = JSON.parse(o.key_results_json || '[]'); } catch { krs = []; }
+        const parts = (Array.isArray(krs) ? krs : [])
+          .filter((k) => k && String(k.text || '').trim())
+          .map((k) => {
+            const unit = k.unit ? ` ${k.unit}` : '';
+            return k.target == null || k.target === ''
+              ? `${k.text} (NO TARGET RECORDED)`
+              : `${k.text} (${k.current ?? 'no current value recorded'} of ${k.target}${unit})`;
+          });
+        lines.push(`Objective now: ${o.objective}${parts.length ? ` — key results: ${parts.join('; ')}` : ' — no key results recorded'}`);
+      }
+      const cards = await c.env.DB.prepare(
+        `SELECT t.title, t.status, t.due_date, t.updated_at
+           FROM mvp_tasks t WHERE t.deal_id = ? AND t.status <> 'done'
+          ORDER BY t.updated_at DESC LIMIT 40`
+      ).bind(pid).all<{ title: string; status: string; due_date: string | null; updated_at: string | null }>();
+      for (const t of (cards.results || [])) {
+        lines.push(`Open card: ${t.title} — ${t.status.replace('_', ' ')}; `
+          + `${t.due_date ? `due ${String(t.due_date).slice(0, 10)}` : 'no due date recorded'}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}`);
+      }
+      return lines;
+    },
+  },
+
+  'build/roadmap': {
+    // A3's second band: "Proposal · tradeoff, reasoned — Slack integration and
+    // the permissions model both sit in Q4 … Asked to reason it out, the model
+    // argues for Slack first."
+    //
+    // This one is an ARGUMENT rather than a summary, and the artboard is
+    // explicit that it costs twenty times a Monday plan for that reason. What
+    // the instruction has to prevent is the argument being made from outside
+    // the record — the canvas's own fixture reasons from interview counts, and
+    // a roadmap gather has no interviews in it.
+    instruction: [
+      'Argue the ordering of the objectives below: name the one pair whose order is most worth changing, and give the reason.',
+      'Reason only from what is recorded here — the horizon, the quarter, the key results and their progress. Do not cite interviews, customers, headcount or cost; none of it is in front of you.',
+      'If nothing in the record argues for a different order, say so rather than manufacturing a tradeoff.',
+      'State plainly that the ordering is the founder\'s to change and that accepting this changes nothing on its own.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT objective, key_results_json, kanban_status, quarter
+           FROM roadmap_okrs WHERE project_id = ?
+          ORDER BY CASE kanban_status WHEN 'now' THEN 0 WHEN 'next' THEN 1 ELSE 2 END, sort_order, id
+          LIMIT 60`
+      ).bind(pid).all<{ objective: string; key_results_json: string | null; kanban_status: string; quarter: string | null }>();
+      return (rows.results || []).map((o) => {
+        let krs: any[] = [];
+        try { krs = JSON.parse(o.key_results_json || '[]'); } catch { krs = []; }
+        const n = (Array.isArray(krs) ? krs : []).filter((k) => k && String(k.text || '').trim()).length;
+        return `${o.objective} — horizon ${o.kanban_status}; `
+          + `${o.quarter ? `quarter ${o.quarter}` : 'NO QUARTER RECORDED'}; `
+          + `${n} key result${n === 1 ? '' : 's'}`;
+      });
+    },
+  },
+
+  'build/kpi': {
+    // A3's third band: "Out of range · explain this? — Burn jumped 31% on last
+    // month. Want a one-line annotation drafted … attached to this figure for
+    // investor updates?"
+    //
+    // An annotation on a figure a founder will paste into an investor update is
+    // the one place a confident invented cause does real damage, so the
+    // instruction refuses a cause outright. Two snapshots is also the minimum
+    // for the word "jumped" to mean anything: with one, there is no movement to
+    // explain and the gather says so rather than letting the model treat a
+    // single figure as a change.
+    instruction: [
+      'Draft one short annotation for the figure below that moved most between the two snapshots.',
+      'State the movement and its size from the figures given. Do NOT state a cause: nothing here records why anything moved, and an invented reason goes into an investor update as fact.',
+      'Where only one snapshot exists there is no movement — say that instead, and do not describe the single figure as a change.',
+      'Name any figure the summary could not compute, and its stated reason, rather than treating a missing value as zero.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      await ensureProjectMetricsSchema(c.env);
+      const rows = await c.env.DB.prepare(
+        `SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance
+           FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets'
+          ORDER BY snapshot_date DESC, id DESC LIMIT 2`
+      ).bind(pid).all<{
+        snapshot_date: string | null; mrr: number | null; paying_accounts: number | null;
+        net_burn: number | null; cash_balance: number | null;
+      }>();
+      const snaps = rows.results || [];
+      if (!snaps.length) return [];
+      const fmt = (r: typeof snaps[number]) =>
+        `Snapshot ${r.snapshot_date || 'date not recorded'}: `
+        + `MRR ${r.mrr == null ? 'not recorded' : r.mrr}; `
+        + `paid accounts ${r.paying_accounts == null ? 'not recorded' : r.paying_accounts}; `
+        + `net burn ${r.net_burn == null ? 'not recorded' : r.net_burn}; `
+        + `cash ${r.cash_balance == null ? 'not recorded' : r.cash_balance}`;
+      const lines = snaps.map(fmt);
+      if (snaps.length === 1) lines.push('ONLY ONE SNAPSHOT EXISTS — there is no prior figure to compare against.');
+      return lines;
+    },
+  },
+
+  'build/retro': {
+    // The cadence card's band (D510). A3: "Friday retro gets a draft summary
+    // from the board's own history — accept it or write your own." The
+    // integrated Build canvas's fixture reads "three cards moved, one carried
+    // a third time, one commitment missed with no note", and names decisions.
+    //
+    // THE BOARD KEEPS NO HISTORY OF ITS MOVES. A card is one `mvp_tasks` row:
+    // its status NOW, when it was created, when it was last touched. Nothing
+    // records a move, so "carried a third time" and "moved three times" have
+    // no row behind them, and neither does when a card was finished. So the
+    // week here is the cards last touched in the past seven days, each with
+    // where it stands now, plus the open cards past their due date. The
+    // instruction forbids the counts nothing records, and the material says
+    // why in its own words, so the gap reaches the model as a fact rather
+    // than as silence. Decisions live in the founder's ritual notes, not on
+    // the board, so this surface states none.
+    //
+    // A CUT LIST SAYS IT IS CUT. Both lists are capped (40 touched, 20 past
+    // due) to bound the prompt, and each statement counts its whole match in
+    // the same read (`COUNT(*) OVER ()` is taken before LIMIT), so a board
+    // past the cap sends "N more … are not listed" rather than a list the
+    // model would read as complete.
+    //
+    // AN EMPTY BOARD IS NOTHING TO DRAFT; A QUIET WEEK IS NOT. A board with
+    // cards and no card touched this week is a retro that says so, and the
+    // material carries that sentence. Only a board with no card at all
+    // returns [] for the route to answer as `nothing_to_draft`.
+    instruction: [
+      'Summarise this week on the board below for the founder\'s Friday retro.',
+      'Say which cards were touched this week and where each stands now, and name every open card listed as past its due date.',
+      'Where the material says more cards are not listed, say how many, and never present a list as complete when it is not.',
+      'The board records each card\'s current status and when it was last touched, and no history of its moves: never say how many times a card moved, slipped or carried over, and never say when a card was finished, only that it is done now.',
+      'Never name an owner, give a cause or state a decision: none is recorded here. Add nothing the material below does not support.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      // Every statement is keyed on `deal_id = pid`, the project the ownership
+      // check resolved — `mvp_tasks.deal_id` is a `projects.id` (see
+      // `founder_board.ts`).
+      const byStatus = await c.env.DB.prepare(
+        `SELECT status, COUNT(*) AS n FROM mvp_tasks WHERE deal_id = ? GROUP BY status ORDER BY status`
+      ).bind(pid).all<{ status: string; n: number }>();
+      const counts = byStatus.results || [];
+      const total = counts.reduce((sum, r) => sum + Number(r.n), 0);
+      if (!total) return [];
+      const today = new Date().toISOString().slice(0, 10);
+      const lines: string[] = [
+        `The week read: the seven days to ${today}.`,
+        `The board holds ${total} card${total === 1 ? '' : 's'}: `
+          + counts.map((r) => `${r.n} ${String(r.status).replace('_', ' ')}`).join(', ') + '.',
+        'NO MOVE HISTORY IS STORED: a card records only its current status and when it was last touched, so how often it moved, slipped or carried over, and when it was finished, are not known.',
+      ];
+      const touched = await c.env.DB.prepare(
+        `SELECT title, status, due_date, created_at, updated_at,
+                CASE WHEN datetime(created_at) >= datetime('now', '-7 days') THEN 1 ELSE 0 END AS added,
+                COUNT(*) OVER () AS matched
+           FROM mvp_tasks
+          WHERE deal_id = ? AND datetime(updated_at) >= datetime('now', '-7 days')
+          ORDER BY datetime(updated_at) DESC, id DESC LIMIT 40`
+      ).bind(pid).all<{
+        title: string; status: string; due_date: string | null;
+        created_at: string | null; updated_at: string | null; added: number; matched: number;
+      }>();
+      const week = touched.results || [];
+      if (!week.length) lines.push(`No card was touched in the seven days to ${today}.`);
+      for (const t of week) {
+        lines.push(`Touched this week: ${t.title} — now ${String(t.status).replace('_', ' ')}; `
+          + `${Number(t.added) ? 'added this week' : `added ${t.created_at ? String(t.created_at).slice(0, 10) : 'on a date not recorded'}`}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}; `
+          + `${t.due_date ? `due ${String(t.due_date).slice(0, 10)}` : 'no due date recorded'}`);
+      }
+      const weekMore = week.length ? Number(week[0].matched) - week.length : 0;
+      if (weekMore > 0) {
+        lines.push(`${weekMore} more card${weekMore === 1 ? ' was' : 's were'} touched this week and ${weekMore === 1 ? 'is' : 'are'} not listed here: only the ${week.length} most recently touched are.`);
+      }
+      // Past due is read off the due date alone, so it holds whether or not
+      // the card was touched this week. The closed statuses are the ones
+      // `founder_board.ts` keeps out of a WIP count; anything else is open.
+      const late = await c.env.DB.prepare(
+        `SELECT title, status, due_date, updated_at, COUNT(*) OVER () AS matched FROM mvp_tasks
+          WHERE deal_id = ? AND due_date IS NOT NULL AND date(due_date) < date('now')
+            AND lower(status) NOT IN ('done','cancelled','archived')
+          ORDER BY date(due_date), id LIMIT 20`
+      ).bind(pid).all<{ title: string; status: string; due_date: string; updated_at: string | null; matched: number }>();
+      const overdue = late.results || [];
+      for (const t of overdue) {
+        lines.push(`Past due and still open: ${t.title} — ${String(t.status).replace('_', ' ')}; `
+          + `was due ${String(t.due_date).slice(0, 10)}; `
+          + `last touched ${t.updated_at ? String(t.updated_at).slice(0, 10) : 'not recorded'}`);
+      }
+      const lateMore = overdue.length ? Number(overdue[0].matched) - overdue.length : 0;
+      if (lateMore > 0) {
+        lines.push(`${lateMore} more open card${lateMore === 1 ? ' is' : 's are'} past ${lateMore === 1 ? 'its' : 'their'} due date and not listed here: only the ${overdue.length} longest overdue are.`);
+      }
+      return lines;
+    },
+  },
+
+  'raise/capital': {
+    // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
+    // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
+    // than the round itself — 7.4 points against 16.0."
+    //
+    // The artboard is explicit that the reasoning is shown step by step
+    // "because you will be asked to defend this number", and that is the
+    // instruction that matters: a dilution figure a founder cannot reconstruct
+    // in a partner meeting is worse than none. The second is that a round with
+    // no pre-money recorded has no post-money and therefore no dilution at all
+    // — computing one from the target alone would put a number in front of
+    // someone who is about to defend it.
+    instruction: [
+      'Read the round below back in plain language, and show every step of the arithmetic.',
+      'Where a figure the arithmetic needs is not recorded, say which one and stop: do not assume a pre-money, a pool or a share count.',
+      'Name the largest single source of dilution and compare it against the others in points.',
+      'Add no benchmark and no market comparison. Nothing here records what other rounds look like.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money, pro_rata_reserved, close_date, created_at
+           FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{
+        name: string | null; target_amount: number | null; pre_money: number | null;
+        pro_rata_reserved: number | null; close_date: string | null; created_at: string | null;
+      }>();
+      const lines: string[] = [];
+      if (round) {
+        lines.push(`Round: ${round.name || 'unnamed'}; `
+          + `target ${round.target_amount == null ? 'NOT RECORDED' : round.target_amount}; `
+          + `pre-money ${round.pre_money == null ? 'NOT RECORDED' : round.pre_money}; `
+          + `pro-rata reserved ${round.pro_rata_reserved == null ? 'NOT RECORDED' : round.pro_rata_reserved}; `
+          + `close ${round.close_date || 'NOT RECORDED'}`);
+      }
+      const allocs = await c.env.DB.prepare(
+        `SELECT COALESCE(commit_status, 'signed') AS state, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total
+           FROM raise_prospects WHERE project_id = ? AND stage = 'committed' AND amount IS NOT NULL
+          GROUP BY COALESCE(commit_status, 'signed')`
+      ).bind(pid).all<{ state: string; n: number; total: number }>();
+      for (const a of (allocs.results || [])) {
+        lines.push(`Committed as ${a.state}: ${a.n} allocation${a.n === 1 ? '' : 's'} totalling ${a.total}`);
+      }
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null }>();
+      if (scenario) lines.push(`Cap table scenario "${scenario.name}": ${String(scenario.inputs_json || '').slice(0, 1200)}`);
+      else if (lines.length) lines.push('NO CAP TABLE SCENARIO IS RECORDED — there are no current ownership percentages to dilute.');
+      return lines;
+    },
+  },
+
+  'raise/legal': {
+    // A4's band: "'Full ratchet anti-dilution' — off market at seed. Broad-based
+    // weighted average is standard."
+    //
+    // THE DOCUMENT'S OWN TEXT IS THE MATERIAL, and it has to be: a clause read
+    // from a title is a guess about a document. Bounded per document and
+    // capped, because the point is the clauses and not the whole instrument.
+    //
+    // "Not legal advice. Counsel is on the Team page" is on the band's foot in
+    // the page, and the instruction carries the same limit, because a founder
+    // reading a confident paragraph about their own term sheet is exactly the
+    // reader who will act on it.
+    instruction: [
+      'Name the clauses in the documents below that a founder should look at again, and say plainly what each one does to them.',
+      'Quote the clause you are describing. Do not describe a clause that is not in the text.',
+      'You are not counsel and this is not advice: say what the clause does, never what to sign or refuse.',
+      'Where a document is a draft or unsigned, say so — its terms are not settled.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const rows = await c.env.DB.prepare(
+        `SELECT title, doc_type, status, content FROM documents
+          WHERE project_id = ? ORDER BY updated_at DESC LIMIT 8`
+      ).bind(pid).all<{ title: string; doc_type: string; status: string; content: string | null }>();
+      return (rows.results || []).map((d) => {
+        const body = String(d.content || '').trim();
+        return `${d.title} (${d.doc_type}, ${d.status})\n`
+          + (body ? body.slice(0, 4000) : 'NO TEXT STORED — this document has a record but no body to read.');
+      });
+    },
+  },
+
+  'raise/data-room': {
+    // A4's band: "Seed investors in workflow software ask for three things you
+    // don't have staged … Two of the four investors already viewing have
+    // requested the first."
+    //
+    // The artboard's version reasons from what investors in a sector ask for,
+    // which nothing here records — so this one reasons from the room instead:
+    // what is staged, what is behind NDA, and what the people with access have
+    // actually opened. A model told to name gaps and handed only a file list
+    // will otherwise recite a generic diligence checklist as though it had read
+    // this founder's room.
+    instruction: [
+      'Describe what this data room does and does not hold, from the list below alone.',
+      'Do not produce a generic diligence checklist: name only gaps the room itself evidences — a folder with nothing in it, a document referred to by a file name that is not there, an artifact behind NDA that everyone with access already signed for.',
+      'Say what each investor with access has and has not opened, where that is recorded.',
+      'If the room looks complete for what it holds, say so rather than inventing something missing.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const folders = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+           FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
+      ).bind(pid).all<{ name: string; visibility: string; files: number }>();
+      const files = await c.env.DB.prepare(
+        `SELECT f.name, f.visibility,
+                (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
+           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+      ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
+      const grants = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
+      ).bind(pid).first<{ n: number }>();
+      const lines: string[] = [];
+      for (const f of (folders.results || [])) {
+        lines.push(`Folder ${f.name} (${f.visibility}) — ${f.files} file${f.files === 1 ? '' : 's'}`);
+      }
+      for (const f of (files.results || [])) {
+        lines.push(`File ${f.name} (${f.visibility}) — `
+          + `${f.viewers ? `opened by ${f.viewers} investor${f.viewers === 1 ? '' : 's'}` : 'never opened'}`);
+      }
+      if (lines.length) {
+        lines.push(`${Number(grants?.n || 0)} investor${Number(grants?.n || 0) === 1 ? '' : 's'} currently have access.`);
+      }
+      return lines;
+    },
+  },
+
+  'raise/liquidity': {
+    // A4's band sits beside a waterfall the product cannot draw: no exit model
+    // and no preference terms are stored anywhere, so the page says so. What
+    // this band has is the cap table and the round — enough to answer the one
+    // question the zone exists for, which the artboard states outright: the
+    // waterfall should be understood BEFORE terms are signed, not after.
+    //
+    // So the instruction is mostly a set of refusals. A model asked about exits
+    // will supply a preference stack, a participation multiple and a comparable
+    // outcome, and each of those would be a term this founder has not agreed to
+    // presented as one they have.
+    instruction: [
+      'Explain who is paid what, and in what order, at an exit — using only the ownership and round figures below.',
+      'No preference multiple, participation right or liquidation term is recorded anywhere here. Do not assume one, and do not describe a standard one as though it applied to this company.',
+      'Name every input the answer would need that is missing, and say plainly that the order of payment cannot be settled without them.',
+      'Model no exit price that is not given. If none is given, describe the mechanism rather than inventing an outcome.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const scenario = await c.env.DB.prepare(
+        `SELECT name, inputs_json, result_json FROM cap_table_scenarios
+          WHERE project_id = ? AND is_variant = 0 ORDER BY updated_at DESC LIMIT 1`
+      ).bind(pid).first<{ name: string; inputs_json: string | null; result_json: string | null }>();
+      if (!scenario) return [];
+      const round = await c.env.DB.prepare(
+        `SELECT name, target_amount, pre_money FROM raise_rounds WHERE project_id = ? AND status = 'active'`
+      ).bind(pid).first<{ name: string | null; target_amount: number | null; pre_money: number | null }>();
+      const lines = [
+        `Cap table scenario "${scenario.name}" inputs: ${String(scenario.inputs_json || '').slice(0, 1500)}`,
+        `Computed ownership: ${String(scenario.result_json || 'NOT COMPUTED').slice(0, 1500)}`,
+      ];
+      lines.push(round
+        ? `Open round: ${round.name || 'unnamed'}; target ${round.target_amount ?? 'NOT RECORDED'}; pre-money ${round.pre_money ?? 'NOT RECORDED'}`
+        : 'NO OPEN ROUND IS RECORDED.');
+      lines.push('NO LIQUIDATION PREFERENCE, PARTICIPATION RIGHT OR EXIT MODEL IS RECORDED for this company.');
+      return lines;
+    },
+  },
+
+  // D4493 (#4493): 'grow/customers' (A5's outreach-sequence band) is retired. The
+  // Distribution sequence builder's Ask drafts a sequence through D4488's task
+  // (kind `sequence`) and keeps the `draft:grow/customers` rail row's models.
+
+  'grow/talent': {
+    // A5's band: "Ranked first of 14 on three receipts you can check: shipped
+    // an event-sourced handoff system at Verwood, applied through your careers
+    // page rather than a board, and names async workflows in her own words."
+    //
+    // "RECEIPTS YOU CAN CHECK" is the instruction. An applicant record holds a
+    // cover note, a link and a resume key — no score, no skills breakdown, no
+    // inference. So a reason has to be a thing the founder can open and read
+    // for themselves, and anything the model would have to conclude on its own
+    // is exactly what must not appear as a ranking.
+    //
+    // AND MOVING SOMEONE TO SCREEN IS NOT AN ACTION HERE. Nothing writes
+    // `job_applications.status` through any route, so the band produces a
+    // reading and the founder acts on it in Talent.
+    instruction: [
+      'Rank the applicants below and give the reasons for the top one.',
+      'Every reason must be a receipt the founder can open and check for themselves — something written in the application. Do not infer seniority, culture fit or ability from anything not stated.',
+      'Where an application is thin, say what is missing rather than filling it in.',
+      'Do not say anyone has been moved to a screen or to any other stage. Nothing here changes an application.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const posts = await c.env.DB.prepare(
+        `SELECT id, title, seniority, status FROM job_postings
+          WHERE project_id = ? AND status <> 'draft' ORDER BY created_at DESC LIMIT 10`
+      ).bind(pid).all<{ id: number; title: string; seniority: string; status: string }>();
+      const lines: string[] = [];
+      for (const post of (posts.results || [])) {
+        const apps = await c.env.DB.prepare(
+          `SELECT name, cover_note, linkedin_url, portfolio_url, resume_key, status, created_at
+             FROM job_applications WHERE posting_id = ? ORDER BY created_at DESC LIMIT 40`
+        ).bind(post.id).all<{
+          name: string | null; cover_note: string | null; linkedin_url: string | null;
+          portfolio_url: string | null; resume_key: string | null; status: string; created_at: string;
+        }>();
+        const rows = apps.results || [];
+        lines.push(`Role: ${post.title} (${post.seniority}, ${post.status}) — `
+          + `${rows.length} applicant${rows.length === 1 ? '' : 's'}`);
+        for (const a of rows) {
+          // The APPLICANT'S EMAIL IS DELIBERATELY NOT HERE. It identifies a
+          // real person to a third-party model and adds nothing a ranking can
+          // use; the name and what they wrote are the material.
+          lines.push(`  Applicant ${a.name || 'name not given'} (${a.status}, applied ${String(a.created_at).slice(0, 10)}): `
+            + `${a.cover_note ? `wrote "${String(a.cover_note).slice(0, 600)}"` : 'NO COVER NOTE'}; `
+            + `${a.linkedin_url ? 'linkedin given' : 'no linkedin'}; `
+            + `${a.portfolio_url ? 'portfolio given' : 'no portfolio'}; `
+            + `${a.resume_key ? 'resume attached' : 'NO RESUME'}`);
+        }
+      }
+      return lines;
+    },
+  },
+
+  // The investor's memo on ONE room (canvas b6a5f992, "Room · what is thin").
+  // The scope key is a grant uid, and the material comes from `roomMaterial`,
+  // which passes through the same held-grant gate as the room read: a uid the
+  // caller does not hold drafts nothing, and nothing behind an NDA the caller
+  // has not signed is named to the model — only counted.
+  // ── FOUNDER NETWORK (D551, #1144) ──────────────────────────────────────
+  //
+  // The founder Network desk's two bands (A6). `network/relationships` and
+  // `network/introductions` above read a PARTNER's book; a founder's people
+  // live in `contacts`, keyed on a project, so these are their own surfaces
+  // scoped the way every founder surface is: through `founderProject`.
+
+  'network/re-engagement': {
+    // A6's band: "Marisol Vega has gone 71 days without contact. She asked
+    // about your retention data in June — you have it now." The note opens on
+    // what the person last wrote, never on a check-in — and when nothing they
+    // wrote is logged, the instruction says so rather than letting the model
+    // supply a June conversation.
+    instruction: [
+      'Write one short re-engagement note, two or three sentences, to the first contact below: the one who has gone longest without contact.',
+      'Open on what they last wrote when it is given; when no reply of theirs is logged, say nothing about a past conversation.',
+      'Never invent a meeting, a promise, a shared history or a figure the rows do not state, and do not write a generic check-in.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      // GOING COLD IS THE PAGES' DEFINITION, more than 60 days since the last
+      // recorded activity (`lib/networkBook.js` COLD_AFTER_DAYS), so the band
+      // drafts for the people the desk flags and nobody else.
+      const rows = await c.env.DB.prepare(
+        `SELECT ct.name, ct.organization, ct.strength, ct.audience,
+                CAST(julianday('now') - julianday(ct.last_activity_at) AS INTEGER) AS days,
+                (SELECT r.body FROM contact_replies r
+                  WHERE r.contact_id = ct.id AND r.direction = 'inbound' AND TRIM(COALESCE(r.body, '')) <> ''
+                  ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS last_inbound
+           FROM contacts ct
+          WHERE ct.project_id = ? AND ct.last_activity_at IS NOT NULL
+            AND julianday('now') - julianday(ct.last_activity_at) > ?
+          ORDER BY julianday(ct.last_activity_at) ASC, ct.id ASC LIMIT 20`
+      ).bind(pid, FOUNDER_COLD_AFTER_DAYS).all<{
+        name: string | null; organization: string | null; strength: string | null; audience: string;
+        days: number; last_inbound: string | null;
+      }>();
+      return (rows.results || []).map((r) =>
+        `${r.name || 'A contact with no name recorded'} (${r.audience}) at ${r.organization || 'no organisation recorded'}`
+        + ` — strength ${r.strength || 'not recorded'}, ${r.days} days since the last recorded activity; `
+        + (r.last_inbound ? `the last thing they wrote: "${r.last_inbound.slice(0, 400)}"` : 'no reply of theirs is logged'));
+    },
+  },
+
+  'network/intro-email': {
+    // A6's band: "Proposal · intro email — written from both sides' real
+    // context … Forwardable as-is." Both sides' context is what the match
+    // recorded about the pair; the draft asks for the introduction and never
+    // reads as though it had been made.
+    instruction: [
+      'Write one short, forwardable email asking for an introduction to the first person below, from the founder.',
+      'Use only the reasons the match recorded for both sides. Never write as though the introduction has already been made, and add no fact the rows do not state.',
+    ].join(' '),
+    gather: async (c, userId, scope) => {
+      // The founder's own ACCEPTED propositions: the ones in motion. `scope`,
+      // when sent, names one proposition, and it must be the caller's.
+      const rows = await c.env.DB.prepare(
+        `SELECT ip.uid, ip.breakdown_json, ip.responded_at, COALESCE(u.name, 'a member with no name recorded') AS target
+           FROM intro_propositions ip
+           JOIN users u ON u.id = ip.target_user_id
+          WHERE ip.user_id = ? AND ip.status = 'accepted' AND (? = '' OR ip.uid = ?)
+          ORDER BY ip.responded_at DESC, ip.id DESC LIMIT 10`
+      ).bind(userId, scope, scope).all<{ uid: string; breakdown_json: string | null; responded_at: string | null; target: string }>();
+      return (rows.results || []).map((r) => {
+        let reasons: string[] = [];
+        try {
+          const b = JSON.parse(r.breakdown_json || '{}');
+          reasons = (Array.isArray(b?.reasons) ? b.reasons : []).filter((x: unknown) => typeof x === 'string' && x.trim()).slice(0, 5);
+        } catch { reasons = []; }
+        return `Introduction to ${r.target} — ${reasons.length ? `recorded reasons: ${reasons.join('; ')}` : 'no reason recorded for the match'}`;
+      });
+    },
+  },
+
+  'research/diligence': {
+    instruction: [
+      'Write a short private memo for the investor who holds access to the data room below.',
+      'Say what the founder has staged, and what is thin or absent for diligence, using only the facts listed.',
+      'Name a document only by the name given. Do not guess what any document says.',
+      'Anything behind an NDA is a count only. Do not name or guess it.',
+      'Do not tell the investor what to decide. Add no fact that is not below.',
+    ].join(' '),
+    gather: (c, userId, scope) => roomMaterial(c.env, userId, scope),
+  },
+
+  // The founder's pre-meeting brief on ONE researched fund (canvas c0834993,
+  // FS4d, "Proposal · pre-meeting brief"). The scope key is the fund uid and
+  // the material is that row alone, read owner-scoped. Accept writes the
+  // brief into the fund's note, after what the founder already wrote.
+  'research/funds': {
+    instruction: [
+      'Write a short pre-meeting brief for a founder about to meet the fund below.',
+      'Quote their thesis back in their own words if it is given. Use only the facts listed.',
+      'Turn every fact marked "not recorded" into a question to ask, not a fact to assert.',
+      'Do not name a partner, cite a fund size or an investment, or assume an introduction.',
+      'Do not score the fund or tell the founder what to decide.',
+    ].join(' '),
+    gather: (c, userId, scope) => fundMaterial(c.env, userId, scope),
+    accept: (c, userId, scope, body) => writeBriefIntoNote(c.env, userId, scope, body),
+  },
+
+  // D553 (#1146) — I6's "Draft reminder" on a capital call line: one LP, one
+  // call. A DRAFT ONLY: there is no `accept` hook, so accepting it writes
+  // nothing and sends nothing. The GP sends it from wherever they send mail,
+  // then logs it on the fund's comms log ("Log as sent"). The gather is the
+  // licence and ownership gate: an investor who is the GP of record, or an
+  // admin; another fund's line gives nothing to draft.
+  'funds/calls': {
+    instruction: CALL_REMINDER_INSTRUCTION,
+    gather: (c, userId, scope) => callReminderMaterial(c.env, userId, scope),
+  },
+
+  // #1524 item 3 (D663) — the Investor narrative band: Eadwyn phrases the fix
+  // for ONE mismatch the consistency check stored, on request. The material is
+  // that one row (`services/narrativeFix.ts`); `finish` refuses a wording that
+  // quotes a figure the row does not carry and appends the check's own
+  // sentence, so both sides are cited and neither is picked. There is no
+  // `accept` hook: accepting keeps the wording and changes neither record.
+  'raise/narrative-fix': {
+    instruction: NARRATIVE_FIX_INSTRUCTION,
+    // D912 (#2696): the scope may name the mismatch clicked, `<project>:v<n>:<figure>`.
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      const { pick } = parseFixScope(scope);
+      const m = await narrativeMismatch(c.env, pid, pick);
+      return m ? narrativeFixMaterial(m) : [];
+    },
+    finish: async (c, userId, scope, text) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return null;
+      const { pick } = parseFixScope(scope);
+      const m = await narrativeMismatch(c.env, pid, pick);
+      return m ? finishNarrativeFix(text, m) : null;
+    },
+  },
+};
+
+research.get('/drafts', async (c) => {
+  const user = await requireAuth(c);
+  const surface = String(c.req.query('surface') || '');
+  if (!DRAFT_SURFACES[surface]) return c.json({ detail: 'unknown_surface' }, 400);
+  // A page about ONE record (one room) asks for that record's drafts only, so
+  // a memo on one company's room never shows on another's. Pages that omit
+  // `scope_key` read the surface's newest drafts, as they always have.
+  const scopeKey = c.req.query('scope_key');
+  const rows = scopeKey !== undefined
+    ? await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? AND scope_key = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface, scopeKey).all<ZoneDraftRow>()
+    : await c.env.DB.prepare(
+        `SELECT * FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? ORDER BY id DESC LIMIT 20`
+      ).bind(user.id, surface).all<ZoneDraftRow>();
+  return c.json({ items: (rows.results || []).map(draftDto) });
+});
+
+/**
+ * D778 part 3 (#2103): the founder's own bands, each on the page D771's
+ * inventory gives it (`frontend/src/lib/railOptions/founder.js`, which
+ * `founder_draft_surfaces.test.ts` holds this table to). A run from a client
+ * that sent no rail page names that page; a mounted rail's page still wins,
+ * since it holds the member's Manual switch. Shared bands use the workspace
+ * preference keys in SHARED_DRAFT_PAGES below.
+ */
+/**
+ * D778 part 11 (#2103): Ask's page and option in the founder inventory
+ * (`frontend/src/lib/railOptions/founder.js`), for a client that sent no rail
+ * context. Before part 11 the fallback was the workspace key `research`.
+ */
+export const ASK_PAGE = 'Founder · Research · Ask';
+export const ASK_OPTION = 'ask:library';
+
+export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
+  'build/roadmap': 'Founder · Build · Product roadmap',
+  'build/this-week': 'Founder · Build · Operating systems',
+  'build/retro': 'Founder · Build · Operating systems',
+  'build/kpi': 'Founder · Build · Operating systems',
+  'raise/data-room': 'Founder · Raise · Fundraising readiness',
+  'raise/legal': 'Founder · Raise · Fundraising readiness',
+  'raise/narrative-fix': 'Founder · Raise · Investor narrative',
+  'raise/capital': 'Founder · Raise · Cap table',
+  'raise/liquidity': 'Founder · Raise · Cap table',
+  // D4493: kept for the moved rail row's page; the surface itself is retired above.
+  'grow/customers': 'Founder · Grow · Distribution',
+  'grow/talent': 'Founder · Grow · Team expansion',
+  'network/re-engagement': 'Founder · Network',
+  'network/intro-email': 'Founder · Network',
+  'research/funds': 'Founder · Research · Funds',
+};
+
+// D778 part 10: these bands belong to several profiles. The fallback is the
+// workspace where the Manual switch and model picks are stored, even when a
+// phone lens leaves the browser's pathname on another page. Request headers
+// still win in railFor; inventory labels are not preference-section keys.
+export const SHARED_DRAFT_PAGES: Readonly<Record<string, string>> = {
+  'network/relationships': 'network',
+  'network/introductions': 'network',
+  'research/ask': 'research',
+  'research/library': 'research',
+};
+
+/**
+ * Draft one. NOTHING RUNS ON MOUNT — this is a POST behind a button, for the
+ * reason `ValidateProposals` states in its own docblock: a component that
+ * proposed on render would spend a reader's budget for visiting a page.
+ */
+// #3938 part 2 (D1478 task 4, job GR4): the founder's press ranks one posting's
+// applicants: retrieve (bge-m3), rank (the reranker), then one line each, drawn only
+// from what the applicant wrote (`services/ai/matchRows.ts`). Nothing writes an
+// application's status; the founder acts in Talent. No applicant's email is read.
+research.post('/grow/talent/rank', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const pid = await founderProject(c, user.id, String(body?.scope_key ?? ''));
+  if (pid == null) return c.json({ detail: 'no_project' }, 404);
+  const postingId = Number(body?.posting_id);
+  const post = Number.isSafeInteger(postingId) && postingId > 0
+    ? await c.env.DB.prepare("SELECT id, title, seniority FROM job_postings WHERE id = ? AND project_id = ? AND status <> 'draft'").bind(postingId, pid)
+      .first<{ id: number; title: string; seniority: string | null }>()
+    : null;
+  if (!post) return c.json({ detail: 'no_posting' }, 404);
+  const apps = (await c.env.DB.prepare(
+    `SELECT id, name, cover_note, linkedin_url, portfolio_url, resume_key FROM job_applications WHERE posting_id = ? ORDER BY created_at DESC LIMIT 40`,
+  ).bind(post.id).all<{ id: number; name: string | null; cover_note: string | null; linkedin_url: string | null; portfolio_url: string | null; resume_key: string | null }>()).results ?? [];
+  const query = `${post.title}${post.seniority ? `, ${post.seniority}` : ''}`;
+  const candidates = apps.map((a) => ({
+    key: String(a.id),
+    text: [a.name || 'Name not given', a.cover_note ? `Wrote: ${String(a.cover_note).slice(0, 600)}` : 'No cover note',
+      a.linkedin_url ? 'LinkedIn given' : null, a.portfolio_url ? 'Portfolio given' : null, a.resume_key ? 'Resume attached' : 'No resume'].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: FOUNDER_DRAFT_PAGES['grow/talent'] ?? 'grow', option: 'draft:grow/talent' });
+  const deps = MATCH_DEPS.make(c.env, { userId: user.id, surface: '/grow/talent', rail, guardText: query }, 'GR4');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'GR4', posting_id: post.id, steps: res.steps, rows: res.rows.map((r) => ({ application_id: Number(r.key), position: r.position, line: r.line })) });
+});
+
+research.post('/drafts', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const surface = String(body?.surface || '');
+  const spec = DRAFT_SURFACES[surface];
+  if (!spec) return c.json({ detail: 'unknown_surface' }, 400);
+  const scope = String(body?.scope_key || '');
+  // THE PAGE THE BAND SITS ON, recorded as the run's `surface` (D404, D510).
+  // It is the app path, not the draft key above: `ai_usage_logs.surface` is
+  // what the rail groups "This page this month" on, and `build/retro` is not
+  // a page anyone stands on. Without it every zone-draft run landed in the
+  // month's unattributed group. The router re-validates it with
+  // `normaliseSurface`, so a value that is not a plain app path is recorded
+  // as NULL ("not recorded"), never trimmed into one; capped as `ai.ts` caps it.
+  const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
+
+  const material = await spec.gather(c, user.id, scope);
+  // NOTHING TO READ IS NOT AN ERROR AND MUST NOT REACH THE MODEL. A brief over
+  // an empty session would be written from the model's own knowledge in exactly
+  // the voice a grounded one uses — the failure `/ask` refuses by retrieving
+  // first, and the same refusal belongs here.
+  if (!material.length) return c.json({ detail: 'nothing_to_draft' }, 409);
+
+  let out;
+  try {
+    out = await runAI(c.env, {
+      task: 'workspace_explain',
+      userId: user.id,
+      text: `${spec.instruction}\n\n${material.join('\n\n')}`,
+      maxTokens: 500,
+      surface: page,
+      // D765: the band's page and the draft as the option.
+      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? SHARED_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
+    });
+  } catch (e) {
+    console.error('[research] draft failed:', (e as Error).message);
+    return c.json({ detail: 'draft_unavailable' }, 503);
+  }
+  if (out.refusal === 'assist_off') return refuseAssistOff(c);
+  // D763, D770 (#2095): a withheld draft, or one the guard could not check, is
+  // never stored; the guard's own words go back instead of "unavailable".
+  if (!out.ok && (out.refusal === 'guard_blocked_output' || out.refusal === 'guard_unavailable')) {
+    return c.json({ detail: out.refusal, message: out.error, ...(out.guard?.refusal?.link ? { link: out.guard.refusal.link } : {}) }, 503);
+  }
+  const drafted = out.ok && out.output ? out.output.trim() : '';
+  if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
+  const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
+  if (!text) return c.json({ detail: 'draft_unfaithful' }, 503);
+
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body, model, cost_micro_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, surface, scope || null, text,
+    out.usage?.model ?? null, Math.max(0, Math.round((out.usage?.est_cost_usd ?? 0) * 1e6)),
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  return c.json({ item: row ? draftDto(row) : null }, 201);
+});
+
+/**
+ * Accept it, having optionally edited it first — the artboard's `Accept …` and
+ * `Edit first` are one write, because editing then accepting is the same act
+ * with a different body. A `body` that arrives is the reader's version and
+ * replaces the drafted one; the receipt does not change, since the run is what
+ * was charged.
+ */
+research.patch('/drafts/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  const edited = typeof body?.body === 'string' ? body.body.trim().slice(0, 8000) : null;
+  if (edited !== null && !edited) return c.json({ detail: 'body_empty' }, 400);
+
+  // A surface whose Accept writes a record writes it FIRST, and a refusal
+  // leaves the draft unaccepted — never a stamped draft over a record that
+  // was not written.
+  const current = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!current) return c.json({ detail: 'not_found' }, 404);
+  const hook = DRAFT_SURFACES[current.surface]?.accept;
+  if (hook) {
+    const refused = await hook(c, user.id, current.scope_key || '', edited || current.body);
+    if (refused) return c.json({ error: refused, message: ACCEPT_REFUSALS[refused] || 'That could not be written.' }, 409);
+  }
+
+  if (edited) {
+    await c.env.DB.prepare(
+      `UPDATE research_zone_drafts SET body = ?, accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
+    ).bind(edited, uid, user.id).run();
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE research_zone_drafts SET accepted_at = datetime('now') WHERE uid = ? AND owner_user_id = ?`
+    ).bind(uid, user.id).run();
+  }
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<ZoneDraftRow>();
+  if (!row) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ item: draftDto(row) });
+});
+
+/** Discard. The row goes; see the migration's note on why there is no third state. */
+research.delete('/drafts/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_zone_drafts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Funds — founder-facing fund research (migration 216)
+// ---------------------------------------------------------------------------
+//
+// EVERY READ IS OWNER-SCOPED, like the library above and for the same reason:
+// a founder's shortlist, their notes on a partner, and above all their record
+// of who passed and why are not things another account may read. There is no
+// cross-user listing in this section by construction.
+
+const FUND_STAGE_FIT = new Set(['right', 'wrong']);
+const FUND_PATH = new Set(['warm', 'cold']);
+const FUND_STATUS = new Set(['researching', 'passed']);
+/** D4613: a fund-directory uid, as the directory writes them. */
+const CATALOGUE_UID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
+
+interface FundRow {
+  id: number; uid: string; owner_user_id: number; project_id: number | null;
+  name: string; cheque_min_cents: number | null; cheque_max_cents: number | null;
+  stage_fit: string | null; path: string | null; status: string;
+  pass_reason: string | null; thesis: string | null; note: string | null;
+  source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
+}
+
+const fundDto = (r: FundRow) => ({
+  uid: r.uid,
+  name: r.name,
+  // NULL is not zero. A cheque range nobody recorded is not a fund that writes
+  // nothing, and the zone renders it as unrecorded.
+  cheque_min_cents: r.cheque_min_cents,
+  cheque_max_cents: r.cheque_max_cents,
+  // NULL is not 'wrong'. "Not yet assessed" and "does not write at our stage"
+  // are different facts and must never render the same way.
+  stage_fit: r.stage_fit,
+  path: r.path,
+  status: r.status,
+  pass_reason: r.pass_reason,
+  thesis: r.thesis,
+  note: r.note,
+  source_url: r.source_url,
+  // D4613: the fund-directory row this came from; null for a hand-written fund.
+  catalogue_uid: r.catalogue_uid ?? null,
+  created_at: r.created_at,
+  // The dossier's "Last updated" tile. Every write to the row stamps it —
+  // PATCH, and a brief accepted into the note.
+  updated_at: r.updated_at,
+});
+
+const clampText = (v: unknown, max: number): string | null => {
+  const t = String(v ?? '').trim();
+  return t ? t.slice(0, max) : null;
+};
+const clampInt = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n) : null;
+};
+const oneOf = (v: unknown, set: Set<string>): string | null => {
+  const t = String(v ?? '').trim().toLowerCase();
+  return set.has(t) ? t : null;
+};
+
+// The raise this page is measured against belongs to the active company, not
+// to the fund and not to "whichever project this founder touched last".
+async function activeRaiseTargetCents(c: any, user: { id: number }): Promise<number | null> {
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  const scope = companyScope(user, companyId, 'p');
+  const target = await c.env.DB.prepare(
+    `SELECT p.raise_target_usd FROM projects p
+      WHERE ${scope.sql} AND p.raise_target_usd IS NOT NULL
+      ORDER BY p.updated_at DESC LIMIT 1`
+  ).bind(...scope.binds).first().catch(() => null) as { raise_target_usd: number } | null;
+  return target?.raise_target_usd ? Math.round(Number(target.raise_target_usd) * 100) : null;
+}
+
+research.get('/funds', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
+  ).bind(user.id).all<FundRow>();
+  const items = (rows.results || []).map(fundDto);
+
+  // The cheque-overlap figure the canvas asks for needs the size of the round
+  // being raised, and that lives on the project rather than here. When no
+  // target is recorded the answer is not zero — it is that the question cannot
+  // be asked yet, and the response says which.
+  // NARROWED BY THE ACTIVE COMPANY, not by founder ownership alone. A founder
+  // with two companies raising two different rounds would otherwise get
+  // whichever project was touched last, and every fund on this page would be
+  // measured against the wrong ask — one company's data on another company's
+  // screen, which is the rule `companyScope` exists to hold. `activeRaiseTargetCents`
+  // is that read, shared with the dossier so the list and the fund page cannot
+  // measure against different asks. `company_switcher.test.mjs` caught it
+  // reading unscoped before this comment existed.
+  const askCents = await activeRaiseTargetCents(c, user);
+  const overlaps = askCents === null ? null : items.filter((f) => {
+    if (f.cheque_min_cents === null && f.cheque_max_cents === null) return false;
+    const lo = f.cheque_min_cents ?? 0;
+    const hi = f.cheque_max_cents ?? Number.MAX_SAFE_INTEGER;
+    return askCents >= lo && askCents <= hi;
+  }).length;
+
+  return c.json({
+    items,
+    researched_count: items.length,
+    right_stage_count: items.filter((f) => f.stage_fit === 'right').length,
+    warm_path_count: items.filter((f) => f.path === 'warm').length,
+    passed_count: items.filter((f) => f.status === 'passed').length,
+    // A pass with no reason is indistinguishable from a fund nobody reached,
+    // which is the whole thing recording a pass is meant to prevent.
+    passed_without_reason: items.filter((f) => f.status === 'passed' && !f.pass_reason).length,
+    cheque_overlap_count: overlaps,
+    cheque_overlap_note: askCents === null
+      ? 'No raise target is recorded on the active company\'s project, so there is no ask to compare a cheque range against. The count is absent rather than zero.'
+      : null,
+  });
+});
+
+// Public discovery catalog. These rows are source-backed identity metadata,
+// not a user's private company research and not financial/diligence claims.
+// The market directory uses Axal's sector taxonomy while the discovery
+// company directory stores Wikidata's free-form industry labels. Keep the
+// mapping explicit so a taxonomy card can produce an honest drill-down.
+const MARKET_SECTOR_ALIASES: Record<string, string[]> = {
+  ai: ['artificial intelligence', 'ai'],
+  'cloud-infrastructure': ['cloud infrastructure', 'cloud computing'],
+  biotech: ['biotechnology', 'biotech'],
+  cybersecurity: ['cybersecurity', 'computer security', 'information security'],
+  fintech: ['financial technology', 'financial services', 'fintech'],
+  autotech: ['automotive industry', 'automotive'],
+  telecommunications: ['telecommunications industry', 'telecommunications'],
+  software: ['software industry', 'software'],
+  'e-commerce': ['e-commerce', 'electronic commerce', 'online shopping'],
+  retail: ['retail'],
+  space: ['space industry', 'space'],
+  'media-content': ['media industry', 'mass media', 'news media'],
+  'food-and-beverage': ['food industry', 'food and beverage'],
+  energytech: ['energy industry', 'energy'],
+  hardware: ['hardware industry', 'hardware'],
+  robotics: ['robotics'],
+  pharmaceuticals: ['pharmaceutical industry', 'pharmaceuticals'],
+  'health-hospital-services': ['health care', 'healthcare', 'hospital'],
+};
+
+research.get('/company-directory', async (c) => {
+  await requireAuth(c);
+  const sectorKey = String(c.req.query('sector') || '').trim().slice(0, 120).toLowerCase();
+  const sectorLabel = sectorKey.replace(/-/g, ' ');
+  const sectorTerms = sectorKey ? [...new Set(MARKET_SECTOR_ALIASES[sectorKey] || [sectorLabel])].filter(Boolean) : [];
+  let query;
+  try {
+    query = parseCompanyQuery((k) => c.req.query(k), sectorTerms);
+  } catch (e) {
+    if (e instanceof CompanyQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
+  let page;
+  try {
+    page = await listCompanies(c.env, query);
+  } catch {
+    // A failed read says so; it is never an empty directory.
+    return c.json({ detail: 'Unreadable', reason: 'The company directory could not be read' }, 503);
+  }
+  return c.json({ ...page, requested_sector: sectorKey || null, matched_terms: sectorTerms, source: 'Wikidata', source_boundary: 'Discovery metadata only; taxonomy matches are normalized labels and do not equal the separate taxonomy company count.' });
+});
+
+// One company (D534): identity, each metric with its source and as-of date,
+// the migration-370 evidence keyed on company_id = id, and same-sector peers.
+research.get('/company-directory/:uid', async (c) => {
+  await requireAuth(c);
+  let company;
+  try {
+    company = await getCompany(c.env, c.req.param('uid'));
+  } catch {
+    return c.json({ detail: 'Unreadable', reason: 'The company could not be read' }, 503);
+  }
+  if (!company) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ...company, source_boundary: 'Metrics are shown only with their recorded source and as-of date; a metric with no record reads Not recorded.' });
+});
+
+// Public fund catalog (D535). Spreadsheet observations are reported fund-size
+// snapshots only; they are not private-fund NAV, IRR, TVPI, or performance data.
+// Search, filters, sort and paging run on the server (services/researchFundDirectory.ts).
+const FUND_DIRECTORY_SOURCE = 'Public fund spreadsheets (EuroTech VC Funds; Deep Tech Investors Mapping)';
+const FUND_DIRECTORY_BOUNDARY = 'Reported fund-size snapshots and discovery metadata only; no NAV, IRR, TVPI, or performance is inferred.';
+
+research.get('/fund-directory', async (c) => {
+  await requireAuth(c);
+  let query;
+  try {
+    query = parseDirectoryQuery((k) => c.req.query(k));
+  } catch (e) {
+    if (e instanceof DirectoryQueryError) return c.json({ detail: e.reason, field: e.field }, 400);
+    throw e;
+  }
+  try {
+    const page = await listDirectory(c.env, query);
+    return c.json({ ...page, source: FUND_DIRECTORY_SOURCE, source_boundary: FUND_DIRECTORY_BOUNDARY });
+  } catch {
+    // A failed read says so; it is never an empty directory.
+    return c.json({ detail: 'Unreadable', reason: 'The fund directory could not be read' }, 503);
+  }
+});
+
+research.get('/fund-directory/:uid', async (c) => {
+  await requireAuth(c);
+  let fund;
+  try {
+    fund = await getFund(c.env, c.req.param('uid'));
+  } catch {
+    return c.json({ detail: 'Unreadable', reason: 'The fund could not be read' }, 503);
+  }
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  // D597: a fund of a list taken down for its terms says so, and why — never its fields.
+  if (fund.removed) {
+    return c.json({ detail: 'Removed', reason: `This fund's list was taken down. ${fund.removed.reason}`, removed: fund.removed }, 410);
+  }
+  return c.json({ ...fund, source_boundary: FUND_DIRECTORY_BOUNDARY });
+});
+
+research.get('/market-directory', async (c) => {
+  await requireAuth(c);
+  const q = String(c.req.query('q') || '').trim().slice(0, 120);
+  const rows = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory
+      WHERE (? = '' OR name LIKE '%' || ? || '%')
+      ORDER BY name COLLATE NOCASE LIMIT 200`
+  ).bind(q, q).all();
+  return c.json({ items: rows.results || [], source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
+});
+
+research.get('/market-directory/:slug', async (c) => {
+  await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT slug, name, company_count, source_name, source_boundary, as_of
+       FROM research_market_directory WHERE slug = ?`
+  ).bind(c.req.param('slug')).first();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ item: row, source_boundary: 'Counts are discovery-universe counts supplied by Axal, not TAM or valuation.' });
+});
+
+research.post('/funds', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const name = clampText(body.name, 200);
+  if (!name) return c.json({ detail: 'A fund needs a name' }, 400);
+  // D4613: an add from the fund directory names the directory row it came
+  // from. Checked against a fixed character set before it reaches SQL (bound
+  // there regardless), and absent for a fund typed in by hand.
+  const rawCatalogue = body.catalogue_uid;
+  const catalogueUid = rawCatalogue == null || rawCatalogue === '' ? null : String(rawCatalogue);
+  if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
+    return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+  }
+  const uid = newUid();
+  const now = nowIso();
+  // D4613: INSERT OR IGNORE against the partial unique index on (owner,
+  // catalogue_uid). A repeat of the same catalogue add — a double click, or a
+  // retry after a lost response — writes nothing and answers with the row the
+  // first one wrote. A hand-written fund (NULL catalogue_uid) never collides.
+  const write = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_funds
+       (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, clampInt(body.project_id), name,
+    clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
+    oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
+    oneOf(body.status, FUND_STATUS) || 'researching',
+    clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
+  ).run();
+  const created = Number(write.meta?.changes ?? 1) > 0;
+  const row = created
+    ? await c.env.DB.prepare(`SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`).bind(uid, user.id).first<FundRow>()
+    : await c.env.DB.prepare(`SELECT * FROM research_funds WHERE owner_user_id = ? AND catalogue_uid = ?`).bind(user.id, catalogueUid).first<FundRow>();
+  if (!row) return c.json({ detail: 'The fund did not save' }, 500);
+  // 201 for the row this request wrote, 200 for the one an earlier request
+  // wrote. `existing` says which, so the page can say "already on My funds".
+  return c.json({ ...fundDto(row), existing: !created }, created ? 201 : 200);
+});
+
+// ---------------------------------------------------------------------------
+// Funds ↔ Google Sheets
+//
+// Dedicated Sheets OAuth (not calendar's token table, not calendar's scopes).
+// SUPER ADMIN ONLY — a founder's shortlist stays on Axal; they do not get a
+// Google copy of it. Sheet routes are registered BEFORE `/funds/:uid` so
+// "sheet" is never captured as a uid. Push never deletes. Pull overwrites
+// the sheet's data rows.
+// ---------------------------------------------------------------------------
+
+research.get('/funds/sheet/status', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const configured = googleSheetsOAuthAvailable(c.env);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  const tok = configured ? await loadSheetsToken(c.env, user.id) : null;
+  const link = await loadSheetLink(c.env, user.id);
+  return c.json({
+    configured,
+    missing: configured ? [] : missing,
+    connected: configured ? !!tok : false,
+    google_email: tok?.google_email || null,
+    spreadsheet_id: link?.spreadsheet_id || null,
+    sheet_gid: link ? Number(link.sheet_gid) : null,
+    sheet_title: link?.sheet_title || null,
+    last_pulled_at: link?.last_pulled_at || null,
+    last_pushed_at: link?.last_pushed_at || null,
+    last_error: link?.last_error || null,
+    suggested_url: SUGGESTED_SHEET_URL,
+  });
+});
+
+research.post('/funds/sheet/connect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const missing = preflightSheetsOAuthSecrets(c.env);
+  if (missing.length > 0) {
+    return c.json({
+      error: {
+        code: 'oauth_config_missing',
+        message: `Google Sheets is not configured on this server. Missing: ${missing.join(', ')}.`,
+        missing,
+      },
+    }, 503);
+  }
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const state = await makeSheetsState(c.env, user.id);
+  const url = buildSheetsAuthUrl(c.env, state, loginHint);
+  return c.json({ redirect_url: url, auth_url: url });
+});
+
+research.get('/funds/sheet/callback', async (c) => {
+  const dest = `${fundsAppBase(c.env)}/research/funds`;
+  const fail = (reason: string) => new Response(null, {
+    status: 302,
+    headers: { Location: `${dest}?sheets=error&reason=${encodeURIComponent(reason.slice(0, 80))}` },
+  });
+  try {
+    const url = new URL(c.req.url);
+    const code = url.searchParams.get('code');
+    const stateRaw = url.searchParams.get('state');
+    const error = url.searchParams.get('error');
+    if (error || !code || !stateRaw) return fail(error || 'invalid_state');
+    const userId = await consumeSheetsState(c.env, stateRaw);
+    if (!userId) return fail('invalid_state');
+    // The state names who started Connect. Connect is super-admin only, so a
+    // leftover or forged nonce for anyone else must not land a refresh token.
+    const row = await c.env.DB.prepare(
+      'SELECT id, role FROM users WHERE id = ?',
+    ).bind(userId).first<{ id: number; role: string }>();
+    if (!row) return fail('forbidden');
+    const actor = await hydrateSuperAdmin(c.env, row as any);
+    if (!isSuperAdmin(actor as any)) return fail('forbidden');
+    const tokens = await exchangeSheetsCode(c.env, code);
+    const refreshToken = tokens?.refresh_token;
+    if (!refreshToken) return fail('no_refresh_token');
+    const info = await fetchSheetsUserinfo(tokens.access_token || '');
+    await saveSheetsToken(c.env, { id: userId }, {
+      refreshToken,
+      scope: tokens.scope || '',
+      googleEmail: info.email || null,
+      googleSub: String(info.id || ''),
+    });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${dest}?sheets=connected` },
+    });
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    console.error('[SHEETS:callback]', msg);
+    if (msg.startsWith('token_exchange_failed')) return fail('token_exchange');
+    if (msg.startsWith('cryptoBox:secret_missing')) return fail('secret_missing');
+    return fail('callback_failed');
+  }
+});
+
+research.delete('/funds/sheet', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.post('/funds/sheet/disconnect', async (c) => {
+  const user = await requireSuperAdmin(c);
+  await deleteSheetsToken(c.env, user);
+  return c.json({ ok: true });
+});
+
+research.patch('/funds/sheet/link', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const raw = String(body.url || body.spreadsheet_url || body.spreadsheet_id || '').trim();
+  const parsed = parseSpreadsheetRef(raw);
+  if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+  const existing = await loadSheetLink(c.env, user.id);
+  const gid = parsed.sheet_gid != null
+    ? parsed.sheet_gid
+    : (body.sheet_gid != null && Number.isFinite(Number(body.sheet_gid))
+      ? Math.trunc(Number(body.sheet_gid))
+      : (existing ? Number(existing.sheet_gid) : 0));
+  const link = await upsertSheetLink(c.env, user, parsed.spreadsheet_id, gid);
+  return c.json({
+    spreadsheet_id: link.spreadsheet_id,
+    sheet_gid: Number(link.sheet_gid),
+  });
+});
+
+research.post('/funds/sheet/pull', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pullFundsToSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return refuse(c, 502, { code: 'sheet_write_failed', message: 'Could not write to the sheet. Check that the connected Google account can edit it and try again.', raw: msg, audience: 'owner' });
+  }
+});
+
+research.post('/funds/sheet/push', async (c) => {
+  const user = await requireSuperAdmin(c);
+  if (!googleSheetsOAuthAvailable(c.env)) {
+    return c.json({ detail: 'Google Sheets is not configured on this server yet.' }, 503);
+  }
+  try {
+    return c.json(await pushFundsFromSheet(c.env, user));
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    if (msg === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
+    if (msg === 'no_spreadsheet') return c.json({ detail: 'Save a spreadsheet URL first' }, 409);
+    return refuse(c, 502, { code: 'sheet_read_failed', message: 'Could not read the sheet. Check that the connected Google account can open it and try again.', raw: msg, audience: 'owner' });
+  }
+});
+
+research.patch('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const uid = c.req.param('uid');
+  const existing = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<FundRow>();
+  if (!existing) return c.json({ detail: 'Not found' }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    name: has('name') ? (clampText(b.name, 200) || existing.name) : existing.name,
+    cheque_min_cents: has('cheque_min_cents') ? clampInt(b.cheque_min_cents) : existing.cheque_min_cents,
+    cheque_max_cents: has('cheque_max_cents') ? clampInt(b.cheque_max_cents) : existing.cheque_max_cents,
+    stage_fit: has('stage_fit') ? oneOf(b.stage_fit, FUND_STAGE_FIT) : existing.stage_fit,
+    path: has('path') ? oneOf(b.path, FUND_PATH) : existing.path,
+    status: has('status') ? (oneOf(b.status, FUND_STATUS) || existing.status) : existing.status,
+    pass_reason: has('pass_reason') ? clampText(b.pass_reason, 1000) : existing.pass_reason,
+    thesis: has('thesis') ? clampText(b.thesis, 2000) : existing.thesis,
+    note: has('note') ? clampText(b.note, 2000) : existing.note,
+    source_url: has('source_url') ? clampText(b.source_url, 500) : existing.source_url,
+  };
+  await c.env.DB.prepare(
+    `UPDATE research_funds
+        SET name = ?, cheque_min_cents = ?, cheque_max_cents = ?, stage_fit = ?, path = ?,
+            status = ?, pass_reason = ?, thesis = ?, note = ?, source_url = ?, updated_at = ?
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(
+    next.name, next.cheque_min_cents, next.cheque_max_cents, next.stage_fit, next.path,
+    next.status, next.pass_reason, next.thesis, next.note, next.source_url, nowIso(),
+    uid, user.id,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<FundRow>();
+  return c.json(fundDto(row as FundRow));
+});
+
+research.delete('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+// Quarterly public reporting snapshots for a founder's fund dossier. A report
+// is not inferred from the fund directory: every metric remains nullable and
+// must carry a source URL when entered.
+research.get('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ?
+      ORDER BY period ASC`
+  ).bind(fundUid, user.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+research.post('/funds/:uid/reports', async (c) => {
+  const user = await requireAuth(c);
+  const fundUid = c.req.param('uid');
+  const fund = await c.env.DB.prepare(
+    `SELECT uid FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, user.id).first();
+  if (!fund) return c.json({ detail: 'Not found' }, 404);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const period = String(body.period || '').trim();
+  if (!/^\d{4}-Q[1-4]$/.test(period)) return c.json({ detail: 'Period must use YYYY-Q1 through YYYY-Q4.' }, 400);
+  const sourceUrl = clampText(body.source_url, 500);
+  if (!sourceUrl) return c.json({ detail: 'A source URL is required for a quarterly report.' }, 400);
+  const uid = newUid();
+  const now = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO research_fund_reports
+       (uid, fund_uid, owner_user_id, period, report_date, fund_size_cents,
+        nav_cents, quarterly_return_bps, net_irr_bps, tvpi_bps, source_url,
+        report_url, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (fund_uid, owner_user_id, period) DO UPDATE SET
+       report_date = excluded.report_date,
+       fund_size_cents = excluded.fund_size_cents,
+       nav_cents = excluded.nav_cents,
+       quarterly_return_bps = excluded.quarterly_return_bps,
+       net_irr_bps = excluded.net_irr_bps,
+       tvpi_bps = excluded.tvpi_bps,
+       source_url = excluded.source_url,
+       report_url = excluded.report_url,
+       notes = excluded.notes,
+       updated_at = excluded.updated_at`
+  ).bind(
+    uid, fundUid, user.id, period, clampText(body.report_date, 30),
+    clampInt(body.fund_size_cents), clampInt(body.nav_cents),
+    clampInt(body.quarterly_return_bps), clampInt(body.net_irr_bps),
+    clampInt(body.tvpi_bps), sourceUrl, clampText(body.report_url, 500),
+    clampText(body.notes, 2000), now, now,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT uid, period, report_date, fund_size_cents, nav_cents,
+            quarterly_return_bps, net_irr_bps, tvpi_bps,
+            source_url, report_url, notes, created_at, updated_at
+       FROM research_fund_reports
+      WHERE fund_uid = ? AND owner_user_id = ? AND period = ?`
+  ).bind(fundUid, user.id, period).first();
+  return c.json(row, 201);
+});
+
+research.delete('/funds/:uid/reports/:reportUid', async (c) => {
+  const user = await requireAuth(c);
+  const result = await c.env.DB.prepare(
+    `DELETE FROM research_fund_reports
+      WHERE uid = ? AND fund_uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('reportUid'), c.req.param('uid'), user.id).run();
+  if (!result.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+
+// Registered AFTER the sheet block. `research_stores_scoping.test.ts` slices
+// every sheet handler from `/funds/sheet/status` up to `patch('/funds/:uid'`
+// and requires each of them to be Super Admin. A founder route placed above
+// that line — the dossier GET, or the quarterly report routes — would be
+// counted as a sheet route and either fail the test or, if someone "fixed"
+// it by switching the read to requireSuperAdmin, hide a founder's own
+// dossier from them.
+research.get('/funds/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<FundRow>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  const askCents = await activeRaiseTargetCents(c, user);
+  return c.json({
+    ...fundDto(row),
+    raise_target_cents: askCents,
+    overlap_note: fundOverlapNote(row, askCents),
+  });
+});
+
+/** The longest note a fund row takes, the same cap PATCH applies. */
+const FUND_NOTE_MAX = 2000;
+
+const ACCEPT_REFUSALS: Record<string, string> = {
+  fund_not_found: 'This fund is not on your list any more, so the brief was not written into a note.',
+  note_full: 'Your note and this brief together are over 2,000 characters. Shorten one of them, then accept again.',
+};
+
+/**
+ * The facts a pre-meeting brief is drafted from: one fund row the caller owns.
+ * Empty — so the model is never reached — when the row is not theirs, or when
+ * it holds neither a thesis nor a note, because a brief over a name alone
+ * would be written from the model's own knowledge of the fund.
+ */
+async function fundMaterial(env: Env, userId: number, fundUid: string): Promise<string[]> {
+  if (!fundUid) return [];
+  const f = await env.DB.prepare(
+    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<FundRow>();
+  if (!f || (!f.thesis && !f.note)) return [];
+  const usdOf = (cents: number | null) => (cents == null ? null : `$${Math.round(cents / 100).toLocaleString('en-US')}`);
+  const nr = 'not recorded';
+  return [
+    `Fund: ${f.name}`,
+    `Their thesis, in their words: ${f.thesis ? `"${f.thesis}"` : nr}`,
+    `The founder's research note: ${f.note || nr}`,
+    `Cheque range: ${usdOf(f.cheque_min_cents) ?? nr} to ${usdOf(f.cheque_max_cents) ?? nr}`,
+    `Stage fit (the founder's read): ${f.stage_fit || nr}`,
+    `Route in: ${f.path === 'warm' ? 'warm path' : f.path === 'cold' ? 'no route in' : nr}`,
+    `Status: ${f.status}${f.status === 'passed' ? `, reason: ${f.pass_reason || nr}` : ''}`,
+    `Source: ${f.source_url || nr}`,
+    `Partner who will be in the room: ${nr}`,
+    `Public fund size and what they have funded: ${nr}`,
+  ];
+}
+
+/**
+ * Accept on the brief: append it to the fund's note, after the founder's own
+ * words, and stamp the row. It never replaces the note, and it refuses rather
+ * than truncating either text to fit the column.
+ */
+async function writeBriefIntoNote(env: Env, userId: number, fundUid: string, brief: string): Promise<string | null> {
+  const f = await env.DB.prepare(
+    `SELECT note FROM research_funds WHERE uid = ? AND owner_user_id = ?`
+  ).bind(fundUid, userId).first<{ note: string | null }>();
+  if (!f) return 'fund_not_found';
+  const text = brief.trim();
+  const next = f.note ? `${f.note.trim()}\n\nPre-meeting brief:\n${text}` : `Pre-meeting brief:\n${text}`;
+  if (next.length > FUND_NOTE_MAX) return 'note_full';
+  await env.DB.prepare(
+    `UPDATE research_funds SET note = ?, updated_at = ? WHERE uid = ? AND owner_user_id = ?`
+  ).bind(next, nowIso(), fundUid, userId).run();
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Benchmarks (migration 217)
+// ---------------------------------------------------------------------------
+
+interface BenchRow {
+  id: number; uid: string; owner_user_id: number; metric: string;
+  our_value: string | null; peer_value: string | null; peer_source: string | null;
+  peer_sample_size: number | null; peer_as_of: string | null; reading: string | null;
+  created_at: string; updated_at: string;
+}
+
+const benchDto = (r: BenchRow) => ({
+  uid: r.uid,
+  metric: r.metric,
+  our_value: r.our_value,
+  peer_value: r.peer_value,
+  peer_source: r.peer_source,
+  peer_sample_size: r.peer_sample_size,
+  peer_as_of: r.peer_as_of,
+  reading: r.reading,
+  // Derived, not stored: a row is only a COMPARISON when the peer figure has
+  // its base. Without it the row is a metric being tracked, which is a
+  // different and lesser claim, and the zone renders the two differently.
+  is_comparison: Boolean(r.peer_value && r.peer_source && r.peer_sample_size),
+  created_at: r.created_at,
+});
+
+research.get('/benchmarks', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
+  ).bind(user.id).all<BenchRow>();
+  const items = (rows.results || []).map(benchDto);
+  const compared = items.filter((b) => b.is_comparison);
+  const smallest = compared.length
+    ? Math.min(...compared.map((b) => Number(b.peer_sample_size)))
+    : null;
+  return c.json({
+    items,
+    metric_count: items.length,
+    comparison_count: compared.length,
+    unread_count: items.filter((b) => !b.reading).length,
+    // The base of the weakest comparison on the page, stated rather than left
+    // for a reader to find by opening every row. A peer median over four funds
+    // and one over four hundred are not the same evidence.
+    smallest_sample_size: smallest,
+    sample_note: smallest !== null && smallest < 10
+      ? `The smallest peer set behind a comparison here is ${smallest}. A median over a set that size moves with one member and should not be presented as a market rate.`
+      : null,
+  });
+});
+
+research.post('/benchmarks', async (c) => {
+  const user = await requireAuth(c);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const metric = clampText(b.metric, 200);
+  if (!metric) return c.json({ detail: 'A benchmark needs a metric' }, 400);
+  const peerValue = clampText(b.peer_value, 100);
+  const peerSource = clampText(b.peer_source, 300);
+  const peerSample = clampInt(b.peer_sample_size);
+  // The schema CHECK would reject this too. Refusing here as well turns a
+  // constraint violation into a sentence the writer can act on.
+  if (peerValue && (!peerSource || peerSample === null)) {
+    return c.json({
+      detail: 'A peer figure needs its source and its sample size. A benchmark presented '
+        + 'without its base is arithmetic wearing a metric’s clothes.',
+    }, 400);
+  }
+  const uid = newUid();
+  const now = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO research_benchmarks
+       (uid, owner_user_id, metric, our_value, peer_value, peer_source,
+        peer_sample_size, peer_as_of, reading, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, metric, clampText(b.our_value, 100), peerValue, peerSource,
+    peerSample, clampText(b.peer_as_of, 40), clampText(b.reading, 2000), now, now,
+  ).run();
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, user.id).first<BenchRow>();
+  return c.json(benchDto(row as BenchRow), 201);
+});
+
+research.delete('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  // Its named constituents go with it (migration 303). D1 does not enforce the
+  // foreign key's cascade inside a batch, so the rows are removed by hand,
+  // owner-scoped, before the benchmark itself.
+  const row = await c.env.DB.prepare(
+    `SELECT id FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!row) return c.json({ detail: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  await c.env.DB.prepare(
+    `DELETE FROM research_benchmarks WHERE id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).run();
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// One benchmark (canvas f2eb2046) and its named constituents (migration 303)
+// ---------------------------------------------------------------------------
+//
+// EVERY READ AND WRITE IS OWNER-SCOPED, like the list. A benchmark uid that is
+// not the caller's answers exactly as one that does not exist.
+//
+// THE CHECK IS RE-VALIDATED ON EVERY EDIT. Migration 217 refuses a peer figure
+// without its source and sample size; PATCH merges the edit onto the stored row
+// and refuses the RESULT with a sentence before the schema would refuse it
+// with a constraint error. Clearing the peer figure is allowed — the row goes
+// back to tracked — unless constituents are named against it.
+//
+// A THIN BASE IS THIS ROW'S OWN n, not the list's minimum: the detail page's
+// banner reads the comparison in front of it.
+
+const BENCH_THIN_AT = 10;
+const BENCHMARK_NOT_FOUND = 'This benchmark is not on your list.';
+const PEER_BASE_REQUIRED = 'A peer figure needs its source and its sample size. A benchmark presented '
+  + 'without its base is arithmetic wearing a metric’s clothes.';
+
+interface ConstituentRow {
+  id: number; uid: string; benchmark_id: number; owner_user_id: number;
+  name: string; value: string | null; as_of: string | null; position: number; created_at: string;
+}
+
+const constituentDto = (r: ConstituentRow) => ({
+  uid: r.uid, name: r.name, value: r.value, as_of: r.as_of, created_at: r.created_at,
+});
+
+/** The caller's benchmark by uid, or null. */
+async function ownedBenchmark(env: Env, userId: number, uid: string): Promise<BenchRow | null> {
+  const row = await env.DB.prepare(
+    `SELECT * FROM research_benchmarks WHERE uid = ? AND owner_user_id = ?`
+  ).bind(uid, userId).first<BenchRow>();
+  return row || null;
+}
+
+/** The detail read: the row, its constituents, and what the page says about them. */
+async function benchmarkDetail(env: Env, userId: number, row: BenchRow) {
+  const cons = await env.DB.prepare(
+    `SELECT * FROM research_benchmark_constituents
+      WHERE benchmark_id = ? AND owner_user_id = ?
+      ORDER BY position ASC, id ASC`
+  ).bind(row.id, userId).all<ConstituentRow>();
+  const constituents = (cons.results || []).map(constituentDto);
+  const item = { ...benchDto(row), updated_at: row.updated_at };
+  const n = item.is_comparison ? Number(row.peer_sample_size) : null;
+  return {
+    item,
+    constituents,
+    // Only a comparison has a sample to be thin, or a count to disagree with.
+    thin: n !== null && n < BENCH_THIN_AT,
+    sample_note: n !== null && n < BENCH_THIN_AT
+      ? `The smallest peer set behind this comparison is ${n}. A median over a set that size moves with one member and should not be presented as a market rate.`
+      : null,
+    count_mismatch: n !== null && constituents.length > 0 && constituents.length !== n,
+    mismatch_note: n !== null && constituents.length > 0 && constituents.length !== n
+      ? `${constituents.length} ${constituents.length === 1 ? 'constituent is' : 'constituents are'} named against a stored sample of ${n}.`
+      : null,
+  };
+}
+
+research.get('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  return c.json(await benchmarkDetail(c.env, user.id, row));
+});
+
+research.patch('/benchmarks/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const b = await c.req.json<any>().catch(() => ({}));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+  const next = {
+    metric: has('metric') ? clampText(b.metric, 200) : row.metric,
+    our_value: has('our_value') ? clampText(b.our_value, 100) : row.our_value,
+    peer_value: has('peer_value') ? clampText(b.peer_value, 100) : row.peer_value,
+    peer_source: has('peer_source') ? clampText(b.peer_source, 300) : row.peer_source,
+    peer_sample_size: has('peer_sample_size') ? clampInt(b.peer_sample_size) : row.peer_sample_size,
+    peer_as_of: has('peer_as_of') ? clampText(b.peer_as_of, 40) : row.peer_as_of,
+    reading: has('reading') ? clampText(b.reading, 2000) : row.reading,
+  };
+  if (!next.metric) return c.json({ error: 'metric_required', message: 'A benchmark needs a metric.' }, 400);
+  if (next.peer_sample_size !== null && next.peer_sample_size < 1) {
+    return c.json({ error: 'sample_size_invalid', message: 'A sample size is at least 1.' }, 400);
+  }
+  // The merged row, not the request, is what must satisfy migration 217.
+  if (next.peer_value && (!next.peer_source || next.peer_sample_size === null)) {
+    return c.json({ error: 'peer_base_required', message: PEER_BASE_REQUIRED }, 400);
+  }
+  if (!next.peer_value && row.peer_value) {
+    const named = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+    ).bind(row.id, user.id).first<{ n: number }>();
+    if (Number(named?.n) > 0) {
+      return c.json({
+        error: 'constituents_exist',
+        message: 'Remove the named constituents before clearing the peer figure. They are members of a peer set this row would no longer have.',
+      }, 409);
+    }
+  }
+  await c.env.DB.prepare(
+    `UPDATE research_benchmarks
+        SET metric = ?, our_value = ?, peer_value = ?, peer_source = ?, peer_sample_size = ?,
+            peer_as_of = ?, reading = ?, updated_at = ?
+      WHERE id = ? AND owner_user_id = ?`
+  ).bind(
+    next.metric, next.our_value, next.peer_value, next.peer_source, next.peer_sample_size,
+    next.peer_as_of, next.reading, nowIso(), row.id, user.id,
+  ).run();
+  const fresh = await ownedBenchmark(c.env, user.id, row.uid);
+  return c.json(await benchmarkDetail(c.env, user.id, fresh as BenchRow));
+});
+
+research.post('/benchmarks/:uid/constituents', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  // A constituent is a member of a peer set. A tracked row has none to join.
+  if (!row.peer_value) {
+    return c.json({
+      error: 'not_a_comparison',
+      message: 'This benchmark is tracked, not compared. Enter a sourced peer figure before naming who it was measured over.',
+    }, 409);
+  }
+  const b = await c.req.json<any>().catch(() => ({}));
+  const name = clampText(b.name, 200);
+  if (!name) return c.json({ error: 'constituent_name_required', message: 'A constituent needs a name.' }, 400);
+  const last = await c.env.DB.prepare(
+    `SELECT MAX(position) AS p FROM research_benchmark_constituents WHERE benchmark_id = ? AND owner_user_id = ?`
+  ).bind(row.id, user.id).first<{ p: number | null }>();
+  await c.env.DB.prepare(
+    `INSERT INTO research_benchmark_constituents (uid, benchmark_id, owner_user_id, name, value, as_of, position, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    newUid(), row.id, user.id, name, clampText(b.value, 100), clampText(b.as_of, 40),
+    last?.p == null ? 0 : Number(last.p) + 1, nowIso(),
+  ).run();
+  return c.json(await benchmarkDetail(c.env, user.id, row), 201);
+});
+
+research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
+  const user = await requireAuth(c);
+  const row = await ownedBenchmark(c.env, user.id, c.req.param('uid'));
+  if (!row) return c.json({ error: 'benchmark_not_found', message: BENCHMARK_NOT_FOUND }, 404);
+  const res = await c.env.DB.prepare(
+    `DELETE FROM research_benchmark_constituents WHERE uid = ? AND benchmark_id = ? AND owner_user_id = ?`
+  ).bind(c.req.param('cuid'), row.id, user.id).run();
+  if (!res.meta?.changes) {
+    return c.json({ error: 'constituent_not_found', message: 'That constituent is not on this benchmark.' }, 404);
+  }
+  return c.json(await benchmarkDetail(c.env, user.id, row));
+});
+
+// ---------------------------------------------------------------------------
+// Diligence — NO NEW STORE. Room access, read from the investor's side.
+// ---------------------------------------------------------------------------
+//
+// The investor canvas (Pages · Investor Research, IR2) heads this
+// `['Company','Scope','State','Deal stage','Founder activity']` over a "Rooms
+// granted" count, and every one of those already exists: `data_room_grants` is
+// the grant, `data_room_files.visibility` is the scope the founder actually
+// staged, and `data_room_access_log` is the activity. So this zone needed no
+// migration — it needed assembling, which is what the zone's own card
+// suspected when it said folding diligence in here "is a routing decision that
+// has not been made".
+//
+// SCOPE REPORTS WHAT WAS STAGED, NOT WHAT WAS ASKED FOR. The canvas's own
+// reading, kept: "Kelp Bio reads 6 of 11 — the IP folder has survived two asks,
+// and that became the IC condition on the deal. What is absent from a room is
+// diligence information too." So the response returns both numbers and never
+// the ratio alone.
+
+research.get('/diligence', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT g.id AS grant_id, g.uid AS grant_uid, g.created_at, g.expires_at, g.granted_by_user_id,
+            p.uid AS project_uid, p.name AS project_name, g.project_id,
+            (SELECT MAX(l.created_at) FROM data_room_access_log l
+              WHERE l.project_id = g.project_id AND l.user_id = ?) AS last_opened_at
+       FROM data_room_grants g
+       JOIN projects p ON p.id = g.project_id
+      WHERE g.investor_user_id = ? AND g.status = 'active'
+        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+      ORDER BY g.created_at DESC LIMIT 200`
+  ).bind(user.id, user.id).all<any>();
+
+  // "Open to you" is what THIS investor may open, not what the founder marked
+  // `open`. An investor holding a live NDA with the venture's founder
+  // may open the `nda` files too — the download route already lets them —
+  // so counting only `visibility = 'open'` told a signed investor that files
+  // were behind an NDA they had already signed. One NDA check per venture,
+  // through the data room's own `projectNdaActive` (D4631 part 2: the venture's
+  // NDA by the shared rule, whoever granted the room), never a second copy of
+  // its predicate here.
+  const ndaByProject = new Map<number, boolean>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!ndaByProject.has(pid)) ndaByProject.set(pid, await projectNdaActive(c.env, pid, user.id));
+  }
+
+  // D691 decision 6 — the counts are what this investor's tier admits.
+  const counted = new Map<number, { total: number; open: number }>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    const nda = ndaByProject.get(pid) === true;
+    // D1103 — and only what the grant's folders hold.
+    counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
+  }
+
+  const items = (rows.results || []).map((r: any) => {
+    const nda = ndaByProject.get(Number(r.project_id)) === true;
+    const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
+    return {
+      grant_uid: r.grant_uid,
+      project_uid: r.project_uid,
+      project_name: r.project_name,
+      nda_signed: nda,
+      // Two numbers, never one ratio: what is absent from a room is diligence
+      // information too, and a percentage hides which rooms are thin.
+      file_open: open,
+      file_total: total,
+      withheld_behind_nda: total - open,
+      last_opened_at: r.last_opened_at ?? null,
+      expires_at: r.expires_at ?? null,
+      created_at: r.created_at,
+    };
+  });
+
+  return c.json({
+    items,
+    granted_count: items.length,
+    // Rooms where the founder staged less than everything they hold. Not a
+    // complaint — it is the signal the zone exists to surface.
+    partial_count: items.filter((r) => r.withheld_behind_nda > 0).length,
+    // Deal stage is on the canvas and is NOT joined here. A grant is between a
+    // founder and an investor; a deal is a separate record that may or may not
+    // exist for the same company, and joining them on a name rather than a key
+    // would attach a stage to the wrong room. Stated rather than guessed.
+    deal_stage: null,
+    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
+      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One room, and one document in it — keyed by the GRANT, read by its holder.
+// ---------------------------------------------------------------------------
+//
+// The list above says which rooms are open to you; these two are the room and
+// the document pages behind it (canvases b6a5f992 and 96463a46). They read the
+// data room's own tables and pass through the data room's own gate —
+// `activeGrant`, `projectNdaActive` and `logAccess` from `data_room.ts` — so there is
+// one definition of "this investor may see this" in the worker, not two.
+//
+// KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
+// holds. A grant uid is resolved only against rows naming the caller as the
+// investor, and a uid they do not hold answers exactly like one that does not
+// exist: telling the two apart would tell an investor which rooms exist.
+//
+// OPENING THIS PAGE IS OPENING THE ROOM. The room read lists filenames, which
+// is what `GET /api/data-room/shared/:projectUid` logs as `open_room` and the
+// founder sees in their access log. Listing the same names from a second URL
+// without the same entry would be a quiet way into the room, so this read
+// logs `open_room` too. The document read logs nothing of its own: it shows
+// one name the room read already showed, and the download it offers goes
+// through the data room's own route, which logs `download`.
+//
+// WHAT THE ACTIVITY IS. Only the caller's own rows — the founder's view of
+// the same log shows investor emails, and nothing here reaches another
+// investor's. A row about an `nda` file keeps its time and action but loses
+// its name once the NDA that let the caller download it has lapsed: a name
+// the gate would withhold today is not re-served from the log.
+//
+// AND WHAT `download` MEANS. The log records a link being ISSUED, not used.
+// The link is single-use and short-lived (`signedDownload.ts`), but whether it
+// was followed is not joined here, so the response says "issued", never
+// "downloaded".
+
+const ROOM_NOT_OPEN = 'This room is not open to you. The grant may have been revoked or expired, or it was never yours.';
+const DOWNLOAD_NOTE = 'Each entry is a single-use link issued to you, valid for two minutes. '
+  + 'Whether the link was followed is not recorded here.';
+
+type HeldRoom = {
+  grant: { id: number; uid: string; project_id: number; granted_by_user_id: number;
+    expires_at: string | null; created_at: string };
+  project: { id: number; uid: string; name: string };
+  nda: boolean;
+};
+
+/**
+ * The room this grant opens for this caller, or null.
+ *
+ * The uid is looked up ONLY among the caller's own grants, and then the data
+ * room's `activeGrant` decides whether it is live — status and expiry are
+ * checked in one place. `data_room_grants` is UNIQUE on (project_id,
+ * investor_user_id), so the live grant it returns is this one; the uid check
+ * after it is belt and braces.
+ */
+async function heldRoom(env: Env, userId: number, grantUid: string): Promise<HeldRoom | null> {
+  const held = await env.DB.prepare(
+    `SELECT project_id FROM data_room_grants WHERE uid = ? AND investor_user_id = ?`
+  ).bind(grantUid, userId).first<{ project_id: number }>();
+  if (!held) return null;
+  const grant = await activeGrant(env, held.project_id, userId);
+  if (!grant || grant.uid !== grantUid) return null;
+  const project = await env.DB.prepare(
+    `SELECT id, uid, name FROM projects WHERE id = ?`
+  ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
+  if (!project) return null;
+  return { grant, project, nda: await projectNdaActive(env, project.id, userId) };
+}
+
+/**
+ * The facts the room memo is drafted from, for a grant the caller holds.
+ *
+ * Empty when the grant is not the caller's or not live — the draft route turns
+ * that into `nothing_to_draft` and the model is never called. Only what the
+ * room read itself would show is listed: open files by name, withheld ones as
+ * a number.
+ */
+async function roomMaterial(env: Env, userId: number, grantUid: string): Promise<string[]> {
+  if (!grantUid) return [];
+  const room = await heldRoom(env, userId, grantUid);
+  if (!room) return [];
+  const pid = room.grant.project_id;
+  const files = await env.DB.prepare(
+    `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  // D691 decision 6 — only what the tier and expiry admit is described, or
+  // counted. D1103 — and only what the grant's folders hold.
+  const committed = await investorCommitted(env, pid, userId);
+  const scope = await grantFolderScope(env, room.grant.id);
+  const all = (files.results || []).filter((f: any) => tierAdmits(f, committed, Date.now(), scope));
+  const open = all.filter((f: any) => f.visibility === 'open' || room.nda);
+  const lines = [
+    `Company: ${room.project.name}`,
+    `Room granted ${String(room.grant.created_at).slice(0, 10)}`
+      + (room.grant.expires_at ? `, access expires ${String(room.grant.expires_at).slice(0, 10)}` : ', no expiry set'),
+    `NDA with this founder: ${room.nda ? 'active' : 'none'}`,
+    `Documents in the room: ${all.length}. Open to this investor: ${open.length}. Behind an NDA, not named: ${all.length - open.length}.`,
+  ];
+  for (const f of open) {
+    lines.push(`Document: ${f.name} (${f.content_type || 'type not recorded'}, `
+      + `${f.size_bytes == null ? 'size not recorded' : `${f.size_bytes} bytes`}, staged ${String(f.created_at).slice(0, 10)})`);
+  }
+  return lines;
+}
+
+research.get('/diligence/:grantUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const tiered = await c.env.DB.prepare(
+    `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`
+  ).bind(pid).all<any>();
+  // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
+  // counted. D1103 — nor is one outside the grant's folders.
+  const roomCommitted = await investorCommitted(c.env, pid, user.id);
+  const roomScope = await grantFolderScope(c.env, room.grant.id);
+  const files = {
+    results: (tiered.results || []).filter((f: any) => tierAdmits(f, roomCommitted, Date.now(), roomScope))
+      .map(({ access_tier, access_expires_at, ...rest }: any) => rest),
+  };
+  const folders = await c.env.DB.prepare(
+    `SELECT id, uid, name, visibility, display_order
+       FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`
+  ).bind(pid).all<any>();
+  // Read BEFORE this visit is logged, so "you last opened it" is the visit
+  // before this one rather than always "just now". Any action counts, as in
+  // the list's `last_opened_at`, so the two pages agree.
+  const activity = await c.env.DB.prepare(
+    `SELECT l.action, l.created_at, l.file_id
+       FROM data_room_access_log l
+      WHERE l.project_id = ? AND l.user_id = ?
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 100`
+  ).bind(pid, user.id).all<any>();
+
+  const allFiles = files.results || [];
+  const visible = (v: string) => v === 'open' || room.nda;
+  const byId = new Map<number, any>(allFiles.map((f: any) => [Number(f.id), f]));
+  const folderUid = new Map<number, string>((folders.results || []).map((f: any) => [Number(f.id), f.uid]));
+  const acts = activity.results || [];
+
+  const lastDownload = new Map<number, string>();
+  for (const a of acts) {
+    if (a.action === 'download' && a.file_id != null && !lastDownload.has(Number(a.file_id))) {
+      lastDownload.set(Number(a.file_id), a.created_at);
+    }
+  }
+
+  const openFiles = allFiles.filter((f: any) => visible(f.visibility)).map((f: any) => ({
+    uid: f.uid,
+    name: f.name,
+    content_type: f.content_type ?? null,
+    size_bytes: f.size_bytes ?? null,
+    visibility: f.visibility,
+    folder_uid: f.folder_id == null ? null : folderUid.get(Number(f.folder_id)) ?? null,
+    created_at: f.created_at,
+    last_downloaded_at: lastDownload.get(Number(f.id)) ?? null,
+  }));
+  const withheld = allFiles.length - openFiles.length;
+
+  const yourActivity = acts.map((a: any) => {
+    const f = a.file_id == null ? null : byId.get(Number(a.file_id));
+    // A file deleted since, or one behind an NDA the caller no longer holds,
+    // keeps its line and loses its name.
+    const named = f && visible(f.visibility);
+    return {
+      action: a.action,
+      created_at: a.created_at,
+      file_uid: named ? f.uid : null,
+      file_name: named ? f.name : null,
+      file_withheld: !!(f && !named),
+      // The row's file is gone from the room (deleted since).
+      file_removed: a.file_id != null && !f,
+    };
+  });
+
+  await logAccess(c.env, pid, user.id, 'open_room', null);
+
+  return c.json({
+    grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
+    project: { uid: room.project.uid, name: room.project.name },
+    nda_signed: room.nda,
+    file_total: allFiles.length,
+    file_open: openFiles.length,
+    // A count, never the names — the data room's own rule.
+    withheld_behind_nda: withheld,
+    last_opened_at: acts.length ? acts[0].created_at : null,
+    folders: (folders.results || []).filter((f: any) => visible(f.visibility) && folderInScope(f.id, roomScope))
+      .map((f: any) => ({ uid: f.uid, name: f.name, visibility: f.visibility })),
+    files: openFiles,
+    activity: yourActivity,
+    download_note: DOWNLOAD_NOTE,
+    // Same reason as the list: no key joins a grant to a deal.
+    deal_stage: null,
+    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
+      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+  });
+});
+
+research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
+  const user = await requireAuth(c);
+  const room = await heldRoom(c.env, user.id, c.req.param('grantUid'));
+  if (!room) return c.json({ error: 'room_not_found', message: ROOM_NOT_OPEN }, 404);
+  const pid = room.grant.project_id;
+
+  const found = await c.env.DB.prepare(
+    `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+       FROM data_room_files WHERE uid = ? AND project_id = ?`
+  ).bind(c.req.param('fileUid'), pid).first<any>();
+  const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
+  // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.
+  // D1103 — and so does a file outside the grant's folders.
+  const file = found && tierAdmits(found, await investorCommitted(c.env, pid, user.id), Date.now(), await grantFolderScope(c.env, room.grant.id))
+    ? (({ access_tier, access_expires_at, folder_id, ...rest }: any) => rest)(found) : null;
+  if (!file) {
+    return c.json({ error: 'file_not_found', message: 'This document is not in the room. The founder may have removed it.', room: roomRef }, 404);
+  }
+  // Re-checked here, as the download route re-checks it: a uid captured while
+  // an NDA was live stops naming the file when it lapses. Nothing about the
+  // file travels — no name, size or type — only the room it sits in.
+  if (file.visibility === 'nda' && !room.nda) {
+    return c.json({
+      error: 'nda_required',
+      message: 'This document is behind an NDA you have not signed with this founder. Its name stays private until you do.',
+      room: roomRef,
+    }, 403);
+  }
+
+  const downloads = await c.env.DB.prepare(
+    `SELECT created_at FROM data_room_access_log
+      WHERE project_id = ? AND user_id = ? AND file_id = ? AND action = 'download'
+      ORDER BY created_at DESC, id DESC LIMIT 50`
+  ).bind(pid, user.id, file.id).all<{ created_at: string }>();
+  const mine = (downloads.results || []).map((d) => d.created_at);
+
+  return c.json({
+    room: { ...roomRef, project_uid: room.project.uid },
+    file: {
+      uid: file.uid,
+      name: file.name,
+      content_type: file.content_type ?? null,
+      size_bytes: file.size_bytes ?? null,
+      visibility: file.visibility,
+      created_at: file.created_at,
+    },
+    last_downloaded_at: mine[0] ?? null,
+    downloads: mine,
+    download_note: DOWNLOAD_NOTE,
+  });
+});
+
+export default research;

@@ -1,0 +1,38 @@
+{
+  "skill": "competitor-watch-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "competitors": [
+          {
+            "name": "Inspecto"
+          },
+          {
+            "name": "SiteSure"
+          }
+        ]
+      },
+      "research.library": [
+        {
+          "competitor": "Inspecto",
+          "note": "Raised a Series A",
+          "date": "2026-10-20"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Inspecto",
+      "Series A",
+      "No change recorded"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "SiteSure raised"
+    ]
+  }
+}

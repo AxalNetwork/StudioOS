@@ -1,0 +1,519 @@
+import { holdsLicence } from './accountLicences';
+/**
+ * Tenancy scope — the one place that decides which rows a non-admin may read.
+ *
+ * The integration brief requires tenancy through a single middleware and
+ * forbids ad-hoc WHERE clauses scattered through route files. That middleware
+ * did not exist: src/middleware/ has cfAccess, csrf, rateLimit, requireTier
+ * and others, but nothing for tenancy, so every de-admined surface so far has
+ * inlined its own scoping (see the comments in capital.ts and funds.ts, each
+ * explaining its own IDOR fix separately).
+ *
+ * This module is the seed of that layer rather than a fourth inlined pattern.
+ * It is deliberately small and pure: a resource name in, a SQL fragment plus
+ * binds out. Route files compose the fragment; they never decide policy. As
+ * Phase 3 lands, resources are added here and the routes do not change.
+ *
+ * The property that matters most is the DEFAULT. An actor this module does
+ * not recognise gets `1=0` — no rows — never an unfiltered query. Scoping
+ * bugs in this shape are silent: an accidental "no filter" reads as working
+ * software right up until it serves another tenant's contracts. So the
+ * fallthrough denies, and tests pin that it denies.
+ */
+
+/** The minimum an authenticated caller must present to be scoped at all. */
+export interface Actor {
+  id?: number | null;
+  role?: string | null;
+  /**
+   * The caller's account email. Only `lpMembershipScope` reads it, and only
+   * because `limited_partners` rows can predate the account that claims them.
+   *
+   * Safe to match on because `users.email` is VERIFIED: changing it requires
+   * confirming a token mailed to the new address (`email_change_requests` in
+   * routes/settings.ts), so holding an address here means having proved
+   * control of it. If that flow is ever relaxed, this scope becomes unsafe —
+   * `lpMembershipScope`'s own comment says so, and a test pins the coupling.
+   */
+  email?: string | null;
+  /**
+   * `users.founder_id` — the founders row this account is attached to.
+   * `projectOwnerScope` reads it because `projects.founder_id` points at
+   * `founders(id)`, not at `users(id)`: a project's owner cannot be matched on
+   * the caller's user id at all.
+   */
+  founder_id?: number | null;
+}
+
+/** A composable SQL fragment. `sql` is always safe to drop after WHERE. */
+export interface ScopeClause {
+  sql: string;
+  binds: Array<string | number>;
+}
+
+/** Every row. Only ever returned for a role in UNSCOPED_ROLES. */
+export const ALL_ROWS: ScopeClause = { sql: '1=1', binds: [] };
+
+/** No rows. The default for anyone this module cannot positively identify. */
+export const NO_ROWS: ScopeClause = { sql: '1=0', binds: [] };
+
+/**
+ * Roles that see across tenants. Kept as a set rather than `role === 'admin'`
+ * so Phase 3 can add an auditor or support role in one edit, and so a typo in
+ * a role string fails closed instead of matching.
+ */
+export const UNSCOPED_ROLES: ReadonlySet<string> = new Set(['admin']);
+
+/** A caller with no usable id is malformed, whatever role it claims. */
+function actorId(actor: Actor | null | undefined): number | null {
+  const id = Number(actor?.id);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/**
+ * Unscoped requires BOTH a recognised role and a real id.
+ *
+ * Checking the role alone looked equivalent and was not: `{ role: 'admin' }`
+ * with no id — a half-built actor, a session that failed to load, a shape
+ * assembled from an untrusted body — came back as every row. That is the
+ * exact silent widening this module exists to prevent, so identity is
+ * required before privilege.
+ */
+export function isUnscoped(actor: Actor | null | undefined): boolean {
+  return actorId(actor) !== null && UNSCOPED_ROLES.has(String(actor?.role ?? ''));
+}
+
+/**
+ * Envelopes an actor may read, as `e.*`.
+ *
+ * Three ways to be entitled to an envelope, and all three are real:
+ *   created_by   you originated it
+ *   user_id      it is ABOUT you (the founder a 3-way agreement names)
+ *   recipient    you were asked to sign it
+ *
+ * esign_envelopes has no company_id, so this is user-scoped rather than
+ * company-scoped. When Phase 3 introduces company membership, the extra
+ * clause is added here and no route file changes.
+ */
+export function esignEnvelopeScope(actor: Actor | null | undefined, alias = 'e'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return {
+    sql: `(${alias}.created_by = ? OR ${alias}.user_id = ? OR EXISTS (
+            SELECT 1 FROM esign_recipients r
+             WHERE r.envelope_id = ${alias}.id AND r.user_id = ?))`,
+    binds: [id, id, id],
+  };
+}
+
+/**
+ * Funds an actor may operate, as `f.*`, optionally narrowed to one company.
+ *
+ * Ownership is `vc_funds.gp_user_id` — the GP of record added by migration
+ * 163, whose own header says it exists so the platform can tell "whether the
+ * signer is a real user and reach them". That is precisely an ownership key,
+ * and it was the only one this table had until migration 195 added
+ * `company_id` for the GP's firm.
+ *
+ * Consequence worth stating plainly: a fund with a NULL gp_user_id has no
+ * owner, so no non-admin can operate it. That is the correct failure. The
+ * alternative — treating unowned funds as open — would hand every
+ * institutional-tier account write access to every legacy fund in the table,
+ * including capital calls and distributions.
+ *
+ * THIS IS THE ONE SCOPE WHERE COMPANY IS AN AUTHORISATION, NOT A FILTER.
+ * `companyScope` narrows rows the caller may already read, so an error there
+ * shows too little. This clause is what makes `requireFundGp` return 404, so
+ * an error here changes who may run a capital call. What keeps that safe is
+ * that the company predicate is ANDed onto a conjunct that has ALREADY proved
+ * `gp_user_id = ?`: it can only narrow within the caller's own funds and can
+ * never reach another GP's, whatever company id arrives. That is also why the
+ * `company_id IS NULL` arm — a hole in a predicate standing alone — is not
+ * one here, and why callers must still pass a VERIFIED id (the result of
+ * `resolveActiveCompany`) rather than a raw header.
+ *
+ * `companyId === null` means "no company selected" and yields the pre-195
+ * clause exactly, so a caller that has never touched the switcher, and every
+ * caller written before this parameter existed, keeps reading every fund they
+ * are the GP of.
+ */
+export function fundGpScope(
+  actor: Actor | null | undefined,
+  companyId: number | null = null,
+  alias = 'f',
+): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  // `= ?` and not `IS ?`: a NULL gp_user_id must never match, and in SQL
+  // `NULL = 5` is NULL rather than true, which is the behaviour wanted here.
+  // The company arm is the opposite case on purpose — a fund whose GP has no
+  // primary company is theirs under every company, never under none.
+  if (companyId === null) return { sql: `(${alias}.gp_user_id = ?)`, binds: [id] };
+  return {
+    sql: `(${alias}.gp_user_id = ? AND (${alias}.company_id = ? OR ${alias}.company_id IS NULL))`,
+    binds: [id, companyId],
+  };
+}
+
+/**
+ * "Is this caller an LP of this fund?" — the canonical predicate.
+ *
+ * Before this existed the question was asked at THIRTEEN sites with TWO
+ * answers. Eleven checked `user_id` alone (capital.ts ×4, funds.ts's LPA gate,
+ * lp_reports.ts ×2, liquidity.ts ×2, and the two `listByUser` models behind
+ * the LP portal); two also matched the account email (funds.ts's capital-call
+ * join, spinout_lab.ts's fund entitlement). The consequence was not a leak but
+ * a denial: an LP whose `user_id` was never backfilled — a "legacy LP migrated
+ * from lp_investors", in funds.ts's own words — read their fund metrics and
+ * capital calls through two doors and was refused their LP record, their LP
+ * list, their LP reports and their portfolio through the other eleven. The LP
+ * portal asked it BOTH ways inside a single handler, so the same page listed
+ * capital calls for a fund whose LP row it had just failed to find.
+ *
+ * The email arm is qualified by `user_id IS NULL`, which is narrower than
+ * either predicate it replaces and is the point of the whole exercise:
+ *
+ *   - `limited_partners.email` is operator-entered and denormalized, so it can
+ *     name one address while `user_id` points at a different account. The
+ *     unqualified `OR LOWER(email) = LOWER(?)` that funds.ts and spinout_lab.ts
+ *     shipped therefore handed such a row to whoever held the address, over
+ *     the top of the account that actually owned it. Requiring the row to be
+ *     UNCLAIMED closes that: a row with an owner is reachable only by its
+ *     owner.
+ *   - What remains is exactly the legacy case — an LP row nobody has claimed —
+ *     and it is safe because `users.email` is verified (see `Actor.email`).
+ *
+ * It is also deliberately paired with `claimLpRowsByEmail` at the call sites,
+ * whose UPDATE carries the same `user_id IS NULL` condition. Reaching a row by
+ * email CLAIMS it, so the email grant converts to a permanent, auditable
+ * account link on first use rather than staying live forever, and an address
+ * that is later reassigned inherits nothing.
+ *
+ * An empty email is never matched. `spinout_lab.ts` bound `user.email ?? ''`,
+ * and `LOWER(email) = LOWER('')` is true for any row with an empty email — so
+ * a session without an address could have claimed every such row. Dropping the
+ * arm entirely when there is nothing to match on is what closes that.
+ */
+export function lpMembershipScope(actor: Actor | null | undefined, alias = 'lp'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  const email = typeof actor?.email === 'string' ? actor.email.trim() : '';
+  if (!email) {
+    // Identified, but nothing to match on beyond the account link.
+    return { sql: `(${alias}.user_id = ?)`, binds: [id] };
+  }
+  return {
+    sql: `(${alias}.user_id = ? OR (${alias}.user_id IS NULL AND LOWER(${alias}.email) = LOWER(?)))`,
+    binds: [id, email],
+  };
+}
+
+/**
+ * The same LP predicate, with NO unscoped escape — the caller's own rows and
+ * nothing else, whatever their role.
+ *
+ * Self-views need this and `lpMembershipScope` would break them. `/lp-portal`
+ * and `/liquidity/my-portfolio` answer "what do *I* hold"; returning ALL_ROWS
+ * to an admin there does not grant an oversight view, it corrupts a personal
+ * one — every LP's commitments summed into one operator's TVPI, every LP's
+ * distributions listed as their own. The pre-existing code was right about
+ * this: those handlers never branched on role at all.
+ *
+ * So the choice between the two functions is not about privilege, it is about
+ * what the page MEANS:
+ *
+ *   lpMembershipScope   "which LP rows may I administer?"  → admin sees all
+ *   lpSelfScope         "which LP rows are mine?"          → nobody sees more
+ *
+ * Both share the membership rule itself, which is the point of the pair: the
+ * legacy-email arm cannot drift between the administrative surfaces and the
+ * personal ones, because there is only one copy of it.
+ */
+export function lpSelfScope(actor: Actor | null | undefined, alias = 'lp'): ScopeClause {
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  // Deliberately re-entering through the shared predicate with the role
+  // stripped, rather than duplicating the two arms. A second copy is exactly
+  // the failure this module was built to end.
+  return lpMembershipScope({ id, email: actor?.email ?? null }, alias);
+}
+
+/**
+ * The caller's own AI usage rows, as `u.*`. A self-view, like `lpSelfScope`.
+ *
+ * `ai_usage_logs` is the audit trail `aiRouter` writes on every model call:
+ * task, model, tokens, `est_cost_usd`, latency, whether a fallback or the
+ * cache was used, and any refusal. The org-wide rollup over the same table
+ * already exists behind `requireAdmin` at `/api/monitoring/ai-usage`, so this
+ * resource exists for one question only — "what have *I* spent?" — and has no
+ * unscoped escape for the same reason `/lp-portal` has none: an admin's own
+ * spend meter must show their own spend, not the organisation's.
+ *
+ * `user_id` is nullable on that table (calls made outside a user session), and
+ * `= ?` never matches NULL, so unattributed rows belong to nobody's meter.
+ * That is correct: a row the platform cannot attribute must not be billed to
+ * whoever happens to be looking.
+ */
+export function aiUsageSelfScope(actor: Actor | null | undefined, alias = 'u'): ScopeClause {
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return { sql: `(${alias}.user_id = ?)`, binds: [id] };
+}
+
+/** Compose a scope into a query that already has its own WHERE conditions. */
+export function andScope(baseSql: string, baseBinds: Array<string | number>, scope: ScopeClause) {
+  return { sql: `${baseSql} AND ${scope.sql}`, binds: [...baseBinds, ...scope.binds] };
+}
+
+/**
+ * Projects the caller owns — the fourth resource, after e-sign envelopes, fund
+ * GP rows and LP memberships.
+ *
+ * `projects.founder_id` references `founders(id)`, so ownership is the
+ * caller's `users.founder_id`, never their user id. Getting that wrong does not
+ * fail loudly: `founder_id = <a user id>` is valid SQL that matches whichever
+ * unrelated founder happens to hold that number, which is worse than an error.
+ *
+ * `deleted_at IS NULL` is part of the predicate rather than left to the caller.
+ * A soft-deleted project is not owned in any sense a surface should act on, and
+ * two routes that already inline this scope both remembered the filter — which
+ * is exactly the kind of agreement that survives right up until the third
+ * copy forgets.
+ *
+ * PARTNERS GET NOTHING HERE, which is where this diverges from
+ * `canAccessFounderResource` — that predicate treats admin and partner alike as
+ * studio-wide staff. A data room is not "founder data staff may read": it is the
+ * set of documents a founder chose to share with named investors, and a
+ * blanket partner path would make the per-investor grant decorative. The
+ * divergence is the point, so it is written down rather than inferred.
+ *
+ * `routes/contacts.ts` and `routes/advisory.ts` each carry their own
+ * `ownedProjectScope` helper predating this module. They are not rewritten
+ * here: both are correct, both are covered, and a working ownership filter is
+ * the last thing to refactor speculatively. New code uses this one.
+ */
+export function projectOwnerScope(actor: Actor | null | undefined, alias = 'p'): ScopeClause {
+  if (isUnscoped(actor)) return { sql: `(${alias}.deleted_at IS NULL)`, binds: [] };
+  if (actorId(actor) === null) return NO_ROWS;
+  // ROLE-GATED, not merely founder_id-gated. `auth.ts` records why, in two
+  // places: a principal converted to another role KEEPS its residual
+  // `users.founder_id`, so a founder who later became an investor would
+  // otherwise still read their old projects through this scope. Matching on
+  // the id alone is the bug `canAccessFounderResource` and `entityListScope`
+  // were both written to avoid; this is the third copy of that rule and it
+  // agrees with them deliberately.
+  if (!(actor && holdsLicence(actor, 'founder'))) return NO_ROWS;
+  const founderId = typeof actor?.founder_id === 'number' ? actor.founder_id : null;
+  // A founder account with no founders row owns no projects. Falling back to
+  // the user id here would be the id-space mismatch described above.
+  if (founderId === null) return NO_ROWS;
+  return {
+    sql: `(${alias}.founder_id = ? AND ${alias}.deleted_at IS NULL)`,
+    binds: [founderId],
+  };
+}
+
+/**
+ * Whether one already-loaded project is visible under the active company.
+ *
+ * The in-code twin of the clause `companyScope` appends:
+ *
+ *     (p.company_id = ? OR p.company_id IS NULL)
+ *
+ * Both forms exist because routes reach projects two ways. Some compose a
+ * scope into their WHERE (data_room.ts); many more load the row by id and then
+ * gate on it (`loadProject` + `ensureCanView`, which progress.ts, financials.ts,
+ * captable.ts, compliance.ts and crunchbase.ts each have their own copy of).
+ * The second shape cannot use a SQL fragment, and rewriting all of them to the
+ * first is a much larger change than adding company scoping. So: one predicate,
+ * kept deliberately identical to the clause, with a test that pins the two
+ * agreeing on every case.
+ *
+ * TAKES NO ACTOR, ON PURPOSE. This is the whole safety property, so it is worth
+ * stating plainly. `projects.company_id` is the FOUNDER's company. A caller who
+ * reaches a project some other way has an active company of their own — under
+ * the model agreed for this rollout, an investor's fund, a partner's agency, an
+ * advisor's practice — and that id will never match this column. Narrowing such
+ * a caller by it does not restrict them, it erases their access entirely.
+ *
+ * That is not hypothetical: `companyScope(partner, 5, 'p')` evaluates to `1=0`
+ * today, because it layers on `projectOwnerScope` and a partner has no
+ * `founder_id`. progress.ts's `isPrivileged` deliberately admits partners to
+ * every project, so a handler that swapped its ownership check for a
+ * companyScope query would silently drop partner reads across all 31 of its
+ * endpoints — and the same mistake was queued to repeat in the four other files
+ * carrying their own `loadProject`.
+ *
+ * Refusing an actor parameter makes that misuse structurally impossible: there
+ * is nothing to pass, so the CALLER must already have decided it is on the
+ * ownership path before it can ask this question at all.
+ *
+ * `companyId === null` means "no company selected", not "no access" — the same
+ * reading `companyScope` documents. Unassigned projects (`company_id IS NULL`)
+ * stay visible under every company, because migration 189 backfills only
+ * founders who have a primary company and invents nothing for the rest.
+ */
+export function projectInActiveCompany(
+  companyId: number | null,
+  project: { company_id?: number | null } | null | undefined,
+): boolean {
+  if (!project) return false;
+  if (companyId === null) return true;
+  const owning = project.company_id ?? null;
+  return owning === null || owning === companyId;
+}
+
+/**
+ * A founder's projects, narrowed to ONE company.
+ *
+ * This is the scope the CompanySwitcher was always implying and never had.
+ * Before migration 189 no business table carried a `company_id` at all — the
+ * whole schema had it on `user_company_links`, the membership join itself — so
+ * selecting a company changed a label and nothing else.
+ *
+ * It layers on `projectOwnerScope` rather than replacing it. Ownership is still
+ * the outer question: a company you belong to does not hand you another
+ * founder's projects that happen to share it. Company is a NARROWING, never a
+ * widening, and composing this way means the id-space rule projectOwnerScope
+ * documents (`projects.founder_id` is a founders row, not a users row) is
+ * enforced once instead of restated here.
+ *
+ * `companyId === null` means "no company selected", NOT "no access": the caller
+ * sees every project they own. That is the single-company case, which is almost
+ * everyone, and the case before the switcher has been touched. Returning
+ * NO_ROWS for a missing header would blank the app for every existing user the
+ * moment this shipped.
+ *
+ * UNASSIGNED PROJECTS ARE VISIBLE UNDER EVERY COMPANY. `company_id IS NULL` is
+ * a real state — migration 189 backfills only founders who have a primary
+ * company, and deliberately invents nothing for those who do not. An unassigned
+ * project is not another company's data, so showing it breaks no isolation
+ * rule; hiding it would make a founder's own work vanish behind a control they
+ * did not know changed anything. When assignment UI ships, the OR clause is
+ * what it removes.
+ *
+ * ADMIN STAYS UNSCOPED, as everywhere else in this module. The cross-tenant
+ * "read-only overlay" that would let an admin view one tenant at a time is a
+ * separate feature (ROUTE_MAP: Admin · Super); bolting it on here would make an
+ * admin's blank-company case indistinguishable from a scoped one.
+ *
+ * @param companyId a company the caller has been VERIFIED to belong to.
+ *   This function does not check membership and must never be handed a raw
+ *   client value — `middleware/activeCompany.ts` resolves the header against
+ *   `user_company_links` and passes null when the claim does not hold.
+ */
+export function companyScope(
+  actor: Actor | null | undefined,
+  companyId: number | null,
+  alias = 'p',
+): ScopeClause {
+  const owner = projectOwnerScope(actor, alias);
+  // No rows is already the answer; narrowing it further cannot help, and
+  // appending to `1=0` would make the SQL harder to read for no gain.
+  if (owner.sql === NO_ROWS.sql) return owner;
+  if (isUnscoped(actor)) return owner;
+  if (companyId === null) return owner;
+  return {
+    sql: `(${owner.sql} AND (${alias}.company_id = ? OR ${alias}.company_id IS NULL))`,
+    binds: [...owner.binds, companyId],
+  };
+}
+
+/**
+ * IC decisions an actor may read, as `d.*` — the Commit stage's committee.
+ *
+ * Three ways to be entitled, and all three are real. The shape is
+ * `esignEnvelopeScope`'s, for the same reason: a committee object is not owned
+ * by one person, so a single `created_by = ?` would be a working scope that
+ * broke the feature.
+ *
+ *   created_by      you opened the decision
+ *   ic_votes        you are on the committee — you have voted on it
+ *   company_id      it belongs to a firm you are a member of
+ *
+ * COMPANY IS THE OWNERSHIP KEY HERE, not a narrowing. Everywhere else in this
+ * module (`companyScope`, `projectInActiveCompany`) company is laid OVER an
+ * ownership predicate that already holds, so `company_id IS NULL` is read as
+ * "unassigned, therefore visible under every company" — a widening that hides
+ * nobody's data because ownership has already decided. There is no such outer
+ * predicate for a colleague's IC decision: the firm is the only thing that
+ * makes a colleague a colleague. So the NULL branch is EXCLUDED rather than
+ * admitted (`company_id IS NOT NULL`), and a decision whose author has no
+ * company is readable by its author and its voters and by nobody else. Getting
+ * that backwards would hand every unassigned row to every licence holder,
+ * which is precisely the leak migration 219 exists to close.
+ *
+ * THE VOTES BRANCH CANNOT BOOTSTRAP ACCESS. A vote row only exists because
+ * `POST /api/ic/:uid/vote` ran, and that endpoint is behind this same scope —
+ * so the first vote on any decision comes from its author or a firm colleague.
+ * The branch keeps a member's own participation readable after the fact (an
+ * author who changes firm, a row that predates 219's backfill), and grants
+ * nothing that was not already granted.
+ *
+ * MEMBERSHIP IS READ FROM `user_company_links` DIRECTLY, not from a verified
+ * active-company header. The header answers "which of my companies am I looking
+ * at", a filter the reader controls; this answers "is this row mine at all". A
+ * caller who has not touched the switcher must still see their own firm's
+ * docket, so the switcher must not be load-bearing for authorisation. The
+ * subquery binds the caller's id and compares to the ROW's company, so a forged
+ * header reaches nothing here.
+ *
+ * Companion to migration 219 (`ic_decisions.company_id`) and used by every
+ * endpoint in `routes/ic.ts`, read and write.
+ */
+export function icDecisionScope(actor: Actor | null | undefined, alias = 'd'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return {
+    sql: `(${alias}.created_by = ?
+           OR EXISTS (SELECT 1 FROM ic_votes v
+                       WHERE v.ic_decision_id = ${alias}.id AND v.user_id = ?)
+           OR (${alias}.company_id IS NOT NULL AND EXISTS (
+                 SELECT 1 FROM user_company_links ucl
+                  WHERE ucl.user_id = ? AND ucl.company_id = ${alias}.company_id)))`,
+    binds: [id, id, id],
+  };
+}
+
+/**
+ * Which company KYB records are mine — task #108, migration 220.
+ *
+ * THE SIMPLEST SCOPE IN THIS MODULE, BECAUSE THE TABLE WAS DESIGNED FOR IT.
+ * `company_kyb_records.company_id` is NOT NULL and UNIQUE, so there is exactly
+ * one row per company and exactly one question to answer: is the caller a
+ * member of that company? There is no author fallback and no NULL branch,
+ * because there is no such row to have — the schema refuses one.
+ *
+ * That is the difference from `icDecisionScope` beside it, which needs three
+ * branches for a table that gained `company_id` late and nullable, and which
+ * therefore has to say out loud that `IS NULL` means "author and voters only"
+ * rather than "everyone". Here the column carried its meaning from the first
+ * row, so the predicate is just membership.
+ *
+ * MEMBERSHIP IS READ FROM `user_company_links` DIRECTLY, for the reason 219's
+ * docblock gives: the `X-Company-Id` header answers "which of my companies am I
+ * looking at", which is a filter the reader controls, and this answers "is this
+ * row mine at all". A forged header reaches nothing, because the subquery binds
+ * the caller's id and compares against the ROW's company.
+ *
+ * WHY THERE IS NO `started_by_user_id` BRANCH, though the column exists.
+ * `esignEnvelopeScope` and `icDecisionScope` both admit their creator, and both
+ * are records about a PERSON'S act. A KYB record is about the COMPANY: whoever
+ * typed it did so on the company's behalf, and someone who has left should not
+ * keep reading its registration number because they filled the form in once.
+ * The column says who to ask, not who may look.
+ */
+export function companyKybScope(actor: Actor | null | undefined, alias = 'k'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return {
+    sql: `EXISTS (SELECT 1 FROM user_company_links ucl
+                   WHERE ucl.user_id = ? AND ucl.company_id = ${alias}.company_id)`,
+    binds: [id],
+  };
+}

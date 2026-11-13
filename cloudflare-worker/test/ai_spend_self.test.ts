@@ -1,0 +1,506 @@
+/**
+ * The caller's own AI spend meter — over real rows, with a movable clock.
+ *
+ * Two properties carry the weight here.
+ *
+ * 1. SELF-SCOPED. `ai_usage_logs` holds every user's calls. The org rollup is
+ *    admin-gated elsewhere; this read must never widen, admin included, for the
+ *    same reason /lp-portal must not: an operator's own spend meter showing the
+ *    organisation's spend is not oversight, it is a wrong number.
+ *
+ * 2. "NO RECORD" IS NOT "$0". A user who has made no calls has spent zero, and
+ *    that is a fact worth showing. A table that cannot be read is an absence of
+ *    knowledge, and drawing an empty meter from it asserts something false. The
+ *    two cases are distinguished by `recorded`, and tested separately.
+ *
+ * The clock is injected because the period boundary is the whole question. A
+ * test that cannot move the clock can only assert the shape of the answer.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { makeD1 } from './_d1_sqlite.mjs';
+import { AI_USERS_SCHEMA, AI_BUDGET_MIGRATION } from './_ai_budget_fixture.mjs';
+import { loadMyAiSpend, SPEND_CAP_DEFAULTS, SPEND_CAP_VARS } from '../src/services/aiSpend.ts';
+import { aiUsageSelfScope, ALL_ROWS, NO_ROWS } from '../src/services/tenancyScope.ts';
+
+const SCHEMA = AI_USERS_SCHEMA + AI_BUDGET_MIGRATION + `
+CREATE TABLE ai_usage_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  task TEXT NOT NULL,
+  model TEXT NOT NULL,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  est_cost_usd REAL NOT NULL DEFAULT 0,
+  safety_score REAL,
+  fallback_used INTEGER NOT NULL DEFAULT 0,
+  cached INTEGER NOT NULL DEFAULT 0,
+  refusal TEXT,
+  created_at TEXT NOT NULL
+);
+`;
+
+/** Rows spanning two months, three users, and one unattributed call. */
+const SEED = `
+INSERT INTO users(id,role) VALUES(7,'investor'),(9,'founder'),(11,'founder'),(4242,'founder');
+INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, cached, fallback_used, refusal, created_at) VALUES
+  (7,    'advisor_turn', 'llama-3.3-70b', 0.0100, 0, 0, NULL,             '2026-08-01 09:00:00'),
+  (7,    'advisor_turn', 'llama-3.3-70b', 0.0200, 0, 1, NULL,             '2026-08-27 10:00:00'),
+  (7,    'embed',        'bge-base',      0.0005, 1, 0, NULL,             '2026-08-27 11:00:00'),
+  (7,    'advisor_turn', 'llama-3.1-8b',  0.0000, 0, 0, 'budget_user_day','2026-07-30 09:00:00'),
+  (9,    'publication',  'llama-3.3-70b', 5.0000, 0, 0, NULL,             '2026-08-27 10:30:00'),
+  (NULL, 'safety',       'llama-guard',   0.0300, 0, 0, NULL,             '2026-08-27 10:45:00');
+`;
+
+const AT = new Date('2026-08-27T12:00:00Z');
+const env = (extra: Record<string, unknown> = {}) => {
+  const { DB, db } = makeD1(SCHEMA, SEED);
+  return { env: { DB, ...extra } as any, db };
+};
+
+// ---------- the scope ----------
+
+test('the AI usage scope is a self-view with no unscoped escape', () => {
+  const admin = aiUsageSelfScope({ id: 1, role: 'admin', email: 'ops@axal.vc' });
+  assert.notEqual(admin.sql, ALL_ROWS.sql, 'an admin meter must show the admin, not the org');
+  assert.deepEqual(admin.binds, [1]);
+  for (const actor of [null, undefined, {}, { id: 0 }, { id: -1 }, { role: 'admin' }] as any[]) {
+    assert.equal(aiUsageSelfScope(actor).sql, NO_ROWS.sql,
+      `${JSON.stringify(actor)} must see no usage rows`);
+  }
+  assert.match(aiUsageSelfScope({ id: 3 }, 'x').sql, /x\.user_id/);
+});
+
+// ---------- what the meter reports ----------
+
+test('month-to-date sums only the caller’s own rows in the current month', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.recorded, true);
+  assert.equal(r.month.key, '2026-08');
+  // 0.0100 + 0.0200 + 0.0005 — July excluded, user 9 excluded, NULL excluded.
+  assert.equal(Number(r.month.spend_usd!.toFixed(4)), 0.0305);
+  assert.equal(r.month.calls, 3);
+});
+
+test('an unattributed row is billed to nobody', async () => {
+  // user_id IS NULL on calls made outside a session. `= ?` never matches NULL,
+  // so the $0.03 safety call belongs to no one's meter — not to whoever looks.
+  const { env: e } = env();
+  for (const id of [7, 9]) {
+    const r = await loadMyAiSpend(e, { id, role: 'investor' }, AT);
+    assert.ok(!r.by_task.some((t) => t.task === 'safety'), `user ${id} must not be billed the orphan row`);
+  }
+});
+
+test('two users get disjoint meters', async () => {
+  const { env: e } = env();
+  const a = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  const b = await loadMyAiSpend(e, { id: 9, role: 'investor' }, AT);
+  assert.equal(Number(a.month.spend_usd!.toFixed(4)), 0.0305);
+  assert.equal(Number(b.month.spend_usd!.toFixed(4)), 5.0000);
+});
+
+test('an admin sees their own spend, not the organisation’s', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 1, role: 'admin', email: 'ops@axal.vc' }, AT);
+  assert.equal(r.month.spend_usd, 0, 'no rows for this account is a real zero');
+  assert.equal(r.recorded, true);
+  assert.notEqual(r.month.spend_usd, 5.0305, 'must not be the sum of everyone');
+});
+
+test('today is a narrower window than the month, on the same rows', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.today.key, '2026-08-27');
+  // The 1 Aug call falls out; 0.0200 + 0.0005 remain.
+  assert.equal(Number(r.today.spend_usd!.toFixed(4)), 0.0205);
+  assert.equal(r.today.calls, 2);
+  assert.ok(r.today.spend_usd! < r.month.spend_usd!);
+});
+
+test('moving the clock to the next month empties the meter without touching the rows', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, new Date('2026-09-01T00:00:00Z'));
+  assert.equal(r.month.key, '2026-09');
+  assert.equal(r.month.spend_usd, 0, 'a new period starts at a real zero');
+  assert.equal(r.recorded, true, 'and the platform still knows that');
+});
+
+// ---------- recorded vs zero ----------
+
+test('an unreadable usage table reports "no record", never $0', async () => {
+  // The distinction the fund surfaces already make: an absent fact is not a
+  // zero fact. A meter drawn from a failed read would state a spend the
+  // platform cannot vouch for.
+  const { DB } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const r = await loadMyAiSpend({ DB } as any, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.recorded, false);
+  assert.equal(r.month.spend_usd, null);
+  assert.equal(r.today.spend_usd, null);
+  assert.equal(r.last_run, null);
+  assert.deepEqual(r.by_task, []);
+});
+
+test('a user with no calls reports a real zero, not "no record"', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 4242, role: 'investor' }, AT);
+  assert.equal(r.recorded, true);
+  assert.equal(r.month.spend_usd, 0);
+  assert.equal(r.last_run, null, 'no calls means no last run');
+});
+
+// ---------- the last run and the task breakdown ----------
+
+test('the last run is the caller’s own most recent call, with its receipt', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.last_run?.task, 'embed');
+  assert.equal(r.last_run?.cost_usd, 0.0005);
+  assert.equal(r.last_run?.cached, true, 'a cached run is labelled as one');
+  assert.equal(r.last_run?.at, '2026-08-27 11:00:00');
+});
+
+test('a refusal is reported rather than hidden', async () => {
+  // The July row is a budget refusal. A meter that silently drops refusals
+  // would show a user a clean history of the month they spent hitting a cap.
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, new Date('2026-07-31T00:00:00Z'));
+  assert.equal(r.last_run?.refusal, 'budget_user_day');
+  assert.equal(r.last_run?.cost_usd, 0);
+});
+
+test('the task breakdown covers the month and sums to the month total', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.deepEqual(r.by_task.map((t) => t.task), ['advisor_turn', 'embed'], 'ordered by spend');
+  const total = r.by_task.reduce((s, t) => s + t.spend_usd, 0);
+  assert.equal(Number(total.toFixed(4)), Number(r.month.spend_usd!.toFixed(4)),
+    'a breakdown that does not add up to its own total is worse than none');
+});
+
+// ---------- caps ----------
+
+test('the admin licence\'s caps come from the env vars the router enforces, with its defaults', async () => {
+  const { env: e, db } = env();
+  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no day (D1367)
+  const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
+  assert.equal(d.month.cap_usd, SPEND_CAP_DEFAULTS.month);
+  assert.equal(d.today.cap_usd, SPEND_CAP_DEFAULTS.day);
+
+  const { env: e2, db: db2 } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
+  db2.exec('DELETE FROM super_admins');
+  const o = await loadMyAiSpend(e2, { id: 1, role: 'admin' }, AT);
+  assert.equal(o.month.cap_usd, 250);
+  assert.equal(o.today.cap_usd, 12);
+});
+
+test('D1367: a Super Admin\'s meter shows the admin month and no day, never a billion dollars', async () => {
+  // Mutation checked: keep the $1 billion cap → cap_usd 1000000000.
+  const { env: e } = env();
+  const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
+  assert.deepEqual([d.month.cap_usd, d.today.cap_usd], [SPEND_CAP_DEFAULTS.month, null]);
+});
+
+test('D783: a member\'s cap is their plan\'s share each month, with no day cap and no env var', async () => {
+  // The fixture's member pays $200 a month, so 25% is $50.
+  const { env: e } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
+  const m = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(m.month.cap_usd, 50);
+  assert.equal(m.today.cap_usd, null, 'a member has no daily limit');
+});
+
+test('a nonsense cap falls back to the default rather than to zero', async () => {
+  // A zero cap would make the meter read "over plan" for every user at once.
+  for (const bad of ['', 'abc', '0', '-5', 'NaN']) {
+    const { env: e, db } = env({ [SPEND_CAP_VARS.month]: bad });
+    db.exec('DELETE FROM super_admins');
+    const r = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
+    assert.equal(r.month.cap_usd, SPEND_CAP_DEFAULTS.month, `cap ${JSON.stringify(bad)}`);
+  }
+});
+
+// ---------- the enforcement counter is reported separately ----------
+
+test('the KV counter is reported alongside the log sum, not merged into it', async () => {
+  // They can legitimately disagree: aiRouter's own note says KV has no atomic
+  // increment and may undercount, and the keys carry a TTL. Showing one number
+  // would mean either a meter that disagrees with what refuses the next call,
+  // or an enforcement counter presented as an invoice.
+  const store = new Map<string, string>([
+    ['ai_spend:7:2026-08', '0.9999'],
+    ['ai_spend:7:2026-08-27', '0.5000'],
+  ]);
+  const { env: e } = env({ AI_SPEND: { get: async (k: string) => store.get(k) ?? null } });
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.month.enforced_usd, 0.9999);
+  assert.equal(r.today.enforced_usd, 0.5);
+  assert.equal(Number(r.month.spend_usd!.toFixed(4)), 0.0305, 'the log sum is untouched by KV');
+});
+
+test('an absent KV counter is null, not zero', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.month.enforced_usd, null, 'no store means no reading, not a reading of zero');
+});
+
+test('a KV read that throws does not fail the meter', async () => {
+  const { env: e } = env({ AI_SPEND: { get: async () => { throw new Error('kv down'); } } });
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.month.enforced_usd, null);
+  assert.equal(Number(r.month.spend_usd!.toFixed(4)), 0.0305, 'the durable figure still stands');
+});
+
+test('a denied actor reads nobody’s meter', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, {} as any, AT);
+  assert.equal(r.month.spend_usd, 0, 'the 1=0 scope matches no rows');
+  assert.equal(r.month.enforced_usd, null, 'and no KV key is constructed for a missing id');
+});
+
+// ---------- the meter must not draw a cap the router does not enforce ----------
+
+test('the meter and router share the cap resolver rather than copying defaults', () => {
+  const routerSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiRouter.ts'),'utf8');
+  const spendSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiSpend.ts'),'utf8');
+  const budgetSrc=readFileSync(resolve(process.cwd(),'cloudflare-worker/src/services/aiBudget.ts'),'utf8');
+  assert.match(routerSrc,/aiBudget\.environmentAiCaps/);
+  assert.match(spendSrc,/resolveAiCaps\(env,callerId\)/);
+  assert.equal(SPEND_CAP_DEFAULTS.day,5); assert.equal(SPEND_CAP_DEFAULTS.month,50);
+  assert.match(budgetSrc,new RegExp(SPEND_CAP_VARS.day)); assert.match(budgetSrc,new RegExp(SPEND_CAP_VARS.month));
+});
+
+test('the org rollup stays admin-gated — this endpoint did not open it up', () => {
+  const monitoringSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/monitoring.ts'), 'utf8');
+  const at = monitoringSrc.indexOf("monitoring.get('/ai-usage'");
+  assert.notEqual(at, -1, 'the org rollup must still exist');
+  assert.match(monitoringSrc.slice(at, at + 300), /requireAdmin\s*\(/,
+    'the every-user view stays admin-only; /api/ai/me/spend is the self-view');
+});
+
+test('the self endpoint requires auth and never takes a user id from the request', () => {
+  // A `?user_id=` on a spend endpoint is the whole IDOR class in one query
+  // param. The route reads the authenticated caller and nothing else.
+  const fileSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  // Just the `/me/spend` handler. The whole file used to be read, which was
+  // right while every route in it took no path parameter; D698's
+  // `/rail-preferences/:section/:task` routes read a rail section and a router
+  // task from the path, never a user id (rail_prefs_d698.test.ts proves that
+  // behaviourally), so the ban is held where its subject is.
+  const from = fileSrc.indexOf("ai.get('/me/spend'");
+  assert.ok(from >= 0, 'the /me/spend route is gone');
+  const routeSrc = fileSrc.slice(from, fileSrc.indexOf('\n});\n', from) + 4);
+  assert.match(routeSrc, /requireAuth\s*\(/);
+  assert.doesNotMatch(routeSrc, /req\.param\(|req\.queries\(|req\.query\(\s*\)/,
+    'the caller must not be able to name whose spend they read');
+  // D552 added ONE query read, `surface`, which filters to a page of the
+  // caller's own rows. Any other key read off the query string fails here.
+  const reads = [...routeSrc.matchAll(/req\.query\(\s*([^)]*)\)/g)].map((m) => m[1].trim());
+  assert.deepEqual(reads, ["'surface'"],
+    'the spend route reads a query key other than `surface`');
+});
+
+// ---------- the pricing endpoint ----------
+
+/**
+ * Just the `/pricing` handler.
+ *
+ * Both tests below used to slice `indexOf("ai.get('/pricing'")` to the END OF
+ * THE FILE, which is every route declared after it as well. That is two
+ * failures in one: the assertions were never about the pricing handler, and
+ * they passed only because nothing further down happened to use the words they
+ * ban — until a comment in `/workspace/explain` mentioned `ai_usage_logs` and
+ * the pricing endpoint was reported as leaking per-user data.
+ */
+function pricingHandler(src: string): string {
+  const from = src.indexOf("ai.get('/pricing'");
+  if (from < 0) throw new Error('the /pricing route is gone');
+  // Handlers in this file close on `});` at column 0.
+  const end = src.indexOf('\n});', from);
+  return src.slice(from, end < 0 ? src.length : end + 4);
+}
+
+test('the pricing endpoint serves the router’s own table, not a second copy', () => {
+  // assistCost.js's header already argues that the estimate and the receipt
+  // must come from one calculation, because "two functions drifting apart is
+  // exactly how a user is quoted one price and shown another". The same is
+  // true one level up: the calculation was shared but the PRICES were not.
+  const routeSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  assert.match(routeSrc, /PRICE_USD_PER_1M_TOKENS/, 'prices come from aiRouter');
+  assert.match(routeSrc, /\bROUTE\b/, 'and so does the task → model map');
+  // No hand-written figures in the route file — that would be the second copy
+  // this endpoint exists to remove.
+  const body = pricingHandler(routeSrc);
+  assert.ok(body.includes('PRICE_USD_PER_1M_TOKENS') && body.length < 2000,
+    'the handler slice is wrong — it is either empty or swallowing the rest of the file');
+  assert.doesNotMatch(body, /\bin:\s*0\.\d|\bout:\s*0\.\d/,
+    'the route must not restate any price literal');
+});
+
+test('the pricing endpoint requires auth and exposes no per-user data', () => {
+  const routeSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  const body = pricingHandler(routeSrc);
+  assert.match(body, /requireAuth\s*\(/);
+  assert.doesNotMatch(body, /ai_usage_logs|user_id|loadMyAiSpend/,
+    'a static table must not reach into anyone’s usage');
+  // The handler now publishes `alternates`, which is routing config and not
+  // per-user data — but it is new, so say what it is allowed to carry.
+  assert.match(body, /alternates: entry\.alternates \?\? \[\]/,
+    'the menu the rail draws must come from the router, over this endpoint');
+});
+
+test('every routed task class has a price, or the estimate is unknown not free', () => {
+  // A model in ROUTE with no entry in PRICE_USD_PER_1M_TOKENS makes
+  // priceForTask() return null, and the rail must then decline to quote. This
+  // asserts the frontend helper refuses rather than defaulting to zero.
+  const hookSrc = readFileSync(
+    resolve(process.cwd(), 'frontend/src/hooks/useAiSpend.js'), 'utf8');
+  assert.match(hookSrc, /if \(!model\) return null/);
+  assert.match(hookSrc, /if \(!p \|\| typeof p\.in !== 'number' \|\| typeof p\.out !== 'number'\) return null/,
+    'an unpriced model yields null, never 0');
+});
+
+test('the hook keeps "no record" distinguishable from "$0" at the boundary', () => {
+  const hookSrc = readFileSync(
+    resolve(process.cwd(), 'frontend/src/hooks/useAiSpend.js'), 'utf8');
+  // A failed fetch must leave `spend` null rather than substituting an
+  // empty-looking object, or the component cannot tell the two apart.
+  // RE-AIMED IN D400: the hook now keeps a separate error per read and a
+  // retry can run the fetch again, so the failure branch also clears a
+  // previous success. The property is the same — success sets the response,
+  // failure leaves `spend` null and records why.
+  assert.match(hookSrc, /if \(s && !s\.__err\) \{ setSpend\(s\); setSpendError\(null\); \} else \{ setSpend\(null\); setSpendError\(/);
+  assert.doesNotMatch(hookSrc, /setSpend\(\{\s*\}\)|setSpend\(\{ *spend_usd: *0/,
+    'a failure must not be turned into a zero reading');
+});
+
+// ---------- D401: the last run carries its token counts ----------
+
+/** One row per case the receipt has to tell apart, all for user 11. */
+const TOKENS_SEED = (rows: string) => `
+INSERT INTO ai_usage_logs (user_id, task, model, prompt_tokens, completion_tokens, est_cost_usd, cached, fallback_used, refusal, created_at) VALUES
+${rows};
+`;
+const lastFor = async (rows: string, schema = SCHEMA) => {
+  const { DB } = makeD1(schema, TOKENS_SEED(rows));
+  return loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+};
+
+test('D401: a live call reports the token counts the log recorded', async () => {
+  const r = await lastFor(`(11, 'workspace_explain', '@cf/m', 812, 144, 0.0006, 0, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(r.last_run_recorded, true);
+  assert.equal(r.last_run?.prompt_tokens, 812);
+  assert.equal(r.last_run?.completion_tokens, 144);
+});
+
+test('D401: a cached answer or a refusal has no token counts, not zero', async () => {
+  // No model was called. "0 in / 0 out" would read as a very small run.
+  const cached = await lastFor(`(11, 'embed', '@cf/b', 0, 0, 0, 1, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(cached.last_run?.prompt_tokens, null);
+  assert.equal(cached.last_run?.completion_tokens, null);
+  const refused = await lastFor(`(11, 'advisor_turn', '@cf/m', 0, 0, 0, 0, 0, 'budget_user_day', '2026-08-27 11:30:00')`);
+  assert.equal(refused.last_run?.prompt_tokens, null);
+  assert.equal(refused.last_run?.completion_tokens, null);
+  // Not merely "whatever the column held": a cached row with stray counts
+  // still called no model.
+  const stray = await lastFor(`(11, 'embed', '@cf/b', 50, 7, 0, 1, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(stray.last_run?.prompt_tokens, null);
+  // The same for a refusal. The zero-count rows above would pass whether or
+  // not the refusal rule existed, because a zero is nulled on its own — a
+  // mutation dropping the rule escaped them, so this row carries counts.
+  const strayRefusal = await lastFor(`(11, 'advisor_turn', '@cf/m', 50, 7, 0, 0, 0, 'all_models_failed', '2026-08-27 11:30:00')`);
+  assert.equal(strayRefusal.last_run?.prompt_tokens, null);
+  assert.equal(strayRefusal.last_run?.completion_tokens, null);
+});
+
+test('D401: a streamed call has a prompt count and no completion count', async () => {
+  // The router records completion 0 on a stream because it never reads the
+  // body. A zero there is "not measured", not "the model said nothing".
+  const r = await lastFor(`(11, 'advisor_turn', '@cf/m', 300, 0, 0.0001, 0, 0, NULL, '2026-08-27 11:30:00')`);
+  assert.equal(r.last_run?.prompt_tokens, 300);
+  assert.equal(r.last_run?.completion_tokens, null);
+});
+
+test('D401: no calls is a readable "no last run"', async () => {
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 4242, role: 'investor' }, AT);
+  assert.equal(r.last_run, null);
+  assert.equal(r.last_run_recorded, true, 'the query ran and found nothing');
+  assert.equal(r.by_task_recorded, true);
+});
+
+test('D401: a last-run read that fails is unrecorded, not "no calls"', async () => {
+  // The totals query reads only est_cost_usd and created_at, so a table
+  // without the token columns still totals — and the last-run query, which
+  // selects them, throws. That is the failure the flag exists to report.
+  const NO_TOKENS = `CREATE TABLE ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+    task TEXT NOT NULL, model TEXT NOT NULL, est_cost_usd REAL NOT NULL DEFAULT 0,
+    cached INTEGER NOT NULL DEFAULT 0, fallback_used INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL);`;
+  const { DB } = makeD1(NO_TOKENS, `INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, created_at)
+    VALUES (11, 'workspace_explain', '@cf/m', 0.001, '2026-08-27 11:30:00');`);
+  const r = await loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+  assert.equal(r.recorded, true, 'the totals still read');
+  assert.equal(r.last_run, null);
+  assert.equal(r.last_run_recorded, false, 'a failed read was reported as "no calls"');
+  assert.equal(r.by_task_recorded, true, 'the breakdown does not read token columns and still stands');
+});
+
+test('D401: an unreadable usage table leaves both reads unrecorded', async () => {
+  const { DB } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const r = await loadMyAiSpend({ DB } as any, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.last_run_recorded, false);
+  assert.equal(r.by_task_recorded, false);
+});
+
+// ---------- D404: spend per page ----------
+
+const WITH_SURFACE = SCHEMA.replace('created_at TEXT NOT NULL\n);', 'created_at TEXT NOT NULL,\n  surface TEXT\n);');
+
+test('D404: the month is broken down by the page each run was asked from', async () => {
+  assert.notEqual(WITH_SURFACE, SCHEMA, 'the fixture schema did not gain the column');
+  const { DB } = makeD1(WITH_SURFACE, `
+INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, created_at, surface) VALUES
+  (11, 'workspace_explain', 'm', 0.0010, '2026-08-20 10:00:00', '/validate/interviews'),
+  (11, 'workspace_explain', 'm', 0.0030, '2026-08-21 10:00:00', '/validate/interviews'),
+  (11, 'workspace_explain', 'm', 0.0020, '2026-08-22 10:00:00', '/build/board'),
+  (11, 'advisor_explain',   'm', 0.0040, '2026-08-23 10:00:00', NULL),
+  (11, 'workspace_explain', 'm', 0.0500, '2026-07-30 10:00:00', '/validate/interviews'),
+  (12, 'workspace_explain', 'm', 9.0000, '2026-08-22 10:00:00', '/validate/interviews');
+`);
+  const r = await loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
+  assert.equal(r.by_surface_recorded, true);
+  const by = new Map(r.by_surface.map((s) => [s.surface, s]));
+  // Only this user's rows, only this month's. D704: the retired Interviews
+  // page's runs count under Customer research, the module that holds it now.
+  assert.equal(by.get('/validate/customer-research')?.calls, 2);
+  assert.equal(Number(by.get('/validate/customer-research')?.spend_usd.toFixed(4)), 0.004);
+  assert.equal(by.has('/validate/interviews'), false, 'a retired page keeps its own entry');
+  assert.equal(by.get('/build/board')?.calls, 1);
+  // The unattributed runs are ONE entry, reported rather than dropped.
+  assert.equal(by.get(null)?.calls, 1, 'the month\'s runs with no page were dropped');
+  const sum = r.by_surface.reduce((s, x) => s + x.spend_usd, 0);
+  assert.equal(Number(sum.toFixed(4)), Number(r.month.spend_usd!.toFixed(4)),
+    'the per-page breakdown does not add up to the month');
+});
+
+test('D404: before migration 319 the breakdown is unrecorded, not empty', async () => {
+  // The fixture without the column is production before the migration runs.
+  const { env: e } = env();
+  const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.recorded, true, 'the totals must still read');
+  assert.equal(r.by_surface_recorded, false);
+  assert.deepEqual(r.by_surface, []);
+});
+
+test('D404: an unreadable usage table leaves the breakdown unrecorded', async () => {
+  const { DB } = makeD1('CREATE TABLE unrelated (id INTEGER);');
+  const r = await loadMyAiSpend({ DB } as any, { id: 7, role: 'investor' }, AT);
+  assert.equal(r.by_surface_recorded, false);
+});

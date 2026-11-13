@@ -1,0 +1,174 @@
+/**
+ * The no-store copy a zone renders, in one place both its page and its bucket
+ * board read.
+ *
+ * WHY IT MOVED HERE. `BucketOverview` already derives its "Not built" line from
+ * the same object the zone page renders, through `unbuiltFrom()`, so a card can
+ * never describe a store the page denies having. A board section needs the same
+ * guarantee, and it was briefly implemented by passing the object in as an
+ * argument — which put the coupling in the caller, where a guard cannot see it,
+ * and where forgetting the argument silently produced a section with no gap and
+ * no source at all.
+ *
+ * Importing one exported object from both sides makes it structural instead:
+ * there is one sentence, and neither surface can be gentler than the other
+ * because neither has its own copy to soften.
+ *
+ * Plain JavaScript, no JSX, so `bucket_board.test.mjs` can load it in Node —
+ * `AdvisorBucketRoutes.jsx` cannot be loaded there.
+ */
+
+/**
+ * Advisor `/expertise` — empty since D1424 (#3700). Visibility, the last zone
+ * of that bucket with nothing behind it, now reads D1597's
+ * `GET /api/advisors/me/visibility`, and states profile views as "Not recorded"
+ * on the page. The map stays so the bucket keeps its shape.
+ */
+export const ADVISOR_EXPERTISE_COPY = {};
+
+/** Keyed by bucket prefix, matching the shape `AdvisorBucketRoutes` reads. */
+export const ADVISOR_COPY = {
+  '/expertise': ADVISOR_EXPERTISE_COPY,
+};
+
+/**
+ * Network · Organizations, on a licence that renders no body for it.
+ *
+ * `ORG_BACKED` below is `{founder, investor, partner}`. A founder's zone
+ * groups `contacts.organization`, which migration 386 (D551, #1144) added and
+ * `PUT /api/contacts/:uid` sets; a partner's groups the book's own column
+ * (migration 224). The investor path still ends at
+ * `metadata.organization_name`, which nothing writes — #1023's IN3 is to read
+ * the same `contacts.organization` there.
+ *
+ * Founder and investor have a body that says what is and is not recorded — a
+ * table, its empty state and the zone's notes. Advisor and operator have no body, so
+ * the copy below is the whole surface. The heading is the exact line the
+ * overview card shows, so the card, the board section and the rail say one
+ * thing.
+ */
+/**
+ * The licences whose Organizations zone has a store behind it.
+ *
+ * ONE DEFINITION, BECAUSE THERE WERE TWO AND THEY DRIFTED. `NetworkWorkspace`
+ * held `{founder, investor, partner}` and `boards/network.js` held
+ * `{founder, investor}`, while the board's own docblock claimed it was "the
+ * same set the zone body and the rail already consult". It was not, so the
+ * partner `/network` root printed `NETWORK_ORG_COPY` — "Organizations reads
+ * nothing on this licence" — over a zone that has grouped real rows since
+ * migration 224. A card telling a reader a working feature does not exist is
+ * worse than a missing button, and no test compared the two sets.
+ *
+ * PARTNER IS IN, ADVISOR IS OUT, and both are load-bearing. Migration 224 put
+ * an `organization` column on every book contact — text, with no organization
+ * record behind it, which is exactly what the `pn3` artboard is about — so a
+ * partner's zone groups real rows and says on its own face that the roll-up is
+ * not built. An advisor is 403'd from `/api/contacts` and has no book at all,
+ * so the gap card is the honest answer there (task #94).
+ *
+ * It lives beside the copy it decides between: whoever changes one should be
+ * looking at the other.
+ */
+export const ORG_BACKED = new Set(['founder', 'investor', 'partner']);
+
+export const NETWORK_ORG_COPY = {
+  heading: 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.',
+  what: 'The companies, funds and firms behind the people you know, rolled up from the relationships you keep.',
+  why: 'The roll-up needs a person-to-organisation edge and nothing stores one: a relationship is a pair of account ids with a type, and a referral records an organisation as free text with no link back to an account. On this licence there is not even a surface to attempt it from — an advisor cannot read the contact store at all, and an operator has no organizations tab. A count assembled from anything else would be counting something other than what the heading says.',
+};
+
+/**
+ * Research · Markets, Companies and Ask — blocked on a store, said where a
+ * reader can see it.
+ *
+ * WHY THESE THREE ARE DIFFERENT FROM EVERY ENTRY ABOVE. The objects above
+ * describe zones that render NOTHING ELSE: `unbuiltFrom` turns each into a
+ * card, the page renders `NoStoreYet`, and the whole surface is the gap. These
+ * three have live bodies and keep them. What is recorded here is narrower and
+ * was previously written down only in `founderZoneFilters.js`, a table no
+ * customer opens: each of these zones serves a real feed AND has a
+ * canvas-specified capability with no store behind it.
+ *
+ * THE DISTINCTION IS THE WHOLE POINT, because collapsing it is how this gets
+ * said wrongly in both directions. Saying "no store behind this yet" over
+ * `/research/markets` is false — the zone holds real, dated comparable
+ * readings (it once held the signals feed). Saying nothing is false too:
+ * every filter the artboard draws for that zone is a view of a saved analysis
+ * that no table holds, so a reader comparing the design to the page finds four
+ * missing controls and no reason given. Both sentences are wrong; this is the
+ * one that is not.
+ *
+ * `blocks` IS THE MISSING STORE, NAMED. It is the string the guard compares
+ * against the filter registry's own reason for the same zone, so the sentence a
+ * customer reads and the sentence a developer reads cannot drift apart — the
+ * same coupling that put this whole file in one place.
+ */
+export const RESEARCH_STORE_GAPS = {
+  // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
+  // signals feed". It has not since `/research/markets` became `MarketZone`:
+  // comparable readings a person enters, dated and age-gated (migration 223),
+  // with the feed kept at `/signals` (until D670). The missing store it names is still
+  // missing and still what the founder and investor canvases narrow — so the
+  // entry stays for them. For partner and advisor, whose canvases draw exactly
+  // the readings `MarketZone` holds, it is not shown (`roles`).
+  //
+  // D593 — `why` said the page holds "comparable readings" instead, and since
+  // D533 it is the market directory first: the taxonomy's markets by tracked
+  // sector, with the readings card (whose record form is back) beside them.
+  // The sentence names both; the missing store is unchanged.
+  markets: {
+    roles: ['founder', 'investor'],
+    eyebrow: 'Blocked on a store',
+    blocks: 'a saved market analysis',
+    heading: 'Comparable readings are stored. A saved market analysis is not.',
+    what: 'A deep-dive you ran and kept — its method, the date it was run, the documents it rests on, and whether it is current or retired.',
+    why: 'Nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of. The artboard makes this plain: its instrument table is Analysis · Method · Run · State, and all four filters it draws are views of that object. What this page holds instead is the taxonomy’s markets by tracked sector and your comparable readings — ranges you record here, each with its run date and an age that decides whether it can still be used — different objects from the one the design narrows. The sector signals feed has its own page, Signals.',
+  },
+  // D495 (#1023) — THE INVESTOR'S MARKETS ZONE DRAWS THESES, not saved
+  // analyses: its filters are Active · Parked · Retired · Builder, and each row
+  // is a thesis, what it has sourced, and a written read. No store holds a
+  // thesis, and whether one belongs to the investor or the firm is the owner's
+  // call (question 5 on #1023). This entry takes precedence over `markets` for
+  // the investor (`storeGapFor`).
+  'markets:investor': {
+    eyebrow: 'Blocked on a decision',
+    blocks: 'a thesis',
+    heading: 'Market readings are stored. Theses are not, yet.',
+    what: 'Each thesis with its state (active, parked or retired), the deals it has sourced, and a written read, so a thesis that sources nothing can be retired on the record.',
+    why: 'No thesis is stored, and no deal records the thesis that sourced it. Whether a thesis belongs to you or to your firm is the owner’s decision, asked on #1023, and nothing here invents one. What this page holds today is the taxonomy’s markets by tracked sector and your comparable readings.',
+  },
+  companies: {
+    eyebrow: 'Blocked on a store',
+    blocks: 'a comparable, and a relation an analysis carries itself',
+    heading: 'The analyses are stored. A comparable is not, and neither is an analysis-level relation.',
+    what: 'Competitors filed as comparables, and saved analyses narrowed by the relation they describe.',
+    why: 'No competitor can be filed as a comparable at all: the form offers direct or adjacent, and the row editor, the AI prompt and three server-side coercions all push anything else back to direct. The relation that does exist sits one level below what this header governs — `competitor_candidates` carries it per competitor, while this row narrows the saved analyses, and an analysis carries no relation of its own. The analyses store is real and readable; whether it holds any is a separate question from whether it exists.',
+  },
+};
+
+/**
+ * `ask` WAS THE THIRD ENTRY AND IS GONE, WHICH IS THE OUTCOME THIS OBJECT IS
+ * FOR. It read "Answers are produced. Nothing keeps them." and named the gap
+ * precisely: the ask route searched, answered and returned without writing a
+ * row. Migration 221 writes the row — session, question, outcome, citations and
+ * the router's own cost receipt — so the sentence stopped being true and the
+ * card went with it, along with the `unbuilt:` prose on four filter chips and
+ * two ops in four tables.
+ *
+ * A gap card outliving its gap is worse than never having written one: it is a
+ * confident, specific, prominent claim that the product cannot do something it
+ * now does. Whoever closes `markets` or `companies` deletes their entry in the
+ * same commit.
+ */
+
+/**
+ * The store gap a Research zone shows for a licence (D392, D495): a
+ * licence-specific entry (`<slug>:<role>`) first, then the zone's own, which may
+ * name the licences it is true for.
+ */
+export function storeGapFor(slug, role) {
+  const own = RESEARCH_STORE_GAPS[`${slug}:${role}`];
+  if (own) return own;
+  const shared = RESEARCH_STORE_GAPS[slug];
+  return shared && (!shared.roles || shared.roles.includes(role)) ? shared : null;
+}

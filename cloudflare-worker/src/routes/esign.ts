@@ -1,0 +1,2225 @@
+/**
+ * eSignature routes — DocuSign-like flow built on R2 + D1 + Workers.
+ *
+ * Endpoints:
+ *  - POST   /api/legal/esign/send            (signed in) — create envelope + email recipient
+ *  - GET    /api/legal/esign                 (scoped) — list envelopes (filter by user_id, deal_id)
+ *  - GET    /api/legal/esign/:id             (scoped) — envelope detail + audit log
+ *  - GET    /api/legal/esign/:id/document    (scoped) — stream signed PDF from R2
+ *  - POST   /api/legal/esign/:id/forward     (scoped) — email the signed PDF onward
+ *  - GET    /api/legal/esign/:id/forward     (scoped) — that envelope's forward log
+ *
+ *    "scoped" is services/tenancyScope.ts's esignEnvelopeScope: the sender,
+ *    the envelope's subject, or a recipient (an admin sees every row). An
+ *    envelope outside it is a 404 on every route, never a 403 (D410).
+ *  - GET    /api/legal/esign/sign/:token     (public) — fetch envelope details for signing UI
+ *  - POST   /api/legal/esign/sign/:token     (public) — submit signature (canvas data URL)
+ *  - POST   /api/legal/esign/sign/:token/reject (public) — recipient declines
+ *
+ * Security model:
+ *  - Authenticated routes require requireAuth. Origination and the envelope
+ *    reads were admin-only until task #119; they are now open to any signed-in
+ *    user, with two controls in place of the gate:
+ *      * reads are scoped by services/tenancyScope.ts, which grants an
+ *        envelope only to its originator, its subject, or a recipient, and
+ *        denies by default for anything it cannot positively identify;
+ *      * origination is capped by the fail-CLOSED `esign_send` bucket in
+ *        middleware/rateLimit.ts, because it emails an Axal-branded signing
+ *        link to an arbitrary address.
+ *  - Public sign/:token routes are gated by a 32-byte URL-safe random token
+ *    stored in `esign_recipients.signing_token` with a 7-day expiry.
+ *  - Tokens are single-use for the POST submit; GET is allowed multiple times
+ *    until expiry (so the recipient can re-open the page).
+ *  - A signing token reaches its recipient's inbox and nobody else. It is not
+ *    returned to a non-admin sender, not written into audit meta, and older
+ *    audit rows that still carry one are redacted on read (D410). A sender who
+ *    held the link could otherwise sign as a recipient who has no account.
+ *  - Every access (GET or POST) appends to the envelope's `audit_log` JSON
+ *    array AND writes to `activity_logs` for cross-system observability.
+ *  - The R2 bucket is private; signed PDFs are streamed through the worker
+ *    via gated downloads. No presigned URLs are issued.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAuth, requireStepUp, requireSuperAdmin } from '../auth';
+import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
+import { esignEnvelopeScope } from '../services/tenancyScope';
+import { sendAgreementAssignedEmail, sendAgreementAssignedEmailResult, type EmailSendResult } from '../services/email';
+import { sha256Hex, sha256HexBytes } from '../services/pdf';
+import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
+import { structureForPaper } from '../services/fundStructure';
+import { renderLegalPdf } from '../services/legalPaperRender';
+import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
+import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
+import { isRestrictedSlug, templateUseRefusal } from '../services/templateSafety';
+import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
+import { PDFDocument } from 'pdf-lib';
+import { bindingKey } from '../util/schemaBootstrap';
+import { clientIp } from '../util/clientIp';
+import { refuse } from '../util/refusal';
+import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
+
+const esign = new Hono<{ Bindings: Env }>();
+
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SIGNATURE_DATAURL_PREFIX = 'data:image/png;base64,';
+const MAX_SIGNATURE_BYTES = 256 * 1024; // 256 KB
+
+// ---------------------------------------------------------------------------
+// Schema (defensive lazy migration — same pattern as other routes).
+// ---------------------------------------------------------------------------
+const MIGRATED = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env): Promise<void> {
+  if (MIGRATED.get(bindingKey(env))) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS esign_envelopes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_uuid TEXT NOT NULL UNIQUE,
+      user_id INTEGER,
+      deal_id INTEGER,
+      document_type TEXT NOT NULL,
+      document_title TEXT NOT NULL,
+      document_body TEXT NOT NULL,
+      body_sha256 TEXT NOT NULL,
+      original_r2_key TEXT,
+      signed_r2_key TEXT,
+      status TEXT NOT NULL DEFAULT 'sent',
+      audit_log TEXT NOT NULL DEFAULT '[]',
+      created_by INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      completed_at TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_user ON esign_envelopes(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_deal ON esign_envelopes(deal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_status ON esign_envelopes(status)`,
+    `CREATE TABLE IF NOT EXISTS esign_recipients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_id INTEGER NOT NULL,
+      user_id INTEGER,
+      recipient_email TEXT NOT NULL,
+      recipient_name TEXT,
+      signing_token TEXT NOT NULL UNIQUE,
+      token_expires_at TIMESTAMP NOT NULL,
+      signed_at TIMESTAMP,
+      signer_ip TEXT,
+      signer_ua TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_rec_envelope ON esign_recipients(envelope_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_rec_email ON esign_recipients(recipient_email)`,
+    // Append-only audit table — replaces the read-modify-write JSON column as
+    // the source of truth for compliance events. The JSON column is kept for
+    // backward compatibility but no longer written to.
+    `CREATE TABLE IF NOT EXISTS esign_audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_id INTEGER NOT NULL,
+      ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      signer_id INTEGER,
+      signer_email TEXT,
+      action TEXT NOT NULL,
+      ip TEXT,
+      ua TEXT,
+      meta TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_audit_envelope ON esign_audit_events(envelope_id, ts)`,
+    // Task #2 — DocuSign provider columns. ALTER ADD COLUMN has no
+    // IF NOT EXISTS in D1; the per-statement try/catch below swallows
+    // the resulting `duplicate column name` errors on re-run.
+    `ALTER TABLE esign_envelopes ADD COLUMN provider TEXT NOT NULL DEFAULT 'native'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN docusign_envelope_id TEXT`,
+    `ALTER TABLE esign_envelopes ADD COLUMN docusign_account_id TEXT`,
+    // Last terminal-state reason from the provider (decline/void
+    // reason for DocuSign; null for in-house). Surfaced in the admin
+    // contracts UI so reviewers don't have to dig into audit events.
+    `ALTER TABLE esign_envelopes ADD COLUMN last_error TEXT`,
+    // D711 — the paper the sender chose and the template version they sent
+    // (migration 475). A fresh build carries them; this covers a database the
+    // migration has not reached yet.
+    `ALTER TABLE esign_envelopes ADD COLUMN page_size TEXT NOT NULL DEFAULT 'letter'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN cover TEXT NOT NULL DEFAULT 'dark'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN template_version INTEGER`,
+    // D717 (#1782), as migration 479: the kind and Axal party the send
+    // printed. Every later copy of the envelope reads these, never the
+    // template's; NULL renders from the slug, as before.
+    `ALTER TABLE esign_envelopes ADD COLUMN doc_kind TEXT CHECK (doc_kind IS NULL OR doc_kind IN ('agreement','corporate','resolution','unilateral','policy','notice','booklet'))`,
+    `ALTER TABLE esign_envelopes ADD COLUMN axal_party TEXT CHECK (axal_party IS NULL OR axal_party IN ('management','holdings','gp','fund','none'))`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,
+    // Partial UNIQUE — see migration 021 for rationale (account-scoped).
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_esign_account_docusign_envelope
+       ON esign_envelopes(docusign_account_id, docusign_envelope_id)
+       WHERE docusign_envelope_id IS NOT NULL`,
+    // Task #14 — forward-log table for signed-document forwarding to legal partners.
+    `CREATE TABLE IF NOT EXISTS esign_forward_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      envelope_id INTEGER NOT NULL,
+      forwarded_by INTEGER NOT NULL,
+      forwarded_to TEXT NOT NULL,
+      forwarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      include_audit_page INTEGER NOT NULL DEFAULT 1,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      email_sent INTEGER NOT NULL DEFAULT 0,
+      error_message TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_forward_envelope ON esign_forward_log(envelope_id, forwarded_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_esign_forward_to ON esign_forward_log(forwarded_to)`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); } catch {}
+  }
+  MIGRATED.set(bindingKey(env), true);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function genToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface AuditEntry {
+  ts: string;
+  signer_id: number | null;
+  signer_email: string | null;
+  action: string;
+  ip: string;
+  ua?: string;
+  meta?: Record<string, unknown>;
+}
+
+async function appendAudit(env: Env, envelopeId: number, entry: AuditEntry): Promise<void> {
+  try {
+    // Append-only insert — no RMW, no lost-update window. Source of truth
+    // for the compliance audit trail.
+    await env.DB.prepare(
+      `INSERT INTO esign_audit_events (envelope_id, ts, signer_id, signer_email, action, ip, ua, meta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      envelopeId, entry.ts, entry.signer_id, entry.signer_email,
+      entry.action, entry.ip, entry.ua || null,
+      entry.meta ? JSON.stringify(entry.meta) : null,
+    ).run();
+    // Mirror to activity_logs so admins see eSign events in the global feed.
+    try {
+      await env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+      ).bind(`esign_${entry.action}`, JSON.stringify({ envelope_id: envelopeId, ip: entry.ip, meta: entry.meta }), entry.signer_email || 'system', entry.signer_id).run();
+    } catch {}
+  } catch (e) {
+    console.error('[esign] appendAudit failed', e);
+  }
+}
+
+interface AgreementTemplate {
+  title: string;
+  body: string;
+}
+
+// ---------------------------------------------------------------------------
+// The template body a doc type sends, BEFORE any merge — one resolver for the
+// send and the preview (D411), so what a sender reads on the page is what the
+// envelope hashes.
+//
+// D758 (#1863): THE LIBRARY ROW IS THE DOCUMENT. A spelling is first resolved
+// to its row's slug (`librarySlugFor`), so `investor_nda_v1` reads the
+// `investor_nda_axal` row, never the bundled file while the row has a body.
+// Order: the editable D1 store (active, non-stub) under that slug, then the
+// bundled markdown file for that slug, which is the row's fallback. A key in
+// `BUNDLED_SENT_DIRECTLY` is still sent as its bundled file, as its sender
+// does today. Null means the document has no body anywhere, and a send of it
+// is refused (D758, #1862): there is no fallback text. A store that cannot be
+// read THROWS, so a caller never takes "unreadable" for "no body". `title` is
+// the store row's; a bundled body has none.
+// ---------------------------------------------------------------------------
+export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template'; title: string | null } | null> {
+  const { templateKeyForDocType, getLegalTemplateBody } = await import('../services/legalTemplates');
+  const { activeTemplate } = await import('../services/legalTemplateStore');
+  if (sentAsBundledFile(docType)) {
+    const key = templateKeyForDocType(docType);
+    return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+  }
+  const slug = librarySlugFor(docType);
+  const stored = await activeTemplate(env, slug);
+  if (stored) return { body: stored.body, source: 'store', title: stored.title };
+  const key = templateKeyForDocType(slug);
+  return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+}
+
+/** D758: the 3-way NDA under either spelling, the old envelope one and the row's slug. */
+export function isThreeWayNdaType(t: string | null | undefined): boolean {
+  return t === 'nda_3way_v1' || t === 'nda_3way_founder_investor_axal';
+}
+
+/**
+ * The merge keys createAndSendEnvelope fills by itself, from the recipient and
+ * the clock. Everything else in a body is the sender's to fill; the preview
+ * route lists those as fields and the send refuses while any is left (D411).
+ */
+export const AUTO_MERGE_KEYS: ReadonlySet<string> = new Set(['recipient_name', 'recipient_email', 'counterparty_name', 'effective_date']);
+export const isAutoMergeKey = (k: string) => AUTO_MERGE_KEYS.has(k) || k.startsWith('counterparty.');
+
+/**
+ * Thrown by createAndSendEnvelope({ refuseUnfilled: true }) when the merged
+ * body still carries a `{{token}}`. mergeFields leaves an unfilled token in
+ * place, and before D411 that literal went into the hashed, signed document.
+ */
+export class UnfilledFieldsError extends Error {
+  fields: string[];
+  constructor(fields: string[]) {
+    super('unfilled_fields');
+    this.fields = fields;
+  }
+}
+
+/**
+ * D416 — thrown by createAndSendEnvelope({ renderedBody }) before anything is
+ * written, when the rendered document is unusable (no title or no body) or is
+ * sent with `mergeFields`, which a finished document has no slots for. A
+ * typed error rather than a null return, because null already means "the send
+ * failed" and this is the caller's mistake, not the platform's.
+ */
+export class RenderedBodyError extends Error {
+  reason: 'missing_title' | 'missing_body' | 'merge_fields_with_rendered_body';
+  constructor(reason: RenderedBodyError['reason']) {
+    super('rendered_body_invalid');
+    this.reason = reason;
+  }
+}
+
+/**
+ * D758 — thrown by createAndSendEnvelope before anything is written, when the
+ * document has no body in the library (`no_body`) or the store could not be
+ * read (`unreadable`). There is no fallback text: every caller answers it
+ * through `templateBodyRefusal`.
+ */
+export class TemplateBodyError extends Error {
+  /** D4811 adds `restricted`: the template is in `COUNSEL_REVIEW_SLUGS` (services/templateSafety.ts). */
+  reason: 'no_body' | 'unreadable' | 'restricted';
+  slug: string;
+  constructor(reason: TemplateBodyError['reason'], slug: string) {
+    super(reason === 'no_body' ? 'template_has_no_body' : reason === 'restricted' ? 'template_restricted' : 'template_unreadable');
+    this.reason = reason;
+    this.slug = slug;
+  }
+}
+
+/**
+ * The refusal a caller answers for a TemplateBodyError, or null for any other
+ * error. The admin sentences reuse the canvas's stub copy (boards L8 and L9).
+ */
+export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
+  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable' | 'template_restricted'; message: string } | null {
+  if (!(e instanceof TemplateBodyError)) return null;
+  if (e.reason === 'restricted') {
+    const r = templateUseRefusal({ slug: e.slug, body_md: 'x' })!;
+    return { status: 409, code: 'template_restricted', message: audience === 'member'
+      ? 'This document is not ready to send: counsel has not reviewed its text yet. Nothing was sent.' : r.message };
+  }
+  if (e.reason === 'unreadable') {
+    return { status: 503, code: 'template_unreadable', message: 'The template could not be read, so nothing was sent. Try again in a moment.' };
+  }
+  const message = audience === 'member'
+    ? 'This document is not ready to send: it has no text in the library yet. Nothing was sent.'
+    : COUNSEL_DRAFT_SLUGS.has(e.slug)
+      ? `${PART_STUB} This document has no text until counsel supplies it, so nothing was sent.`
+      : `${STUB_LINE.replace(/\.$/, '')}, so nothing was sent. Add its body under Contracts › Templates.`;
+  return { status: 409, code: 'template_has_no_body', message };
+}
+
+// ---------------------------------------------------------------------------
+// Internal helper exported for use from other routes (e.g. profiling/verify).
+// Returns { envelope_id, signing_url } or null on send failure.
+// ---------------------------------------------------------------------------
+export async function createAndSendEnvelope(
+  env: Env,
+  opts: {
+    adminUserId: number;
+    adminName: string;
+    recipientUserId: number | null;
+    recipientEmail: string;
+    recipientName: string;
+    documentType: string;
+    dealId?: number | null;
+    appUrl: string;
+    /**
+     * Task #2 — Provider override. When 'docusign', the envelope is
+     * routed through the admin's connected DocuSign account instead of
+     * the in-house signing flow. Falls back to 'native' if the admin
+     * has no active DocuSign integration. Default 'native'.
+     */
+    viaProvider?: 'native' | 'docusign';
+    /**
+     * Task #5 (Z) v2 — Optional template merge fields. Tokens of the
+     * form `{{key}}` in the template body are replaced with the
+     * matching value before persistence. Applied keys are recorded in
+     * the audit log for traceability.
+     */
+    mergeFields?: Record<string, string>;
+    /**
+     * The originating request's client IP, for the `envelope_created` audit
+     * row. The admin-only callers omit it and keep the historic 'admin'
+     * marker; POST /send passes the sender's real address, because a
+     * non-admin sender recorded as `ip: 'admin'` is a false audit line.
+     */
+    actorIp?: string;
+    /**
+     * D411 — refuse, before anything is written, when the merged body still
+     * has an unfilled `{{token}}`: throws UnfilledFieldsError naming them.
+     * POST /send sets it; the operator flows keep their existing behaviour.
+     */
+    refuseUnfilled?: boolean;
+    /**
+     * D416 — AN ALREADY-RENDERED DOCUMENT, sent as it is. Per-party signing
+     * (D354) renders one agreement and sends it to each party, and every party
+     * must sign the same bytes: re-rendering per recipient from the template
+     * would merge each party's own name into `recipient_name` and give every
+     * signer a different document. With this set, the template lookup and the
+     * merge are skipped and the body is stored and hashed exactly as given, so
+     * each party's envelope carries the same `body_sha256`.
+     *
+     * Everything after the body is unchanged: the one-pending-send key, the
+     * recipients row in the same batch, the email, the audit trail. A body
+     * with a `{{token}}` still in it is refused (UnfilledFieldsError) whether
+     * or not `refuseUnfilled` is set — a finished document with a hole in it
+     * is never one the sender meant to send. `mergeFields` alongside it is
+     * refused (RenderedBodyError) rather than silently ignored.
+     */
+    renderedBody?: { title: string; body: string };
+    /** D711 — the paper every copy of this envelope prints on (decision 4). */
+    pageSize?: 'letter' | 'a4';
+    cover?: 'dark' | 'light';
+    /** D711 — the template version sent, when the sender knows it (decision 8). */
+    templateVersion?: number | null;
+    /**
+     * D717 (#1782) — the kind and Axal party this send prints, recorded on
+     * the envelope so every later copy reads them, never the template's. The
+     * contract send passes its publication's; any other caller omits it and
+     * gets the active row's (`templateFormatFor`), stored or from the slug.
+     */
+    format?: TemplateFormat;
+  }
+): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
+  await ensureSchema(env);
+  // D758: the envelope records, prints and dedupes under the library row's
+  // slug, so `mentor_disclaimer_v1` is sent as `mentor_engagement_disclaimer`.
+  // A key still sent as its bundled file keeps its own spelling.
+  const documentType = sentAsBundledFile(opts.documentType) ? opts.documentType : librarySlugFor(opts.documentType);
+  const requestedAs = documentType === opts.documentType ? {} : { requested_as: opts.documentType };
+
+  const { applyMergeFields, mergeTokensIn } = await import('../services/legalTemplates');
+  // The body comes from the library only (D758): the canonical D1 store body
+  // (active, non-stub) keyed by `document_type`, then the bundled markdown
+  // template. The lookup is `templateBodyFor`, which the preview route shares
+  // (D411). A document with neither is refused here, before the envelope, its
+  // recipient or any email is written; a store that cannot be read is refused
+  // as unreadable, never as "no body".
+  const rendered = opts.renderedBody;
+  // D4811: a restricted template is refused before anything is written, whether
+  // the body is looked up here or was rendered by the caller from that template.
+  if (isRestrictedSlug(documentType) || isRestrictedSlug(opts.documentType)) throw new TemplateBodyError('restricted', documentType);
+  if (rendered !== undefined) {
+    if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
+      throw new RenderedBodyError('missing_title');
+    }
+    if (typeof rendered.body !== 'string' || !rendered.body.trim()) throw new RenderedBodyError('missing_body');
+    if (opts.mergeFields && Object.keys(opts.mergeFields).length) {
+      throw new RenderedBodyError('merge_fields_with_rendered_body');
+    }
+  }
+  let source: Awaited<ReturnType<typeof templateBodyFor>> = null;
+  if (!rendered) {
+    try {
+      source = await templateBodyFor(env, documentType);
+    } catch (e) {
+      console.error('[esign] template store unreadable', (e as Error)?.message);
+      throw new TemplateBodyError('unreadable', documentType);
+    }
+    if (!source) throw new TemplateBodyError('no_body', documentType);
+  }
+  let tpl: AgreementTemplate;
+  const appliedMergeKeys: string[] = [];
+  if (rendered) {
+    tpl = { title: rendered.title.trim(), body: rendered.body };
+  } else {
+    const src = source!; // non-null: a missing body was refused above
+    // Y-1 markdown — `renderLegalTemplate` already does {{key}}
+    // substitution. We always seed a sane set of default merge values
+    // (recipient_name/email + effective_date) and let the caller
+    // override any of them via `mergeFields`.
+    //
+    // Task #1 (DB) — also seed `counterparty.{founder_id,partner_id}`
+    // from the recipient user row when the recipient is a known
+    // platform user. The renderer accepts dotted-path tokens like
+    // `{{counterparty.founder_id}}` so legal templates can embed the
+    // public AXF-/AXP- identifier without per-template plumbing.
+    let counterparty: { founder_id: string | null; partner_id: string | null; user_id: number | null } = {
+      founder_id: null, partner_id: null, user_id: opts.recipientUserId ?? null,
+    };
+    if (opts.recipientUserId) {
+      try {
+        // Self-heal partial / un-migrated environments BEFORE the
+        // SELECT below references founder_public_id / partner_public_id.
+        // Idempotent (sentinel-cached after first call per isolate).
+        try {
+          const { ensurePublicIdColumns } = await import('../services/publicIds');
+          await ensurePublicIdColumns(env);
+        } catch {}
+        const row = await env.DB.prepare(
+          `SELECT role, founder_id, partner_id, founder_public_id, partner_public_id
+             FROM users WHERE id = ?`,
+        ).bind(opts.recipientUserId).first<{
+          role: string | null;
+          founder_id: number | null; partner_id: number | null;
+          founder_public_id: string | null; partner_public_id: string | null;
+        }>();
+        if (row) {
+          // Task #1 (DB) — auto-assign at send-time so the merge field
+          // never expands to an empty string. Triggered when:
+          //   * the user is already a founder/partner (role or FK set)
+          //     but has no public id yet (back-compat for accounts that
+          //     pre-date migration 049 and have not been backfilled).
+          let founderPid = row.founder_public_id;
+          let partnerPid = row.partner_public_id;
+          if (!founderPid && (row.role === 'founder' || row.founder_id)) {
+            try {
+              const { assignFounderPublicId } = await import('../services/publicIds');
+              founderPid = await assignFounderPublicId(env, opts.recipientUserId);
+            } catch {}
+          }
+          if (!partnerPid && (row.role === 'partner' || row.partner_id)) {
+            try {
+              const { assignPartnerPublicId } = await import('../services/publicIds');
+              partnerPid = await assignPartnerPublicId(env, opts.recipientUserId);
+            } catch {}
+          }
+          counterparty = {
+            founder_id: founderPid || null,
+            partner_id: partnerPid || null,
+            user_id: opts.recipientUserId,
+          };
+        }
+      } catch (e) {
+        console.error('[esign] counterparty lookup failed', (e as Error).message);
+      }
+    }
+    const merge: Record<string, unknown> = {
+      recipient_name: opts.recipientName || '',
+      recipient_email: opts.recipientEmail,
+      counterparty_name: opts.recipientName || opts.recipientEmail,
+      effective_date: new Date().toISOString().slice(0, 10),
+      counterparty,
+      ...(opts.mergeFields || {}),
+    };
+    // `merge_keys_applied` is a claim about the DOCUMENT, so it is read off the
+    // document. This used to be `Object.keys(opts.mergeFields)` — every key the
+    // caller sent, recorded as applied whether or not the body had a slot for
+    // it — which put a false statement in an audit row that a signature dispute
+    // would later be read against.
+    const tokens = mergeTokensIn(src.body);
+    const body = applyMergeFields(src.body, merge);
+    tpl = { title: originatorName(documentType) ?? src.title ?? documentType, body };
+    if (opts.mergeFields) {
+      appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
+    }
+  }
+  if (opts.refuseUnfilled || rendered) {
+    const left = [...mergeTokensIn(tpl.body)];
+    if (left.length) throw new UnfilledFieldsError(left);
+  }
+  const envelopeUuid = crypto.randomUUID();
+  const bodySha = await sha256Hex(tpl.body);
+
+  // ONE PENDING ENVELOPE PER (document, sender, recipient, deal) — D410.
+  //
+  // What makes two sends "the same send" is who sent it and who it is for.
+  // This key used to be (document_type, user_id, deal_id) alone. Its comment
+  // claimed an email fallback that did not exist: a null user_id keyed to -1,
+  // and the sender was not in it at all. So every /legal/send envelope of one
+  // document type — POST /send never had a user id to pass — was ONE key
+  // platform-wide. The second sender got back the first sender's envelope id,
+  // no mail went out, and the page said "Sent". The admin bulk-send modal hit
+  // the same wall on its second recipient.
+  //
+  // The recipient is matched two ways, because two kinds of envelope exist:
+  //   * an in-house envelope has a recipients row, so the email on that row
+  //     is the recipient, whether or not they have an account;
+  //   * a DocuSign envelope has no recipients row (DocuSign emails the
+  //     signer), so it can only be matched by a KNOWN account, which the
+  //     user_id equality below already pins. A DocuSign envelope for an
+  //     address with no account is never a duplicate — a second send makes
+  //     a second envelope, which is the safe failure: nobody is handed an
+  //     envelope that is not theirs.
+  // `deal_id` stays in the key (task #8, X-1): partner onboarding sends every
+  // invitation with no user id, and the deal is what tells two of them apart.
+  //
+  // Atomic: SQLite runs INSERT…SELECT…WHERE NOT EXISTS as one statement, and
+  // the in-house path writes the recipients row in the SAME batch (one D1
+  // transaction), so the row the predicate reads exists the instant the
+  // envelope does. Two concurrent identical sends cannot both land.
+  const pageSize = opts.pageSize === 'a4' ? 'a4' : 'letter';
+  const cover = opts.cover === 'light' ? 'light' : 'dark';
+  const templateVersion = Number.isInteger(opts.templateVersion) && (opts.templateVersion as number) >= 1 ? opts.templateVersion as number : null;
+  const recipientKey = (opts.recipientUserId ?? -1);
+  const dealKey = opts.dealId ?? null;
+  const SAME_PENDING_SEND = `
+        x.document_type IN (?, ?)
+    AND x.created_by = ?
+    AND COALESCE(x.user_id, -1) = ?
+    AND COALESCE(x.deal_id, -2) = COALESCE(?, -2)
+    AND x.status IN ('sent', 'partially_signed')
+    AND (
+          EXISTS (SELECT 1 FROM esign_recipients rr
+                   WHERE rr.envelope_id = x.id AND LOWER(rr.recipient_email) = LOWER(?))
+       OR (x.user_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
+    )`;
+  const sameSendBinds = [documentType, opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, documentType);
+  const insertEnvelope = env.DB.prepare(
+    `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
+                                  page_size, cover, template_version, doc_kind, axal_party)
+     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]', ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
+     RETURNING id`
+  ).bind(
+    envelopeUuid, opts.recipientUserId, opts.dealId || null, documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    pageSize, cover, templateVersion, format.kind, format.party,
+    ...sameSendBinds,
+  );
+  // The in-house signing token is minted before the insert so its recipients
+  // row can ride in the same batch. The SELECT…WHERE envelope_uuid finds
+  // nothing when the envelope insert was a duplicate, so no orphan row lands.
+  const token = genToken();
+  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+  let insertEnv: any;
+  if (opts.viaProvider === 'docusign') {
+    insertEnv = await insertEnvelope.first();
+  } else {
+    await env.DB.batch([
+      insertEnvelope,
+      env.DB.prepare(
+        `INSERT INTO esign_recipients (envelope_id, user_id, recipient_email, recipient_name, signing_token, token_expires_at, status)
+         SELECT id, ?, ?, ?, ?, ?, 'pending' FROM esign_envelopes WHERE envelope_uuid = ?`
+      ).bind(opts.recipientUserId, opts.recipientEmail, opts.recipientName || null, token, expiresAt, envelopeUuid),
+    ]);
+    // Read back by this send's own uuid rather than trusting how a batch
+    // reports a RETURNING row: the uuid is unique and minted above, so a row
+    // under it exists exactly when THIS insert landed.
+    insertEnv = await env.DB.prepare(
+      `SELECT id FROM esign_envelopes WHERE envelope_uuid = ?`
+    ).bind(envelopeUuid).first();
+  }
+  if (!insertEnv?.id) {
+    // Already pending — return THIS sender's envelope for THIS recipient so
+    // the caller can say so without re-emailing. `already_pending` is what a
+    // caller branches on; `email_sent: false` alone read as a mail failure.
+    const existing: any = await env.DB.prepare(
+      `SELECT x.id, x.envelope_uuid FROM esign_envelopes x
+        WHERE ${SAME_PENDING_SEND}
+        ORDER BY x.id DESC LIMIT 1`
+    ).bind(...sameSendBinds).first();
+    if (existing?.id) {
+      return {
+        envelope_id: existing.id as number,
+        envelope_uuid: existing.envelope_uuid as string,
+        signing_url: '',
+        email_sent: false,
+        already_pending: true,
+      };
+    }
+    return null;
+  }
+  const envelopeId = insertEnv.id as number;
+
+  // ── Task #2 — DocuSign opt-in path ─────────────────────────────────────
+  // When the admin requests `viaProvider:'docusign'` AND has an active
+  // DocuSign integration, hand the document off to DocuSign and skip the
+  // in-house token/email path (DocuSign emails the signer). On any
+  // failure we fall back to the in-house flow so the agreement still
+  // lands in the recipient's inbox.
+  if (opts.viaProvider === 'docusign') {
+    try {
+      const { findActiveDocusignIntegrationForUser, sendDocusignEnvelope, ensureDocusignWebhookSecret } = await import('../integrations/providers/docusign');
+      const dsRow = await findActiveDocusignIntegrationForUser(env, opts.adminUserId);
+      if (!dsRow) {
+        // Explicit-provider contract — caller asked for DocuSign and
+        // we have no integration to satisfy it. We do NOT silently
+        // fall back to native; the caller decides whether to retry
+        // with provider='native' or surface a connect-DocuSign prompt.
+        throw new Error('docusign_not_connected: no active DocuSign integration for the sender.');
+      }
+      {
+        const webhookSecret = await ensureDocusignWebhookSecret(env, dsRow);
+        const ds = await sendDocusignEnvelope(env, dsRow, {
+          documentTitle: tpl.title,
+          documentBody: tpl.body,
+          documentType,
+          ...renderFormat(format),
+          templateVersion,
+          envelopeUuid,
+          pageSize,
+          cover,
+          recipientEmail: opts.recipientEmail,
+          recipientName: opts.recipientName,
+          emailSubject: `Please sign: ${tpl.title}`,
+          appUrl: opts.appUrl,
+          webhookSecret,
+          integrationUid: dsRow.uid,
+        });
+        // D711 — the provider UPDATE and the source file's registry row land
+        // together.
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ?, docusign_account_id = ? WHERE id = ?`,
+          ).bind(ds.docusign_envelope_id, dsRow.external_account_id || null, envelopeId),
+          fileRowStatement(env, {
+            uid: newFileUid(),
+            kind: 'docusign_source',
+            envelopeId,
+            templateSlug: documentType,
+            templateVersion,
+            bodySha256: bodySha,
+            fileSha256: ds.source.sha256,
+            fileBytes: ds.source.bytes,
+            contentType: 'application/pdf',
+            pageSize: ds.source.pageSize,
+            renderer: ds.source.renderer,
+            paperSha256: ds.source.paperSha256,
+            actorUserId: opts.adminUserId,
+          }),
+        ]);
+        await appendAudit(env, envelopeId, {
+          ts: new Date().toISOString(),
+          signer_id: opts.adminUserId,
+          signer_email: null,
+          action: 'envelope_created',
+          ip: opts.actorIp || 'admin',
+          meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
+        });
+        return {
+          envelope_id: envelopeId,
+          envelope_uuid: envelopeUuid,
+          signing_url: '',     // DocuSign emails the signer directly
+          email_sent: true,
+          provider: 'docusign',
+        };
+      }
+    } catch (e) {
+      // Caller explicitly asked for DocuSign — do NOT silently fall
+      // back to native. Roll back the orphan `esign_envelopes` row we
+      // pre-inserted (otherwise the next send would hit the
+      // status-IN-('sent','partially_signed') idempotency predicate
+      // and return a stale row), preserve the typed `docusign_*`
+      // prefix, and surface a route-mappable error.
+      try {
+        await env.DB.prepare(
+          `DELETE FROM esign_envelopes WHERE id = ? AND status = 'sent' AND provider = 'native'`,
+        ).bind(envelopeId).run();
+      } catch {}
+      const raw = (e as Error).message || 'unknown';
+      const cls = raw.split(':')[0]?.slice(0, 80) || 'docusign_failed';
+      console.warn('[esign] docusign send failed (explicit provider, no fallback):', cls);
+      // Preserve the original typed prefix when present
+      // (`docusign_not_connected`, `docusign_no_account`, …) so the
+      // route handler can return the right HTTP status; only wrap
+      // truly-anonymous failures.
+      if (cls.startsWith('docusign_')) throw new Error(cls);
+      throw new Error(`docusign_send_failed: ${cls}`);
+    }
+  }
+
+  // The recipients row was written in the same batch as the envelope above.
+  const signingUrl = `${opts.appUrl}/esign/${token}`;
+
+  await appendAudit(env, envelopeId, {
+    ts: new Date().toISOString(),
+    signer_id: opts.adminUserId,
+    signer_email: null,
+    action: 'envelope_created',
+    ip: opts.actorIp || 'admin',
+    // D416 — which path produced the body, because "rendered by the caller"
+    // and "rendered here from the template" are different claims about who
+    // decided the document's words.
+    meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
+  });
+
+  const emailSent = await sendAgreementAssignedEmail(
+    env, opts.recipientEmail, opts.recipientName, tpl.title, signingUrl, opts.adminName
+  );
+
+  await appendAudit(env, envelopeId, {
+    ts: new Date().toISOString(),
+    signer_id: null, signer_email: opts.recipientEmail,
+    action: emailSent ? 'email_sent' : 'email_failed',
+    ip: 'system',
+    // No signing URL here (D410). It used to be `signing_url: signingUrl`, which
+    // put a live bearer token into esign_audit_events, into activity_logs via
+    // appendAudit's mirror, and into every GET /:id response for the life of
+    // the envelope. The token is the recipient's; the audit trail records that
+    // mail went, not how to act on it.
+    meta: { merge_keys_applied: appliedMergeKeys },
+  });
+
+  return { envelope_id: envelopeId, envelope_uuid: envelopeUuid, signing_url: signingUrl, email_sent: emailSent, provider: 'native' };
+}
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
+// POST /api/legal/esign/send — admin creates an envelope and emails the recipient.
+// POST /api/legal/esign/send — originate an envelope.
+//
+// De-admined (task #119). A founder must be able to send their own SAFE or
+// advisory agreement without an operator doing it for them, which was the
+// whole point of the admin gate coming off.
+//
+// What replaces the gate, because this route emails an Axal-branded signing
+// link to an ARBITRARY address and is therefore an outbound-mail surface:
+//   * a dedicated fail-CLOSED rate-limit bucket, `esign_send` in
+//     middleware/rateLimit.ts — 10/hour/user. Previously this route fell
+//     through to the generic 60/min/user bucket, fail-OPEN, which was fine
+//     while only admins could reach it and is not fine now.
+//   * the sender's own name on the outbound mail, so a recipient sees who
+//     actually sent it rather than an anonymous "Axal" request.
+//   * the existing esign_audit_events trail, which already records the
+//     originator.
+// Reads are scoped separately, in services/tenancyScope.ts.
+esign.post('/send', async (c) => {
+  const sender = await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const documentType = String(body?.document_type || '').trim();
+  const recipientEmail = String(body?.recipient_email || '').trim().toLowerCase();
+  const recipientName = String(body?.recipient_name || '').trim();
+  const claimedRecipientUserId = body?.recipient_user_id != null && body.recipient_user_id !== ''
+    ? Number(body.recipient_user_id) : null;
+  const dealId = body?.deal_id ? Number(body.deal_id) : null;
+  // Task #5 (Z) v2 — `merge_fields` is an optional map of token →
+  // string substitutions applied to the static template body (e.g.
+  // `{{company_name}}`). Validate that it is a flat object of
+  // string|number values; reject silently-larger payloads to avoid
+  // log/audit blow-ups.
+  let mergeFields: Record<string, string> | undefined;
+  if (body?.merge_fields != null) {
+    if (typeof body.merge_fields !== 'object' || Array.isArray(body.merge_fields)) {
+      return c.json({ error: 'merge_fields must be a flat JSON object of string values' }, 400);
+    }
+    const entries = Object.entries(body.merge_fields);
+    if (entries.length > 50) return c.json({ error: 'merge_fields supports up to 50 keys' }, 400);
+    mergeFields = {};
+    for (const [k, v] of entries) {
+      if (!/^[A-Za-z0-9_\-.]{1,64}$/.test(k)) {
+        return c.json({ error: `merge_fields key "${k}" is invalid (alnum/_/-/. only, max 64 chars)` }, 400);
+      }
+      if (v == null) continue;
+      const sv = typeof v === 'number' ? String(v) : typeof v === 'string' ? v : null;
+      if (sv == null || sv.length > 1000) {
+        return c.json({ error: `merge_fields value for "${k}" must be string|number ≤ 1000 chars` }, 400);
+      }
+      mergeFields[k] = sv;
+    }
+  }
+  // Canonical request field is `provider`; `via_provider` is kept as a
+  // backwards-compat alias for any in-flight callers. Both accept
+  // 'native' | 'docusign'.
+  const providerRaw = String(body?.provider ?? body?.via_provider ?? 'native').toLowerCase();
+  const viaProvider: 'native' | 'docusign' = providerRaw === 'docusign' ? 'docusign' : 'native';
+  if (!documentType) return c.json({ error: 'document_type is required' }, 400);
+  // D711 — the paper every copy prints on.
+  const paper = readPaperChoice(body?.page_size, body?.cover);
+  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
+  // The picker is not the gate. A caller may only originate a document their
+  // role may originate — otherwise the de-admin would have turned a hidden
+  // admin wizard into an open one. Admins keep the full catalogue through
+  // /admin/contracts, which is unchanged; `mayOriginate` gives them the union
+  // of every role's list here.
+  if (!mayOriginate(sender.role, documentType, sender.licences) && sender.role !== 'admin') {
+    return c.json({ error: 'your role may not originate this document type' }, 403);
+  }
+  if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) {
+    return c.json({ error: 'valid recipient_email is required' }, 400);
+  }
+
+  // THE RECIPIENT'S ACCOUNT IS LOOKED UP BY THEIR EMAIL, NEVER TAKEN FROM THE
+  // BODY (D410). The signer-identity check in POST /sign/:token only runs when
+  // the recipients row carries a user_id, and this route used to take that id
+  // from an optional body field the page never sent. So every /legal/send
+  // envelope was bearer-only, and the sender — who was handed the signing URL —
+  // could sign as a recipient who had an account. A caller-supplied id would
+  // be worse: pointing it at yourself makes you the only person who can sign
+  // an envelope mailed to someone else. An id the body does send must agree
+  // with the address, or the send is refused.
+  let recipientUserId: number | null = null;
+  try {
+    const acct = await c.env.DB.prepare(
+      `SELECT id FROM users WHERE LOWER(email) = ? ORDER BY id LIMIT 1`
+    ).bind(recipientEmail).first<{ id: number }>();
+    recipientUserId = acct?.id ?? null;
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'recipient_lookup_failed',
+      message: 'We could not check whether the recipient has an account, so nothing was sent. Try again in a moment.',
+      raw: e,
+    });
+  }
+  if (claimedRecipientUserId !== null && claimedRecipientUserId !== recipientUserId) {
+    return refuse(c, 400, {
+      code: 'recipient_user_mismatch',
+      message: 'recipient_user_id does not belong to recipient_email. Send the email alone; the account is looked up from it.',
+    });
+  }
+
+  // Studio-tier gate. DocuSign is a Studio-only provider; non-Studio
+  // senders get a 402 with the standard upsell payload. Admins pass through
+  // BYPASS_ROLES in middleware/requireTier; there is no separate super-admin
+  // role for it to admit — the Super Admin is an elevation on `admin`
+  // (migration 199, DECISIONS D35), so a holder is an admin here too.
+  if (viaProvider === 'docusign') {
+    const { userMeetsTier, tierUpsell } = await import('../middleware/requireTier');
+    if (!userMeetsTier(sender, 'studio')) {
+      return c.json(tierUpsell('studio'), 402);
+    }
+  }
+
+  let result;
+  try {
+    result = await createAndSendEnvelope(c.env, {
+      adminUserId: sender.id,
+      adminName: sender.name || sender.email,
+      recipientUserId,
+      recipientEmail,
+      recipientName,
+      documentType,
+      dealId,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      viaProvider,
+      mergeFields,
+      actorIp: clientIp(c.req.raw),
+      refuseUnfilled: true,
+      pageSize: paper.pageSize,
+      cover: paper.cover,
+    });
+  } catch (e) {
+    // D411 — a blank field is the sender's to fill, never a literal
+    // `{{token}}` hashed into what the recipient signs. Nothing was written.
+    if (e instanceof UnfilledFieldsError) {
+      const n = e.fields.length;
+      return refuse(c, 422, {
+        code: 'unfilled_fields',
+        message: `This document still has ${n} blank field${n === 1 ? '' : 's'} (${e.fields.join(', ')}). Fill every field before sending; nothing was sent.`,
+        extra: { fields: e.fields },
+      });
+    }
+    // D758 — no body in the library, or an unreadable store: nothing was written.
+    const bodyRefusal = templateBodyRefusal(e, sender.role === 'admin' ? 'admin' : 'member');
+    if (bodyRefusal) return refuse(c, bodyRefusal.status, { code: bodyRefusal.code, message: bodyRefusal.message, raw: e });
+    // No-silent-fallback: surface explicit-DocuSign failures as 412
+    // (Precondition Failed) so the UI can prompt the admin to either
+    // connect DocuSign or retry with provider='native'.
+    const msg = (e as Error).message || '';
+    if (msg.startsWith('docusign_not_connected')) {
+      return c.json({ error: 'docusign_not_connected', message: 'No active DocuSign integration for the sender.' }, 412);
+    }
+    if (msg.startsWith('docusign_')) {
+      // All other typed DocuSign failures (provider rejection, no
+      // account access, etc.) — 502 with the typed code so the UI
+      // can render an appropriate retry/connect-help affordance.
+      return c.json({ error: msg.split(':')[0], message: 'DocuSign rejected the send request — check the integration credentials and retry.' }, 502);
+    }
+    throw e;
+  }
+  if (!result) return c.json({ error: 'Failed to create envelope' }, 500);
+  // The signing URL is the RECIPIENT'S bearer credential (D410). It goes to
+  // their inbox; a non-admin sender never sees it, because a sender holding it
+  // can sign for a recipient who has no account. Admins keep it for the
+  // operator flows that hand a link over in person.
+  if (sender.role === 'admin') return c.json(result);
+  const { signing_url: _withheld, ...forSender } = result;
+  return c.json(forSender);
+});
+
+// GET /api/legal/esign — admin lists envelopes (filter by user_id or deal_id).
+// The templates THIS caller may originate. POST /send has taken plain
+// `requireAuth` since task #156, but the only picker in the SPA was behind
+// requireAdmin, so non-admins could sign a document and not send one. This is
+// the picker for everyone else; see services/esignOriginators.ts for why the
+// list is as short as it is.
+// ---------------------------------------------------------------------------
+// D1216 (#3213, Closing part 3) — one document signed in order by several
+// parties, with Axal's countersign last (`services/stagedSigning.ts`).
+//   POST /staged/preview             the text a stage would sign; a counsel draft previews, never sends
+//   POST /staged                     record the stages and send stage 1 (the closing's founder or an admin)
+//   GET  /staged/line/:commitmentId  every staged envelope on one closing line
+//   GET  /staged/:uid                the status per signer (founder, the line's investor, admins)
+//   POST /staged/:uid/countersign    closing.countersign: a Super Admin, with a fresh step-up
+// ---------------------------------------------------------------------------
+
+async function stagedAnswer(c: any, run: () => Promise<unknown>, status = 200) {
+  const { StagedRefusal } = await import('../services/stagedSigning');
+  try {
+    return c.json(await run(), status);
+  } catch (e) {
+    if (e instanceof StagedRefusal) {
+      return refuse(c, e.status, { code: e.code, message: e.sentence, audience: 'member', extra: e.extra });
+    }
+    throw e;
+  }
+}
+
+esign.post('/staged/preview', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const { previewText } = await import('../services/stagedSigning');
+  const fields = body?.fields && typeof body.fields === 'object' ? body.fields as Record<string, string> : {};
+  return stagedAnswer(c, () => previewText(c.env, String(body?.document_type || ''), fields, { title: body?.title, body: body?.body }));
+});
+
+esign.post('/staged', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const { createStaged } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => createStaged(c.env, user as any, body, c.env.APP_URL || 'https://axal.vc'), 201);
+});
+
+esign.get('/staged/line/:commitmentId', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('commitmentId'));
+  const { readLine } = await import('../services/stagedSigning');
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 404, { code: 'staged_not_found', message: 'No envelope here.', audience: 'member' });
+  return stagedAnswer(c, () => readLine(c.env, user as any, id));
+});
+
+esign.get('/staged/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const { readStaged } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => readStaged(c.env, user as any, c.req.param('uid')));
+});
+
+// The countersign is a Super Admin's act, with a step-up minted in the last
+// few minutes; the stage is sent to that Super Admin, and its token is
+// returned to them alone.
+esign.post('/staged/:uid/countersign', async (c) => {
+  const superAdmin = await requireSuperAdmin(c);
+  await requireStepUp(c);
+  await ensureSchema(c.env);
+  const { releaseCountersign } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => releaseCountersign(c.env, superAdmin as any, c.req.param('uid'), c.env.APP_URL || 'https://axal.vc'));
+});
+
+esign.get('/templates', async (c) => {
+  const user = await requireAuth(c);
+  // `not_offered` is what the canvas draws for this role that cannot be sent
+  // from here, each with its own reason (D411) — printed, never guessed at.
+  return c.json({ role: user.role, items: templatesFor(user.role, user.licences), not_offered: notOfferedFor(user.role, user.licences), absent: SEND_ABSENCES });
+});
+
+/** `recipient_email` → "Recipient email"; `counterparty.founder_id` → "Counterparty founder id". */
+function fieldLabel(key: string): string {
+  const words = key.replace(/[._]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// GET /api/legal/esign/templates/:doc_type — the body a sender is about to
+// send, and the fields in it that are theirs to fill (D411). The preview on
+// /legal/send renders this text with the sender's values substituted, so it
+// shows the document the envelope will hash, not a mock-up of it.
+//
+// Gated exactly like POST /send: a caller reads only a template their role may
+// originate. Anything else — an unknown doc type, a real one this role may not
+// send — is the same 404, so the route is not a catalogue of every template.
+esign.get('/templates/:doc_type', async (c) => {
+  const user = await requireAuth(c);
+  const docType = c.req.param('doc_type');
+  const offered = /^[a-z0-9_]{1,80}$/.test(docType)
+    ? templatesFor(user.role, user.licences).find((t) => t.doc_type === docType)
+    : undefined;
+  if (!offered) return refuse(c, 404, { code: 'template_not_offered', message: 'That template is not one you can send.' });
+  const { mergeTokensIn } = await import('../services/legalTemplates');
+  let resolved: Awaited<ReturnType<typeof templateBodyFor>>;
+  try {
+    resolved = await templateBodyFor(c.env, docType);
+  } catch (e) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The template could not be read. Try again in a moment.', raw: e });
+  }
+  if (!resolved) {
+    // An offered type with no body in the library (D758): there is no
+    // fallback text, so a send of it would be refused too.
+    const r = templateBodyRefusal(new TemplateBodyError('no_body', docType), 'member')!;
+    return refuse(c, r.status, { code: r.code, message: r.message });
+  }
+  const tokens = [...mergeTokensIn(resolved.body)];
+  const fields = tokens.map((key) => ({
+    key,
+    label: fieldLabel(key),
+    // Who fills it: the sender on the page, or the send itself from the
+    // recipient's details and the date. Only the sender's are inputs.
+    filled_by: isAutoMergeKey(key) ? 'send' : 'sender',
+    kind: /(scope|description|deliverables|details|purpose|terms|other)$/.test(key) ? 'area' : 'text',
+  }));
+  return c.json({
+    ...offered,
+    body: resolved.body,
+    source: resolved.source,
+    fields,
+    absent: SEND_ABSENCES,
+  });
+});
+
+esign.get('/', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  // The scope goes in FIRST and unconditionally. Previously the WHERE clause
+  // was built only when a query filter was present, so an unfiltered list
+  // returned every row — correct while the route was admin-only, and a
+  // cross-tenant leak the moment it is not. An admin's scope is `1=1`, so the
+  // shape is identical for them.
+  const scope = esignEnvelopeScope(user);
+  const where: string[] = [scope.sql];
+  const args: any[] = [...scope.binds];
+  const userId = c.req.query('user_id');
+  const dealId = c.req.query('deal_id');
+  const recipientEmail = c.req.query('recipient_email')?.toLowerCase();
+  if (userId)         { where.push('e.user_id = ?');         args.push(Number(userId)); }
+  if (dealId)         { where.push('e.deal_id = ?');         args.push(Number(dealId)); }
+  if (recipientEmail) { where.push('LOWER(r.recipient_email) = ?'); args.push(recipientEmail); }
+  const sql = `SELECT e.id, e.envelope_uuid, e.user_id, e.deal_id, e.document_type, e.document_title,
+                      e.status, e.created_at, e.completed_at, e.signed_r2_key,
+                      (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id) AS recipient_count,
+                      (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed') AS signed_count
+                 FROM esign_envelopes e
+                 ${recipientEmail ? 'LEFT JOIN esign_recipients r ON r.envelope_id = e.id' : ''}
+                 WHERE ${where.join(' AND ')}
+                 GROUP BY e.id
+                 ORDER BY e.created_at DESC LIMIT 200`;
+  const r: any = await c.env.DB.prepare(sql).bind(...args).all();
+  return c.json({ envelopes: r?.results || [] });
+});
+
+// Audit rows written before D410 carry the recipient's live signing URL in
+// `meta.signing_url` (the `email_sent` row). New rows never do; these are
+// redacted on the way out, for every caller, because this route's scope now
+// includes the sender — exactly the person who must not hold the link. The
+// stored row is left as written: an audit table is append-only.
+function redactAuditMeta(meta: unknown): unknown {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return meta;
+  if (!('signing_url' in meta)) return meta;
+  const { signing_url: _redacted, ...rest } = meta as Record<string, unknown>;
+  return { ...rest, signing_url_redacted: true };
+}
+
+// GET /api/legal/esign/:id — envelope detail incl. recipients + audit log.
+esign.get('/:id{[0-9]+}', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const scope = esignEnvelopeScope(user);
+  // 404 rather than 403 for an envelope outside the caller's scope: a 403
+  // would confirm that envelope id exists, which is itself a leak on a
+  // sequential id. An admin's scope is `1=1`, so they still get a true 404.
+  const env: any = await c.env.DB.prepare(
+    `SELECT e.* FROM esign_envelopes e WHERE e.id = ? AND ${scope.sql}`
+  ).bind(id, ...scope.binds).first();
+  if (!env) return c.json({ error: 'Envelope not found' }, 404);
+  const recs: any = await c.env.DB.prepare(
+    `SELECT id, recipient_email, recipient_name, status, signed_at, signer_ip, token_expires_at FROM esign_recipients WHERE envelope_id = ? ORDER BY id`
+  ).bind(id).all();
+  // Read audit log from the append-only events table (source of truth).
+  const events: any = await c.env.DB.prepare(
+    `SELECT ts, signer_id, signer_email, action, ip, ua, meta FROM esign_audit_events WHERE envelope_id = ? ORDER BY ts ASC, id ASC LIMIT 500`
+  ).bind(id).all();
+  const auditLog = (events?.results || []).map((r: any) => ({
+    ...r,
+    meta: r.meta ? redactAuditMeta((() => { try { return JSON.parse(r.meta); } catch { return null; } })()) : null,
+  }));
+  return c.json({
+    ...env,
+    audit_log: auditLog,
+    recipients: recs?.results || [],
+    // D411 — remind and void are the SENDER's, not everyone the read scope
+    // admits; the page shows those controls only when this is true, and the
+    // two routes enforce the same rule themselves.
+    can_manage: Number(env.created_by) === Number(user.id),
+    absent: ENVELOPE_ABSENCES,
+  });
+});
+
+// GET /api/legal/esign/sign/:token/document — recipient downloads their signed
+// PDF using the same magic-link token. Allowed once envelope is at least
+// partially_signed (and this recipient has signed). Solves the "email-only
+// recipient" download gap — they don't need a logged-in user account.
+esign.get('/sign/:token/document', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.id, r.envelope_id, r.recipient_email, r.status, r.token_expires_at, r.user_id,
+            e.signed_r2_key, e.envelope_uuid
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This link has expired.' }, 410);
+  }
+  // D711 — each signer downloads their own copy; a recipient who signed
+  // before migration 475 has no row and keeps getting `signed_r2_key`.
+  const key: string | null = rec.status === 'signed'
+    ? (await newestSignedCopyKey(c.env, rec.id)) || rec.signed_r2_key
+    : null;
+  if (!key) {
+    return c.json({ error: 'Document not yet signed' }, 409);
+  }
+  if (!c.env.FILES) return c.json({ error: 'Storage not configured' }, 500);
+  if (!key.startsWith('esign/signed/')) return c.json({ error: 'Invalid document key' }, 400);
+  const obj = await c.env.FILES.get(key);
+  if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
+  await appendAudit(c.env, rec.envelope_id, {
+    ts: new Date().toISOString(),
+    signer_id: rec.user_id,
+    signer_email: rec.recipient_email,
+    action: 'document_downloaded_by_recipient',
+    ip: clientIp(c.req.raw),
+    ua: c.req.header('user-agent') || undefined,
+  });
+  const body = await materializeSignedPdf(c.env, key, obj);
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="axal-${rec.envelope_uuid}.pdf"`,
+      'Cache-Control': 'private, max-age=0, no-store',
+    },
+  });
+});
+
+// GET /api/legal/esign/:id/document — stream signed PDF from R2.
+esign.get('/:id{[0-9]+}/document', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  // THE SAME SCOPE AS THE LIST AND THE DETAIL (D410). This was "admin, or
+  // envelope.user_id", checked AFTER the row was found: the sender — whose
+  // Settings list links here — got a 403, and the 403-versus-404 split told
+  // any signed-in caller which sequential ids exist.
+  const scope = esignEnvelopeScope(user);
+  const envRow: any = await c.env.DB.prepare(
+    `SELECT e.id, e.signed_r2_key, e.user_id, e.status FROM esign_envelopes e WHERE e.id = ? AND ${scope.sql}`
+  ).bind(id, ...scope.binds).first();
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  if (!envRow.signed_r2_key || envRow.status !== 'completed') {
+    return c.json({ error: 'Document not yet signed' }, 409);
+  }
+  if (!c.env.FILES) return c.json({ error: 'R2 storage not configured' }, 500);
+  if (!envRow.signed_r2_key.startsWith('esign/signed/')) {
+    return c.json({ error: 'Invalid document key' }, 400);
+  }
+  const obj = await c.env.FILES.get(envRow.signed_r2_key);
+  if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
+  await appendAudit(c.env, id, {
+    ts: new Date().toISOString(),
+    signer_id: user.id,
+    signer_email: user.email,
+    action: 'document_downloaded',
+    ip: clientIp(c.req.raw),
+  });
+  const body = await materializeSignedPdf(c.env, envRow.signed_r2_key, obj);
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="axal-envelope-${envRow.id}.pdf"`,
+      'Cache-Control': 'private, max-age=0, no-store',
+    },
+  });
+});
+
+// Helper — DocuSign-routed envelopes are stored AES-GCM-encrypted in R2
+// at `esign/signed/<uuid>.pdf.enc`; in-house envelopes are stored
+// plaintext at `esign/signed/<uuid>.pdf`. We pick the decode path off
+// the suffix so a single download route handles both providers.
+/**
+ * D711 — an envelope's recipients in `ORDER BY id`, for the paper. The email
+ * only finds the counter-signer; the paper never prints it.
+ */
+async function envelopeRecipients(env: Env, envelopeId: number): Promise<(PaperRecipient & { id: number })[]> {
+  const rows = await env.DB.prepare(
+    `SELECT id, recipient_name, recipient_email, status, signed_at FROM esign_recipients WHERE envelope_id = ? ORDER BY id`
+  ).bind(envelopeId).all<{ id: number; recipient_name: string | null; recipient_email: string; status: string; signed_at: string | null }>();
+  return (rows.results || []).map((r) => ({
+    id: r.id, name: r.recipient_name, email: r.recipient_email, status: r.status, signedAt: r.signed_at,
+  }));
+}
+
+/** D711 — the recipient's newest signed copy, or null before migration 475. */
+async function newestSignedCopyKey(env: Env, recipientId: number): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT r2_key FROM legal_document_files WHERE recipient_id = ? AND kind = 'signed_copy' ORDER BY id DESC LIMIT 1`
+    ).bind(recipientId).first<{ r2_key: string | null }>();
+    return row?.r2_key || null;
+  } catch {
+    return null;
+  }
+}
+
+async function materializeSignedPdf(env: Env, key: string, obj: R2ObjectBody): Promise<Uint8Array | null> {
+  if (key.endsWith('.enc')) {
+    const { decryptBytes } = await import('../services/cryptoBox');
+    const ciphertext = new Uint8Array(await obj.arrayBuffer());
+    return await decryptBytes(env, ciphertext);
+  }
+  return new Uint8Array(await obj.arrayBuffer());
+}
+
+// The roles App.jsx's guard admits to /legal/send. esign_originators.test.mjs
+// holds the two equal, so a notice never links someone to a page that turns
+// them away.
+const STATUS_VIEW_ROLES: ReadonlySet<string> = new Set(['admin', 'founder', 'partner', 'investor', 'advisor']);
+
+// A voided envelope is not a declined one (D411). Void used to leave the
+// signer routes untouched: GET /sign/:token still served the document, and the
+// admin void marks recipients 'rejected', so the signer read "declined" for a
+// decision they never made. Both spellings in the tree are recognised —
+// admin_contracts writes 'void', admin_partners 'voided'.
+const isVoided = (status: unknown) => status === 'void' || status === 'voided';
+function voidedRefusal(c: any) {
+  return refuse(c, 410, {
+    code: 'envelope_voided',
+    message: 'The sender voided this agreement, so it can no longer be signed. Nothing is owed on it; ask the sender if you expected a new one.',
+  });
+}
+
+// D759 (#1858) — a Subscription Booklet envelope signs the booklet's frozen
+// copy, so its paper comes from services/bookletSigning.ts, never from
+// `document_body` (which is the frozen JSON). Imported on demand, as the
+// completion hooks are, and only for that document type.
+const BOOKLET_DOC_TYPE = 'subscription_booklet';
+/** D1120 — `services/programSchedule.ts`'s document type, repeated so the completion block needs no eager import. */
+const PROGRAM_SCHEDULE_DOC_TYPE = 'program_schedule';
+/** D959 — `services/investorCohortAccess.ts`'s cohort NDA document type, repeated for the same reason. */
+const INVESTOR_COHORT_NDA_DOC_TYPE = 'investor_cohort_nda';
+
+/** A booklet refusal as a response, or null for any other error. */
+async function bookletRefused(c: any, e: unknown): Promise<Response | null> {
+  const { BookletRefusal } = await import('../services/subscriptionBooklet');
+  return e instanceof BookletRefusal ? refuse(c, e.status, { code: e.code, message: e.publicMessage, extra: e.extra }) : null;
+}
+
+// GET /api/legal/esign/sign/:token — public, fetch envelope for signing UI.
+esign.get('/sign/:token', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.status AS envelope_status, e.body_sha256
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (isVoided(rec.envelope_status)) return voidedRefusal(c);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This signing link has expired. Please request a new one from the Axal admin who sent it.' }, 410);
+  }
+  await appendAudit(c.env, rec.envelope_id, {
+    ts: new Date().toISOString(),
+    signer_id: rec.user_id,
+    signer_email: rec.recipient_email,
+    action: 'envelope_viewed',
+    ip: clientIp(c.req.raw),
+    ua: c.req.header('user-agent') || undefined,
+  });
+  // D759 — a booklet envelope says which stage it is and its edition (v[N]).
+  let booklet: { stage: string; edition: number } | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    const { bookletSignInfo } = await import('../services/bookletSigning');
+    booklet = await bookletSignInfo(c.env, rec.envelope_uuid);
+  }
+  return c.json({
+    ...(rec.document_type === BOOKLET_DOC_TYPE ? { booklet } : {}),
+    envelope_uuid: rec.envelope_uuid,
+    document_type: rec.document_type,
+    document_title: rec.document_title,
+    document_body: rec.document_body,
+    body_sha256: rec.body_sha256,
+    recipient_email: rec.recipient_email,
+    recipient_name: rec.recipient_name,
+    status: rec.status,
+    envelope_status: rec.envelope_status,
+    expires_at: rec.token_expires_at,
+  });
+});
+
+// GET /api/legal/esign/sign/:token/paper — D711: the paper the signer signs,
+// with their name in the preamble (decision 9). Exactly the token, expiry and
+// void checks of GET /sign/:token, and no audit event: that route records the
+// view. Faces inline; never cached.
+esign.get('/sign/:token/paper', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.id, r.envelope_id, r.token_expires_at, e.envelope_uuid, e.document_type, e.document_title, e.document_body,
+            e.status AS envelope_status, e.body_sha256, e.page_size, e.cover, e.template_version, e.doc_kind, e.axal_party
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (isVoided(rec.envelope_status)) return voidedRefusal(c);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This signing link has expired. Please request a new one from the Axal admin who sent it.' }, 410);
+  }
+  const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec);
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+  const model = bookletInput
+    ? paperModel({
+        ...bookletInput,
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      })
+    : paperModel({
+        title: rec.document_title,
+        body: rec.document_body,
+        slug: rec.document_type,
+        version: rec.template_version ?? null,
+        // D717: the pair the send recorded, as the signed copy prints it.
+        ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+        structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+        bodySha256: rec.body_sha256,
+        envelopeUuid: rec.envelope_uuid,
+        state: { kind: 'issued' },
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      });
+  const html = paperHtml(model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', medium: 'screen', fonts: 'inline' });
+  return c.json({ html, body_sha256: rec.body_sha256, page_size: pageSize }, 200, { 'Cache-Control': 'no-store' });
+});
+
+// POST /api/legal/esign/sign/:token — submit signature.
+esign.post('/sign/:token', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const sigDataUrl: string = body?.signature_data_url || '';
+  const accepted: boolean = !!body?.accepted;
+  const typedName: string = String(body?.typed_name || '').trim().slice(0, 200);
+
+  if (!accepted) return c.json({ error: 'You must accept the terms to sign.' }, 400);
+  if (!sigDataUrl.startsWith(SIGNATURE_DATAURL_PREFIX)) {
+    return c.json({ error: 'Signature must be a PNG canvas drawing' }, 400);
+  }
+  const sigB64 = sigDataUrl.slice(SIGNATURE_DATAURL_PREFIX.length);
+  if (sigB64.length > MAX_SIGNATURE_BYTES * 1.4) {
+    return c.json({ error: 'Signature image too large' }, 413);
+  }
+
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256, e.user_id AS envelope_user_id,
+            e.status AS envelope_status, e.page_size, e.cover, e.template_version, e.doc_kind, e.axal_party
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (isVoided(rec.envelope_status)) return voidedRefusal(c);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This signing link has expired.' }, 410);
+  }
+  if (rec.status === 'signed') {
+    return c.json({ error: 'This document has already been signed.' }, 409);
+  }
+  if (rec.status === 'rejected') {
+    return c.json({ error: 'This signing request was previously declined.' }, 409);
+  }
+
+  // Limited-access gate: a user with access_level='limited' can browse the
+  // platform but is explicitly NOT permitted to enter into binding
+  // agreements until they complete KYC. Enforced server-side so a magic
+  // signing link in their inbox can't bypass the policy.
+  //
+  // Resolve the recipient user robustly: envelope_user_id may be NULL (the
+  // /send endpoint accepts an optional recipient_user_id). Fall back to
+  // looking up by lowercased recipient email so the gate also catches
+  // signers whose envelope wasn't linked at creation time.
+  let recipientUser: any = null;
+  if (rec.envelope_user_id) {
+    recipientUser = await c.env.DB.prepare(
+      `SELECT access_level, kyc_status FROM users WHERE id = ?`
+    ).bind(rec.envelope_user_id).first().catch(() => null);
+  }
+  if (!recipientUser && rec.recipient_email) {
+    recipientUser = await c.env.DB.prepare(
+      `SELECT access_level, kyc_status FROM users WHERE lower(email) = lower(?)`
+    ).bind(rec.recipient_email).first().catch(() => null);
+  }
+  if (recipientUser && recipientUser.access_level === 'limited' && recipientUser.kyc_status !== 'approved') {
+    return c.json({
+      error: 'Limited access — please complete KYC verification before signing legal agreements. Contact Axal compliance if you need help.',
+      code: 'kyc_required_for_signing',
+    }, 403);
+  }
+
+  // Task #3 (Y-1) — signer-identity enforcement. When the recipient
+  // row is linked to an Axal account (`esign_recipients.user_id IS NOT
+  // NULL`), the caller MUST be authenticated as that user. This blocks
+  // the attack where an investor who issued a 3-way NDA (and thus
+  // technically holds the envelope_uuid) can never sign as the founder
+  // or Axal counter-signer just by guessing/sniffing those tokens.
+  // Tokens for non-account signers (e.g. one-off external counsel
+  // emails with no user_id) keep working with anonymous bearer access.
+  if (rec.user_id) {
+    const { getCurrentUser } = await import('../auth');
+    const caller = await getCurrentUser(c);
+    if (!caller || caller.id !== rec.user_id) {
+      return c.json({
+        error: 'You must be signed in as the intended recipient to complete this signature.',
+        code: 'signer_identity_mismatch',
+      }, 403);
+    }
+  }
+
+  const ip = clientIp(c.req.raw);
+  const ua = c.req.header('user-agent') || '';
+  const signedAt = new Date().toISOString();
+  // D711 — the paper names the signer, never their email (decision 13).
+  const signerName = typedName || rec.recipient_name || '';
+
+  // D759 — a booklet envelope's paper is built BEFORE the claim, so a
+  // refusal (`booklet_text_changed`) changes nothing.
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec, { signature: { imageDataUrl: sigDataUrl, signedAt } });
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+
+  // Atomic claim: only one concurrent POST can transition pending → signing.
+  // If two requests race, exactly one sees `meta.changes === 1`; the other
+  // gets 0 and we return 409. This guarantees the PDF generation + R2
+  // upload only happens once, eliminating the last-writer-wins overwrite.
+  const claim: any = await c.env.DB.prepare(
+    `UPDATE esign_recipients SET status = 'signing', signer_ip = ?, signer_ua = ? WHERE id = ? AND status = 'pending'`
+  ).bind(ip, ua.slice(0, 512), rec.id).run();
+  if ((claim?.meta?.changes || claim?.changes || 0) < 1) {
+    return c.json({ error: 'This signing session is already in progress or completed.' }, 409);
+  }
+
+  // Render the signed PDF and upload to R2.
+  if (!c.env.FILES) {
+    // Best-effort rollback so the recipient can retry.
+    await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
+    return c.json({ error: 'Storage not configured' }, 500);
+  }
+  // D711 — each signature keeps its own copy, never overwritten (decision 7):
+  // `esign/signed/<uuid>/<file uid>.pdf`, drawn with every recipient's block,
+  // and recorded in legal_document_files in the same batch that signs.
+  let signedKey: string;
+  let fileRow: Parameters<typeof fileRowStatement>[1];
+  try {
+    const recipients = await envelopeRecipients(c.env, rec.envelope_id);
+    const idx = recipients.findIndex((r) => r.id === rec.id);
+    const signed = { signatureDataUrl: sigDataUrl, signedAt };
+    if (idx >= 0) recipients[idx] = { ...recipients[idx], name: signerName || recipients[idx].name, status: 'signed', signedAt };
+    const model = bookletInput
+      // D759 — the frozen parts, with this signer's image on their own lines.
+      ? paperModel({
+          ...bookletInput,
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          certificate: true,
+        })
+      : paperModel({
+          title: rec.document_title,
+          body: rec.document_body,
+          slug: rec.document_type,
+          version: rec.template_version ?? null,
+          // D717: the pair the send recorded; NULL columns render as before.
+          ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+          structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+          bodySha256: rec.body_sha256,
+          envelopeUuid: rec.envelope_uuid,
+          effectiveDate: signedAt.slice(0, 10),
+          state: { kind: 'issued' },
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
+          certificate: true,
+        });
+    const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
+    const rendered = await renderLegalPdf(c.env, model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', createdAt: new Date(signedAt) });
+    if (!rendered.ok) throw new Error(rendered.code);
+    const pdfBytes = rendered.bytes;
+    const fileUid = newFileUid();
+    signedKey = `esign/signed/${rec.envelope_uuid}/${fileUid}.pdf`;
+    await c.env.FILES.put(signedKey, pdfBytes, {
+      httpMetadata: { contentType: 'application/pdf' },
+      customMetadata: {
+        envelope_uuid: rec.envelope_uuid,
+        signer_email: rec.recipient_email,
+        signed_at: signedAt,
+        body_sha256: rec.body_sha256,
+      },
+    });
+    fileRow = {
+      uid: fileUid,
+      kind: 'signed_copy',
+      envelopeId: rec.envelope_id,
+      recipientId: rec.id,
+      templateSlug: rec.document_type,
+      templateVersion: rec.template_version ?? null,
+      bodySha256: rec.body_sha256,
+      fileSha256: await sha256HexBytes(pdfBytes),
+      fileBytes: pdfBytes.length,
+      contentType: 'application/pdf',
+      pageSize,
+      renderer: rendered.renderer,
+      paperSha256: await paperSha256(),
+      r2Key: signedKey,
+      actorUserId: rec.user_id ?? null,
+    };
+  } catch (e: any) {
+    console.error('[esign] PDF render/upload failed', e);
+    // Roll the claim back so the recipient can retry.
+    await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
+    return refuse(c, 500, { code: 'signed_pdf_failed', message: 'The signed PDF could not be produced. Your signature was not recorded; open the link again and sign once more.', raw: e });
+  }
+
+  // Finalize the claim → 'signed', and record the copy, together: the row is
+  // inserted only once the recipient reads `signed`.
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE id = ? AND status = 'signing'`
+      ).bind(signedAt, rec.id),
+      fileRowStatement(c.env, fileRow, { whenRecipientSigned: rec.id }),
+    ]);
+  } catch (e: any) {
+    console.error('[esign] signature finalize failed', e);
+    await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
+    return refuse(c, 500, { code: 'signed_pdf_failed', message: 'The signed PDF could not be produced. Your signature was not recorded; open the link again and sign once more.', raw: e });
+  }
+
+  const remaining: any = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM esign_recipients WHERE envelope_id = ? AND status NOT IN ('signed','rejected')`
+  ).bind(rec.envelope_id).first();
+  const allSigned = (remaining?.n || 0) === 0;
+
+  if (allSigned) {
+    // Task #1 (Slack, 2026-05-10) — gate the completion UPDATE on a
+    // not-yet-completed status so concurrent final signers don't both
+    // observe `remaining=0` and double-fire the contract_signed notify.
+    // `meta.changes` reflects the real row count touched; only the winner
+    // proceeds to dispatch the notification.
+    const upd = await c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'completed', signed_r2_key = ?, completed_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status != 'completed'`
+    ).bind(signedKey, rec.envelope_id).run();
+    const wonRace = (upd.meta?.changes ?? 0) > 0;
+    // Best-effort; never blocks the sign API.
+    if (wonRace) try {
+      const envelopeRow = await c.env.DB.prepare(
+        `SELECT user_id, created_by, document_title, envelope_uuid, document_type FROM esign_envelopes WHERE id = ?`
+      ).bind(rec.envelope_id).first<{ user_id: number | null; created_by: number | null; document_title: string | null; envelope_uuid: string; document_type: string | null }>();
+      // D759 — a booklet's applicant stage sends the General Partner's. Its own
+      // try, so it never fails the signature; the applicant stage's two
+      // notices are skipped below, since the Fund has not signed yet.
+      let bookletStage: string | null = null;
+      if (envelopeRow?.document_type === BOOKLET_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onBookletEnvelopeCompleted } = await import('../services/bookletSigning');
+          bookletStage = await onBookletEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
+        } catch (e) { console.warn('[esign] booklet_gp_stage_failed', (e as Error)?.name || 'error'); }
+      }
+      // D1216 — a staged envelope's stage records its signature and sends the
+      // next stage (never Axal's: a Super Admin releases that one). Its own
+      // try, so it never fails the signature.
+      if (envelopeRow?.envelope_uuid) {
+        try {
+          const { onStagedEnvelopeCompleted } = await import('../services/stagedSigning');
+          await onStagedEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
+        } catch (e) { console.warn('[esign] staged_next_stage_failed', (e as Error)?.name || 'error'); }
+      }
+      // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
+      // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
+      // row to `active` and stamp a 12-month `valid_until`. Without this,
+      // the maskFounderForInvestor gate would keep returning masked rows
+      // forever even though all three parties have signed.
+      if (isThreeWayNdaType(envelopeRow?.document_type) && envelopeRow?.envelope_uuid) {
+        try {
+          const { activatePairwiseNda } = await import('../services/trust');
+          await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] activatePairwiseNda failed', e); }
+      }
+      // D1120 — a program grant's schedule: the grant that names this envelope
+      // records its signature once, and comes into force if nothing else
+      // holds it. Its own try, so it never fails the signature.
+      if (envelopeRow?.document_type === PROGRAM_SCHEDULE_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onProgramScheduleEnvelopeCompleted } = await import('../services/programSchedule');
+          const signed = await onProgramScheduleEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+          if (signed?.changed) {
+            const { pushLicenceToBranch } = await import('../services/licencePush');
+            await pushLicenceToBranch(c.env, signed.licence_id);
+          }
+          // D5052: the schedule may satisfy the program's legal gate; record the gate's answer (best effort).
+          if (signed) {
+            const { syncLegalGateById } = await import('../services/agreementPolicies');
+            await syncLegalGateById(c.env, signed.licence_id, { actorId: null, reason: 'Program schedule signed.' });
+          }
+        } catch (e) { console.warn('[esign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
+      }
+      // D5049 — a package or program agreement version: the version that names this envelope is executed
+      // once, with its signed copy's hash. Its own try, so it never fails the signature.
+      if (envelopeRow?.envelope_uuid) {
+        try {
+          const { onAgreementEnvelopeCompleted } = await import('../services/programAgreements');
+          await onAgreementEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] licence_agreement_sign_failed', (e as Error)?.name || 'error'); }
+      }
+      // D959 — an investor's cohort NDA: the grant that names this envelope
+      // records its signature once. Its own try, so it never fails the signature.
+      if (envelopeRow?.document_type === INVESTOR_COHORT_NDA_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onCohortNdaEnvelopeCompleted } = await import('../services/investorCohortAccess');
+          await onCohortNdaEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] investor_cohort_nda_sign_failed', (e as Error)?.name || 'error'); }
+      }
+      // Task #8 (X-1) — Partner deal activation hook. Any envelope linked
+      // to a `partner_deals` row by `envelope_id` triggers user creation,
+      // tier grants, referral-code activation, DD case open, and Trust
+      // Center seeding. Idempotent: a second pass on the same envelope is
+      // a no-op once status='active'.
+      let partnerVoidReason: string | null = null;
+      try {
+        const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
+        const activation = await activatePartnerDealOnSignature(c.env, rec.envelope_id);
+        partnerVoidReason = activation?.void_reason || null;
+        if (activation && !activation.activated && !partnerVoidReason) {
+          // D925 refuses to reactivate a deal already voided by an admin.
+          // Its recorded reason still belongs in the completion notice.
+          const voided = await c.env.DB.prepare(
+            `SELECT void_reason FROM partner_deals WHERE id = ? AND status = 'voided'`,
+          ).bind(activation.partner_deal_id).first<{ void_reason: string | null }>();
+          if (voided) partnerVoidReason = voided.void_reason || 'not_recorded';
+        }
+      } catch {
+        // D925: the signature stands even when activation fails. The admin
+        // retry route uses this marker and the deal's own completed envelope.
+        try {
+          const { recordPartnerActivationFailure } = await import('../services/partnerDeals');
+          await recordPartnerActivationFailure(c.env, rec.envelope_id);
+        } catch { console.warn('[esign] partner activation failure could not be recorded'); }
+      }
+      // D958 — a referral partner's terms: the row that names this envelope
+      // records its signature and reads `signed`, then `active` from its
+      // start date. Its own try, so it never fails the signature.
+      try {
+        const { onReferralTermsEnvelopeCompleted } = await import('../services/referralPartnerTerms');
+        await onReferralTermsEnvelopeCompleted(c.env, rec.envelope_id);
+      } catch { console.warn('[esign] referral_terms_sign_failed'); }
+      // Record the signature against the obligation it satisfies — the three
+      // NDAs and the advisor disclaimer. Until this hook existed, all four had
+      // a signable document, a wired template and a send route, and nothing
+      // wrote the result back, so they stayed `pending` for the life of the
+      // account (`test/obligation_satisfiable.test.ts`).
+      //
+      // RUNS LAST, AFTER THE PARTNER ACTIVATOR, because that activator seeds
+      // Trust Center rows; a satisfier ahead of it could find no row to update.
+      // Never fails the signature: the user has already signed, and a
+      // bookkeeping error must not turn that into an error response.
+      try {
+        const { satisfyObligationFromEnvelope } = await import('../services/trust');
+        const done = await satisfyObligationFromEnvelope(c.env, rec.envelope_id);
+        if (done?.changed) console.log(`[esign] obligation ${done.key} satisfied by signature`);
+      } catch (e) { console.warn('[esign] satisfyObligationFromEnvelope failed', e); }
+      // D411 — each notice links to where its reader can open this envelope:
+      // the status view on /legal/send, which the read scope already admits
+      // them to, when their role can reach that route; Documents & agreements
+      // on /account otherwise. The subject's link was '/legal', which only
+      // admins and founders can open.
+      const statusView = `/legal/send?envelope=${rec.envelope_id}`;
+      if (envelopeRow?.user_id && bookletStage !== 'applicant') {
+        const { notify } = await import('../services/notify');
+        const subject: any = await c.env.DB.prepare(`SELECT role FROM users WHERE id = ?`)
+          .bind(envelopeRow.user_id).first().catch(() => null);
+        const subjectLink = STATUS_VIEW_ROLES.has(String(subject?.role ?? '')) ? statusView : '/account';
+        await notify(c.env, {
+          userId: envelopeRow.user_id,
+          type: 'contract_signed',
+          title: `Contract fully signed: ${envelopeRow.document_title || 'Agreement'}`,
+          body: subjectLink === statusView
+            ? 'All counterparties have signed. The executed PDF and the audit trail are on the envelope.'
+            : 'All counterparties have signed. The executed PDF is under Documents & agreements in your account.',
+          link: subjectLink,
+          payload: { envelope_uuid: envelopeRow.envelope_uuid },
+          channels: ['in_app', 'email', 'slack'],
+          category: 'contract_signed',
+        });
+      }
+      // THE SENDER HEARS IT TOO (D410). Until now the only completion notice
+      // went to `envelope.user_id` — the subject, who for a /legal/send
+      // envelope is the recipient — so the person who asked for the signature
+      // learned of it only by coming back to look, while the send page told
+      // them they "will be emailed when it is executed". Skipped when the
+      // sender is the subject, who was just notified above. It runs after the
+      // subject's notice, in its own try, so it can never cost them theirs.
+      if (bookletStage !== 'applicant' && envelopeRow?.created_by && envelopeRow.created_by !== envelopeRow.user_id) {
+        try {
+          const { notify } = await import('../services/notify');
+          await notify(c.env, {
+            userId: envelopeRow.created_by,
+            type: 'contract_signed',
+            title: partnerVoidReason
+              ? `Signed, deal voided: ${envelopeRow.document_title || 'Agreement'}`
+              : `Signed and executed: ${envelopeRow.document_title || 'Agreement'}`,
+            body: partnerVoidReason
+              ? `The agreement was signed, but the deal was voided. ${partnerVoidReason === 'link_lapsed' ? 'The invitation link lapsed before signing.' : partnerVoidReason === 'admin_revoked' ? 'An admin revoked the deal.' : partnerVoidReason === 'invitation_revoked' ? 'The invitation was revoked.' : 'The reason was not recorded.'} No partner benefits were activated.`
+              : 'Every signer has signed the agreement you sent. The executed PDF and the audit trail are on the envelope.',
+            link: statusView,
+            payload: { envelope_uuid: envelopeRow.envelope_uuid, envelope_id: rec.envelope_id, role: 'sender' },
+            channels: ['in_app', 'email', 'slack'],
+            category: 'contract_signed',
+          });
+        } catch (e) { console.warn('[esign] notify sender contract_signed failed', e); }
+      }
+    } catch (e) { console.warn('[esign] notify contract_signed failed', e); }
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'partially_signed', signed_r2_key = ? WHERE id = ?`
+    ).bind(signedKey, rec.envelope_id).run();
+  }
+
+  await appendAudit(c.env, rec.envelope_id, {
+    ts: signedAt,
+    signer_id: rec.user_id,
+    signer_email: rec.recipient_email,
+    action: 'envelope_signed',
+    ip,
+    ua,
+    meta: { typed_name: typedName, signed_r2_key: signedKey, all_signed: allSigned },
+  });
+
+  return c.json({
+    signed: true,
+    completed: allSigned,
+    envelope_uuid: rec.envelope_uuid,
+    signed_at: signedAt,
+  });
+});
+
+// POST /api/legal/esign/sign/:token/reject — decline to sign.
+esign.post('/sign/:token/reject', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  const body = await c.req.json().catch(() => ({}));
+  const reason: string = String(body?.reason || '').slice(0, 1000);
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.id, r.envelope_id, r.recipient_email, r.status, r.token_expires_at, r.user_id, e.status AS envelope_status
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (isVoided(rec.envelope_status)) return voidedRefusal(c);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This link has expired.' }, 410);
+  }
+  if (rec.status !== 'pending') {
+    return c.json({ error: `Cannot decline — status is ${rec.status}` }, 409);
+  }
+  await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'rejected' WHERE id = ?`).bind(rec.id).run();
+  await c.env.DB.prepare(`UPDATE esign_envelopes SET status = 'rejected' WHERE id = ?`).bind(rec.envelope_id).run();
+  await appendAudit(c.env, rec.envelope_id, {
+    ts: new Date().toISOString(),
+    signer_id: rec.user_id,
+    signer_email: rec.recipient_email,
+    action: 'envelope_rejected',
+    ip: clientIp(c.req.raw),
+    meta: { reason },
+  });
+  return c.json({ rejected: true });
+});
+
+// POST /api/legal/esign/:id/forward — anyone the envelope scope admits (its
+// sender, its subject, a recipient; an admin) forwards the signed PDF to one
+// or more legal partners by email. It mails an attachment to arbitrary
+// addresses, so it shares the fail-closed `esign_send` bucket with /send. Optionally strips the last page
+// (audit/signature page) before sending.
+esign.post('/:id{[0-9]+}/forward', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const recipients = (body?.recipients || []).filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e));
+  const includeAuditPage = body?.include_audit_page !== false;
+  const message = String(body?.message || '').slice(0, 2000);
+
+  if (!recipients.length) return c.json({ error: 'Provide at least one valid email address' }, 400);
+  if (recipients.length > 10) return c.json({ error: 'Maximum 10 recipients per forward' }, 400);
+
+  // Scoped like every other envelope read, and out of scope is a 404 (D410).
+  const scope = esignEnvelopeScope(user);
+  const envRow: any = await c.env.DB.prepare(
+    `SELECT e.id, e.envelope_uuid, e.document_title, e.signed_r2_key, e.status, e.user_id
+       FROM esign_envelopes e WHERE e.id = ? AND ${scope.sql}`
+  ).bind(id, ...scope.binds).first();
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  if (!envRow.signed_r2_key || envRow.status !== 'completed') return c.json({ error: 'Document not yet signed' }, 409);
+  if (!c.env.FILES) return c.json({ error: 'R2 storage not configured' }, 500);
+
+  // Materialize the signed PDF (decrypt if needed).
+  const obj = await c.env.FILES.get(envRow.signed_r2_key);
+  if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
+  const pdfBytes = await materializeSignedPdf(c.env, envRow.signed_r2_key, obj);
+  if (!pdfBytes || pdfBytes.length === 0) return c.json({ error: 'Failed to load PDF' }, 500);
+
+  // Optionally strip the last page (audit/signature page).
+  let attachmentBytes = pdfBytes;
+  let actuallyIncludedAudit = true;
+  if (!includeAuditPage) {
+    try {
+      const doc = await PDFDocument.load(attachmentBytes);
+      const pageCount = doc.getPageCount();
+      if (pageCount > 1) {
+        doc.removePage(pageCount - 1);
+        attachmentBytes = await doc.save();
+        actuallyIncludedAudit = false;
+      }
+    } catch (e) {
+      const msg = (e as Error).message || 'Unknown PDF error';
+      console.warn('[esign] PDF strip-last-page failed:', msg);
+      return refuse(c, 500, { code: 'audit_page_strip_failed', message: 'The document could not be prepared for forwarding. Nothing was sent; try again in a moment.', raw: msg });
+    }
+  }
+
+  const { sendSignedPdfForwardedEmail } = await import('../services/email');
+  const results: { email: string; ok: boolean; error?: string }[] = [];
+
+  for (const email of recipients) {
+    const emailSent = await sendSignedPdfForwardedEmail(
+      c.env, email, envRow.document_title || 'Signed Document',
+      user.name || user.email || 'Axal StudioOS',
+      attachmentBytes,
+      { message: message || undefined, from: 'Axal VC Legal <legal@axal.vc>' },
+    );
+    results.push({ email, ok: emailSent.ok, error: emailSent.error });
+    const status = emailSent.ok ? 'sent' : 'failed';
+    await c.env.DB.prepare(
+      `INSERT INTO esign_forward_log (envelope_id, forwarded_by, forwarded_to, include_audit_page, message, status, email_sent, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, user.id, email.toLowerCase(),
+      actuallyIncludedAudit ? 1 : 0,
+      message || null,
+      status,
+      emailSent.ok ? 1 : 0,
+      emailSent.error || null,
+    ).run();
+    await appendAudit(c.env, id, {
+      ts: new Date().toISOString(),
+      signer_id: user.id,
+      signer_email: user.email,
+      action: 'document_forwarded',
+      ip: clientIp(c.req.raw),
+      meta: { forwarded_to: email, include_audit_page: actuallyIncludedAudit, ok: emailSent.ok },
+    });
+  }
+
+  return c.json({ forwarded: true, results });
+});
+
+// GET /api/legal/esign/:id/forward — list forward log for an envelope.
+// The same scope as the envelope itself; out of scope is a 404.
+esign.get('/:id{[0-9]+}/forward', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const scope = esignEnvelopeScope(user);
+  const envRow: any = await c.env.DB.prepare(
+    `SELECT e.id FROM esign_envelopes e WHERE e.id = ? AND ${scope.sql}`
+  ).bind(id, ...scope.binds).first();
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT id, forwarded_to, forwarded_at, include_audit_page, message, status, email_sent, error_message
+       FROM esign_forward_log WHERE envelope_id = ? ORDER BY forwarded_at DESC`
+  ).bind(id).all();
+  return c.json({ forwards: rows?.results || [] });
+});
+
+// ---------------------------------------------------------------------------
+// D411 — the sender's two actions on an envelope they sent: remind and void.
+//
+// SENDER-SCOPED, NOT READ-SCOPED. esignEnvelopeScope lets a recipient and the
+// subject read an envelope too; neither may void it or send its reminders, so
+// both routes key on `created_by = caller` alone and answer 404 to everyone
+// else, the same 404 a missing id gets. An admin who did not send it is
+// refused here as well — the admin console's own void (with its fresh-TOTP
+// requirement) is untouched and remains the operator path.
+//
+// Both are metered by the fail-closed `esign_send` bucket (ESIGN_SENDER_ACTION
+// in middleware/rateLimit.ts): remind sends mail, and void is a write on a
+// legal record. Both append to the audit trail with the caller's address.
+//
+// In-house envelopes only. DocuSign holds its own signer state, so voiding or
+// reminding locally would leave DocuSign's copy live; those get a 409 naming
+// where to act.
+// ---------------------------------------------------------------------------
+const REMIND_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PENDING_ENVELOPE = ['sent', 'partially_signed'];
+
+async function senderEnvelope(c: any, id: number, userId: number) {
+  return c.env.DB.prepare(
+    `SELECT id, envelope_uuid, document_title, status, provider, created_by
+       FROM esign_envelopes WHERE id = ? AND created_by = ?`
+  ).bind(id, userId).first();
+}
+
+function notActionable(c: any, envRow: any, verb: 'voided' | 'reminded') {
+  if (envRow.provider && envRow.provider !== 'native') {
+    return refuse(c, 409, {
+      code: 'provider_managed',
+      message: `This envelope was sent through DocuSign, so it is ${verb} there rather than here.`,
+    });
+  }
+  if (!PENDING_ENVELOPE.includes(String(envRow.status))) {
+    const why = envRow.status === 'completed' ? 'it is fully executed'
+      : isVoided(envRow.status) ? 'it is already voided'
+      : envRow.status === 'rejected' ? 'the recipient declined it'
+      : `its status is ${String(envRow.status)}`;
+    return refuse(c, 409, { code: 'envelope_not_pending', message: `This envelope cannot be ${verb}: ${why}.` });
+  }
+  return null;
+}
+
+// POST /api/legal/esign/:id/void — the sender withdraws an envelope before
+// anyone has signed it. Body: { reason? } (≤ 500 chars).
+/**
+ * D4809: void an envelope on behalf of a workflow that replaces it (the cohort
+ * NDA's Send again), by its uuid. The same rule as the sender's void below:
+ * one batch, only while nobody has started to sign, recipients become 'void'.
+ * Returns whether the envelope is void afterwards (already void counts).
+ */
+export async function voidEnvelopeForResend(env: Env, envelopeUuid: string, reason: string, actorUserId: number): Promise<boolean> {
+  await ensureSchema(env);
+  const row: any = await env.DB.prepare('SELECT id, status FROM esign_envelopes WHERE envelope_uuid = ?').bind(envelopeUuid).first();
+  if (!row) return true;
+  if (row.status === 'void') return true;
+  const id = Number(row.id);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'void', last_error = ?
+        WHERE id = ? AND status IN ('sent', 'partially_signed')
+          AND NOT EXISTS (SELECT 1 FROM esign_recipients
+                           WHERE envelope_id = ? AND status IN ('signing', 'signed'))`
+    ).bind(reason, id, id),
+    env.DB.prepare(
+      `UPDATE esign_recipients SET status = 'void'
+        WHERE envelope_id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status = 'void')`
+    ).bind(id, id),
+  ]);
+  const after: any = await env.DB.prepare('SELECT status FROM esign_envelopes WHERE id = ?').bind(id).first();
+  if (after?.status !== 'void') return false;
+  await appendAudit(env, id, {
+    ts: new Date().toISOString(), signer_id: actorUserId, signer_email: null,
+    action: 'envelope_voided', ip: 'system', meta: { by: 'workflow', reason },
+  });
+  return true;
+}
+
+esign.post('/:id{[0-9]+}/void', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason ?? '').trim().slice(0, 500);
+  const envRow: any = await senderEnvelope(c, id, user.id);
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  const blocked = notActionable(c, envRow, 'voided');
+  if (blocked) return blocked;
+
+  // One transaction, and conditional on nobody having started to sign. A
+  // recipient in 'signing' is mid-way through POST /sign/:token (the PDF is
+  // being rendered); voiding under them would let that request finish and mark
+  // a voided envelope completed. The canvas's rule — "void until the first
+  // signature lands" — is this predicate. Recipients become 'void', never
+  // 'rejected': nobody declined anything.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'void', last_error = ?
+        WHERE id = ? AND created_by = ? AND status IN ('sent', 'partially_signed')
+          AND NOT EXISTS (SELECT 1 FROM esign_recipients
+                           WHERE envelope_id = ? AND status IN ('signing', 'signed'))`
+    ).bind(reason ? `voided by sender: ${reason}` : 'voided by sender', id, user.id, id),
+    c.env.DB.prepare(
+      `UPDATE esign_recipients SET status = 'void'
+        WHERE envelope_id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status = 'void')`
+    ).bind(id, id),
+  ]);
+  const after: any = await c.env.DB.prepare(`SELECT status FROM esign_envelopes WHERE id = ?`).bind(id).first();
+  if (after?.status !== 'void') {
+    return refuse(c, 409, {
+      code: 'signature_in_progress',
+      message: 'A signature has already landed or is being recorded on this envelope, so it can no longer be voided.',
+    });
+  }
+  await appendAudit(c.env, id, {
+    ts: new Date().toISOString(),
+    signer_id: user.id,
+    signer_email: user.email,
+    action: 'envelope_voided',
+    ip: clientIp(c.req.raw),
+    meta: { by: 'sender', reason: reason || null },
+  });
+  return c.json({ voided: true, envelope_id: id });
+});
+
+/** D924: called only after the invitation route's admin gate. Scope the
+ * recipient through the invitation, never through the resending admin's id.
+ * Tokens go only to the matching recipient's inbox, never the route response.
+ */
+export async function renewPartnerInvitationSigningLink(
+  env: Env,
+  invitationId: number,
+  actor: { id: number; email: string; name?: string | null },
+  expiresAt: string,
+  actorIp: string,
+): Promise<EmailSendResult | null> {
+  const envelope = await env.DB.prepare(
+    `SELECT ee.id, ee.document_title, pi.recipient_email
+       FROM partner_invitations pi JOIN esign_envelopes ee ON ee.id = pi.envelope_id
+      WHERE pi.id = ? AND pi.status NOT IN ('signed','revoked')
+        AND ee.status IN ('sent','partially_signed')`,
+  ).bind(invitationId).first<{ id: number; document_title: string; recipient_email: string }>();
+  if (!envelope) return null;
+  const recipient = await env.DB.prepare(
+    `SELECT id, recipient_email, recipient_name, signing_token, token_expires_at FROM esign_recipients
+      WHERE envelope_id = ? AND LOWER(recipient_email) = LOWER(?)
+        AND status = 'pending' ORDER BY id LIMIT 1`,
+  ).bind(envelope.id, envelope.recipient_email).first<{ id: number; recipient_email: string; recipient_name: string | null; signing_token: string; token_expires_at: string }>();
+  if (!recipient) return null;
+  const token = genToken();
+  const changed = await env.DB.prepare(
+    `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
+      WHERE id = ? AND status = 'pending'
+        AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status IN ('sent','partially_signed'))
+        AND EXISTS (SELECT 1 FROM partner_invitations WHERE id = ? AND status NOT IN ('signed','revoked'))`,
+  ).bind(token, expiresAt, recipient.id, envelope.id, invitationId).run();
+  if (!changed.meta?.changes) return null;
+  const result = await sendAgreementAssignedEmailResult(
+    env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
+    `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || 'Axal VC', 14,
+  );
+  let previousLinkRestored = false;
+  if (!result.ok) {
+    // Keep the link already in the recipient's inbox usable after a failed
+    // send. Compare the fresh token so a concurrent resend is never undone.
+    const restored = await env.DB.prepare(
+      `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
+        WHERE id = ? AND signing_token = ? AND status = 'pending'`,
+    ).bind(recipient.signing_token, recipient.token_expires_at, recipient.id, token).run();
+    previousLinkRestored = (restored.meta?.changes || 0) > 0;
+  }
+  await appendAudit(env, envelope.id, {
+    ts: new Date().toISOString(), signer_id: actor.id, signer_email: actor.email,
+    action: result.ok ? 'partner_signing_link_renewed' : 'partner_signing_link_renewal_failed', ip: actorIp,
+    meta: { to: recipient.recipient_email, link_renewed: result.ok, previous_link_restored: previousLinkRestored, invitation_id: invitationId },
+  });
+  return result;
+}
+
+// POST /api/legal/esign/:id/remind — re-send the signing email to every
+// recipient who has not signed. The link goes to their inbox, never into the
+// response (D410). A link past its expiry is replaced with a fresh one, which
+// is the only way a lapsed envelope comes back to life; an unexpired link is
+// re-sent as it is. At most one reminder per envelope a day, on top of the
+// per-user bucket, so a sender cannot use it to flood one inbox.
+esign.post('/:id{[0-9]+}/remind', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const envRow: any = await senderEnvelope(c, id, user.id);
+  if (!envRow) return c.json({ error: 'Envelope not found' }, 404);
+  const blocked = notActionable(c, envRow, 'reminded');
+  if (blocked) return blocked;
+
+  const last: any = await c.env.DB.prepare(
+    `SELECT ts FROM esign_audit_events WHERE envelope_id = ? AND action = 'reminder_sent' ORDER BY ts DESC, id DESC LIMIT 1`
+  ).bind(id).first();
+  const lastAt = last?.ts ? new Date(String(last.ts)).getTime() : NaN;
+  if (Number.isFinite(lastAt) && Date.now() - lastAt < REMIND_MIN_INTERVAL_MS) {
+    const next = new Date(lastAt + REMIND_MIN_INTERVAL_MS).toISOString();
+    return refuse(c, 429, {
+      code: 'remind_too_soon',
+      message: 'A reminder already went out for this envelope in the last 24 hours. You can send another after that.',
+      extra: { next_reminder_at: next },
+    });
+  }
+
+  const recs: any = await c.env.DB.prepare(
+    `SELECT id, recipient_email, recipient_name, signing_token, token_expires_at
+       FROM esign_recipients WHERE envelope_id = ? AND status = 'pending' ORDER BY id`
+  ).bind(id).all();
+  const pending = (recs?.results || []) as any[];
+  if (!pending.length) {
+    return refuse(c, 409, { code: 'nobody_to_remind', message: 'Nobody on this envelope is still waiting to sign.' });
+  }
+
+  const appUrl = c.env.APP_URL || 'https://axal.vc';
+  const senderName = user.name || user.email;
+  const results: { email: string; sent: boolean; link_renewed: boolean; expires_at: string }[] = [];
+  for (const r of pending) {
+    let tokenValue = String(r.signing_token);
+    let expiresAt = String(r.token_expires_at);
+    const lapsed = new Date(expiresAt).getTime() < Date.now();
+    if (lapsed) {
+      tokenValue = genToken();
+      expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+      await c.env.DB.prepare(
+        `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ? WHERE id = ? AND status = 'pending'`
+      ).bind(tokenValue, expiresAt, r.id).run();
+    }
+    const sent = await sendAgreementAssignedEmail(
+      c.env, r.recipient_email, r.recipient_name || '', envRow.document_title || 'Agreement',
+      `${appUrl}/esign/${tokenValue}`, senderName,
+    );
+    results.push({ email: r.recipient_email, sent, link_renewed: lapsed, expires_at: expiresAt });
+    await appendAudit(c.env, id, {
+      ts: new Date().toISOString(),
+      signer_id: user.id,
+      signer_email: user.email,
+      action: sent ? 'reminder_sent' : 'reminder_failed',
+      ip: clientIp(c.req.raw),
+      meta: { to: r.recipient_email, link_renewed: lapsed },
+    });
+  }
+  if (!results.some((r) => r.sent)) {
+    return refuse(c, 502, {
+      code: 'reminder_not_sent',
+      message: 'The reminder email could not be sent. Nothing changed for the recipient; try again later.',
+      extra: { results },
+    });
+  }
+  return c.json({ reminded: true, results });
+});
+
+export default esign;

@@ -1,0 +1,38 @@
+{
+  "skill": "marketing-performance-reporting",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "campaign": "Autumn notes",
+        "delivered": 200,
+        "clicks": 20,
+        "spend_usd": 50,
+        "attributed_revenue": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Autumn notes",
+      "10%",
+      "50"
+    ],
+    "must_say_not_recorded": [
+      "attributed revenue"
+    ],
+    "must_not_include": [
+      "positive ROI confirmed"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why attributed revenue is missing rather than inventing it.",
+    "Do not assert: positive ROI confirmed.",
+    "Return a proposal only; do not perform any external action.",
+    "Calculate 20/200 = 10% click rate; ROI is not measurable without attributed revenue."
+  ],
+  "predicate_witness": "Autumn notes; 10%; 50. attributed revenue: Not recorded. Human review required."
+}

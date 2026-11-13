@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="position:relative;width:100%;max-width:390px;margin:0 auto;box-sizing:border-box;height:824px;display:flex;flex-direction:column;background:#fff;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased">
+  <div style="flex:none;position:relative;height:52px;background-image:url('uploads/spin-out-lab-04622b47.png');background-size:cover;background-position:center 18%"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,38,.22),rgba(20,12,38,.55))"></div><div style="position:absolute;left:22px;right:22px;top:0;bottom:0;display:flex;align-items:center;justify-content:space-between;color:#fff"><div style="display:flex;align-items:center;gap:6px"><img src="axal-logo.png" alt="Axal VC" width="15" height="15" style="width:15px;height:15px;object-fit:contain;filter:brightness(0) invert(1)"><span style="font-size:12px;font-weight:800">Axal VC</span></div><span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-height:28px;display:inline-flex;align-items:center;font-size:11px;font-weight:700;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:99px;padding:0 10px">[Company]</span><div style="display:flex;align-items:center;gap:9px"><a href="/studio" aria-label="Studio" style="width:18px;height:18px;display:block;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ icStudio }}"></a><span style="width:18px;height:18px;display:block;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ icBell }}"></span><span style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.92);display:grid;place-items:center;font-size:10px;font-weight:800;color:#6d28d9">[AB]</span></div></div></div>
+  <div style="flex:none;padding:5px 22px 13px;border-bottom:1px solid #ececf1"><div style="display:flex;align-items:center;gap:5px;height:44px;margin:-5px -22px 0;padding:0 22px;font-size:13px;font-weight:700;color:#6d28d9"><span style="font-size:17px;line-height:1;margin-top:-2px">‹</span>Back</div><div style="font-size:19px;font-weight:800;letter-spacing:-.024em">{{ pg.title }}</div><div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ pg.sub }}</div></div>
+  <div style="flex:1;min-height:0;overflow:auto;padding:0 22px 18px">
+    <sc-for list="{{ pg.secs }}" as="s" hint-placeholder-count="3">
+      <div style="padding-top:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px"><span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:#7d7889">{{ s.title }}</span><sc-if value="{{ s.act }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;font-weight:700;color:#6d28d9">{{ s.act }}</span></sc-if></div>
+        <sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="3"><div style="padding:9px 0;border-bottom:1px solid #f0eff3;min-height:52px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:12px"><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;line-height:1.35">{{ r.t }}</div><sc-if value="{{ r.d }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#615c6e;margin-top:2px;line-height:1.4">{{ r.d }}</div></sc-if></div><sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if><sc-if value="{{ r.chev }}" hint-placeholder-val="{{ false }}"><span style="font-size:16px;color:#c9c6d2">›</span></sc-if></div>
+          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="height:7px;background:#ececf1;border-radius:99px;overflow:hidden"><div style="height:100%;width:{{ r.bar }};background:#6d28d9;border-radius:99px"></div></div></sc-if>
+        </div></sc-for>
+        <sc-if value="{{ s.cta }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:13px;font-size:14.5px;font-weight:700;color:#fff;background:#6d28d9;margin-top:12px">{{ s.cta }}</div></sc-if>
+        <sc-if value="{{ s.note }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#615c6e;line-height:1.5;margin-top:8px">{{ s.note }}</div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="flex:none;display:flex;border-top:1px solid #ececf1;padding-bottom:4px;background:#fff"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0 0;font-size:9.5px;font-weight:700;color:#9a95a6"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ t.icon }}"></span>{{ t.t }}</span></sc-for></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:370,&quot;height&quot;:824},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;account&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;account&quot;,&quot;usage&quot;,&quot;connectors&quot;,&quot;trust&quot;,&quot;perks&quot;,&quot;calendar&quot;,&quot;events&quot;,&quot;learning&quot;,&quot;help&quot;,&quot;pricing&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const page = this.props.page ?? 'account';
+    const P = (k) => 'font-size:11px;font-weight:700;border-radius:99px;padding:3px 9px;white-space:nowrap;' + ({ ok: 'color:#047857;background:#ecfdf5;border:1px solid #a7f3d0', vio: 'color:#6d28d9;background:#f6f2ff;border:1px solid #e6dcff', amb: 'color:#92400e;background:#fffbeb;border:1px solid #fcd34d', bad: 'color:#b91c1c;background:#fef2f2;border:1px solid #fecaca', grey: 'color:#6b6577;background:#f4f3f7;border:1px solid #ececf1', nr: 'color:#6b6577;background:#f4f3f7;border:1px dashed #d4d1dc' }[k] || '');
+    const V = 'font-size:13px;font-weight:700;color:#18181b;font-variant-numeric:tabular-nums;white-space:nowrap';
+    const R = (t, d, v, k, o) => Object.assign({ t, d: d || '', v: v || '', vs: k ? P(k) : V, chev: false, bar: '' }, o || {});
+    const N = (t, d) => R(t, d, '', '', { chev: true });
+    const S = (title, rows, o) => Object.assign({ title, rows, act: '', cta: '', note: '' }, o || {});
+    const PAGES = {
+      account: ['Account', 'Settings you manage for yourself.', [
+        S('Settings', [N('Profile and identity', 'Personal details, identity, company profile'), N('Notifications', 'Each type, in-app, email and push'), N('Sign-in and security', 'Password, authenticator app, SMS'), N('Billing and orders', 'Validate + Build · [$20 / month]'), N('Following', '[n] people and companies')]),
+        S('Developer', [N('API and search indexes', 'Shown when developer mode is on')]),
+      ]],
+      usage: ['Usage', 'What you have used across all your companies.', [
+        S('AI allowance', [R('Today', 'Resets at 00:00 UTC · [in 5 h 12 min]', '[$0.42] of [$1.00]', '', { bar: '42%' }), R('This month', 'Resets on the 1st at 00:00 UTC', '[$3.10] of [$5.00]', '', { bar: '62%' }), R('Held by runs in progress', 'Returned if a run does not finish in 5 minutes', '[$0.05]'), R('Top-up balance', 'Runs use your allowance first, then your top-up', '[$10.00]')], { cta: 'Add tokens' }),
+        S('Models this month', [R('Llama 3.3 70B Fast', '[n] runs · [1.2M] in · [340k] out', '[$0.88]'), R('Whisper Large v3 Turbo', '[n] min transcribed', '[$0.02]'), R('Llama Guard 3 8B', 'Safety check on every run', '[$0.01]')], { note: 'Estimated from the run log. Runs still in progress are not in these yet.' }),
+        S('Storage', [R('All your files', 'Data room, interviews, research library', '[1.2 GB] · [148]'), R('Files with no size recorded', '', 'Not recorded', 'nr')], { note: 'No plan sets a storage limit.' }),
+      ]],
+      connectors: ['Connectors', 'Bring your tools in, and send your work back to them.', [
+        S('Yours', [R('Stripe', 'Revenue and traction · [12 min ago]', 'Connected', 'ok'), R('HubSpot', 'Sign-in expired · Reconnect', 'Needs attention', 'amb'), R('Google Calendar', 'Interviews · [3 min ago]', 'Connected', 'ok'), R('GitHub', 'Prototype / MVP', 'Syncing', 'vio')], { act: '1–4 of [4]' }),
+        S('Suggested for you', [R('Calendly', 'Your interview pipeline has no booking link yet', '+', 'vio'), R('DocuSign', 'Send envelopes from Raise', 'Beta', 'grey'), R('Notion', 'Docs in Research', 'Coming soon', 'grey')], { cta: 'Browse connectors' }),
+      ]],
+      trust: ['Trust Center', 'Your obligations and verification, for your role.', [
+        S('Trust score', [R('[52] of 100', 'You have [3] open requirements', 'Partial', 'amb', { bar: '52%' })]),
+        S('Obligations', [R('Terms of Service', 'Signed [12 Mar]', 'Satisfied', 'ok'), R('Founder NDA', 'Renews in [214] days', 'Satisfied', 'ok'), R('Identity check (KYC)', 'Submitted [4 Sep]', 'In review', 'amb'), R('Legal entity (KYB)', 'Registration ID missing · Complete in Settings', 'Not started', 'grey'), R('83(b) election', 'Window closes in [16] days', 'Due soon', 'bad')]),
+      ]],
+      perks: ['Perks', 'Claim offers with credits, or by your plan.', [
+        S('Credits', [R('Balance', 'US$1 of perk value each', '[n] credits')]),
+        S('Live perks', [R('[Partner] · [$5,000 cloud credits]', 'Cloud · closes [30 Sep]', '[n] credits', 'vio'), R('[Partner] · [20% off formation legal]', 'Legal · included in your plan', 'Claim', 'ok'), R('[Partner] · [3 months free banking]', 'Banking', '[n] credits', 'vio')]),
+        S('My perks', [N('[Perk] · code [NCL-4471]', 'Expires [30 Dec]')]),
+      ]],
+      calendar: ['Calendar', 'Your sessions, office hours and events.', [
+        S('Today', [R('[14:00] · Interview with [Name]', 'Validate · Customer research', '45 min'), R('[16:30] · Office hours with [Advisor]', 'Raise', '30 min')]),
+        S('This week', [R('[Thu] · Demo Day rehearsal', 'Spin-Out Lab', 'Not recorded', 'nr'), R('[Fri] · Weekly review', 'Build · Operating systems', '[10:00]')]),
+        S('Sources', [R('Google Calendar', 'Synced [3 min ago]', 'Connected', 'ok'), R('Microsoft 365', 'Sign-in expired', 'Reconnect', 'amb')]),
+      ]],
+      events: ['Events', 'Workshops, office hours, LP briefings and Demo Day.', [
+        S('Upcoming', [R('[24 Oct] · Pricing pressure-test workshop', 'Online · [n] going', 'Going', 'ok'), R('[18 Nov] · Demo Day', 'Spin-Out Lab · [Venue]', 'Waitlist', 'amb'), R('[2 Dec] · Office hours block', 'Online', 'RSVP', 'vio')]),
+        S('Past', [R('[3 Oct] · Fundraising basics', 'Replay available', 'Replay', 'grey')]),
+      ]],
+      learning: ['Learning', 'Courses, videos, webinars and articles.', [
+        S('Continue learning', [R('[Course title]', 'Next: [Lesson title] · [12 min]', '[68%]', '', { bar: '68%' })]),
+        S('My programs', [R('[Regional program]', '[n] of [n] done', '[40%]', '', { bar: '40%' })]),
+        S('Upcoming webinars', [R('[Webinar title]', '[28 Oct] · [16:00] [TZ]', 'Register', 'vio')]),
+        S('Browse', [N('Courses'), N('Articles and publications'), N('Exercises and exams')]),
+      ]],
+      help: ['Help Center', 'Guides for what you are working on.', [
+        S('For you now', [N('Filing your 83(b) election', 'Matches an open obligation')]),
+        S('Guides', [N('Getting started', '[6] guides'), N('Raising and legal', '[9] guides'), N('Capital calls and distributions', '[5] guides')]),
+        S('Contact', [N('Open a ticket', 'Replies appear in My tickets'), N('Email support', 'From the address on your account')]),
+      ]],
+      pricing: ['Plans & Pricing', 'Pay for the cycles you are in. Each step keeps everything below it.', [
+        S('Plans', [R('Free', 'Start validating one idea · AI $0.25 a day, $1 a month', '$0'), R('Validate + Build', 'Prove the idea, then build the company · AI $1 a day, $5 a month', '$20 / month', 'vio'), R('Raise + Grow', 'Raise the money, then grow the company · AI $5 a day, $25 a month', '$100 / month')], { cta: 'Manage plan' }),
+        S('Tokens', [R('Past your allowance', '$1 of tokens buys $1 of AI use. Tokens never expire.', 'Add tokens', 'vio')]),
+      ]],
+    };
+    const d = PAGES[page] || PAGES.account;
+    const ic = (p) => ({ __html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const I = { Validate: '<path d="M20 6 9 17l-5-5"/>', Build: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>', Raise: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', Grow: '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>', More: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>' };
+    return { icStudio: ic('<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>'), icBell: ic('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'), pg: { title: d[0], sub: d[1], secs: d[2] }, tabs: Object.keys(I).map(t => ({ t, icon: ic(I[t]) })) };
+  }
+}
+</script>
+</body>
+</html>

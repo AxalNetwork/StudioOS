@@ -1,0 +1,83 @@
+# scripts/lib — the pure half of the scripts
+
+Every file here is a module with no side effects: no `spawnSync`, no network,
+and filesystem reads only where the thing being described *is* a file tree.
+The CLI that owns each one does the effects and the arguing with the operator;
+this is the part that can be unit-tested and, more importantly, the part that
+can be read to find out what a rule actually is.
+
+| File | What it decides |
+| --- | --- |
+| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. |
+| `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
+| `probeOutcome.mjs` | #4571 R2-09: the one outcome a sign-in probe run is filed under (EDGE_CHALLENGED, APPLICATION_REFUSED, REFUSED_UNATTRIBUTED, APPLICATION_FAILED, ACCEPTED_NOT_VERIFIED, VERIFIED_END_TO_END). A skipped check is never a pass. Read by `../check-magic-link-insert.mjs` and `../check-magic-link-live.mjs`. |
+| `runtimeDdl.mjs` | #4568 R2-04: the inventory of runtime `ADD COLUMN` in the Worker (file, table, column, whether the file asks the table first, whether a migration declares the column) and the no-growth ratchet over it. Owned by `../check-runtime-ddl.mjs` and `cloudflare-worker/test/runtime_ddl_4568.test.ts`. |
+| `githubAlerts.mjs` | GitHub health alerts for Slack: which transitions open or close an `[alert] ...` issue (main red, reviewer calling no model, Actions queue backed up), the failing tests in a future-clock TAP log, and the Slack text. Owned by `../github-alerts.mjs`. |
+| `migrationPlan.mjs` | The migration ledger's shape, the baseline cutoff, and what to do with each file — apply, mark, or skip. Owned by `../migrate-d1.mjs`. |
+| `migrationTargets.mjs` | Which database a migration run touches, and which database may never be bootstrapped. One `--branch <code>` target per subsidiary, each naming the config that declares it. |
+| `previewIsolation.mjs` | #4566: the preview isolation matrix and its fail-closed preflight, over `branchConfig.mjs`'s TOML parser and an owner's read-only observation. Owned by `../check-preview-isolation.mjs`. |
+| `usageTablesMatrix.mjs` | #4568: reads every SQL string naming a usage table, plans it, and builds the index, foreign-key and consumer matrix; `planDiff` compares plans with candidate indexes. Owned by `../usage-tables-matrix.mjs` and `cloudflare-worker/test/usage_indexes_4568.test.ts`. |
+| `agentSyntheticFixtures.mjs` | #4566: synthetic-only seed, cleanup and residual statements for agent execution validation, inside fixed ceilings. Owned by `../agent-validation-fixtures.mjs` and `cloudflare-worker/test/agent_execution_validation_4566.test.ts`. |
+| `branchConfig.mjs` | A branch Worker's whole `wrangler.toml`, derived from HQ's `[env.production]` table, plus what a registry entry must contain and what a rendered config must never say. Owned by `../gen-branch-wrangler.mjs` and `../check-branch-config.mjs`. |
+| `rpcSurface.mjs` | The RPC surface between HQ and a branch, read off the source (D207, D209): which methods each entrypoint class declares and takes, and which of them anything in the Worker calls across the tier boundary. Read as text, because `cloudflare-worker/src/rpc/index.ts` imports a module only the Workers runtime has. Two readers: `rpcEntrypoints.test.mjs` and `cloudflare-worker/test/topology_d209.test.ts`, which holds HQ's Topology page and a branch's S14 to the same facts. |
+| `assetGeneration.mjs` | The assets ONE build's shells reach — what the no-ledger seed keeps, so `docs/assets` stops growing (D183). |
+| `assetRetention.mjs` | Which hashed assets in `docs/` a build keeps and which it may prune, and (D529) whether the build had a restored previous build to carry the window forward or restarted it. |
+| `sourceTreeHash.mjs` | The content hash of `frontend/src` that `docs/.build-source` records, so "is this bundle built from this source" is answerable (D103). |
+| `assetsIgnore.mjs` | What `docs/.assetsignore` withholds from the Worker's asset upload, and why each file stays private: the retention ledger, the build stamp, and a stray Pages entry script — never `_headers`, which wrangler reads to set the security headers. One literal file per line, refused otherwise. Owned by `../build-frontend.mjs` (D271). |
+| `accessComments.mjs` | Which comments in the Worker may say "Cloudflare Access": a small lexer that tells a comment from a string, a template literal or a regex, and the rule that every mention must be quoted by an entry in `../access-comment-allowlist.json`. Owned by `../check-access-comments.mjs`. |
+| `authInventory.mjs` | #4570: reads every Worker route's identity gate and ownership evidence from source — the handler, the router and path-scoped app middleware that cover it, and the functions it calls or hands on by name, three levels down. Errs towards review: a gate it cannot see reads as weaker, never stronger, and the auth module's own queries (the caller's row) are never ownership evidence. Owned by `../build-auth-inventory.mjs`; tested in `authInventory.test.mjs`. |
+| `migrationImmutability.mjs` | Which changes may land under `cloudflare-worker/sql/migrations/`: an addition, and nothing that alters a file already on the base. It parses `git diff --name-status -z`, refuses a status letter it does not know, and resolves the base — a pull request's base branch, or on a push to main the commit main pointed at before it — refusing any branch name or commit id git could read as something else. Owned by `../migration-immutability-gate.mjs` (D269). |
+| `apiModules.mjs` | Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every module under `frontend/src/lib/api/` — the generated re-export index's exact text and whether the built one names exactly those modules in alphabetical order (#4105) from a deterministic generator, untracked by git (D5612), whether `api.js` re-exports it, and whether each `request()` call has a Worker route (D527). Owned by `../check-api-drift.mjs` and `../build-api-index.mjs`. |
+| `routeRegistry.mjs` | #4105: the Worker's self-mounting route modules read as text — each `mount` export parsed, `_registry.ts`'s exact text, the routes it adds for the static readers, and everything wrong with the descriptors (a `before` nobody mounts, a cycle, a router also mounted by hand) or the registry's generator (not deterministic, or its output tracked by git, D5612). Owned by `../build-route-registry.mjs`; read by `../check-api-drift.mjs` and the Worker's api_drift and route_registry tests. |
+| `generatedOutput.mjs` | D5612 (#5612): what sound means for a generated module that is not committed — two renders of the same sources (one from each listing reversed) give the same bytes, and `git ls-files` does not list the output. Read by `routeRegistry.mjs`, `apiModules.mjs` and `../build-skill-library.mjs`. |
+| `secEdgarCompanies.mjs` | What a SEC EDGAR company row carries and how a migration is written from EDGAR's company_tickers_exchange.json: one row per CIK, the first listing as its ticker, nothing EDGAR does not record, every row citing its source and licence, `INSERT OR IGNORE` in batches of 100. The header number is the leading digits of `--out` (404 created the table; 412 holds the rows). Owned by `../import-sec-edgar.mjs` (D595). |
+| `claudeReview.mjs` | The advisory Claude review's rules: its settings and their bounds, which pull requests may be reviewed (never a fork or Dependabot), the diff parse, which files are sent and in what order, the prompt with its nonce-fenced untrusted data, the output schema and the validation of every finding against the diff, the cost estimate and the per-review and monthly caps, the artifact-name ledger, and the escaped summary and annotations. Owned by `../claude-review/review.mjs`. |
+| `claudeReviewRun.mjs` | The whole review run with git, the GitHub API and the Anthropic client handed in, so a missing secret, a fork, an empty or oversized diff, a repeat, a budget refusal, an API failure, a refusal and a malformed answer are all tested with fakes. |
+| `readmeUnion.mjs` | What a `merge=union` README merge can leave behind (`.gitattributes`): a conflict marker, or the same substantial line twice within a few lines, which is union keeping both versions of a line two branches rewrote. Owned by `../check-folder-docs.mjs` (rule 4). |
+| `webhookGuard.mjs` | Whether the WhatsApp webhook refuses an unsigned POST (D754): any 2xx fails, 401 or 403 passes as guarded, 503 passes as not configured yet, and any other answer or an unreachable host is not this check's business. The probe takes `fetch` handed in, so it is tested with fakes; it never calls Meta and needs no secret. Owned by `../check-spa-live.mjs`. |
+| `connectorReadiness.mjs` | Which catalogue OAuth connectors have no client, read off `/api/health`'s `connectors_oauth` block (D751 T9): a false or null key is one WARN line and a run-summary row, a missing or malformed block fails, and strict mode (`SMOKE_CONNECTORS_STRICT=1`) fails on any WARN. Keys only: a value, or a key that is not a provider key, is never printed. Owned by `../check-spa-live.mjs`; tested in `frontend/test/spa_live_routes.test.mjs` beside the script's wiring. |
+| `railMatrixOverrides.json` | D764 (#2089): what `../build-rail-matrix.mjs` adds to the owner's canvas: each canvas model's Workers AI id and capabilities, each kind's shape, the kinds that read `axal-search`, and the page rows the canvas has no board for (`Admin · Home`). Edit it, then rerun the script. |
+| `assetRetentionTime.test.mjs` | D1364: the 72-hour window, protected floor, whole-generation cap, legacy grace and post-deploy timestamp CLI. |
+| `assetRetentionBuild.test.mjs` | D1364: real build-wrapper restore, protected output cap and total static-file limit with synthetic bundler output. |
+| `spaChunks.mjs` | Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI runs. |
+| `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
+| `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
+| `runnerBenchmark.mjs` | D5611: runner-lane timing/cost summaries, provenance and explicit paid-benchmark gates. |
+| `runnerBenchmark.test.mjs` | D5611: measurement fixtures, unavailable evidence and lane-gate regressions. |
+| `landingThroughput.mjs` | D5623: native/batch capacity arithmetic, binary-bisection cost and strict 14-day decision trigger; `landingThroughput.test.mjs` checks arithmetic, evidence and table parity. |
+| `workerStartup.test.mjs` | D5532: startup budget, profile accounting and Wrangler bundle identity fixtures. |
+| `productionAdmission.test.mjs` | D5501: trust, failure and supersession fixtures and mutation ordering in the release workflows. |
+| `selectTests.mjs` | D5610: conservative affected-test selection, honest shadow scoring and aggregate reporting; tests in `selectTests.test.mjs`. |
+| `fixtures/` | Evidence-backed replay inputs; no invented historical results. |
+| `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
+| `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
+| `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
+| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
+
+## Tests
+
+`npm run test:retention` runs every `*.test.mjs` in this folder. Fourteen of the
+fifteen modules are covered here; `migrationPlan.mjs` is the exception, and
+deliberately so — its behaviour is pinned against a real SQLite database by
+`cloudflare-worker/test/migrate_d1_plan.test.ts` and
+`cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual
+migrations rather than a model of them.
+
+`rpcEntrypoints.test.mjs` is where `rpcSurface.mjs` is exercised. It holds
+`branchConfig.mjs`'s two entrypoint names against the RPC classes in
+`cloudflare-worker/src/rpc/index.ts` and against every call that crosses the
+tier boundary, derived from the source rather than pinned (D207), with a
+floor of known call sites so a harvest that stops matching fails rather than
+passing over nothing.
+
+## The rule for adding to it
+
+A module belongs here when a CLI's *decision* is worth testing separately from
+its *effects* — which is most of them, and all the dangerous ones. If it needs
+to spawn something or talk to Cloudflare, that part stays in the script above.
+
+| `scanScope.mjs` | D5602: PR scan policy, opaque finding snapshots, outstanding-new state and redacted shared incident format. |
+| `notificationRouting.mjs` | D5666: observational ownership and routing from claims, live rules and existing CI digest. |
+
+| `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
+| `futureClockEvidence.mjs` | D5663: complete TAP and producer provenance before health recovery. |

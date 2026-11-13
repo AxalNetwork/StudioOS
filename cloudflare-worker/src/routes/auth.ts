@@ -1,0 +1,1600 @@
+import { Hono } from 'hono';
+import { TOTP, Secret } from 'otpauth';
+import * as QRCode from 'qrcode';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
+import { branchOf } from '../util/branch';
+import { sendVerificationEmail } from '../services/email';
+import { send as sendEmail } from '../services/email/send';
+import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
+import { verifyTurnstile } from '../services/turnstile';
+import { persistNewTotpEnrolment, loadTotp, updateRecoveryHashes, markTotpUsed, hasTotpConfigured, clearTotp } from '../services/authTotp';
+import { setUserFactor } from '../services/authSms';
+import { recordSecurityEvent, ipPrefix } from '../services/securityEvents';
+import smsRoutes from './auth_sms';
+
+const auth = new Hono<{ Bindings: Env }>();
+
+// T5 — Recovery codes are persisted as SHA-256 hex hashes in
+// `users.totp_recovery_codes` (JSON array of strings; column added in
+// epic3_settings.sql). Format is XXXX-XXXX-XXXX from a 32-char ambiguity-free
+// alphabet (settings.ts:generateRecoveryCode). We intentionally re-use this
+// existing column rather than introduce a separate `totp_backup_codes` table:
+// the feature already ships against it (regenerate endpoint + Settings UI),
+// and a single-row UPDATE gives us atomic single-use semantics for free.
+const RECOVERY_CODE_COUNT = 10;
+const RECOVERY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateRecoveryCode(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  const chars: string[] = [];
+  for (let i = 0; i < 12; i++) chars.push(RECOVERY_ALPHABET[bytes[i] % RECOVERY_ALPHABET.length]);
+  return `${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars.slice(8, 12).join('')}`;
+}
+
+async function mintRecoveryCodes(): Promise<{ plain: string[]; hashes: string[] }> {
+  const plain: string[] = [];
+  const hashes: string[] = [];
+  for (let i = 0; i < RECOVERY_CODE_COUNT; i++) {
+    const c = generateRecoveryCode();
+    plain.push(c);
+    hashes.push(await hashToken(c));
+  }
+  return { plain, hashes };
+}
+
+/**
+ * T5 — try to consume a recovery code. Normalises the input (uppercase, strip
+ * spaces, accept 12 raw chars OR XXXX-XXXX-XXXX), hashes it, and atomically
+ * removes the matching hash from the user's recovery-code array. Returns true
+ * if a code was consumed (caller should treat the login as successful and emit
+ * an audit log). Returns false on any mismatch / parse failure / missing column.
+ *
+ * Uses a re-read + targeted UPDATE rather than a single CAS to keep the SQL
+ * portable — under concurrent attempts the worst case is one extra failed
+ * verify (the second writer's UPDATE is a no-op against the smaller array).
+ */
+async function tryConsumeRecoveryCode(env: Env, userId: number, raw: string): Promise<boolean> {
+  const normalized = raw.replace(/[\s-]/g, '').toUpperCase();
+  if (normalized.length !== 12) return false;
+  const formatted = `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}-${normalized.slice(8, 12)}`;
+  let candidateHash: string;
+  try {
+    candidateHash = await hashToken(formatted);
+  } catch {
+    return false;
+  }
+  const sql = getSQL(env);
+  try {
+    const rows = await sql`SELECT totp_recovery_codes FROM users WHERE id = ${userId}`;
+    if (!rows.length) return false;
+    let stored: string[] = [];
+    try {
+      const json = rows[0].totp_recovery_codes;
+      stored = json ? JSON.parse(json) : [];
+      if (!Array.isArray(stored)) stored = [];
+    } catch {
+      return false;
+    }
+    const idx = stored.indexOf(candidateHash);
+    if (idx === -1) return false;
+    stored.splice(idx, 1);
+    // Task #33 — keep the new auth_totp.recovery_hashes column in lockstep
+    // with the legacy users.totp_recovery_codes column. updateRecoveryHashes
+    // batches both writes; if auth_totp has no row yet (legacy user),
+    // mirror the legacy update only.
+    try {
+      await updateRecoveryHashes(env, userId, stored);
+    } catch {
+      await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(stored)} WHERE id = ${userId}`;
+    }
+    return true;
+  } catch (e) {
+    console.error('[AUTH:recovery-code] consume failed:', e);
+    return false;
+  } finally {
+    try { await sql.end(); } catch {}
+  }
+}
+
+/**
+ * Defensive wrapper for auth handlers. Catches any unhandled exception and
+ * returns a friendly, route-scoped error message instead of the global
+ * "Internal server error" 500. Critical for the auth funnel — silent 500s
+ * here cost real signups and lock users out of their accounts.
+ *
+ * Logs the actual cause to Cloudflare logs with the route label so we can
+ * triage post-hoc without leaking internals to the client.
+ */
+// Known underlying errors that are safe to surface as a short, stable
+// `code` on the 500 response. Lets the operator diagnose misconfiguration
+// from the screenshot alone instead of having to dig through Cloudflare
+// logs. Patterns must match throw messages used inside the auth routes
+// and their direct services (columnCipher, authTotp).
+const SAFE_ERROR_CODES: Array<{ re: RegExp; code: string; hint: string }> = [
+  { re: /KEK_PII is required in production/i, code: 'kek_pii_missing',
+    hint: 'Server is missing the column-encryption key (KEK_PII). Ask the operator to provision it.' },
+  { re: /KEK_PII must be at least 32 bytes/i, code: 'kek_pii_too_short',
+    hint: 'Server column-encryption key is too short (<32 bytes). Ask the operator to rotate it.' },
+  { re: /Neither KEK_PII nor JWT_SECRET is set/i, code: 'encryption_keys_missing',
+    hint: 'Server encryption keys are not configured. Ask the operator to provision KEK_PII.' },
+];
+
+function safe(label: string, friendlyError: string, handler: (c: any) => Promise<any>) {
+  return async (c: any) => {
+    try {
+      return await handler(c);
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      // #4570: a refusal from a gate (`requireAuth`'s 'Unauthorized', a step-up, a frozen admin) is not an
+      // unhandled error. Re-thrown, app.onError answers it with its own status (401, 403, 423) and body.
+      if (AUTH_ERROR_STATUSES[msg]) throw e;
+      console.error('[AUTH] unhandled error', label, msg, e?.stack || '');
+      const hit = SAFE_ERROR_CODES.find(s => s.re.test(msg));
+      if (hit) {
+        return c.json({ error: hit.hint, code: hit.code }, 500);
+      }
+      return c.json({ error: friendlyError }, 500);
+    }
+  };
+}
+
+async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
+  try {
+    const body = await c.req.json();
+    return { ok: true, body: body || {}, res: null };
+  } catch (e: any) {
+    console.error('[AUTH] invalid JSON body:', e?.message || e);
+    return { ok: false, body: null, res: c.json({ error: 'Malformed request body' }, 400) };
+  }
+}
+
+// T22.1 — hashEmail moved to ../util/hashEmail so admin.ts and other
+// routes can reuse it without re-declaring the digest logic. Re-imported
+// here so existing call sites (register/verify/login/referral) keep
+// working unchanged.
+import { hashEmail } from '../util/hashEmail';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+// Task #9 follow-up — every fresh signup now lands directly in the
+// 'exploring' holding state instead of the lane role (founder/partner/
+// investor) it used to get. ensureExploringSchema guarantees the
+// users.role CHECK admits 'exploring' before the INSERT; upsertSuggestedRole
+// records the marketing lane the visitor picked so the admin review queue
+// (routes/admin_exploring.ts) shows a suggestion immediately, before the
+// onboarding chatbot even runs.
+import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
+import { withDeadline } from '../util/deadline';
+
+/**
+ * The three answers a throttle can give. `deny` is the person's own doing —
+ * they really have asked too often. `unavailable` is ours: the limiter could
+ * not be consulted, so we refuse without knowing. Collapsing the two into one
+ * boolean is what made a KV outage reach the browser as "Too many requests.
+ * Please wait a minute" — advice that would never come true, sending the user
+ * away to wait on a queue that was not the problem.
+ */
+type RateVerdict = 'allow' | 'deny' | 'unavailable';
+
+// A KV round trip that has not answered in this long counts as an outage.
+// Nothing in the handler below can run until it returns, so the choice is not
+// between a fast answer and a slow one — it is between an answer and none.
+const RATE_KV_DEADLINE_MS = 2_000;
+
+async function checkRateLimit(env: Env, key: string, max: number, windowSec: number): Promise<RateVerdict> {
+  // Fail-CLOSED on any KV error (audit M1). These limiters guard sensitive
+  // auth / registration / magic-link / step-up endpoints, so a KV outage must
+  // DENY rather than silently disable throttling — fail-open would re-open
+  // credential-stuffing / OTP brute-force during the very window it's needed.
+  // Log only the bucket prefix (the key tail carries the email → PII, L5).
+  //
+  // A STALL IS AN OUTAGE. Both KV calls carry a deadline because KV takes no
+  // AbortSignal: without one, a namespace that answers neither leaves this
+  // `await` pending for the life of the request and the fail-closed branch
+  // below — correct, and tested — never runs. That is how sign-in came to
+  // return the browser's own "The server did not respond within 30s" on
+  // 2026-09-12 with nothing logged: not a missing error path, an unreachable
+  // one. The verdict is `unavailable` rather than `deny` so the caller can say
+  // which of the two happened instead of blaming the person for our outage.
+  let attempts: number[] = [];
+  try {
+    const data = await withDeadline(env.RATE_LIMITS.get(key), RATE_KV_DEADLINE_MS, `ratelimit-get:${key.split(':')[0]}`);
+    const now = Date.now();
+    attempts = data ? JSON.parse(data) : [];
+    attempts = attempts.filter(t => now - t < windowSec * 1000);
+    if (attempts.length >= max) return 'deny';
+    attempts.push(now);
+    await withDeadline(
+      env.RATE_LIMITS.put(key, JSON.stringify(attempts), { expirationTtl: windowSec }),
+      RATE_KV_DEADLINE_MS,
+      `ratelimit-put:${key.split(':')[0]}`,
+    );
+  } catch (e) {
+    console.error('checkRateLimit KV error (failing closed) bucket=%s', key.split(':')[0], e);
+    return 'unavailable';
+  }
+  return 'allow';
+}
+
+// What a non-`allow` verdict looks like to the caller. `null` means carry on.
+// The 503 says the limiter is the thing that failed, and carries a code so the
+// cause is legible from a screenshot alone — the same reason SAFE_ERROR_CODES
+// exists above.
+const LIMITER_DOWN_COPY = 'We could not check the request limit for this endpoint, so the request was refused. This is a problem on our side, not yours — please try again in a moment.';
+
+function rateGate(c: any, verdict: RateVerdict, denyCopy: string): any | null {
+  if (verdict === 'allow') return null;
+  if (verdict === 'deny') return c.json({ error: denyCopy }, 429);
+  return c.json({ error: LIMITER_DOWN_COPY, code: 'rate_limiter_unavailable' }, 503);
+}
+
+async function sendVerification(env: Env, email: string, name: string, userId: number): Promise<{ sent: boolean; verificationUrl: string; tokenStored: boolean }> {
+  const rawToken = generateToken();
+  const tokenHash = await hashToken(rawToken);
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const verificationUrl = `${env.PUBLIC_BASE_URL || env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
+
+  let tokenStored = false;
+  try {
+    const sql = getSQL(env);
+    await sql`UPDATE users SET verification_token = ${tokenHash}, verification_token_expires = ${expires} WHERE id = ${userId}`;
+    await sql.end();
+    tokenStored = true;
+  } catch (e: any) {
+    console.error(`[AUTH] Failed to persist verification token for ${email}: ${e?.message || 'Unknown error'}`);
+    return { sent: false, verificationUrl, tokenStored: false };
+  }
+
+  // Task #2 (IB) — route through the unified send() pipeline first. It
+  // renders the `auth_verify_email` template, mirrors into
+  // notifications_inbox, and enqueues an `email_send` job (with
+  // automatic DLQ on permanent failure). The legacy
+  // sendVerificationEmail() stays as a fallback ONLY if the unified
+  // pipeline throws before enqueueing — the queue itself handles its
+  // own retries so we don't double-send on transient SMTP errors.
+  try {
+    const { send } = await import('../services/email/send');
+    // `immediate: true` — verification emails are user-interactive
+    // (the visitor is sitting on a loading button waiting for the
+    // link), so we deliver synchronously instead of enqueueing.
+    // Without this, send() returned ok:true the moment the job hit
+    // JOB_QUEUE, and the API replied `email_sent: true` even when
+    // Gmail later failed inside the queue consumer (expired refresh
+    // token, mailbox bounce, queue not draining), so the user saw
+    // "Email sent" and never received anything. Synchronous delivery
+    // also gives us a truthful `delivered` flag we can surface to the
+    // user as `email_sent: false` so RegisterPage's emailWarning kicks
+    // in and shows the dev fallback verification_url.
+    const r = await send(
+      env,
+      'auth_verify_email',
+      email,
+      { name, verify_url: verificationUrl, app_url: env.APP_URL },
+      { userId, immediate: true },
+    );
+    if (r.ok && r.delivered !== false) return { sent: true, verificationUrl, tokenStored };
+    console.warn(`[AUTH] unified send() returned not-ok/undelivered for ${email} (reason=${r.reason || 'unknown'}); falling back to legacy sender`);
+  } catch (e: any) {
+    console.error(`[AUTH] unified send() threw for ${email}: ${e?.message || 'Unknown error'} — falling back`);
+  }
+  try {
+    const sent = await sendVerificationEmail(env, email, name, verificationUrl);
+    if (!sent) {
+      console.warn(`[AUTH] Email delivery failed for ${email}. Check GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN secrets.`);
+    }
+    return { sent, verificationUrl, tokenStored };
+  } catch (e: any) {
+    console.error(`[AUTH] Email service error for ${email}: ${e?.message || 'Unknown error'}`);
+    return { sent: false, verificationUrl, tokenStored };
+  }
+}
+
+auth.post('/register', safe('register', 'Registration failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, name, role, turnstileToken, ref_code, defer_email, product } = parsed.body;
+  if (!email || !name) return c.json({ error: 'Email and name required' }, 400);
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRe.test(String(email).trim())) return c.json({ error: 'Please enter a valid email address' }, 400);
+  if (role && !['founder', 'partner', 'investor'].includes(role)) return c.json({ error: 'Invalid role' }, 400);
+
+  const clientIp = c.req.header('cf-connecting-ip') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
+  if (!turnstileOk) {
+    // Audit-log the failed attempt so we can spot abuse patterns. We store
+    // a SHA-256 hash of the email + a /24-truncated IP rather than raw PII —
+    // the failed submitter never authenticated and we have no consent /
+    // legitimate-interest basis to retain their plain email indefinitely.
+    try {
+      const emailHash = await hashEmail(email);
+      // /24 for IPv4, /48 for IPv6 — coarse enough for abuse clustering, fine
+      // enough to drop unique-host info.
+      const ipBucket = ipPrefix(clientIp);
+      const sql = getSQL(c.env);
+      await sql`INSERT INTO activity_logs (action, details, actor)
+                VALUES ('turnstile_failed',
+                        ${`register attempt blocked: email_hash=${emailHash} ip_bucket=${ipBucket} ref=${ref_code ?? 'none'}`},
+                        ${ipBucket})`;
+      await sql.end();
+    } catch (e) {
+      console.error('[AUTH] failed to log turnstile failure', e);
+    }
+    return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  }
+
+  const sql = getSQL(c.env);
+  const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+
+  if (existing.length > 0) {
+    const user = existing[0];
+    // D306 — AN UNAUTHENTICATED REQUEST MAY ONLY OVERWRITE AN ACCOUNT WHOSE
+    // EMAIL HAS NEVER BEEN PROVEN. This route carries Turnstile and no
+    // session, so it cannot tell an account's owner from anyone else who
+    // knows the address. Once `email_verified` is set the address has been
+    // proven — by a verification or magic link, by Google, or by an
+    // invitation sent to it — so the account is refused here whatever factor
+    // it signs in with, and its owner is told to sign in. An unverified row
+    // is one nobody has proven; retrying the signup over it takes the path
+    // below exactly as before.
+    //
+    // TOTP IS NOT THE TEST, though it was: this read `email_verified &&
+    // hasTotpConfigured(...)`, from when an authenticator was mandatory and a
+    // verified row without one was a signup abandoned between its two steps.
+    // Task #11 made TOTP optional, and magic-link and Google members never
+    // enrol one — so the old test let anyone with such a member's address
+    // rename them and reset their role to 'exploring', and let a member who
+    // came back through this page demote themselves the same way.
+    //
+    // RegisterPage's primary path reads this code as "send a sign-in link
+    // instead", so the owner still ends up signed in. The sentence keeps the
+    // words "already registered" for a tab loaded before that page keyed on
+    // the code (D258).
+    if (user.email_verified) {
+      await sql.end();
+      return c.json({
+        error: 'email_already_registered',
+        message: 'This email is already registered. Please sign in instead.',
+      }, 409);
+    }
+    // Task #9 follow-up — an incomplete signup retrying /register lands
+    // in 'exploring' just like a brand-new account (see the fresh-INSERT
+    // branch below). The lane the visitor picked is recorded as the
+    // suggested role for the admin review queue, never applied directly.
+    await ensureExploringSchema(c.env);
+    await sql`UPDATE users SET name = ${name}, role = 'exploring' WHERE id = ${user.id}`;
+    // Task #7 — persist the ?product= registration intent (e.g.
+    // 'spinout-lab') so applicants are identifiable in the admin queue.
+    // try/caught: column arrives with migration 154.
+    if (product === 'spinout-lab') {
+      try { await sql`INSERT INTO user_spinout_flags (user_id, registration_product) VALUES (${user.id}, ${product}) ON CONFLICT(user_id) DO UPDATE SET registration_product = excluded.registration_product`; } catch {}
+    }
+    try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
+    await sql.end();
+    // Phase 0.1: investors embed under their own entity bucket; partners stay legacy.
+    try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
+    // Task #50 — frontend signup is a multi-step flow (register → chatbot →
+    // "Check Your Email"). When `defer_email` is true the frontend will
+    // explicitly request the verification email at the final step via
+    // /resend-verification, so it arrives the moment the user lands on the
+    // "Check Your Email" screen instead of minutes earlier (which made users
+    // think no email was ever sent).
+    if (defer_email) {
+      return c.json({
+        message: 'Account updated, verification email deferred',
+        email, name, requires_verification: true, email_sent: null, email_deferred: true,
+      });
+    }
+    const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
+    return c.json({
+      message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
+      email, name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
+    });
+  }
+
+  // Task #9 follow-up — every fresh signup lands directly in 'exploring'
+  // (not the lane role) so it surfaces in the admin review queue from the
+  // moment the account exists. The chosen lane (founder/partner/investor)
+  // is preserved as the suggested_role via upsertSuggestedRole below, and
+  // is still used further down to seed lane-appropriate trust obligations
+  // and (for the investor lane) the trial window.
+  await ensureExploringSchema(c.env);
+  const [user] = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${name}, 'exploring', false) RETURNING *`;
+  // Task #7 — persist the ?product= registration intent (see the
+  // existing-user branch above). try/caught: column arrives with 154.
+  if (product === 'spinout-lab') {
+    try { await sql`INSERT INTO user_spinout_flags (user_id, registration_product) VALUES (${user.id}, ${product}) ON CONFLICT(user_id) DO UPDATE SET registration_product = excluded.registration_product`; } catch {}
+  }
+  try { await upsertSuggestedRole(c.env, user.id, role || null); } catch (e) { console.error('[auth] suggested-role upsert failed', e); }
+  // Task #6 (W-1) — investor signups get a 14-day Professional trial.
+  // Cron in index.ts at 04:25 UTC downgrades expired trials to free.
+  if (role === 'investor') {
+    try {
+      // Task #43 — source dealroom cap from INVESTOR_QUOTAS so the trial
+      // initialisation tracks the canonical professional cap (still 5,
+      // but no longer a magic number that drifts from the constant).
+      const { ensureInvestorPaywallSchema, INVESTOR_QUOTAS } = await import('../middleware/requireInvestorTier');
+      await ensureInvestorPaywallSchema(c.env);
+      const trialEnds = new Date(Date.now() + 14 * 86400 * 1000).toISOString();
+      await c.env.DB.prepare(
+        `UPDATE users SET investor_tier = 'professional',
+                           investor_subscription_status = 'trialing',
+                           investor_trial_ends_at = ?,
+                           investor_dealroom_max = ?
+         WHERE id = ?`
+      ).bind(trialEnds, INVESTOR_QUOTAS.professional.dealroom_max, user.id).run();
+    } catch (e) { console.error('[auth] investor trial init failed', e); }
+  }
+  // Task #3 (Y-1) — Trust Center: seed role-conditional obligations the
+  // moment the account exists. Idempotent (UNIQUE on user_id+key) so a
+  // second pass from /me self-heals if this throws.
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, user.id, role || 'partner');
+  } catch (e) { console.error('[auth] trust seed failed', e); }
+  // T22.1 — PII redaction: details no longer carries the plaintext name +
+  // email; actor stores an email_hash instead of the email itself. The
+  // user_id FK is the canonical link back to the account row when joins
+  // are needed for support/analytics.
+  const regEmailHash = await hashEmail(email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
+  // Auth v2 — seed the licence-picker gate row. RequireAuth pins new users to
+  // the SPA page `/onboarding` until the API call `POST /api/onboarding/licence`
+  // advances them into the role wizard. Those two paths are NOT the same thing
+  // and only the page moved: the picker used to live at `/onboarding/licence`,
+  // which read as the same string as its own endpoint. The endpoint keeps its
+  // name. Legacy accounts may still have flow='chat'.
+  if ((role || 'partner') !== 'admin') {
+    try {
+      await c.env.DB.prepare(
+        `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+         VALUES (?, 'licence', 0, 0, NULL)`
+      ).bind(user.id).run();
+    } catch (e) { console.error('[auth] onboarding_progress seed failed', e); }
+  }
+  await sql.end();
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
+
+  // D4289 P2 (#4291): a handle reference (`h:jane`, `@jane`) is never upper-cased into a code: the handle path
+  // takes it, with its own window and checks. With no ref_code, the first-touch cookie is the referral.
+  const { attachSignupReferral, parseHandleRef } = await import('../services/referrals/handleAttribution');
+  const cookieRef = ref_code ? null : (await import('../services/referralAttribution')).readRefCookie(c.req.header('cookie'));
+  if (parseHandleRef(ref_code ?? cookieRef)) {
+    const linked = await attachSignupReferral(c.env, user.id, String(ref_code ?? cookieRef));
+    if (linked) {
+      try {
+        await c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ?, ?, ?)`)
+          .bind('Joined through an influencer handle', await hashEmail(email), user.id).run();
+      } catch (e) { console.error('[auth] handle referral log failed', e); }
+    }
+  } else if (cookieRef) {
+    await attachSignupReferral(c.env, user.id, cookieRef);
+  } else if (ref_code) {
+    try {
+      const code = String(ref_code).toUpperCase();
+      // Task #8 (X-1) — partner referral codes (PART-XXXXXXXX) grant tier
+      // benefits per the partner deal's terms; non-partner codes fall
+      // through to the legacy network referral chain.
+      if (code.startsWith('PART-')) {
+        try {
+          const { redeemPartnerReferralCode } = await import('../services/partnerDeals');
+          const redeemed = await redeemPartnerReferralCode(c.env, user.id, code);
+          if (redeemed) {
+            const sql2 = getSQL(c.env);
+            const refEmailHash = await hashEmail(email);
+            await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('partner_referral_redeemed', ${JSON.stringify({ partner_deal_id: redeemed.partner_deal_id, code })}, ${refEmailHash}, ${user.id})`;
+            await sql2.end();
+          }
+        } catch (e) { console.error('redeemPartnerReferralCode failed:', e); }
+      } else {
+        const { attachReferral } = await import('./network');
+        const linked = await attachReferral(c.env, user.id, code);
+        if (linked) {
+          // T22.1 — actor uses email_hash, never the plaintext email.
+          const sql2 = getSQL(c.env);
+          const refEmailHash = await hashEmail(email);
+          await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ${`Joined via referral code ${ref_code}`}, ${refEmailHash}, ${user.id})`;
+          await sql2.end();
+        }
+      }
+    } catch (e) { console.error('attachReferral failed:', e); }
+  }
+
+  // Task #50 — see note above; defer when the multi-step signup will request
+  // verification email at the final step.
+  if (defer_email) {
+    return c.json({
+      message: 'Account created, verification email deferred',
+      email: user.email, name: user.name, requires_verification: true, email_sent: null, email_deferred: true,
+    });
+  }
+  const { sent: emailSent, verificationUrl, tokenStored } = await sendVerification(c.env, email, name, user.id);
+  return c.json({
+    message: emailSent ? 'Verification email sent' : 'Account created but email delivery failed',
+    email: user.email, name: user.name, requires_verification: true, email_sent: emailSent, verification_url: !emailSent && tokenStored ? verificationUrl : undefined
+  });
+}));
+
+auth.post('/resend-verification', async (c) => {
+  const { email } = await c.req.json().catch(() => ({} as any));
+  const genericMsg = 'If an account exists with that email, a verification link has been sent.';
+
+  if (!email || typeof email !== 'string') {
+    return c.json({ error: 'Email required' }, 400);
+  }
+
+  const resendGate = rateGate(
+    c, await checkRateLimit(c.env, `resend:${email.toLowerCase()}`, 3, 3600),
+    'Maximum resend limit reached. Please try again in an hour.',
+  );
+  if (resendGate) return resendGate;
+
+  let users: any[] = [];
+  try {
+    const sql = getSQL(c.env);
+    users = await sql`SELECT * FROM users WHERE email = ${email}`;
+    await sql.end();
+  } catch (e: any) {
+    console.error(`[AUTH] resend lookup failed for ${email}: ${e?.message || 'Unknown error'}`);
+    return c.json({ message: genericMsg, email_sent: false });
+  }
+
+  if (users.length === 0) {
+    return c.json({ message: genericMsg, email_sent: false });
+  }
+
+  const user = users[0];
+
+  // Task #11 — TOTP is optional, so "account complete" is email verification
+  // alone. A verified user gets the generic response and NOTHING is reset:
+  // the old code here un-verified already-verified accounts and cleared TOTP
+  // state for any user missing either flag, which let an anonymous POST with
+  // a victim's email nuke the authenticator a magic-link/Google user had
+  // enrolled from Settings.
+  if (user.email_verified) {
+    return c.json({ message: genericMsg, email_sent: false, already_verified: true });
+  }
+
+  // Unverified ⇒ classic signup never completed (login requires a verified
+  // email, so this account has never signed in). Clear any half-finished
+  // TOTP enrolment so the fresh verification link starts from a clean slate.
+  try { await clearTotp(c.env, user.id); } catch (e) { console.error('[AUTH] clearTotp on resend failed', e); }
+
+  try {
+    const { sent, verificationUrl, tokenStored } = await sendVerification(c.env, email, user.name, user.id);
+    return c.json({
+      message: genericMsg,
+      email_sent: sent,
+      verification_url: !sent && tokenStored ? verificationUrl : undefined,
+    });
+  } catch (e: any) {
+    console.error(`[AUTH] resend send failed for ${email}: ${e?.message || 'Unknown error'}`);
+    return c.json({ message: genericMsg, email_sent: false });
+  }
+});
+
+auth.get('/verify-email', safe('verify-email', 'Could not verify your email link. Please try again or request a new verification email.', async (c) => {
+  const token = c.req.query('token');
+  if (!token) return c.json({ error: 'Token required' }, 400);
+
+  // T5 — IP-keyed brute-force cap. The verify-email link is a 32-byte secret,
+  // so guessing is computationally infeasible — but enumerating against a
+  // single IP is still cheap noise we can drop. 10/15min/IP is generous enough
+  // that a real user retrying after a typo or refreshing the tab is fine.
+  const verifyIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const verifyGate = rateGate(
+    c, await checkRateLimit(c.env, `verify-email-ip:${verifyIp}`, 10, 900),
+    'Too many verification attempts. Please try again in 15 minutes.',
+  );
+  if (verifyGate) return verifyGate;
+
+  const tokenHash = await hashToken(token);
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE verification_token = ${tokenHash}`;
+  await sql.end();
+
+  if (users.length === 0) return c.json({ error: 'Invalid or expired verification link.' }, 400);
+  const user = users[0];
+  if (user.verification_token_expires && new Date() > new Date(user.verification_token_expires)) {
+    return c.json({ error: 'Verification link has expired. Please request a new one.' }, 400);
+  }
+
+  // T22.2 — narrow response to `{ valid: true }`. Previously echoed
+  // user.email + user.name, which leaked PII to anyone replaying the
+  // verification token (and to log scrapers capturing the response body).
+  // The frontend re-derives email/name via the subsequent
+  // POST /confirm-verify-email step, which already requires presenting
+  // the same token.
+  return c.json({ valid: true });
+}));
+
+auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confirm your email. Please try the verification link again or request a new one.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { token } = parsed.body;
+  if (!token) return c.json({ error: 'Token required' }, 400);
+
+  // Task #11 — this endpoint now mints a session, so it carries the same
+  // IP-keyed brute-force cap as GET /verify-email (shared bucket: both are
+  // steps of the same flow).
+  const confirmIp = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const confirmGate = rateGate(
+    c, await checkRateLimit(c.env, `verify-email-ip:${confirmIp}`, 10, 900),
+    'Too many verification attempts. Please try again in 15 minutes.',
+  );
+  if (confirmGate) return confirmGate;
+
+  await ensureAuthBlockersSchema(c.env);
+  const tokenHash = await hashToken(token);
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE verification_token = ${tokenHash}`;
+
+  if (users.length === 0) { await sql.end(); return c.json({ error: 'Invalid or expired verification link.' }, 400); }
+  const user = users[0];
+  if (user.verification_token_expires && new Date() > new Date(user.verification_token_expires)) {
+    await sql.end();
+    return c.json({ error: 'Verification link has expired.' }, 400);
+  }
+  if (Number(user.is_active ?? 1) === 0) { await sql.end(); return c.json({ error: 'Account is inactive' }, 403); }
+
+  const setupToken = generateToken();
+  const setupHash = await hashToken(setupToken);
+  const setupExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  await sql`UPDATE users SET email_verified = true, verification_token = ${setupHash}, verification_token_expires = ${setupExpires} WHERE id = ${user.id}`;
+  // T22.1 — PII redaction: drop name/email from details; actor stores hash.
+  const verifEmailHash = await hashEmail(user.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('email_verified', ${`email verified (email_hash=${verifEmailHash})`}, ${verifEmailHash}, ${user.id})`;
+
+  // Task #11 — TOTP is now optional, so email verification is the moment the
+  // user is "in". Mint a LOWER-assurance session exactly like /magic/verify:
+  // factor='email' + assurance_level='email_only' means requireFactor('totp')
+  // and requireStepUp() still gate sensitive routes (both fail closed on
+  // non-strong factors), and the 7-day session-scoped step_up_due_at drives
+  // the getCurrentUser auto-relock. Proof presented here (possession of the
+  // emailed verification link) is the same evidence class as a magic link.
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const stepUpDue = new Date(Date.now() + MAGIC_STEP_UP_DAYS * 86400 * 1000).toISOString();
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level, step_up_due_at)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${confirmIp === 'unknown' ? null : confirmIp.slice(0, 64)}, 'email', 'email_only', ${stepUpDue})`;
+  } catch (e) { console.error('[AUTH:confirm-verify-email] session insert failed', e); }
+  await sql.end();
+
+  await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+
+  return c.json({
+    verified: true,
+    email: user.email,
+    name: user.name,
+    // Legacy back-compat: /setup-totp still accepts this one-shot token.
+    setup_token: setupToken,
+    // Session fields mirror POST /login so the SPA stores them identically.
+    token: jwtToken,
+    csrf_token: csrfToken,
+    // Spin-Out Lab flags ride along so frontend route guards can grant
+    // lab-tool access from the FIRST render after login (avoids the
+    // bounce-until-/auth/me-refreshes redirect race).
+    user: {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      spinout_lab_active: Number(user.spinout_lab_active ?? 0),
+      spinout_lab_week: Number(user.spinout_lab_week ?? 0),
+      is_incorporated: Number(user.is_incorporated ?? 0),
+    },
+    expires_in: 24 * 3600,
+  });
+}));
+
+auth.post('/setup-totp', safe('setup-totp', 'Could not set up authenticator. Please try again or request a new verification email.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, token } = parsed.body;
+  if (!email || !token) return c.json({ error: 'Email and token required' }, 400);
+
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  if (users.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+
+  const user = users[0];
+  if (!user.email_verified) { await sql.end(); return c.json({ error: 'Email not verified.' }, 403); }
+
+  const tokenHash = await hashToken(token);
+  if (user.verification_token !== tokenHash) { await sql.end(); return c.json({ error: 'Invalid setup token.' }, 403); }
+  if (user.verification_token_expires && new Date() > new Date(user.verification_token_expires)) {
+    await sql.end(); return c.json({ error: 'Setup token expired.' }, 403);
+  }
+  if (await hasTotpConfigured(c.env, user.id)) { await sql.end(); return c.json({ error: 'TOTP is already configured.' }, 409); }
+
+  const secret = new Secret();
+  const totp = new TOTP({ issuer: 'Axal VC StudioOS', label: email, secret });
+  const totpSecret = secret.base32;
+
+  // T5 — mint 10 single-use recovery codes at enrolment so the user is never
+  // permanently locked out if they lose their authenticator. Plaintext codes
+  // are returned to the caller exactly once in this response; the server only
+  // ever stores SHA-256 hashes.
+  const { plain: recoveryCodes, hashes: recoveryHashes } = await mintRecoveryCodes();
+
+  // Task #1 — TOTP secrets live exclusively in `auth_totp` (encrypted).
+  // `users.password_hash` is deliberately untouched here: the column is
+  // reserved for real credential storage and "is TOTP configured?" is
+  // now derived from `hasTotpConfigured(env, userId)` (auth_totp row
+  // presence) at every call site.
+  await persistNewTotpEnrolment(c.env, user.id, totpSecret, recoveryHashes);
+  // Task #6 — keep tfa_methods in lock-step with the auth_totp row so the
+  // factor-discovery endpoint and SettingsPage Security tab both see TOTP
+  // immediately. Best-effort; older DBs without the column silently no-op.
+  try { await setUserFactor(c.env, user.id, 'totp'); } catch {}
+  await sql`UPDATE users SET totp_recovery_codes = ${JSON.stringify(recoveryHashes)}, verification_token = NULL, verification_token_expires = NULL WHERE id = ${user.id}`;
+  await sql.end();
+
+  const uri = totp.toString();
+  let qrBase64: string | null = null;
+  try {
+    qrBase64 = await QRCode.toDataURL(uri);
+    qrBase64 = qrBase64.replace('data:image/png;base64,', '');
+  } catch {}
+
+  return c.json({
+    user_id: user.id, email: user.email, name: user.name, role: user.role,
+    totp_secret: totpSecret, provisioning_uri: uri, qr_code: qrBase64,
+    recovery_codes: recoveryCodes,
+    message: 'Scan the QR code with your authenticator app, then use the TOTP code to log in. Save the recovery codes — they will not be shown again.',
+  });
+}));
+
+auth.post('/login', safe('login', 'Login failed. Please try again in a moment, or contact support if the problem persists.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, totp_code, turnstileToken } = parsed.body;
+  if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
+
+  // Cloudflare Turnstile — bot-protect the password-equivalent factor on
+  // login (mirrors /register). verifyTurnstile() fails CLOSED in
+  // production when TURNSTILE_SECRET_KEY is missing and fails OPEN in
+  // dev/preview so local sign-in still works without the secret.
+  const clientIp = c.req.header('cf-connecting-ip') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, turnstileToken, clientIp);
+  if (!turnstileOk) {
+    try {
+      const emailHash = await hashEmail(email);
+      const ipBucket = ipPrefix(clientIp);
+      const sql = getSQL(c.env);
+      await sql`INSERT INTO activity_logs (action, details, actor)
+                VALUES ('turnstile_failed',
+                        ${`login attempt blocked: email_hash=${emailHash} ip_bucket=${ipBucket}`},
+                        ${ipBucket})`;
+      await sql.end();
+    } catch (e) {
+      console.error('[AUTH] failed to log turnstile failure on login', e);
+    }
+    return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  }
+
+  const loginGate = rateGate(
+    c, await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300),
+    'Too many attempts. Try again in 5 minutes.',
+  );
+  if (loginGate) return loginGate;
+
+  // D200 — every refusal below is recorded in security_events, with the
+  // subject hashed and the network bucketed, BEFORE the status it already
+  // answered. The write never throws (services/securityEvents.ts), so the
+  // refusal's own status is unchanged by it; a successful sign-in is NOT
+  // recorded here — activity_logs already holds those.
+  const refuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'totp', outcome: 'refused', detail, userId, email, ip: clientIp });
+
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  if (users.length === 0) { await sql.end(); await refuse('unknown_account'); return c.json({ error: 'Invalid credentials' }, 401); }
+
+  const user = users[0];
+  if (!user.email_verified) { await sql.end(); await refuse('email_unverified', user.id); return c.json({ error: 'Please verify your email before logging in.' }, 403); }
+  if (!user.is_active) { await sql.end(); await refuse('inactive', user.id); return c.json({ error: 'Account is inactive' }, 403); }
+  // Task #1 — "TOTP configured?" is sourced from `auth_totp` row presence
+  // (with a fallback to a legacy base32 secret pending migration). We no
+  // longer gate on `users.password_hash`: that column is reserved for
+  // future real-credential storage and must not double as a 2FA flag.
+  if (!(await hasTotpConfigured(c.env, user.id))) {
+    await sql.end();
+    await refuse('totp_not_configured', user.id);
+    return c.json({ error: 'Account not set up for TOTP authentication' }, 401);
+  }
+
+  // Task #33 — load TOTP secret from `auth_totp` (preferred) with lazy
+  // migration off the legacy `users.password_hash` storage. Returns null
+  // if no usable TOTP secret exists for the user. Task #1 — when the
+  // migration runs (source === 'legacy'), the user's `password_hash` was
+  // misused for TOTP storage and is now NULLed + `password_reset_required`
+  // is set to 1; we surface that flag to the SPA AND fire a forced
+  // password-reset email so the user re-establishes a clean credential.
+  const totpRow = await loadTotp(c.env, user.id, user.password_hash, user.totp_recovery_codes);
+  if (!totpRow) { await sql.end(); await refuse('totp_not_configured', user.id); return c.json({ error: 'Account not set up for TOTP authentication' }, 401); }
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
+  const delta = totp.validate({ token: totp_code, window: 1 });
+  let usedRecoveryCode = false;
+  if (delta === null) {
+    // T5 — fall back to recovery code consumption. We try this only after the
+    // 6-digit TOTP fails so the common path stays fast. Single-use enforcement
+    // is in tryConsumeRecoveryCode (atomic UPDATE removes the hash).
+    await sql.end();
+    usedRecoveryCode = await tryConsumeRecoveryCode(c.env, user.id, totp_code);
+    if (!usedRecoveryCode) { await refuse('invalid_code', user.id); return c.json({ error: 'Invalid TOTP code' }, 401); }
+  } else {
+    // Best-effort audit field on auth_totp.last_used_at — non-fatal if it fails.
+    await markTotpUsed(c.env, user.id);
+  }
+  const sql2 = usedRecoveryCode ? getSQL(c.env) : sql;
+
+  // Epic 3 — mint a session-bound JWT. The jti claim ties the token to a
+  // row in user_sessions so the user can list and revoke individual devices
+  // from /settings. Falls back gracefully if the table doesn't exist yet
+  // (auth.ts already handles missing-table on the verify side).
+  const jti = crypto.randomUUID();
+  const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  try {
+    // Task #6 — record the factor that minted this session so requireFactor()
+    // can step-up gate high-risk routes. Recovery-code logins are tracked
+    // distinctly from real TOTP — they DO NOT count as "totp" for step-up
+    // purposes, so an attacker holding a printed code can't escalate to
+    // impersonation/billing/contract-void without re-arming TOTP.
+    const sessionFactor = usedRecoveryCode ? 'recovery' : 'totp';
+    await sql2`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, ${sessionFactor})`;
+  } catch {
+    // Table not migrated yet; the JWT still works (auth.ts skips the check).
+  }
+  // T22.1 — PII redaction on login: drop user.name from details, store
+  // email_hash as actor instead of plaintext email. user_id remains the
+  // canonical FK back to the user row.
+  const loginEmailHash = await hashEmail(user.email);
+  const loginAction = usedRecoveryCode ? 'user_login_recovery_code' : 'user_login';
+  const loginDetails = usedRecoveryCode
+    ? `login via recovery code (email_hash=${loginEmailHash})`
+    : `login (email_hash=${loginEmailHash})`;
+  await sql2`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${loginAction}, ${loginDetails}, ${loginEmailHash}, ${user.id})`;
+  await sql2.end();
+
+  // T6 — issue httpOnly auth cookie + readable CSRF cookie alongside the
+  // JSON token. Frontend `api.js` will pick up the cookie automatically
+  // (credentials: 'include'); legacy direct-fetch callers (websocket
+  // subprotocol, signed-download URLs, impersonation flow) keep using the
+  // JSON `token` field via localStorage until they migrate. Both auth
+  // paths end at the same JWT, so the worker accepts whichever arrives.
+  // Task #4 — revoke any incoming stale session that belongs to a different
+  // user BEFORE we overwrite the cookie. Stops a lingering admin JWT in
+  // localStorage (or a still-valid `studioos_auth` cookie from a prior
+  // browser user) from being replayed from outside the browser even after
+  // the SPA's identity-change purge wipes localStorage.
+  await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
+
+  const csrfToken = generateCsrfToken();
+  setAuthCookies(c, jwtToken, csrfToken);
+
+  // Task #1 — surface password_reset_required so the SPA can route the user
+  // straight to the recovery flow. Re-read the flag from the row we just
+  // touched (the lazy TOTP migration may have just set it to 1 above).
+  let passwordResetRequired = Number(user.password_reset_required ?? 0) === 1;
+  if (totpRow.source === 'legacy') {
+    passwordResetRequired = true;
+    // Fire-and-forget: email failures must not block login. We use
+    // executionCtx.waitUntil so the worker doesn't return before the
+    // outbound HTTPS call lands, but the response is still sent immediately.
+    try {
+      const sendForcedResetEmail = async () => {
+        try {
+          const { sendNotificationEmail } = await import('../services/email');
+          await sendNotificationEmail(
+            c.env,
+            user.email,
+            'Action required: re-establish your Axal StudioOS sign-in',
+            `Hi ${user.name || ''},\n\n` +
+            `As part of a security upgrade, your account requires you to ` +
+            `re-establish your sign-in credential. Please visit ` +
+            `${(c.env as { APP_URL?: string }).APP_URL || 'https://axal.vc'}/settings ` +
+            `and complete the password-reset flow.\n\n` +
+            `If you did not just sign in, please contact support immediately.`,
+          );
+        } catch (e) {
+          console.error('[auth] forced reset email failed', e);
+        }
+      };
+      const ctx = (c as { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } }).executionCtx;
+      if (ctx?.waitUntil) ctx.waitUntil(sendForcedResetEmail());
+      else void sendForcedResetEmail();
+    } catch (e) {
+      console.error('[auth] forced reset dispatch failed', e);
+    }
+  }
+
+  return c.json({
+    token: jwtToken,
+    csrf_token: csrfToken,
+    // Spin-Out Lab flags ride along so frontend route guards can grant
+    // lab-tool access from the FIRST render after login (avoids the
+    // bounce-until-/auth/me-refreshes redirect race).
+    user: {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      spinout_lab_active: Number(user.spinout_lab_active ?? 0),
+      spinout_lab_week: Number(user.spinout_lab_week ?? 0),
+      is_incorporated: Number(user.is_incorporated ?? 0),
+    },
+    expires_in: 24 * 3600,
+    used_recovery_code: usedRecoveryCode || undefined,
+    password_reset_required: passwordResetRequired || undefined,
+  });
+}));
+
+// T6 — server-side logout. Clears the cookie pair AND revokes the current
+// session row in user_sessions (so a stolen Bearer copy of the same JWT can
+// no longer be used either). Tolerant of unauth'd calls — logout should
+// always succeed from the user's POV, even if the cookie is already gone.
+auth.post('/logout', safe('logout', 'Logout failed.', async (c) => {
+  // Best-effort session revocation. We don't await requireAuth() because
+  // that would 401 a session whose cookie expired client-side — and the
+  // user still wants the cookie cleared in that case.
+  //
+  // D4669 — EVERY TOKEN THE REQUEST PRESENTS, read the way `getCurrentUser`
+  // reads them. This used to take the Bearer if there was one and otherwise
+  // look for HQ's cookie name only, so on a branch (whose cookie is
+  // `studioos_auth_<code>`, D104) a sign-out revoked nothing, and under a
+  // support Bearer the operator's own cookie session was left standing. The
+  // answer now says whether a session was ended, instead of `ok` regardless.
+  let sessionRevoked: 'revoked' | 'none' | 'failed' = 'none';
+  try {
+    const { decodeJWT, extractJwtCandidates } = await import('../auth');
+    const { bearer, cookie } = extractJwtCandidates(c);
+    for (const token of [...new Set([bearer, cookie].filter(Boolean) as string[])]) {
+      let payload: { jti?: string; user_id?: number } | null = null;
+      try { payload = await decodeJWT(c.env, token); } catch { payload = null; }
+      if (!payload?.jti) continue;
+      try {
+        await c.env.DB.prepare(
+          "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+        ).bind(payload.jti, payload.user_id).run();
+        if (sessionRevoked === 'none') sessionRevoked = 'revoked';
+      } catch (e) {
+        sessionRevoked = 'failed';
+        console.error('[AUTH:logout] session revoke failed:', e);
+      }
+    }
+  } catch (e) {
+    sessionRevoked = 'failed';
+    console.error('[AUTH:logout] session revoke failed (non-fatal):', e);
+  }
+  clearAuthCookies(c);
+  return c.json({ ok: true, session_revoked: sessionRevoked });
+}));
+
+auth.get('/me', async (c) => {
+  const user = await requireAuth(c);
+  // Self-healing FK backfill: if the user's role implies a founder
+  // or partner profile but the corresponding ID is null, lazy-create
+  // the row and link it. Idempotent + non-throwing — degrades to the
+  // current IDs on any DB error.
+  let founderId: number | null = user.founder_id ?? null;
+  let partnerId: number | null = (user as unknown as { partner_id?: number | null }).partner_id ?? null;
+  try {
+    const { ensureRoleProfile } = await import('../services/ensureRoleProfile');
+    const ids = await ensureRoleProfile(c.env, user);
+    founderId = ids.founder_id;
+    partnerId = ids.partner_id;
+  } catch (e) {
+    console.error('[auth:/me] ensureRoleProfile failed:', (e as Error).message);
+  }
+  // The lane the user picked at signup, stored as a SUGGESTION by
+  // upsertSuggestedRole (never applied to users.role — only an admin
+  // assignment does that, behind a signed binding agreement). Exposed here so
+  // the holding-state screen can address someone by the intent they actually
+  // declared instead of showing every applicant identical copy. The caller's
+  // own row, so no new disclosure; absent for everyone past 'exploring'.
+  let suggestedRole: string | null = null;
+  if (String(user.role) === 'exploring') {
+    try {
+      const rr = await c.env.DB.prepare(
+        'SELECT suggested_role FROM user_role_review WHERE user_id = ?',
+      ).bind(user.id).first<{ suggested_role: string | null }>();
+      suggestedRole = rr?.suggested_role || null;
+    } catch { /* table absent on a partial DB — the screen falls back to generic copy */ }
+  }
+  // D1548: set by `terms_acceptance_pending` below, read by the key after it.
+  let termsReason: 'missing' | 'updated' | null = null;
+  // D4289 P1 (#4290): an active influencer membership; 0 when there is none or it cannot be read.
+  const { influencerActive } = await import('../services/influencers');
+  const influencer_active = await influencerActive(c.env, Number(user.id));
+
+  return c.json({
+    id: user.id, email: user.email, name: user.name, role: user.role,
+    licences: user.licences || [],
+    is_active: user.is_active, created_at: user.created_at,
+    founder_id: founderId, partner_id: partnerId,
+    suggested_role: suggestedRole,
+    // Migration 199. The elevation that lets an admin franchise the platform,
+    // hydrated onto `user` from the `super_admins` side table by getCurrentUser
+    // and echoed so the SPA can render the Super shell. Coerced rather than
+    // passed through: a row nobody hydrated yields undefined, and the shell
+    // must read that as "not a super admin" rather than as a missing answer.
+    is_super_admin: Number((user as any).is_super_admin ?? 0) === 1 ? 1 : 0,
+    // Spin-Out Lab flags — parity with the login payload and the FastAPI
+    // dev backend's /me, so frontend route guards keep lab access stable
+    // across auth refreshes.
+    spinout_lab_active: Number((user as any).spinout_lab_active ?? 0),
+    spinout_lab_week: Number((user as any).spinout_lab_week ?? 0),
+    // D4289 P1 (#4290): the Influencer sidebar row reads this, as the Lab's reads spinout_lab_active.
+    influencer_active,
+    is_incorporated: Number((user as any).is_incorporated ?? 0),
+    kyc_status: (user as any).kyc_status || 'not_started',
+    // 'limited' lets the user past the KYC gate to browse the app, but
+    // they still cannot sign legal agreements (server-enforced in esign).
+    // null means normal flow: full access requires kyc_status='approved'.
+    access_level: (user as any).access_level || null,
+    // LinkedIn identity (Refer & Earn). Columns are added lazily by
+    // routes/linkedin.ts; null on rows that pre-date the migration.
+    linkedin_sub: (user as any).linkedin_sub || null,
+    linkedin_email: (user as any).linkedin_email || null,
+    linkedin_name: (user as any).linkedin_name || null,
+    // Task #5 — gate the dashboard personal-assistant launcher. Onboarding
+    // /complete flips this to 1 once role detection is done. NULL on rows
+    // that pre-date the migration; coerce to 0 so the UI hides the launcher
+    // until the user has actually completed onboarding.
+    // Mirror the /api/assistant/* mount gate in src/index.ts: if the
+    // assistant route is closed (production, or ENABLE_ANTHROPIC_DEV !== '1'
+    // on dev/preview), force the flag to 0 so the dashboard launcher hides
+    // instead of rendering and then erroring with "not_found" when the user
+    // sends a message.
+    assistant_enabled: (() => {
+      const e = c.env as any;
+      const prod = e?.STAGE === 'production' || e?.ENVIRONMENT === 'production';
+      if (prod || e?.ENABLE_ANTHROPIC_DEV !== '1') return 0;
+      return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
+    })(),
+    // Task #6 — founder subscription tier (FREE / GROWTH / STUDIO).
+    // Bypass roles (admin/partner/investor/advisor) still receive these
+    // fields so the frontend can display them, but tier gates are no-ops.
+    subscription_tier: (user as any).subscription_tier || 'free',
+    // Task #103 — the investor-side twin of subscription_tier. It was the one
+    // tier field the client could not see, so `canUseCustomerChat` read every
+    // investor as `free` and refused the Help Center's chat channel to exactly
+    // the tier that pays for it. Same shape, same sensitivity: the caller's
+    // own plan, next to the caller's own subscription row.
+    investor_tier: (user as any).investor_tier || 'free',
+    subscription_status: (user as any).subscription_status || 'active',
+    subscription_renews_at: (user as any).subscription_renews_at || null,
+    stripe_customer_id: (user as any).stripe_customer_id || null,
+    stripe_subscription_id: (user as any).stripe_subscription_id || null,
+    // Task #50 — recovery state. cool_off_until > now disables sensitive
+    // surfaces (billing/contracts/capital/DD/KYC/impersonation). step_up_due_at
+    // is set on lower-assurance ('email_only') sessions; the SPA nags the
+    // user to re-enrol TOTP / passkey before the deadline.
+    recovery_cool_off_until: (user as any).recovery_cooling_off_until || null,
+    recovery_step_up_due_at: (user as any).recovery_step_up_due_at || null,
+    // Explicit boolean — true if ANY recovery ticket on this account
+    // is still in flight. The SPA shows a persistent "Recovery in
+    // progress" banner while this is true.
+    recovery_pending: await (async () => {
+      try {
+        const row: any = await c.env.DB.prepare(
+          `SELECT 1 FROM auth_recovery_tickets
+           WHERE user_id = ?
+             AND status IN ('open','awaiting_contacts','awaiting_admin','awaiting_admin_cosign')
+           LIMIT 1`,
+        ).bind(user.id).first();
+        return !!row;
+      } catch { return false; }
+    })(),
+    // Task #178 — does this account still owe an affirmative acceptance of the
+    // terms and the privacy policy?
+    //
+    // PR #549 made that consent real, but only at the onboarding licence gate,
+    // and only fresh Auth-v2 signups pass through it. Admins, impersonated
+    // sessions, `access_level = 'limited'` accounts, legacy `flow='chat'` rows
+    // and EVERY account that predates #549 still have `tos_v1` and `privacy_v1`
+    // sitting `pending`. Since #549 they are satisfiable; nothing has satisfied
+    // them.
+    //
+    // IT RIDES /me BECAUSE EVERY OTHER CANDIDATE WRITES. Each read-shaped
+    // `/trust/*` GET calls `seedObligations`, which is one unconditional UPDATE
+    // plus one `INSERT … ON CONFLICT DO UPDATE` per obligation def — gating page
+    // load on one would put those writes on every navigation, and
+    // `/trust/score/:userId` does them to ANOTHER user's rows. This is a SELECT
+    // on a response the SPA already fetches on every route change.
+    //
+    // A PURE FACT, NOT A POLICY. An admin really does have these rows pending
+    // and this says so. Whether a session is INTERRUPTED over it is the gate's
+    // call, in `App.jsx`, beside the licence and KYC gates whose exclusions it
+    // copies — one place that decides who gets stopped, rather than two that
+    // can disagree.
+    //
+    // ABSENT READS AS FALSE, deliberately, in both directions: a DB error or a
+    // missing table gates nobody, and neither does an account with no obligation
+    // rows at all. That last case is not a hole — `seedObligations` runs on
+    // every login path (registration, magic-link verify, Google callback), so
+    // rows exist for anyone who has signed in. The dev FastAPI returns a
+    // different shape entirely and therefore also gates nobody, which is why the
+    // SPA must read a missing key as "do not gate".
+    //
+    // D1548 (#3793) — RE-ACCEPTANCE RIDES THE SAME FLAG. When
+    // `TERMS_REACCEPT_FROM` is set, a member who accepted the Terms before that
+    // version owes the acceptance again. The second query runs only then, so
+    // with the constant null (today) /me asks exactly what it asked before.
+    // `terms_acceptance_reason` tells the screen which case it is: 'missing'
+    // (never accepted) or 'updated' (accepted an earlier version); null when
+    // nothing is owed.
+    terms_acceptance_pending: await (async () => {
+      try {
+        const row: any = await c.env.DB.prepare(
+          `SELECT 1 FROM legal_obligations
+            WHERE user_id = ?
+              AND obligation_key IN ('tos_v1', 'privacy_v1')
+              AND required = 1
+              AND status IN ('pending', 'in_review')
+            LIMIT 1`,
+        ).bind(user.id).first();
+        if (row) { termsReason = 'missing'; return true; }
+        const { TERMS_REACCEPT_FROM } = await import('../services/trust');
+        if (!TERMS_REACCEPT_FROM) return false;
+        const stale: any = await c.env.DB.prepare(
+          `SELECT 1 FROM legal_obligations o
+            WHERE o.user_id = ?
+              AND o.obligation_key = 'tos_v1'
+              AND o.required = 1
+              AND o.status = 'satisfied'
+              AND NOT EXISTS (SELECT 1 FROM legal_acceptances a
+                               WHERE a.user_id = o.user_id
+                                 AND a.obligation_key = 'tos_v1'
+                                 AND a.document_version >= ?)
+            LIMIT 1`,
+        ).bind(user.id, TERMS_REACCEPT_FROM).first();
+        if (stale) { termsReason = 'updated'; return true; }
+        return false;
+      } catch { return false; }
+    })(),
+    terms_acceptance_reason: termsReason,
+    // D106 — WHICH DEPLOYMENT IS THIS, told once, on the response the SPA
+    // already fetches on every route change.
+    //
+    // `null` on HQ, and the SPA must read a missing key as HQ too: the dev
+    // FastAPI returns a different shape and would otherwise render the branch
+    // shell over HQ data.
+    //
+    // THE VARS ARE THE SOURCE, NOT THE DATABASE. `BRANCH_CODE`, `BRANCH_NAME`
+    // and `BRANCH_TERRITORY` come from the generated config (D105), so this
+    // answers correctly on a branch whose licence copy has not arrived yet —
+    // which is exactly the window in which someone is looking at the screen
+    // wondering why. `status` and `as_of` do come from the copy, and are null
+    // together when it is absent; a branch that reads `status: null` shows
+    // "awaiting HQ", never "active".
+    branch: await (async () => {
+      const code = branchOf(c.env);
+      if (!code) return null;
+      const e = c.env as unknown as Record<string, string | undefined>;
+      const territories = String(e.BRANCH_TERRITORY ?? '')
+        .split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      let status: string | null = null;
+      let as_of: string | null = null;
+      try {
+        const row: any = await c.env.DB.prepare(
+          'SELECT status, pushed_at FROM branch_licence WHERE id = 1',
+        ).first();
+        if (row) { status = String(row.status); as_of = String(row.pushed_at); }
+      } catch { /* migration 256 not applied yet — reads as awaiting HQ */ }
+      return { code, name: e.BRANCH_NAME || null, territories, status, as_of };
+    })(),
+  });
+});
+
+/**
+ * Task #178 — the affirmative act the interstitial collects.
+ *
+ * Thin on purpose: `recordTermsAcceptance` already holds the whole rule — the
+ * append-only `legal_acceptances` evidence first, the `legal_obligations` status
+ * second, in that order and for that reason. This route's only jobs are to
+ * establish WHO is accepting and to name WHERE the act happened.
+ *
+ * `source` and `surface` are both passed and they are not the same thing.
+ * `surface` is the audit trail's own field. `source` is what
+ * `obligationSource` renders on the Trust Center row, and leaving it at its
+ * default would have printed "Accepted at signup" over an act that happened
+ * years later, in a different screen, for a different reason.
+ *
+ * No admin variant, no `userId` parameter, no backfill: an acceptance recorded
+ * on somebody's behalf forges the record this whole change exists to make
+ * honest.
+ */
+auth.post('/accept-terms', safe('accept-terms', 'Could not record your acceptance. Please try again.', async (c) => {
+  const user = await requireAuth(c);
+  const { recordTermsAcceptance } = await import('../services/trust');
+  const result = await recordTermsAcceptance(c.env, user.id, {
+    surface: 'reacceptance_interstitial',
+    source: 'reacceptance_interstitial',
+    ip: c.req.header('cf-connecting-ip') || null,
+    ua: c.req.header('user-agent') || null,
+  });
+  return c.json({ ok: true, keys: result.keys, satisfied: result.satisfied });
+}));
+
+auth.post('/verify-totp', safe('verify-totp', 'Could not verify your code. Please try again.', async (c) => {
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const { email, totp_code } = parsed.body;
+  if (!email || !totp_code) return c.json({ error: 'Email and TOTP code required' }, 400);
+  const totpLoginGate = rateGate(
+    c, await checkRateLimit(c.env, `login:${email.toLowerCase()}`, 5, 300),
+    'Too many attempts.',
+  );
+  if (totpLoginGate) return totpLoginGate;
+
+  const sql = getSQL(c.env);
+  const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+  await sql.end();
+
+  // D200 — a refused verification is recorded; the answer is unchanged.
+  const verifyRefuse = (detail: string, userId?: number) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'totp', outcome: 'refused', detail, userId, email, ip: c.req.header('cf-connecting-ip') });
+  if (users.length === 0) { await verifyRefuse('unknown_account'); return c.json({ error: 'Invalid credentials' }, 401); }
+  // Task #33 — read TOTP via authTotp (auth_totp table → fallback legacy column).
+  const totpRow = await loadTotp(c.env, users[0].id, users[0].password_hash, users[0].totp_recovery_codes);
+  if (!totpRow) { await verifyRefuse('totp_not_configured', users[0].id); return c.json({ error: 'Invalid credentials' }, 401); }
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
+  const valid = totp.validate({ token: totp_code, window: 1 }) !== null;
+  if (!valid) await verifyRefuse('invalid_code', users[0].id);
+  return c.json({ valid });
+}));
+
+// ───────────────────────────────────── BLOCK-AUTH-01 — magic-link sign-in ──
+// Passwordless email sign-in / sign-up. /magic/start emails a single-use,
+// 15-minute link; /magic/verify claims it, find-or-creates the account, and
+// mints a LOWER-assurance ('email_only') session that must step-up to TOTP
+// within 7 days (enforced session-scoped by getCurrentUser auto-relock). We
+// never reveal whether an email exists — /start always returns the same 202.
+const MAGIC_LINK_TTL_MIN = 15;
+const MAGIC_STEP_UP_DAYS = 7;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function publicBase(env: Env): string {
+  return String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+}
+
+auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link. Please try again in a moment.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  const startIpGate = rateGate(
+    c, await checkRateLimit(c.env, `magic-start-ip:${ip || 'unknown'}`, 5, 300),
+    'Too many requests. Please wait a minute and try again.',
+  );
+  if (startIpGate) return startIpGate;
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const email = String(parsed.body?.email || '').toLowerCase().trim();
+  if (!EMAIL_RE.test(email)) return c.json({ error: 'Please enter a valid email address' }, 400);
+  const startEmailGate = rateGate(
+    c, await checkRateLimit(c.env, `magic-start-email:${email}`, 3, 900),
+    'Too many requests for this email. Please wait a few minutes.',
+  );
+  if (startEmailGate) return startEmailGate;
+
+  const raw = generateToken();
+  const tokenHash = await hashToken(raw);
+  const expires = new Date(Date.now() + MAGIC_LINK_TTL_MIN * 60 * 1000).toISOString();
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO magic_link_tokens (email, token_hash, expires_at, ip, user_agent) VALUES (?, ?, ?, ?, ?)`,
+    ).bind(email, tokenHash, expires, ip || null, ua || null).run();
+  } catch (e) {
+    console.error('[AUTH:magic-start] token insert failed', e);
+    return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 500);
+  }
+
+  const magicUrl = `${publicBase(c.env)}/api/auth/magic/verify?token=${raw}`;
+  // Use the account's name if we already know it — no enumeration leak, the
+  // response shape is identical whether or not the account exists.
+  let name = email.split('@')[0];
+  try {
+    const sql = getSQL(c.env);
+    const rows = await sql`SELECT name FROM users WHERE email = ${email}`;
+    await sql.end();
+    if (rows.length && rows[0].name) name = rows[0].name;
+  } catch {}
+  // THE LINK IS ALREADY VALID; THE QUEUE ACCEPTANCE IS NOT OPTIONAL. `send()`
+  // inserts the send log and hands the message to the job queue. It does not
+  // call Gmail — the queue consumer does, so this await is a D1 write plus a
+  // queue send, not the provider round-trip D74 moved off the response.
+  //
+  // It used to be `waitUntil`. The response then said the link was on its way
+  // before anything had accepted the message. On the first request (cold
+  // isolate, schema bootstrap already spent) that errand was dropped: the
+  // token row existed, the screen said "Sign-in link sent", and no mail left.
+  // Resend ran the same handler on a warm isolate, the errand survived, and
+  // that second press was the first time a message was actually queued.
+  // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
+  // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  const signup = parsed.body?.purpose === 'signup';
+  const queued = signup
+    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
+    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  if (!queued.ok) {
+    console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
+    return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
+  }
+  return c.json({ ok: true, message: 'If that email is valid, a sign-in link is on its way. It expires in 15 minutes.' }, 202);
+}));
+
+auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in link.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const base = publicBase(c.env);
+  const fail = (code: string) => c.redirect(`${base}/login?magic_error=${code}`, 302);
+  // D200 — the two refusals that answer a presented credential are recorded
+  // (a token that no longer claims, an account that is inactive). A request
+  // with no token at all is not an attempt, and a claim whose UPDATE threw is
+  // an unreadable store rather than a refusal; neither is written.
+  const magicRefuse = (detail: string, subject?: { email?: string; userId?: number }) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'magic', outcome: 'refused', detail, ip: c.req.header('cf-connecting-ip'), ...subject });
+  const token = String(c.req.query('token') || '');
+  if (!token) return fail('invalid');
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  // This handler answers with a redirect, not JSON, so it cannot use
+  // rateGate() — but it still has to tell the two refusals apart: 'rate' is
+  // the person's, 'limiter' is ours, and MAGIC_ERROR_COPY in LoginPage.jsx
+  // carries a line for each.
+  const verifyVerdict = await checkRateLimit(c.env, `magic-verify-ip:${ip || 'unknown'}`, 20, 300);
+  if (verifyVerdict === 'deny') return fail('rate');
+  if (verifyVerdict === 'unavailable') return fail('limiter');
+
+  const tokenHash = await hashToken(token);
+  // Atomic single-use claim — succeeds only for an unused, unexpired token.
+  let claimed: { email: string } | null = null;
+  try {
+    claimed = await c.env.DB.prepare(
+      `UPDATE magic_link_tokens SET used_at = CURRENT_TIMESTAMP
+         WHERE token_hash = ? AND used_at IS NULL AND datetime(expires_at) > datetime('now')
+         RETURNING email`,
+    ).bind(tokenHash).first() as { email: string } | null;
+  } catch (e) {
+    console.error('[AUTH:magic-verify] claim failed', e);
+    return fail('invalid');
+  }
+  if (!claimed) { await magicRefuse('expired'); return fail('expired'); }
+  const email = String(claimed.email).toLowerCase().trim();
+
+  const sql = getSQL(c.env);
+  try {
+    let user: any;
+    let newSignup = false;
+    const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+    if (existing.length) {
+      user = existing[0];
+      if (Number(user.is_active ?? 1) === 0) { await sql.end(); await magicRefuse('inactive', { email, userId: Number(user.id) }); return fail('inactive'); }
+      if (!user.email_verified) {
+        await sql`UPDATE users SET email_verified = true WHERE id = ${user.id}`;
+        user.email_verified = true;
+      }
+    } else {
+      // Task #9 follow-up — magic-link is also a first-time-signup surface
+      // (LoginPage's "Email me a sign-in link"), so it must land brand-new
+      // accounts in 'exploring' and route them through the onboarding
+      // chatbot + admin review, exactly like /register and Google.
+      await ensureExploringSchema(c.env);
+      const inserted = await sql`INSERT INTO users (email, name, role, email_verified) VALUES (${email}, ${email.split('@')[0]}, 'exploring', true) RETURNING *`;
+      user = inserted[0];
+      newSignup = true;
+      try {
+        await c.env.DB.prepare(
+          `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+           VALUES (?, 'licence', 0, 0, NULL)`
+        ).bind(user.id).run();
+      } catch (e) { console.error('[AUTH:magic-verify] onboarding_progress seed failed', e); }
+      // D4289 P2 (#4291): a magic-link sign-up keeps the first-touch referral, as /register and Google do.
+      const { readRefCookie } = await import('../services/referralAttribution');
+      const { attachSignupReferral } = await import('../services/referrals/handleAttribution');
+      await attachSignupReferral(c.env, Number(user.id), readRefCookie(c.req.header('cookie')));
+    }
+
+    const eh = await hashEmail(user.email);
+    if (newSignup) {
+      await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+                VALUES ('user_signup_magic', ${`magic-link sign-up (email_hash=${eh})`}, ${eh}, ${user.id})`;
+    }
+
+    // Mint a LOWER-assurance session. factor='magic' so requireFactor('totp')
+    // AND requireStepUp() still gate sensitive routes; the 7-day session-scoped
+    // step_up_due_at drives the getCurrentUser auto-relock.
+    const jti = crypto.randomUUID();
+    const jwtToken = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+    const ua = (c.req.header('user-agent') || '').slice(0, 500);
+    const stepUpDue = new Date(Date.now() + MAGIC_STEP_UP_DAYS * 86400 * 1000).toISOString();
+    try {
+      await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor, assurance_level, step_up_due_at)
+                VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'magic', 'email_only', ${stepUpDue})`;
+    } catch (e) { console.error('[AUTH:magic-verify] session insert failed', e); }
+
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('user_login_magic', ${`magic-link sign-in (email_hash=${eh})`}, ${eh}, ${user.id})`;
+    await sql.end();
+
+    // Best-effort downstream seeding for brand-new accounts (mirrors /register + Google).
+    if (newSignup) {
+      try { const { seedObligations } = await import('../services/trust'); await seedObligations(c.env, user.id, user.role || 'founder'); } catch (e) { console.error('[AUTH:magic-verify] trust seed failed', e); }
+      try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id }); } catch {}
+    }
+
+    await revokeStaleCrossIdentitySession(c, user.id);
+    await claimLpRowsAtSignIn(c.env, user); // D5318 H8
+    const csrf = generateCsrfToken();
+    setAuthCookies(c, jwtToken, csrf);
+    const landing = newSignup ? '/onboarding/chat' : '/dashboard';
+    return c.redirect(`${base}${landing}?magic=ok`, 302);
+  } catch (e) {
+    try { await sql.end(); } catch {}
+    console.error('[AUTH:magic-verify] error', e);
+    return fail('error');
+  }
+}));
+
+// ───────────────────────────── D120 — the HQ support session hand-off ──
+// POST /api/auth/support/redeem  { code }
+//
+// The browser half of a cross-host support session. HQ authorised it over the
+// service binding (`HqEntrypoint.openSupportSession`, which verifies
+// HQ_RPC_SECRET); this swaps the one-time code for a session on THIS branch.
+//
+// UNAUTHENTICATED BY NECESSITY, AND THAT IS WHY THE CODE IS THE WAY IT IS. The
+// HQ operator holds no session here — HQ's JWT is signed with a different
+// secret and does not even decode on a branch (D.4). So the code is the only
+// credential, which is why it is 192 bits from the CSPRNG, single-use, valid
+// for five minutes, stored only as a digest, and refused with one message for
+// all three failure modes.
+//
+// IT CLEARS THE COOKIE JAR, AND THAT IS A CORRECTNESS FIX, NOT HYGIENE.
+// `pickAuthToken` (auth.ts:196) lets a Bearer beat a cookie when the Bearer's
+// `impersonated_by` equals the cookie's `user_id` — "a legitimate impersonation
+// Bearer", which is true at HQ where both ids name the same human. Across this
+// boundary the two id spaces are unrelated, so that equality is a coincidence
+// test: if the ids happened to differ, a branch user already signed in on this
+// browser would have their own cookie beat the support session, the session
+// would silently not take effect, and `selectJwt` would log a
+// `cross_session_bearer_discarded` row — an audit signal that exists to flag a
+// cross-account leak — for a supported operation. Rather than special-case
+// `pickAuthToken`, this leaves it nothing to arbitrate: revoke the other
+// identity's session and set this one's cookies, exactly as every other
+// sign-in path here does (`:626`, `:831`, `:1330`, auth_google, auth_sms,
+// auth_passkey).
+auth.post('/support/redeem', safe('support-redeem', 'Could not open the support session.', async (c) => {
+  const code = branchOf(c.env);
+  if (!code) {
+    // HQ has its own support session at /admin/accounts, with the operator's
+    // own TOTP and step-up in front of it. This endpoint exists for the case
+    // where the operator cannot have a session at all.
+    return c.json({
+      error: 'A support hand-off is redeemed on the branch it was opened for. This deployment is HQ.',
+      code: 'hq_only_surface',
+    }, 404);
+  }
+
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  const gate = rateGate(
+    c,
+    await checkRateLimit(c.env, `support-redeem-ip:${ip || 'unknown'}`, 10, 300),
+    'Too many attempts to open a support session from this address. Wait five minutes and try again.',
+  );
+  if (gate) return gate;
+
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+
+  const { redeemSupportCode } = await import('../rpc/branchOps');
+  let session;
+  try {
+    session = await redeemSupportCode(c.env, String(parsed.body?.code || ''));
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    // D4669 — the branch could not record the session, so none was opened.
+    if (/^support-unavailable: /.test(msg)) {
+      return c.json({ error: msg.replace(/^support-unavailable: /, ''), code: 'support_session_unrecorded' }, 503);
+    }
+    if (/^support: /.test(msg)) {
+      return c.json({ error: msg.replace(/^support: /, ''), code: 'support_code_invalid' }, 400);
+    }
+    throw e;
+  }
+
+  await revokeStaleCrossIdentitySession(c, session.target.id);
+  const csrf = generateCsrfToken();
+  setAuthCookies(c, session.token, csrf);
+
+  return c.json({
+    token: session.token,
+    expires_at: session.expires_at,
+    // THE ACTOR'S NAME TRAVELS IN THE RESPONSE because the branch has no
+    // `realUser` row to build the banner from — the operator is a person in
+    // HQ's database, which this one cannot read. The SPA shows this string;
+    // there is nothing here to look up and nothing that could resolve to the
+    // wrong person.
+    actor_name: session.hq_actor_name,
+    reason: session.reason,
+    target: session.target,
+    branch: code,
+  });
+}));
+
+// ──────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
+// Re-assert a RECENT TOTP for the current session. Stamps last_step_up_at on
+// the session row so requireStepUp() passes for the next ttl window. TOTP-only
+// by design — recovery codes / SMS / magic / google can never satisfy step-up.
+auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try again.', async (c) => {
+  await ensureAuthBlockersSchema(c.env);
+  const user = await requireAuth(c);
+  // D200 — a step-up is the one event this ledger records in BOTH outcomes:
+  // the stamp below overwrites a single column and would otherwise leave no
+  // trail of a fresh authenticator check having been asked for, or refused.
+  // D4691 — a support session's step-up is the operator's, and says so.
+  const supportUserId = await supportOperatorOf(c, Number(user.id));
+  const stepUp = (outcome: 'ok' | 'refused', detail?: string) =>
+    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip'), supportUserId });
+  const parsed = await readJson(c);
+  if (!parsed.ok) return parsed.res;
+  const code = String(parsed.body?.totp_code || '').trim();
+  if (!code) return c.json({ error: 'Authenticator code required' }, 400);
+  const stepUpGate = rateGate(
+    c, await checkRateLimit(c.env, `stepup:${user.id}`, 5, 300),
+    'Too many attempts. Please wait a few minutes.',
+  );
+  if (stepUpGate) return stepUpGate;
+  const sel = await selectJwt(c);
+  const jti = sel?.payload?.jti as string | undefined;
+  if (!jti) return c.json({ error: 'No active session' }, 401);
+
+  const totpRow = await loadTotp(c.env, user.id, (user as any).password_hash, (user as any).totp_recovery_codes);
+  if (!totpRow) { await stepUp('refused', 'totp_not_configured'); return c.json({ error: 'No authenticator is set up on this account.', code: 'totp_not_configured' }, 400); }
+  const totp = new TOTP({ secret: Secret.fromBase32(totpRow.secret) });
+  if (totp.validate({ token: code, window: 1 }) === null) {
+    await stepUp('refused', 'invalid_code');
+    return c.json({ error: 'Invalid authenticator code' }, 401);
+  }
+  await markTotpUsed(c.env, user.id);
+  const now = new Date().toISOString();
+  try {
+    await c.env.DB.prepare(
+      `UPDATE user_sessions SET last_step_up_at = ? WHERE jti = ? AND user_id = ?`,
+    ).bind(now, jti, user.id).run();
+  } catch (e) {
+    console.error('[AUTH:step-up] stamp failed', e);
+    return c.json({ error: 'Could not record step-up. Please try again.' }, 500);
+  }
+  await stepUp('ok');
+  return c.json({ ok: true, stepped_up_at: now, ttl_minutes: STEP_UP_TTL_MINUTES });
+}));
+
+// ─────────────────────────── NICE-AUTH-04 — sign-out-everywhere alias ──
+// Alias of POST /api/settings/sessions/revoke-all. Same jwt_min_iat bump;
+// kept as a distinct /api/auth path so the SPA + integrations can call either.
+auth.post('/sign-out-everywhere', safe('sign-out-everywhere', 'Could not sign out other sessions.', async (c) => {
+  const user = await requireAuth(c);
+  const nowSec = await bumpJwtMinIat(c.env, user.id);
+  try {
+    const eh = await hashEmail(user.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id)
+       VALUES ('sessions_revoked_all', 'User revoked all active sessions via /api/auth/sign-out-everywhere', ?, ?)`,
+    ).bind(eh, user.id).run();
+  } catch {}
+  return c.json({ ok: true, revoked_at: nowSec });
+}));
+
+// Task #6 — mount SMS 2FA endpoints (and the /factors discovery endpoint)
+// onto the same /api/auth prefix. Kept in a separate file (auth_sms.ts)
+// so this router stays small and the SMS surface can be lifted out for
+// independent rate-limit / observability tuning later.
+auth.route('/', smsRoutes);
+
+export default auth;

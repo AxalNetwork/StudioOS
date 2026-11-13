@@ -1,0 +1,78 @@
+{
+  "GET /api/mentors/:uid": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/mentors/:uid/slots": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/mentors/me/guidance/:uid/history": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+    "note": "Only the advisor who wrote the row (advisor_user_id = caller) reads its versions; another advisor on the same cohort gets 404 naming nothing, and a founder (no advisor licence) gets 403."
+  },
+  "GET /api/mentors/proof-consents/:token/claim": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "PATCH /api/mentors/me/guidance/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/:uid/book": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/booking-links/open": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/bookings/:id/pay": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "The legacy mount of POST /api/advisors/bookings/:id/pay, the same router: only the booking's founder reaches the billing checks; everyone else gets the 404 a missing booking gets and no payment provider is called; no credentials or a disabled founder get 401."
+  },
+  "POST /api/mentors/me/cohort/:cycleId/guidance": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/me/guidance/:uid/publish": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+    "note": "Only the advisor who wrote the row (advisor_user_id = caller, else 404 naming nothing) publishes it, and only while their cohort assignment is active (requireOwnCohort, else 403); another advisor on the same cohort and every founder are refused and the row is unchanged."
+  },
+  "POST /api/mentors/proof-consents/:token/code": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/proof-consents/:token/respond": {
+    "review": "optional_auth",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/received/deliverables/:uid/accept": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/mentors/received/deliverables/:uid/open": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,27 @@
+#5 - Discovery Unification & Lead Routing
+What & Why
+Roadmap items #2 and #3 from the Founder UX audit. Founder Discovery is still a single interview log, and the old /customer-discovery page still renders as a parallel surface. Lead routing is only half-wired: routeFor() classifies customer and investor leads but everything else silently falls back to "network," so advisor/mentor/co-founder/partner leads dead-end, and only the Advisory destination shows a lead strip. Unify Discovery into one tabbed workspace and complete the routing so every captured lead lands in a visible destination.
+Done looks like
+* Discovery is one workspace with Leads · Interviews · Insights tabs (interview log becomes the Interviews tab).
+* The legacy /customer-discovery route redirects into the unified Discovery workspace instead of rendering its own page.
+* A captured lead is routed by audience to the correct destination for all audiences (customer, investor, advisor, mentor, co-founder, partner) — none silently default to "network."
+* Each destination surface shows an incoming-lead strip so routed leads are visible where the founder acts on them (Advisory already has one; add the missing Team and Marketplace/partner strips).
+Out of scope
+* Restructuring the Team and Advisory pages themselves (separate task) — this task only adds their incoming-lead strips.
+* Investor-side navigation and workspaces.
+Steps
+1. Unify Discovery — Convert the Discovery page into a single workspace with Leads, Interviews, and Insights tabs, folding the existing interview log in as the Interviews tab.
+2. Redirect legacy discovery — Point the old customer-discovery route at the unified Discovery workspace so it is no longer a separate surface.
+3. Complete lead routing — Extend the audience-to-destination routing so advisor, mentor, co-founder, and partner leads route to real destinations instead of defaulting to network.
+4. Destination lead strips — Add the missing incoming-lead strips on the Team and Marketplace/partner destinations so routed leads are visible there.
+Architectural notes:
+* Backend routing lives in the Cloudflare Worker (worker-route-first); keep the audience list and routing logic canonical there.
+* A follow-up task restructures Team & Advisory and will build on the strips added here, so keep the strip components self-contained.
+Relevant files
+* frontend/src/pages/DiscoveryPage.jsx
+* frontend/src/pages/CustomerDiscoveryPage.jsx
+* frontend/src/App.jsx:1254
+* cloudflare-worker/src/routes/contacts.ts:36-40,150-165,350-365
+* frontend/src/pages/TeamBuildingPage.jsx
+* frontend/src/pages/MarketplacePage.jsx
+* frontend/src/pages/FounderMarketplacePage.jsx

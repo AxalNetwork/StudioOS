@@ -1,0 +1,191 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
+
+const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
+const src = codeOnly(read('frontend/src/sidebarConfig.js'));
+const partner = src.slice(src.indexOf('\n  partner: ['), src.indexOf('\n  investor: ['));
+const rows = [...partner.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
+  .map((match) => ({ to: match[1], label: match[2] }));
+const labels = rows.map((row) => row.label);
+const targets = rows.map((row) => row.to);
+
+test('Partner sidebar is exactly the seven approved rows in order', () => {
+  // Two corrections, both against what `sidebarConfig.js` has actually held on
+  // this branch and on main, and neither of them a relaxation — the list is
+  // still exact, still ordered, still checked against its destinations.
+  //
+  // 'Studio', not 'Home'. `rows` above is built from a regex that only matches
+  // items carrying a `to:`. 'Home' is the GROUP header — it has no `to:`, so it
+  // can never appear in `rows`, and this assertion was comparing a group's name
+  // against a row's. The item on /studio has been labelled 'Studio' in every
+  // role for as long as the config has existed. The same correction was made in
+  // founder_shell, investor_shell and advisor_shell.
+  //
+  // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery, Offers
+  // and Research used to point at legacy destinations — /needs,
+  // /partner/operations/overview, /services, /signals — so the canvas overview
+  // pages (P3, P4, P5, P7) were unreachable from the sidebar and the rows lit
+  // up on pages outside their own buckets. The roots render the overviews via
+  // PartnerBucketRoutes; the legacy destinations stay in each row's `match`
+  // list, which the deep-link test below still pins.
+  assert.deepEqual(labels, [
+    'Studio',
+    'Spin-Out Lab',
+    'Pipeline',
+    'Delivery',
+    'Offers',
+    'Network',
+    'Research',
+  ]);
+  assert.deepEqual(targets, [
+    '/studio',
+    '/spinout-lab',
+    '/pipeline',
+    '/delivery',
+    '/offers',
+    '/network',
+    '/research',
+  ]);
+  assert.ok(!labels.includes('Messages'));
+  assert.ok(!labels.includes('Jobs'));
+});
+
+test('Partner shell is one flat, headerless group', () => {
+  assert.match(partner, /\{ key: 'shell', label: '', items:/);
+  assert.equal([...partner.matchAll(/\{ key: '([^']+)', label:/g)].length, 1);
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(sidebar, /group\.key === 'home' \|\| !group\.label/);
+});
+
+test('Home remains /studio and no Partner persona root was invented', () => {
+  // 'Home' here is the group; the destination is what the test pins.
+  assert.equal(rows[0].to, '/studio');
+  assert.ok(!targets.includes('/home'));
+  assert.ok(!targets.includes('/partner'));
+});
+
+test('canonical Partner deep links are owned by the correct workspace', () => {
+  const expectedMatches = {
+    // '/matches' left with the AI Matching Engine, which was deleted.
+    // D505: the retired /partner/operations/* addresses (D395 redirects) are
+    // replaced by their successors — engagements → /pipeline/proposals,
+    // performance → /pipeline/analytics, portfolio → /delivery/health,
+    // capabilities → /offers/catalog. Overview's successor, /company-settings,
+    // is the pinned footer's own row and so sits in no row's `match`.
+    // #2338: '/needs' (Pipeline) and '/services' (Offers) left with their
+    // pages; both addresses forward to the zones below.
+    Pipeline: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'],
+    Delivery: ['/delivery', '/delivery/health'],
+    Offers: ['/offers', '/perks', '/comarketing', '/offers/catalog'],
+    Network: ['/network', '/relationships', '/contacts'],
+    // '/signals' and '/market-intel' left with their pages (D670).
+    Research: ['/research'],
+  };
+  for (const [label, paths] of Object.entries(expectedMatches)) {
+    const rowStart = partner.indexOf(`label: '${label}'`);
+    const rowEnd = partner.indexOf('},', rowStart);
+    const rowSource = partner.slice(rowStart, rowEnd);
+    for (const path of paths) {
+      assert.ok(rowSource.includes(`'${path}'`) || targets.includes(path), `${path} is not owned by ${label}`);
+    }
+  }
+});
+
+test('collapsed Pipeline and Offers sections remain reachable from Partner tabs', () => {
+  const bars = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const app = readRoutesSource();
+  const routeLine = (path) => app.split('\n').find(
+    (line) => line.includes(`path="${path}"`) && line.includes('<Route'),
+  );
+  // #2338: Leads and Catalog are the bucket's own zones now, not the removed
+  // board and catalogue pages, and the old addresses only forward to them.
+  for (const [zone, old] of [['/pipeline/leads', '/needs'], ['/offers/catalog', '/services']]) {
+    assert.ok(bars.includes(`to: '${zone}'`), `${zone} is in no Partner tab set`);
+    assert.ok(routeLine(zone).includes('<PartnerBucketRoutes />'), `${zone} is not the bucket's zone`);
+    const forward = routeLine(old);
+    assert.equal(forward, undefined);
+    assert.ok(!bars.includes(`to: '${old}'`), `a tab still opens the removed ${old}`);
+  }
+  for (const path of [
+    '/partner/insights',
+    '/perks',
+    '/comarketing',
+  ]) {
+    assert.ok(bars.includes(`to: '${path}'`), `${path} is in no Partner tab set`);
+    const line = routeLine(path);
+    assert.ok(line, `no route for ${path}`);
+    if (path === '/perks') {
+      assert.ok(line.includes('Navigate replace to="/offers/perk-deals"'),
+        '/perks must redirect partners to the dedicated perk-deals zone');
+      continue;
+    }
+    assert.ok(line.includes('PartnerWorkspaceTabs'), `${path} does not mount the Partner tab shell`);
+  }
+  assert.doesNotMatch(bars, /label: 'Office hours'/,
+    'Office hours is unrelated to the Perks & Products Offers container');
+});
+
+test('Partner pages share amber identity and cyan provenance without recoloring other roles', () => {
+  const shell = read('frontend/src/pages/partner/PartnerWorkspaceShell.jsx');
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(shell, /text-amber-/);
+  assert.match(shell, /border-cyan-/);
+  assert.match(shell, /Founder-granted access/);
+  assert.match(shell, /Screened and consented/);
+  assert.match(shell, /AI assist/);
+  assert.match(sidebar, /role === 'partner'/);
+  assert.match(sidebar, /role === 'advisor'/);
+  assert.match(sidebar, /text-emerald-/);
+  assert.match(sidebar, /text-violet-/);
+});
+
+test('the shared Network page only mounts Partner chrome for Partner users', () => {
+  const tabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const network = read('frontend/src/pages/NetworkPage.jsx');
+  assert.match(tabs, /user\?\.role !== 'partner'/);
+  assert.match(network, /role === 'partner'/);
+  assert.match(network, /workspace="network"/);
+  assert.match(network, /role === 'advisor'/);
+  // MarketIntelPage was the shared Research page this test also held; D670
+  // retired it, and Research is the role-branched ResearchWorkspace.
+});
+
+test('Trust and account Portfolio stay in the user menu, outside the sidebar', () => {
+  assert.ok(!targets.includes('/trust'));
+  assert.ok(!targets.includes('/company-settings'));
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/); // D4416 amends D4152.
+  const app = readRoutesSource();
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
+  assert.ok(!/to="\/settings"/.test(sidebar));
+});
+
+test('D1424 (#3700): each Operating Partner zone header fills the primary D1424 names, or none', async () => {
+  // Every Pipeline zone, and Delivery's Board, Deliverables, Capacity and
+  // Health, have no live first step: their header ops are stated gaps (owner
+  // answer I keeps them disabled ghosts with their reasons).
+  const { PARTNER_ZONE_ACTIONS } = await import('../src/workspaces/partnerZoneActions.js');
+  const primaries = Object.fromEntries(Object.entries(PARTNER_ZONE_ACTIONS)
+    .map(([zone, rows]) => [zone, rows.filter((r) => r.primary).map((r) => r.label)])
+    .filter(([, labels]) => labels.length));
+  assert.deepEqual(primaries, {
+    'delivery/status-reports': ['New report'],
+    'offers/catalog': ['New service'],
+    'offers/perk-deals': ['New perk'],
+    'offers/proof': ['Ask for consent'],
+  });
+  for (const zone of ['delivery/board', 'delivery/deliverables', 'delivery/capacity', 'delivery/health']) {
+    assert.ok(PARTNER_ZONE_ACTIONS[zone].every((r) => !r.primary), `${zone} has no live first step`);
+  }
+  // Owner answer I: the Delivery stores stay disabled ghosts, each with its reason.
+  for (const label of ['Draft all', 'Cadence rules', 'Change order', 'Renewal watch']) {
+    const row = Object.values(PARTNER_ZONE_ACTIONS).flat().find((r) => r.label === label);
+    assert.ok(row?.unbuilt, `${label} lost its reason`);
+  }
+});

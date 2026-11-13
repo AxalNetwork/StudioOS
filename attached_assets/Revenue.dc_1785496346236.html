@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+    .rv-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .rv-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa}
+    .rv-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.03)}
+    .rv-row:hover{background:#fafafa}
+    .rv-src{transition:border-color .12s,box-shadow .12s;cursor:pointer}
+    .rv-src:hover{border-color:#99f6e4;box-shadow:0 4px 14px rgba(13,148,136,.1)}
+    .rv-root.rv-embedded .rv-topbar{display:none!important}
+    @keyframes rvFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @media (max-width:1080px){.rv-2col{grid-template-columns:1fr!important}.rv-srcgrid{grid-template-columns:1fr!important}.rv-kpi{grid-template-columns:repeat(2,1fr)!important}}
+    @media (max-width:720px){.rv-tablewrap{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="rv-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="rv-topbar" style="height:3px;background:#0d9488;border-radius:0 0 3px 3px;margin-bottom:16px"></div>
+  <div class="rv-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px 0 9px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-size:13px;font-weight:600">← Back to Workspace</a>
+      <div><div style="display:flex;align-items:center;gap:9px"><h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Revenue</h1><span style="font-size:10.5px;font-weight:700;color:#166534;background:#dcfce7;border-radius:99px;padding:3px 9px">Active</span></div><div style="font-size:13px;color:#71717a;margin-top:2px">Capture real revenue and build investor-ready proof of traction.</div></div>
+    </div>
+    <span style="font-size:11px;font-weight:600;color:#0f766e;background:#ecfdf5;border:1px solid #99f6e4;padding:5px 11px;border-radius:99px">Unlocked · Wk 3</span>
+  </div>
+
+  <!-- MODE + QUICK ACTIONS -->
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+    <div style="display:flex;gap:5px">
+      <sc-for list="{{ modeTabs }}" as="m" hint-placeholder-count="2"><button onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button></sc-for>
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">↗ Share</button>
+      <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">⬇ Export</button>
+      <button onClick="{{ toggleInvestorView }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:{{ investorBtnColor }};padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">👁 {{ investorBtnLabel }}</button>
+    </div>
+  </div>
+  <div style="font-size:12px;color:#0f766e;background:#ecfdf5;border:1px solid #ccfbf1;border-radius:10px;padding:9px 14px;margin-bottom:20px">{{ modeNote }}</div>
+
+  <!-- KPI STRIP -->
+  <div class="rv-kpi" style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px">
+    <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+      <div class="rv-card" style="padding:16px 18px">
+        <div class="rv-mono" style="font-size:23px;font-weight:700;color:{{ k.color }};line-height:1">{{ k.value }}</div>
+        <div style="font-size:11.5px;color:#71717a;margin-top:5px">{{ k.label }}</div>
+        <sc-if value="{{ k.sub }}"><div style="font-size:10.5px;color:#a1a1aa;margin-top:2px">{{ k.subText }}</div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- SOURCE CARDS (hidden in investor view) -->
+  <sc-if value="{{ showInputs }}">
+  <div class="rv-lbl" style="margin-bottom:12px">Add a revenue source</div>
+  <div class="rv-srcgrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <sc-for list="{{ sources }}" as="s" hint-placeholder-count="3">
+      <div class="rv-src rv-card" onClick="{{ s.onClick }}" style="padding:18px;box-shadow:none;border-color:{{ s.border }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="width:38px;height:38px;border-radius:10px;background:{{ s.iconBg }};color:{{ s.iconColor }};display:flex;align-items:center;justify-content:center;font-size:17px">{{ s.glyph }}</span>
+          <span style="font-size:10px;font-weight:700;border-radius:99px;padding:3px 9px;{{ s.statusStyle }}">{{ s.status }}</span>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:#27272a">{{ s.title }}</div>
+        <div style="font-size:11.5px;color:#71717a;margin-top:5px;line-height:1.45">{{ s.desc }}</div>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <div class="rv-2col" style="display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start">
+    <!-- LEFT: revenue table + trends -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <!-- REVENUE TABLE -->
+      <div class="rv-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+          <div class="rv-lbl">Revenue entries</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ filters }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.onClick }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+        </div>
+        <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:14px">{{ tableNote }}</div>
+        <div class="rv-tablewrap">
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="border-bottom:1px solid #f0f0f3">
+              <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Customer</th>
+              <th style="text-align:right;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Amount</th>
+              <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Type</th>
+              <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Date</th>
+              <th style="text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Status</th>
+              <th style="text-align:center;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa">Proof</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ entries }}" as="e" hint-placeholder-count="6">
+                <tr class="rv-row" style="border-bottom:1px solid #f6f6f8">
+                  <td style="padding:11px 10px"><div style="font-size:13px;font-weight:600;color:#27272a">{{ e.customer }}</div><div style="font-size:11px;color:#a1a1aa">{{ e.source }}</div></td>
+                  <td style="padding:11px 10px;text-align:right"><span class="rv-mono" style="font-size:13.5px;font-weight:700;color:{{ e.amountColor }}">{{ e.amount }}</span></td>
+                  <td style="padding:11px 10px"><span style="font-size:10.5px;font-weight:600;border-radius:6px;padding:2px 8px;{{ e.typeStyle }}">{{ e.type }}</span></td>
+                  <td style="padding:11px 10px"><span class="rv-mono" style="font-size:12px;color:#52525b">{{ e.date }}</span></td>
+                  <td style="padding:11px 10px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;border-radius:99px;padding:3px 9px;{{ e.statusStyle }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ e.dot }}"></span>{{ e.status }}</span></td>
+                  <td style="padding:11px 10px;text-align:center"><span style="font-size:14px" title="{{ e.proofLabel }}">{{ e.proofIcon }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <sc-if value="{{ entriesEmpty }}"><div style="text-align:center;padding:26px 0;font-size:12.5px;color:#a1a1aa">{{ emptyMsg }}</div></sc-if>
+      </div>
+
+      <!-- TRENDS -->
+      <div class="rv-card" style="padding:22px">
+        <div class="rv-lbl" style="margin-bottom:16px">Monthly revenue trend</div>
+        <div style="display:flex;align-items:flex-end;gap:14px;height:150px;padding:0 4px">
+          <sc-for list="{{ trend }}" as="t" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%;justify-content:flex-end">
+              <span class="rv-mono" style="font-size:11px;font-weight:700;color:#27272a">{{ t.label }}</span>
+              <div style="width:100%;max-width:52px;display:flex;flex-direction:column-reverse;border-radius:7px 7px 0 0;overflow:hidden;height:{{ t.h }}">
+                <div style="background:#0d9488;height:{{ t.recH }}"></div>
+                <div style="background:#5eead4;height:{{ t.oneH }}"></div>
+              </div>
+              <span style="font-size:10px;color:#a1a1aa">{{ t.month }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid #f0f0f3">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#52525b"><span style="width:10px;height:10px;border-radius:3px;background:#0d9488"></span>Recurring</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#52525b"><span style="width:10px;height:10px;border-radius:3px;background:#5eead4"></span>One-time & pilots</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: proof vault + deck box + feeds -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <!-- PROOF VAULT -->
+      <div class="rv-card" style="padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><div class="rv-lbl">Proof vault</div><span style="font-size:10px;font-weight:700;color:#0f766e;background:#ecfdf5;border-radius:99px;padding:2px 8px">{{ proofCoverage }} covered</span></div>
+        <div style="font-size:11px;color:#a1a1aa;margin-bottom:14px">Auto-tagged into the data room as diligence artifacts</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ proofDocs }}" as="d" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #f0f0f3;border-radius:10px">
+              <span style="font-size:15px">{{ d.icon }}</span>
+              <div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#27272a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</div><div style="font-size:10.5px;color:#a1a1aa">{{ d.meta }}</div></div>
+              <span style="font-size:9.5px;font-weight:700;color:#0f766e;background:#ecfdf5;border-radius:6px;padding:2px 7px">{{ d.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:9px 11px;margin-top:12px;line-height:1.4">{{ proofWarn }}</div>
+      </div>
+
+      <!-- DECK-READY TRACTION -->
+      <div class="rv-card" style="padding:20px;background:linear-gradient(140deg,#0f766e,#0d9488);color:#fff;border:none">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#99f6e4;margin-bottom:12px">Deck-ready traction</div>
+        <div style="font-size:15px;font-weight:700;line-height:1.5;margin-bottom:14px">{{ tractionLine }}</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:16px">
+          <sc-for list="{{ tractionBullets }}" as="b" hint-placeholder-count="3"><div style="font-size:12px;color:#d0fbf4;display:flex;gap:8px"><span style="color:#99f6e4">›</span>{{ b }}</div></sc-for>
+        </div>
+        <div style="display:flex;gap:8px"><button style="flex:1;height:36px;border-radius:9px;border:none;background:#fff;color:#0f766e;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Sync to Pitch Deck</button><button style="flex:1;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Send to Capital</button></div>
+      </div>
+
+      <!-- CONFIDENCE -->
+      <div class="rv-card" style="padding:20px">
+        <div class="rv-lbl" style="margin-bottom:14px">Revenue mix & confidence</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <sc-for list="{{ confidenceRows }}" as="c" hint-placeholder-count="4">
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:11.5px;font-weight:600;color:#3f3f46">{{ c.label }}</span><span class="rv-mono" style="font-size:11.5px;font-weight:700;color:#52525b">{{ c.value }}</span></div>
+              <div style="height:6px;border-radius:99px;background:#f1f1f5;overflow:hidden"><div style="height:100%;width:{{ c.pct }};background:{{ c.color }};border-radius:99px"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- FEEDS INTO -->
+      <div class="rv-card" style="padding:20px">
+        <div class="rv-lbl" style="margin-bottom:12px">Feeds into</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ feeds }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:2px;background:{{ f.dot }}"></span><div style="flex:1"><span style="font-size:12.5px;font-weight:600;color:#27272a">{{ f.tool }}</span><span style="font-size:11px;color:#a1a1aa"> · {{ f.via }}</span></div></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD SOURCE MODAL -->
+<sc-if value="{{ modalOpen }}">
+  <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.4);backdrop-filter:blur(2px);animation:rvFade .18s ease"></div>
+  <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:81;width:min(560px,92vw);max-height:88vh;overflow-y:auto;background:#fff;border-radius:18px;box-shadow:0 30px 80px -20px rgba(24,24,27,.4);animation:rvFade .2s ease">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #f0f0f3;padding:20px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div><div style="font-size:16px;font-weight:800;letter-spacing:-.01em">{{ modal.title }}</div><div style="font-size:12px;color:#71717a;margin-top:2px">{{ modal.subtitle }}</div></div>
+      <button onClick="{{ closeModal }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;font-size:16px;cursor:pointer">×</button>
+    </div>
+    <div style="padding:22px 24px">
+      <!-- STRIPE -->
+      <sc-if value="{{ modal.isStripe }}">
+        <div style="border:1px solid #f0f0f3;border-radius:12px;padding:18px;text-align:center;margin-bottom:16px">
+          <div style="font-size:30px;margin-bottom:8px">💳</div>
+          <div style="font-size:13.5px;font-weight:700;color:#27272a;margin-bottom:5px">Connect your Stripe account</div>
+          <div style="font-size:12px;color:#71717a;line-height:1.5">Sync subscriptions, charges, customers, refunds, and invoices. Every synced entry is marked <b>Verified</b> automatically.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px">
+          <sc-for list="{{ stripeOpts }}" as="o" hint-placeholder-count="2"><label style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3f3f46;cursor:pointer"><span style="width:16px;height:16px;border-radius:4px;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">✓</span>{{ o }}</label></sc-for>
+        </div>
+        <button style="width:100%;height:42px;border-radius:10px;border:none;background:#635bff;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Connect with Stripe →</button>
+      </sc-if>
+      <!-- IMPORT -->
+      <sc-if value="{{ modal.isImport }}">
+        <div style="border:1.5px dashed #cbd5e1;border-radius:12px;padding:26px;text-align:center;margin-bottom:16px;background:#fafafa">
+          <div style="font-size:26px;margin-bottom:8px">📄</div>
+          <div style="font-size:13px;font-weight:700;color:#27272a;margin-bottom:4px">Drop a file or click to upload</div>
+          <div style="font-size:11.5px;color:#a1a1aa">CSV · invoice export · Stripe export · payment report · signed PO · contract</div>
+        </div>
+        <div class="rv-lbl" style="margin-bottom:10px">Column mapping preview</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:18px">
+          <sc-for list="{{ importCols }}" as="c" hint-placeholder-count="4"><div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:7px 11px;border:1px solid #f0f0f3;border-radius:9px"><span style="color:#71717a">{{ c.from }}</span><span style="color:#0d9488">→ {{ c.to }}</span></div></sc-for>
+        </div>
+        <button style="width:100%;height:42px;border-radius:10px;border:none;background:#0d9488;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Validate & import · attaches proof to data room</button>
+      </sc-if>
+      <!-- MANUAL -->
+      <sc-if value="{{ modal.isManual }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="grid-column:1 / 3"><div style="font-size:11.5px;font-weight:600;color:#3f3f46;margin-bottom:5px">Customer / company</div><input type="text" value="{{ mf.customer }}" onChange="{{ mfSet.customer }}" placeholder="Acme Co." style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></div>
+          <div><div style="font-size:11.5px;font-weight:600;color:#3f3f46;margin-bottom:5px">Amount (USD)</div><input type="text" value="{{ mf.amount }}" onChange="{{ mfSet.amount }}" placeholder="1200" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></div>
+          <div><div style="font-size:11.5px;font-weight:600;color:#3f3f46;margin-bottom:5px">Date received</div><input type="text" value="{{ mf.date }}" onChange="{{ mfSet.date }}" placeholder="Jul 18, 2026" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></div>
+        </div>
+        <div style="margin-bottom:14px"><div style="font-size:11.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">Revenue type</div><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ typePills }}" as="t" hint-placeholder-count="4"><button onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div></div>
+        <div style="margin-bottom:16px"><div style="font-size:11.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">Proof attached?</div><div style="display:flex;gap:6px"><sc-for list="{{ proofPills }}" as="p" hint-placeholder-count="2"><button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button></sc-for></div></div>
+        <div style="font-size:11px;color:#a1a1aa;background:#fafafa;border:1px solid #f0f0f3;border-radius:9px;padding:9px 11px;margin-bottom:16px;line-height:1.4">Grants, investment capital, and non-operating cash should not be logged as customer revenue — they distort traction.</div>
+        <button onClick="{{ saveManual }}" style="width:100%;height:42px;border-radius:10px;border:none;background:#0d9488;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Save revenue entry</button>
+        <sc-if value="{{ savedToast }}"><div style="margin-top:10px;font-size:11.5px;color:#15803d;text-align:center">✓ Entry saved. Marked "Manual — needs evidence" until proof is attached.</div></sc-if>
+      </sc-if>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {
+    mode:'week3', filter:'all', investorView:false,
+    modalOpen:false, modalKind:null, savedToast:false,
+    mf:{ customer:'', amount:'', date:'' }, mfType:'Paid pilot', mfProof:'No',
+    extra:[],
+  };
+
+  baseEntries(){
+    return [
+      { customer:'Northwind Ops', source:'Stripe · sub_1P2x', amount:'$490', amtNum:490, type:'Recurring', date:'Jul 1', status:'Verified' },
+      { customer:'Northwind Ops', source:'Stripe · sub_1P2x', amount:'$490', amtNum:490, type:'Recurring', date:'Jun 1', status:'Verified' },
+      { customer:'Meridian Labs', source:'Paid pilot · contract', amount:'$1,500', amtNum:1500, type:'Pilot', date:'Jun 24', status:'Supported' },
+      { customer:'Volta Systems', source:'Paid pilot · contract', amount:'$1,000', amtNum:1000, type:'Pilot', date:'Jun 18', status:'Supported' },
+      { customer:'Cedar & Co.', source:'Stripe · one-time', amount:'$300', amtNum:300, type:'One-time', date:'Jun 12', status:'Verified' },
+      { customer:'Loop Freight', source:'Manual · deposit', amount:'$420', amtNum:420, type:'Deposit', date:'Jun 8', status:'Manual' },
+    ];
+  }
+
+  renderVals(){
+    const st=this.state;
+    const isWk4 = st.mode==='week4';
+    const pill=(active)=> active
+      ? 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #0d9488;background:#0d9488;color:#fff;cursor:pointer;font-family:inherit'
+      : 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #e4e4e7;background:#fff;color:#52525b;cursor:pointer;font-family:inherit';
+
+    const modeTabs=[['week3','Week 3 · Generate'],['week4','Week 4 · Prove']].map(([k,l])=>({
+      label:l, onClick:()=>this.setState({mode:k}), style:pill(st.mode===k) }));
+    const modeNote = isWk4
+      ? 'Week 4 mode — emphasis on investor-facing metrics, proof quality, and a synced pitch-deck traction slide.'
+      : 'Week 3 mode — emphasis on first paid customers, pilots, pricing experiments, and capturing proof as you go.';
+
+    const typeStyle={ Recurring:'color:#0f766e;background:#ecfdf5', Pilot:'color:#6d28d9;background:#f5f3ff', 'One-time':'color:#2563eb;background:#eff6ff', Deposit:'color:#b45309;background:#fef3c7' };
+    const statusMeta={
+      Verified:{ style:'color:#15803d;background:#dcfce7', dot:'#16a34a', proof:'📎', proofLabel:'Stripe charge' },
+      Supported:{ style:'color:#b45309;background:#fef3c7', dot:'#d97706', proof:'📄', proofLabel:'Document uploaded' },
+      Manual:{ style:'color:#a1a1aa;background:#f4f4f5', dot:'#a1a1aa', proof:'—', proofLabel:'No evidence attached' },
+    };
+
+    const extras = st.extra.map(x=>({ ...x, source:'Manual · '+(x.proofAttached?'proof':'no proof'), amount:'$'+Number(x.amtNum).toLocaleString(), status:x.proofAttached?'Supported':'Manual' }));
+    let all = extras.concat(this.baseEntries());
+    // filter
+    const f=st.filter;
+    let list=all.slice();
+    if(f==='recurring') list=all.filter(e=>e.type==='Recurring');
+    else if(f==='pilot') list=all.filter(e=>e.type==='Pilot'||e.type==='Deposit');
+    else if(f==='verified') list=all.filter(e=>e.status==='Verified');
+    else if(f==='unverified') list=all.filter(e=>e.status==='Manual');
+    // investor view hides Manual (unverified)
+    if(st.investorView) list=list.filter(e=>e.status!=='Manual');
+
+    const entries=list.map(e=>{ const m=statusMeta[e.status]; return { ...e,
+      amountColor: e.status==='Manual'?'#a1a1aa':'#27272a',
+      typeStyle: typeStyle[e.type]||typeStyle['One-time'],
+      statusStyle:m.style, dot:m.dot, proofIcon:m.proof, proofLabel:m.proofLabel }; });
+
+    const filters=[['all','All'],['recurring','Recurring'],['pilot','Pilots & deposits'],['verified','Verified'],['unverified','Unverified']].map(([k,lab])=>({
+      label:lab, onClick:()=>this.setState({filter:k}),
+      style: f===k?'color:#fff;background:#0d9488;border:1px solid #0d9488;font-size:11px;font-weight:600;padding:5px 11px;border-radius:99px;cursor:pointer;font-family:inherit':'color:#71717a;background:#fff;border:1px solid #e4e4e7;font-size:11px;font-weight:600;padding:5px 11px;border-radius:99px;cursor:pointer;font-family:inherit' }));
+
+    // totals
+    const total=all.reduce((s,e)=>s+e.amtNum,0);
+    const verified=all.filter(e=>e.status==='Verified').reduce((s,e)=>s+e.amtNum,0);
+    const supported=all.filter(e=>e.status==='Supported').reduce((s,e)=>s+e.amtNum,0);
+    const manual=all.filter(e=>e.status==='Manual').reduce((s,e)=>s+e.amtNum,0);
+    const recurring=all.filter(e=>e.type==='Recurring');
+    const mrr=recurring.length?recurring[0].amtNum + (all.filter(e=>e.type==='Recurring'&&e.customer==='Cedar & Co.').length?0:0):0;
+    const customers=[...new Set(all.map(e=>e.customer))];
+    const verifiedPct=Math.round(verified/total*100);
+    const proofBackedPct=Math.round((verified+supported)/total*100);
+
+    const kpis=[
+      { value:'$'+total.toLocaleString(), label:'Revenue to date', color:'#0d9488' },
+      { value:'$490', label:'MRR', color:'#27272a', sub:true, subText:'1 recurring plan' },
+      { value:String(customers.length), label:'Paying customers', color:'#27272a' },
+      { value:verifiedPct+'%', label:'Verified revenue', color: verifiedPct>=60?'#15803d':'#b45309' },
+      { value: isWk4?'Synced 2m ago':'Jul 1', label: isWk4?'Deck traction slide':'Last synced (Stripe)', color:'#27272a' },
+    ];
+
+    const sources=[
+      { key:'stripe', glyph:'💳', iconBg:'#eef2ff', iconColor:'#635bff', title:'Connect Stripe', desc:'Live sync of subscriptions, charges, and invoices. Auto-verified.', status:'Connected', statusStyle:'color:#15803d;background:#dcfce7', border:'#e0e7ff', onClick:()=>this.openModal('stripe') },
+      { key:'import', glyph:'📄', iconBg:'#ecfdf5', iconColor:'#0d9488', title:'Import revenue document', desc:'CSV, invoice export, payment report, or signed contract as proof.', status:'2 imported', statusStyle:'color:#0f766e;background:#ecfdf5', border:'#ccfbf1', onClick:()=>this.openModal('import') },
+      { key:'manual', glyph:'✏️', iconBg:'#faf5ff', iconColor:'#7c3aed', title:'Add manually', desc:'Log pilots, deposits, or early subscriptions with optional proof.', status:'1 entry', statusStyle:'color:#6d28d9;background:#f5f3ff', border:'#ede9fe', onClick:()=>this.openModal('manual') },
+    ];
+
+    const trendData=[ {month:'Mar',rec:0,one:300}, {month:'Apr',rec:0,one:1000}, {month:'May',rec:490,one:1500}, {month:'Jun',rec:490,one:1020} ];
+    const maxT=Math.max(...trendData.map(t=>t.rec+t.one));
+    const trend=trendData.map(t=>{ const tot=t.rec+t.one; const hPct=Math.round(tot/maxT*100);
+      return { month:t.month, label:'$'+((tot/1000).toFixed(1))+'k', h:hPct+'%', recH: tot?Math.round(t.rec/tot*100)+'%':'0%', oneH: tot?Math.round(t.one/tot*100)+'%':'0%' }; });
+
+    const proofDocs=[
+      { icon:'📎', name:'Stripe payouts export.csv', meta:'Added Jul 1 · covers 3 entries', tag:'Stripe export' },
+      { icon:'📄', name:'Meridian Labs pilot agreement.pdf', meta:'Added Jun 24', tag:'Contract' },
+      { icon:'📄', name:'Volta Systems SOW.pdf', meta:'Added Jun 18', tag:'Pilot agreement' },
+      { icon:'🧾', name:'Cedar invoice #1042.pdf', meta:'Added Jun 12', tag:'Invoice' },
+    ];
+
+    const confidenceRows=[
+      { label:'Verified (Stripe)', value:'$'+verified.toLocaleString(), pct:Math.round(verified/total*100)+'%', color:'#16a34a' },
+      { label:'Supported (docs)', value:'$'+supported.toLocaleString(), pct:Math.round(supported/total*100)+'%', color:'#d97706' },
+      { label:'Manual (no proof)', value:'$'+manual.toLocaleString(), pct:Math.round(manual/total*100)+'%', color:'#a1a1aa' },
+    ];
+
+    return {
+      embeddedClass: this.props.embedded ? 'rv-embedded' : '',
+      modeTabs, modeNote,
+      investorView:st.investorView, showInputs:!st.investorView,
+      toggleInvestorView:()=>this.setState(s=>({investorView:!s.investorView})),
+      investorBtnLabel: st.investorView?'Exit investor view':'Preview as investor',
+      investorBtnColor: st.investorView?'#0d9488':'#52525b',
+      kpis, sources, filters, entries, entriesEmpty:entries.length===0,
+      emptyMsg: st.investorView?'No proof-backed revenue in this filter.':'No entries in this filter.',
+      tableNote: st.investorView?'Investor view — only proof-backed revenue shown.':'All sources shown with verification status and proof.',
+      trend, proofDocs, proofCoverage: proofBackedPct+'%',
+      proofWarn: '1 of 6 entries has no attached evidence and will not count toward investor-ready revenue.',
+      tractionLine: '$'+total.toLocaleString()+' revenue to date from '+customers.length+' paying customers.',
+      tractionBullets:['1 customer on a recurring monthly plan ($490 MRR)','2 paid pilots converted from customer discovery','Proof attached for 5 of 6 entries ('+proofBackedPct+'%)'],
+      confidenceRows,
+      feeds:[ {tool:'Pitch Deck Builder', via:'traction / revenue slide', dot:'#0d9488'}, {tool:'Capital', via:'diligence-ready proof', dot:'#2563eb'}, {tool:'MI — Investor Signals', via:'monetization readiness', dot:'#7c3aed'} ],
+      // modal
+      modalOpen:st.modalOpen, closeModal:()=>this.setState({modalOpen:false,savedToast:false}),
+      modal:{ isStripe:st.modalKind==='stripe', isImport:st.modalKind==='import', isManual:st.modalKind==='manual',
+        title: st.modalKind==='stripe'?'Connect Stripe':st.modalKind==='import'?'Import revenue document':'Add revenue manually',
+        subtitle: st.modalKind==='stripe'?'Live sync · auto-verified':st.modalKind==='import'?'Upload proof and map columns':'For pilots, deposits, and early subscriptions' },
+      stripeOpts:['Import recurring subscription revenue','Import one-time charges'],
+      importCols:[{from:'"Customer"',to:'customerName'},{from:'"Amount"',to:'amount'},{from:'"Date"',to:'dateReceived'},{from:'"Status"',to:'verificationStatus'}],
+      mf:st.mf, mfSet:{ customer:e=>this.setMf('customer',e.target.value), amount:e=>this.setMf('amount',e.target.value), date:e=>this.setMf('date',e.target.value) },
+      typePills:['Recurring','Paid pilot','One-time','Deposit','Service'].map(l=>({label:l,onClick:()=>this.setState({mfType:l}),style:pill(st.mfType===l)})),
+      proofPills:['Yes','No'].map(l=>({label:l,onClick:()=>this.setState({mfProof:l}),style:pill(st.mfProof===l)})),
+      saveManual:()=>this.saveManual(), savedToast:st.savedToast,
+      stop:e=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'rv-back'},'*');}catch(x){}},
+    };
+  }
+  openModal(kind){ this.setState({modalOpen:true, modalKind:kind, savedToast:false}); }
+  setMf(k,v){ this.setState(s=>({mf:{...s.mf,[k]:v}})); }
+  saveManual(){
+    const {mf,mfType,mfProof}=this.state;
+    if(!mf.customer||!mf.amount) return;
+    const entry={ customer:mf.customer, amtNum:Number(String(mf.amount).replace(/[^0-9.]/g,''))||0, type:mfType==='Paid pilot'?'Pilot':mfType, date:mf.date||'Today', proofAttached: mfProof==='Yes' };
+    this.setState(s=>({ extra:[entry,...s.extra], savedToast:true, mf:{customer:'',amount:'',date:''} }));
+  }
+}
+</script>
+</body>
+</html>

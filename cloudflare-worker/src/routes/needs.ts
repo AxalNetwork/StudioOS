@@ -1,0 +1,1007 @@
+/**
+ * T15 — Founder Needs / RFPs / Quotes / Engagements (port of needs.py).
+ * Exports three Hono routers that index.ts mounts at /api/needs, /api/quotes,
+ * /api/engagements respectively.
+ *
+ * Engagement transitions: accepted → in_progress → delivered → reviewed → invoiced
+ * (cancelled is terminal from any non-terminal state).
+ */
+import { matchFor } from '../services/mercuryPersonal';
+import { Hono } from 'hono';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
+import { logActorAct } from '../services/actorLog';
+import { companyBinds } from '../services/partnerPipelineRules';
+import {
+  analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
+  analyseLossReasons, inDecisionPeriod, quarterOf,
+  type QuoteRow as QuoteAnalyticsRow, type EngagementRow as EngagementAnalyticsRow,
+  type DecisionPeriod,
+} from '../services/bdAnalytics';
+
+// Mirror FastAPI VALID_CATEGORIES (kept loose for forward-compat).
+const VALID_CATEGORIES = new Set([
+  'design', 'engineering', 'legal', 'finance', 'marketing', 'sales',
+  'recruiting', 'ops', 'pr', 'data', 'ai_ml', 'product', 'research', 'other',
+]);
+const VALID_NEED_STATUSES = new Set(['open', 'in_review', 'closed', 'filled']);
+
+type Need = {
+  id: number; uid: string; project_id: number; founder_id: number;
+  category: string; title: string; description: string;
+  budget_min: number | null; budget_max: number | null;
+  timeline: string | null; status: string;
+  created_at: string; updated_at: string;
+};
+type RFP = {
+  id: number; uid: string; need_id: number;
+  scope_md: string; deliverables_md: string | null;
+  deadline_at: string | null; status: string;
+  created_at: string; updated_at: string;
+};
+type Quote = {
+  id: number; uid: string; need_id: number; rfp_id: number | null;
+  partner_id: number; price: number; timeline_weeks: number | null;
+  deliverables: string; notes: string | null;
+  status: string; decided_at: string | null;
+  created_at: string; updated_at: string;
+};
+type Engagement = {
+  id: number; uid: string; need_id: number; quote_id: number;
+  partner_id: number; founder_id: number; project_id: number;
+  price: number; status: string;
+  delivered_at: string | null; delivery_notes: string | null;
+  cancelled_at: string | null; cancel_reason: string | null;
+  invoice_id: string | null; invoiced_at: string | null;
+  created_at: string; updated_at: string;
+};
+
+async function needDto(env: Env, n: Need): Promise<any> {
+  const proj = await env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(n.project_id).first<{ name: string }>();
+  const rfp = await env.DB.prepare('SELECT * FROM rfps WHERE need_id = ?').bind(n.id).first<RFP>();
+  const cnt = await env.DB.prepare('SELECT COUNT(*) c FROM quotes WHERE need_id = ?').bind(n.id).first<{ c: number }>();
+  return {
+    id: n.id, uid: n.uid, project_id: n.project_id,
+    project_name: proj?.name || null,
+    founder_id: n.founder_id, category: n.category,
+    title: n.title, description: n.description,
+    budget_min: n.budget_min, budget_max: n.budget_max,
+    timeline: n.timeline, status: n.status,
+    created_at: n.created_at, updated_at: n.updated_at,
+    quote_count: Number(cnt?.c || 0),
+    rfp: rfp ? {
+      id: rfp.id, uid: rfp.uid, need_id: rfp.need_id,
+      scope_md: rfp.scope_md, deliverables_md: rfp.deliverables_md,
+      deadline_at: rfp.deadline_at, status: rfp.status, created_at: rfp.created_at,
+    } : null,
+  };
+}
+
+async function quoteDto(env: Env, q: Quote): Promise<any> {
+  // No `kyb_status` column exists on `partners` — nor on any table in this
+  // schema; the KYB flow lives behind /trust/kyb/* and does not write one.
+  // Naming it here threw, and this `.first()` is unguarded, so building a
+  // quote DTO failed outright. `kyb_verified` is now null rather than false:
+  // "we have no record" is not the same claim as "this partner is not
+  // verified", and a trust signal is exactly where that distinction matters.
+  const partner = await env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(q.partner_id).first<any>();
+  return {
+    id: q.id, uid: q.uid, need_id: q.need_id, rfp_id: q.rfp_id,
+    partner_id: q.partner_id,
+    partner_name: partner?.name || null,
+    partner_company: partner?.company || null,
+    kyb_verified: null,
+    price: q.price, timeline_weeks: q.timeline_weeks,
+    deliverables: q.deliverables, notes: q.notes,
+    status: q.status, decided_at: q.decided_at,
+    created_at: q.created_at, updated_at: q.updated_at,
+  };
+}
+
+function engagementDto(e: Engagement): any { return { ...e }; }
+
+// ---------------------------------------------------------------------------
+// /api/needs
+// ---------------------------------------------------------------------------
+const needs = new Hono<{ Bindings: Env }>();
+
+function isNeedOwner(n: Need, u: User): boolean {
+  return isFounder(u) && !!u.founder_id && u.founder_id === n.founder_id;
+}
+
+needs.get('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const status = c.req.query('status');
+    const category = c.req.query('category');
+    const projectId = c.req.query('project_id');
+    let where = '1=1';
+    const params: any[] = [];
+    if (status) { where += ' AND status = ?'; params.push(status); }
+    if (category) { where += ' AND category = ?'; params.push(category); }
+    if (projectId) { where += ' AND project_id = ?'; params.push(Number(projectId)); }
+    // Founders see only their own needs by default; partners/admin/investor see all open ones.
+    if (isFounder(user)) {
+      where += ' AND founder_id = ?'; params.push(user.founder_id ?? -1);
+    } else if (isPartner(user)) {
+      // Partners only see open/in_review needs (browsing demand).
+      where += " AND status IN ('open','in_review')";
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM founder_needs WHERE ${where} ORDER BY created_at DESC LIMIT 200`
+    ).bind(...params).all<Need>();
+    const items: any[] = [];
+    for (const n of rows.results || []) items.push(await needDto(c.env, n));
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.post('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isFounder(user) && !isAdmin(user)) return c.json({ detail: 'Founder role required' }, 403);
+    if (!user.founder_id && !isAdmin(user)) return c.json({ detail: 'No founder profile' }, 400);
+    const body = await c.req.json().catch(() => ({} as any));
+    const cat = String(body.category || '').toLowerCase();
+    if (!VALID_CATEGORIES.has(cat)) return c.json({ detail: `category must be one of ${[...VALID_CATEGORIES]}` }, 400);
+    const title = String(body.title || '').trim();
+    const description = String(body.description || '').trim();
+    if (!title || !description) return c.json({ detail: 'title and description required' }, 400);
+    const projectId = Number(body.project_id);
+    const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first<{ founder_id: number }>();
+    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    if (!isAdmin(user) && project.founder_id !== user.founder_id) return c.json({ detail: 'Not your project' }, 403);
+    const uid = newUid();
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO founder_needs
+         (uid, project_id, founder_id, category, title, description,
+          budget_min, budget_max, timeline, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
+    ).bind(uid, projectId, project.founder_id, cat, title.slice(0, 300), description.slice(0, 8000),
+           body.budget_min != null ? Number(body.budget_min) : null,
+           body.budget_max != null ? Number(body.budget_max) : null,
+           body.timeline || null, nowIso(), nowIso()).run();
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<Need>();
+    return c.json(await needDto(c.env, n!));
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.get('/:id', async (c) => {
+  try {
+    await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    return c.json(await needDto(c.env, n));
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.patch('/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    if (!isAdmin(user) && !isNeedOwner(n, user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    if (body.category && !VALID_CATEGORIES.has(String(body.category).toLowerCase())) {
+      return c.json({ detail: 'invalid category' }, 400);
+    }
+    if (body.status && !VALID_NEED_STATUSES.has(String(body.status))) {
+      return c.json({ detail: 'invalid status' }, 400);
+    }
+    const fields = ['title', 'description', 'category', 'budget_min', 'budget_max', 'timeline', 'status'] as const;
+    const sets: string[] = []; const params: any[] = [];
+    for (const f of fields) {
+      if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
+    }
+    if (sets.length) {
+      sets.push('updated_at = ?'); params.push(nowIso()); params.push(id);
+      await c.env.DB.prepare(`UPDATE founder_needs SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+    }
+    const fresh = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    return c.json(await needDto(c.env, fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.delete('/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    if (!isAdmin(user) && !isNeedOwner(n, user)) return c.json({ detail: 'Forbidden' }, 403);
+    await c.env.DB.prepare('DELETE FROM founder_needs WHERE id = ?').bind(id).run();
+    await c.env.DB.prepare('DELETE FROM rfps WHERE need_id = ?').bind(id).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.post('/:id/rfp', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    if (!isAdmin(user) && !isNeedOwner(n, user)) return c.json({ detail: 'Forbidden' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = String(body.scope_md || '').trim();
+    if (!scope) return c.json({ detail: 'scope_md required' }, 400);
+    const existing = await c.env.DB.prepare('SELECT * FROM rfps WHERE need_id = ?').bind(id).first<RFP>();
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE rfps SET scope_md=?, deliverables_md=?, deadline_at=?, updated_at=? WHERE id = ?`
+      ).bind(scope, body.deliverables_md || null, body.deadline_at || null, nowIso(), existing.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO rfps (uid, need_id, scope_md, deliverables_md, deadline_at, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`
+      ).bind(newUid(), id, scope, body.deliverables_md || null, body.deadline_at || null, nowIso(), nowIso()).run();
+    }
+    const fresh = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    return c.json(await needDto(c.env, fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.post('/:id/quotes', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isPartner(user) && !isAdmin(user)) return c.json({ detail: 'Partner role required' }, 403);
+    if (!user.partner_id && !isAdmin(user)) return c.json({ detail: 'No partner profile' }, 400);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    if (!['open', 'in_review'].includes(n.status)) return c.json({ detail: 'Need is not accepting quotes' }, 409);
+    const body = await c.req.json().catch(() => ({} as any));
+    const price = Number(body.price);
+    if (!Number.isFinite(price) || price <= 0) return c.json({ detail: 'price must be > 0' }, 400);
+    const deliverables = String(body.deliverables || '').trim();
+    if (!deliverables) return c.json({ detail: 'deliverables required' }, 400);
+    const rfp = await c.env.DB.prepare('SELECT id FROM rfps WHERE need_id = ?').bind(id).first<{ id: number }>();
+    const uid = newUid();
+    try {
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO quotes
+          (uid, need_id, rfp_id, partner_id, price, timeline_weeks, deliverables, notes, status, created_at, updated_at, company_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?)`
+      // Company scoping, stage 8: the bid records the agency that made it, and
+      // the engagement created when a founder accepts inherits it from here.
+      ).bind(uid, id, rfp?.id ?? null, user.partner_id || (isAdmin(user) ? Number(body.partner_id || 0) : 0),
+             price, body.timeline_weeks != null ? Number(body.timeline_weeks) : null,
+             deliverables.slice(0, 4000), body.notes ? String(body.notes).slice(0, 2000) : null,
+             nowIso(), nowIso(), await activeCompanyFor(c, user)).run();
+      const q = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?')
+        .bind((ins as any).meta?.last_row_id).first<Quote>();
+      return c.json(await quoteDto(c.env, q!));
+    } catch (e: any) {
+      if (String(e?.message || e).includes('UNIQUE')) {
+        return c.json({ detail: 'You already submitted a quote for this need' }, 409);
+      }
+      throw e;
+    }
+  } catch (e) { return mapError(c, e); }
+});
+
+needs.get('/:id/quotes', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const n = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(id).first<Need>();
+    if (!n) return c.json({ detail: 'Need not found' }, 404);
+    const rows = await c.env.DB.prepare('SELECT * FROM quotes WHERE need_id = ? ORDER BY created_at ASC').bind(id).all<Quote>();
+    const visible: any[] = [];
+    for (const q of rows.results || []) {
+      const canSee = isAdmin(user) ||
+        isNeedOwner(n, user) ||
+        (isPartner(user) && user.partner_id === q.partner_id);
+      if (canSee) visible.push(await quoteDto(c.env, q));
+    }
+    return c.json({ items: visible });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// /api/quotes
+// ---------------------------------------------------------------------------
+const quotesRouter = new Hono<{ Bindings: Env }>();
+
+quotesRouter.get('/me', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isPartner(user) && !isAdmin(user)) return c.json({ items: [] });
+    // Company scoping, stage 8. "My quotes" is a claim about THIS agency.
+    // The admin arm is an oversight view and is deliberately left wide — the
+    // same exemption every stage of this rollout has honoured, and the reason
+    // each file's exemption set has to be read rather than copied.
+    const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+    const rows = await (
+      isAdmin(user)
+        ? c.env.DB.prepare('SELECT * FROM quotes ORDER BY created_at DESC LIMIT 200')
+        : c.env.DB.prepare(
+              `SELECT * FROM quotes
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+                ORDER BY created_at DESC LIMIT 200`,
+            ).bind(user.partner_id ?? -1, ...companyBinds(companyId))
+    ).all<Quote>();
+    const items: any[] = [];
+    for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
+    // Wave 1a — attach the need's title/status so the Operations "Proposals"
+    // list can say what each quote was FOR. Additive keys; batch lookup
+    // (placeholders only — no values are interpolated into the SQL text).
+    const needIds = [...new Set(items.map((i) => i.need_id).filter((n) => Number.isFinite(n)))];
+    if (needIds.length) {
+      const ph = needIds.map(() => '?').join(',');
+      const needRows = await c.env.DB.prepare(
+        `SELECT id, title, status, category FROM founder_needs WHERE id IN (${ph})`,
+      ).bind(...needIds).all<any>();
+      const byId = new Map((needRows.results || []).map((n: any) => [n.id, n]));
+      for (const it of items) {
+        const n = byId.get(it.need_id);
+        it.need_title = n?.title ?? null;
+        it.need_status = n?.status ?? null;
+        it.need_category = n?.category ?? null;
+      }
+    }
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Build queue #122 — GET /api/quotes/analytics
+ *
+ * BD pipeline analytics for a service partner: win rate, weighted
+ * forecast, cycle time, and delivery health, computed in
+ * services/bdAnalytics.ts. Scoped exactly like /quotes/me — a partner
+ * sees only their own quotes; admin sees all.
+ *
+ * The win rate's denominator is decided quotes only. Open and withdrawn
+ * are returned separately so the UI can show what was excluded rather
+ * than presenting a bare percentage.
+ *
+ * `by_shape` and `by_quarter` were added for the Pipeline canvas's Analytics
+ * zone, which asks for the same rate decomposed two ways. Both are derived
+ * from columns the store already holds — a quote's status, its two timestamps
+ * and, through the need it answers, that need's `category`.
+ *
+ * `loss_reasons` WAS NULL AND IS NOT ANY MORE. It was returned as null with the
+ * reason attached for as long as that was true: nothing recorded why a quote
+ * was rejected, and a taxonomy inferred from a bare status would have been a
+ * guess. Migration 234 added `quotes.loss_reason` and the Proposals zone writes
+ * it against a closed vocabulary, so the count is read. What is still true, and
+ * is why `losses_unstated` comes back beside it, is that nobody is obliged to
+ * record one.
+ *
+ * `?period=` NARROWS WHAT WAS DECIDED, never what is open. The analytics chip
+ * row offers this quarter, last quarter and year to date; an undecided quote
+ * has no decision date to place in any of them, so it stays in every window and
+ * the forecast keeps its meaning when a reader presses a chip. Omitting the
+ * parameter is `all`, which is exactly what the two older consumers
+ * (`/partner/operations/performance` and the Studio home card) already send.
+ */
+const PERIOD_LABELS: Record<DecisionPeriod, string> = {
+  all: 'All time',
+  quarter: 'This quarter',
+  prev_quarter: 'Last quarter',
+  ytd: 'Year to date',
+  shape: 'All time, by shape',
+};
+
+/**
+ * The window a reader asked for, or `all`.
+ *
+ * AN UNRECOGNISED VALUE IS `all`, NOT AN ERROR. This endpoint has two older
+ * consumers that send no parameter at all, and a 400 on a stray query string
+ * would take a working dashboard down over a chip that does not exist.
+ */
+function readPeriod(raw: string | undefined): DecisionPeriod {
+  const v = String(raw || 'all');
+  return (Object.prototype.hasOwnProperty.call(PERIOD_LABELS, v) ? v : 'all') as DecisionPeriod;
+}
+
+
+/** Rows per chunk when the analytics walk a table. */
+const ANALYTICS_CHUNK = 500;
+/** Chunks one walk reads before it refuses to go on (250,000 rows). */
+const ANALYTICS_MAX_CHUNKS = 500;
+
+/**
+ * Read a whole table in id order, a chunk at a time. A walk that cannot finish
+ * THROWS: a figure computed from part of a book must not be sent as the figure.
+ */
+async function readAllByIdChunks<T extends { id: number }>(
+  read: (afterId: number) => Promise<{ results?: T[] }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let after = 0;
+  for (let i = 0; i < ANALYTICS_MAX_CHUNKS; i += 1) {
+    const page = (await read(after)).results || [];
+    out.push(...page);
+    if (page.length < ANALYTICS_CHUNK) return out;
+    after = Number(page[page.length - 1].id);
+  }
+  throw new Error('analytics walk did not finish');
+}
+
+quotesRouter.get('/analytics', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isPartner(user) && !isAdmin(user)) {
+      return c.json({ pipeline: null, forecast: null, delivery: null });
+    }
+    const admin = isAdmin(user);
+    // One clock for the whole response: the window, the current-quarter label
+    // and every quarter key below are read off this instant, so a request that
+    // straddles midnight on the last day of a quarter cannot answer half in one
+    // period and half in the next.
+    const now = new Date();
+    const period = readPeriod(c.req.query('period'));
+    // The analytics must answer for the SAME set of rows the lists show, or a
+    // partner reads a win rate for one agency beside a pipeline for another.
+    const analyticsCompany = admin ? null : await activeCompanyFor(c, user);
+    // `n.category AS shape` is a LEFT join on purpose: a quote whose need row
+    // is missing must still count toward the headline win rate. An INNER join
+    // would silently drop it and quietly change the denominator of the one
+    // figure this endpoint exists to compute. Unmatched rows land in the
+    // by-shape breakdown as an unrecorded shape, which is what they are.
+    //
+    // EVERY QUOTE, NOT THE NEWEST THOUSAND (#4701). These reads were
+    // `ORDER BY created_at DESC LIMIT 1000`, so a firm with more than a
+    // thousand bids was told a win rate, a cycle time and a forecast computed
+    // from the newest thousand while the page said nothing about the rest. The
+    // reads now walk the table in id order in bounded chunks until it is
+    // exhausted; `rows_read` says how many were counted.
+    const readQuotes = (afterId: number) => (
+      admin
+        ? c.env.DB.prepare(
+            `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+               FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
+              WHERE q.id > ?
+              ORDER BY q.id LIMIT ?`,
+          ).bind(afterId, ANALYTICS_CHUNK)
+        : c.env.DB.prepare(
+              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
+                 FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
+                WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?) AND q.id > ?
+                ORDER BY q.id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
+    ).all<QuoteAnalyticsRow & { id: number }>();
+    const readEngagements = (afterId: number) => (
+      admin
+        ? c.env.DB.prepare(
+            'SELECT id, status, price AS amount FROM engagements WHERE id > ? ORDER BY id LIMIT ?',
+          ).bind(afterId, ANALYTICS_CHUNK)
+        : c.env.DB.prepare(
+              `SELECT id, status, price AS amount FROM engagements
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?) AND id > ?
+                ORDER BY id LIMIT ?`,
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
+    ).all<EngagementAnalyticsRow & { id: number }>();
+    const quoteRows = await readAllByIdChunks(readQuotes);
+
+    // THE DELIVERY READ IS INDEPENDENT AND MAY FAIL ON ITS OWN. It used to
+    // `.catch(() => ({ results: [] }))`, which turned an unreadable engagements
+    // table into "0 active, 0 delivered" — a valid-looking zero. A failed read
+    // is now `delivery: null` with `delivery_unavailable: true`, and the quote
+    // figures, which did read, stay.
+    let engagementRows: Array<EngagementAnalyticsRow & { id: number }> | null = null;
+    try { engagementRows = await readAllByIdChunks(readEngagements); } catch { engagementRows = null; }
+
+    const q = quoteRows;
+    // WHAT THE WINDOW APPLIES TO, and what it deliberately does not.
+    //
+    //   in       what was DECIDED in the window — the rate, the cycle, the
+    //            shape breakdown and the loss pattern
+    //   q        everything, for the forecast (an open quote belongs to no
+    //            quarter) and for the quarter-over-quarter chart (a trend
+    //            narrowed to one quarter is one bar)
+    const inWindow = inDecisionPeriod(q, period, now);
+    const losses = analyseLossReasons(inWindow);
+    const pipeline = analysePipeline(inWindow);
+    return c.json({
+      pipeline,
+      forecast: weightedPipeline(q),
+      delivery: engagementRows === null ? null : analyseDelivery(engagementRows),
+      delivery_unavailable: engagementRows === null,
+      rows_read: q.length,
+      by_shape: analyseByShape(inWindow),
+      // NOT NARROWED, on purpose: this IS the time series. Applying the chip to
+      // it would leave a quarter-over-quarter chart with one quarter in it.
+      by_quarter: analyseByQuarter(q),
+      period,
+      period_label: PERIOD_LABELS[period],
+      current_quarter: quarterOf(now),
+      decided_in_window: pipeline.accepted + pipeline.rejected,
+      // The canvas's third analytic block, now read rather than refused.
+      loss_reasons: losses.reasons,
+      losses_unstated: losses.unstated,
+      lost_count: losses.losses,
+      on_price_losses: losses.on_price,
+      // A COUNT OVER EXPLAINED LOSSES ONLY, said in the response so a consumer
+      // cannot present it as a share of every loss.
+      loss_reasons_note: losses.losses === 0
+        ? 'Nothing was lost in this window, so there is no loss pattern to read.'
+        : (losses.unstated === losses.losses
+          ? `No reason is recorded against any of the ${losses.losses} losses in this window, so the taxonomy has nothing to count yet.`
+          : (losses.unstated
+            ? `${losses.unstated} of ${losses.losses} losses carry no recorded reason and are counted separately rather than as "other".`
+            : `All ${losses.losses} losses in this window carry a recorded reason.`)),
+      // AN OPEN QUOTE BELONGS TO NO QUARTER, which is why the forecast ignores
+      // the chip row. Said here so a page cannot imply the chip narrowed it.
+      forecast_scope: 'all_open',
+      forecast_scope_note: 'The weighted forecast is over every quote still open. An undecided quote has no decision date, so no period chip can place it.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+async function quoteTransition(c: Context<{ Bindings: Env }>, target: 'accept' | 'reject' | 'withdraw') {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  const q = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+  if (!q) return c.json({ detail: 'Quote not found' }, 404);
+  const need = await c.env.DB.prepare('SELECT * FROM founder_needs WHERE id = ?').bind(q.need_id).first<Need>();
+  if (!need) return c.json({ detail: 'Need missing' }, 404);
+  if (target === 'withdraw') {
+    if (!isAdmin(user) && !(isPartner(user) && user.partner_id === q.partner_id)) {
+      return c.json({ detail: 'Forbidden' }, 403);
+    }
+    if (q.status !== 'submitted') return c.json({ detail: 'Only submitted quotes may be withdrawn' }, 409);
+    await c.env.DB.prepare("UPDATE quotes SET status='withdrawn', decided_at=?, updated_at=? WHERE id=?")
+      .bind(nowIso(), nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+    return c.json(await quoteDto(c.env, fresh!));
+  }
+  // accept / reject — founder-owner only
+  if (!isAdmin(user) && !isNeedOwner(need, user)) return c.json({ detail: 'Forbidden' }, 403);
+  if (target === 'accept' && q.status === 'accepted') {
+    // D4677: a retry of an acceptance that already landed is the same answer,
+    // not a 409, and it repairs a missing engagement (see `ENGAGEMENT_FOR_ACCEPTED`).
+    await c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), nowIso(), nowIso(), id, q.decided_at).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+    return c.json(await quoteDto(c.env, fresh!));
+  }
+  if (q.status !== 'submitted') return c.json({ error: 'quote_already_decided', detail: `Quote already ${q.status}` }, 409);
+  if (target === 'reject') {
+    await c.env.DB.prepare("UPDATE quotes SET status='rejected', decided_at=?, updated_at=? WHERE id=?")
+      .bind(nowIso(), nowIso(), id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+    return c.json(await quoteDto(c.env, fresh!));
+  }
+  // accept: ONE transaction (D4677). The four statements run as one D1 batch, so
+  // an engagement insert that fails for any reason rolls the acceptance back and
+  // the error propagates; nothing is accepted without its engagement.
+  //
+  // THE WINNER IS CLAIMED IN THE STATEMENT, not decided from a read above it.
+  // The claim only matches while the quote is still `submitted`, the need is
+  // still open, and NO quote on the need is accepted; the three statements after
+  // it match only the quote this call just accepted (`decided_at` is the token).
+  // Two concurrent accepts of different quotes therefore cannot both win: the
+  // second claim matches nothing, and so does everything chained to it.
+  const decidedAt = nowIso();
+  let results: unknown[];
+  try {
+    results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
+          WHERE id = ? AND status = 'submitted'
+            AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
+            AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
+      ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
+          WHERE need_id = ? AND id != ? AND status = 'submitted'
+            AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
+      c.env.DB.prepare(
+        `UPDATE founder_needs SET status='filled', updated_at=?
+          WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, q.need_id, id, decidedAt),
+      c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
+    ]);
+  } catch (e) {
+    // D5359: the partial unique index is the last arbiter when two Workers
+    // race. Its loser is the same business outcome as a zero-row claim, not a
+    // server failure. Other batch failures still propagate and roll back.
+    if (/UNIQUE constraint failed:\s*quotes\.need_id/i.test(String((e as Error)?.message ?? e))) {
+      return c.json({
+        error: 'need_already_decided',
+        detail: 'This need already has an accepted quote, or is no longer open. Nothing was changed.',
+      }, 409);
+    }
+    throw e;
+  }
+  if (!Number((results[0] as any)?.meta?.changes)) {
+    // Someone else's acceptance (or a closed need) got there first.
+    const now = await c.env.DB.prepare('SELECT status FROM quotes WHERE id = ?').bind(id).first<{ status: string }>();
+    if (now?.status === 'accepted') {
+      const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+      return c.json(await quoteDto(c.env, fresh!));
+    }
+    return c.json({
+      error: 'need_already_decided',
+      detail: now?.status === 'submitted'
+        ? 'This need already has an accepted quote, or is no longer open. Nothing was changed.'
+        : `Quote already ${now?.status}: another quote on this need was accepted first.`,
+    }, 409);
+  }
+  const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
+  return c.json(await quoteDto(c.env, fresh!));
+}
+
+/**
+ * The engagement for one accepted quote, as one statement: `?1 uid, ?2/?3
+ * created/updated, ?4 quote id, ?5 the quote's `decided_at``. It reads the
+ * founder, project, partner, price and agency from the QUOTE and its need, so it
+ * cannot disagree with them; the agency is the quote's, never the accepting
+ * founder's firm (migration 196). `NOT EXISTS` makes a repeat insert nothing,
+ * and `quote_id` is UNIQUE besides. A real failure (a missing table, a
+ * constraint) is NOT swallowed here: it fails the batch.
+ */
+const ENGAGEMENT_FOR_ACCEPTED = `INSERT INTO engagements
+     (uid, need_id, quote_id, partner_id, founder_id, project_id, price, status, created_at, updated_at, company_id)
+   SELECT ?, q.need_id, q.id, q.partner_id, n.founder_id, n.project_id, q.price, 'accepted', ?, ?, q.company_id
+     FROM quotes q JOIN founder_needs n ON n.id = q.need_id
+    WHERE q.id = ? AND q.status = 'accepted' AND q.decided_at = ?
+      AND NOT EXISTS (SELECT 1 FROM engagements e WHERE e.quote_id = q.id)`;
+
+quotesRouter.post('/:id/accept', (c) => quoteTransition(c, 'accept'));
+quotesRouter.post('/:id/reject', (c) => quoteTransition(c, 'reject'));
+quotesRouter.post('/:id/withdraw', (c) => quoteTransition(c, 'withdraw'));
+
+// ---------------------------------------------------------------------------
+// /api/engagements
+// ---------------------------------------------------------------------------
+const engagementsRouter = new Hono<{ Bindings: Env }>();
+
+/**
+ * May this caller see this engagement, under the company they are acting for?
+ *
+ * Company scoping, stage 8. Only the PARTNER arm consults `companyId`, and the
+ * asymmetry is the point: `engagements.company_id` records the partner's
+ * AGENCY. A founder's side of the same row is answered through `project_id`
+ * and migration 189, so testing the founder against a partner's agency column
+ * would refuse them their own engagement.
+ *
+ * Ordered so ownership is proved first and the company only narrows what is
+ * already the caller's — this decides a 403, so a company that could grant
+ * rather than narrow would be a hole rather than a filter.
+ *
+ * A NULL company on the row means the partner had no primary company when it
+ * was created; it stays visible under every one of theirs.
+ */
+function canSeeEngagement(e: Engagement, u: User, companyId: number | null = null): boolean {
+  if (isAdmin(u)) return true;
+  if (isPartner(u) && u.partner_id === e.partner_id) {
+    const owning = (e as Engagement & { company_id?: number | null }).company_id ?? null;
+    return companyId === null || owning === null || owning === companyId;
+  }
+  if (isFounder(u) && u.founder_id === e.founder_id) return true;
+  return false;
+}
+
+engagementsRouter.get('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    let where = '1=1';
+    const params: any[] = [];
+    // Company scoping, stage 8, and the two branches ask DIFFERENT questions.
+    // A partner's engagements narrow on `e.company_id` — their agency. A
+    // founder's narrow on the PROJECT's company, because that is where a
+    // founder's company lives (migration 189) and `e.company_id` is not
+    // theirs to be tested against. Admin stays wide.
+    const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+    if (isPartner(user)) {
+      where = 'e.partner_id = ? AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)';
+      params.push(user.partner_id ?? -1, ...companyBinds(companyId));
+    }
+    else if (isFounder(user)) {
+      where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1);
+      if (companyId !== null) {
+        where += ' AND (p.company_id = ? OR p.company_id IS NULL)'; params.push(companyId);
+      }
+    }
+    else if (!isAdmin(user)) { return c.json({ items: [] }); }
+    // Wave 1a — the list now carries display names so the Operations tabs can
+    // render "who is this engagement with" without an N+1 fetch per row. All
+    // additive keys; the bare-id shape every existing consumer reads is
+    // unchanged. LEFT JOINs on purpose: a deleted project or need must not
+    // hide the engagement row itself.
+    const rows = await c.env.DB.prepare(
+      `SELECT e.*, p.name AS project_name, fn.title AS need_title,
+              fn.category AS need_category,
+              pt.name AS partner_name, pt.company AS partner_company,
+              f.name AS founder_name
+         FROM engagements e
+         LEFT JOIN projects p ON p.id = e.project_id
+         LEFT JOIN founder_needs fn ON fn.id = e.need_id
+         LEFT JOIN partners pt ON pt.id = e.partner_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE ${where} ORDER BY e.created_at DESC LIMIT 200`
+    ).bind(...params).all<Engagement>();
+    return c.json({ items: (rows.results || []).map(engagementDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+engagementsRouter.get('/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Engagement not found' }, 404);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
+    return c.json(engagementDto(e));
+  } catch (e) { return mapError(c, e); }
+});
+
+async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'deliver' | 'cancel' | 'invoice') {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+  if (!e) return c.json({ detail: 'Engagement not found' }, 404);
+  if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const isPartnerSide = isAdmin(user) || (isPartner(user) && user.partner_id === e.partner_id);
+  const isFounderSide = isAdmin(user) || (isFounder(user) && user.founder_id === e.founder_id);
+  let nextStatus = e.status; const sets: string[] = []; const params: any[] = [];
+  if (target === 'start') {
+    if (e.status !== 'accepted') return c.json({ detail: `Cannot start from ${e.status}` }, 409);
+    if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
+    nextStatus = 'in_progress';
+  } else if (target === 'deliver') {
+    if (!['accepted', 'in_progress'].includes(e.status)) return c.json({ detail: `Cannot deliver from ${e.status}` }, 409);
+    if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
+    nextStatus = 'delivered';
+    sets.push('delivered_at = ?'); params.push(nowIso());
+    if (body.delivery_notes) { sets.push('delivery_notes = ?'); params.push(String(body.delivery_notes).slice(0, 4000)); }
+  } else if (target === 'cancel') {
+    if (['reviewed', 'invoiced', 'cancelled'].includes(e.status)) return c.json({ detail: `Cannot cancel from ${e.status}` }, 409);
+    if (!isPartnerSide && !isFounderSide) return c.json({ detail: 'Forbidden' }, 403);
+    nextStatus = 'cancelled';
+    sets.push('cancelled_at = ?'); params.push(nowIso());
+    if (body.reason) { sets.push('cancel_reason = ?'); params.push(String(body.reason).slice(0, 2000)); }
+  } else if (target === 'invoice') {
+    // D4682 — A RETRY AFTER SUCCESS IS NOT AN ERROR. An engagement already
+    // `invoiced` whose invoice exists answers 200 with that engagement and
+    // issues nothing. (One that says `invoiced` with no invoice behind it,
+    // from before invoices were real documents, is still refused here: that
+    // is a data repair, not a retry.)
+    if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
+    if (e.status === 'invoiced') {
+      const have = await c.env.DB.prepare('SELECT invoice_number FROM engagement_invoices WHERE engagement_id = ?')
+        .bind(id).first<{ invoice_number: string }>();
+      if (have && e.invoice_id === have.invoice_number) return c.json({ ...engagementDto(e), already_invoiced: true });
+    }
+    if (!['delivered', 'reviewed'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
+    // This used to write `invoice_id = 'stub-<uid>'` and nothing else, with a
+    // comment noting Stripe Connect was not ported. The effect in production
+    // was a state that lied: the engagement went to `invoiced` permanently,
+    // no invoice existed, and the UI's `{e.stripe_invoice_url && …}` link was
+    // unconditionally falsy — so neither party had anything to send or pay.
+    // It now issues a real in-platform invoice document (migration 188). No
+    // payment rail is implied: see services/engagementInvoices.ts.
+    const invUid = newUid();
+    const now = nowIso();
+    const quote = await c.env.DB.prepare(
+      'SELECT price, deliverables FROM quotes WHERE id = ?',
+    ).bind(e.quote_id).first<{ price: number; deliverables: string | null }>();
+    const parties = await c.env.DB.prepare(
+      `SELECT (SELECT u.id FROM users u WHERE u.partner_id = ? LIMIT 1) AS partner_user_id,
+              (SELECT u.id FROM users u WHERE u.founder_id = ? LIMIT 1) AS founder_user_id,
+              (SELECT pt.company FROM partners pt WHERE pt.id = ?) AS bill_from_name,
+              (SELECT p.name FROM projects p WHERE p.id = ?) AS bill_to_name`,
+    ).bind(e.partner_id, e.founder_id, e.partner_id, e.project_id)
+      .first<{ partner_user_id: number | null; founder_user_id: number | null; bill_from_name: string | null; bill_to_name: string | null }>();
+    const issued = await issueInvoice(c.env, {
+      engagementId: id,
+      partnerUserId: parties?.partner_user_id ?? null,
+      founderUserId: parties?.founder_user_id ?? null,
+      billFromName: parties?.bill_from_name ?? null,
+      billToName: parties?.bill_to_name ?? null,
+      // The engagement price is the accepted quote's; prefer the quote row and
+      // fall back to the engagement's own copy.
+      priceDollars: quote?.price ?? e.price,
+      deliverables: quote?.deliverables ?? null,
+    }, invUid, now);
+    // The invoice and the engagement's `invoiced` state were written by one
+    // batch inside `issueInvoice`; there is no second write to lose.
+    const fresh = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+    if (!issued.invoice || fresh?.status !== 'invoiced') {
+      // The engagement stopped being invoiceable between the read and the
+      // batch (cancelled, say): nothing was issued.
+      return c.json({
+        detail: `Cannot invoice from ${fresh?.status ?? e.status}`, code: 'engagement_changed',
+      }, 409);
+    }
+    await logActorAct(c.env, user, 'engagement_invoice', {
+      engagement_id: id, invoice_number: issued.invoice.invoice_number,
+      created: issued.created, acting_as_admin: isAdmin(user) && !(isPartner(user) && user.partner_id === e.partner_id),
+    });
+    return c.json({ ...engagementDto(fresh), ...(issued.created ? {} : { already_invoiced: true }) });
+  }
+  sets.unshift('status = ?'); params.unshift(nextStatus);
+  sets.push('updated_at = ?'); params.push(nowIso()); params.push(id);
+  // D4682 — THE MOVE NAMES THE STATE IT WAS DECIDED FROM. A request that read
+  // an older status (a cancel racing a deliver) changes nothing and answers
+  // 409, instead of writing over the transition that already completed.
+  params.push(e.status);
+  const moved = await c.env.DB.prepare(`UPDATE engagements SET ${sets.join(', ')} WHERE id = ? AND status = ?`)
+    .bind(...params).run();
+  if (Number((moved as any)?.meta?.changes ?? 0) !== 1) {
+    const now = await c.env.DB.prepare('SELECT status FROM engagements WHERE id = ?').bind(id).first<{ status: string }>();
+    return c.json({
+      detail: `This engagement is now ${now?.status ?? 'changed'}, so that was not applied.`,
+      code: 'engagement_changed', status: now?.status ?? null,
+    }, 409);
+  }
+  await logActorAct(c.env, user, `engagement_${target}`, {
+    engagement_id: id, from: e.status, to: nextStatus,
+    acting_as_admin: isAdmin(user) && !(isPartner(user) && user.partner_id === e.partner_id)
+      && !(isFounder(user) && user.founder_id === e.founder_id),
+  });
+  const fresh = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+  return c.json(engagementDto(fresh!));
+}
+
+engagementsRouter.post('/:id/start', (c) => engTransition(c, 'start'));
+engagementsRouter.post('/:id/deliver', (c) => engTransition(c, 'deliver'));
+engagementsRouter.post('/:id/cancel', (c) => engTransition(c, 'cancel'));
+engagementsRouter.post('/:id/invoice', (c) => engTransition(c, 'invoice'));
+
+// The invoice document itself. Either party to the engagement may read it —
+// an invoice with only one readable side is not an invoice — and nobody else
+// can, including admin: a 404 rather than a 403 so a non-party cannot confirm
+// the engagement exists.
+engagementsRouter.get('/:id/invoice', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?')
+      .bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Not found' }, 404);
+    const mine = (isPartner(user) && user.partner_id === e.partner_id)
+      || (isFounder(user) && user.founder_id === e.founder_id);
+    if (!mine) return c.json({ detail: 'Not found' }, 404);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
+    ).bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    return c.json(invoiceDto(row, await matchFor(c.env, 'engagement_invoice', row.id), isPartner(user) ? 'partner' : 'founder'));
+  } catch (err) { return mapError(c, err); }
+});
+
+// Record that payment arrived. The platform does NOT process it — there is
+// no payment rail here. This is the partner asserting they were paid OUT OF
+// BAND, and the copy on both sides says exactly that.
+engagementsRouter.post('/:id/invoice/paid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?')
+      .bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Not found' }, 404);
+    if (!(isPartner(user) && user.partner_id === e.partner_id)) {
+      return c.json({ detail: 'Partner-side action' }, 403);
+    }
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
+    ).bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    if (row.status === 'void') return c.json({ detail: 'That invoice is void' }, 409);
+    await c.env.DB.prepare(
+      "UPDATE engagement_invoices SET status = 'paid', paid_at = ?, updated_at = ? WHERE id = ?",
+    ).bind(nowIso(), nowIso(), row.id).run();
+    const fresh = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE id = ?',
+    ).bind(row.id).first<any>();
+    return c.json(invoiceDto(fresh));
+  } catch (err) { return mapError(c, err); }
+});
+
+engagementsRouter.get('/:id/reviews', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Engagement not found' }, 404);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
+    const rows = await c.env.DB.prepare(
+      'SELECT * FROM engagement_reviews WHERE engagement_id = ? ORDER BY created_at ASC'
+    ).bind(id).all<any>();
+    return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+engagementsRouter.post('/:id/reviews', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Engagement not found' }, 404);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
+    if (!['delivered', 'reviewed', 'invoiced'].includes(e.status)) {
+      return c.json({ detail: 'Engagement must be delivered before reviewing' }, 409);
+    }
+    const body = await c.req.json().catch(() => ({} as any));
+    const rating = Math.max(1, Math.min(5, Number(body.rating || 0)));
+    if (!rating) return c.json({ detail: 'rating must be 1..5' }, 400);
+    const reviewer_role = (isPartner(user) && user.partner_id === e.partner_id) ? 'partner' : 'founder';
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO engagement_reviews
+           (uid, engagement_id, reviewer_user_id, reviewer_role, rating, comment, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).bind(newUid(), id, user.id, reviewer_role, rating,
+             body.comment ? String(body.comment).slice(0, 2000) : null, nowIso()).run();
+    } catch (e: any) {
+      if (String(e?.message || e).includes('UNIQUE')) return c.json({ detail: 'Already reviewed' }, 409);
+      throw e;
+    }
+    // Promote status to 'reviewed' once at least one side has rated.
+    if (e.status === 'delivered') {
+      await c.env.DB.prepare("UPDATE engagements SET status='reviewed', updated_at=? WHERE id=?")
+        .bind(nowIso(), id).run();
+    }
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// Task #1 (AG) — Marketplace facade endpoints called from the founder UI.
+// These are typed lookups that augment (not replace) the core needs CRUD.
+needs.get('/categories', async (c) => {
+  await requireAuth(c);
+  return c.json({ items: [...VALID_CATEGORIES].map((slug) => ({ slug, label: slug })) });
+});
+
+needs.get('/inquiries', (c) => {
+  // url already carries the original querystring on `url.search`; only swap
+  // the pathname. Never concatenate `url.search` again — that would double
+  // the query string (e.g. `?status=open?status=open`).
+  const url = new URL(c.req.url);
+  url.pathname = '/api/needs/';
+  return needs.fetch(
+    new Request(url, { method: 'GET', headers: c.req.raw.headers }),
+    c.env, c.executionCtx,
+  );
+});
+
+needs.post('/inquiries', async (c) => {
+  const body = await c.req.text();
+  const url = new URL(c.req.url);
+  url.pathname = '/api/needs/';
+  url.search = '';
+  return needs.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
+needs.get('/providers', async (c) => {
+  await requireAuth(c);
+  // Providers are partners with status='active' — return the public-safe shape.
+  const rows = await c.env.DB.prepare(
+    `SELECT uid, name, company, specialization FROM partners WHERE status = 'active' ORDER BY name LIMIT 200`,
+  ).all();
+  return c.json({ items: rows.results || [] });
+});
+
+needs.get('/providers/me/stripe', async (c) => {
+  const user = await requireAuth(c);
+  // Stripe Connect onboarding is owned by AO; return a typed empty status so
+  // the SPA's check renders without crashing.
+  return c.json({
+    user_id: user.id,
+    connected: false,
+    account_id: null,
+    onboarding_url: null,
+    detail: 'stripe_connect_not_configured',
+  });
+});
+
+needs.post('/providers/me/stripe/onboard', async (c) => {
+  await requireAuth(c);
+  return c.json({ ok: false, detail: 'stripe_connect_not_configured' }, 503);
+});
+
+export { needs, quotesRouter, engagementsRouter };
+export default needs;

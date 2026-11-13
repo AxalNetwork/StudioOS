@@ -1,0 +1,299 @@
+You are building the Investor profile only for a VC operating system in Replit.
+
+Scope
+This prompt applies ONLY to the Investor profile. Do not build founder, admin, or other user-profile variants.
+
+Goal
+Create these top-level sections and feature pages:
+
+1. Network
+- Introductions
+- Relationships
+- Organizations
+
+2. Pipeline
+- Deal Flow
+- Screening
+- Commit
+- Transactions
+
+3. Portfolio
+- Companies
+- Performance
+- Reporting
+- Growth
+
+4. Funds
+- Fund Management
+- LP Management
+- Performance
+- Accounting
+
+5. Research
+- Market
+- Companies
+- Documents
+- AI Research
+- News
+- Documents
+
+Important
+- Build each top-level section as a separate area in the sidebar.
+- Build each feature page as its own route or page.
+- Keep the structure modular and reusable.
+- Do not add extra top-level sections.
+- Do not merge top-level sections unless the app architecture already requires it.
+- You MAY merge items within the same feature page when they are clearly subviews, tabs, filters, or internal modules of that page.
+- Keep the UI clean, investor-native, and easy to extend.
+
+How to organize pages and merge internal features
+
+NETWORK
+Section: Network
+Pages:
+1. Introductions
+- introduction list
+- profile preview
+- accept / decline actions
+- match reasons
+- filters if needed
+
+2. Relationships
+- relationship graph
+- mutual connections
+- relationship strength
+- interaction timeline
+- contact history
+- meeting history
+- shared investments
+- referrals
+
+3. Organizations
+- company overview
+- employees
+- funding history
+- ownership
+- locations
+- industry
+- tags
+- documents
+
+PIPELINE
+Section: Pipeline
+Pages:
+1. Deal Flow
+This page should contain all of the following as internal views, tabs, filters, or subpanels:
+- deal pipeline
+- kanban board
+- pipeline stages
+- watchlist
+- archived deals
+- lost deals
+- incoming applications
+- referrals
+- scouts
+- accelerators
+- conferences
+- CRM import
+- website applications
+
+2. Screening
+This page should contain all of the following as internal modules:
+- AI screening
+- scorecards
+- investment thesis match
+- TAM analysis
+- market analysis
+- competitor analysis
+- founder analysis
+- risk assessment
+- red flags
+
+3. Commit
+This page should contain all of the following as internal modules:
+- data room
+- checklist
+- financial review
+- technical review
+- legal review
+- product review
+- customer calls
+- reference calls
+- security review
+- investment memos
+- committee meetings
+- voting
+- decision history
+- approvals
+- meeting minutes
+
+4. Transactions
+This page should contain all of the following as internal modules:
+- SAFE
+- convertible notes
+- equity
+- term sheets
+- closing documents
+
+PORTFOLIO
+Section: Portfolio
+Pages:
+1. Companies
+- portfolio list
+- company profiles
+- ownership
+- investment history
+
+2. Performance
+- revenue
+- ARR
+- MRR
+- burn rate
+- runway
+- headcount
+- cash
+- valuation
+- KPIs
+
+3. Reporting
+- monthly updates
+- quarterly reports
+- board decks
+- investor updates
+
+4. Growth
+- talent network
+- customer introductions
+- partnerships
+- experts
+- advisors
+- service providers
+- hiring support
+- new rounds
+- pro-rata tracking
+- exit planning
+- M&A
+- IPO monitoring
+
+FUNDS
+Section: Funds
+Pages:
+1. Fund Management
+- funds
+- vintage years
+- strategies
+- mandates
+
+2. LP Management
+- LP CRM
+- commitments
+- capital calls
+- distributions
+- documents
+- investor portal
+
+3. Performance
+- NAV
+- IRR
+- DPI
+- TVPI
+- RVPI
+- cash flow
+- waterfall
+- carry
+
+4. Accounting
+- fees
+- expenses
+- audit
+- tax documents
+- compliance
+
+RESEARCH
+Section: Research
+Pages:
+1. Market
+- industries
+- sectors
+- trends
+- macro analysis
+- geography
+
+2. Companies
+- startup database
+- unicorn database
+- public companies
+- exit database
+- funding rounds
+
+3. Documents
+- pitch decks
+- investment memos
+- PDFs
+- contracts
+- research papers
+- searchable document library
+
+4. AI Research
+- AI search
+- AI analyst
+- comparable companies
+- market maps
+- company reports
+
+5. News
+- industry news
+- portfolio news
+- competitor news
+- funding news
+- acquisitions
+- IPOs
+
+Implementation tasks
+
+Task 1: App shell
+- Create the sidebar with these 5 top-level sections.
+- Add routing for every feature page.
+- Make the layout responsive.
+- Add active state navigation.
+
+Task 2: Network
+- Build Introductions, Relationships, and Organizations pages.
+- Use list/detail views where appropriate.
+- Add filters and mock records.
+
+Task 3: Pipeline
+- Build Deal Flow, Screening, Commit, and Transactions as separate pages.
+- Inside each page, merge the listed sub-features into tabs, filters, panels, or subviews instead of separate sidebar entries.
+- Keep the pipeline flow linear.
+
+Task 4: Portfolio
+- Build Companies, Performance, Reporting, and Growth pages.
+- Merge sub-features into each page as internal widgets or sections.
+
+Task 5: Funds
+- Build Fund Management, LP Management, Performance, and Accounting pages.
+- Include the listed sub-features inside each page.
+
+Task 6: Research
+- Build Market, Companies, Documents, AI Research, and News pages.
+- Merge document-related items into the Documents page and support search/filtering.
+
+Task 7: Shared components
+- Create reusable components for tables, cards, filters, breadcrumbs, empty states, detail panels, tabs, and side panels.
+- Keep styling consistent across all sections.
+
+Task 8: Mock data
+- Seed the app with realistic mock data for every section.
+- Ensure every page has meaningful content.
+- Keep the models easy to replace with real backend data later.
+
+Task 9: Polish
+- Add simple tests for route rendering and sidebar navigation.
+- Make sure the app feels cohesive, fast, and production-ready.
+
+Before coding
+- Inspect the repo structure.
+- Identify reusable components and existing patterns.
+- Summarize the smallest viable implementation plan.
+- Then build section by section in the order above.

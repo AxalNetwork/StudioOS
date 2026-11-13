@@ -1,0 +1,27 @@
+{
+  "$id": "deckStagePlan",
+  "title": "GET /api/decks/:id/stage-plan (D1522, #3774)",
+  "description": "The reply the deck v2 adapter's `stagePlan` method passes through: the deck, then `stagePlan()`'s plan (`services/decks/stagePlan.ts`). The plan's own keys are checked by `planFor`'s tests; this contract holds the keys the route adds. D1511 (#3762).",
+  "type": "object",
+  "required": ["deck_id", "version", "stage_source", "sources", "evidence", "objections"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "stage_source": { "type": "string" },
+    "sources": { "enum": ["ok", "unreadable"] },
+    "evidence": { "enum": ["ok", "unreadable"] },
+    "objections": {
+      "type": "object", "additionalProperties": false, "required": ["state", "unanswered"],
+      "properties": {
+        "state": { "enum": ["ok", "unreadable"] },
+        "unanswered": {
+          "type": "array", "maxItems": 3,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["text", "count"],
+            "properties": { "text": { "type": "string" }, "count": { "type": "integer", "minimum": 0 } }
+          }
+        }
+      }
+    }
+  }
+}

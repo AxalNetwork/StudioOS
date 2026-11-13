@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#881337;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:176px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:13px 0}
+    .main{flex:1;min-width:0}
+    .inner{padding:18px 20px 26px}
+    .rail{width:270px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:16px 16px 22px}
+    .hq{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 20px;background:#881337;color:#fff}
+    .st{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 20px;background:#334155;color:#fff}
+    .num{font-variant-numeric:tabular-nums}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14.5px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 10px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:#881337;color:#fff;white-space:nowrap}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;white-space:nowrap}
+    .vm{font-size:11px;font-weight:700;color:#881337;white-space:nowrap}
+    .nr{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:4px;background:#fffbf2;color:#92400e;border:1px dashed #f0b429;white-space:nowrap}
+    .warn{font-size:8.5px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;background:#fff5f7;color:#881337;border:1px solid #f9c8d2}
+  </style>
+</helmet>
+
+<!-- ══════════ F1 · ENTITY GRAPH ══════════ -->
+<section class="ab" id="f1">
+  <div class="ab-hd"><a class="ab-id" href="#f1">F1</a><span class="ab-nm">Entity graph — the tenancy wall, drawn</span><span class="ab-sub">Super full fabric · subsidiary subtree beside it</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The hulls are the point. A subsidiary's entities are grouped inside a tinted boundary, and the subsidiary's own view is the identical component with every hull but theirs removed — HQ collapsing to one anonymous anchor. Not a permission check over a shared graph: a different query.</div>
+
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSuper }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:12.5px;font-weight:700">Axal VC HQ</span>
+          <span style="display:inline-flex;background:rgba(255,255,255,.16);border-radius:7px;padding:2px">
+            <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2"><span style="{{ m.style }}">{{ m.label }}</span></sc-for>
+          </span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.75">{{ entCount }} entities · {{ jurCount }} jurisdictions · {{ fundCount }} funds</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.025em">Entity graph</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ graphSub }}</div>
+
+        <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Corporate fabric</span><span class="zs">Tinted hulls = tenancy boundaries</span></div>
+            <div style="display:grid;gap:13px">
+              <sc-for list="{{ hulls }}" as="h" hint-placeholder-count="3">
+                <div style="{{ h.hullStyle }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+                    <span style="{{ h.chip }}">{{ h.tenant }}</span>
+                    <span class="num" style="font-size:10px;color:#615c6e">{{ h.n }} entities · {{ h.funds }}</span>
+                  </div>
+                  <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-start">
+                    <sc-for list="{{ h.nodes }}" as="e" hint-placeholder-count="3">
+                      <div style="{{ e.nodeStyle }}">
+                        <div style="display:flex;align-items:center;gap:6px">
+                          <span style="{{ e.dot }}"></span>
+                          <span style="font-size:9px;font-weight:800;letter-spacing:.06em;color:#615c6e">{{ e.type }}</span>
+                        </div>
+                        <div style="font-size:11.5px;font-weight:700;margin-top:5px;line-height:1.3">{{ e.name }}</div>
+                        <div class="num mono" style="font-size:9.5px;color:#615c6e;margin-top:4px">{{ e.jur }}</div>
+                        <sc-if value="{{ e.own }}"><div class="num" style="font-size:9px;color:#615c6e;margin-top:4px">{{ e.own }}</div></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">{{ hullNote }}</div>
+          </div>
+
+          <div style="display:grid;gap:14px;align-content:start">
+            <div class="c" style="padding:15px 17px">
+              <div class="zh"><span class="zt">By type &amp; jurisdiction</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <sc-for list="{{ byType }}" as="t" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 9px;background:#fbfbfc;border:1px solid #f0eff4;border-radius:8px">
+                    <span style="font-size:10.5px;color:#3f3a49">{{ t.k }}</span><span class="num" style="font-size:12px;font-weight:800">{{ t.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div class="c" style="padding:15px 17px">
+              <div class="zh"><span class="zt">Filings due</span><span class="zs">next 60 days</span></div>
+              <div style="display:grid;gap:7px">
+                <sc-for list="{{ filings }}" as="f" hint-placeholder-count="4">
+                  <div style="{{ f.rowStyle }}">
+                    <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ f.what }}</div><div class="num" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ f.ent }}</div></div>
+                    <span class="num" style="font-size:10.5px;font-weight:700;color:{{ f.ink }}">{{ f.due }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:10px;line-height:1.55">{{ filingNote }}</div>
+            </div>
+            <div class="c" style="padding:15px 17px">
+              <div class="zh"><span class="zt">Forming</span><span class="zs">checklist per jurisdiction</span></div>
+              <div style="border:1px solid #f0b429;background:#fffbf2;border-radius:9px;padding:11px 12px">
+                <div style="font-size:11.5px;font-weight:700;color:#78350f">{{ forming.name }}</div>
+                <div class="num" style="font-size:10px;color:#92400e;margin-top:4px">{{ forming.jur }}</div>
+                <div style="display:grid;gap:5px;margin-top:9px">
+                  <sc-for list="{{ forming.steps }}" as="s" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:7px"><span style="{{ s.box }}"></span><span style="font-size:10.5px;color:{{ s.ink }}">{{ s.label }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:10px;line-height:1.55">{{ formNote }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="super" page="Funds" hint-size="100%,860px"></dc-import></div>
+  </div>
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px">
+    <div style="flex:1;min-width:520px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="st" style="border-radius:8px;margin:-4px 0 13px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;font-weight:700">Axal France</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">TERRITORY · FR</span></div>
+        <span class="num" style="font-size:10.5px;opacity:.75">{{ frCount }} entities · 1 fund</span>
+      </div>
+      <div class="lbl">Same component, subsidiary query</div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:11px;align-items:flex-start">
+        <div style="border:1.5px dashed #94a3b8;background:#f8fafc;border-radius:10px;padding:11px 13px;min-width:150px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.06em;color:#475569">HQ ANCHOR</div>
+          <div style="font-size:11.5px;font-weight:700;margin-top:5px">Axal VC HQ</div>
+          <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:4px">Brand licensor</div>
+        </div>
+        <sc-for list="{{ frNodes }}" as="e" hint-placeholder-count="3">
+          <div style="{{ e.nodeStyle }}">
+            <div style="display:flex;align-items:center;gap:6px"><span style="{{ e.dot }}"></span><span style="font-size:9px;font-weight:800;letter-spacing:.06em;color:#615c6e">{{ e.type }}</span></div>
+            <div style="font-size:11.5px;font-weight:700;margin-top:5px;line-height:1.3">{{ e.name }}</div>
+            <div class="num mono" style="font-size:9.5px;color:#615c6e;margin-top:4px">{{ e.jur }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:13px;line-height:1.6">{{ subGraphNote }}</div>
+    </div>
+    <div style="width:330px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Licence gate</div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:9px;line-height:1.65">{{ gateNote }}</div>
+      <div style="display:grid;gap:7px;margin-top:12px">
+        <sc-for list="{{ gateRows }}" as="g" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid {{ g.edge }};background:{{ g.bg }};border-radius:8px">
+            <span style="font-size:11px;font-weight:600">{{ g.tenant }}</span><span style="{{ g.pill }}">{{ g.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F2 · ENTITY DOSSIER ══════════ -->
+<section class="ab" id="f2">
+  <div class="ab-hd"><a class="ab-id" href="#f2">F2</a><span class="ab-nm">Entity dossier — Axal VC GP LLC</span><span class="ab-sub">the filings calendar is the working half</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">A GP entity read as a legal-operational record. The US obligation pack ships real because the backend holds it; every other jurisdiction inherits a pack HQ defines once — which is F9, not a second hardcoded ruleset here.</div>
+  <div style="display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Registration</div>
+      <div style="display:grid;gap:0;margin-top:11px">
+        <sc-for list="{{ regRows }}" as="r" hint-placeholder-count="6">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7">
+            <span style="font-size:11px;color:#615c6e">{{ r.k }}</span>
+            <sc-if value="{{ r.missing }}"><span class="nr">Not recorded</span></sc-if>
+            <sc-if value="{{ r.has }}"><span class="num" style="font-size:11.5px;font-weight:700;text-align:right">{{ r.v }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div class="lbl" style="margin-top:16px">Officers &amp; signatories</div>
+      <div style="display:grid;gap:7px;margin-top:10px">
+        <sc-for list="{{ officers }}" as="o" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+            <div style="min-width:0"><div style="font-size:11.5px;font-weight:700">{{ o.who }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px">{{ o.role }}</div></div>
+            <span style="{{ o.pill }}">{{ o.link }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Filings calendar</span><span class="zs">US pack · inherited</span></div>
+      <div style="display:grid;gap:8px">
+        <sc-for list="{{ calendar }}" as="c" hint-placeholder-count="5">
+          <div style="{{ c.rowStyle }}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+              <div style="min-width:0">
+                <div style="font-size:11.5px;font-weight:700">{{ c.what }}</div>
+                <div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ c.cadence }}</div>
+              </div>
+              <div style="text-align:right;flex:none">
+                <div class="num" style="font-size:11px;font-weight:800;color:{{ c.ink }}">{{ c.due }}</div>
+                <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:2px">{{ c.days }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ calNote }}</div>
+    </div>
+
+    <div style="display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">Linked contracts</div>
+        <div style="display:grid;gap:7px;margin-top:11px">
+          <sc-for list="{{ entContracts }}" as="c" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+              <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ c.name }}</div><div class="num mono" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ c.ver }}</div></div>
+              <span style="{{ c.pill }}">{{ c.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="lbl" style="margin-top:15px">GP of</div>
+        <div style="display:grid;gap:7px;margin-top:10px">
+          <sc-for list="{{ gpOf }}" as="f" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #f9c8d2;background:#fff5f7;border-radius:8px">
+              <div style="min-width:0"><div style="font-size:11px;font-weight:700;color:#4c0519">{{ f.name }}</div><div class="num" style="font-size:9.5px;color:#881337;margin-top:3px">{{ f.meta }}</div></div>
+              <span class="vm">Console →</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid #f9c8d2;border-radius:12px;padding:16px 18px">
+        <div class="lbl" style="color:#881337">Destructive</div>
+        <div style="font-size:11.5px;color:#4c0519;margin-top:8px;line-height:1.6">{{ dissolveNote }}</div>
+        <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Begin dissolution</span><span class="gho">Export record</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F3 · FUND CONSOLE · HQ ══════════ -->
+<section class="ab" id="f3">
+  <div class="ab-hd"><a class="ab-id" href="#f3">F3</a><span class="ab-nm">Fund console — Axal VC Fund I LP</span><span class="ab-sub">HQ as working GP · all six zones</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The owner operating their own fund, not supervising someone else's. Mode reads <strong>My funds</strong> and every action here is live — which is exactly why oversight has to be a different mode rather than a dimmer version of this one.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSuper }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="font-size:12.5px;font-weight:700">Axal VC Fund I LP ▾</span>
+          <span style="display:inline-flex;background:rgba(255,255,255,.16);border-radius:7px;padding:2px">
+            <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2"><span style="{{ m.style }}">{{ m.label }}</span></sc-for>
+          </span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.75">{{ f1.stage }} · vintage {{ f1.vintage }}</span>
+      </div>
+      <div class="inner">
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:14px">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">{{ f1.name }}</span><span class="zs">{{ f1.terms }}</span></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+              <sc-for list="{{ f1.stats }}" as="s" hint-placeholder-count="4">
+                <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:10px 11px">
+                  <div class="lbl" style="font-size:8.5px">{{ s.k }}</div>
+                  <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ s.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:0;margin-top:13px">
+              <sc-for list="{{ lifecycle }}" as="l" hint-placeholder-count="6">
+                <div style="flex:1;min-width:0"><div style="{{ l.bar }}"></div><div style="font-size:9px;color:{{ l.ink }};margin-top:5px;font-weight:{{ l.w }};line-height:1.25">{{ l.label }}</div></div>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 12px">
+                <div class="lbl" style="font-size:8.5px">GP of record</div>
+                <div style="display:grid;gap:6px;margin-top:8px">
+                  <sc-for list="{{ f1.gp }}" as="g" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                      <span style="font-size:10.5px;color:#615c6e">{{ g.k }}</span>
+                      <sc-if value="{{ g.missing }}"><span class="nr">Not recorded</span></sc-if>
+                      <sc-if value="{{ g.has }}"><span style="font-size:10.5px;font-weight:700;text-align:right">{{ g.v }}</span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 12px">
+                <div class="lbl" style="font-size:8.5px">Service providers</div>
+                <div style="display:grid;gap:6px;margin-top:8px">
+                  <sc-for list="{{ f1.svc }}" as="g" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                      <span style="font-size:10.5px;color:#615c6e">{{ g.k }}</span>
+                      <sc-if value="{{ g.missing }}"><span class="nr">Not recorded</span></sc-if>
+                      <sc-if value="{{ g.has }}"><span style="font-size:10.5px;font-weight:700;text-align:right">{{ g.v }}</span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ honestyNote }}</div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">LP pipeline</span><span class="zs">seam · each stage links out</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 11px;border:1px solid {{ p.edge }};background:{{ p.bg }};border-radius:9px">
+                  <span class="num" style="font-size:15px;font-weight:800;width:24px;flex:none;color:{{ p.ink }}">{{ p.n }}</span>
+                  <div style="min-width:0;flex:1"><div style="font-size:11.5px;font-weight:700">{{ p.stage }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px">{{ p.owner }}</div></div>
+                  <span class="vm" style="font-size:10px">Open →</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ pipeNote }}</div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:14px">
+          <div class="zh"><span class="zt">Capital ledger</span><span class="zs">LEDGER · {{ f1.ccy }} · totals pinned</span></div>
+          <div style="display:grid;grid-template-columns:1.25fr .8fr .8fr .8fr .8fr .8fr .6fr;gap:10px">
+            <span class="th">Limited partner</span><span class="th">Committed</span><span class="th">Called</span><span class="th">Funded</span><span class="th">Unfunded</span><span class="th">Distributed</span><span class="th">Own %</span>
+          </div>
+          <sc-for list="{{ ledger }}" as="l" hint-placeholder-count="6">
+            <div style="{{ l.rowStyle }}">
+              <span class="td" style="font-weight:{{ l.w }};border-top:{{ l.bt }}">{{ l.lp }}</span>
+              <span class="td num" style="font-weight:{{ l.w }};border-top:{{ l.bt }}">{{ l.committed }}</span>
+              <span class="td num" style="border-top:{{ l.bt }}">{{ l.called }}</span>
+              <span class="td num" style="border-top:{{ l.bt }}">{{ l.funded }}</span>
+              <span class="td num" style="border-top:{{ l.bt }};color:{{ l.unfundedInk }}">{{ l.unfunded }}</span>
+              <span class="td num" style="border-top:{{ l.bt }}">{{ l.dist }}</span>
+              <span class="td num" style="font-weight:{{ l.w }};border-top:{{ l.bt }}">{{ l.own }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ ledgerNote }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Capital calls</span><span class="zs">WORK BOARD</span></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px">
+              <sc-for list="{{ callLanes }}" as="c" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:7px"><span style="font-size:10px;font-weight:800">{{ c.name }}</span><span class="num" style="font-size:10px;color:#615c6e">{{ c.n }}</span></div>
+                  <div style="display:grid;gap:6px">
+                    <sc-for list="{{ c.cards }}" as="k" hint-placeholder-count="1">
+                      <div style="{{ k.cardStyle }}">
+                        <div class="num" style="font-size:11px;font-weight:800">{{ k.amount }}</div>
+                        <div style="font-size:9.5px;color:#615c6e;margin-top:4px;line-height:1.35">{{ k.purpose }}</div>
+                        <sc-if value="{{ k.aging }}"><div class="num" style="font-size:9px;font-weight:700;color:#92400e;margin-top:5px">{{ k.aging }}</div></sc-if>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{ c.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:7px;padding:10px;text-align:center;font-size:9.5px;color:#615c6e">—</div></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ callNote }}</div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Distributions</span><span class="zs">waterfall · <span style="color:#92400e;font-weight:700">model until executed</span></span></div>
+            <div style="display:inline-flex;background:#f2f1f5;border-radius:7px;padding:2px;margin-bottom:11px">
+              <sc-for list="{{ wfMode }}" as="w" hint-placeholder-count="2"><span style="{{ w.style }}">{{ w.label }}</span></sc-for>
+            </div>
+            <div style="display:grid;gap:0">
+              <sc-for list="{{ waterfall }}" as="w" hint-placeholder-count="5">
+                <div style="{{ w.rowStyle }}">
+                  <div style="min-width:0"><div style="font-size:11px;font-weight:{{ w.w }};color:{{ w.ink }}">{{ w.tier }}</div><div class="num" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ w.rule }}</div></div>
+                  <span class="num" style="font-size:11.5px;font-weight:{{ w.w }};color:{{ w.ink }}">{{ w.amt }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ wfNote }}</div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:14px">
+          <div class="zh"><span class="zt">Reporting</span><span class="zs">COLLECTION · issued = frozen snapshot</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <sc-for list="{{ reports }}" as="r" hint-placeholder-count="4">
+              <div style="{{ r.cardStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <span style="font-size:11.5px;font-weight:800">{{ r.period }}</span>
+                  <span style="{{ r.pill }}">{{ r.state }}</span>
+                </div>
+                <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:6px;line-height:1.4">{{ r.meta }}</div>
+                <sc-if value="{{ r.frozen }}"><div style="display:flex;align-items:center;gap:5px;margin-top:7px"><span style="width:9px;height:9px;display:block;color:#615c6e" dangerouslySetInnerHTML="{{ lockIcon }}"></span><span style="font-size:9px;color:#615c6e">byte-identical re-download</span></div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ repNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="super" page="Funds" hint-size="100%,1180px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ F4 · SUBSIDIARY CONSOLE ══════════ -->
+<section class="ab" id="f4">
+  <div class="ab-hd"><a class="ab-id" href="#f4">F4</a><span class="ab-nm">Fund console — subsidiary variant</span><span class="ab-sub">steel · the HQ share is a visible line, not a deduction</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Identical console, scoped to Axal France. The one structural difference is in the waterfall: the brand-licence share appears as its own tier, because an operator who cannot see what HQ takes cannot model their own carry.</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+    <div style="flex:1;min-width:560px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden">
+      <div class="st">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;font-weight:700">Axal France Fund I FPCI ▾</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">TERRITORY · FR</span></div>
+        <span class="num" style="font-size:10.5px;opacity:.75">{{ f2.stage }} · {{ f2.ccy }}</span>
+      </div>
+      <div style="padding:16px 18px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <sc-for list="{{ f2.stats }}" as="s" hint-placeholder-count="4">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:10px 11px">
+              <div class="lbl" style="font-size:8.5px">{{ s.k }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ s.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="zh" style="margin-top:15px"><span class="zt">Distribution waterfall</span><span class="zs">European · model</span></div>
+        <div style="display:grid;gap:0">
+          <sc-for list="{{ waterfall2 }}" as="w" hint-placeholder-count="6">
+            <div style="{{ w.rowStyle }}">
+              <div style="min-width:0"><div style="font-size:11px;font-weight:{{ w.w }};color:{{ w.ink }}">{{ w.tier }}</div><div class="num" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ w.rule }}</div></div>
+              <span class="num" style="font-size:11.5px;font-weight:{{ w.w }};color:{{ w.ink }}">{{ w.amt }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border:1px solid #cbd5e1;background:#f8fafc;border-radius:9px;padding:12px 13px;margin-top:12px">
+          <div style="font-size:11.5px;color:#1e293b;line-height:1.65">{{ hqShareNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div style="width:340px;flex:none;display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">What differs from HQ mode</div>
+        <div style="display:grid;gap:10px;margin-top:11px">
+          <sc-for list="{{ subDiffs }}" as="d" hint-placeholder-count="4">
+            <div style="border-left:2px solid #475569;padding-left:11px">
+              <div style="font-size:11.5px;font-weight:700">{{ d.k }}</div>
+              <div style="font-size:11px;color:#3f3a49;margin-top:4px;line-height:1.55">{{ d.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F5 · LP RECORD ══════════ -->
+<section class="ab" id="f5">
+  <div class="ab-hd"><a class="ab-id" href="#f5">F5</a><span class="ab-nm">LP record — Meridian Family Office</span><span class="ab-sub">one LP across the tenant's funds</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The reliability indicator is the zone worth arguing for: a GP chasing a wire needs to know whether this LP has been late before, and that is a fact the payment history already holds but no ledger surfaces.</div>
+  <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:38px;height:38px;border-radius:10px;background:#fff5f7;color:#881337;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex:none">MF</div>
+        <div style="min-width:0"><div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Meridian Family Office</div><div style="font-size:10.5px;color:#615c6e;margin-top:3px">Institutional · admitted Mar 2025</div></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+        <sc-for list="{{ lpChips }}" as="c" hint-placeholder-count="4"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+      </div>
+      <div class="lbl" style="margin-top:16px">Signed documents</div>
+      <div style="display:grid;gap:7px;margin-top:10px">
+        <sc-for list="{{ lpDocs }}" as="d" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+            <div style="min-width:0"><div style="font-size:11px;font-weight:700">{{ d.name }}</div><div class="num mono" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ d.meta }}</div></div>
+            <span style="{{ d.pill }}">{{ d.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Per-fund commitments</div>
+      <div style="display:grid;gap:10px;margin-top:11px">
+        <sc-for list="{{ lpFunds }}" as="f" hint-placeholder-count="2">
+          <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:12px 13px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span style="font-size:12px;font-weight:800">{{ f.fund }}</span>
+              <span class="num" style="font-size:12px;font-weight:800;color:#881337">{{ f.own }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">
+              <sc-for list="{{ f.cells }}" as="c" hint-placeholder-count="4">
+                <div><div class="lbl" style="font-size:8px">{{ c.k }}</div><div class="num" style="font-size:11.5px;font-weight:700;margin-top:3px">{{ c.v }}</div></div>
+              </sc-for>
+            </div>
+            <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:10px"><div style="height:100%;width:{{ f.pct }}%;background:#881337;border-radius:999px"></div></div>
+            <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:5px">{{ f.pct }}% of commitment called</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:16px;align-content:start">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="zh"><span class="zt">Payment history</span><span class="zs">reliability</span></div>
+        <div style="{{ relStyle }}">
+          <div style="font-size:12px;font-weight:800;color:{{ relInk }}">{{ relLabel }}</div>
+          <div style="font-size:10.5px;color:#3f3a49;margin-top:5px;line-height:1.5">{{ relNote }}</div>
+        </div>
+        <div style="display:grid;gap:6px;margin-top:11px">
+          <sc-for list="{{ payments }}" as="p" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid {{ p.edge }};background:{{ p.bg }};border-radius:8px">
+              <span class="num" style="font-size:10.5px;color:#615c6e">{{ p.call }}</span>
+              <span class="num" style="font-size:11px;font-weight:700">{{ p.amt }}</span>
+              <span class="num" style="font-size:10px;font-weight:700;color:{{ p.ink }}">{{ p.when }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+        <div class="lbl">Actions</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+          <span class="acc">Record wire received</span><span class="gho">Send reminder</span><span class="gho" style="color:#881337;border-color:#f9c8d2">Flag to Security</span>
+        </div>
+        <div style="font-size:10.5px;color:#615c6e;margin-top:11px;line-height:1.55">{{ lpActionNote }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F6 · OVERSIGHT ══════════ -->
+<section class="ab" id="f6">
+  <div class="ab-hd"><a class="ab-id" href="#f6">F6</a><span class="ab-nm">Oversight — all funds</span><span class="ab-sub">read-only · HQ economics ledger</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The other mode. Cross-tenant rows, FX-normalised with the rate date stated, and the brand-licence share of every subsidiary GP's economics — accrued, invoiced, collected — which is the line that reconciles into Revenue.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navSuper }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="font-size:12.5px;font-weight:700">Oversight</span>
+          <span style="display:inline-flex;background:rgba(255,255,255,.16);border-radius:7px;padding:2px">
+            <sc-for list="{{ modesOv }}" as="m" hint-placeholder-count="2"><span style="{{ m.style }}">{{ m.label }}</span></sc-for>
+          </span>
+          <span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px">READ ONLY</span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.75">Platform AUM {{ aum }} · FX {{ fxDate }}</span>
+      </div>
+      <div class="inner">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+          <sc-for list="{{ ovStats }}" as="s" hint-placeholder-count="5">
+            <div style="{{ s.cardStyle }}">
+              <div class="lbl" style="font-size:8.5px;line-height:1.3">{{ s.k }}</div>
+              <div class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:5px;color:{{ s.ink }}">{{ s.v }}</div>
+              <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:4px;line-height:1.35">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="c" style="padding:15px 17px;margin-top:14px">
+          <div class="zh"><span class="zt">Every fund on the platform</span><span class="zs">row drill-in opens that console in oversight framing</span></div>
+          <div style="display:grid;grid-template-columns:.85fr 1.2fr .6fr .55fr .75fr .7fr .95fr .8fr;gap:9px">
+            <span class="th">Tenant</span><span class="th">Fund</span><span class="th">Jur</span><span class="th">Vintage</span><span class="th">Size</span><span class="th">Called</span><span class="th">DPI / TVPI</span><span class="th">Flags</span>
+          </div>
+          <sc-for list="{{ ovRows }}" as="o" hint-placeholder-count="4">
+            <div style="{{ o.rowStyle }}">
+              <span class="td" style="font-weight:700">{{ o.tenant }}</span>
+              <span class="td">{{ o.fund }}</span>
+              <span class="td mono" style="font-size:10.5px">{{ o.jur }}</span>
+              <span class="td num">{{ o.vintage }}</span>
+              <span class="td num">{{ o.size }}</span>
+              <span class="td num">{{ o.called }}</span>
+              <span class="td num">{{ o.perf }}</span>
+              <span class="td"><sc-if value="{{ o.flag }}"><span class="warn">{{ o.flag }}</span></sc-if><sc-if value="{{ o.clean }}"><span style="font-size:10px;color:#047857;font-weight:700">clear</span></sc-if></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ ovNote }}</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:15px 17px;border-color:#f9c8d2">
+            <div class="zh"><span class="zt" style="color:#881337">HQ economics</span><span class="zs">brand-licence share · reconciles into Revenue</span></div>
+            <div style="display:grid;grid-template-columns:1.1fr .75fr .75fr .8fr .75fr .8fr;gap:9px">
+              <sc-for list="{{ econCols }}" as="c" hint-placeholder-count="6"><span class="th">{{ c }}</span></sc-for>
+            </div>
+            <sc-for list="{{ econRows }}" as="e" hint-placeholder-count="4">
+              <div style="{{ e.rowStyle }}">
+                <span class="td" style="font-weight:{{ e.w }};border-top:{{ e.bt }}">{{ e.gp }}</span>
+                <span class="td num" style="border-top:{{ e.bt }}">{{ e.basis }}</span>
+                <span class="td num" style="border-top:{{ e.bt }}">{{ e.carry }}</span>
+                <span class="td num" style="font-weight:{{ e.w }};border-top:{{ e.bt }}">{{ e.accrued }}</span>
+                <span class="td num" style="border-top:{{ e.bt }}">{{ e.invoiced }}</span>
+                <span class="td num" style="border-top:{{ e.bt }};color:{{ e.colInk }}">{{ e.collected }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ econNote }}</div>
+          </div>
+
+          <div class="c" style="padding:15px 17px">
+            <div class="zh"><span class="zt">Compliance flags</span><span class="zs">FEED</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ flags }}" as="f" hint-placeholder-count="4">
+                <div style="{{ f.rowStyle }}">
+                  <div style="min-width:0"><div style="font-size:11px;font-weight:700;color:{{ f.ink }}">{{ f.what }}</div><div class="num" style="font-size:9.5px;color:#615c6e;margin-top:3px">{{ f.who }}</div></div>
+                  <span class="vm" style="font-size:10px">Open →</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ flagNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="super" page="Funds" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ F7 · LAUNCH A FUND ══════════ -->
+<section class="ab" id="f7">
+  <div class="ab-hd"><a class="ab-id" href="#f7">F7</a><span class="ab-nm">Launch a fund — six steps</span><span class="ab-sub">step 6 differs on a subsidiary</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The flow ends at <em>Forming</em>, not at <em>Investing</em> — a fund that exists on paper and has raised nothing is a real state, and pretending otherwise is how a console starts lying on day one.</div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+    <sc-for list="{{ launch }}" as="s" hint-placeholder-count="6">
+      <div style="{{ s.cardStyle }}">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="{{ s.numStyle }}">{{ s.n }}</span>
+          <span style="font-size:11.5px;font-weight:800;letter-spacing:-.01em">{{ s.title }}</span>
+        </div>
+        <div style="font-size:10.5px;color:#3f3a49;margin-top:9px;line-height:1.6">{{ s.body }}</div>
+        <sc-if value="{{ s.chip }}"><div style="margin-top:9px"><span style="{{ s.chipStyle }}">{{ s.chip }}</span></div></sc-if>
+        <sc-if value="{{ s.note }}"><div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.55">{{ s.note }}</div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:11px;padding:14px 16px;margin-top:14px">
+    <div class="lbl" style="color:#334155">Step 6 on a subsidiary</div>
+    <div style="font-size:11.5px;color:#1e293b;margin-top:8px;line-height:1.65">{{ launchSubNote }}</div>
+  </div>
+</section>
+
+<!-- ══════════ F8 · CAPITAL CALL FLOW ══════════ -->
+<section class="ab" id="f8">
+  <div class="ab-hd"><a class="ab-id" href="#f8">F8</a><span class="ab-nm">New capital call — pro-rata and notice</span><span class="ab-sub">Forge pre-fills; the send is human</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The pro-rata table is tinted until confirmed, because a pre-filled number that looks committed is worse than a blank one. Every row derives from the same commitments the capital ledger shows, so the split cannot drift from the book it is drawn on.</div>
+  <div style="display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Step 1 · Amount &amp; purpose</div>
+      <div style="border:1.5px solid #881337;background:#fff5f7;border-radius:9px;padding:11px 12px;margin-top:11px">
+        <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em">{{ call.amount }}</div>
+        <div class="num" style="font-size:10px;color:#881337;margin-top:4px">{{ call.pctOfCommit }} of total commitments</div>
+      </div>
+      <div style="display:grid;gap:7px;margin-top:11px">
+        <sc-for list="{{ call.purpose }}" as="p" hint-placeholder-count="3">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:8px">
+            <span style="font-size:10.5px;color:#3f3a49">{{ p.k }}</span><span class="num" style="font-size:11px;font-weight:700">{{ p.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:10.5px;color:#615c6e;margin-top:11px;line-height:1.6">{{ call.note }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Step 2 · Pro-rata</span><span class="zs" style="color:#92400e">tinted = Forge, unconfirmed</span></div>
+      <div style="display:grid;grid-template-columns:1.3fr .8fr .8fr .7fr;gap:9px">
+        <span class="th">LP</span><span class="th">Commitment</span><span class="th">This call</span><span class="th">Share</span>
+      </div>
+      <sc-for list="{{ prorata }}" as="p" hint-placeholder-count="6">
+        <div style="{{ p.rowStyle }}">
+          <span class="td" style="font-weight:{{ p.w }};border-top:{{ p.bt }}">{{ p.lp }}</span>
+          <span class="td num" style="border-top:{{ p.bt }}">{{ p.commit }}</span>
+          <span class="td num" style="font-weight:{{ p.w }};border-top:{{ p.bt }};color:{{ p.ink }}">{{ p.amt }}</span>
+          <span class="td num" style="border-top:{{ p.bt }}">{{ p.share }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <span class="acc">Confirm split</span><span class="gho">Adjust an LP</span>
+        <span class="num" style="font-size:10px;color:#615c6e;margin-left:auto">{{ prorataCheck }}</span>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Step 3 · Notice preview</div>
+      <div style="border:1px solid #ececf1;background:#fbfbfc;border-radius:9px;padding:13px 14px;margin-top:11px">
+        <div style="font-size:11px;font-weight:800">{{ notice.head }}</div>
+        <div style="font-size:10.5px;color:#3f3a49;margin-top:8px;line-height:1.7">{{ notice.body }}</div>
+        <div class="num" style="font-size:10px;color:#615c6e;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">{{ notice.sig }}</div>
+      </div>
+      <div style="border:1px solid #f0b429;background:#fffbf2;border-radius:9px;padding:11px 12px;margin-top:11px">
+        <div style="font-size:10.5px;color:#78350f;line-height:1.6">{{ notice.forge }}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><span class="acc">Send to {{ lpCount }} LPs</span><span class="gho">Save draft</span></div>
+      <div class="num" style="font-size:10px;color:#615c6e;margin-top:9px;line-height:1.5">{{ notice.audit }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F9 · JURISDICTION PACKS ══════════ -->
+<section class="ab" id="f9">
+  <div class="ab-hd"><a class="ab-id" href="#f9">F9</a><span class="ab-nm">Jurisdiction packs — configure once, inherit everywhere</span><span class="ab-sub">the alternative to hardcoding a second country</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">The US pack ships real because the backend holds it. Every other jurisdiction is an obligation set HQ defines once and every entity there inherits — which is what keeps France from being a second hardcoded ruleset and Nordics from being a third.</div>
+  <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="lbl">Packs</div>
+      <div style="display:grid;gap:8px;margin-top:11px">
+        <sc-for list="{{ packs }}" as="p" hint-placeholder-count="4">
+          <div style="{{ p.cardStyle }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:9px">
+              <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="font-size:11px;font-weight:800">{{ p.code }}</span><span style="font-size:11px;font-weight:700">{{ p.name }}</span></div>
+              <span style="{{ p.pill }}">{{ p.state }}</span>
+            </div>
+            <div class="num" style="font-size:10px;color:#615c6e;margin-top:6px">{{ p.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:10.5px;color:#615c6e;margin-top:11px;line-height:1.6">{{ packNote }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">FR pack · obligations</span><span class="zs">applies to {{ frEntities }} entities on save</span></div>
+      <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr .9fr;gap:9px">
+        <span class="th">Obligation</span><span class="th">Cadence</span><span class="th">Applies to</span><span class="th">Lead time</span>
+      </div>
+      <sc-for list="{{ frPack }}" as="o" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr .9fr;gap:9px;align-items:center;padding:8px 0;border-top:1px solid #f4f3f7">
+          <span style="font-size:11px;font-weight:600">{{ o.what }}</span>
+          <span class="td num" style="border-top:none;padding:0">{{ o.cadence }}</span>
+          <span class="td" style="border-top:none;padding:0"><span style="{{ o.scopeStyle }}">{{ o.scope }}</span></span>
+          <span class="td num" style="border-top:none;padding:0">{{ o.lead }}</span>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap">
+        <span class="acc">Save pack</span><span class="gho">+ Add obligation</span>
+        <span class="num" style="font-size:10px;color:#615c6e;margin-left:auto">{{ packSaveNote }}</span>
+      </div>
+      <div style="border:1px solid #f0b429;background:#fffbf2;border-radius:9px;padding:11px 12px;margin-top:12px">
+        <div style="font-size:10.5px;color:#78350f;line-height:1.6">{{ packForge }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ F10 · HONESTY STATES ══════════ -->
+<section class="ab" id="f10">
+  <div class="ab-hd"><a class="ab-id" href="#f10">F10</a><span class="ab-nm">Honesty states</span><span class="ab-sub">what an unset fiduciary fact looks like</span></div>
+  <div class="ab-sub" style="max-width:1010px;margin:-6px 0 16px">Two states the suite must render without inventing anything. A fund with no GP of record cannot issue an LP-facing document, and a drafted report is not a report — both are blocks, and both say so in the place the action would otherwise be.</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid #f0b429;border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Fund with no GP of record</span><span class="zs">Nordics Fund I · Forming</span></div>
+      <div style="display:grid;gap:7px">
+        <sc-for list="{{ emptyGP }}" as="g" hint-placeholder-count="5">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #f4f3f7">
+            <span style="font-size:11px;color:#615c6e">{{ g.k }}</span><span class="nr">Not recorded</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #f9c8d2;background:#fff5f7;border-radius:9px;padding:12px 13px;margin-top:12px">
+        <div style="font-size:11.5px;font-weight:700;color:#881337">{{ blockTitle }}</div>
+        <div style="font-size:11px;color:#4c0519;margin-top:6px;line-height:1.65">{{ blockBody }}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8">Issue LPA · blocked</span>
+        <span class="acc">Record GP of record</span>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+      <div class="zh"><span class="zt">Report drafted, not issued</span><span class="zs">Q3 2026 · Axal VC Fund I LP</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+        <div style="border:1px dashed #cbd5e1;background:#f8fafc;border-radius:10px;padding:13px 14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11.5px;font-weight:800">Q3 2026</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:4px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">DRAFT</span></div>
+          <div style="font-size:10.5px;color:#3f3a49;margin-top:8px;line-height:1.6">{{ draftBody }}</div>
+        </div>
+        <div style="border:1px solid #a7f3d0;background:#f2fdf7;border-radius:10px;padding:13px 14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:11.5px;font-weight:800">Q2 2026</span><span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:4px;background:#dcfce7;color:#047857;border:1px solid #a7f3d0">ISSUED</span></div>
+          <div style="font-size:10.5px;color:#14532d;margin-top:8px;line-height:1.6">{{ issuedBody }}</div>
+        </div>
+      </div>
+      <div style="display:grid;gap:7px;margin-top:12px">
+        <sc-for list="{{ issueSteps }}" as="s" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid {{ s.edge }};background:{{ s.bg }};border-radius:8px">
+            <span style="{{ s.box }}"></span>
+            <div style="min-width:0;flex:1"><div style="font-size:11px;font-weight:700;color:{{ s.ink }}">{{ s.label }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ s.note }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ issueNote }}</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const OX = '#881337', OXT = '#fff5f7', OXE = '#f9c8d2';
+    const I = {
+      home: this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      lic:  this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'),
+      fund: this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      con:  this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      team: this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      sup:  this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.5 1c0 1.9-2.7 2.4-2.7 4M12 17.5h.01"/>'),
+      sec:  this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/>'),
+      globe:this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      lock: this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>')
+    };
+    const NAV = [['Home',I.home],['Licences',I.lic],['Funds',I.fund],['Contracts',I.con],['Team',I.team],['Support',I.sup],['Security',I.sec]];
+    const navOf = (active) => NAV.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:12px;'
+        + (label === active ? 'font-weight:700;color:' + OX + ';background:' + OXT + ';box-shadow:inset 2px 0 0 ' + OX : 'font-weight:600;color:#4a4553') }));
+
+    // Sign sits OUTSIDE the symbol, and -0 normalises to 0 — "$-0" is not a figure any
+    // statement would print, and this is a fiduciary ledger.
+    const money = (sym) => (n) => {
+      const v = Object.is(n, -0) ? 0 : n;
+      return (v < 0 ? '−' + sym : sym) + Math.abs(v).toLocaleString('en-US');
+    };
+    const usd = money('$');
+    const eur = money('€');
+    const m$ = (n) => '$' + (n / 1e6).toFixed(1) + 'M';
+    const mode = (list, on) => list.map(l => ({ label:l,
+      style:'font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:5px;'
+        + (l === on ? 'background:#fff;color:' + OX : 'color:rgba(255,255,255,.8)') }));
+    const pill = (t) => {
+      const M = { Active:['#ecfdf5','#047857','#a7f3d0'], Signed:['#ecfdf5','#047857','#a7f3d0'],
+                  Issued:['#dcfce7','#047857','#a7f3d0'], Granted:['#ecfdf5','#047857','#a7f3d0'],
+                  Current:['#ecfdf5','#047857','#a7f3d0'], Linked:['#ecfdf5','#047857','#a7f3d0'],
+                  Forming:['#fffbf2','#92400e','#fde68a'], Draft:['#f1f5f9','#475569','#cbd5e1'],
+                  Pending:['#fffbf2','#92400e','#fde68a'], 'Not granted':['#f4f4f6','#615c6e','#e4e4e8'],
+                  Suspended:['#fef2f2','#b91c1c','#fecaca'], Verified:['#ecfdf5','#047857','#a7f3d0'] };
+      const c = M[t] || M.Draft;
+      return 'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+
+    // ══ ONE entity record. Graph hulls, type counts, jurisdiction count and the dossier's
+    // "GP of" list all read it, so a header total cannot disagree with the nodes drawn. ══
+    const ENTITIES = [
+      { tenant:'HQ', name:'Axal VC Holdings LLC', type:'HOLDING', jur:'US · Delaware · LLC', status:'active' },
+      { tenant:'HQ', name:'Axal VC GP LLC', type:'GP ENTITY', jur:'US · Delaware · LLC', status:'active', own:'100% held by Holdings' },
+      { tenant:'HQ', name:'Axal VC Management LLC', type:'MANAGEMENT', jur:'US · Delaware · LLC', status:'active' },
+      { tenant:'HQ', name:'Axal VC Fund I LP', type:'FUND', jur:'US · Delaware · LP', status:'active', own:'GP: Axal VC GP LLC' },
+      { tenant:'HQ', name:'Axal VC Fund II LP', type:'FUND', jur:'US · Delaware · LP', status:'forming', own:'GP: Axal VC GP LLC' },
+      { tenant:'France', name:'Axal France GP SAS', type:'GP ENTITY', jur:'FR · Paris · SAS', status:'active' },
+      { tenant:'France', name:'Axal France Fund I FPCI', type:'FUND', jur:'FR · Paris · FPCI', status:'active', own:'GP: Axal France GP SAS' },
+      { tenant:'Nordics', name:'Axal Nordics GP AB', type:'GP ENTITY', jur:'SE · Stockholm · AB', status:'forming' },
+      { tenant:'Nordics', name:'Axal Nordics Fund I', type:'FUND', jur:'SE · Stockholm · AB', status:'forming' }
+    ];
+    const TENANTS = ['HQ','France','Nordics'];
+    const entCount = ENTITIES.length;
+    const jurCount = 3;
+    const fundCount = ENTITIES.filter(e => e.type === 'FUND').length;
+    const frEnts = ENTITIES.filter(e => e.tenant === 'France');
+    // Label carried, not derived by case-folding — that turned GP ENTITY into "Gp entity"
+    // beside node chips reading GP ENTITY.
+    const TYPES = [
+      { k:'HOLDING', label:'Holding' }, { k:'GP ENTITY', label:'GP entity' },
+      { k:'MANAGEMENT', label:'Management' }, { k:'FUND', label:'Fund' }
+    ];
+
+    const statusDot = (s) => 'width:6px;height:6px;border-radius:50%;flex:none;background:'
+      + (s === 'active' ? '#10b981' : (s === 'forming' ? '#f59e0b' : '#94a3b8'));
+    const nodeBox = (e) => 'border:1px solid ' + (e.status === 'forming' ? '#fde68a;background:#fffdf5' : '#ececf1;background:#fff')
+      + ';border-radius:9px;padding:10px 11px;min-width:152px';
+
+    // ══ ONE LP book for Fund I. The ledger, the pro-rata split, ownership %, the LP record
+    // and the platform AUM all derive from it. ══
+    const FUND_SIZE = 42000000;
+    const LPS = [
+      { lp:'Meridian Family Office', commit:12000000, called:5400000, dist:1800000, late:1 },
+      { lp:'Kestrel Endowment', commit:10000000, called:4500000, dist:1500000, late:0 },
+      { lp:'Thornbury Capital', commit:8000000, called:3600000, dist:1200000, late:0 },
+      { lp:'Verwood Partners', commit:6000000, called:2700000, dist:900000, late:0 },
+      { lp:'B. Lindqvist', commit:4000000, called:1800000, dist:600000, late:0 },
+      { lp:'Axal VC GP LLC (GP commit)', commit:2000000, called:900000, dist:300000, late:0 }
+    ];
+    const totCommit = LPS.reduce((a, l) => a + l.commit, 0);
+    const totCalled = LPS.reduce((a, l) => a + l.called, 0);
+    const totDist = LPS.reduce((a, l) => a + l.dist, 0);
+    const calledPct = Math.round(totCalled / totCommit * 100);
+    const ownOf = (l) => (l.commit / totCommit * 100).toFixed(1) + '%';
+
+    // ══ Capital call: one amount, split pro-rata off the same commitments. ══
+    const CALL_AMT = 6300000;
+    const shareOf = (l) => l.commit / totCommit;
+    const callFor = (l) => Math.round(CALL_AMT * shareOf(l));
+    const callSum = LPS.reduce((a, l) => a + callFor(l), 0);
+
+    // ══ Waterfall: derived from distributable proceeds, not typed tiers. ══
+    // Above called capital, so every tier below return-of-capital actually exercises — a
+    // waterfall demonstrating three empty tiers demonstrates nothing.
+    const PROCEEDS = 26000000;
+    const roc = Math.min(PROCEEDS, totCalled);
+    const afterRoc = PROCEEDS - roc;
+    const pref = Math.min(afterRoc, Math.round(totCalled * 0.08));
+    const afterPref = afterRoc - pref;
+    const catchup = Math.min(afterPref, Math.round(pref * 0.25));
+    const residual = afterPref - catchup;
+    const carryPct = 0.20;
+    const gpCarry = Math.round(residual * carryPct);
+    const lpResidual = residual - gpCarry;
+
+    // Subsidiary fund — same shape, HQ brand share is a tier of the GP's carry.
+    const FR_PROCEEDS = 4000000, FR_CALLED = 3200000;
+    const frRoc = Math.min(FR_PROCEEDS, FR_CALLED);
+    const frAfter = FR_PROCEEDS - frRoc;
+    const frPref = Math.min(frAfter, Math.round(FR_CALLED * 0.08));
+    const frResid = frAfter - frPref;
+    const frGpCarry = Math.round(frResid * carryPct);
+    const HQ_SHARE = 0.20;
+    const hqCut = Math.round(frGpCarry * HQ_SHARE);
+    const frNetCarry = frGpCarry - hqCut;
+    const frLpResid = frResid - frGpCarry;
+
+    // ══ Oversight: rows and AUM derive from the fund records. ══
+    // Each fund carries its own currency and the rate used. AUM sums the CONVERTED figures,
+    // so "FX-normalised · as of 25 Feb 2026" describes a conversion that actually happened.
+    const FX = { USD:1, EUR:1.081, SEK:0.094 };
+    const OV = [
+      { tenant:'HQ', fund:'Axal VC Fund I LP', jur:'US-DE', vintage:'2025', sizeN:FUND_SIZE, ccy:'USD', calledPct:calledPct, perf:'0.19 / 1.34', flag:null },
+      { tenant:'HQ', fund:'Axal VC Fund II LP', jur:'US-DE', vintage:'2026', sizeN:0, ccy:'USD', calledPct:0, perf:'—', flag:'FORMING' },
+      { tenant:'France', fund:'Axal France Fund I FPCI', jur:'FR', vintage:'2026', sizeN:16200000, ccy:'EUR', calledPct:Math.round(FR_CALLED / 16200000 * 100), perf:'0.00 / 1.02', flag:null },
+      { tenant:'Nordics', fund:'Axal Nordics Fund I', jur:'SE', vintage:'2026', sizeN:0, ccy:'SEK', calledPct:0, perf:'—', flag:'NO GP OF RECORD' }
+    ].map(o => Object.assign({}, o, { usdSize: Math.round(o.sizeN * FX[o.ccy]) }));
+    const aumN = OV.reduce((a, o) => a + o.usdSize, 0);
+
+    // ══ HQ economics: the share is a rate on each subsidiary's own economics. ══
+    const ECON = [
+      { gp:'Axal France GP SAS', feeBase:324000, carryBase:frGpCarry, invoicedPct:1.0, collectedPct:1.0 },
+      { gp:'Axal Nordics GP AB', feeBase:0, carryBase:0, invoicedPct:0, collectedPct:0 }
+    ].map(e => {
+      // Split, so the Basis string "20% of fees + carry" is evidenced and F4's €21,760
+      // carry share resolves to a real cell rather than an aggregate.
+      const feeShare = Math.round(e.feeBase * HQ_SHARE);
+      const carryShare = Math.round(e.carryBase * HQ_SHARE);
+      const accrued = feeShare + carryShare;
+      return { gp:e.gp, feeShare, carryShare, accrued,
+        invoiced:Math.round(accrued * e.invoicedPct), collected:Math.round(accrued * e.collectedPct) };
+    });
+    const econTot = ECON.reduce((a, e) => ({ feeShare:a.feeShare + e.feeShare, carryShare:a.carryShare + e.carryShare,
+      accrued:a.accrued + e.accrued, invoiced:a.invoiced + e.invoiced, collected:a.collected + e.collected }),
+      { feeShare:0, carryShare:0, accrued:0, invoiced:0, collected:0 });
+
+    // Formatter is a parameter — a EUR fund's amounts must not render in dollars beside
+    // rule strings quoting euros.
+    const wfRow = (tier, rule, amt, emph, fmt) => ({
+      tier, rule, amt: amt === null ? '—' : (fmt || usd)(amt),
+      w: emph ? '800' : '500', ink: emph ? OX : '#3f3a49',
+      rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #f4f3f7'
+    });
+
+    return {
+      navSuper: navOf('Funds'),
+      globeIcon: I.globe, lockIcon: I.lock,
+      modes: mode(['My funds','All funds'], 'My funds'),
+      modesOv: mode(['My funds','All funds'], 'All funds'),
+      entCount:String(entCount), jurCount:String(jurCount), fundCount:String(fundCount),
+      frCount:String(frEnts.length),
+      graphSub: 'Every entity HQ can see, grouped by the tenant that owns it. ' + entCount + ' entities across ' + jurCount + ' jurisdictions, of which ' + fundCount + ' are funds.',
+
+      hulls: TENANTS.map(t => {
+        const nodes = ENTITIES.filter(e => e.tenant === t);
+        const funds = nodes.filter(e => e.type === 'FUND').length;
+        const isHQ = t === 'HQ';
+        return {
+          tenant: isHQ ? 'Axal VC HQ' : 'Axal ' + t,
+          n:String(nodes.length),
+          funds: funds + ' fund' + (funds === 1 ? '' : 's'),
+          chip:'font-size:10px;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:5px;'
+            + (isHQ ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE
+                    : 'background:#f1f5f9;color:#334155;border:1px solid #cbd5e1'),
+          hullStyle:'border:1.5px dashed ' + (isHQ ? OXE : '#cbd5e1') + ';background:'
+            + (isHQ ? 'rgba(136,19,55,.03)' : 'rgba(51,65,85,.03)') + ';border-radius:12px;padding:12px 13px',
+          nodes:nodes.map(e => ({ name:e.name, type:e.type, jur:e.jur, own:e.own || null,
+            dot:statusDot(e.status), nodeStyle:nodeBox(e) }))
+        };
+      }),
+      hullNote: 'A subsidiary\u2019s query returns its own hull and nothing else — not a filtered version of this view, a different query. Which is why the count in the header bar changes with the viewer rather than staying constant and hiding rows.',
+
+      byType: TYPES.map(t => ({ k:t.label, n:String(ENTITIES.filter(e => e.type === t.k).length) }))
+        .concat([{ k:'US · Delaware', n:String(ENTITIES.filter(e => /US/.test(e.jur)).length) },
+                 { k:'Non-US', n:String(ENTITIES.filter(e => !/US/.test(e.jur)).length) }]),
+
+      filings: [
+        { what:'Delaware franchise tax', ent:'Axal VC GP LLC', due:'Mar 1', days:9, ink:'#b91c1c' },
+        { what:'Registered agent renewal', ent:'Axal VC Holdings LLC', due:'Mar 18', days:26, ink:'#92400e' },
+        { what:'Form ADV annual update', ent:'Axal VC Management LLC', due:'Mar 31', days:39, ink:'#92400e' },
+        { what:'Annual report', ent:'Axal VC Fund I LP', due:'Apr 15', days:54, ink:'#615c6e' }
+      ].map(f => ({ what:f.what, ent:f.ent, due:f.due, ink:f.ink,
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid '
+          + (f.days < 14 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:8px' })),
+      filingNote: 'Sorted by date, not by entity — a franchise tax nine days out matters more than which LLC owes it.',
+
+      forming: { name:'Axal Nordics GP AB', jur:'SE · Stockholm · AB',
+        steps:[
+          { label:'Name reservation', done:true }, { label:'Registration filed', done:true },
+          { label:'Registered agent appointed', done:false }, { label:'Operating agreement instantiated', done:false }
+        ].map(s => ({ label:s.label, ink: s.done ? '#047857' : '#78350f',
+          box:'width:11px;height:11px;border-radius:3px;flex:none;border:1.5px solid ' + (s.done ? '#10b981' : '#f0b429') + ';background:' + (s.done ? '#10b981' : 'transparent') })) },
+      formNote: 'The checklist is generated from the SE jurisdiction pack, not typed per entity — which is the whole argument for F9.',
+
+      frNodes: frEnts.map(e => ({ name:e.name, type:e.type, jur:e.jur, dot:statusDot(e.status), nodeStyle:nodeBox(e) })),
+      subGraphNote: 'France sees ' + frEnts.length + ' entities and one anonymous HQ anchor. Not a redacted HQ subtree — HQ\u2019s ' + ENTITIES.filter(e => e.tenant === 'HQ').length + ' entities are not in the response at all, so there is nothing to leak through a search box or a Forge answer.',
+
+      gateNote: 'The Funds row is licence-gated. Where fund-operation rights are not granted, the sidebar row is absent — not a locked teaser, which would tell a tenant what they are missing and invite a support ticket.',
+      gateRows: [
+        { tenant:'Axal France', state:'Granted', edge:'#a7f3d0', bg:'#f2fdf7' },
+        { tenant:'Axal Nordics', state:'Granted', edge:'#a7f3d0', bg:'#f2fdf7' },
+        { tenant:'Axal Benelux', state:'Not granted', edge:'#e4e4e8', bg:'#fbfbfc' }
+      ].map(g => ({ tenant:g.tenant, state:g.state, edge:g.edge, bg:g.bg, pill:pill(g.state) })),
+
+      // ── F2 ──
+      regRows: [
+        { k:'Jurisdiction', v:'Delaware, US' }, { k:'Legal form', v:'LLC' },
+        { k:'Formation date', v:'14 Jan 2025' }, { k:'Registration no.', v:'7412883' },
+        { k:'Registered agent', v:'CSC Delaware' }, { k:'Agent renewal', v:'18 Mar 2026' }
+      ].map(r => ({ k:r.k, v:r.v, has:!!r.v, missing:!r.v })),
+      officers: [
+        { who:'Guillaume Lauzier', role:'Managing Member · authorised signatory', link:'Linked' },
+        { who:'C. Moreau', role:'Officer · operations', link:'Linked' },
+        { who:'Secretary', role:'Not appointed', link:'—' }
+      ].map(o => ({ who:o.who, role:o.role, link:o.link,
+        pill: o.link === 'Linked' ? pill('Linked') : 'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' })),
+      calendar: [
+        { what:'Delaware franchise tax', cadence:'Annual · due 1 Mar', due:'Mar 1', days:'9 days', ink:'#b91c1c' },
+        { what:'Registered agent renewal', cadence:'Annual · due 18 Mar', due:'Mar 18', days:'26 days', ink:'#92400e' },
+        { what:'Annual report', cadence:'Annual · due 1 Jun', due:'Jun 1', days:'101 days', ink:'#615c6e' },
+        { what:'Form ADV update', cadence:'Annual · 90 days after FY end', due:'Mar 31', days:'39 days', ink:'#92400e' },
+        { what:'83(b) window monitor', cadence:'Event-driven · 30 days from grant', due:'—', days:'no open grants', ink:'#615c6e' }
+      ].map(c => ({ what:c.what, cadence:c.cadence, due:c.due, days:c.days, ink:c.ink,
+        rowStyle:'padding:10px 11px;border:1px solid ' + (/days/.test(c.days) && parseInt(c.days, 10) < 14 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      calNote: 'The US pack ships real because the backend holds these obligations. An entity in another jurisdiction inherits its pack instead — the calendar component is identical, the obligation set is not.',
+      entContracts: [
+        { name:'Operating Agreement', ver:'v2.1 · executed 14 Jan 2025', state:'Signed' },
+        { name:'Intercompany services agreement', ver:'v1.0 · Holdings ↔ Management', state:'Signed' },
+        { name:'Brand licence', ver:'n/a · HQ entity', state:'—' }
+      ].map(c => ({ name:c.name, ver:c.ver, state:c.state,
+        pill: c.state === '—' ? 'font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' : pill(c.state) })),
+      gpOf: ENTITIES.filter(e => e.type === 'FUND' && e.tenant === 'HQ').map(f => ({
+        name:f.name, meta: f.status === 'active' ? 'Investing · ' + m$(FUND_SIZE) : 'Forming · no close yet' })),
+      dissolveNote: 'Dissolving a GP entity orphans every fund it is GP of — ' + ENTITIES.filter(e => e.type === 'FUND' && e.tenant === 'HQ').length + ' here. Typed reason required, and the funds must be reassigned or wound down first. Recorded in Security.',
+
+      // ── F3 ──
+      f1: {
+        name:'Axal VC Fund I LP', vintage:'2025', ccy:'USD', stage:'Investing',
+        terms:'2.0% management fee · 20% carry · European waterfall',
+        stats:[
+          { k:'Target', v:m$(FUND_SIZE) }, { k:'Committed', v:m$(totCommit) },
+          { k:'Called', v:m$(totCalled) }, { k:'Called %', v:calledPct + '%' }
+        ],
+        gp:[
+          { k:'GP name', v:'Guillaume Lauzier', has:true },
+          { k:'Title', v:'Managing Member', has:true },
+          { k:'GP entity', v:'Axal VC GP LLC', has:true }
+        ].map(g => ({ k:g.k, v:g.v, has:g.has, missing:!g.has })),
+        svc:[
+          { k:'Fund administrator', v:'Standish Fund Services', has:true },
+          { k:'Auditor', v:'Marcum LLP', has:true },
+          { k:'Legal counsel', v:'Cooley LLP', has:true },
+          { k:'Custodian', v:'', has:false }
+        ].map(g => ({ k:g.k, v:g.v, has:g.has, missing:!g.has }))
+      },
+      lifecycle: ['Forming','First close','Investing','Fully invested','Harvesting','Winding down'].map((l, i) => ({
+        label:l, w: i === 2 ? '800' : '500',
+        ink: i < 2 ? OX : (i === 2 ? '#18181b' : '#615c6e'),
+        bar:'height:5px;border-radius:999px;margin-right:3px;background:' + (i < 2 ? OX : (i === 2 ? '#e5a0b4' : '#eceaf2'))
+      })),
+      honestyNote: 'Custodian reads Not recorded because none is on file. The chip is not decoration — an LP-facing document that names a custodian cannot be issued from this fund until one is entered, which is F10.',
+
+      pipeline: [
+        { n:'3', stage:'LP application', owner:'Approvals queue', tone:'warn' },
+        { n:'2', stage:'Subscription agreement', owner:'Contract system', tone:'warn' },
+        { n:'2', stage:'KYC · accreditation · sanctions', owner:'Trust system', tone:'plain' },
+        { n:'1', stage:'Commitment recorded', owner:'This console', tone:'ok' },
+        { n:String(LPS.length), stage:'In capital ledger', owner:'Below', tone:'ok' }
+      ].map(p => {
+        const C = { ok:['#a7f3d0','#f2fdf7','#047857'], warn:['#fde68a','#fffbf2','#92400e'], plain:['#f0eff4','#fbfbfc','#3f3a49'] }[p.tone];
+        return { n:p.n, stage:p.stage, owner:p.owner, edge:C[0], bg:C[1], ink:C[2] };
+      }),
+      pipeNote: 'Five stages, four owned by other systems. This zone links across the seam rather than duplicating it — an LP cannot be admitted from here, only observed arriving.',
+
+      ledger: LPS.map(l => ({
+        lp:l.lp, committed:usd(l.commit), called:usd(l.called), funded:usd(l.called),
+        unfunded:usd(l.commit - l.called), dist:usd(l.dist), own:ownOf(l), w:'500', bt:'1px solid #f4f3f7',
+        unfundedInk:'#3f3a49',
+        rowStyle:'display:grid;grid-template-columns:1.25fr .8fr .8fr .8fr .8fr .8fr .6fr;gap:10px;align-items:center'
+      })).concat([{
+        lp:'Total', committed:usd(totCommit), called:usd(totCalled), funded:usd(totCalled),
+        unfunded:usd(totCommit - totCalled), dist:usd(totDist), own:'100.0%', w:'800', bt:'1px solid #ececf1',
+        unfundedInk:OX,
+        rowStyle:'display:grid;grid-template-columns:1.25fr .8fr .8fr .8fr .8fr .8fr .6fr;gap:10px;align-items:center;margin-top:2px'
+      }]),
+      ledgerNote: 'Ownership is commitment over total commitment, so the column sums to 100% by construction rather than by someone checking. Funded equals called here because no LP is currently in arrears — when one is, the two columns separate and the difference is the number worth chasing.',
+
+      callLanes: [
+        { name:'Draft', cards:[] },
+        { name:'Notice sent', cards:[{ amount:usd(CALL_AMT), purpose:'Call #4 · follow-on reserve', aging:null }] },
+        { name:'Receipts', cards:[{ amount:usd(2800000), purpose:'Call #3 · 2 of 6 outstanding', aging:'oldest 11 days' }] },
+        { name:'Closed', cards:[{ amount:usd(4200000), purpose:'Call #2 · fully received', aging:null }] }
+      ].map(c => ({ name:c.name, n:String(c.cards.length), empty:c.cards.length === 0,
+        cards:c.cards.map(k => ({ amount:k.amount, purpose:k.purpose, aging:k.aging,
+          cardStyle:'border:1px solid ' + (k.aging ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:8px;padding:9px 10px' })) })),
+      callNote: 'Aging lives on the receipts card, because a call that is 40% collected on day 11 is a different problem from one at 40% on day 2, and a lane label cannot tell you which.',
+
+      wfMode: ['European','American'].map(l => ({ label:l,
+        style:'font-size:10.5px;font-weight:700;padding:5px 11px;border-radius:6px;'
+          + (l === 'European' ? 'background:#fff;color:' + OX + ';box-shadow:0 1px 2px rgba(24,24,27,.1)' : 'color:#4a4553') })),
+      waterfall: [
+        wfRow('Distributable proceeds', 'realised this period', PROCEEDS, true),
+        wfRow('Return of capital', 'to LPs, up to called ' + usd(totCalled), -roc),
+        wfRow('Preferred return', '8% on called capital', -pref),
+        wfRow('GP catch-up', '25% of preferred', -catchup),
+        wfRow('Residual to LPs', (100 - carryPct * 100) + '% of ' + usd(residual), lpResidual),
+        wfRow('GP carry', (carryPct * 100) + '% of ' + usd(residual), gpCarry, true)
+      ],
+      wfNote: 'Every tier computes from the ' + usd(PROCEEDS) + ' realised and the ' + usd(totCalled)
+        + ' called above. Because proceeds exceed called capital, all four tiers exercise: capital returns in full, the 8% preferred pays '
+        + usd(pref) + ', the GP catches up ' + usd(catchup) + ', and ' + usd(residual) + ' splits '
+        + (100 - carryPct * 100) + '/' + (carryPct * 100) + '. Drop proceeds below ' + usd(totCalled)
+        + ' and every tier under return-of-capital goes to zero — which is the honest state of a fund that has not yet returned its LPs, not a broken model. It stays a model until execute is pressed; nothing here has been paid.',
+
+      reports: [
+        { period:'Q4 2025', state:'Issued', meta:'issued 14 Jan · 6 LPs accessed', frozen:true },
+        { period:'Q1 2026', state:'Issued', meta:'issued 12 Apr · 6 LPs accessed', frozen:true },
+        { period:'Q2 2026', state:'Issued', meta:'issued 11 Jul · 5 LPs accessed', frozen:true },
+        { period:'Q3 2026', state:'Draft', meta:'not issued · no LP access', frozen:false }
+      ].map(r => ({ period:r.period, state:r.state, meta:r.meta, frozen:r.frozen, pill:pill(r.state),
+        cardStyle:'border:1px ' + (r.frozen ? 'solid #a7f3d0;background:#f2fdf7' : 'dashed #cbd5e1;background:#f8fafc') + ';border-radius:9px;padding:11px 12px' })),
+      repNote: 'An issued report is a frozen snapshot: re-downloading it a year later returns the same bytes, because an LP who received a number in July must be able to produce that same number in an audit.',
+
+      // ── F4 ──
+      f2: { stage:'Investing', ccy:'EUR',
+        stats:[{ k:'Committed', v:eur(16200000) }, { k:'Called', v:eur(FR_CALLED) },
+               { k:'Called %', v:Math.round(FR_CALLED / 16200000 * 100) + '%' }, { k:'LPs', v:'9' }] },
+      waterfall2: [
+        wfRow('Distributable proceeds', 'realised this period', FR_PROCEEDS, true, eur),
+        wfRow('Return of capital', 'to LPs, up to called ' + eur(FR_CALLED), -frRoc, false, eur),
+        wfRow('Preferred return', '8% on called capital', -frPref, false, eur),
+        wfRow('Residual to LPs', (100 - carryPct * 100) + '% of ' + eur(frResid), frLpResid, false, eur),
+        wfRow('GP carry, gross', (carryPct * 100) + '% of ' + eur(frResid), frGpCarry, false, eur),
+        wfRow('Axal HQ share — per licence', (HQ_SHARE * 100) + '% of GP carry', -hqCut, true, eur),
+        wfRow('Net to Axal France GP SAS', 'after brand-licence share', frNetCarry, true, eur)
+      ],
+      hqShareNote: 'The HQ share is ' + eur(hqCut) + ' of a ' + eur(frGpCarry) + ' gross carry, leaving ' + eur(frNetCarry)
+        + ' to the French GP. It sits in the waterfall rather than being netted before it, because an operator modelling their own economics needs to see the deduction, not just its consequence. The same figure appears on HQ\u2019s economics ledger in F6 — one number, two views.',
+      subDiffs: [
+        { k:'Accent and territory badge', v:'Steel, with FR on every screen. The console is otherwise identical — same six zones, same archetypes.' },
+        { k:'HQ share in the waterfall', v:'A visible tier. HQ funds have no such line because there is no licensor above them.' },
+        { k:'Scope', v:'One tenant\u2019s funds. No mode toggle, because a subsidiary has nothing to oversee.' },
+        { k:'Licence gate', v:'This row exists only because France holds fund-operation rights. Benelux does not, and for them the row is absent.' }
+      ],
+
+      // ── F5 ──
+      lpChips: [
+        { label:'KYC verified', tone:'ok' }, { label:'Accredited · institutional', tone:'ok' },
+        { label:'Sanctions clear', tone:'ok' }, { label:'Re-verify Mar 2027', tone:'warn' }
+      ].map(c => {
+        const C = { ok:['#f2fdf7','#047857','#a7f3d0'], warn:['#fffbf2','#92400e','#fde68a'] }[c.tone];
+        return { label:c.label, style:'font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;background:'+C[0]+';color:'+C[1]+';border:1px solid '+C[2] };
+      }),
+      lpDocs: [
+        { name:'Subscription agreement', meta:'Fund I · v2.2 · signed 18 Mar 2025', state:'Signed' },
+        { name:'Side letter', meta:'MFN election · signed 18 Mar 2025', state:'Signed' },
+        { name:'LPA counterpart', meta:'Fund I · v2.2', state:'Signed' }
+      ].map(d => ({ name:d.name, meta:d.meta, state:d.state, pill:pill(d.state) })),
+      lpFunds: (function(){
+        const l = LPS[0];
+        return [{ fund:'Axal VC Fund I LP', own:ownOf(l),
+          cells:[{ k:'Committed', v:usd(l.commit) }, { k:'Called', v:usd(l.called) },
+                 { k:'Unfunded', v:usd(l.commit - l.called) }, { k:'Distributed', v:usd(l.dist) }],
+          pct:String(Math.round(l.called / l.commit * 100)) }];
+      })(),
+      relLabel: LPS[0].late ? 'Has been late once' : 'Pays on time',
+      relInk: LPS[0].late ? '#92400e' : '#047857',
+      relStyle: 'border:1px solid ' + (LPS[0].late ? '#fde68a;background:#fffbf2' : '#a7f3d0;background:#f2fdf7') + ';border-radius:9px;padding:11px 12px',
+      relNote: LPS[0].late
+        ? 'One late payment across four calls — 9 days on call #2, paid without a second reminder. Worth knowing before the next call, not worth escalating.'
+        : 'Four calls, four on-time wires.',
+      payments: [
+        { call:'Call #1', amt:usd(1800000), when:'on time', tone:'ok' },
+        { call:'Call #2', amt:usd(1800000), when:'9 days late', tone:'warn' },
+        { call:'Call #3', amt:usd(900000), when:'on time', tone:'ok' },
+        { call:'Call #4', amt:usd(900000), when:'outstanding', tone:'plain' }
+      ].map(p => {
+        const C = { ok:['#a7f3d0','#f2fdf7','#047857'], warn:['#fde68a','#fffbf2','#92400e'], plain:['#f0eff4','#fbfbfc','#615c6e'] }[p.tone];
+        return { call:p.call, amt:p.amt, when:p.when, edge:C[0], bg:C[1], ink:C[2] };
+      }),
+      lpActionNote: 'Flagging to Security is not a soft action — it opens a case in the trust system and is recorded there, so it belongs beside the routine actions rather than hidden behind a menu.',
+
+      // ── F6 ──
+      aum: m$(aumN), fxDate: 'as of 25 Feb 2026',
+      ovStats: [
+        { k:'Platform AUM', v:m$(aumN), note:'FX-normalised', tone:'plain' },
+        { k:'Funds', v:String(OV.length), note:OV.filter(o => o.sizeN > 0).length + ' with a close', tone:'plain' },
+        { k:'GP entities', v:String(ENTITIES.filter(e => e.type === 'GP ENTITY').length), note:'across ' + jurCount + ' jurisdictions', tone:'plain' },
+        { k:'HQ accrued', v:eur(econTot.accrued), note:'brand-licence share', tone:'ox' },
+        { k:'Open flags', v:String(OV.filter(o => o.flag).length), note:'see feed', tone:'warn' }
+      ].map(s => {
+        const C = { plain:['#fff','#ececf1','#18181b'], ox:[OXT, OXE, OX], warn:['#fffbf2','#fde68a','#92400e'] }[s.tone];
+        return { k:s.k, v:s.v, note:s.note, ink:C[2],
+          cardStyle:'background:' + C[0] + ';border:1px solid ' + C[1] + ';border-radius:11px;padding:11px 12px' };
+      }),
+      ovRows: OV.map(o => ({
+        tenant:o.tenant, fund:o.fund, jur:o.jur, vintage:o.vintage,
+        size: o.sizeN ? m$(o.usdSize) + (o.ccy === 'USD' ? '' : ' †') : '—',
+        called: o.sizeN ? o.calledPct + '%' : '—',
+        perf:o.perf, flag:o.flag, clean:!o.flag,
+        rowStyle:'display:grid;grid-template-columns:.85fr 1.2fr .6fr .55fr .75fr .7fr .95fr .8fr;gap:9px;align-items:center;padding:9px 0;border-top:1px solid #f4f3f7;'
+          + (o.flag === 'NO GP OF RECORD' ? 'background:#fffbfb;' : '')
+      })),
+      ovNote: '† converted for comparison — Axal France holds ' + eur(16200000) + ', shown here as '
+        + m$(OV[2].usdSize) + ' at ' + FX.EUR + '. The fund\u2019s own console reports euros; only this table normalises, which is why the rate date sits in the header. '
+        + 'Read-only. Opening a row shows that fund\u2019s console behind an unmistakable oversight banner — the same component, but no action in it will fire. Nordics carries a flag because a fund with no GP of record cannot issue anything, which F10 shows in full.',
+
+      econCols: ['Subsidiary GP','Fee share','Carry share','Accrued','Invoiced','Collected'],
+      econRows: ECON.map(e => ({
+        gp:e.gp, basis:eur(e.feeShare), accrued:eur(e.accrued), invoiced:eur(e.invoiced), collected:eur(e.collected),
+        carry:eur(e.carryShare),
+        colInk: e.collected < e.accrued ? '#92400e' : '#047857', w:'500', bt:'1px solid #f4f3f7',
+        rowStyle:'display:grid;grid-template-columns:1.1fr .75fr .75fr .8fr .75fr .8fr;gap:9px;align-items:center'
+      })).concat([{
+        gp:'Total', basis:eur(econTot.feeShare), carry:eur(econTot.carryShare), accrued:eur(econTot.accrued),
+        invoiced:eur(econTot.invoiced), collected:eur(econTot.collected),
+        colInk: econTot.collected < econTot.accrued ? '#92400e' : '#047857', w:'800', bt:'1px solid #ececf1',
+        rowStyle:'display:grid;grid-template-columns:1.1fr .75fr .75fr .8fr .75fr .8fr;gap:9px;align-items:center;margin-top:2px'
+      }]),
+      econNote: 'Split into its two components, because ' + (HQ_SHARE * 100) + '% of fees and '
+        + (HQ_SHARE * 100) + '% of carry behave differently: the fee share is contractual and predictable, the carry share only exists once a fund distributes. '
+        + eur(ECON[0].carryShare) + ' is the same figure F4 shows as a tier in the French waterfall — one number, two views. '
+        + 'Nordics reads zero on both because its fund has not closed; the row exists so the absence is visible rather than the GP being missing from the table.',
+
+      flags: [
+        { what:'No GP of record', who:'Axal Nordics Fund I · blocks LPA issue', tone:'bad' },
+        { what:'Franchise tax due in 9 days', who:'Axal VC GP LLC', tone:'bad' },
+        { what:'Q3 report drafted, not issued', who:'Axal VC Fund I LP · 12 days past cadence', tone:'warn' },
+        { what:'Custodian not recorded', who:'Axal VC Fund I LP', tone:'warn' }
+      ].map(f => ({ what:f.what, who:f.who, ink: f.tone === 'bad' ? '#b91c1c' : '#92400e',
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 11px;border:1px solid '
+          + (f.tone === 'bad' ? '#fecaca;background:#fffbfb' : '#fde68a;background:#fffdf5') + ';border-radius:9px' })),
+      flagNote: 'Three of these four are honesty-rule consequences rather than failures — the fund is not broken, it simply has not recorded a fact, and the flag says which fact and what it blocks.',
+
+      // ── F7 ──
+      launch: [
+        { n:'1', title:'GP entity', body:'Pick an existing GP from the graph or form a new one inline — the F1 formation flow, not a duplicate of it.', chip:'Axal VC GP LLC', chipTone:'ok' },
+        { n:'2', title:'Fund shell', body:'Name, jurisdiction and legal form, currency, vintage, target, fee and carry terms.', chip:'US-DE · LP · USD', chipTone:'plain' },
+        { n:'3', title:'Governing docs', body:'LPA, PPM and subscription templates instantiated from the master library. Forge drafts jurisdiction riders.', chip:'Tinted until counsel-confirmed', chipTone:'warn',
+          note:'A rider Forge wrote and nobody read is the most dangerous artifact this suite can produce, so it stays visibly unconfirmed.' },
+        { n:'4', title:'GP of record', body:'GP name, title, entity, and the four service providers.', chip:'May be Not recorded', chipTone:'warn',
+          note:'Honesty chips from day one — the fund can be created without them, it just cannot issue.' },
+        { n:'5', title:'First close', body:'Target date, minimum close, and the LP pipeline linkage that feeds the capital ledger.', chip:'Links to Approvals', chipTone:'plain' },
+        { n:'6', title:'Activate', body:'The fund appears in the console at Forming — not Investing, and not with a synthetic first close.', chip:'Stage: Forming', chipTone:'ok' }
+      ].map(s => {
+        const C = { ok:['#a7f3d0','#f2fdf7','#047857'], warn:['#fde68a','#fffbf2','#92400e'], plain:['#e2e1e8','#fbfbfc','#4a4553'] }[s.chipTone];
+        return { n:s.n, title:s.title, body:s.body, chip:s.chip, note:s.note || null,
+          chipStyle:'font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+C[1]+';color:'+C[2]+';border:1px solid '+C[0],
+          numStyle:'width:19px;height:19px;border-radius:6px;background:' + OX + ';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex:none',
+          cardStyle:'background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:11px;padding:14px 15px' };
+      }),
+      launchSubNote: 'On a subsidiary, activation does not complete until the licence\u2019s fund-economics terms are displayed and acknowledged — the ' + (HQ_SHARE * 100) + '% brand-licence share of carry, in the same words it will appear in the waterfall. Acknowledged, not buried in the licence PDF, because the first time an operator sees that number should not be the first time they run a distribution.',
+
+      // ── F8 ──
+      call: {
+        amount: usd(CALL_AMT),
+        pctOfCommit: (CALL_AMT / totCommit * 100).toFixed(1) + '%',
+        purpose:[
+          { k:'Purpose', v:'Follow-on reserve' }, { k:'Due date', v:'20 Mar 2026' },
+          { k:'Call number', v:'#4' }, { k:'Cumulative called after', v:Math.round((totCalled + CALL_AMT) / totCommit * 100) + '%' }
+        ],
+        note:'Stated as a percentage of commitments as well as an amount, because that is the figure an LP checks against their own unfunded balance.'
+      },
+      prorata: LPS.map(l => ({
+        lp:l.lp, commit:usd(l.commit), amt:usd(callFor(l)), share:(shareOf(l) * 100).toFixed(1) + '%',
+        w:'500', bt:'1px solid #f4f3f7', ink:'#92400e',
+        rowStyle:'display:grid;grid-template-columns:1.3fr .8fr .8fr .7fr;gap:9px;align-items:center;background:#fffdf5'
+      })).concat([{
+        lp:'Total', commit:usd(totCommit), amt:usd(callSum), share:'100.0%',
+        w:'800', bt:'1px solid #ececf1', ink:'#18181b',
+        rowStyle:'display:grid;grid-template-columns:1.3fr .8fr .8fr .7fr;gap:9px;align-items:center;margin-top:2px'
+      }]),
+      prorataCheck: callSum === CALL_AMT ? 'Sums to ' + usd(CALL_AMT) + ' exactly' : 'Rounds to ' + usd(callSum) + ' · ' + usd(CALL_AMT - callSum) + ' residual on the GP line',
+      lpCount: String(LPS.length),
+      notice: {
+        head:'Capital Call Notice #4 · Axal VC Fund I LP',
+        body:'Pursuant to Section 3.2 of the Limited Partnership Agreement, the General Partner hereby calls ' + usd(CALL_AMT) + ' in aggregate, representing ' + (CALL_AMT / totCommit * 100).toFixed(1) + '% of total commitments. Your pro-rata share and wire instructions follow. Funds are due 20 March 2026.',
+        sig:'Signed · Guillaume Lauzier, Managing Member, Axal VC GP LLC',
+        forge:'Forge drafted this notice from the LPA section reference, the amount and the due date. It did not send it, and it cannot — the send is a human action with the GP\u2019s own authenticated session.',
+        audit:'Recorded in Security as fund.capital_call.send · ' + LPS.length + ' recipients'
+      },
+
+      // ── F9 ──
+      packs: [
+        { code:'US', name:'United States · Delaware', state:'Active', meta:'5 obligations · ' + ENTITIES.filter(e => /US/.test(e.jur)).length + ' entities · ships with the backend' },
+        { code:'FR', name:'France', state:'Draft', meta:'4 obligations · ' + frEnts.length + ' entities · being defined now' },
+        { code:'SE', name:'Sweden', state:'Draft', meta:'3 obligations · ' + ENTITIES.filter(e => /SE/.test(e.jur)).length + ' entities' },
+        { code:'BE', name:'Belgium', state:'Not started', meta:'0 entities · no fund rights granted' }
+      ].map(p => ({ code:p.code, name:p.name, state:p.state, meta:p.meta, pill:pill(p.state === 'Not started' ? 'Not granted' : p.state),
+        cardStyle:'border:1px solid ' + (p.state === 'Active' ? '#a7f3d0;background:#f2fdf7' : (p.state === 'Draft' ? '#cbd5e1;background:#f8fafc' : '#f0eff4;background:#fbfbfc')) + ';border-radius:9px;padding:11px 12px' })),
+      packNote: 'One pack per jurisdiction, not one per entity. Adding a sixth French entity inherits these obligations automatically; adding a sixth obligation updates all of them.',
+      frEntities: String(frEnts.length),
+      frPack: [
+        { what:'Dépôt des comptes annuels', cadence:'Annual', scope:'All entities', lead:'60 days' },
+        { what:'Liasse fiscale', cadence:'Annual', scope:'All entities', lead:'90 days' },
+        { what:'AMF reporting', cadence:'Quarterly', scope:'Funds only', lead:'30 days' },
+        { what:'Registered office renewal', cadence:'Annual', scope:'All entities', lead:'45 days' }
+      ].map(o => ({ what:o.what, cadence:o.cadence, scope:o.scope, lead:o.lead,
+        scopeStyle:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;'
+          + (o.scope === 'Funds only' ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE
+                                      : 'background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec') })),
+      packSaveNote: 'Applies to ' + frEnts.length + ' entities · recorded in Security',
+      packForge: 'Forge proposed these four from public French filing requirements and flagged that AMF reporting applies only to the fund, not the GP SAS. It drafted the pack; a human saves it, and counsel confirms it — the suite never claims to know another country\u2019s law.',
+
+      // ── F10 ──
+      emptyGP: [{ k:'GP name' }, { k:'Title' }, { k:'GP entity' }, { k:'Fund administrator' }, { k:'Auditor' }],
+      blockTitle: 'LPA issue is blocked',
+      blockBody: 'An LPA is signed by a named fiduciary. With no GP of record on file there is nobody to sign as, and the honest response is to block the action rather than render a placeholder name into a document an LP will rely on. The fund can exist at Forming indefinitely; it simply cannot issue.',
+      draftBody: 'Numbers can still move. No LP has access, nothing is downloadable, and the period can be recomputed as valuations settle.',
+      issuedBody: 'Frozen. Re-downloading returns identical bytes, and the access log records which of the 6 LPs opened it and when.',
+      issueSteps: [
+        { label:'Period closed', note:'Valuations locked for Q3.', done:true },
+        { label:'GP signature', note:'Signed by the GP of record through the e-sign rail, in their own session.', done:false },
+        { label:'Issue to LPs', note:'Snapshot frozen; access log opens.', done:false }
+      ].map(s => ({ label:s.label, note:s.note,
+        ink: s.done ? '#047857' : '#3f3a49',
+        edge: s.done ? '#a7f3d0' : '#f0eff4', bg: s.done ? '#f2fdf7' : '#fbfbfc',
+        box:'width:12px;height:12px;border-radius:4px;flex:none;border:1.5px solid ' + (s.done ? '#10b981' : '#cbd5e1') + ';background:' + (s.done ? '#10b981' : 'transparent') })),
+      issueNote: 'Issuing requires the GP of record\u2019s signature, which is why the two honesty states on this artboard are the same rule seen twice: a fund without a fiduciary on file cannot produce an LP-facing document of any kind.'
+    };
+  }
+}
+</script>
+</body>
+</html>

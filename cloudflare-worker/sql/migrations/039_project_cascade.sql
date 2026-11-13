@@ -1,0 +1,63 @@
+-- Task #7 (AM) — Projects soft-delete: `projects.deleted_at` and its index.
+--
+-- THIS FILE ONCE TRIED TO DO MUCH MORE, AND NEVER DID IT. As written in May
+-- 2026 it also rebuilt five child tables — deals, score_snapshots, documents,
+-- discovery_interviews, roadmap_okrs — so their `project_id` foreign key became
+-- `ON DELETE CASCADE`. That half of the file has never run, anywhere, and the
+-- file now says so instead of implying otherwise.
+--
+-- WHAT PRODUCTION ACTUALLY HAS (read off live D1 on 2026-09-08 with
+-- `SELECT sql FROM sqlite_master`, not off `schema.sql`, which has drifted
+-- before):
+--
+--   projects.deleted_at + idx_projects_deleted_at   present
+--   deals.project_id                REFERENCES projects(id)   — no CASCADE
+--   score_snapshots.project_id      REFERENCES projects(id)   — no CASCADE
+--   documents.project_id            REFERENCES projects(id)   — no CASCADE
+--   discovery_interviews.project_id INTEGER NOT NULL          — no REFERENCES
+--   roadmap_okrs.project_id         INTEGER NOT NULL          — no REFERENCES
+--
+-- WHY IT STOPPED. Every section was wrapped in its own transaction, and D1's
+-- HTTP API rejects transaction statements outright ("use
+-- state.storage.transaction() …"), so the file aborted on its first one. On
+-- 2026-05-11 someone applied the two statements below by hand and recorded
+-- exactly that, renaming the file's own marker row to
+-- `_migrations_applied.name = '039_project_cascade_partial_deleted_at_only'`.
+-- That row is still the only row in that table. CHANGELOG.md has carried the
+-- same note since; this header is the version that sits where the SQL is.
+--
+-- WHY THE REBUILD IS DELETED RATHER THAN REPAIRED. Three reasons, in order of
+-- weight:
+--
+--   1. A fresh database must land where production is. Keeping the rebuild
+--      would give every new build a CASCADE that production does not have, and
+--      every migration written after this one would be written against a schema
+--      only one of the two carries. A migration file that describes a database
+--      nobody runs is worse than no file.
+--   2. Nothing depends on the cascade. `services/projectTrash.ts`
+--      ::hardDeleteProject enumerates every child table and deletes from each
+--      by hand, then detaches `activity_logs` by nulling `project_id` because
+--      that history is deliberately KEPT — which a cascade would have dropped.
+--      That loop is the only cascade production has ever had and it works.
+--   3. The rebuild had gone stale where it would have hurt most. Three of its
+--      five sections copied rows with `INSERT INTO <t>_new SELECT * FROM <t>`,
+--      which maps by POSITION, and the live column order no longer matches the
+--      declarations: `score_snapshots` has since gained `official_week`, and
+--      `deals` sixteen columns including the whole pass taxonomy. On an empty
+--      database that copies nothing; on a populated one it writes values into
+--      the wrong columns.
+--
+-- IF THE CASCADE IS EVER WANTED, it is a NEW migration written against the
+-- tables as they are today, applied to production and to fresh builds alike —
+-- not a repair of a file the ledger has already marked applied. Note before
+-- writing one that a rebuild under `PRAGMA defer_foreign_keys` must drop the
+-- table and recreate it under its OWN name, then copy back: a scratch table
+-- filled first and renamed into place never clears SQLite's deferred-violation
+-- counter, and the batch dies at commit. `documentation/architecture/GOTCHAS.md`
+-- records that from migration 200's rewrite; DECISIONS D60 records this one.
+--
+-- No transaction statements and no PRAGMA (see `scripts/check-sql-migrations.mjs`).
+
+ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);

@@ -1,0 +1,553 @@
+/**
+ * The Trust Center calls routes that exist, and reads the data it fetches.
+ *
+ * THE SHAPE OF WHAT WAS WRONG. `scripts/api-drift-baseline.json` suppressed
+ * nine `/trust/*` paths the SPA called with no worker route behind them, which
+ * is why CI stayed green over them. Reading each one against
+ * `routes/trust.ts`'s eighteen declared routes gave three different answers,
+ * and the difference matters:
+ *
+ *   KybCard, AccreditationCard — UNREACHABLE, not broken-in-use. Each rendered
+ *     only on the true branch of `legacy?.kyb ? …` / `legacy?.accreditation ? …`,
+ *     and GET /trust/summary returns both as LITERAL NULLS with a comment
+ *     saying so. Nobody could hit their 404s. Deleted, with their client
+ *     methods.
+ *
+ *   NdaCard — REACHABLE, and broken twice over. It was fed `summary.ndas`,
+ *     which is `pairwise_ndas` rows, while reading `it.role`, `it.title` and
+ *     `it.signed_at` — none of which exist on that row — so it rendered blank
+ *     titles, "role: undefined", and keyed React on undefined. And it signed
+ *     through two routes that do not exist. Meanwhile the page was already
+ *     fetching GET /trust/nda/required, which returns exactly the right
+ *     thing, and THROWING THE RESULT AWAY.
+ *
+ * Eight baseline entries retired as a result: 22 -> 14.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const PAGE = read('frontend/src/pages/TrustCenterPage.jsx');
+// The comments in this file NAME what was removed — `legacy?.kyb ? <KybCard …>`
+// and the discarded `try { await api.getRequiredNdas(); } catch {}` are both
+// quoted verbatim as the record of what went wrong. Assertions about absence
+// have to read code, or they fail against the explanation of the fix.
+const CODE = codeOnly(PAGE);
+const API = read('frontend/src/lib/api.js');
+const WORKER = read('cloudflare-worker/src/routes/trust.ts');
+const WORKER_SVC = read('cloudflare-worker/src/services/trust.ts');
+const BASELINE = JSON.parse(read('scripts/api-drift-baseline.json'));
+
+/** Every path routes/trust.ts actually declares. */
+const declared = () =>
+  new Set([...WORKER.matchAll(/trust\.(get|post|put|patch|delete)\('([^']+)'/g)]
+    .map((m) => `${m[1]} ${m[2]}`));
+
+test('no /trust path the SPA calls is banked as missing', () => {
+  // NOT a reimplementation of check-api-drift.mjs. A first draft of this test
+  // tried to match every client path against every declared route and drowned
+  // in normalisation — `/obligation/${encodeURIComponent(key)}/start` against
+  // `/obligation/:key/start` needs the real matcher, and there is one, in the
+  // gate already.
+  //
+  // What that matcher CANNOT tell you is this: a path already banked in the
+  // baseline is suppressed forever, so drift stays green while the SPA calls
+  // something that 404s. This asserts the narrower, durable thing — the
+  // Trust Center may not call a path the ledger records as having no route.
+  // It is how `getNdaStatus` was found, with zero call sites and a banked
+  // entry nobody had noticed.
+  const banked = (BASELINE.missing_route || [])
+    .filter((e) => e.includes('trust/'))
+    .map((e) => e.replace(/^[A-Z]+\s+/, '').replace(/^\/?api\//, ''));
+  const called = [...API.matchAll(/request\(`?'?\/(trust\/[A-Za-z0-9/_-]*)/g)].map((m) => m[1]);
+  const overlap = called.filter((c) => banked.some((b) => b.startsWith(c) || c.startsWith(b.split(':')[0])));
+  assert.deepEqual(overlap, [],
+    `the SPA calls ${overlap.join(', ')}, which the drift baseline records as having no worker route`);
+  assert.ok(declared().size >= 15, 'routes/trust.ts parse broke, not the code');
+});
+
+test('the six dead client methods are gone, not merely unused', () => {
+  // D432 added the two whose ROUTES existed but had no caller: /trust/summary
+  // and /trust/kyb/start went with them.
+  for (const m of ['getKybStatus', 'submitKyb', 'getAccreditationStatus', 'uploadAccreditation',
+                   'reviewAccreditation', 'getAccreditationBadge', 'getNdaPreview', 'signNda',
+                   'getNdaStatus', 'getTrustSummary', 'startKyb']) {
+    assert.ok(!API.includes(`${m}:`), `${m} still exists in api.js`);
+    assert.ok(!PAGE.includes(`api.${m}`), `${m} is still called`);
+  }
+});
+
+test('the retired paths left the drift baseline', () => {
+  const missing = new Set(BASELINE.missing_route || []);
+  for (const p of ['trust/kyb/submit', 'trust/kyb/status', 'trust/accreditation/upload',
+                   'trust/accreditation/status', 'trust/nda/:p/preview', 'trust/nda/sign']) {
+    const still = [...missing].some((e) => e.includes(p));
+    assert.ok(!still, `${p} is still banked in the baseline — the suppression outlived its caller`);
+  }
+});
+
+test('the two unreachable cards are gone, and the reason is recorded', () => {
+  assert.doesNotMatch(PAGE, /function KybCard/);
+  assert.doesNotMatch(PAGE, /function AccreditationCard/);
+  // The premise was that GET /trust/summary answered `kyb: null` and
+  // `accreditation: null`. D432 retired the route itself — nothing called it —
+  // so the premise is now that it does not exist, on either side.
+  assert.doesNotMatch(WORKER, /trust\.get\('\/summary'/, 'GET /trust/summary is back — the cards were deleted on the premise that it carried nothing');
+  assert.doesNotMatch(WORKER, /trust\.post\('\/kyb\/start'/, 'POST /trust/kyb/start is back without a caller');
+  // And the page must not read them any more.
+  assert.doesNotMatch(CODE, /legacy\?\.kyb\s*\?/);
+  assert.doesNotMatch(CODE, /legacy\?\.accreditation\s*\?/);
+});
+
+test('the role NDAs are fed the endpoint the page fetches, not the one it discarded', () => {
+  // The bug in one line: the result was awaited and dropped on the floor.
+  assert.doesNotMatch(CODE, /try \{ await api\.getRequiredNdas\(\); \} catch \{\}/,
+    'getRequiredNdas is being fetched and thrown away again');
+  assert.match(PAGE, /setRequiredNdas\(/);
+  // D432 — no second list: the required NDAs reach the Role agreements rows
+  // through AgreementsTab, and the Template NDAs card is gone.
+  assert.match(PAGE, /<AgreementsTab[^>]*requiredNdas=\{requiredNdas\}/);
+  assert.doesNotMatch(PAGE, /function NdaCard|Template NDAs/);
+  // And the button reads fields that exist on that payload, not on a pairwise_nda row.
+  const card = CODE.slice(CODE.indexOf('function OpenToSignButton'), CODE.indexOf('function ObligationList'));
+  assert.ok(card.length > 200, 'OpenToSignButton could not be sliced');
+  for (const gone of ['it.role', 'it.title', 'it.signed_at', 'item.role', 'item.title', 'item.signed_at']) {
+    assert.ok(!card.includes(gone), `${gone} is not a field of GET /trust/nda/required`);
+  }
+  assert.match(card, /item\.obligation_key/);
+  assert.match(card, /item\.evidence_envelope_uuid/);
+});
+
+test('signing goes through the envelope route that exists, via the method already in use', () => {
+  const card = CODE.slice(CODE.indexOf('function OpenToSignButton'), CODE.indexOf('function ObligationList'));
+  assert.match(card, /api\.trustMySigningUrl\(item\.evidence_envelope_uuid\)/);
+  // That method's route is real, and the Agreements tab already relies on it.
+  assert.match(WORKER, /trust\.get\('\/agreements\/:envelope_uuid\/my_signing_url'/);
+  // No typed-name ceremony: the worker returns a LINK into the e-sign flow.
+  assert.doesNotMatch(card, /Type your full legal name/);
+  assert.match(card, /signing_url/);
+});
+
+test('accreditation states the limit instead of drawing an upload that cannot POST', () => {
+  assert.match(PAGE, /Evidence upload is not available here/);
+  assert.doesNotMatch(PAGE, /type="file"/, 'no file input may survive without a route to POST to');
+  // The premise: no accreditation route on either side.
+  assert.doesNotMatch(WORKER, /trust\.(get|post)\('\/accreditation/,
+    'an accreditation route now exists — the stated limit should become a control');
+});
+
+test('the page keeps the three things the canvas has no concept of', () => {
+  // Server-derived tabs, server-derived role, partial-failure resilience.
+  assert.match(PAGE, /function tabsForRole\(role, obligations\)/);
+  assert.match(PAGE, /const role = matrix\?\.role \|\| cachedRole/,
+    'the role must come from /trust/me, with localStorage only as a first-paint fallback');
+  assert.match(PAGE, /Promise\.allSettled/);
+  // The canvas ships demo switchers for role and state. They must never land.
+  assert.doesNotMatch(PAGE, /roleTabs|stateTabs/);
+});
+
+test('an investor does not get two h1s in one frame', () => {
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /<TrustCenterPage chromeless=\{effectiveRole === 'investor'\} \/>/);
+  assert.match(PAGE, /function TrustCenterPage\(\{ chromeless = false \}\)/);
+  assert.match(PAGE, /\{chromeless \? <div \/> : \(/);
+  // InvestorWorkspacePage is the one that draws the other heading.
+  assert.match(read('frontend/src/pages/investor/InvestorWorkspacePage.jsx'), /<h1 className="investor-title"/);
+});
+
+// ===========================================================================
+// Severity tones. The restyle's real content is not the colours — it is that
+// the map is COMPLETE against the vocabulary the WORKER writes, and stays so.
+
+test('every status the WORKER writes has a tone', () => {
+  // The defect this replaces: STATUS_PILL enumerated eleven statuses while
+  // pairwise_ndas carries `active`, `revoked` and `cancelled` (trust.ts
+  // branches on the first two by name). All three fell through to the
+  // `unverified` grey, so a live NDA and a revoked one drew identically.
+  //
+  // Enumerating tones instead of classes does not fix that on its own — the
+  // canvas this came from has the same hole. Parsing the WORKER is what fixes
+  // it, so this test reads trust.ts rather than trusting either list.
+  const written = new Set();
+  // `status = 'x'` (SQL SET), `status: 'x'` (JSON out), `status === 'x'` (branch)
+  for (const m of WORKER.matchAll(/status\s*(?:=|:|===|!==)\s*'([a-z_]+)'/g)) written.add(m[1]);
+  assert.ok(written.size >= 5, `parsed only ${written.size} statuses out of trust.ts`);
+
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  assert.ok(block.length > 100, 'could not read STATUS_TONE');
+  const mapped = new Set([...block.matchAll(/^\s{2}([a-z_]+):/gm)].map(m => m[1]));
+
+  // Statuses that belong to other objects entirely and never reach a pill.
+  // Each is named so adding to this list is a decision, not a shrug.
+  const NOT_A_PILL = new Set([
+    'already_active',   // POST /nda/request idempotency reply, not a row status
+    'envelope_issued',  // ditto — the shape of a response, not of a record
+    // D1074 (#2966): whether a score read found obligation rows — a property of
+    // the /score answer, drawn by TrustScoreBadge, never a pill on a row.
+    'recorded',
+    'not_recorded',
+  ]);
+
+  const unmapped = [...written].filter(s => !mapped.has(s) && !NOT_A_PILL.has(s));
+  assert.deepEqual(unmapped, [],
+    `trust.ts writes ${unmapped.join(', ')} and STATUS_TONE has no tone for it — it would render as neutral grey`);
+});
+
+test('the three statuses that used to render grey now read correctly', () => {
+  // Pinned by name because these are the ones the old map missed, and the
+  // failure was invisible: grey is a plausible colour for anything.
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  const toneOf = {
+    active: (block.match(/^\s{2}active:\s*'([a-z]+)'/m) || [])[1],
+    revoked: (block.match(/^\s{2}revoked:\s*'([a-z]+)'/m) || [])[1],
+    cancelled: (block.match(/^\s{2}cancelled:\s*'([a-z]+)'/m) || [])[1],
+  };
+  assert.equal(toneOf.active, 'ok', 'an in-force NDA must not read as neutral');
+  assert.equal(toneOf.revoked, 'bad', 'a revoked NDA must not read as neutral');
+  assert.equal(toneOf.cancelled, 'bad', 'a cancelled NDA must not read as neutral');
+});
+
+test('waived reads the same way the score counts it', () => {
+  // computeTrustScore counts waived alongside satisfied. A neutral pill beside
+  // a green score said two things about one row.
+  // The rule moved out of TrustScoreBadge.jsx into the pure lib module so the
+  // worker's copy could be run against it (migration 243's snapshot needs the
+  // score server-side). The badge re-exports it; the rule itself reads here.
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
+    'the score no longer counts waived — recheck its tone');
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  assert.match(block, /^\s{2}waived:\s+'ok',/m);
+});
+
+test('the client score formula still mirrors the WORKER, and the PAGE does not invent a third', () => {
+  // The canvas proposed partial credit for in-review plus a per-gate penalty.
+  // Shipping it would have put /trust at odds with GET /trust/score/:userId
+  // AND with the same badge on /account.
+  assert.match(WORKER_SVC, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  const rule = read('frontend/src/lib/trustCenter.js');
+  assert.match(rule, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  // Looking alike is not enough and never was: the two are now imported and
+  // RUN side by side over shared fixtures in
+  // `cloudflare-worker/test/trust_score_parity.test.ts`. This stays as the
+  // cheap structural tripwire for someone editing one of them in place.
+  assert.match(
+    read('frontend/src/components/TrustScoreBadge.jsx'),
+    /export \{ computeTrustScore \} from '\.\.\/lib\/trustCenter'/,
+    'the badge must re-export the shared rule, not grow a private copy',
+  );
+  // The PAGE consumes the shared helper and defines no rival.
+  assert.doesNotMatch(CODE, /computeTrustScore\(obligations\)|<TrustScoreBadge|<ScorePanel/);
+  assert.doesNotMatch(CODE, /reqGates|weightOf|PREV_SCORE|scoreDelta/,
+    'the canvas score model landed — it disagrees with the server');
+});
+
+test('expiry is rendered as a state, not a bare date', () => {
+  // `expires 3/14/2027` reads identically whether it is two years out or
+  // lapsed last month, which is how an expired obligation sat in the list
+  // looking ordinary.
+  assert.match(PAGE, /function expiryNote\(iso, now = new Date\(\)\)/);
+  assert.match(PAGE, /Expired \$\{n\} \$\{n === 1 \? 'day' : 'days'\} ago/);
+  assert.match(PAGE, /Expires in \$\{days\}/);
+  // and it is actually used on both row types
+  assert.match(PAGE, /const exp = expiryNote\(o\.expires_at\)/);
+  assert.match(PAGE, /const validExp = expiryNote\(a\.valid_until\)/);
+});
+
+
+
+test('the canvas demo switchers did not land', () => {
+  // roleTabs/stateTabs let the canvas flip role and completeness by hand. The
+  // real role comes from /trust/me; the real state comes from the matrix.
+  const code = CODE;
+  assert.doesNotMatch(code, /roleTabs|stateTabs/);
+  assert.doesNotMatch(code, /Guillaume Lauzier|Novacraft|Marisol Vega|AX-1183|Halverton/,
+    'canvas fixture data landed in the PAGE');
+  assert.doesNotMatch(code, /'83b'|83\(b\)/,
+    "the canvas's 83b key is not an ObligationKey");
+});
+
+// ===========================================================================
+// Trust Center v2 — the page reports, it does not edit.
+//
+// The canvas's whole thesis, and the one thing `/trust` visibly was not: it
+// rendered an editable KYC form inline, so the page was a status report AND a
+// submission surface at once. These pin the split.
+
+test('the page renders no editable identity control', () => {
+  assert.doesNotMatch(CODE, /KycVerification/,
+    'the editable KYC form is embedded in the Trust Center again — this page reports status only');
+  assert.doesNotMatch(CODE, /api\.kycSubmit/,
+    'the Trust Center is submitting KYC; submission belongs to /kyc');
+});
+
+test('removing the form stranded nobody — /kyc is still routed and still linked', () => {
+  // The check that has to pass BEFORE taking a form away. `/kyc` renders the
+  // same component full-page, and Settings points at it, so the only thing that
+  // changed is that the form stopped being in two places.
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/kyc"/, '/kyc is no longer routed — the KYC form is now unreachable');
+  assert.match(read('frontend/src/pages/KYCPage.jsx'), /KycVerification/,
+    '/kyc no longer renders the KYC form');
+  // Account no longer carries a Verification card (owner, 2026-10-28): the
+  // Trust Center is where a member finds the identity check, so it must link it.
+  assert.doesNotMatch(read('frontend/src/pages/SettingsPage.jsx'), /function VerificationStubCard/,
+    'Account grew a Verification card again; verification is the Trust Center\'s');
+  // And this page says where it went.
+  assert.match(PAGE, /this page reports status only/);
+  assert.match(PAGE, /href="\/kyc"/, 'the Trust Center offers no route to the form it stopped rendering');
+});
+
+test('the identity fields are read, and the ID number is not printed in full', () => {
+  // `publicKycData` (kyc.ts) strips document bytes and spreads the rest, so
+  // `id_number` arrives whole. Printing it on a status page is a disclosure with
+  // no purpose; the mask is the point.
+  assert.match(PAGE, /api\.kycStatus\(\)/, 'the read-only grid no longer reads /kyc/status');
+  assert.match(CODE, /function maskIdNumber/, 'the ID-number mask is gone');
+  assert.match(CODE, /maskIdNumber\(kd\?\.id_number\)/,
+    'the ID number is no longer masked where it is rendered');
+  assert.doesNotMatch(CODE, /value: kd\?\.id_number\b/,
+    'the raw ID number is being rendered — mask it to the last four');
+});
+
+test('an absent value says the platform has none, not that the user withheld one', () => {
+  // "Not provided" blames the reader for a gap that may be a legacy record, a
+  // field never asked for, or a failed read. The page cannot tell those apart.
+  assert.match(CODE, /'Not recorded'/,
+    'the read-only fields no longer say "Not recorded" for an absent value');
+  assert.doesNotMatch(CODE, /'Not provided'/,
+    'a field claims the user did not provide a value the platform simply does not hold');
+});
+
+test('the Entity tab draws the per-company card, and keeps the two entities apart', () => {
+  // THIS TEST HELD THE OPPOSITE LINE UNTIL TASK #108 ANSWERED IT. It used to
+  // require the sentence "recorded once per account, not per company" and refuse
+  // any company dimension on the page, because `corporate_profiles` upserts
+  // ON CONFLICT(user_id) and no /trust route accepted a company — so a selector
+  // over three companies would have changed nothing when clicked, which is worse
+  // than not offering it. Migration 220 gave the page something real to draw.
+  //
+  // It is rewritten rather than deleted, because the thing worth guarding did
+  // not go away, it moved: D40 and D42 say the account's entity and the
+  // company's are DIFFERENT OBJECTS that must not drift into each other. So the
+  // assertions now pin that both are present and distinct.
+  assert.match(CODE, /<CompanyKybCard \/>/, 'the per-company card is drawn');
+  assert.match(CODE, /Your companies/, 'and named as the canvas names it');
+  assert.match(CODE, /api\.companyKybList\(\)/, 'from the company endpoint, not the account one');
+
+  // The account's own record is still here and still says which it is.
+  assert.match(CODE, /separate from your account/i,
+    'the card must say the account entity is a different record');
+
+  const worker = read('cloudflare-worker/src/routes/trust.ts');
+  // D432 retired POST /trust/kyb/start, the one upsert this file made into
+  // corporate_profiles, so the key is now read where it is declared: the
+  // table's primary key is the account, and no migration can change a
+  // SQLite primary key in place.
+  assert.match(read('cloudflare-worker/sql/schema_baseline.sql'),
+    /CREATE TABLE corporate_profiles \(\s*user_id INTEGER PRIMARY KEY/,
+    'corporate_profiles must stay keyed on user_id — the account entity is not the company entity');
+  assert.match(worker, /ON CONFLICT \(company_id\)/,
+    'and the company record is keyed on the company');
+  // The write must never take a company from the body: `resolveActiveCompany`
+  // verifies membership, a body field is a self-made ownership claim.
+  assert.match(worker, /resolveActiveCompany\(c\.env, user, c\.req\.header\(ACTIVE_COMPANY_HEADER\)\)/,
+    'the company must come from the verified header');
+});
+
+test('the pending-agreement label reads the column the worker actually selects', () => {
+  assert.match(CODE, /p\.document_type \|\| 'Agreement'/,
+    'the label is not reading document_type');
+  assert.doesNotMatch(CODE, /p\.agreement_type/,
+    'agreement_type is back — no such column exists, so every row falls through to "Agreement"');
+  assert.match(read('cloudflare-worker/src/routes/trust.ts'), /e\.document_type/,
+    'the worker stopped selecting document_type — recheck the label');
+});
+
+test('both frames get the provenance line, exactly once', () => {
+  // OUTSIDE the `chromeless` guard, deliberately. It went inside first, on the
+  // reasoning that investorWorkspace supplies its own header — and rendering the
+  // investor frame showed that `chromeless` then suppressed the line entirely,
+  // so the reader most likely to be mid-verification never saw the sentence
+  // explaining why nothing on the page is editable. It is not a heading, so
+  // there was never anything to duplicate.
+  // Counted over CODE, not PAGE: the Identity tab's docblock quotes the
+  // canvas's sentence verbatim to explain what the tab is for, so a raw count
+  // finds two and blames the page for its own explanation.
+  const occurrences = [...CODE.matchAll(/this page reports status only/g)].length;
+  assert.equal(occurrences, 1, `the provenance line is rendered ${occurrences} times — one, in one place`);
+
+  const start = CODE.indexOf('{chromeless ? <div /> : (');
+  assert.ok(start > 0, 'could not find the chromeless guard');
+  // Anchored FORWARD from the guard, and sliced out of the SAME string the
+  // index came from. Two bugs lived here in turn, both of which made this
+  // assertion read the wrong bytes while still passing:
+  //   1. `indexOf('<TrustScoreBadge')` from zero found the Overview panel's
+  //      badge far above the header, so the slice ran backwards and was empty.
+  //   2. `start` was then taken from CODE while the slice was taken from PAGE —
+  //      comments are stripped from one and not the other, so the offsets
+  //      disagree by thousands of characters and the slice landed nowhere near
+  //      the header. The mutation check caught it: moving the line back inside
+  //      the guard did not fail the test.
+  const head = CODE.slice(start, CODE.indexOf('{provenance}', start));
+  assert.ok(head.length > 200, 'could not read the header block');
+  assert.match(head, /chromeless/, 'the header slice does not contain the guard it is supposed to bracket');
+  assert.doesNotMatch(head, /this page reports status only/,
+    'the provenance line is back inside the chromeless guard — an investor would never see it');
+});
+
+// ===========================================================================
+// Trust Center v2 — the score panel, the provenance line, and the two exits.
+//
+// The derivations behind these are unit-tested in
+// `frontend/test/trust_center_panel.test.mjs`, where every branch is reachable
+// without React. What is left to guard is that the PAGE actually renders them,
+// and renders them from the shared rule rather than a local re-derivation —
+// which is the specific way this panel went wrong once already.
+
+test('the band tone classes are literal, not built by string surgery', () => {
+  // A class name assembled at the call site (`bar.replace('border-l-','border-')`)
+  // is invisible to Tailwind's scanner and ships with no rule behind it, which
+  // is how the first draft of this panel drew a colourless ring.
+  const s = CODE.indexOf('const TONE = {');
+  const e = CODE.indexOf('function toneOf', s);
+  assert.ok(s > 0 && e > s, 'could not read TONE');
+  const tone = CODE.slice(s, e);
+  for (const [band, ring, edge] of [
+    ['ok', 'stroke-emerald-500', 'border-emerald-200'],
+    ['prog', 'stroke-amber-500', 'border-amber-200'],
+    ['bad', 'stroke-red-500', 'border-red-200'],
+  ]) {
+    assert.match(tone, new RegExp(`ring: '${ring}'`), `TONE.${band}.ring is not a literal class`);
+    assert.match(tone, new RegExp(`edge: '${edge}`), `TONE.${band}.edge is not a literal class`);
+  }
+  assert.doesNotMatch(tone, /\.replace\(/, 'tone classes remain literal');
+});
+
+test('an obligation row shows where its status came from, and invents nothing', () => {
+  const s = CODE.indexOf('function ObligationList(');
+  const e = CODE.indexOf('function ', CODE.indexOf('return (', s));
+  const list = CODE.slice(s, e > s ? e : s + 4000);
+  assert.match(list, /\{o\.source && \(/,
+    'the provenance line renders unconditionally — a row nothing satisfied would claim an origin');
+  assert.match(list, /\{o\.source\}/);
+  // The premise: the worker derives it and /me returns it.
+  assert.match(WORKER, /source: obligationSource\(o\)/,
+    'GET /trust/me no longer returns `source` — the line would render for nobody');
+  assert.match(WORKER_SVC, /export function obligationSource/);
+  // And it is null, not a filler string, when there is no evidence.
+  assert.match(WORKER_SVC, /if \(!raw\) return null;/,
+    'obligationSource invents a provenance for a row with no evidence');
+});
+
+test('the entity list marks which company the rest of the app is acting on', () => {
+  const s = CODE.indexOf('function CompanyKybCard(');
+  const e = CODE.indexOf('const accreditation =', s);
+  assert.ok(s > 0 && e > s, 'could not read CompanyKybCard');
+  const card = CODE.slice(s, e);
+  assert.match(card, /const activeCompanyId = getActiveCompanyId\(\)/,
+    'the badge has no idea which workspace is active');
+  // Compared as strings on purpose: the id arrives from localStorage as text
+  // and from the API as a number, and `1 === '1'` is false.
+  assert.match(card, /String\(row\.company_id\) === String\(activeCompanyId\)/,
+    'the comparison is type-sensitive again — the badge would never light up');
+  assert.match(card, /Active workspace/);
+  assert.match(read('frontend/src/lib/api.js'), /export function getActiveCompanyId/,
+    'the page imports a helper api.js no longer exports');
+});
+
+test('an agreement expands into the timeline the canvas draws', () => {
+  const s = CODE.indexOf('function EnvelopeHistory(');
+  const e = CODE.indexOf('function ObligationList(', s);
+  assert.ok(s > 0 && e > s, 'the envelope-history panel is gone');
+  const panel = CODE.slice(s, e);
+
+  assert.match(panel, /Envelope history/, 'the canvas\'s own heading for the panel');
+  assert.match(panel, /api\.trustAgreementHistory\(envelopeUuid\)/,
+    'the panel no longer fetches the trail');
+  assert.match(panel, /collapseEnvelopeHistory\(res\?\.history \|\| \[\]\)/);
+  assert.match(panel, /envelopeEventLabel\(e\.action\)/);
+  // The three states an async panel owes its reader, each distinct.
+  assert.match(panel, /state\.phase === 'loading'/);
+  assert.match(panel, /state\.phase === 'error'/);
+  assert.match(panel, /NO_ENVELOPE_HISTORY_NOTE/);
+  // A FAILED READ MUST NOT RENDER AS AN EMPTY TIMELINE. "Nothing recorded"
+  // and "we could not find out" are different claims about an audit trail.
+  assert.match(panel, /phase: 'error'/);
+  assert.doesNotMatch(panel, /catch[\s\S]{0,120}phase: 'ready'/,
+    'a failed fetch resolves to a ready, empty timeline — it must say it failed');
+  // Fetched per envelope and re-fetched when the uuid changes.
+  assert.match(panel, /\}, \[envelopeUuid, attempt\]\);/,
+    'the effect does not key on the envelope — expanding a second row would show the first one\'s history');
+});
+
+test('the expander exists only where there is an envelope to expand', () => {
+  const s = CODE.indexOf('function AgreementsTab(');
+  const e = CODE.indexOf('function CompanyKybCard(', s);
+  assert.ok(s > 0 && e > s, 'could not read AgreementsTab');
+  const tab = CODE.slice(s, e);
+  assert.match(tab, /\{a\.nda_envelope_uuid && \(/,
+    'the expander is offered on rows with no envelope, where it can only ever say "nothing recorded"');
+  assert.match(tab, /setExpandedEnvelope\(open \? null : a\.nda_envelope_uuid\)/,
+    'the toggle does not close the row it opened');
+  assert.match(tab, /\{open && <EnvelopeHistory envelopeUuid=\{a\.nda_envelope_uuid\} \/>\}/);
+  // One row at a time, keyed by uuid rather than by pair id.
+  assert.match(tab, /const \[expandedEnvelope, setExpandedEnvelope\] = useState\(null\)/);
+  assert.match(tab, /const open = expandedEnvelope === a\.nda_envelope_uuid/);
+  // The control announces itself to a screen reader as well as to a mouse.
+  assert.match(tab, /aria-expanded=\{open\}/);
+  assert.match(tab, /className="sr-only">\{open \? 'Hide' : 'Show'\} envelope history/);
+});
+
+test('the client method the panel calls has the worker route behind it', () => {
+  // The rule in CLAUDE.md, checked here as well as by `npm run test:drift`,
+  // because this pair was added in one commit and is easy to half-revert.
+  assert.match(read('frontend/src/lib/api.js'),
+    /trustAgreementHistory: \(envelope_uuid\) =>\s*\n\s*request\(`\/trust\/agreements\/\$\{encodeURIComponent\(envelope_uuid\)\}\/history`\)/);
+  assert.match(WORKER, /trust\.get\('\/agreements\/:envelope_uuid\/history'/);
+  // 404, not 403 — /my_signing_url already refuses to confirm an envelope
+  // exists and this must not become the oracle that one does.
+  const route = WORKER.slice(
+    WORKER.indexOf("trust.get('/agreements/:envelope_uuid/history'"),
+    WORKER.indexOf("trust.post('/intro/request'"),
+  );
+  assert.ok(route.length > 200, 'could not read the history route');
+  assert.match(route, /if \(history === null\) return c\.json\(\{ error: 'not_a_recipient' \}, 404\)/);
+  // An empty trail is a 200 with an empty array — a real answer, not a 404.
+  assert.match(route, /return c\.json\(\{ history \}\)/);
+});
+
+test('both "managed elsewhere" exits lead somewhere that exists', () => {
+  // The page reports and does not edit, so every statement of that fact owes
+  // the reader a route to where the editing happens. A dead link here is
+  // worse than no link: it confirms the page cannot help and then fails.
+  //
+  // ANCHORED ON THE RENDER, not on the words. `codeOnly` strips block comments
+  // that start at column 0 and whole-line `//` comments — not an indented JSX
+  // `{/* … */}`, and the page has one that quotes BOTH labels to explain why
+  // they use different verbs. A bare /Edit in Account Settings/ matched that
+  // comment, so replacing the real link text with "Contact support" left the
+  // test green. Third time this suite has been bitten by an assertion its own
+  // explanation satisfies (see #144's LEGAL_LINKS import line).
+  assert.match(CODE, /Edit in Account Settings &rarr;\s*<\/a>/,
+    'the Entity list offers no way out');
+  assert.match(CODE, /<ManagedElsewhere cta="Manage in Account Settings →"/,
+    'the Accreditation card offers no way out');
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/account"/, '/account is not routed — both exits are dead ends');
+  // And the role that sees the accreditation card can reach it.
+  const route = app.slice(app.indexOf('path="/account"'), app.indexOf('path="/account"') + 220);
+  assert.match(route, /'investor'/, 'an investor cannot open /account, so its exit 403s');
+});

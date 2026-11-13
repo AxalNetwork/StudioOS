@@ -1,0 +1,978 @@
+/**
+ * D693 — Verdict: the venture's decisions, kept for the venture or for one
+ * hypothesis, withheld below the evidence bar and never overwritten.
+ *
+ * THE ONE MODULE. Only this file reads or writes `validation_decisions`,
+ * `validation_decision_evidence` and `validation_decision_commitments`
+ * (migrations 211 and 464), and D4586's `validation_decision_method` and
+ * `validation_decision_exclusions` (migration 202611091102). Every reader of "the current decision" calls
+ * `currentDecision`, so the old verdict page, the summary CSV and the new
+ * module can never disagree about it. `services/records/owned.ts` may test
+ * that an id is the venture's, and nothing else.
+ *
+ * SCOPE. A decision is For the venture (`hypothesis_id` NULL) or for one
+ * hypothesis. A given decision supersedes the current given decision of its
+ * own scope and nothing else: a decision on H2 never retires the venture's
+ * verdict, and the venture's never retires H2's. The pointer and the
+ * supersession are written in one `DB.batch`, and the pointer is chosen
+ * inside it (`INSERT … SELECT`), never read before it, so two decisions
+ * recorded at once leave exactly one current and a correct chain.
+ *
+ * THE BAR. Below `DECISION_EVIDENCE_BAR` counted pieces of evidence a
+ * decision is kept as withheld: never current, superseding nothing, with its
+ * own row and its own record. The bar counts what the founder checks,
+ * contradicting items included. Since D4586 (methodology v2) it counts
+ * distinct underlying sources, only the decision's own hypothesis's evidence,
+ * and only experiments with an observed result (`decisionEvidenceV2`). The
+ * checked links that do not count are kept in `validation_decision_exclusions`
+ * with their reason, and `validation_decision_evidence` holds only what
+ * counted, so `evidence_count` means the same for v1 and v2 decisions. A
+ * decision with no `validation_decision_method` row is a v1 decision and is
+ * never recomputed.
+ *
+ * FAILURES THROW. A read that fails is a 503 or an unreadable card, never an
+ * empty history: "no decision yet" and "the decision could not be read" are
+ * different facts.
+ */
+import { evidenceFor as validateEvidenceFor, type EvidenceCtx, type EvidenceItemFull } from './validateEvidence';
+import { insertHypothesisWithLinksStatements } from '../routes/_founder_validate_writes';
+import type { Env, User } from '../types';
+import { logCycleWriteStatement } from './cycleActivity';
+import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
+import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
+import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
+import { decisionEvidenceV2, sourceKey, type DecisionEvidence, type EvidenceRow, type Exclusion } from './validateMethodology';
+
+/**
+ * Pieces of evidence a decision must rest on before a verdict is given.
+ *
+ * The Record a decision lightbox (Cycle Overview canvas, CO:335): "[2] of [5]
+ * needed before a verdict is given. Below that it is withheld." Its own
+ * constant: `VALIDATION_BAR` counts supporting ICP interviews behind one
+ * claim, which is a different question.
+ */
+export const DECISION_EVIDENCE_BAR = 5;
+
+export const DECISION_KINDS = ['proceed', 'pivot', 'stop'] as const;
+export type DecisionKind = typeof DECISION_KINDS[number];
+export const isDecisionKind = (v: unknown): v is DecisionKind =>
+  typeof v === 'string' && (DECISION_KINDS as readonly string[]).includes(v);
+
+export type DecisionState = 'given' | 'withheld';
+
+/** The venture, or one hypothesis by id. */
+export type Scope = 'venture' | number;
+
+/** A decision's caps, enforced here so every caller gets the same refusal. */
+export const MAX_EVIDENCE_KEYS = 50;
+export const MAX_REASONING = 4000;
+
+/**
+ * One piece of the venture's evidence, as the evidence reader gives it.
+ *
+ * `id` names the link the item came through (#1692's `evidenceFor`:
+ * `pain-<link id>-<interview id>` or `evidence-<link id>`), so it is unique
+ * across the venture and an interview behind two claims is two items.
+ */
+export type EvidenceItem = {
+  id: string;
+  kind: string;
+  label: string;
+  strength: 'anecdote' | 'pattern' | 'measured' | null;
+  direction: 'supports' | 'contradicts';
+  date: string | null;
+  hypothesis_id?: number | null;
+  /** The record behind the link (`validateEvidence.ts`); without it, the link is its own source. */
+  ref_id?: string;
+  /** Experiments only: whether a result is recorded (D4586 § 4). */
+  observed?: boolean;
+};
+
+export type EvidenceSource = (env: Env, projectId: number) => Promise<EvidenceItem[]>;
+
+/** Adapt Validate's context reader without losing its link-based keys or metadata. */
+export function adaptEvidenceReader(
+  reader: (ctx: EvidenceCtx, opts?: { hypothesisId?: number }) => Promise<EvidenceItemFull[]>,
+): EvidenceSource {
+  return (env, projectId) => reader({ env, projectId }, {});
+}
+
+const readEvidence = adaptEvidenceReader(validateEvidenceFor);
+
+/** The real linked evidence, with its claim named in every choice and snapshot. */
+export const evidenceFor: EvidenceSource = async (env, projectId) => {
+  const items = await readEvidence(env, projectId);
+  if (!items.length) return items;
+  const claims = (await env.DB.prepare('SELECT id, code, claim FROM hypotheses WHERE project_id = ?')
+    .bind(projectId).all<{ id: number; code: string; claim: string }>()).results || [];
+  const byId = new Map(claims.map((h) => [Number(h.id), h]));
+  return items.map((item) => {
+    const h = byId.get(Number(item.hypothesis_id));
+    if (!h) throw new Error('The evidence hypothesis could not be read');
+    return { ...item, label: `${item.label} · ${h.code} · ${h.claim}` };
+  });
+};
+
+/** Hypothesis statements run inside the decision's transaction, before its INSERT. */
+export type PivotStatements = (
+  env: Env, input: { projectId: number; claim: string; userId: number | null },
+) => D1PreparedStatement[];
+
+/** A Pivot uses the same atomic hypothesis writer and activity words as New hypothesis. */
+const pivotHypothesisStatements: PivotStatements = (env, input) => [
+  ...insertHypothesisWithLinksStatements(env, input, { painGroupIds: [], direction: 'supports' }),
+  logCycleWriteStatement(env, {
+    projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'experiments',
+    readback: { table: 'hypotheses', by: 'max' }, action: 'hypothesis_created', summary: 'Hypothesis created',
+  }),
+];
+
+/** A refusal with its own status and the sentence the caller shows. */
+export class VerdictError extends Error {
+  status: number;
+  sentence: string;
+  constructor(status: number, sentence: string) {
+    super(sentence);
+    this.status = status;
+    this.sentence = sentence;
+  }
+}
+
+export type RecordInput = {
+  decision: string;
+  for: Scope;
+  reasoning?: unknown;
+  evidence?: unknown;
+  pivot_claim?: unknown;
+};
+
+export type Recorded = {
+  id: number;
+  state: DecisionState;
+  supersedes_id: number | null;
+  pivot_hypothesis_id: number | null;
+  /** D4586: what the decision was counted on, as recorded in `validation_decision_method`. */
+  coverage: DecisionEvidence;
+};
+
+const KIND_WORD: Record<DecisionKind, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
+const STRENGTHS = new Set(['anecdote', 'pattern', 'measured']);
+const DIRECTIONS = new Set(['supports', 'contradicts']);
+
+const textOrNull = (v: unknown): string | null => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s : null;
+};
+
+/**
+ * The checked keys, refused as a malformed body when they are not a list of
+ * strings, or are more than the cap. Repeats count once.
+ */
+function evidenceKeys(raw: unknown): string[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.some((k) => typeof k !== 'string' || !k.trim() || k.length > 200)) {
+    throw new VerdictError(400, 'evidence must be a list of evidence keys');
+  }
+  const keys = [...new Set((raw as string[]).map((k) => k.trim()))];
+  if (keys.length > MAX_EVIDENCE_KEYS) {
+    throw new VerdictError(400, `A decision rests on at most ${MAX_EVIDENCE_KEYS} pieces of evidence.`);
+  }
+  return keys;
+}
+
+/**
+ * The activity rows for a decision, as statements for the decision's batch,
+ * through `services/cycleActivity.ts`'s statement form (#1690, D-e).
+ *
+ * Logged only under `entity_type 'validate.verdict'`, never against the
+ * hypothesis, because partners read a hypothesis's activity and never a
+ * decision. The summary says the decision and its scope; it never carries
+ * the reasoning or a commitment's text.
+ *
+ * The new decision's id is not known before the batch and the table has no
+ * `uid`, so it is read back inside the batch (D1 runs a batch as one
+ * transaction): the recorded row names the venture's newest decision, and the
+ * superseded row names that decision's `supersedes_id`, written only when it
+ * is set, so a Withheld decision logs no superseded row.
+ */
+const verdictWrite = (user: User, projectId: number, action: string, summary: string) =>
+  ({ projectId, userId: user.id ?? null, cycle: 'validate' as const, module: 'verdict' as const, action, summary });
+
+/**
+ * Record a decision. Never edits or deletes one (D693 decision 4).
+ *
+ * `bar` is the evidence bar, `DECISION_EVIDENCE_BAR` for every route (D693
+ * decision 12); a test may pass another.
+ */
+export async function recordDecision(
+  env: Env,
+  user: User,
+  project: { id: number },
+  input: RecordInput,
+  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor, pivotStatements = pivotHypothesisStatements }: {
+    bar?: number; evidenceSource?: EvidenceSource; pivotStatements?: PivotStatements;
+  } = {},
+): Promise<Recorded> {
+  const projectId = project.id;
+  if (!isDecisionKind(input.decision)) throw new VerdictError(400, 'decision must be proceed, pivot or stop');
+  const decision = input.decision;
+  const scope = input.for;
+  if (scope !== 'venture' && !(Number.isInteger(scope) && (scope as number) > 0)) {
+    throw new VerdictError(400, 'for must be the venture or one hypothesis');
+  }
+  if (input.reasoning !== undefined && input.reasoning !== null && typeof input.reasoning !== 'string') {
+    throw new VerdictError(400, 'reasoning must be text');
+  }
+  const reasoning = textOrNull(input.reasoning);
+  if (reasoning && reasoning.length > MAX_REASONING) {
+    throw new VerdictError(400, `Reasoning must be ${MAX_REASONING.toLocaleString('en-US')} characters or fewer.`);
+  }
+  const keys = evidenceKeys(input.evidence);
+  const pivotClaim = textOrNull(input.pivot_claim);
+  if (input.pivot_claim !== undefined && input.pivot_claim !== null && decision !== 'pivot') {
+    throw new VerdictError(400, 'Only a Pivot starts a new hypothesis.');
+  }
+
+  // The scope, bound to the venture: another venture's hypothesis is not found.
+  let hypothesisId: number | null = null;
+  let scopeWord = 'the venture';
+  if (scope !== 'venture') {
+    const h = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE id = ? AND project_id = ?')
+      .bind(scope, projectId).first<{ id: number; code: string }>();
+    if (!h) throw new VerdictError(404, 'Hypothesis not found.');
+    hypothesisId = Number(h.id);
+    scopeWord = h.code;
+  }
+
+  // Only keys the evidence reader gives for THIS venture are accepted.
+  let items: EvidenceItem[] = [];
+  if (keys.length) {
+    const byId = new Map((await evidenceSource(env, projectId)).map((it) => [it.id, it]));
+    for (const k of keys) {
+      const it = byId.get(k);
+      if (!it) throw new VerdictError(404, 'Evidence not found.');
+      items.push(it);
+    }
+  }
+
+  // D4586 (methodology v2): what counts toward the bar. Each link the founder
+  // checked is kept: the counted ones as the decision's evidence, the others
+  // with the reason they did not count.
+  const rows: EvidenceRow[] = items.map((it) => ({
+    id: it.id, kind: String(it.kind || 'evidence') as EvidenceRow['kind'], ref_id: String(it.ref_id ?? it.id),
+    hypothesis_id: Number(it.hypothesis_id), direction: DIRECTIONS.has(it.direction) ? it.direction : 'supports',
+    ...(it.kind === 'experiment' ? { observed: it.observed === true } : {}),
+  }));
+  const coverage = decisionEvidenceV2(rows, scope === 'venture' ? 'venture' : (hypothesisId as number), await interviewPeople(env, projectId, rows), bar);
+  const reasonOf = new Map<string, Exclusion>(coverage.excluded.map((x) => [x.id, x.reason]));
+  const state: DecisionState = coverage.state;
+  const word = KIND_WORD[decision];
+  const recordedSummary = state === 'given'
+    ? `Recorded ${word} for ${scopeWord}`
+    : `Recorded ${word} for ${scopeWord}, withheld`;
+
+  const stmts = pivotClaim && pivotStatements
+    ? pivotStatements(env, { projectId, claim: pivotClaim, userId: user.id ?? null })
+    : [];
+  const decisionIndex = stmts.length;
+  const hasPivot = pivotClaim ? 1 : 0;
+  if (state === 'given') {
+    // The pointer is the newest current given decision of the same scope,
+    // chosen inside the batch.
+    stmts.push(env.DB.prepare(
+      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id, pivot_hypothesis_id)
+       SELECT ?, ?, ?, ?, ?, 'given',
+              (SELECT id FROM validation_decisions
+                WHERE project_id = ? AND hypothesis_id IS ? AND state = 'given' AND superseded_at IS NULL
+                ORDER BY decided_at DESC, id DESC LIMIT 1),
+              CASE WHEN ? = 1 THEN (SELECT MAX(id) FROM hypotheses WHERE project_id = ?) ELSE NULL END
+       RETURNING id, supersedes_id, pivot_hypothesis_id`,
+    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null, projectId, hypothesisId, hasPivot, projectId));
+    // Every earlier current given decision of the scope is superseded: a
+    // venture may hold two from the old unbatched route, and after this
+    // decision it holds exactly one.
+    stmts.push(env.DB.prepare(
+      `UPDATE validation_decisions SET superseded_at = datetime('now')
+        WHERE project_id = ? AND hypothesis_id IS ? AND state = 'given' AND superseded_at IS NULL
+          AND id <> (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?)`,
+    ).bind(projectId, hypothesisId, projectId));
+  } else {
+    stmts.push(env.DB.prepare(
+      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id, pivot_hypothesis_id)
+       VALUES (?, ?, ?, ?, ?, 'withheld', NULL,
+               CASE WHEN ? = 1 THEN (SELECT MAX(id) FROM hypotheses WHERE project_id = ?) ELSE NULL END)
+       RETURNING id, supersedes_id, pivot_hypothesis_id`,
+    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null, hasPivot, projectId));
+  }
+  // Each item as it reads now, so the record does not change when the
+  // evidence is edited later.
+  for (const [i, it] of items.entries()) {
+    const reason = reasonOf.get(it.id);
+    if (reason) {
+      stmts.push(env.DB.prepare(
+        `INSERT INTO validation_decision_exclusions (uid, decision_id, kind, ref_id, source_key, label, direction, reason)
+         VALUES (?, (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(), projectId, String(it.kind || 'evidence'), it.id, sourceKey(rows[i]), String(it.label || it.id),
+        rows[i].direction, reason,
+      ));
+      continue;
+    }
+    stmts.push(env.DB.prepare(
+      `INSERT INTO validation_decision_evidence (uid, decision_id, kind, ref_id, label, strength, direction, on_date)
+       VALUES (?, (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      crypto.randomUUID(), projectId, String(it.kind || 'evidence'), it.id, String(it.label || it.id),
+      it.strength && STRENGTHS.has(it.strength) ? it.strength : null,
+      DIRECTIONS.has(it.direction) ? it.direction : 'supports',
+      it.date ?? null,
+    ));
+  }
+  stmts.push(env.DB.prepare(
+    `INSERT INTO validation_decision_method (decision_id, methodology_version, links, sources, counted, counted_supporting,
+       counted_contradicting, interviews, interviewees, organizations, bar)
+     VALUES ((SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    projectId, coverage.methodology_version, coverage.links, coverage.sources, coverage.counted, coverage.counted_supporting,
+    coverage.counted_contradicting, coverage.interviews, coverage.interviewees, coverage.organizations, coverage.bar,
+  ));
+  stmts.push(logCycleWriteStatement(env, {
+    ...verdictWrite(user, projectId, 'validation_decision_recorded', recordedSummary),
+    readback: { table: 'validation_decisions', by: 'max' },
+  }));
+  if (state === 'given') {
+    stmts.push(logCycleWriteStatement(env, {
+      ...verdictWrite(user, projectId, 'validation_decision_superseded', `Superseded by ${word}`),
+      readback: { table: 'validation_decisions', by: 'supersedes' },
+    }));
+  }
+
+  const out = await env.DB.batch(stmts);
+  const row = ((out[decisionIndex] as any)?.results?.[0] ?? null) as { id: number; supersedes_id: number | null; pivot_hypothesis_id: number | null } | null;
+  if (!row) throw new Error('The decision was not written');
+  return {
+    id: Number(row.id),
+    state,
+    supersedes_id: row.supersedes_id == null ? null : Number(row.supersedes_id),
+    pivot_hypothesis_id: row.pivot_hypothesis_id == null ? null : Number(row.pivot_hypothesis_id),
+    coverage,
+  };
+}
+
+/**
+ * D4586 § 2: the interviewee and company of each interview the checked links
+ * reach, read only so `decisionEvidenceV2` can count distinct values. Neither
+ * is returned or stored.
+ */
+async function interviewPeople(env: Env, projectId: number, rows: EvidenceRow[]) {
+  const ids = [...new Set(rows.filter((r) => r.kind === 'interview' && /^[1-9][0-9]{0,9}$/.test(r.ref_id)).map((r) => Number(r.ref_id)))];
+  const people = new Map<string, { name: string | null; company: string | null }>();
+  if (!ids.length) return people;
+  const res = await env.DB.prepare(
+    'SELECT id, interviewee_name, interviewee_company FROM discovery_interviews WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))',
+  ).bind(projectId, JSON.stringify(ids)).all<{ id: number; interviewee_name: string | null; interviewee_company: string | null }>();
+  for (const r of res.results || []) people.set(String(r.id), { name: r.interviewee_name, company: r.interviewee_company });
+  return people;
+}
+
+export type DecisionMethod = {
+  methodology_version: number; links: number; sources: number; counted: number; counted_supporting: number;
+  counted_contradicting: number; interviews: number; interviewees: number | null; organizations: number | null; bar: number;
+};
+export type DecisionExclusionRow = {
+  id: number; uid: string; kind: string; ref_id: string; source_key: string; label: string;
+  direction: 'supports' | 'contradicts'; reason: Exclusion;
+};
+
+/**
+ * D4586 — the methodology one decision was recorded under: its coverage and
+ * the checked links that did not count. `method` is null for a decision
+ * recorded before methodology v2, which reads as v1 and is never recomputed.
+ */
+export async function decisionMethod(env: Env, decisionId: number): Promise<{ method: DecisionMethod | null; excluded: DecisionExclusionRow[] }> {
+  const [m, x] = await Promise.all([
+    env.DB.prepare(
+      `SELECT methodology_version, links, sources, counted, counted_supporting, counted_contradicting, interviews,
+              interviewees, organizations, bar
+         FROM validation_decision_method WHERE decision_id = ?`,
+    ).bind(decisionId).first<DecisionMethod>(),
+    env.DB.prepare(
+      `SELECT id, uid, kind, ref_id, source_key, label, direction, reason
+         FROM validation_decision_exclusions WHERE decision_id = ? ORDER BY id`,
+    ).bind(decisionId).all<DecisionExclusionRow>(),
+  ]);
+  return { method: m ?? null, excluded: x.results || [] };
+}
+
+// ---------------------------------------------------------------------------
+// Reads. Each binds the venture, throws on a failure, and never returns an
+// empty list for one.
+// ---------------------------------------------------------------------------
+
+export type DecisionRow = {
+  id: number;
+  decision: DecisionKind;
+  state: DecisionState;
+  hypothesis_id: number | null;
+  hypothesis_code: string | null;
+  reasoning: string | null;
+  decided_at: string;
+  decided_by: number | null;
+  decided_by_name: string | null;
+  superseded_at: string | null;
+  supersedes_id: number | null;
+  pivot_hypothesis_id: number | null;
+  evidence_count: number;
+};
+
+// Each read below spells its columns out rather than splicing a shared list,
+// so no `${…}` lands in a query (scripts/check-sql-prepare.mjs).
+const scopeBind = (scope: Scope): number | null => (scope === 'venture' ? null : scope);
+
+/**
+ * The current given decision of one scope, or null when there is none.
+ *
+ * The newest row wins: a venture may hold two current rows from the old
+ * route's unbatched write, and no index forbids it (migration 464).
+ */
+export async function currentDecision(env: Env, projectId: number, scope: Scope): Promise<DecisionRow | null> {
+  return env.DB.prepare(
+    `SELECT d.id, d.decision, d.state, d.hypothesis_id, h.code AS hypothesis_code, d.reasoning,
+            d.decided_at, d.decided_by, u.name AS decided_by_name, d.superseded_at, d.supersedes_id,
+            d.pivot_hypothesis_id,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+       LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+       LEFT JOIN users u ON u.id = d.decided_by
+      WHERE d.project_id = ? AND d.hypothesis_id IS ? AND d.state = 'given' AND d.superseded_at IS NULL
+      ORDER BY d.decided_at DESC, d.id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<DecisionRow>();
+}
+
+/**
+ * D1143 (#2433, owner question 5 A) — the day of the venture's latest Pivot
+ * given, or null. A superseded Pivot still counts: it happened. A withheld
+ * Pivot, or a Pivot on one claim, does not. The Product-market fit collector
+ * counts only the records dated after it.
+ */
+export async function latestVenturePivotDay(env: Env, projectId: number): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT MAX(decided_at) AS at FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS NULL AND decision = 'pivot' AND state = 'given'`,
+  ).bind(projectId).first<{ at: string | null }>();
+  const d = String(row?.at ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+/**
+ * D1255 (#3278) — the day of the latest Pivot or Stop given, on the venture
+ * or on any claim, or null. A superseded one still counts: it happened. A
+ * withheld decision does not. The venture scorecard's Risk scope reads it to
+ * tell whether an invalidated claim has been answered; it reads no reasoning
+ * and no name.
+ */
+export async function latestPivotOrStopDay(env: Env, projectId: number): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT MAX(decided_at) AS at FROM validation_decisions
+      WHERE project_id = ? AND decision IN ('pivot', 'stop') AND state = 'given'`,
+  ).bind(projectId).first<{ at: string | null }>();
+  const d = String(row?.at ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+/**
+ * D1143 — the venture's Verdict as Product-market fit shows it (never scores
+ * it): the current given decision, as `currentDecision` reads it, else the
+ * latest withheld one ("Withheld (below 5 pieces)"). No reasoning, no name.
+ */
+export async function ventureVerdictHeader(env: Env, projectId: number): Promise<{ decision: string; state: DecisionState; decided_at: string | null; evidence_count: number } | null> {
+  const row = await env.DB.prepare(
+    `SELECT d.decision, d.state, d.decided_at,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+      WHERE d.project_id = ? AND d.hypothesis_id IS NULL AND d.superseded_at IS NULL
+      ORDER BY CASE WHEN d.state = 'given' THEN 0 ELSE 1 END, d.decided_at DESC, d.id DESC LIMIT 1`,
+  ).bind(projectId).first<{ decision: string; state: DecisionState; decided_at: string | null; evidence_count: number }>();
+  return row ? { decision: row.decision, state: row.state, decided_at: row.decided_at, evidence_count: Number(row.evidence_count) || 0 } : null;
+}
+
+export const DECISION_FILTERS = ['proceed', 'pivot', 'stop', 'withheld'] as const;
+export type DecisionFilter = typeof DECISION_FILTERS[number];
+export const DECISIONS_PAGE_SIZE = 20;
+
+/**
+ * The venture's decisions, newest first unless asked otherwise. `scope`
+ * narrows to the venture or one hypothesis; `filter` to one kind of given
+ * decision or to the withheld ones, so a withheld Proceed is under Withheld
+ * and not under Proceed (#1704: the table reads it as "Withheld"). `q`
+ * searches the reasoning and the claim the decision is For, bound, with `%`
+ * and `_` matched as themselves.
+ */
+export async function decisionsFor(
+  env: Env,
+  projectId: number,
+  { scope, filter, q = '', sort = 'newest', page = 1, pageSize = DECISIONS_PAGE_SIZE }:
+    { scope?: Scope; filter?: DecisionFilter | null; q?: string; sort?: 'newest' | 'oldest'; page?: number; pageSize?: number } = {},
+): Promise<{ rows: DecisionRow[]; total: number; page: number; page_size: number }> {
+  const size = Math.max(1, Math.min(200, Math.floor(pageSize)));
+  const p = Math.max(1, Math.floor(page) || 1);
+  const scoped = scope === undefined ? 0 : 1;
+  const hyp = scope === undefined ? null : scopeBind(scope);
+  const kind = filter && filter !== 'withheld' ? filter : null;
+  const withheld = filter === 'withheld' ? 1 : 0;
+  const term = String(q || '').trim().toLowerCase().slice(0, 120);
+  const like = term ? `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
+  const where = [projectId, scoped, hyp, kind, kind, withheld, like, like, like] as const;
+
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM validation_decisions d
+       LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+      WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
+        AND (? = 0 OR d.state = 'withheld')
+        AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')`,
+  ).bind(...where).first<{ n: number }>();
+  const list = sort === 'oldest'
+    ? env.DB.prepare(
+      `SELECT d.id, d.decision, d.state, d.hypothesis_id, h.code AS hypothesis_code, d.reasoning,
+              d.decided_at, d.decided_by, u.name AS decided_by_name, d.superseded_at, d.supersedes_id,
+              d.pivot_hypothesis_id,
+              (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+         FROM validation_decisions d
+         LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+         LEFT JOIN users u ON u.id = d.decided_by
+        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
+          AND (? = 0 OR d.state = 'withheld')
+          AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')
+        ORDER BY d.decided_at ASC, d.id ASC LIMIT ? OFFSET ?`,
+    )
+    : env.DB.prepare(
+      `SELECT d.id, d.decision, d.state, d.hypothesis_id, h.code AS hypothesis_code, d.reasoning,
+              d.decided_at, d.decided_by, u.name AS decided_by_name, d.superseded_at, d.supersedes_id,
+              d.pivot_hypothesis_id,
+              (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+         FROM validation_decisions d
+         LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+         LEFT JOIN users u ON u.id = d.decided_by
+        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
+          AND (? = 0 OR d.state = 'withheld')
+          AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')
+        ORDER BY d.decided_at DESC, d.id DESC LIMIT ? OFFSET ?`,
+    );
+  const res = await list.bind(...where, size, (p - 1) * size).all<DecisionRow>();
+  return { rows: res.results || [], total: Number(total?.n ?? 0), page: p, page_size: size };
+}
+
+export type DecisionEvidenceRow = {
+  id: number; uid: string; kind: string; ref_id: string; label: string;
+  strength: string | null; direction: 'supports' | 'contradicts'; on_date: string | null;
+};
+export type DecisionCommitmentRow = {
+  id: number; uid: string; text: string; owner_user_id: number | null; owner_name: string | null;
+  created_by: number | null; due_date: string | null; done_at: string | null; created_at: string;
+};
+
+/**
+ * One decision of this venture, with the evidence it rests on and the
+ * commitments it created, or null when the id is not this venture's.
+ */
+export async function decisionById(
+  env: Env, projectId: number, id: number,
+): Promise<(DecisionRow & { evidence: DecisionEvidenceRow[]; commitments: DecisionCommitmentRow[] }) | null> {
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.decision, d.state, d.hypothesis_id, h.code AS hypothesis_code, d.reasoning,
+            d.decided_at, d.decided_by, u.name AS decided_by_name, d.superseded_at, d.supersedes_id,
+            d.pivot_hypothesis_id,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+       LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+       LEFT JOIN users u ON u.id = d.decided_by
+      WHERE d.project_id = ? AND d.id = ?`,
+  ).bind(projectId, id).first<DecisionRow>();
+  if (!row) return null;
+  const [ev, cm] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, uid, kind, ref_id, label, strength, direction, on_date
+         FROM validation_decision_evidence WHERE decision_id = ? ORDER BY id`,
+    ).bind(row.id).all<DecisionEvidenceRow>(),
+    env.DB.prepare(
+      `SELECT c.id, c.uid, c.text, c.owner_user_id, u.name AS owner_name, c.created_by, c.due_date, c.done_at, c.created_at
+         FROM validation_decision_commitments c
+         LEFT JOIN users u ON u.id = c.owner_user_id
+        WHERE c.decision_id = ? AND c.project_id = ? ORDER BY c.id`,
+    ).bind(row.id, projectId).all<DecisionCommitmentRow>(),
+  ]);
+  return { ...row, evidence: ev.results || [], commitments: cm.results || [] };
+}
+
+/** The newest unsuperseded decision of one scope, given or withheld (D1065's build plan reads it). */
+export type LatestDecision = Pick<DecisionRow, 'id' | 'decision' | 'state' | 'hypothesis_id' | 'pivot_hypothesis_id'>;
+export async function latestDecision(env: Env, projectId: number, scope: Scope): Promise<LatestDecision | null> {
+  return env.DB.prepare(
+    `SELECT id, decision, state, hypothesis_id, pivot_hypothesis_id FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS ? AND superseded_at IS NULL ORDER BY id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<LatestDecision>();
+}
+
+/**
+ * D1069 (#2939) — the scope's newest unsuperseded decision as the plan page
+ * draws it (VB1's strip, VB14's Withheld and Stop): its word, state, day and
+ * evidence count. No reasoning and no name. `latestDecision` stays as it is,
+ * because D1065 hashes what it answers.
+ */
+export type PlanVerdict = { id: number; decision: DecisionKind; state: DecisionState; decided_at: string | null; evidence_count: number; bar: number };
+export async function planVerdict(env: Env, projectId: number, scope: Scope): Promise<PlanVerdict | null> {
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.decision, d.state, d.decided_at,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+      WHERE d.project_id = ? AND d.hypothesis_id IS ? AND d.superseded_at IS NULL ORDER BY d.id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<{ id: number; decision: DecisionKind; state: DecisionState; decided_at: string | null; evidence_count: number }>();
+  return row ? { id: Number(row.id), decision: row.decision, state: row.state, decided_at: row.decided_at ?? null, evidence_count: Number(row.evidence_count) || 0, bar: DECISION_EVIDENCE_BAR } : null;
+}
+
+/** The ref ids of the evidence a decision rests on as support. */
+export async function supportingRefIds(env: Env, decisionId: number): Promise<string[]> {
+  const rows = (await env.DB.prepare(
+    "SELECT ref_id FROM validation_decision_evidence WHERE decision_id = ? AND direction = 'supports'",
+  ).bind(decisionId).all<{ ref_id: string }>()).results || [];
+  return rows.map((r) => r.ref_id);
+}
+
+/**
+ * Why a given decision has no evidence rows (D693 decision 5). Only the old
+ * verdict route ever wrote one, since every other given decision rests on
+ * at least the bar.
+ */
+export const NO_EVIDENCE_REASON = 'Recorded on the earlier verdict page, which kept no evidence.';
+
+/**
+ * Whether a given decision of the same scope was recorded before this one,
+ * for the record's Supersedes fact (D693 decision 10): with none, "Nothing,
+ * the first for <scope>"; with one and no pointer, the old route never kept
+ * it, and the fact is Not recorded.
+ */
+export async function earlierGivenInScope(env: Env, projectId: number, decision: { id: number; hypothesis_id: number | null }): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS found FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS ? AND state = 'given' AND id < ? LIMIT 1`,
+  ).bind(projectId, decision.hypothesis_id, decision.id).first<{ found: number }>();
+  return !!row;
+}
+
+// ---------------------------------------------------------------------------
+// Commitments (D693 decision 8). Added and closed through the record's action
+// route; there is no commitments route of its own. A commitment's owner must
+// own the venture, so no other user's name is written.
+// ---------------------------------------------------------------------------
+
+export const MAX_COMMITMENT = 500;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export type CommitmentInput = { text?: unknown; owner_user_id?: unknown; due_date?: unknown };
+
+async function ventureOwner(env: Env, project: ProjectRef, raw: unknown): Promise<number> {
+  const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(id) || id < 1) throw new VerdictError(400, 'The owner must own this venture.');
+  const owner = await env.DB.prepare('SELECT id, role, founder_id, spinout_lab_active FROM users WHERE id = ? AND is_active = 1')
+    .bind(id).first<User>();
+  if (!owner || !ownsVenture(project, owner)) throw new VerdictError(400, 'The owner must own this venture.');
+  return id;
+}
+
+/**
+ * Add a commitment to one of the venture's decisions. The owner defaults to
+ * the caller when the caller owns the venture; an admin's commitment has no
+ * owner unless one is named. Logged on the decision, without its text.
+ */
+export async function addCommitment(
+  env: Env, user: User, project: ProjectRef, decisionId: number, input: CommitmentInput,
+): Promise<{ id: number }> {
+  const text = typeof input.text === 'string' ? input.text.replace(/\s+/g, ' ').trim() : '';
+  if (!text) throw new VerdictError(400, 'A commitment needs its text.');
+  if (text.length > MAX_COMMITMENT) throw new VerdictError(400, `A commitment must be ${MAX_COMMITMENT} characters or fewer.`);
+  const due = input.due_date === undefined || input.due_date === null || input.due_date === '' ? null : input.due_date;
+  if (due !== null && !(typeof due === 'string' && DATE_ONLY.test(due) && !Number.isNaN(Date.parse(`${due}T00:00:00Z`)))) {
+    throw new VerdictError(400, 'due_date must be a date (YYYY-MM-DD).');
+  }
+  const named = input.owner_user_id !== undefined && input.owner_user_id !== null && input.owner_user_id !== '';
+  const owner = named ? await ventureOwner(env, project, input.owner_user_id) : (ownsVenture(project, user) ? Number(user.id) : null);
+  const found = await env.DB.prepare('SELECT id FROM validation_decisions WHERE id = ? AND project_id = ?')
+    .bind(decisionId, project.id).first<{ id: number }>();
+  if (!found) throw new VerdictError(404, 'Record not found.');
+  const out = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO validation_decision_commitments (uid, decision_id, project_id, text, owner_user_id, created_by, due_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(crypto.randomUUID(), decisionId, project.id, text, owner, user.id ?? null, due),
+    logCycleWriteStatement(env, { ...verdictWrite(user, project.id, 'validation_commitment_added', 'Added a commitment'), entityId: decisionId }),
+  ]);
+  return { id: Number((out[0] as any)?.results?.[0]?.id) };
+}
+
+/** The decision's commitments that are still open, for its done form. */
+export async function openCommitments(env: Env, projectId: number, decisionId: number): Promise<DecisionCommitmentRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT c.id, c.uid, c.text, c.owner_user_id, u.name AS owner_name, c.created_by, c.due_date, c.done_at, c.created_at
+       FROM validation_decision_commitments c LEFT JOIN users u ON u.id = c.owner_user_id
+      WHERE c.decision_id = ? AND c.project_id = ? AND c.done_at IS NULL ORDER BY c.id`,
+  ).bind(decisionId, projectId).all<DecisionCommitmentRow>();
+  return res.results || [];
+}
+
+/** Mark one of this decision's open commitments done. Another decision's answers 404. */
+export async function completeCommitment(
+  env: Env, user: User, project: ProjectRef, decisionId: number, rawId: unknown,
+): Promise<void> {
+  const id = typeof rawId === 'number' ? rawId : typeof rawId === 'string' && /^[1-9][0-9]{0,9}$/.test(rawId) ? Number(rawId) : NaN;
+  if (!Number.isSafeInteger(id) || id < 1) throw new VerdictError(404, 'Commitment not found.');
+  const open = await env.DB.prepare(
+    'SELECT id FROM validation_decision_commitments WHERE id = ? AND decision_id = ? AND project_id = ? AND done_at IS NULL',
+  ).bind(id, decisionId, project.id).first<{ id: number }>();
+  if (!open) throw new VerdictError(404, 'Commitment not found.');
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE validation_decision_commitments SET done_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ? AND decision_id = ? AND project_id = ? AND done_at IS NULL`,
+    ).bind(id, decisionId, project.id),
+    logCycleWriteStatement(env, { ...verdictWrite(user, project.id, 'validation_commitment_done', 'Marked a commitment done'), entityId: decisionId }),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// The Verdict module (#1704): its card and its Decisions table. Not yet in
+// `cycleValidate.ts`'s `MODULES`, `CARD_FOR` or `RECORDS_FOR`: the Worker's
+// list and the page's land together with `/validate/verdict`'s swap.
+// ---------------------------------------------------------------------------
+
+/** The card's timeline holds the venture's six newest decisions, then Next. */
+export const TIMELINE_CAP = 6;
+
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/**
+ * "24 Oct" from a `YYYY-MM-DD` date, as the canvas writes it ("3 Sep", where
+ * newer `en-GB` locale data says "Sept"). Kept here, not `cycleFocus.ts`'s:
+ * that module reaches `cycleValidate.ts`, which imports this one.
+ */
+const dayMonth = (d: string) => `${Number(d.slice(8, 10))} ${MONTH[Number(d.slice(5, 7)) - 1]}`;
+
+const day = (raw: string | null | undefined) => {
+  const d = String(raw ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+};
+
+/**
+ * Whether a given decision rests on no evidence row, which only the old
+ * verdict page ever wrote (D693 decision 5). Its count is not shown.
+ */
+const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state === 'given' && Number(d.evidence_count) === 0;
+
+/**
+ * D693 decision 9 — the card is the venture's verdict (CO:542, CO:584).
+ *
+ * - `empty`: the venture has no decision in any scope.
+ * - `too_little`: decisions exist, but none is a current given decision for
+ *   the venture.
+ * - `ok`: the timeline (the venture's own decisions, the six newest, oldest
+ *   first; Withheld ones carried with their state) and the current verdict.
+ * - `unreadable`: `safeCard`'s, when a read throws.
+ *
+ * - Next (CO:542's open step): the earliest deadline, today or later, of the
+ *   venture's open hypotheses (migration 460's `hypotheses.deadline`). The
+ *   card's `next` records the decision for that hypothesis. Both are null
+ *   when no deadline is ahead.
+ */
+/** D757 §2.6 (#1925): the card's one read-only interview line; null when it cannot be read. */
+export type VerdictCard = Card & { contributions?: { text: string; href: string }[]; interview_evidence?: { count: number; contradicting: number; text: string } | null };
+
+export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
+  return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async (): Promise<Omit<VerdictCard, 'slug' | 'name' | 'range' | 'caption'>> => {
+    const hasFindings = ctx.canWrite && (await (await import('./interviewFindings')).presentTables(ctx.env, ['interview_findings'])).has('interview_findings');
+    const contributions = hasFindings ? (await ctx.env.DB.prepare("SELECT interview_id, payload_json FROM interview_findings WHERE project_id = ? AND kind = 'verdict_contribution' ORDER BY id DESC LIMIT 50").bind(ctx.projectId).all<{ interview_id: number; payload_json: string }>()).results?.map((r) => ({ text: String(JSON.parse(r.payload_json).text), href: `/validate/customer-research/${r.interview_id}?project=${ctx.projectId}` })) ?? [] : [];
+    const add = { text: 'Record a decision', href: `/validate/verdict/new?project=${ctx.projectId}` };
+    const [any, current, interview_evidence] = await Promise.all([
+      decisionsFor(ctx.env, ctx.projectId, { pageSize: 1 }),
+      currentDecision(ctx.env, ctx.projectId, 'venture'),
+      interviewLine(ctx),
+    ]);
+    if (any.total === 0) {
+      return { state: 'empty', series: null, next: add, contributions, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
+    }
+    if (!current) {
+      return {
+        state: 'too_little', series: null, next: add, interview_evidence, contributions,
+        reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
+      };
+    }
+    const [recent, sprint] = await Promise.all([
+      decisionsFor(ctx.env, ctx.projectId, { scope: 'venture', sort: 'newest', pageSize: TIMELINE_CAP }),
+      nextSprint(ctx),
+    ]);
+    return {
+      state: 'ok',
+      series: {
+        decisions: [...recent.rows].reverse().map((d) => ({ decision: d.decision, state: d.state, date: day(d.decided_at) })),
+        current: {
+          decision: current.decision, date: day(current.decided_at),
+          evidence: isOldRoute(current) ? null : Number(current.evidence_count),
+        },
+        next: sprint ? { date: sprint.deadline } : null,
+      },
+      next: sprint
+        ? {
+          text: `Record the decision for the sprint ending ${dayMonth(sprint.deadline)}.`,
+          href: `/validate/verdict/new?project=${ctx.projectId}&for=h-${sprint.id}`,
+        }
+        : null,
+      reason: null,
+      interview_evidence, contributions,
+    };
+  });
+}
+
+/** A stored time as "YYYY-MM-DD HH:MM:SS", so SQLite's and ISO's compare. */
+const instant = (v: unknown) => String(v ?? '').replace('T', ' ').slice(0, 19);
+
+/**
+ * D757 §2.6 (#1925) — the interview evidence that arrived since the venture's
+ * last decision, of any scope or state: the interview items of `given` (the
+ * evidence a caller already read), else of `evidenceFor`, whose
+ * link (or, for a pain link, the later of the link and the interview) was
+ * created after it. With no decision yet, every interview item counts. It
+ * reads; nothing here or on its callers writes a decision.
+ */
+export async function interviewEvidenceSince(
+  env: Env, projectId: number, given?: ReadonlyArray<Pick<EvidenceItem, 'id' | 'kind' | 'direction'>>,
+): Promise<{ ids: string[]; contradicting: number; since: string | null }> {
+  const [last, items] = await Promise.all([
+    env.DB.prepare('SELECT MAX(decided_at) AS at FROM validation_decisions WHERE project_id = ?').bind(projectId).first<{ at: string | null }>(),
+    given ?? validateEvidenceFor({ env, projectId }),
+  ]);
+  const since = last?.at ? instant(last.at) : null;
+  const interview = items.filter((i) => i.kind === 'interview');
+  if (!interview.length) return { ids: [], contradicting: 0, since };
+  const [pains, evidence, ivs] = await Promise.all([
+    env.DB.prepare('SELECT l.id, l.created_at FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE h.project_id = ?')
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+    env.DB.prepare("SELECT id, created_at FROM hypothesis_evidence_links WHERE project_id = ? AND kind = 'interview'")
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+    env.DB.prepare('SELECT id, created_at FROM discovery_interviews WHERE project_id = ?')
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+  ]);
+  const at = (rows: Array<{ id: number; created_at: string | null }> | undefined) => new Map((rows ?? []).map((r) => [Number(r.id), instant(r.created_at)]));
+  const painAt = at(pains.results); const evidenceAt = at(evidence.results); const ivAt = at(ivs.results);
+  const created = (item: Pick<EvidenceItem, 'id'>): string => {
+    const pain = /^pain-(\d+)-(\d+)$/.exec(item.id);
+    if (pain) {
+      const a = painAt.get(Number(pain[1])) ?? ''; const b = ivAt.get(Number(pain[2])) ?? '';
+      return a > b ? a : b;
+    }
+    const ev = /^evidence-(\d+)$/.exec(item.id);
+    return ev ? evidenceAt.get(Number(ev[1])) ?? '' : '';
+  };
+  const fresh = interview.filter((i) => since == null || created(i) > since);
+  return { ids: fresh.map((i) => i.id), contradicting: fresh.filter((i) => i.direction === 'contradicts').length, since };
+}
+
+/** The Verdict card's interview line, as D757 §2.6 words it. */
+export function interviewEvidenceLine(n: number, contradicting: number, since: string | null): string {
+  const pieces = `${n} ${since ? 'new ' : ''}${n === 1 ? 'piece' : 'pieces'} of interview evidence`;
+  return `${pieces} ${since ? 'since your last decision' : 'so far'}, ${contradicting} contradicting`;
+}
+
+/** The line, or null when its evidence cannot be read: the card still draws. */
+async function interviewLine(ctx: Ctx): Promise<VerdictCard['interview_evidence']> {
+  try {
+    const e = await interviewEvidenceSince(ctx.env, ctx.projectId);
+    return { count: e.ids.length, contradicting: e.contradicting, text: interviewEvidenceLine(e.ids.length, e.contradicting, e.since) };
+  } catch (err) {
+    console.warn('[verdict] interview evidence unreadable:', (err as Error)?.message);
+    return null;
+  }
+}
+
+/**
+ * The sprint the card's Next names: the venture's open hypothesis with the
+ * earliest deadline on or after today, or null when none is ahead.
+ */
+async function nextSprint(ctx: Ctx): Promise<{ id: number; deadline: string } | null> {
+  const row = await ctx.env.DB.prepare(
+    `SELECT id, substr(deadline, 1, 10) AS deadline FROM hypotheses
+      WHERE project_id = ? AND retired_at IS NULL AND deadline IS NOT NULL AND substr(deadline, 1, 10) >= ?
+      ORDER BY substr(deadline, 1, 10), id LIMIT 1`,
+  ).bind(ctx.projectId, ctx.today).first<{ id: number; deadline: string }>();
+  return row && day(row.deadline) ? { id: Number(row.id), deadline: String(row.deadline) } : null;
+}
+
+const DECISION_WORD: Record<DecisionFilter, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop', withheld: 'Withheld' };
+
+/** The Decisions table's columns and sorts (CO:610), default sort first. */
+export const DECISION_COLUMNS = ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by'];
+export const DECISION_SORTS: SortSpec[] = [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }];
+
+type ClaimRow = { id: number; code: string; claim: string };
+const claimWord = (h: ClaimRow | undefined, id: number) => (h ? `${h.code} · ${h.claim}` : `H${id}`);
+
+/**
+ * The Decisions table (CO:610): Decision / For / Reasoning / Evidence /
+ * Date · by, filtered by Decision and For, newest first or oldest, searched
+ * over the reasoning and the claim, paged in SQL. Each row's id is the
+ * decision's.
+ *
+ * - A Withheld row's Reasoning is "<n> of 5 pieces of evidence".
+ * - A Pivot that started a hypothesis reads "Starts <code> · <claim>".
+ * - Any other row reads the first line of its reasoning, or null.
+ * - Evidence is the count of items it rests on, null for an old-route row.
+ */
+export async function decisionRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const f = rq.filter;
+  const filter = (DECISION_FILTERS as readonly string[]).includes(f.decision) ? (f.decision as DecisionFilter) : null;
+  const forId = /^h-([1-9][0-9]{0,9})$/.exec(String(f.for ?? ''));
+  const scope: Scope | undefined = f.for === 'venture' ? 'venture' : forId ? Number(forId[1]) : undefined;
+  const page = await decisionsFor(ctx.env, ctx.projectId, {
+    scope, filter, q: rq.q, sort: rq.sort === 'oldest' ? 'oldest' : 'newest', page: rq.page, pageSize: PAGE_SIZE,
+  });
+  // The claims the page names, the scope's and the Pivot's, in one bound read.
+  const ids = [...new Set(page.rows.flatMap((d) => [d.hypothesis_id, d.pivot_hypothesis_id]).filter((x): x is number => x != null))];
+  const claims = new Map<number, ClaimRow>();
+  if (ids.length) {
+    const res = await ctx.env.DB.prepare(
+      'SELECT id, code, claim FROM hypotheses WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))',
+    ).bind(ctx.projectId, JSON.stringify(ids)).all<ClaimRow>();
+    for (const h of res.results || []) claims.set(Number(h.id), h);
+  }
+  // For lists the venture and each hypothesis that has a decision.
+  const scoped = await ctx.env.DB.prepare(
+    `SELECT DISTINCT h.id, h.code, h.claim, h.sort_order
+       FROM validation_decisions d JOIN hypotheses h ON h.id = d.hypothesis_id AND h.project_id = d.project_id
+      WHERE d.project_id = ? ORDER BY h.sort_order, h.id`,
+  ).bind(ctx.projectId).all<ClaimRow & { sort_order: number }>();
+  const filters: FilterSpec[] = [
+    { key: 'decision', label: 'Decision', options: DECISION_FILTERS.map((k) => ({ value: k, label: DECISION_WORD[k] })) },
+    { key: 'for', label: 'For', options: [
+      { value: 'venture', label: 'The venture' },
+      ...(scoped.results || []).map((h) => ({ value: `h-${Number(h.id)}`, label: `${h.code} · ${h.claim}` })),
+    ] },
+  ];
+  const reasoningOf = (d: DecisionRow): string | null => {
+    if (d.state === 'withheld') return `${Number(d.evidence_count)} of ${DECISION_EVIDENCE_BAR} pieces of evidence`;
+    if (d.decision === 'pivot' && d.pivot_hypothesis_id != null) return `Starts ${claimWord(claims.get(Number(d.pivot_hypothesis_id)), Number(d.pivot_hypothesis_id))}`;
+    const first = String(d.reasoning ?? '').split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+    return first ?? null;
+  };
+  return {
+    cols: DECISION_COLUMNS,
+    rows: page.rows.map((d) => ({
+      id: Number(d.id),
+      decision: d.decision,
+      state: d.state,
+      hypothesis_id: d.hypothesis_id == null ? null : Number(d.hypothesis_id),
+      for: d.hypothesis_id == null ? 'The venture' : claimWord(claims.get(Number(d.hypothesis_id)), Number(d.hypothesis_id)),
+      reasoning: reasoningOf(d),
+      evidence: isOldRoute(d) ? null : Number(d.evidence_count),
+      date: day(d.decided_at),
+      by: d.decided_by_name ?? null,
+    })),
+    total: page.total, page: page.page, page_size: page.page_size,
+    filters, sorts: DECISION_SORTS,
+  };
+}

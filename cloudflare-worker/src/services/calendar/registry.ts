@@ -1,0 +1,100 @@
+/**
+ * D1484 (#3977, part 1 of #3723) — the calendar's sources, in one list.
+ *
+ * Every kind the calendar can show has one entry: its family, the module it
+ * comes from and its label, both in plain words, and whether it is page only
+ * (never in an .ics file, a subscription feed or a provider copy) and whether
+ * one event of it can be pushed to Google or Outlook.
+ *
+ * `READERS` in `../calendar.ts`, `FAMILY_OF` and `COPYABLE_KINDS` in
+ * `items.ts`, the route's `PUSHABLE_KINDS` and D1384's `PAGE_ONLY_KINDS` /
+ * `FEED_KINDS` are derived from it or asserted against it
+ * (`calendar_registry_d1484.test.ts`). `Record<CalendarEvent['kind'], …>`
+ * makes tsc refuse a kind with no entry.
+ *
+ * NEVER A TABLE NAME. `module` and `label` are what a member reads, so the
+ * test refuses any that matches a `CREATE TABLE` name in the baseline.
+ */
+import type { CalendarEvent } from '../calendar';
+
+export type SourceFamily = 'meetings' | 'events' | 'validate' | 'grow' | 'deadlines' | 'raise' | 'tasks' | 'learning' | 'external' | 'agents';
+export const SOURCE_FAMILIES: readonly SourceFamily[] = ['meetings', 'events', 'validate', 'grow', 'deadlines', 'raise', 'tasks', 'learning', 'external', 'agents'];
+/**
+ * Each family's name as a member reads it. D5205 (#5205): moved here from `prefs.ts` (which re-exports it) so
+ * the page can import the whole registry with no database code behind it: `/calendar`'s Kinds filter, its
+ * families and its legend are built from this file, not from a second list in the frontend.
+ */
+export const FAMILY_LABELS: Readonly<Record<SourceFamily, string>> = Object.freeze({
+  meetings: 'Meetings', events: 'Events', validate: 'Validate', grow: 'Grow', deadlines: 'Deadlines',
+  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars', agents: 'AI agents',
+});
+
+export interface SourceDef {
+  family: SourceFamily;
+  /** Where it comes from, in plain words: "Raise › Capital relationships". */
+  module: string;
+  /** What one item is, in plain words: "Investor meeting". */
+  label: string;
+  /** Read on the page only: never an .ics file, a feed or a provider copy. */
+  page_only: boolean;
+  /** One event of it can be copied to Google or Outlook (`POST /calendar/push/:kind/:id`). */
+  pushable: boolean;
+}
+
+export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Object.freeze({
+  ic_meeting: { family: 'meetings', module: 'Deals › Investment committee', label: 'IC meeting', page_only: false, pushable: true },
+  founder_checkin: { family: 'meetings', module: 'Ventures › Check-ins', label: 'Check-in', page_only: false, pushable: true },
+  advisor_booking: { family: 'meetings', module: 'Advisors › Sessions', label: 'Advisor session', page_only: false, pushable: true },
+  partner_office_hour: { family: 'meetings', module: 'Partners › Office hours', label: 'Office hour', page_only: false, pushable: true },
+  calendly_event: { family: 'external', module: 'Calendly', label: 'Calendly booking', page_only: false, pushable: false },
+  expert_booking: { family: 'meetings', module: 'Wellbeing › Expert sessions', label: 'Expert session', page_only: false, pushable: false },
+  event_ticket: { family: 'events', module: 'My events › Tickets', label: 'Event ticket', page_only: false, pushable: true },
+  event_hosted: { family: 'events', module: 'My events › Hosting', label: 'Hosting', page_only: false, pushable: true },
+  investor_meeting: { family: 'raise', module: 'Raise › Capital relationships', label: 'Investor meeting', page_only: false, pushable: false },
+  compliance_due: { family: 'deadlines', module: 'Build › Compliance', label: 'Compliance deadline', page_only: true, pushable: false },
+  // D1208's three readers, wired by D1484.
+  interview_call: { family: 'validate', module: 'Validate › Customer research', label: 'Interview call', page_only: true, pushable: false },
+  cohort_date: { family: 'deadlines', module: 'Spin-Out Lab › Cohort', label: 'Cohort date', page_only: true, pushable: false },
+  deal_closing: { family: 'deadlines', module: 'Deals › Closings', label: 'Deal closing', page_only: true, pushable: false },
+  // The events a member adds with "New event" (`POST /calendar/events`).
+  manual: { family: 'tasks', module: 'Calendar', label: 'Your event', page_only: true, pushable: false },
+  // #3959: the member's own learning plan; page only until its feed and provider copy are designed.
+  learning: { family: 'learning', module: 'Learning › Your plan', label: 'Learning', page_only: true, pushable: false },
+  // D1486 §b (#3981): Grow's dated stores. Page only: a send's time and a planned day are not provider copies.
+  publish_send: { family: 'grow', module: 'Publish', label: 'Publish send', page_only: true, pushable: false },
+  content_planned: { family: 'grow', module: 'Grow › Distribution', label: 'Planned content', page_only: true, pushable: false },
+  // D1486 §a (#3980): the meeting bot's calls; `done` reads Recorded.
+  bot_call: { family: 'meetings', module: 'Validate › Record a session', label: 'Recorded call', page_only: true, pushable: false },
+  // #3982 (D1486 §c): Raise's dated stores.
+  round_close: { family: 'raise', module: 'Raise › Round', label: 'Round close', page_only: true, pushable: false },
+  nda_expiry: { family: 'raise', module: 'Raise › NDAs', label: 'NDA expiry', page_only: true, pushable: false },
+  // #3983 (D1486 §d): the dated task stores.
+  workflow_task: { family: 'tasks', module: 'Workflows › Tasks', label: 'Workflow task', page_only: true, pushable: false },
+  mvp_task: { family: 'tasks', module: 'Build › Board', label: 'Build task', page_only: true, pushable: false },
+  contact_task: { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', page_only: true, pushable: false },
+  engagement_milestone: { family: 'tasks', module: 'Engagements › Milestones', label: 'Engagement milestone', page_only: true, pushable: false },
+  // D1485 (#3979): the member's own connected calendars, read only. Page only and never pushable:
+  // copying an external event back out would loop.
+  external_google: { family: 'external', module: 'Google Calendar', label: 'Google event', page_only: true, pushable: false },
+  external_microsoft: { family: 'external', module: 'Outlook', label: 'Outlook event', page_only: true, pushable: false },
+  // D1614 W4 (#3972): a project's open tasks, in their time block or on their due day.
+  work_item: { family: 'tasks', module: 'Work › Board', label: 'Work item', page_only: true, pushable: false },
+  // #3957: scheduled AI agent work sessions, page only; their work comes back as proposals in Approvals.
+  agent_session: { family: 'agents', module: 'Team › Agents', label: 'AI agent session', page_only: true, pushable: false },
+  // #5131 (D1486 §e): Grow's dated plans and sends. Page only: a plan's days and a send's time are not provider copies.
+  grow_campaign: { family: 'grow', module: 'Grow › Campaigns', label: 'Campaign', page_only: true, pushable: false },
+  ad_flight: { family: 'grow', module: 'Grow › Ads', label: 'Ad flight', page_only: true, pushable: false },
+  newsletter_send: { family: 'grow', module: 'Grow › Newsletter', label: 'Newsletter send', page_only: true, pushable: false },
+  sequence_step: { family: 'grow', module: 'Grow › Sequences', label: 'Sequence step', page_only: true, pushable: false },
+});
+
+export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];
+export const pageOnlyKinds = (): CalendarEvent['kind'][] => SOURCE_KINDS.filter((k) => SOURCES[k].page_only);
+export const pushableKinds = (): CalendarEvent['kind'][] => SOURCE_KINDS.filter((k) => SOURCES[k].pushable);
+
+/** An item's `source`: its family, module and label. `account` is set by D1485's connected calendars only, on the owner's own read. */
+export type ItemSource = { family: SourceFamily; module: string; label: string; account: { provider: 'google' | 'microsoft'; address: string | null } | null };
+export function sourceOf(kind: CalendarEvent['kind'], account: ItemSource['account'] = null): ItemSource {
+  const s = SOURCES[kind];
+  return { family: s.family, module: s.module, label: s.label, account };
+}

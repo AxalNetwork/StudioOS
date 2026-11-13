@@ -1,0 +1,183 @@
+/**
+ * PipelineRoom — one Durable Object instance per pipeline `deal_id`.
+ *
+ * Fans out real-time pipeline events (stage advance, score snapshot, AI
+ * recommendation) to the connected viewers who may still receive them: D4676
+ * decides that per socket at every event (services/pipelineRoomAudience.ts).
+ *
+ * Hibernatable WebSockets (state.acceptWebSocket) keep idle connections
+ * off the billing clock — the runtime evicts the JS instance and revives
+ * it on next message/close. Don't store mutable state in instance fields
+ * that you expect to survive eviction; persist via state.storage instead.
+ */
+import type { Env } from '../types';
+import { bumpActiveWS } from '../services/realtime';
+import { socketDelivery, newAudienceCache, type SocketSession } from '../services/pipelineRoomAudience';
+
+const HEARTBEAT_MS = 25_000;
+const HEARTBEAT_ALARM_KEY = 'pipeline_room_alarm';
+
+export class PipelineRoom implements DurableObject {
+  private state: DurableObjectState;
+  // env is unused today but kept on the instance so subclasses / future
+  // event handlers (e.g. fetching enrichment data on connect) can reach it.
+  private _env: Env;
+
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this._env = env;
+    void this._env;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    // POST /broadcast — internal-only event ingest from the worker fetch
+    // handler. The DO is NOT publicly addressable (no route binds to it
+    // directly); only the worker calls .fetch() on it via the binding.
+    if (request.method === 'POST' && url.pathname === '/broadcast') {
+      const event = await request.json();
+      await this.broadcast(event);
+      return new Response(JSON.stringify({ ok: true, fanout: this.state.getWebSockets().length }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // GET /count — used by /api/infra/queue to report active connections
+    if (request.method === 'GET' && url.pathname === '/count') {
+      return new Response(JSON.stringify({ active: this.state.getWebSockets().length }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    // GET /ws — WebSocket upgrade. The route handler authenticates the
+    // user before forwarding here, and forwards the user_id + role on
+    // X-Auth-* headers so we can attach them to the socket.
+    if (url.pathname === '/ws') {
+      if (request.headers.get('upgrade') !== 'websocket') {
+        return new Response('Expected websocket upgrade', { status: 426 });
+      }
+      const pair = new WebSocketPair();
+      const client = pair[0];
+      const server = pair[1];
+
+      // Hibernatable accept — the runtime will evict the JS instance
+      // between events and re-deliver via webSocketMessage/Close.
+      this.state.acceptWebSocket(server);
+      await bumpActiveWS(this._env, +1);
+
+      // Tag so we can route per-user logic later if needed.
+      const userId = request.headers.get('x-auth-user-id') || 'unknown';
+      const role = request.headers.get('x-auth-role') || 'unknown';
+      // D4676: the token facts the room re-checks the session against at every
+      // event (`services/pipelineRoomAudience.ts`). Identifiers only.
+      let session: SocketSession | null = null;
+      try { session = JSON.parse(request.headers.get('x-auth-session') || 'null'); } catch { session = null; }
+      server.serializeAttachment({ userId, role, connectedAt: Date.now(), session });
+
+      // Send a hello frame immediately so the client confirms the round-trip
+      // worked. After this the socket is silent until events arrive.
+      server.send(JSON.stringify({ type: 'hello', room: 'pipeline', ts: Date.now() }));
+
+      // Schedule a heartbeat alarm so dead connections get pruned even
+      // when no broadcast is happening.
+      await this.scheduleHeartbeat();
+
+      // Epic 11 — RFC 6455: if the client offered a Sec-WebSocket-Protocol
+      // header, the server MUST echo exactly one of the offered values on
+      // the 101 response or the browser closes the socket with code 1006.
+      // The realtime route forwards the original header verbatim; we pick
+      // the first offered subprotocol (which will be `bearer.<jwt>` for
+      // current clients) and echo it back unchanged.
+      const respHeaders: Record<string, string> = {};
+      const offered = request.headers.get('sec-websocket-protocol');
+      if (offered) {
+        const first = offered.split(',').map(s => s.trim()).find(Boolean);
+        if (first) respHeaders['sec-websocket-protocol'] = first;
+      }
+
+      return new Response(null, { status: 101, webSocket: client, headers: respHeaders });
+    }
+
+    return new Response('Not found', { status: 404 });
+  }
+
+  private async broadcast(event: unknown) {
+    // D4676: each socket's answer is decided NOW, not at connect
+    // (`services/pipelineRoomAudience.ts`): its session must still stand, a
+    // notification goes to its recipient, a vote tally to the roles that
+    // always had it, and every other event only to an account that may read
+    // the deal it names. A socket whose session no longer stands is closed.
+    const payload = JSON.stringify(event);
+    const cache = newAudienceCache();
+    for (const ws of this.state.getWebSockets()) {
+      const att = (ws.deserializeAttachment?.() as Record<string, unknown> | null) || null;
+      let answer: 'send' | 'skip' | 'close';
+      try { answer = await socketDelivery(this._env, att, event, cache); } catch (error) {
+        console.warn('[pipeline-room] audience unreadable; nothing sent to this socket', error);
+        answer = 'skip';
+      }
+      if (answer === 'close') {
+        try { ws.close(4401, 'Session ended'); } catch { /* already closing */ }
+        continue;
+      }
+      if (answer !== 'send') continue;
+      try {
+        ws.send(payload);
+      } catch {
+        // Socket may be closing; ignore — webSocketClose will clean up.
+      }
+    }
+  }
+
+  private async scheduleHeartbeat() {
+    const current = await this.state.storage.getAlarm();
+    if (!current) {
+      await this.state.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+      await this.state.storage.put(HEARTBEAT_ALARM_KEY, true);
+    }
+  }
+
+  // Hibernatable WS lifecycle hooks — called by the runtime even after
+  // instance eviction. Keep them small and side-effect-free where possible.
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    // We only support a 'ping' from clients; everything else is server-push.
+    if (typeof message === 'string') {
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed?.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+        }
+      } catch {
+        // Ignore malformed client frames.
+      }
+    }
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
+    try { ws.close(code, 'closed'); } catch {}
+    await bumpActiveWS(this._env, -1);
+  }
+
+  async webSocketError(ws: WebSocket, _error: unknown) {
+    try { ws.close(1011, 'error'); } catch {}
+    await bumpActiveWS(this._env, -1);
+  }
+
+  async alarm() {
+    // Server-initiated heartbeat — sends a ping to every connected socket
+    // so any half-open TCP connections error out and get cleaned up by
+    // webSocketError. Reschedules itself if there are still listeners.
+    const sockets = this.state.getWebSockets();
+    if (sockets.length === 0) {
+      await this.state.storage.delete(HEARTBEAT_ALARM_KEY);
+      return;
+    }
+    const ping = JSON.stringify({ type: 'ping', ts: Date.now() });
+    for (const ws of sockets) {
+      try { ws.send(ping); } catch {}
+    }
+    await this.state.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+  }
+}

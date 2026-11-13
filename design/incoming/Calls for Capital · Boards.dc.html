@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#ebe9f0} a{color:#7c3aed;text-decoration:none} a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="box-sizing:border-box;min-height:100vh;padding:56px 64px 120px;background:#ebe9f0;color:#18181b;font-family:'Space Grotesk',system-ui,sans-serif">
+  <div style="max-width:960px">
+    <div style="font:600 11px/1 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · axal.vc · Raise › Capital relationships › Calls</div>
+    <h1 style="margin:12px 0 0;font:800 40px/1.05 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">Calls for Capital</h1>
+    <p style="margin:14px 0 0;max-width:780px;font:400 15px/1.6 'Space Grotesk',system-ui,sans-serif;color:#4a4553;text-wrap:pretty">A founder's private invitation to verified investors on Axal to read one round and respond. Drawn switched off, as it is today, and switched on: the list, the five-step sheet, and one page per call.</p>
+  </div>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+    <section style="margin-top:72px">
+      <div style="display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid #d9d6e0">
+        <h2 style="margin:0;font:800 24px/1.1 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">{{ g.t }}</h2>
+        <span style="font:500 12px/1 'Roboto Mono',ui-monospace,monospace;color:#6b6577">{{ g.n }}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:56px 48px;margin-top:28px;align-items:flex-start">
+        <sc-for list="{{ g.boards }}" as="d" hint-placeholder-count="3">
+          <div id="{{ d.b }}" style="display:grid;gap:12px">
+            <div style="{{ d.head }}">
+              <span style="flex:none;height:24px;padding:0 9px;border-radius:999px;background:#18181b;color:#ffffff;display:inline-flex;align-items:center;font:700 11px/1 'Roboto Mono',ui-monospace,monospace">{{ d.b }}</span>
+              <span style="font:700 15px/1.3 'Space Grotesk',system-ui,sans-serif">{{ d.lab }}</span>
+            </div>
+            <sc-if value="{{ d.note }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ d.noteS }}">{{ d.note }}</div>
+            </sc-if>
+            <div style="{{ d.box }}"><dc-import name="Calls for Capital Page" b="{{ d.b }}" hint-size="100%,100%"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;All&quot;,&quot;Switched off · today&quot;,&quot;Calls on&quot;,&quot;New call sheet&quot;,&quot;One call&quot;,&quot;For reference&quot;,&quot;Profiles and states&quot;,&quot;Phone&quot;],&quot;default&quot;:&quot;All&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sec = this.props.section ?? 'All';
+    const showN = this.props.showNotes ?? true;
+    const F = (b, lab, w, h, note) => ({
+      b, lab,
+      note: showN && note ? note : false,
+      head: 'display:flex;align-items:center;gap:10px;max-width:' + w + 'px',
+      noteS: "max-width:" + Math.min(w, 760) + "px;font:400 13px/1.55 'Space Grotesk',system-ui,sans-serif;color:#4a4553",
+      box: 'position:relative;width:' + w + 'px;height:' + h + 'px;overflow:hidden;border-radius:14px;border:1px solid #dcd8e4;background:#ffffff;box-shadow:0 1px 2px rgba(24,24,27,.05),0 12px 32px rgba(24,24,27,.07)'
+    });
+    const G = [
+      { t: 'Switched off · today', boards: [
+        F('CLS1', 'Calls · switched off · Founder', 1440, 1260, 'Calls are off on Axal today. New call is off with its reason, and the founder prepares from the readiness list.')
+      ] },
+      { t: 'Calls on', boards: [
+        F('CLS2', 'Calls · list · Founder', 1440, 1180, 'One call is open, so New call is off until it closes. Responses counts the 9 of 30 recipients who went past opening.'),
+        F('CLS3', 'Calls · empty', 1440, 940, 'Calls are on and this venture has made none yet.')
+      ] },
+      { t: 'New call sheet', boards: [
+        F('CLS4', 'Step 1 · The round', 1440, 1200, '[Seed extension] as it was set up before it was sent on 1 Oct. Eadwyn drafted only the plain-words terms; every amount is typed or comes from a record.'),
+        F('CLS5', 'Step 2 · Materials and step 3 · Audience', 1440, 1100, 'Investors who are not on Axal cannot be chosen. Matching investors stay nameless.'),
+        F('CLS6', 'Step 4 · Preview', 1440, 1240, 'Counsel approved these terms on 29 Sep, before the call was sent. The other three counsel states are listed under it.'),
+        F('CLS7', 'Step 5 · Send, and its result', 1440, 880, "29 of 30 were told on Axal; one chosen investor's account was paused.")
+      ] },
+      { t: 'One call', boards: [
+        F('CLS8', 'One call · Open · Founder', 1440, 1680, 'Amounts are indicated, never committed. A matching investor stays nameless until they respond.'),
+        F('CLS9', 'One call · other states', 1440, 780, 'Draft, Awaiting counsel, Expired and Closed.'),
+        F('CLS10', 'Dialogs', 1440, 600, 'Extend the date, close the call, and answer a question.'),
+        F('CLS11', 'Recipient drawer', 1440, 1700, 'A chosen investor, and below it a matching investor before they respond.')
+      ] },
+      { t: 'For reference', boards: [
+        F('CLS13', 'What the investor sees', 1440, 1420, "The same call on the investor's own page, with the closed state below.")
+      ] },
+      { t: 'Profiles and states', boards: [
+        F('CLS12', 'Loading and errors', 1440, 520, 'One failed read never blanks the page.'),
+        F('CLS14', 'Profiles and no permission', 1440, 920, 'Co-founder, Super Admin as counsel recorder, Admin and Explorer.')
+      ] },
+      { t: 'Phone', boards: [
+        F('CLS15', 'Phone · 390', 1720, 924, "The list, the switched-off card, one call's responses, and the full-screen sheet.")
+      ] }
+    ];
+    return { groups: G.filter(g => sec === 'All' || g.t === sec).map(g => Object.assign({}, g, { n: g.boards.length + (g.boards.length === 1 ? ' board' : ' boards') })) };
+  }
+}
+</script>
+</body></html>

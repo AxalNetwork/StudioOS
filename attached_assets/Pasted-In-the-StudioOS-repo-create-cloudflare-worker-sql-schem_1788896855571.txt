@@ -1,0 +1,42 @@
+In the StudioOS repo, create `cloudflare-worker/sql/schema_baseline.sql`.
+
+WHAT IT IS: a faithful dump of the LIVE production D1 schema (database
+`studioos-db`, id 16a23acd-c82e-4ff1-a6c0-408e3eb014c8), which becomes the new
+starting point for building a database from scratch.
+
+HOW TO BUILD IT: read the schema from the live database, not from any file in
+the repo. `cloudflare-worker/sql/schema.sql` has drifted from production before
+and is exactly what this task exists to replace — do not copy from it.
+
+  npx wrangler d1 execute studioos-db --config ../wrangler.toml --remote \
+    --command "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'trigger' THEN 2 ELSE 3 END, name"
+
+Emit the statements in that order — tables, then indexes, then triggers, then
+views — each terminated with a semicolon. Skip `sqlite_sequence` and any
+`sqlite_autoindex_*` (SQLite owns both). Keep `schema_migrations` and
+`_migrations_applied`: a new database needs the ledger table to exist.
+
+CONSTRAINTS, all enforced by `scripts/check-sql-migrations.mjs` and
+`frontend/test/migration_column_shapes.test.mjs`:
+  - No BEGIN / COMMIT / ROLLBACK / SAVEPOINT / RELEASE anywhere, including in
+    comments — wrangler reads the raw file and refuses it if the long form of
+    the opening keyword appears even in prose.
+  - No PRAGMA except `defer_foreign_keys`.
+  - Do not touch `wrangler.toml`, and never run anything with `--remote` that
+    writes.
+
+Head the file with a comment saying it is a dump of production taken on
+<today's date>, that it replaces `schema.sql` as the base, and that it must be
+regenerated the same way rather than hand-edited.
+
+VERIFY before you report done — paste the output:
+  rm -rf /tmp/dbcheck
+  cd cloudflare-worker
+  npx wrangler d1 execute studioos-db --config ../wrangler.toml --local \
+    --persist-to /tmp/dbcheck --file=sql/schema_baseline.sql
+  npx wrangler d1 execute studioos-db --config ../wrangler.toml --local \
+    --persist-to /tmp/dbcheck --command \
+    "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table') AS t, (SELECT COUNT(*) FROM sqlite_master WHERE type='index') AS i, (SELECT COUNT(*) FROM sqlite_master WHERE type='trigger') AS g, (SELECT COUNT(*) FROM sqlite_master WHERE type='view') AS v"
+
+It must apply with no error and report t=399, i=983, g=2, v=1. Anything else
+means the dump is incomplete — do not report success on a partial file.

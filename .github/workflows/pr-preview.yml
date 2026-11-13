@@ -1,0 +1,225 @@
+name: PR preview
+
+# One Worker per pull request — `studioos-pr-<number>` on workers.dev — built
+# from the PR's frontend and deployed from wrangler.pr-preview.toml, which
+# declares NO bindings: a preview can never touch production data, and
+# `/api/*` is a 404 there, exactly as it was on the retired Cloudflare Pages
+# mirror. Deployed on open / synchronize / reopen, deleted on close, its URL
+# kept in one sticky comment on the PR. D4130 (#4130): drafts get no preview —
+# agents push to a draft many times, and each push built and deployed a
+# Worker nobody opened. The first deploy is when the PR is marked ready for
+# review (`ready_for_review`), then every push after; a PR that goes back to
+# draft keeps its last preview until it closes. Same-repository PRs only — secrets are
+# not available to forks — and never for Dependabot. After the deploy, the
+# `login-e2e` job runs frontend/tests/e2e/google_popup_signin.spec.js (D722)
+# and frontend/tests/e2e/integrations.spec.js (D753, #1992) against that
+# preview in Playwright's Chromium; both stub every /api/* call they make.
+#
+# Why not Workers preview URLs or Workers Builds: Cloudflare generates none
+# for a Worker that implements a Durable Object, and `studioos` implements
+# two (documentation/architecture/DECISIONS.md D36). Production is untouched:
+# wrangler.toml is never read here, and the apex guards pin that.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit (the deploy token already has it)
+#   CLOUDFLARE_ACCOUNT_ID — the Cloudflare account containing `studioos`
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: deploy the preview Worker
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PREVIEW_NAME: studioos-pr-${{ github.event.pull_request.number }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      # The same root build the production deploy runs (Vite + hashed-asset
+      # retention + OG prerender), so the preview is the PR's own bytes.
+      # docs/ is not committed (D529); this is the only copy there is.
+      - name: Build the SPA
+        run: npm run build
+
+      # A brand-new Worker's first `wrangler deploy` can fail AFTER the script
+      # and assets are uploaded, when the call that switches on its workers.dev
+      # subdomain races ahead of propagation: "This Worker does not exist on
+      # your account" (code 10007). It happened on this workflow's own first
+      # run (#423). A second attempt sees the script and succeeds, and the
+      # re-upload is a no-op ("already uploaded"), so the step tries three
+      # times, 15 seconds apart, before it is a failure.
+      - name: Deploy the preview Worker
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          deployed=0
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
+              deployed=1
+              break
+            fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed; retrying in 15s"
+            sleep 15
+          done
+          if [ "$deployed" != 1 ]; then
+            echo "::error::wrangler deploy failed three times — see the attempts above"
+            exit 1
+          fi
+          url=$(grep -o 'https://[a-z0-9.-]*\.workers\.dev' deploy.log | head -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::wrangler printed no workers.dev URL — the Worker deployed, but the preview link is unknown"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # One comment per PR, edited in place on every push so the thread does
+      # not fill up with links. The marker is how the comment is found again.
+      - name: Post or update the preview comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- pr-preview -->'
+          body="$(printf '%s\n**Preview:** %s (built from %s)\n\nThe pull request'"'"'s SPA build on a Worker with no bindings: pages and deep links work, `/api/*` is a 404, and nothing here can reach production data. Redeployed on every push; deleted when the PR closes.' "$marker" "$PREVIEW_URL" "${HEAD_SHA:0:9}")"
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" > /dev/null
+          fi
+          echo "preview: $PREVIEW_URL"
+
+  # D722 — the browser half of "Continue with Google" on /login, run in a real
+  # Chromium against the Worker the job above just deployed. The spec serves a
+  # stand-in for Google's gsi/client and stubs every /api/auth/google/* route
+  # (the preview has no API), so it needs no secret and reaches nothing but
+  # the preview. Its own job: a red run never holds back the preview comment.
+  login-e2e:
+    name: /login Google window (Playwright)
+    needs: deploy
+    if: needs.deploy.outputs.url != ''
+    runs-on: ubuntu-latest
+    # Use the same preinstalled Chromium and system libraries as the editor
+    # visual suite so the preview tests can start without Ubuntu mirrors.
+    container:
+      image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
+      options: --user 1001
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.url }}
+      PW_CHROMIUM_PATH: /ms-playwright/chromium-1194/chrome-linux/chrome
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Verify the pinned Chromium
+        run: test -x "$PW_CHROMIUM_PATH" && "$PW_CHROMIUM_PATH" --version | grep -F '141.0.7390.37'
+
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+
+      # A brand-new workers.dev URL can answer a few seconds after the deploy
+      # reports success; wait for /login rather than fail the first test on it.
+      - name: Wait for the preview to answer
+        run: curl -fsS -o /dev/null --retry 12 --retry-delay 5 --retry-all-errors "$PLAYWRIGHT_BASE_URL/login"
+
+      - name: Run the D722 spec against the preview
+        working-directory: frontend
+        run: npx --no-install playwright test tests/e2e/google_popup_signin.spec.js --retries=0
+
+      # D753 (#1992): the Connectors hub, its filter menu, one connector's page
+      # and the 390px check. Every /api/* call is stubbed in the spec.
+      - name: Run the D753 Connectors spec against the preview
+        working-directory: frontend
+        run: npx --no-install playwright test tests/e2e/integrations.spec.js --retries=0
+
+  delete:
+    name: delete the preview Worker
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PREVIEW_NAME: studioos-pr-${{ github.event.pull_request.number }}
+    steps:
+      # A missing Worker is also the expected response when an earlier DELETE
+      # took effect but its response was lost. Other permanent failures stay red.
+      - name: Delete the preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ ! "$PREVIEW_NAME" =~ ^studioos-pr-[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid PR preview Worker name"
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Deleting $PREVIEW_NAME (attempt $attempt/3)"
+            if out="$(NO_COLOR=1 timeout --kill-after=5s 70s npx --yes wrangler@4.125.0 delete "$PREVIEW_NAME" --force 2>&1)"; then
+              printf '%s\n' "$out"
+              exit 0
+            else
+              status=$?
+            fi
+            printf '%s\n' "$out"
+
+            if grep -qiE '\[code: 10007\]|This Worker does not exist' <<< "$out"; then
+              echo "Confirmed $PREVIEW_NAME is absent"
+              exit 0
+            fi
+            if [[ "$status" != 124 && "$status" != 137 ]] &&
+               ! grep -qE "DELETE /accounts/[^[:space:]]+/workers/(services|scripts)/$PREVIEW_NAME -> (429|500|502|503|504)([[:space:]]|$)" <<< "$out"; then
+              echo "::error::$PREVIEW_NAME cleanup failed on attempt $attempt/3. Check the Wrangler error above and the preview delete credentials or configuration."
+              exit 1
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo "::error::$PREVIEW_NAME cleanup failed after $attempt/3 attempts. Retry this job after Cloudflare recovers."
+              exit 1
+            fi
+            sleep "$((5 * attempt))"
+          done

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:1280px;height:720px;position:relative;font-family:'Inter',system-ui,sans-serif;overflow:hidden;background:#fff;color:#1A202C">
+
+  <!-- shared page number footer (all non-cover slides) -->
+  <sc-if value="{{ showPageNum }}">
+    <div style="position:absolute;bottom:26px;right:44px;font-size:12px;font-weight:600;color:#A0AEC0;letter-spacing:.02em;z-index:2">{{ pageNumLabel }}</div>
+  </sc-if>
+
+  <!-- shared corner brand for light slides -->
+  <sc-if value="{{ showBrand }}">
+    <div style="position:absolute;top:34px;right:44px;display:flex;align-items:center;gap:9px;z-index:2">
+      <div style="width:24px;height:24px;border-radius:7px;background:#EDE9FE;color:#6B46C1;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center">{{ d.logoInitials }}</div>
+      <span style="font-size:13px;font-weight:600;color:#A0AEC0">{{ d.company }}</span>
+    </div>
+  </sc-if>
+
+  <!-- 1 COVER -->
+  <sc-if value="{{ isCover }}">
+    <div style="position:absolute;inset:0;background:radial-gradient(1100px 460px at 16% -12%,rgba(139,92,246,.5),transparent 60%),linear-gradient(120deg,#17142e,#241d4c 52%,#3b1d6e);color:#fff;padding:72px 80px;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:13px">
+        <div style="width:48px;height:48px;border-radius:13px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px">{{ d.logoInitials }}</div>
+        <span style="font-size:19px;font-weight:600;color:#cbc4e8">{{ d.company }}</span>
+        <span style="margin-left:auto;font-size:14px;color:#8b7fc0;font-weight:600;border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:7px 16px">{{ d.version }}</span>
+      </div>
+      <div style="margin-top:auto">
+        <div style="font-size:92px;font-weight:900;letter-spacing:-.035em;line-height:.98;background:linear-gradient(90deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;color:transparent">{{ d.company }}</div>
+        <div style="font-size:30px;color:#cbc4e8;margin-top:20px;font-weight:500;max-width:900px;line-height:1.3">{{ d.tagline }}</div>
+      </div>
+      <!-- meta strip -->
+      <div style="margin-top:38px;display:flex;gap:14px">
+        <sc-for list="{{ coverMeta }}" as="m" hint-placeholder-count="3">
+          <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:13px;padding:15px 18px;min-width:150px">
+            <div style="font-size:11px;font-weight:700;color:#8b7fc0;text-transform:uppercase;letter-spacing:.07em">{{ m.k }}</div>
+            <div style="font-size:19px;font-weight:700;color:#fff;margin-top:5px">{{ m.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <!-- discovery strip -->
+      <div style="margin-top:16px;display:flex;align-items:center;gap:22px;border-top:1px solid rgba(255,255,255,.12);padding-top:20px">
+        <span style="font-size:12px;font-weight:700;color:#8b7fc0;text-transform:uppercase;letter-spacing:.08em">Discovery to date</span>
+        <div style="display:flex;gap:26px">
+          <sc-for list="{{ discovery }}" as="x" hint-placeholder-count="4">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:26px;font-weight:900;color:#fff">{{ x.v }}</span><span style="font-size:14px;color:#a89fce">{{ x.k }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 2 PROBLEM -->
+  <sc-if value="{{ isProblem }}">
+    <div style="position:absolute;inset:0;padding:64px 80px;display:flex;flex-direction:column">
+      <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:26px">Problem</div>
+      <div style="display:flex;gap:52px;flex:1;min-height:0">
+        <div style="flex:1.15;display:flex;flex-direction:column">
+          <div style="font-size:44px;font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-bottom:34px">{{ d.problemHead }}</div>
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <sc-for list="{{ problemPts }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;gap:16px;align-items:center;background:#F8F8FA;border:1px solid #EDF2F7;border-radius:14px;padding:16px 20px">
+                <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#FEE2E2;color:#DC2626;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px">{{ p.n }}</span>
+                <span style="flex:1;font-size:21px;line-height:1.35;color:#2D3748;font-weight:500">{{ p.t }}</span>
+                <span style="flex:none;font-size:13px;font-weight:700;color:#DC2626;background:#FEE2E2;border-radius:999px;padding:5px 12px;white-space:nowrap">{{ p.mentions }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:.85;display:flex;flex-direction:column;gap:20px">
+          <div style="background:#F7F5FF;border:1px solid #E9E4FB;border-radius:16px;padding:24px"><div style="font-size:12px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.08em;margin-bottom:9px">Who feels this</div><div style="font-size:20px;line-height:1.4;color:#2D3748;font-weight:500">{{ d.icp }}</div></div>
+          <div style="background:#17142e;color:#fff;border-radius:16px;padding:30px;flex:1;display:flex;flex-direction:column;justify-content:center">
+            <div style="font-size:66px;line-height:.3;color:#8b5cf6;font-weight:800">“</div>
+            <div style="font-size:23px;line-height:1.45;font-style:italic;color:#e9e4fb;margin-top:12px">{{ d.painQuote }}</div>
+            <div style="margin-top:20px;display:flex;align-items:center;gap:11px">
+              <div style="width:36px;height:36px;border-radius:50%;background:#6B46C1;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center">{{ d.painInitials }}</div>
+              <div><div style="font-size:15px;font-weight:700">{{ d.painAuthor }}</div><div style="font-size:13px;color:#a89fce">{{ d.painRole }} · Customer Discovery</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 3 VALIDATION -->
+  <sc-if value="{{ isValidation }}">
+    <div style="position:absolute;inset:0;padding:64px 80px;display:flex;flex-direction:column">
+      <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:26px">Validation</div>
+      <div style="display:flex;gap:20px;margin-bottom:22px">
+        <sc-for list="{{ valStats }}" as="s" hint-placeholder-count="3">
+          <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:18px;padding:28px 30px"><div style="font-size:60px;font-weight:900;letter-spacing:-.02em;color:#6B46C1;line-height:1">{{ s.v }}</div><div style="font-size:17px;color:#718096;margin-top:8px;font-weight:500">{{ s.l }}</div></div>
+        </sc-for>
+      </div>
+      <!-- funnel + revenue proof -->
+      <div style="flex:1;min-height:0;display:flex;gap:18px;margin-bottom:16px">
+        <div style="flex:1.7;background:#fff;border:1px solid #E2E8F0;border-radius:18px;padding:26px 30px;display:flex;flex-direction:column">
+          <div style="font-size:13px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.09em;margin-bottom:22px">Discovery funnel · Interviews → Solution-fit</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="4">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:14px">
+                <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:150px">
+                  <span style="font-size:30px;font-weight:900;color:#1A202C">{{ f.value }}</span>
+                  <div style="width:78%;border-radius:12px 12px 0 0;background:{{ f.bar }};height:{{ f.h }}"></div>
+                </div>
+                <div style="font-size:15px;font-weight:600;color:#4A5568;text-align:center;line-height:1.25">{{ f.label }}</div>
+              </div>
+              <sc-if value="{{ f.arrow }}"><div style="flex:none;color:#CBD5E0;font-size:26px;align-self:center;margin-bottom:36px">→</div></sc-if>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:18px;padding:24px 26px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:8px;height:8px;border-radius:99px;background:#16A34A"></div>
+            <div style="font-size:12px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.09em">Revenue Proof</div>
+          </div>
+          <div>
+            <div style="font-size:38px;font-weight:900;letter-spacing:-.02em;color:#1A202C;line-height:1">{{ revMRR }}</div>
+            <div style="font-size:14px;color:#718096;margin-top:6px;font-weight:500">Monthly recurring revenue</div>
+          </div>
+          <div style="display:flex;gap:14px;padding-top:14px;border-top:1px solid #DDD6FE">
+            <div style="flex:1">
+              <div style="font-size:22px;font-weight:800;color:#1A202C">{{ revCustomers }}</div>
+              <div style="font-size:12.5px;color:#718096;margin-top:2px">Paying customers</div>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:22px;font-weight:800;color:#1A202C">{{ revACV }}</div>
+              <div style="font-size:12.5px;color:#718096;margin-top:2px">Avg. contract</div>
+            </div>
+          </div>
+          <div style="margin-top:auto;font-size:12.5px;font-weight:600;color:#553C9A">Willingness to pay, not just interest</div>
+        </div>
+      </div>
+      <div style="font-size:15px;font-weight:600;color:#4A5568;text-align:center">{{ revTakeaway }}</div>
+    </div>
+  </sc-if>
+
+  <!-- 4 MARKET -->
+  <sc-if value="{{ isMarket }}">
+    <div style="position:absolute;inset:0;padding:68px 80px 60px">
+      <div style="display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px">
+        <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em">Market</div>
+        <span style="font-size:13px;font-weight:600;color:#718096">{{ d.marketProvenance }}</span>
+      </div>
+      <!-- cards: TAM dominant -->
+      <div style="display:flex;gap:16px;align-items:stretch;margin-bottom:20px">
+        <div style="flex:1.5;background:linear-gradient(135deg,#6B46C1,#553C9A);color:#fff;border-radius:18px;padding:26px 30px;position:relative;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:800;letter-spacing:.06em;color:#e9d5ff">TAM · TOTAL ADDRESSABLE</span><span style="font-size:12px;font-weight:800;background:rgba(255,255,255,.2);border-radius:999px;padding:3px 10px">↑ {{ d.cagr }} CAGR</span></div>
+          <div style="font-size:66px;font-weight:900;letter-spacing:-.03em;margin-top:6px;line-height:1">{{ d.tam }}</div>
+          <div style="font-size:16px;color:#e9d5ff;margin-top:2px">{{ d.tamDesc }}</div>
+          <div style="font-size:12px;color:#c4b5fd;margin-top:12px">Source · {{ d.tamSrc }}</div>
+        </div>
+        <div style="flex:1;background:#F5F3FF;border:1px solid #E9E4FB;border-radius:18px;padding:24px 26px;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-size:12px;font-weight:800;letter-spacing:.05em;color:#8B5CF6">SAM · SERVICEABLE AVAILABLE</div>
+          <div style="font-size:46px;font-weight:900;letter-spacing:-.02em;color:#553C9A;line-height:1;margin-top:4px">{{ d.sam }}</div>
+          <div style="font-size:14px;color:#718096;margin-top:2px">{{ d.samDesc }}</div>
+          <div style="font-size:11px;color:#A0AEC0;margin-top:10px">Source · {{ d.samSrc }}</div>
+        </div>
+        <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:18px;padding:24px 26px;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-size:12px;font-weight:800;letter-spacing:.05em;color:#A0AEC0">SOM · OBTAINABLE</div>
+          <div style="font-size:40px;font-weight:900;letter-spacing:-.02em;color:#4A5568;line-height:1;margin-top:4px">{{ d.som }}</div>
+          <div style="font-size:14px;color:#718096;margin-top:2px">{{ d.somDesc }}</div>
+          <div style="font-size:11px;color:#A0AEC0;margin-top:10px">3-year reachable</div>
+        </div>
+      </div>
+      <!-- segment breakdown -->
+      <div style="flex:1;min-height:0;display:flex;gap:20px">
+        <div style="flex:1.6;background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:22px 26px;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-size:13px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.08em">Segment breakdown · % of SAM</span><span style="font-size:12px;color:#A0AEC0">Recommended entry ↓</span></div>
+          <div style="display:flex;flex-direction:column;gap:13px;flex:1;justify-content:center">
+            <sc-for list="{{ segments }}" as="s" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                  <span style="font-size:15px;font-weight:600;color:#2D3748">{{ s.name }}<sc-if value="{{ s.recommended }}"><span style="font-size:11px;font-weight:800;color:#6B46C1;background:#EDE9FE;border-radius:6px;padding:2px 8px;margin-left:9px">RECOMMENDED · ICP FIT</span></sc-if></span>
+                  <span style="font-size:15px;font-weight:800;color:#1A202C">{{ s.value }} · {{ s.pct }}</span>
+                </div>
+                <div style="height:11px;border-radius:99px;background:#F1F0F5;overflow:hidden"><div style="height:100%;width:{{ s.pct }};border-radius:99px;background:{{ s.bar }}"></div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:16px;padding:22px 24px;display:flex;flex-direction:column">
+          <div style="font-size:13px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Confidence</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="font-size:15px;font-weight:800;color:#B45309;background:#FFFAF0;border:1px solid #FEEBC8;border-radius:999px;padding:6px 13px">{{ d.marketConfidence }}</span></div>
+          <div style="font-size:13px;color:#718096;line-height:1.5;flex:1">{{ d.marketSources }}</div>
+          <div style="border-top:1px solid #E2E8F0;padding-top:12px;font-size:12.5px;color:#A0AEC0;line-height:1.4">{{ d.marketNote }}</div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 5 SOLUTION -->
+  <sc-if value="{{ isSolution }}">
+    <div style="position:absolute;inset:0;padding:64px 80px;display:flex;flex-direction:column">
+      <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:26px">Solution</div>
+      <div style="display:flex;gap:52px;flex:1;min-height:0">
+        <div style="flex:1.1;display:flex;flex-direction:column">
+          <div style="font-size:44px;font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-bottom:32px">{{ d.solHead }}</div>
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <sc-for list="{{ solPts }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;gap:15px;align-items:flex-start"><span style="width:30px;height:30px;flex:none;border-radius:9px;background:#F0FFF4;color:#38A169;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">✓</span><span style="font-size:21px;line-height:1.38;color:#2D3748;font-weight:500">{{ p.t }}</span></div>
+            </sc-for>
+          </div>
+          <div style="margin-top:30px;background:#F7F5FF;border:1px solid #E9E4FB;border-radius:14px;padding:18px 22px"><span style="font-size:12px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.08em">Unfair advantage · </span><span style="font-size:19px;color:#2D3748;font-weight:500">{{ d.differentiator }}</span></div>
+        </div>
+        <div style="flex:.85;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:18px;overflow:hidden;align-self:center">
+          <div style="display:flex;padding:26px 30px;background:#FEE2E2;border-bottom:1px solid #FED7D7"><span style="font-size:15px;font-weight:800;color:#C53030;width:100px">Before</span><span style="font-size:20px;color:#742A2A;line-height:1.35">{{ d.beforeTxt }}</span></div>
+          <div style="display:flex;padding:26px 30px;background:#F0FFF4"><span style="font-size:15px;font-weight:800;color:#2F855A;width:100px">After</span><span style="font-size:20px;color:#22543D;line-height:1.35">{{ d.afterTxt }}</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 6 PRODUCT DEMO -->
+  <sc-if value="{{ isDemo }}">
+    <div style="position:absolute;inset:0;padding:60px 80px;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+        <div><div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em">Product</div><div style="font-size:38px;font-weight:800;letter-spacing:-.02em;margin-top:8px">{{ d.demoHead }}</div></div>
+        <span style="font-size:17px;font-weight:700;color:#6B46C1;background:#EDE9FE;border-radius:999px;padding:9px 20px">{{ d.liveURL }} →</span>
+      </div>
+      <div style="flex:1;min-height:0;background:#17142e;border-radius:18px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+        <div style="display:flex;gap:9px;position:absolute;top:18px;left:20px"><span style="width:13px;height:13px;border-radius:50%;background:#ff5f57"></span><span style="width:13px;height:13px;border-radius:50%;background:#febc2e"></span><span style="width:13px;height:13px;border-radius:50%;background:#28c840"></span></div>
+        <div style="text-align:center;color:#8b7fc0"><div style="width:74px;height:74px;margin:0 auto;border:2px solid #8b7fc0;border-radius:16px;display:flex;align-items:center;justify-content:center"><div style="width:0;height:0;border-left:22px solid #8b7fc0;border-top:14px solid transparent;border-bottom:14px solid transparent;margin-left:5px"></div></div><div style="font-size:17px;margin-top:14px">{{ d.demoCaption }}</div></div>
+      </div>
+      <div style="display:flex;gap:14px">
+        <sc-for list="{{ features }}" as="f" hint-placeholder-count="3">
+          <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:13px;padding:18px 20px;display:flex;align-items:center;gap:12px"><span style="width:26px;height:26px;flex:none;border-radius:8px;background:#EDE9FE;color:#6B46C1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">{{ f.n }}</span><span style="font-size:18px;font-weight:600;color:#2D3748">{{ f.t }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 7 ROADMAP -->
+  <sc-if value="{{ isRoadmap }}">
+    <div style="position:absolute;inset:0;padding:60px 80px;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em">Roadmap</div><span style="font-size:14px;font-weight:600;color:#718096">{{ d.roadmapProgress }} complete</span></div>
+      <div style="font-size:34px;font-weight:800;letter-spacing:-.02em;margin-bottom:26px">{{ d.roadmapTitle }}</div>
+      <div style="flex:1;min-height:0;display:flex;gap:18px">
+        <sc-for list="{{ roadmapPhases }}" as="p" hint-placeholder-count="3">
+          <div style="flex:1;background:{{ p.bg }};border:1px solid {{ p.border }};border-radius:16px;padding:22px 22px;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:30px;height:30px;flex:none;border-radius:9px;background:{{ p.chip }};color:{{ p.ink }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">{{ p.n }}</span><span style="font-size:12px;font-weight:800;color:{{ p.ink }};text-transform:uppercase;letter-spacing:.05em">{{ p.status }}</span></div>
+            <div style="font-size:21px;font-weight:800;color:#1A202C;margin-bottom:4px">{{ p.label }}</div>
+            <div style="font-size:13.5px;color:#718096;margin-bottom:16px">{{ p.window }}</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ p.tasks }}" as="t" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;align-items:flex-start">
+                  <span style="width:19px;height:19px;flex:none;margin-top:1px;border-radius:6px;display:flex;align-items:center;justify-content:center;{{ t.boxStyle }}" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+                  <span style="font-size:15px;line-height:1.35;color:{{ t.color }};{{ t.strike }}">{{ t.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 8 TEAM & NETWORK -->
+  <sc-if value="{{ isTeam }}">
+    <div style="position:absolute;inset:0;padding:68px 80px 60px;display:flex;flex-direction:column">
+      <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:28px">Team &amp; Network</div>
+      <div style="display:flex;gap:24px;flex:1;min-height:0">
+        <!-- left: people -->
+        <div style="flex:1.15;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:16px">
+            <sc-for list="{{ founders }}" as="f" hint-placeholder-count="2">
+              <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:16px;padding:22px;display:flex;flex-direction:column;align-items:center;text-align:center"><div style="width:72px;height:72px;border-radius:50%;background:{{ f.avBg }};color:{{ f.avInk }};font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center;margin-bottom:13px">{{ f.initials }}</div><div style="font-size:21px;font-weight:800">{{ f.name }}</div><div style="font-size:15px;color:#6B46C1;font-weight:600;margin-top:2px">{{ f.role }}</div><div style="font-size:14px;color:#718096;margin-top:9px;line-height:1.4">{{ f.bio }}</div></div>
+            </sc-for>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px">
+            <sc-for list="{{ advisors }}" as="a" hint-placeholder-count="2">
+              <div style="flex:1 1 44%;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;flex:none;border-radius:50%;background:#F7F5FF;color:#6B46C1;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">{{ a.initials }}</div><div style="min-width:0"><div style="display:flex;align-items:center;gap:7px"><span style="font-size:16px;font-weight:700">{{ a.name }}</span><span style="font-size:10.5px;font-weight:800;color:#6B46C1;background:#EDE9FE;border-radius:5px;padding:2px 7px">ADVISOR</span></div><div style="font-size:13.5px;color:#718096;margin-top:2px">{{ a.domain }} · {{ a.equity }}</div></div></div>
+            </sc-for>
+          </div>
+        </div>
+        <!-- right: skills chart -->
+        <div style="flex:.85;background:#17142e;color:#fff;border-radius:18px;padding:26px 28px;display:flex;flex-direction:column">
+          <div style="font-size:13px;font-weight:800;color:#a89fce;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Skills coverage</div>
+          <div style="font-size:13px;color:#8b7fc0;margin-bottom:20px">From Personal Advisor skills assessment</div>
+          <div style="display:flex;flex-direction:column;gap:16px;flex:1;justify-content:center">
+            <sc-for list="{{ skills }}" as="s" hint-placeholder-count="5">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:15px;font-weight:600;color:#e9e4fb">{{ s.name }}</span><span style="font-size:13px;font-weight:700;color:{{ s.gapColor }}">{{ s.label }}</span></div>
+                <div style="height:9px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden"><div style="height:100%;width:{{ s.pct }};border-radius:99px;background:{{ s.bar }}"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px;margin-top:6px;font-size:13px;color:#a89fce">Gap: <span style="color:#fff;font-weight:600">{{ d.skillGap }}</span> — advisor matched</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 9 CAP TABLE -->
+  <sc-if value="{{ isCap }}">
+    <div style="position:absolute;inset:0;padding:68px 80px 60px;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:30px"><div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em">Cap Table</div><span style="font-size:13px;font-weight:600;color:#718096">Pulled from Cap Table · {{ d.totalShares }} shares authorized</span></div>
+      <div style="display:flex;gap:40px;flex:1;min-height:0;align-items:center">
+        <div style="flex:1.5">
+          <div style="border:1px solid #E2E8F0;border-radius:16px;overflow:hidden">
+            <div style="display:flex;background:#6B46C1;color:#fff;font-size:14px;font-weight:700;padding:14px 22px"><span style="flex:2">Shareholder</span><span style="flex:1;text-align:right">Shares</span><span style="flex:.8;text-align:right">%</span><span style="flex:1.5;text-align:right">Vesting</span></div>
+            <sc-for list="{{ capRows }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;font-size:17px;padding:16px 22px;background:{{ r.bg }};border-top:1px solid #EDF2F7"><span style="flex:2;font-weight:600">{{ r.name }}</span><span style="flex:1;text-align:right;color:#4A5568">{{ r.shares }}</span><span style="flex:.8;text-align:right;font-weight:800;color:#6B46C1">{{ r.pct }}</span><span style="flex:1.5;text-align:right;color:#718096;font-size:14px">{{ r.vesting }}</span></div>
+            </sc-for>
+          </div>
+          <div style="margin-top:18px;display:flex;gap:10px"><span style="font-size:14px;font-weight:700;border-radius:999px;padding:8px 16px;{{ filed83bStyle }}">{{ d.filed83bLabel }}</span><span style="font-size:14px;font-weight:700;color:#2F855A;background:#F0FFF4;border:1px solid #C6F6D5;border-radius:999px;padding:8px 16px">Delaware C-Corp ✓</span></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="width:230px;height:230px;border-radius:50%;background:{{ donutGradient }};display:flex;align-items:center;justify-content:center"><div style="width:140px;height:140px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:16px;color:#718096">Founders</span><span style="font-size:34px;font-weight:900;color:#1A202C">{{ d.founderPct }}</span></div></div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:24px">
+            <sc-for list="{{ capLegend }}" as="l" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:10px;font-size:16px"><span style="width:14px;height:14px;border-radius:4px;background:{{ l.c }}"></span><span style="color:#2D3748">{{ l.name }} · {{ l.pct }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 10 ASK / USE OF FUNDS -->
+  <sc-if value="{{ isAsk }}">
+    <div style="position:absolute;inset:0;padding:60px 80px;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px">
+        <div><div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px">The Ask</div><div style="display:flex;align-items:baseline;gap:16px"><span style="font-size:88px;font-weight:900;letter-spacing:-.03em;color:#6B46C1;line-height:.9">{{ d.raise }}</span><span style="font-size:24px;color:#718096;font-weight:600">{{ d.roundType }}</span></div></div>
+        <div style="display:flex;gap:12px">
+          <div style="background:#17142e;color:#fff;border-radius:14px;padding:16px 22px"><div style="font-size:13px;color:#8b7fc0;text-transform:uppercase;letter-spacing:.06em">Runway</div><div style="font-size:28px;font-weight:800;margin-top:3px">{{ d.runway }}</div></div>
+          <div style="background:#17142e;color:#fff;border-radius:14px;padding:16px 22px"><div style="font-size:13px;color:#8b7fc0;text-transform:uppercase;letter-spacing:.06em">Post-money</div><div style="font-size:28px;font-weight:800;margin-top:3px">{{ d.postMoney }}</div></div>
+        </div>
+      </div>
+      <div style="font-size:13px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">Use of funds · from Week 4</div>
+      <!-- stacked allocation bar -->
+      <div style="display:flex;height:26px;border-radius:9px;overflow:hidden;margin-bottom:20px">
+        <sc-for list="{{ useOfFunds }}" as="u" hint-placeholder-count="3">
+          <div style="width:{{ u.pct }};background:{{ u.bar }}"></div>
+        </sc-for>
+      </div>
+      <div style="flex:1;min-height:0;display:flex;gap:16px">
+        <sc-for list="{{ useOfFunds }}" as="u" hint-placeholder-count="3">
+          <div style="flex:1;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:16px;padding:24px;display:flex;flex-direction:column">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px"><span style="width:13px;height:13px;border-radius:4px;background:{{ u.bar }}"></span><span style="font-size:38px;font-weight:900;color:#1A202C;line-height:1">{{ u.pct }}</span></div>
+            <div style="font-size:19px;font-weight:700;color:#2D3748">{{ u.cat }}</div>
+            <div style="font-size:15px;color:#6B46C1;font-weight:700;margin-top:2px">{{ u.amount }}</div>
+            <div style="font-size:14px;color:#718096;margin-top:10px;line-height:1.4;flex:1">{{ u.detail }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 11 DEAL READINESS -->
+  <sc-if value="{{ isReview }}">
+    <div style="position:absolute;inset:0;padding:68px 80px 60px;display:flex;gap:44px">
+      <div style="flex:1.05;display:flex;flex-direction:column">
+        <div style="font-size:15px;font-weight:800;color:#6B46C1;text-transform:uppercase;letter-spacing:.12em;margin-bottom:26px">Deal Readiness</div>
+        <div style="font-size:50px;font-weight:900;letter-spacing:-.02em">{{ d.company }}</div>
+        <div style="font-size:22px;color:#718096;margin-top:8px;line-height:1.35">{{ d.tagline }}</div>
+        <!-- readiness ring -->
+        <div style="display:flex;align-items:center;gap:20px;margin-top:30px">
+          <div style="width:104px;height:104px;flex:none;border-radius:50%;background:{{ readinessRing }};display:flex;align-items:center;justify-content:center"><div style="width:78px;height:78px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:26px;font-weight:900;color:#1A202C">{{ d.readinessPct }}</span><span style="font-size:11px;color:#718096">ready</span></div></div>
+          <div style="font-size:18px;color:#2D3748;line-height:1.5">{{ d.dealSummary }}</div>
+        </div>
+        <div style="margin-top:auto;display:flex;align-items:center;gap:14px"><div style="display:inline-flex;align-items:center;gap:10px;background:#6B46C1;color:#fff;border-radius:12px;padding:16px 26px;font-size:20px;font-weight:700">Request Intro →</div><div style="font-size:15px;color:#A0AEC0">{{ d.contact }}</div></div>
+      </div>
+      <div style="flex:.9;background:#F8F8FA;border:1px solid #E2E8F0;border-radius:18px;padding:28px 30px;display:flex;flex-direction:column">
+        <div style="font-size:13px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.08em;margin-bottom:18px">Diligence package</div>
+        <div style="display:flex;flex-direction:column;gap:13px;flex:1">
+          <sc-for list="{{ dataRoom }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:13px"><span style="width:28px;height:28px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:5px;{{ r.style }}" dangerouslySetInnerHTML="{{ r.icon }}"></span><span style="font-size:18px;color:#2D3748;flex:1;font-weight:500">{{ r.label }}</span><span style="font-size:13px;font-weight:700;color:{{ r.tColor }}">{{ r.tag }}</span></div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid #E2E8F0;padding-top:16px;margin-top:8px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;color:#718096">Package complete</span><span style="font-size:20px;font-weight:900;color:#1A202C">{{ d.dataRoomComplete }}</span></div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:720},&quot;data&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;object&quot;},&quot;type&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;cover&quot;,&quot;problem&quot;,&quot;validation&quot;,&quot;market&quot;,&quot;solution&quot;,&quot;demo&quot;,&quot;roadmap&quot;,&quot;team&quot;,&quot;cap&quot;,&quot;ask&quot;,&quot;review&quot;],&quot;default&quot;:&quot;cover&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pageNum&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;tsType&quot;:&quot;number&quot;},&quot;pageTotal&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:11,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const d = this.props.data || {};
+    const t = this.props.type || 'cover';
+    const arr = (v) => Array.isArray(v) ? v : [];
+    const ic = (p, sw=2.4) => ({ __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` });
+    const check = ic('<path d="M20 6 9 17l-5-5"/>');
+    const dash = ic('<path d="M5 12h14"/>', 2);
+    const idx = this.props.pageNum;
+    const total = this.props.pageTotal;
+    const showPageNum = t!=='cover' && !!idx;
+    const pageNumLabel = (idx||'') + (total ? ' / ' + total : '');
+
+    // ---- funnel heights ----
+    const fRaw = arr(d.funnel);
+    const fMax = Math.max(1, ...fRaw.map(f => f.value));
+    const funnel = fRaw.map((f,i) => ({ ...f, h: Math.round(24 + (f.value/fMax)*120)+'px',
+      bar: ['#6B46C1','#8b5cf6','#A78BFA','#C4B5FD'][i]||'#C4B5FD', arrow: i<fRaw.length-1 }));
+
+    // ---- segments ----
+    const segBars = ['#6B46C1','#8b5cf6','#A78BFA','#CBD5E0'];
+    const segments = arr(d.segments).map((s,i) => ({ ...s, bar: s.recommended ? '#6B46C1' : segBars[i]||'#CBD5E0' }));
+
+    // ---- roadmap phases with task done flags ----
+    const rmChip = { done:{bg:'#F0FBF4',border:'#C6F6D5',chip:'#C6F6D5',ink:'#2F855A',status:'Completed'},
+      active:{bg:'#F7F5FF',border:'#E9E4FB',chip:'#EDE9FE',ink:'#6B46C1',status:'In progress'},
+      todo:{bg:'#F8F8FA',border:'#E2E8F0',chip:'#EDF2F7',ink:'#A0AEC0',status:'Upcoming'} };
+    const roadmapPhases = arr(d.roadmapPhases).map((p,i) => ({ n:i+1, label:p.label, window:p.window, ...rmChip[p.state],
+      tasks: arr(p.tasks).map(tk => tk.done
+        ? { label:tk.t, icon:check, boxStyle:'background:#38A169;color:#fff', color:'#A0AEC0', strike:'text-decoration:line-through' }
+        : { label:tk.t, icon:dash, boxStyle:'background:#fff;border:1.5px solid #CBD5E0;color:#CBD5E0', color:'#2D3748', strike:'' }) }));
+
+    // ---- team ----
+    const avPal = [['#EDE9FE','#6B46C1'],['#DBEAFE','#1D4ED8']];
+    const founders = arr(d.founders).map((f,i) => ({ ...f, avBg:avPal[i%2][0], avInk:avPal[i%2][1] }));
+    const advisors = arr(d.advisors).map(a => ({ ...a, initials:(a.name||'').split(' ').map(x=>x[0]).join('').slice(0,2) }));
+    const skills = arr(d.skills).map(s => { const gap = s.pct <= 55;
+      return { ...s, pct:s.pct+'%', bar: gap?'#F59E0B':'#8b5cf6', label: gap?'Gap':(s.pct>=80?'Strong':'OK'), gapColor: gap?'#F59E0B':'#a89fce' }; });
+
+    // ---- cap donut ----
+    const shades = ['#6B46C1','#8b5cf6','#C4B5FD','#E9E4FB'];
+    const legend = arr(d.capLegend);
+    let acc=0; const stops = legend.map((l,i)=>{ const s=acc; acc+=(l.val||0); return `${shades[i%4]} ${s}% ${acc}%`; });
+    const donutGradient = `conic-gradient(${stops.join(',')})`;
+    const capLegend = legend.map((l,i)=>({ ...l, c:shades[i%4] }));
+    const capRows = arr(d.capRows).map((r,i)=>({ ...r, bg: i%2 ? '#F8F8FA' : '#fff' }));
+
+    // ---- use of funds ----
+    const ufBar = ['#6B46C1','#8b5cf6','#C4B5FD'];
+    const useOfFunds = arr(d.useOfFunds).map((u,i)=>({ ...u, bar:ufBar[i%3] }));
+
+    // ---- data room ----
+    const dataRoom = arr(d.dataRoom).map(r => r.done
+      ? { label:r.label, icon:check, tag:'Complete', tColor:'#38A169', style:'background:#F0FFF4;color:#38A169' }
+      : { label:r.label, icon:ic('<path d="M12 8v5M12 16h.01"/>',2.2), tag:'Pending', tColor:'#D97706', style:'background:#FFFAF0;color:#D97706' });
+
+    // ---- readiness ring ----
+    const rp = parseInt(d.readinessPct)||0;
+    const readinessRing = `conic-gradient(#38A169 0% ${rp}%, #E2E8F0 ${rp}% 100%)`;
+
+    const filed = d.filed83b;
+    return {
+      d,
+      showPageNum, pageNumLabel,
+      showBrand: t!=='cover',
+      isCover:t==='cover', isProblem:t==='problem', isValidation:t==='validation', isMarket:t==='market',
+      isSolution:t==='solution', isDemo:t==='demo', isRoadmap:t==='roadmap', isTeam:t==='team',
+      isCap:t==='cap', isAsk:t==='ask', isReview:t==='review',
+      coverMeta: [ {k:'Sector',v:d.sector},{k:'Stage',v:d.stage},{k:'Founder',v:d.founderName},{k:'Venture readiness',v:d.readinessScore} ],
+      discovery: arr(d.discovery),
+      problemPts: arr(d.problemPts).map((x,i)=>({n:i+1,t:x.t,mentions:x.mentions})),
+      solPts: arr(d.solPts).map(x=>({t:x})),
+      features: arr(d.features).map((x,i)=>({n:i+1,t:x})),
+      valStats: [ {v:d.interviews,l:'Interviews logged'},{v:d.distinctPains,l:'Distinct pains'},{v:d.hypothesesValidated,l:'Hypotheses validated'} ],
+      revMRR: d.revMRR, revCustomers: d.revCustomers, revACV: d.revACV, revTakeaway: d.revTakeaway,
+      funnel, segments, roadmapPhases, founders, advisors, skills,
+      capRows, donutGradient, capLegend, useOfFunds, dataRoom, readinessRing,
+      filed83bStyle: filed ? 'background:#F0FFF4;color:#38A169;border:1px solid #C6F6D5' : 'background:#FFFAF0;color:#D97706;border:1px solid #FEEBC8',
+    };
+  }
+}
+</script>
+</body>
+</html>

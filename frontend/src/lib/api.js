@@ -1,0 +1,6144 @@
+import { reportError } from './log';
+import { csrfCookieNameFor } from './branchHost';
+import { storeReason } from './impersonationBar';
+import { railPageHeaders } from './railPage.js';
+import { railBody } from './railPages.js';
+import { rememberLabVenture } from './labVenture.js';
+import { readAllPages } from './pagedRead.js';
+
+// D527 — API domain modules. A new API domain goes in its own file,
+// lib/api/<domain>.js, so unrelated features stop colliding in this file.
+// #4105 — nobody lists them here any more: scripts/build-api-index.mjs writes
+// every module's re-export line into ./apiModules.generated.js, and this one
+// line, which never changes, re-exports that. See lib/api/README.md.
+// scripts/check-api-drift.mjs fails while the generated file is stale.
+export * from './apiModules.generated.js';
+
+
+const BASE = '/api';
+
+/**
+ * Who is asking — for the server, and for the service worker.
+ *
+ * `X-StudioOS-Identity` is not read by the worker; it exists so `sw.js` can
+ * put each account's cached API responses in their OWN Cache Storage bucket.
+ * A cache entry is keyed by URL alone, so before this the origin had one API
+ * bucket and the next person to sign in on the same browser could be handed
+ * the previous person's private bodies. The service worker cannot read
+ * localStorage and a worker-global set by postMessage dies with the worker,
+ * so the identity rides on the request instead, where it cannot go stale.
+ *
+ * It is the numeric user id, which the server already knows from the token
+ * or cookie — no new fact is disclosed, and no address is ever sent. During
+ * a support session this is the IMPERSONATED user, which is correct: the
+ * responses are that account's data and belong in that account's bucket.
+ */
+function getIdentityHeader() {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return {};
+    const id = JSON.parse(raw)?.id;
+    return Number.isInteger(id) && id > 0 ? { 'X-StudioOS-Identity': String(id) } : {};
+  } catch {
+    return {};                      // unparseable or storage disabled → anon bucket
+  }
+}
+
+function getAuthHeaders() {
+  const token = localStorage.getItem('token');
+  return { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...getIdentityHeader() };
+}
+
+// T6 — read the JS-readable CSRF cookie and mirror it into the X-CSRF-Token
+// header on mutating requests. The double-submit pattern proves the request
+// originated from same-origin JS (a cross-site attacker on another origin
+// cannot read the cookie). Returns {} when the cookie is absent — e.g. in
+// dev (FastAPI doesn't set it) or before the user has logged in. The worker
+// only enforces CSRF when an auth cookie is also present, so a missing
+// header is harmless on Bearer-auth or unauth'd calls.
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+function getCsrfHeader(method) {
+  if (!method || !MUTATING_METHODS.has(method.toUpperCase())) return {};
+  if (typeof document === 'undefined') return {};
+  // On a branch host the cookie is `studioos_csrf_<code>`; HQ's plain
+  // `studioos_csrf` is present there too and is not ours (D104, branchHost.js).
+  const name = csrfCookieNameFor(typeof window === 'undefined' ? '' : window.location.hostname);
+  const cookie = document.cookie || '';
+  for (const part of cookie.split(';')) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) === name) {
+      return { 'X-CSRF-Token': trimmed.slice(eq + 1) };
+    }
+  }
+  return {};
+}
+
+// BLOCK-AUTH-03 — global step-up coordination. When the worker returns
+// 403 {code:'step_up_required'}, request() calls requestStepUp(), which fans out
+// a `studioos:step_up_required` event carrying a `done(ok)` callback. A globally
+// mounted <StepUpModal> collects a fresh TOTP, POSTs /auth/step-up, then calls
+// done(true) so the original request is retried once. Concurrent 403s share one
+// in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
+// fast via the synchronous `ack` flag so the request never hangs.
+// D1287: `request(path, { noStepUp: true })` skips the prompt and throws the 403,
+// for a read that is only shown (the checkout sheet's auto-reload line).
+let _stepUpInFlight = null;
+function requestStepUp(ttlMinutes) {
+  if (_stepUpInFlight) return _stepUpInFlight;
+  _stepUpInFlight = new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') { reject(new Error('step_up_unavailable')); return; }
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      _stepUpInFlight = null;
+      if (ok) resolve(); else reject(new Error('step_up_cancelled'));
+    };
+    const detail = { ttlMinutes: ttlMinutes || 15, done, ack: false };
+    window.dispatchEvent(new CustomEvent('studioos:step_up_required', { detail }));
+    if (!detail.ack) done(false); // no modal listening — surface the original 403
+  });
+  return _stepUpInFlight;
+}
+
+// Task #8 — the catch-all 404 page marks itself as a no-auth-redirect surface
+// while it is mounted (setSuppressAuthRedirect(true) on mount, false on
+// unmount). A background 401 — e.g. SettingsProvider probing
+// /api/settings/appearance on first paint — must NOT bounce a logged-OUT
+// visitor who hit an UNKNOWN url to /login; they should see the 404 page.
+// Deliberately scoped to the 404 surface only: the flag is false on every
+// real page, so genuinely-expired sessions on protected pages still bounce.
+let _suppressAuthRedirect = false;
+export function setSuppressAuthRedirect(v) {
+  _suppressAuthRedirect = !!v;
+}
+
+// Directory-style URLs are normalised by some static origins (for example,
+// `/login` becomes `/login/`). Auth redirects must use the same public-route
+// boundary for both forms, otherwise an anonymous settings probe restarts the
+// login page before its lazy route can settle.
+export function isPublicPath(pathname) {
+  const currentPath = typeof pathname === 'string' && pathname
+    ? (pathname.replace(/\/+$/, '') || '/')
+    : '/';
+  return currentPath === '/'
+    || currentPath === '/login'
+    || currentPath === '/register'
+    || currentPath === '/verify-email'
+    // D4637: the public Help home and article-shaped addresses tolerate
+    // background API 401s. Ticket and admin routes stay protected.
+    || currentPath === '/help'
+    || (/^\/help\/[a-z0-9-]+\/[a-z0-9-]+$/i.test(currentPath)
+      && !currentPath.startsWith('/help/tickets/')
+      && !currentPath.startsWith('/help/admin/'))
+    || currentPath === '/status'
+    || currentPath === '/changelog'
+    || currentPath.startsWith('/b/')
+    // An author's public page, by id or by name slug (owner, 2026-10-12).
+    || currentPath.startsWith('/authors/')
+    || /^\/advisors\/[^/]+$/.test(currentPath)
+    || currentPath === '/spinout-lab'
+    // D1581 (#3828, PR2d): a signed-out phone on the remote page is told to sign in, its code kept.
+    || currentPath === '/remote'
+    // D1072 (#2425): the public trust center and its tabs; /trust/me is the member's own and stays auth-only.
+    || ['/trust', '/trust/security', '/trust/data', '/trust/subprocessors', '/trust/documents', '/trust/disclosure'].includes(currentPath)
+    // Printable Program Brief — public brochure page; /spinout-lab/apply
+    // is intentionally NOT listed (auth-only, a 401 there should bounce).
+    || currentPath === '/spinout-lab/brief'
+    // Audience product pages (For Founders / Investors & LPs / Service
+    // Partners / Advisors) — public marketing surfaces. A background
+    // settings/me 401 for an anonymous visitor must not bounce them to
+    // /login (mirrors /spinout-lab above).
+    || currentPath === '/for-founders'
+    || currentPath === '/for-investors'
+    || currentPath === '/for-service-partners'
+    || currentPath === '/for-advisors'
+    // The Spin-Out demo day page and the four retired /lp/* addresses that
+    // forward to the door pages (#2321). Public surfaces: a background
+    // settings/me 401 for an anonymous visitor must not bounce
+    // them to /login.
+    || currentPath.startsWith('/lp/')
+    || currentPath === '/directory'
+    // Task #9 — Public Network layer: Circles (+ /communities redirect).
+    // Public marketing surfaces: a background settings/me 401 for an
+    // anonymous visitor must not bounce them to /login.
+    || currentPath === '/circles'
+    || currentPath === '/communities'
+    || currentPath === '/about'
+    // D677 — the Firm page took /about; the team page moved to /team, and
+    // Platform and Administrators are new public pages beside it.
+    || currentPath === '/team'
+    || currentPath === '/platform'
+    || currentPath === '/administrators'
+    // D678, D679 — the Methodology, Intelligence and Resources pages of the
+    // public site.
+    || currentPath === '/methodology'
+    || currentPath === '/intelligence'
+    || currentPath === '/resources'
+    // D4297 (#4297) — the Influencer program's public page.
+    || currentPath === '/influencers'
+    || currentPath === '/contact'
+    // D813 (#2259) — the newsletter's signup, and the confirm and preferences
+    // pages a link in an email opens; none of them takes a sign-in.
+    || currentPath === '/newsletter'
+    || currentPath === '/newsletter/confirm'
+    || currentPath === '/newsletter/preferences'
+    // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
+    || currentPath === '/privacy'
+    || currentPath === '/privacy/interviews'
+    // #4565: the proposed v2 legal texts, for counsel's review (frontend/src/routes/legalDrafts.jsx).
+    || currentPath === '/terms/v2-draft'
+    || currentPath === '/privacy/v2-draft'
+    // Task #5 — /articles is the public Articles hub (Browse tab is the
+    // default, anonymous-visible surface). Keep it reachable for signed-
+    // out visitors when a background fetch (settings/me) 401s. The
+    // auth-only sub-routes (/articles/mine, /articles/draft,
+    // /articles/edit/:id) are intentionally NOT listed so a genuine
+    // session expiry there still bounces to /login.
+    || currentPath === '/articles'
+    // D786 (#2211): the catalogue at /pricing/products opens to visitors as
+    // /plans-and-pricing did (D755 §13). A product's page (/pricing/products/:id)
+    // and /checkout still need sign-in.
+    || currentPath === '/pricing'
+    || (currentPath.startsWith('/pricing/') && !currentPath.startsWith('/pricing/products/'))
+    || currentPath.startsWith('/partner-onboarding/')
+    || currentPath.startsWith('/partners/onboard')
+    // The attester's side of an advisor proof claim. Reached by a link an
+    // advisor handed over, by someone who has no account here and is not
+    // going to make one — a background settings/me 401 must not bounce them
+    // to /login before they can answer.
+    || currentPath.startsWith('/attest/')
+    || currentPath.startsWith('/esign/')
+    || currentPath.startsWith('/deck/share/')
+    || currentPath.startsWith('/share/deck/')
+    // D1564 (#3811): a published deck framed on a site its founder listed.
+    || currentPath.startsWith('/embed/')
+    || currentPath.startsWith('/share/captable/')
+    || currentPath.startsWith('/insights')
+    // ROUTE literals, not API paths — this whole predicate reads
+    // window.location. /account/email/* is the live pair; /settings/email/*
+    // stays because confirmation links already sent still point at it, and a
+    // 401 bounce to /login is exactly what breaks an email-change flow.
+    || currentPath.startsWith('/account/email/')
+    || currentPath.startsWith('/settings/email/')
+    // Task #5 — Public event surface (no auth)
+    || currentPath === '/events'
+    || currentPath.startsWith('/events/')
+    // Public job board surface (no auth): /jobs (feed) and
+    // /jobs/:slug (detail) must stay reachable for anonymous
+    // visitors when a background settings/me 401 fires.
+    || currentPath === '/jobs'
+    || currentPath.startsWith('/jobs/')
+    || currentPath.startsWith('/invite/')
+    // D120 — the branch landing for an HQ support session. Reached by an HQ
+    // operator who has NO session on this host by construction: HQ's cookie is
+    // scoped to another host and its JWT is signed with another secret (D.4).
+    // A background settings/me 401 is therefore the expected state here, and
+    // bouncing them to /login would send them to sign in as a branch account
+    // they do not have — which is the whole reason the hand-off exists.
+    // EXACT, not a `/support/` prefix: bare `/support` is the help-centre
+    // redirect and everything else under it is unwritten.
+    || currentPath === '/support/session'
+    // D441 — accepting a move onto this branch. The person has no account
+    // here yet, so a background settings/me 401 is the expected state, and
+    // bouncing them to /login before they can accept would strand the link.
+    // The token shape is the whole allow-list: /join itself and anything
+    // that is not an invitation token stay gated.
+    || /^\/join\/invt_[0-9a-f]{64}$/.test(currentPath);
+}
+
+/**
+ * The active company, as a request header.
+ *
+ * Read from module state rather than React context because `request()` is a
+ * plain function called from everywhere, including outside a component tree.
+ * `CompanySwitcher` is still the only writer — it calls `setActiveCompanyId`
+ * through the same context write that changes the UI, so the two cannot drift.
+ *
+ * This header is a CLAIM, not a grant. `middleware/activeCompany.ts` checks it
+ * against `user_company_links` on every request and ignores it when the caller
+ * is not a member, so a tampered value widens nothing.
+ */
+let _activeCompanyId = null;
+
+export function setActiveCompanyId(id) {
+  _activeCompanyId = Number.isSafeInteger(id) && id > 0 ? id : null;
+  try {
+    if (_activeCompanyId === null) localStorage.removeItem('active_company_id');
+    else localStorage.setItem('active_company_id', String(_activeCompanyId));
+  } catch { /* ignore */ }
+}
+
+export function getActiveCompanyId() {
+  return _activeCompanyId;
+}
+
+export function initActiveCompanyId() {
+  try {
+    const raw = localStorage.getItem('active_company_id');
+    if (raw) {
+      const id = Number(raw);
+      if (Number.isSafeInteger(id) && id > 0) _activeCompanyId = id;
+    }
+  } catch { /* ignore */ }
+  return _activeCompanyId;
+}
+
+function getActiveCompanyHeader() {
+  return _activeCompanyId === null ? {} : { 'X-Company-Id': String(_activeCompanyId) };
+}
+
+/**
+ * REQUEST DEADLINES — why every call gets one.
+ *
+ * `fetch` has no timeout. Until this existed, a request that never settled
+ * left its caller's `loading` flag true for good, and the user got a spinner
+ * that would outlive the tab — indistinguishable from the ProfileZone bug
+ * fixed in #427, but reachable from any page. Nothing was written down when it
+ * happened, either: `documentation/architecture/GOTCHAS.md` records a census
+ * of 254 504s on 2026-08-30 whose cause is *still open*, and a client-side
+ * deadline is exactly the evidence that investigation did not have.
+ *
+ * THE NUMBERS ARE BOUNDED ON BOTH SIDES, and both bounds are real.
+ *   · Below: a cold isolate pays 15-20 sequential D1 round-trips before its
+ *     first response (GOTCHAS, "the role-schema bootstrap blocks the request
+ *     path"). A 5-10s deadline would abort healthy cold starts.
+ *   · Above: Cloudflare's gateway gives up near 100s, so a deadline past that
+ *     buys nothing — the request is already dead, just not to us.
+ * 30s sits clear of both.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * Generation, crawling and transcription legitimately run for minutes: the
+ * worker is calling `aiRouter`, Workers AI Whisper, or an in-house crawl of N
+ * competitor sites. They get a long deadline rather than none, because "no
+ * deadline" is the state this module exists to end.
+ *
+ * Matched by path PREFIX against the path `request()` was given. Kept as data
+ * rather than a `timeoutMs` at ~25 call sites: one list a reader can check
+ * against the worker's routes beats twenty-five numbers that drift apart.
+ * `frontend/test/api_request_timeout.test.mjs` asserts every prefix here is
+ * actually reachable, so a stale entry fails the build instead of rotting.
+ */
+export const LONG_TIMEOUT_MS = 180_000;
+
+/**
+ * Literal patterns, not prefixes: two of these carry a path id in the middle
+ * (`/funds/12/regenerate-lpa`, `/deck-reviewer/ab3/regenerate`), so a
+ * `startsWith` list cannot express them. Literal regexes also keep Semgrep's
+ * `detect-non-literal-regexp` quiet, which a constructed one would not.
+ */
+export const SLOW_PATHS = [
+  /^\/advisor\/tool\/auto$/,
+  /^\/advisor\/transcribe$/,
+  /^\/competitors\//,                    // crawl + Workers AI synthesis
+  /^\/dd\/cases\/[^/]+\/(scan|report)$/,
+  /^\/deck-reviewer\/[^/]+\/regenerate$/,
+  /^\/decks\/generate$/,
+  /^\/decks\/[^/]+\/review$/,           // D900: a version's review
+  /^\/funds\/[^/]+\/regenerate-lpa$/,
+  /^\/profiling\/chat$/,                 // onboarding chat
+  /^\/references\/[^/]+\/(transcribe|summarize)$/,
+  /^\/scoring\//,                        // score, deal-memo, generateMemo
+];
+
+/**
+ * The deadline for one call, in ms — or `null` for no deadline at all.
+ *
+ * Pure on purpose: this is the half worth unit-testing, and it can be read
+ * without a DOM, a `fetch` or a network.
+ *
+ * `timeoutMs` in the options always wins, including an explicit `null`, which
+ * is how a caller says "this one genuinely has no bound". A FormData body is
+ * an upload whose duration belongs to the user's connection rather than to the
+ * server, so it takes the long deadline without anyone having to remember.
+ */
+export function deadlineFor(path, options = {}) {
+  if ('timeoutMs' in options) return options.timeoutMs;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (isFormData) return LONG_TIMEOUT_MS;
+  // Match on the path only — a query string is never part of what makes a
+  // call slow, and leaving it in would make `/scoring/x?range=90d` miss.
+  const bare = String(path).split('?')[0];
+  if (SLOW_PATHS.some((re) => re.test(bare))) return LONG_TIMEOUT_MS;
+  return DEFAULT_TIMEOUT_MS;
+}
+
+/**
+ * Arm a deadline and return the signal to hand `fetch`, plus the cleanup.
+ *
+ * HAND-ROLLED, and it has to stay that way. `AbortSignal.timeout()` and
+ * `AbortSignal.any()` would each collapse this to a line, and neither is in
+ * the es2020 target `frontend/vite.config.js` pins — whose comment records
+ * that moving the target "re-broke the Safari blank page" once already. The
+ * idiom below is the one already in the repo, at
+ * `frontend/src/decks/spinout/buildDeck.js:359` (feature-detect, arm, clear in
+ * a `finally`).
+ *
+ * `timedOut()` is what keeps a caller's own cancellation distinguishable from
+ * ours: both surface as an abort, and only the controller that fired says
+ * which. Without it a user navigating away would be reported as a timeout.
+ */
+export function armDeadline(ms, callerSignal) {
+  const noop = { signal: callerSignal, cleanup: () => {}, timedOut: () => false };
+  if (ms == null || typeof AbortController === 'undefined') return noop;
+  if (callerSignal && callerSignal.aborted) return noop;
+
+  const controller = new AbortController();
+  let fired = false;
+  const timer = setTimeout(() => { fired = true; controller.abort(); }, ms);
+
+  // Forward a caller's cancellation without claiming it as ours.
+  const onCallerAbort = () => controller.abort();
+  if (callerSignal) callerSignal.addEventListener('abort', onCallerAbort);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+    },
+    timedOut: () => fired,
+  };
+}
+
+/**
+ * A timeout is shown to the user verbatim (`e?.message || 'Failed to load'` is
+ * the fallback in every page), so the message is prose, not `AbortError` or
+ * `signal is aborted without reason`.
+ *
+ * D233 — "Nothing was changed" was said for EVERY timed-out request, writes
+ * included. A GET or HEAD that times out really did change nothing — there
+ * was nothing to change — but a write (POST/PUT/PATCH/DELETE) may have
+ * committed on the server and simply answered late; the client can't tell.
+ * Claiming "nothing changed" there is a guess dressed as a fact, and it
+ * invites exactly the retry that duplicates the write. So only a read keeps
+ * that sentence; a write gets the honest unknown-outcome wording instead
+ * (the model is `HqSupportPage.jsx`'s `decisionError()`: "Whether … is not
+ * known … Reload before trying again").
+ *
+ * THREE SHAPE RULES, each protecting an existing consumer — unchanged by
+ * which wording fires:
+ *   · `name` is NOT `AbortError`. `LoginPage.jsx` and `SettingsPage.jsx` both
+ *     read that name to mean "the user dismissed the passkey prompt".
+ *   · the message must not match a chunk-load phrase from
+ *     `lib/chunkLoadError.js` (incl. Safari `_result.default`) —
+ *     `RouteErrorBoundary` / `main.jsx` reload the page on those.
+ *   · `code` is the machine flag. `status` stays undefined because a timeout
+ *     has no HTTP status; consumers branching on `e.status` fall through to
+ *     their generic branch, which is the honest outcome.
+ */
+export function timeoutError(path, ms, method) {
+  const isRead = ['GET', 'HEAD'].includes(String(method || 'GET').toUpperCase());
+  const outcome = isRead
+    ? 'Nothing was changed.'
+    : "Whether this was saved is not known. Reload before trying again.";
+  const e = new Error(`The server did not respond within ${Math.round(ms / 1000)}s. ${outcome}`);
+  e.name = 'TimeoutError';
+  e.code = 'timeout';
+  e.path = path;
+  e.data = null;
+  e.field = null;
+  return e;
+}
+
+/**
+ * D258 — ONE DEFINITION OF HOW A REFUSAL BECOMES A SENTENCE AND A CODE.
+ *
+ * `request()` used to build its message as errorObj.message, then a string
+ * `error`, then detailObj.message, then a string `detail`, and only then the
+ * body's own `message` — fifth. About 190 Worker refusals are shaped
+ * `{ error: '<code>', message: '<sentence>' }`, so every page that prints
+ * `e.message` printed `kind_not_available` instead of the sentence somebody
+ * wrote for the person reading it. And an HTTP refusal carried no `e.code` at
+ * all, although this module reads the body's `code` three times itself (the
+ * two 423 banners and the step-up retry). Fifteen raw-fetch helpers further
+ * down built their own Error: twelve read a body, in FOUR different orders
+ * (`detail` first, `error` first, `error` alone, `message` first — only one of
+ * the twelve read `message`), and three threw a fixed sentence without
+ * reading the body at all.
+ *
+ * THE MESSAGE ORDER, and the one place it is not the obvious one:
+ *   errorObj.message → the body's `message` → detailObj.message → a string
+ *   `error` that reads as a SENTENCE → a string `detail` → a string `error`
+ *   that reads as a CODE, as the last resort before the caller's fallback.
+ *   A code in `error` steps below `detail`, so `{ error: 'bad_market',
+ *   detail: 'SAM cannot exceed TAM' }` reads the detail. A sentence in `error`
+ *   keeps its place AHEAD of `detail`, because seven Worker sites pair a
+ *   sentence `error` with a provider's raw text in `detail` —
+ *   `{ error: 'Stripe refund failed', detail: '<Stripe's JSON>' }` — and
+ *   "detail first" would put that JSON on the screen of every refund, billing
+ *   and promo failure.
+ *
+ * THE CODE: the body's string `code` (not shape-checked — `PAYWALL_PREMIUM_
+ * METHOD` travels this way), then errorObj.code, then detailObj.code, then a
+ * bare `error` or `detail` only when it is shaped like a code. A sentence
+ * never becomes a code, and a numeric `code` (a 503 body) is dropped by the
+ * string check.
+ *
+ * 'timeout' BELONGS TO timeoutError ALONE. `_analyticsRead` stops retrying on
+ * it, and `routes/competitors.ts` can answer 422 `{ error: 'timeout' }` when a
+ * web fetch it made was aborted — measured, so the reservation is enforced
+ * here rather than asserted of the Worker.
+ *
+ * `e.data` and `e.field` are NOT this function's business: request() builds
+ * them exactly as it always has, and the pages that read a code off `e.data`
+ * keep working unchanged.
+ */
+export const REFUSAL_CODE = /^[a-z][a-z0-9_]*$/;
+
+export function readRefusal(raw) {
+  const b = raw && typeof raw === 'object' ? raw : {};
+  const str = (v) => (typeof v === 'string' && v.trim() ? v : null);
+  const shaped = (v) => (typeof v === 'string' && REFUSAL_CODE.test(v) ? v : null);
+  const errorObj = b.error && typeof b.error === 'object' ? b.error : null;
+  const detailObj = b.detail && typeof b.detail === 'object' ? b.detail : null;
+  const errorStr = str(b.error);
+  const errorIsCode = shaped(errorStr) !== null;
+  const message = str(errorObj?.message)
+    || str(b.message)
+    || str(detailObj?.message)
+    || (errorIsCode ? null : errorStr)
+    || str(b.detail)
+    || (errorIsCode ? errorStr : null)
+    || null;
+  const code = str(b.code)
+    || str(errorObj?.code)
+    || str(detailObj?.code)
+    || shaped(b.error)
+    || shaped(b.detail)
+    || null;
+  return { message, code: code === 'timeout' ? null : code };
+}
+
+/**
+ * The raw-fetch helpers' half of D258: a failed response they fetched
+ * themselves (a blob, a public token route) becomes an Error through the SAME
+ * definition `request()` uses, never a precedence order of its own — a second
+ * order anywhere in this file is how one root became fifteen. Each caller
+ * keeps its own fallback sentence for a refusal with no readable body.
+ * `res.statusText` sits between the two, as it already did in eleven of the
+ * fifteen; over HTTP/2 it is empty, so in production the fallback is what
+ * shows.
+ *
+ * EXPORTED for the handful of pages that still receive a raw `Response` from
+ * an api.js method (a blob export) and turn a refusal into an Error
+ * themselves: they call this rather than writing a sixteenth order.
+ */
+export async function refusalError(res, fallback) {
+  const body = await res.json().catch(() => null);
+  const { message, code } = readRefusal(body);
+  const e = new Error(message || res.statusText || fallback);
+  e.status = res.status;
+  if (code) e.code = code;
+  return e;
+}
+
+/**
+ * D717 (#1853) — the headers `request()` merges below: auth, CSRF and the
+ * active company. A `lib/api/` module that has to call `fetch` itself (a binary
+ * answer `request()` would parse as JSON) spreads these, so its call carries
+ * exactly what `request()` sends. A POST without the CSRF header is refused
+ * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
+ */
+export function rawRequestHeaders(method = 'GET') {
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
+}
+
+/**
+ * #4622: ONE IN-FLIGHT READ PER IDENTITY AND CONTEXT.
+ *
+ * Several parts of one Studio page ask for the same advisor progress and queue
+ * (the founder home, its interview wrapper, the profile card, the chat). Each
+ * made its own request. Callers that ask while an identical read is still in
+ * flight now share it; once it settles nothing is kept, so a later call reads
+ * again (a retry, or a read after the member answered a question, is never
+ * served a stale copy), and a failure is never remembered. The key carries the
+ * identity the request is sent with (token, impersonation header, company), so
+ * a different member, or the same one in another company, never shares a read.
+ */
+const _sharedReads = new Map();
+export function sharedRead(name, run) {
+  let identity = '';
+  try { identity = JSON.stringify([getAuthHeaders(), getActiveCompanyHeader()]); } catch { identity = ''; }
+  const key = `${name}|${identity}`;
+  const pending = _sharedReads.get(key);
+  if (pending) return pending;
+  const read = run().finally(() => { if (_sharedReads.get(key) === read) _sharedReads.delete(key); });
+  _sharedReads.set(key, read);
+  return read;
+}
+
+export async function request(path, options = {}) {
+  // Armed per attempt, never per call: the step-up retry below re-enters
+  // `request()` after a modal the user may sit on for a minute, and that wait
+  // must not eat the next attempt's deadline.
+  const deadline = armDeadline(deadlineFor(path, options), options.signal);
+  try {
+    // FormData uploads must NOT carry an explicit Content-Type — the browser
+    // sets it (with the multipart boundary). Setting application/json here
+    // would corrupt the request body.
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const csrfHeader = getCsrfHeader(options.method);
+    const companyHeader = getActiveCompanyHeader();
+    // D765: the rail's page (and option), so the Worker records and switches each run by it.
+    const railHeader = railPageHeaders();
+    const baseHeaders = isFormData
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
+    const res = await fetch(`${BASE}${path}`, {
+      // T6 — `credentials: 'include'` makes the browser attach the
+      // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
+      // requests would send it anyway with `same-origin`, but `include` is
+      // safer for any future cross-origin SPA host (e.g. previews) and is
+      // the explicit default for cookie-auth APIs.
+      credentials: 'include',
+      // ORDER IS LOAD-BEARING, and it used to be wrong. `...options` was
+      // spread LAST, after `headers: baseHeaders` — so a caller passing any
+      // `headers` at all replaced the merged object with its own raw one and
+      // silently shipped the request with no Authorization, no CSRF token and
+      // no X-Company-Id, even though `baseHeaders` had just merged them all
+      // together. Only one caller reached it (`/auth/google/start`, a GET that
+      // needs none of the three), so it never surfaced — but `signal` below
+      // would have been discarded the same way, which would have made every
+      // deadline in this module silently inert.
+      ...options,
+      headers: baseHeaders,
+      signal: deadline.signal,
+    });
+    if (!res.ok) {
+      // Public token-gated endpoints (partner onboarding, esign signing,
+      // public profile reads) must never trigger an auth-redirect — a 401
+      // here typically means the dev FastAPI backend lacks the worker-only
+      // route, not "your session expired".
+      const isPublicEndpoint = path.startsWith('/partner-onboard')
+        || path.startsWith('/esign/sign')
+        || path.startsWith('/public/')
+        || path.startsWith('/decks/share/')
+        // Build queue #120 — public audience-scoped cap-table link.
+        || path.startsWith('/captable/share/');
+      if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
+        // Only force a /login redirect when we're on a protected page.
+        // Public marketing/onboarding pages must stay reachable for
+        // anonymous visitors AND for previously-signed-in users with a
+        // now-expired session (otherwise axal.vc/ bounces them to
+        // /login the moment useAuthSync probes /auth/me).
+        const currentPath = window.location.pathname;
+        const publicPath = isPublicPath(currentPath);
+        // `_suppressAuthRedirect` is set only while the catch-all 404 page is
+        // mounted (an unknown URL), so a logged-out visitor there sees the 404
+        // instead of being bounced to /login by this background 401.
+        //
+        // THE SESSION WIPE BELONGS INSIDE THIS GUARD, and used to sit above
+        // it. The redirect was correctly skipped on a public page while the
+        // two `removeItem` calls ran anyway — so a signed-in reader on `/`,
+        // `/login`, `/articles` or `/jobs` was silently signed out by ONE
+        // background 401 from any endpoint that is not `/auth/`-prefixed.
+        // They stayed on the page, so nothing announced it; the session was
+        // simply gone on their next click. That is the exact case the comment
+        // four lines above says this branch exists to protect — a
+        // previously-signed-in user with a now-expired session keeping the
+        // public page — and clearing their token is not "not bouncing them".
+        //
+        // A 401 on a PROTECTED page still clears, because there the tab is
+        // about to become a sign-in screen and leaving a dead token behind
+        // would let the next mount re-send it.
+        if (!publicPath && !_suppressAuthRedirect) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          // Task #10 — capture the bounce BEFORE the hard navigation tears the
+          // tab down. The reportError beacon uses keepalive so it still lands
+          // even though we're about to leave the page; this is what makes a
+          // silent "session expired → /login" redirect debuggable in prod.
+          reportError('api:session-expired-redirect', new Error(`401 on ${path}; redirecting ${currentPath} → /login`));
+          window.location.href = '/login';
+        }
+        throw new Error('Session expired');
+      }
+      const err = await res.json().catch(() => ({}));
+      // Detail can be a structured dict (FastAPI) or a string. The Cloudflare
+      // worker returns `error` as either a string or an object. Surface the
+      // structured payload to callers via `error.data` so UI can render
+      // things like a live cooldown countdown without regex-parsing the msg.
+      const detailObj = (err && typeof err.detail === 'object') ? err.detail : null;
+      const errorObj = (err && typeof err.error === 'object') ? err.error : null;
+      // D258 — the sentence and the machine code come from ONE definition,
+      // `readRefusal` above, shared with every raw-fetch helper in this file.
+      // `e.message` is the sentence written for the person reading it and
+      // `e.code` is the flag a page branches on; a page that matched a code
+      // through the message was matching the wrong field.
+      const refusal = readRefusal(err);
+      const msg = refusal.message || res.statusText || 'Request failed';
+      const e = new Error(msg);
+      e.status = res.status;
+      if (refusal.code) e.code = refusal.code;
+      e.data = detailObj || errorObj || err || null;
+      // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
+      // so form components can highlight the offending input.
+      e.field = (err && err.field) || (detailObj && detailObj.field) || (errorObj && errorObj.field) || null;
+      // Task #6 — when the worker returns 402 `{error:'tier_required'}`, fan
+      // out a custom event so PaywallModal opens automatically. Anything that
+      // catches the throw afterwards still gets the structured error object.
+      // `inlinePaywall` (D651): the caller draws the plan's refusal itself, so
+      // the modal is not opened on top of it.
+      if (res.status === 402 && !options.inlinePaywall && typeof window !== 'undefined') {
+        const tierPayload = (err && (err.required ? err : (err.error === 'tier_required' ? err : null))) || null;
+        if (tierPayload && tierPayload.required) {
+          try {
+            // source: 'auto' tells PaywallModal this came from a background
+            // 402 (likely a fetch fired on page load). PaywallModal gates
+            // auto-fires to once per session so refreshing the page doesn't
+            // keep re-opening the same upsell. Explicit user actions (sidebar
+            // lock click, CTA buttons) use the default source and always show.
+            window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+              detail: { required: tierPayload.required, message: tierPayload.message || '', source: 'auto' },
+            }));
+          } catch { /* noop */ }
+        }
+      }
+      // D136 — the compliance freeze, announced wherever it is met. `requireAdmin`
+      // refuses every non-GET from a frozen admin account with 423 and
+      // `code: 'admin_frozen'` (`util/authErrors.ts`), and the body already
+      // carries the notice that caused it — the gate had the row in hand, so
+      // nothing here has to go and ask.
+      //
+      // WHY THIS EXISTS BESIDE THE BANNER ON /admin/my-licence. That page
+      // explains the state where it can be acted on; this explains it at the
+      // moment of the refusal, wherever the admin happened to be. Without it a
+      // frozen administrator's every click produces whatever generic error the
+      // page prints, which is the shape D107's branch-side 423 already shipped
+      // in and which `423` appearing nowhere in `frontend/src` measured.
+      //
+      // The throw below is unchanged, so every page's own catch still receives
+      // the structured error — the same contract the 402 branch above keeps.
+      if (res.status === 423 && err && err.code === 'admin_frozen' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:admin_frozen', {
+            detail: { notice: err.notice || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
+      // D142 — THE BRANCH TWIN, and the reason it did not exist until now is
+      // the whole defect. `requireBranchNotSuspended` threw a bare Error, so
+      // its 423 shipped as `{detail}` alone and this strict `code` check could
+      // never have matched it — which is why `423` appearing nowhere in
+      // `frontend/src` was measurable at all, and why three places in the repo
+      // claimed a frozen-branch banner had shipped when nothing could key one.
+      // `since` and `reason` are HQ's own, pushed with the licence copy.
+      if (res.status === 423 && err && err.code === 'branch_suspended' && typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('studioos:branch_suspended', {
+            detail: { since: err.since || null, reason: err.reason || null, message: msg },
+          }));
+        } catch { /* noop */ }
+      }
+      // BLOCK-AUTH-03 — step-up gate. Prompt for a fresh TOTP via the global
+      // modal, then retry the ORIGINAL request once. `__steppedUp` guards
+      // against an infinite loop; we never intercept the step-up call itself.
+      if (
+        res.status === 403 &&
+        err && err.code === 'step_up_required' &&
+        !options.__steppedUp &&
+        !options.noStepUp &&
+        !path.startsWith('/auth/step-up')
+      ) {
+        try {
+          await requestStepUp(err.ttl_minutes);
+        } catch {
+          throw e; // user cancelled — surface the original 403
+        }
+        // The modal wait happens above, so this attempt is armed fresh by the
+        // recursive call rather than inheriting a clock already part-spent.
+        deadline.cleanup();
+        return request(path, { ...options, __steppedUp: true });
+      }
+      throw e;
+    }
+    const data = await res.json().catch(() => {
+      throw new Error('Invalid response format from server');
+    });
+    return data;
+  } catch (error) {
+    // OUR deadline fired — not the caller cancelling, which `timedOut()`
+    // is what distinguishes. Reported as well as thrown: `reportError`
+    // consoles, keeps a capped ring buffer in `axal:client-errors` that
+    // support can read straight off an affected browser, and beacons
+    // POST /api/client-error into the Worker logs. That endpoint is one of
+    // the four exempt from the blocking cold-start bootstrap
+    // (cloudflare-worker/src/index.ts) and always answers 204, so reporting a
+    // timeout cannot compound whatever caused it.
+    if (deadline.timedOut()) {
+      const ms = deadlineFor(path, options);
+      const timeout = timeoutError(path, ms, options.method);
+      reportError('api:timeout', new Error(`${path} exceeded ${ms}ms`));
+      throw timeout;
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(error.message || 'Network error');
+  } finally {
+    // Never leave a timer behind — one per call, cleared on every exit path
+    // including the successful one.
+    deadline.cleanup();
+  }
+}
+
+// Task #13 — analytics read helper. Auto-retries once on 5xx (transient
+// worker cold-start / D1 hiccup) with a 1s backoff. Never retries 4xx —
+// those are deterministic (auth, bad range, etc) and the caller should
+// surface them. Network errors (no `status`) get one retry too.
+//
+// A TIMEOUT IS THE ONE STATUS-LESS FAILURE THAT MUST NOT BE RETRIED. It has no
+// `.status`, so it reads as transient by the test below and would be retried
+// on reflex — turning a 30s bound into 30 + 1 + 30 = 61s of spinner, which is
+// the opposite of what the deadline is for. The user has already waited the
+// full deadline once; making them wait it twice is not resilience.
+async function _analyticsRead(path) {
+  try {
+    return await request(path);
+  } catch (e) {
+    if (e?.code === 'timeout') throw e;
+    const status = e?.status;
+    const transient = !status || status >= 500;
+    if (!transient) throw e;
+    await new Promise(r => setTimeout(r, 1000));
+    return await request(path);
+  }
+}
+
+/** D1300 — the filters, sort and scope `adminListUsers` passes through to `GET /api/admin/users`. */
+const ADMIN_USER_FILTERS = ['profile', 'sub', 'status', 'email', 'identity', 'limited', 'plan', 'country', 'persona', 'program', 'trust', 'joined', 'joined_from', 'joined_to', 'active', 'sort', 'scope'];
+
+/** #4689 — `?offset=&limit=` for an Expertise list page, after any other query it carries. */
+function expertisePage(page, extra = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  if (page?.offset) q.set('offset', String(page.offset));
+  if (page?.limit) q.set('limit', String(page.limit));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+/**
+ * #5314 part 3 — a Delivery DELETE states the revision it was shown in the
+ * query. `undefined` sends nothing (the Worker then guards on its own read);
+ * `null` says the read found no record.
+ */
+function deliveryRevisionQuery(revision) {
+  if (revision === undefined) return '';
+  return `?expected_revision=${revision === null ? 'none' : encodeURIComponent(String(revision))}`;
+}
+
+export const api = {
+  // Task #19 — Best-Fit consultations + admin report.
+  bookConsultation: (data) =>
+    request('/consultations/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  getMyConsultations: () => request('/consultations/me'),
+  adminListConsultations: (status) =>
+    request(`/admin/consultations${status ? `?status=${status}` : ''}`),
+  adminUpdateConsultationStatus: (id, data) =>
+    request(`/admin/consultations/${id}/status`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  // D120 — the branch half of an HQ support session. The code comes from the
+  // URL HQ opened; the TOKEN only ever comes back in this response body, never
+  // in a link. Branch Workers only: HQ answers 404 with `hq_only_surface`.
+  redeemSupportSession: (code) =>
+    request('/auth/support/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+  // D441 — a move onto this branch. Preview does not spend the token.
+  // Accept creates or reactivates the account and does not return a session.
+  branchInvitationPreview: (token) =>
+    request(`/branch/invitations/preview?token=${encodeURIComponent(token)}`),
+  branchInvitationAccept: (token) =>
+    request('/branch/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  // T6 — server-side logout: clears the httpOnly auth + CSRF cookies and
+  // revokes the current user_sessions row. App.jsx calls this before wiping
+  // localStorage so a stolen Bearer copy of the JWT can no longer be used.
+  logout: () => request('/auth/logout', { method: 'POST' }),
+  verifyTotp: (data) => request('/auth/verify-totp', { method: 'POST', body: JSON.stringify(data) }),
+  checkVerifyEmail: (token) => request(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+  confirmVerifyEmail: (data) => request('/auth/confirm-verify-email', { method: 'POST', body: JSON.stringify(data) }),
+  resendVerification: (data) => request('/auth/resend-verification', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 (IF) — onboarding checklist + product-tour state.
+  getOnboardingChecklist: () => request('/onboarding/checklist'),
+  completeOnboardingItem: (key) => request(`/onboarding/checklist/${encodeURIComponent(key)}/complete`, { method: 'POST' }),
+  skipOnboardingItem: (key) => request(`/onboarding/checklist/${encodeURIComponent(key)}/skip`, { method: 'POST' }),
+  resetOnboardingChecklist: () => request('/onboarding/checklist/reset', { method: 'POST' }),
+  patchOnboardingMeta: (patch) => request('/onboarding/meta', { method: 'POST', body: JSON.stringify(patch || {}) }),
+  setupTotp: (data) => request('/auth/setup-totp', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 — SMS 2FA (Google Cloud Identity Platform / Firebase Phone Auth).
+  // Discovery is unauth (rate-limited per IP). All other endpoints follow the
+  // same cookie-auth path as the rest of `api.*` and never echo the full
+  // phone number — only the last 4 digits.
+  authFactors: (email) => request(`/auth/factors?email=${encodeURIComponent(email)}`),
+  smsStatus: () => request('/auth/sms/status'),
+  smsStartEnrollment: (phone, country, recaptcha_token) =>
+    request('/auth/sms/start-enrollment', { method: 'POST', body: JSON.stringify({ phone, country, recaptcha_token }) }),
+  smsConfirmEnrollment: (session_info, code) =>
+    request('/auth/sms/confirm-enrollment', { method: 'POST', body: JSON.stringify({ session_info, code }) }),
+  smsDisable: () => request('/auth/sms/disable', { method: 'POST' }),
+  smsStartChallenge: (email, recaptcha_token) =>
+    request('/auth/sms/start-challenge', { method: 'POST', body: JSON.stringify({ email, recaptcha_token }) }),
+  smsVerifyChallenge: (email, session_info, code) =>
+    request('/auth/sms/verify-challenge', { method: 'POST', body: JSON.stringify({ email, session_info, code }) }),
+  getMe: () => request('/auth/me'),
+  // Task #178 — the affirmative act the re-acceptance interstitial collects.
+  // No body: the only thing the server needs is who is calling, and the one
+  // thing it must never accept is a user id — an acceptance recorded on
+  // somebody's behalf forges the record this exists to make honest.
+  acceptTerms: () => request('/auth/accept-terms', { method: 'POST' }),
+  // Task #51 — "Continue with Google" sign-in. /auth/google/start returns
+  // {url} when called with Accept: application/json so the SPA can do a
+  // top-level navigation (window.location.href = url). 503 means the
+  // env vars GOOGLE_AUTH_CLIENT_ID/SECRET aren't set — the click shows the
+  // server's "not enabled" sentence; the button itself always renders (D185).
+  // On /login this is the fallback: Google's own window comes first when the
+  // deployment switches it on (D722, lib/api/googleSignIn.js).
+  googleStartUrl: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.action) qs.set('action', params.action);
+    if (params.redirect) qs.set('redirect', params.redirect);
+    // Signup lane — the worker whitelists it again and signs it into the OAuth
+    // state. Without this the param is dropped here and a Google signup
+    // records no suggested role, unlike every other signup path.
+    if (params.lane) qs.set('lane', params.lane);
+    const q = qs.toString();
+    // NO `timeoutMs` OVERRIDE, and its removal is the point. This used to accept
+    // one because LoginPage called it TWICE — once on mount as a probe deciding
+    // whether to render the button, once on click. That probe is gone: it was
+    // rate-limited (this endpoint is deliberately NOT in RATE_LIMIT_EXEMPT, D74),
+    // carried a 6s deadline a slow mobile connection tripped, and — because
+    // /start mints a nonce, writes KV and sets a cookie — it was a state-mutating
+    // call used as a health check on every page load. Every caller now means it:
+    // the request is the sign-in, so it takes the module default deadline.
+    return request(`/auth/google/start${q ? `?${q}` : ''}`, {
+      headers: { accept: 'application/json' },
+    });
+  },
+  getConnectedAccounts: () => request('/settings/connected-accounts'),
+  unlinkGoogle: () => request('/settings/connected-accounts/google/unlink', { method: 'POST' }),
+  // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
+  // same 202 (no account-existence leak); the link in the email hits the
+  // worker's GET /magic/verify which sets cookies and 302s into the SPA.
+  // #4578: `purpose: 'signup'` asks for the new-account wording of the same link; anything else is a sign-in link.
+  magicStart: (email, { purpose } = {}) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify(purpose === 'signup' ? { email, purpose } : { email }) }),
+  // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
+  stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).
+  signOutEverywhere: () => request('/auth/sign-out-everywhere', { method: 'POST', body: JSON.stringify({}) }),
+  // BLOCK-AUTH-02 — passkeys / WebAuthn. register-* require an authed session;
+  // auth-* are the passwordless login path keyed by email.
+  passkey: {
+    registerOptions: () => request('/auth/passkey/register-options'),
+    registerVerify: (attResp, label) =>
+      request('/auth/passkey/register-verify', { method: 'POST', body: JSON.stringify({ response: attResp, label }) }),
+    authOptions: (email) =>
+      request('/auth/passkey/auth-options', { method: 'POST', body: JSON.stringify({ email }) }),
+    authVerify: (email, assertionResp) =>
+      request('/auth/passkey/auth-verify', { method: 'POST', body: JSON.stringify({ email, response: assertionResp }) }),
+    list: () => request('/auth/passkey/list'),
+    remove: (id) => request(`/auth/passkey/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  },
+  // Task #7 (IG) — Cmd+K + Help widget + Customer chat.
+  getRecentActivity: (limit = 20) => request(`/activity/recent?limit=${encodeURIComponent(limit)}`),
+  getCustomerChatThread: () => request('/customer-chat/thread'),
+  sendCustomerChat: (text) => request('/customer-chat/send', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  }),
+  health: () => request('/health'),
+
+  // Task #15 — Page header explainers (server-synced dismiss list).
+  getExplainersDismissed: () => request('/settings/explainers'),
+  dismissExplainer: (page_key) => request('/settings/explainer-dismissed', { method: 'POST', body: JSON.stringify({ page_key }) }),
+  restoreExplainer: (page_key) => request('/settings/explainer-restore', { method: 'POST', body: JSON.stringify({ page_key }) }),
+
+  // Task #16 — Profile expansion (personal + corporate identity blocks).
+  getPersonalProfile: () => request('/settings/profile/personal'),
+  updatePersonalProfile: (patch) => request('/settings/profile/personal', { method: 'PUT', body: JSON.stringify(patch) }),
+  getCorporateProfile: () => request('/settings/profile/corporate'),
+  updateCorporateProfile: (patch) => request('/settings/profile/corporate', { method: 'PUT', body: JSON.stringify(patch) }),
+
+  // AE-1 (Task #1) — tabbed Settings aliases. /identity merges
+  // user_settings (timezone/locale/pronouns/archetype_sex/profile_slug + display_name +
+  // headline) with personal-profile fields (full_legal_name/DOB/
+  // nationality). /details is the address+phone+tax slice of the personal
+  // profile. /legal-entity is the corporate-profile alias.
+  getIdentitySettings: () => request('/settings/profile/identity'),
+  updateIdentitySettings: (patch) => request('/settings/profile/identity', { method: 'PUT', body: JSON.stringify(patch) }),
+  getProfileDetails: () => request('/settings/profile/details'),
+  updateProfileDetails: (patch) => request('/settings/profile/details', { method: 'PUT', body: JSON.stringify(patch) }),
+  getLegalEntity: () => request('/settings/profile/legal-entity'),
+  updateLegalEntity: (patch) => request('/settings/profile/legal-entity', { method: 'PUT', body: JSON.stringify(patch) }),
+
+  stats: () => request('/dashboard/stats'),
+
+  listProjects: (status) => request(`/projects${status ? `?status=${status}` : ''}`),
+  getProject: (id) => request(`/projects/${id}`),
+  createProject: (data) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
+  updateProject: (id, data) => request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // Task #188/#198 — the sizing assumptions BEHIND tam/sam/som, which
+  // `SpinoutLabMarketPage` used to hold in session state and drop when the tab
+  // closed. A PATCH: fields left out are kept, which is what lets one cited fill
+  // write one figure without blanking the eleven the founder typed.
+  getMarketAssumptions: (id) => request(`/projects/${id}/market-assumptions`),
+  saveMarketAssumptions: (id, assumptions) => request(`/projects/${id}/market-assumptions`, {
+    method: 'PUT', body: JSON.stringify({ assumptions }),
+  }),
+  deleteProject: (id) => request(`/projects/${id}`, { method: 'DELETE' }),
+  // Task #7 (AM) — Admin > Trash management for soft-deleted projects.
+  adminListProjectTrash: () => request('/admin/projects/trash'),
+  adminRestoreProject: (id) => request(`/admin/projects/${id}/restore`, { method: 'POST' }),
+  adminHardDeleteProject: (id) => request(`/admin/projects/${id}/hard-delete`, { method: 'DELETE' }),
+  advanceWeek: (id) => request(`/projects/${id}/advance-week`, { method: 'POST' }),
+
+  // Task #1 — Spin-Out teams collaboration: project membership (co-founders +
+  // advisors). Management (add/invite/remove/revoke) is owner + admin/partner
+  // only and stage-gated server-side; the UI mirrors `can_manage` + `locked`.
+  // #3841: the roster and invitation methods moved to `lib/api/teams.js` (`teamsApi`, D527).
+  acceptProjectInvitation: (token) =>
+    request('/projects/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  // Epic 5: scoreStartup honours `is_sandbox` (founder practice mode). The
+  // server rejects any client-supplied `score`/`tier`/`score_breakdown`.
+  scoreStartup: (data) => request('/scoring/score', { method: 'POST', body: JSON.stringify(data) }),
+  getScores: (projectId, opts = {}) => request(`/scoring/scores/${projectId}${opts.includeSandbox ? '?include_sandbox=1' : ''}`),
+  getCohortBenchmark: (projectId) => request(`/scoring/cohort-benchmark/${encodeURIComponent(projectId)}`),
+  // Admin sign-off queue for flagged / tampered snapshots.
+  getScoreFlags: (status = 'flagged') => request(`/monitoring/score-flags?status=${encodeURIComponent(status)}`),
+  reviewScoreFlag: (id, decision, notes) => request(`/monitoring/score-flags/${id}/review`, { method: 'POST', body: JSON.stringify({ decision, notes }) }),
+  waiveScoreCooldown: (id) => request(`/monitoring/score-flags/${id}/waiver`, { method: 'POST' }),
+
+  listTemplates: () => request('/legal/templates'),
+  getTemplateContent: (key) => request(`/legal/templates/${key}`),
+  listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
+  getDocument: (id) => request(`/legal/documents/${id}`),
+  // Task #30 — Jurisdiction wizard
+  legalJurisdictions: () => request('/legal/jurisdictions'),
+  // Task #10 — live company-name availability check (Confirm step).
+  legalNameCheck: (jurisdictionId, name) =>
+    request(`/legal/name-check?jurisdiction_id=${encodeURIComponent(jurisdictionId)}&name=${encodeURIComponent(name)}`),
+  // Task #11 — per-jurisdiction Stripe Checkout (replaces free wizard submit).
+  legalIncorporateCheckout: (data) =>
+    request('/legal/incorporate/checkout', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #6 — embedded-terminal incorporation order. Creates a one-time Stripe
+  // Invoice whose PaymentIntent is confirmed in-app (no Checkout redirect) plus
+  // a pending order row, and returns an optional annual Registered Agent
+  // subscription offer. Body: { project_id, jurisdiction_id, company_name,
+  // registered_agent_name?, registered_agent_address? } →
+  //   { incorporation_id, client_secret, payment_intent_id, invoice_id,
+  //     amount_cents, currency, registered_agent } | { dev:true, status:'paid', … }
+  legalIncorporationOrder: (data) =>
+    request('/legal/incorporation/order', { method: 'POST', body: JSON.stringify(data) }),
+  // Dev parity: simulate the Stripe webhook marking a checkout-created order
+  // paid (the dev FastAPI has no real Stripe webhook).
+  legalIncorporateDevComplete: (id) =>
+    request(`/legal/incorporate/dev-complete?id=${encodeURIComponent(id)}`, { method: 'POST' }),
+  legalIncorporateStatus: (id) =>
+    request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
+  legalIncorporationOrders: () =>
+    request('/legal/incorporate/orders'),
+  // D362 — the catalog price POST /incorporation/order would charge for this
+  // jurisdiction: { jurisdiction_id, label, amount_cents | null, currency,
+  // source: 'catalog' | null, reason?, message?, registered_agent }.
+  legalIncorporationQuote: (jurisdictionId) =>
+    request(`/legal/incorporation/quote?jurisdiction_id=${encodeURIComponent(jurisdictionId)}`),
+  // Legacy free wizard — still available for admin/back-compat (admin only).
+  legalIncorporateWizard: (data) =>
+    request('/legal/incorporate/wizard', { method: 'POST', body: JSON.stringify(data) }),
+  // Task #31 — Co-founder agreement + 83(b) tracker
+  legalCofounderAgreement: (data) =>
+    request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  // D354 — each party's own position on each clause of a generated draft.
+  // The Worker takes the actor from the session only; nothing here sends a
+  // user id, and a body that named another party's would be refused.
+  legalCofounderPositions: (docId) => request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions`),
+  legalRecordClausePosition: (docId, clauseKey, { position, note }) =>
+    request(`/legal/cofounder-agreement/${encodeURIComponent(docId)}/positions/${encodeURIComponent(clauseKey)}`, {
+      method: 'PUT', body: JSON.stringify({ position, note: note ?? null }),
+    }),
+  // Spin-Out Lab graduation-certificate registry. Scopes are enforced in the
+  // worker (routes/spinout_certificates.ts), not here: admin issues/revokes,
+  // the holder reads only their own row, and the public verifier is separate
+  // and unauthenticated.
+  spinoutCertificateMine: () => request('/spinout-lab/certificates/mine'),
+  spinoutCertificateSharing: (enabled) =>
+    request('/spinout-lab/certificates/mine/sharing', {
+      method: 'POST', body: JSON.stringify({ public_share_enabled: !!enabled }),
+    }),
+  spinoutCertificateList: () => request('/spinout-lab/certificates'),
+  spinoutCertificateIssue: (data) =>
+    request('/spinout-lab/certificates', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutCertificateRevoke: (id, reason) =>
+    request(`/spinout-lab/certificates/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || null }),
+    }),
+  // Catch-up issuance for graduates who finished before auto-issuance
+  // existed. Admin-only, idempotent, and bounded per call — the response
+  // reports `remaining` so the caller knows whether to run it again.
+  spinoutCertificateBackfill: (limit) =>
+    request('/spinout-lab/certificates/backfill', {
+      method: 'POST', body: JSON.stringify({ limit: limit || 100 }),
+    }),
+  // Public, unauthenticated: returns only the public_* snapshot.
+  publicVerifyCertificate: (token) =>
+    request(`/public/verify/${encodeURIComponent(token)}`),
+  legal83bList: (projectId) =>
+    request(`/legal/83b/trackers${projectId ? `?project_id=${projectId}` : ''}`),
+  legal83bCreate: (data) =>
+    request('/legal/83b/trackers', { method: 'POST', body: JSON.stringify(data) }),
+  legal83bUpdate: (id, data) =>
+    request(`/legal/83b/trackers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Task #32 — Compliance calendar
+  complianceList: (projectId, status) => {
+    const q = new URLSearchParams();
+    if (projectId) q.set('project_id', String(projectId));
+    if (status) q.set('status', status);
+    const qs = q.toString();
+    return request(`/compliance/events${qs ? `?${qs}` : ''}`);
+  },
+  complianceCreate: (data) =>
+    request('/compliance/events', { method: 'POST', body: JSON.stringify(data) }),
+  complianceUpdate: (id, data) =>
+    request(`/compliance/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  complianceDelete: (id) =>
+    request(`/compliance/events/${id}`, { method: 'DELETE' }),
+
+  // Task #40 — Founder wellbeing
+  wellbeingMyCheckins: () => request('/wellbeing/checkins'),
+  wellbeingSubmit: (data) =>
+    request('/wellbeing/checkins', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingAggregate: (days = 30) =>
+    request(`/wellbeing/aggregate?days=${days}`),
+  wellbeingResources: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.category) q.set('category', params.category);
+    if (params.region) q.set('region', params.region);
+    const qs = q.toString();
+    return request(`/wellbeing/resources${qs ? `?${qs}` : ''}`);
+  },
+  wellbeingResourceCreate: (data) =>
+    request('/wellbeing/resources', { method: 'POST', body: JSON.stringify(data) }),
+  // D574 — an admin edits a resource: any field, its kind, topic and state.
+  wellbeingResourceUpdate: (id, data) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D574 part 4 — a file attached to a resource: one PUT of the raw bytes.
+  wellbeingResourceFileUpload: (id, file) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'PUT', body: file, headers: { 'Content-Type': file?.type || 'application/octet-stream' } }),
+  wellbeingResourceFileRemove: (id) =>
+    request(`/wellbeing/resources/${encodeURIComponent(id)}/file`, { method: 'DELETE' }),
+  wellbeingResourceDelete: (id) =>
+    request(`/wellbeing/resources/${id}`, { method: 'DELETE' }),
+  // Task #8 (DI) — daily pulse + expert directory
+  wellbeingDaily: (days = 30) => request(`/wellbeing/daily?days=${days}`),
+  // Task #33 — canonical submit endpoint is /wellbeing/checkins; /daily is
+  // kept as a backward-compat alias on the worker.
+  wellbeingDailySubmit: (data) =>
+    request('/wellbeing/checkins', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertCategories: () => request('/wellbeing/experts/categories'),
+  wellbeingExperts: (params = {}) => {
+    const q = new URLSearchParams();
+    const set = (k, v) => { if (v != null && v !== '') q.set(k, String(v)); };
+    set('category', params.category);
+    set('language', params.language);
+    set('modality', params.modality);
+    set('price_max', params.price_max);
+    set('q', params.q);
+    set('limit', params.limit);
+    set('tz', params.tz);
+    set('budget_max', params.budget_max);
+    (params.want_categories || []).forEach((v) => q.append('want_category', v));
+    (params.want_languages || []).forEach((v) => q.append('want_language', v));
+    (params.want_sectors || []).forEach((v) => q.append('want_sector', v));
+    (params.want_modalities || []).forEach((v) => q.append('want_modality', v));
+    const qs = q.toString();
+    return request(`/wellbeing/experts${qs ? `?${qs}` : ''}`);
+  },
+  wellbeingExpertGet: (uid) => request(`/wellbeing/experts/${encodeURIComponent(uid)}`),
+  wellbeingExpertSlots: (uid) => request(`/wellbeing/experts/${encodeURIComponent(uid)}/slots`),
+  wellbeingExpertBook: (uid, data = {}) =>
+    request(`/wellbeing/experts/${encodeURIComponent(uid)}/book`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  wellbeingExpertRate: (uid, data) =>
+    request(`/wellbeing/experts/${encodeURIComponent(uid)}/rate`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  // Task #4 — expert self-service
+  wellbeingExpertApply: (data) =>
+    request('/wellbeing/experts/apply', { method: 'POST', body: JSON.stringify(data || {}) }),
+  wellbeingExpertMe: () => request('/wellbeing/experts/me'),
+  wellbeingExpertMeUpdate: (data) =>
+    request('/wellbeing/experts/me', { method: 'PUT', body: JSON.stringify(data) }),
+  wellbeingExpertMyServices: () => request('/wellbeing/experts/me/services'),
+  wellbeingExpertServiceCreate: (data) =>
+    request('/wellbeing/experts/me/services', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertServiceUpdate: (uid, data) =>
+    request(`/wellbeing/experts/me/services/${encodeURIComponent(uid)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  wellbeingExpertServiceDelete: (uid) =>
+    request(`/wellbeing/experts/me/services/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  wellbeingExpertMyAvailability: () => request('/wellbeing/experts/me/availability'),
+  wellbeingExpertAvailabilityCreate: (data) =>
+    request('/wellbeing/experts/me/availability', { method: 'POST', body: JSON.stringify(data) }),
+  wellbeingExpertAvailabilityDelete: (uid) =>
+    request(`/wellbeing/experts/me/availability/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  wellbeingExpertStripeConnect: () =>
+    request('/wellbeing/experts/me/stripe/connect', { method: 'POST', body: '{}' }),
+  wellbeingExpertStripeStatus: () => request('/wellbeing/experts/me/stripe/status'),
+  wellbeingExpertMyBookings: () => request('/wellbeing/experts/me/bookings'),
+  wellbeingExpertBookingPatch: (uid, data) =>
+    request(`/wellbeing/experts/me/bookings/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  wellbeingMyBookings: () => request('/wellbeing/bookings/mine'),
+  // D574 — a member cancels their own open, unpaid, future booking.
+  wellbeingCancelBooking: (uid) => request(`/wellbeing/bookings/${encodeURIComponent(uid)}/cancel`, { method: 'POST' }),
+  wellbeingAdminHide: (uid, hidden) =>
+    request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/hide`, {
+      method: 'POST', body: JSON.stringify({ hidden: !!hidden }),
+    }),
+  wellbeingAdminVerify: (uid, verified) =>
+    request(`/wellbeing/admin/experts/${encodeURIComponent(uid)}/verify`, {
+      method: 'POST', body: JSON.stringify({ verified: !!verified }),
+    }),
+  articlesByAuthor: (userId) =>
+    request(`/articles/by-author/${encodeURIComponent(userId)}`),
+
+  legal83bUploadReceipt: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/legal/83b/trackers/${id}/receipt`, { method: 'POST', body: fd });
+  },
+  spinoutProject: (projectId) => request(`/legal/spinout/${projectId}`, { method: 'POST' }),
+  listEntities: () => request('/legal/entities'),
+
+  // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
+  adminPartners: {
+    activateDeal: (id) => request(`/admin/partners/deals/${id}/activate`, { method: 'POST' }),
+    // D926 — search, filters, sort and pages run on the Worker, which answers
+    // an exact `total`. With no options the call is today's: the newest 200.
+    // `stage` is a list of stored stages and `lapsed`.
+    listInvitations: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.status) q.set('status', opts.status);
+      if (opts.email) q.set('email', opts.email);
+      if (opts.q) q.set('q', opts.q);
+      for (const s of [].concat(opts.stage || [])) q.append('stage', s);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.invitedBy != null) q.set('invited_by', String(opts.invitedBy));
+      if (opts.sentWithin) q.set('sent_within', String(opts.sentWithin));
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
+      const qs = q.toString();
+      return request(`/admin/partners/invitations${qs ? `?${qs}` : ''}`);
+    },
+    // D926 — PI4's two warnings: an open invitation to this address, and the
+    // member who owns it (their role only).
+    lookupInvitation: (email) =>
+      request(`/admin/partners/invitations/lookup?email=${encodeURIComponent(email)}`),
+    createInvitation: (data) =>
+      request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
+    // D927 (#2723) — read only. The Overview's blocks (each `{ available, … }`
+    // alone), one invitation (message, step dates, offers seen, chosen deal,
+    // refusals, admin history), and the offers a set of types makes over a
+    // neutral profile. None writes a row or logs a view.
+    overview: () => request('/admin/partners/overview'),
+    getInvitation: (id) => request(`/admin/partners/invitations/${encodeURIComponent(id)}`),
+    previewOffers: (types = []) =>
+      request(`/admin/partners/offers/preview?types=${encodeURIComponent([].concat(types).join(','))}`),
+    // The reply carries `signing_link`: 'renewed' | 'not_renewed' | null (D927).
+    resendInvitation: (id) =>
+      request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
+    revokeInvitation: (id, reason) =>
+      request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
+    // A state, as today, or D926's options: `status` (a list, or 'all'),
+    // `q`, `dealType`, `endsWithin`, `hasRedemptions`, `sort`, `limit`, `offset`.
+    listDeals: (statusOrOpts = 'active') => {
+      const opts = typeof statusOrOpts === 'string' ? { status: statusOrOpts } : (statusOrOpts || {});
+      const q = new URLSearchParams();
+      for (const s of [].concat(opts.status || 'active')) q.append('status', s);
+      if (opts.q) q.set('q', opts.q);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.endsWithin) q.set('ends_within', String(opts.endsWithin));
+      if (opts.hasRedemptions) q.set('has_redemptions', 'true');
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
+      return request(`/admin/partners/deals?${q.toString()}`);
+    },
+    terminateDeal: (id, reason) =>
+      request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    // Task #26 — operational counters
+    listTopDeals: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.status) q.set('status', opts.status);
+      const qs = q.toString();
+      return request(`/admin/partners/deals/top${qs ? `?${qs}` : ''}`);
+    },
+    dealRedemptions: (id) =>
+      request(`/admin/partners/deals/${encodeURIComponent(id)}/redemptions`),
+    // The firm link. Every partner surface resolves through `users.partner_id`
+    // and nothing else (D57), so an account without one gets a card saying an
+    // admin can attach it — and this is the admin who can.
+    listFirmLinks: () => request('/admin/partners/links'),
+    // `partnerId: null` detaches. Both ids are explicit: there is no
+    // search-and-guess here, because matching accounts to firms on a mutable
+    // string is exactly the hole D57 closed on the read side.
+    setFirmLink: (userId, partnerId) =>
+      request('/admin/partners/links', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, partner_id: partnerId ?? null }),
+      }),
+  },
+  // Task #9 (X-2) — Public token-gated partner onboarding flow.
+  partnerOnboard: {
+    get: (token) => request(`/partner-onboard/${encodeURIComponent(token)}`),
+    saveProfile: (token, profile) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/profile`, { method: 'POST', body: JSON.stringify(profile) }),
+    propose: (token) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/propose`, { method: 'POST', body: JSON.stringify({}) }),
+    select: (token, body) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/select`, { method: 'POST', body: JSON.stringify(body) }),
+    finalize: (token) =>
+      request(`/partner-onboard/${encodeURIComponent(token)}/finalize`, { method: 'POST', body: JSON.stringify({}) }),
+    status: (token) => request(`/partner-onboard/${encodeURIComponent(token)}/status`),
+  },
+  // Task #9 (X-2) — Authenticated partner deal portal.
+  partnerPortal: {
+    myDeal: () => request('/partner-portal/my-deal'),
+    // Wave 1a — the partner's real firm profile for Operations → Overview
+    // (replaces the BrightPath fixture). Per-field merge on PATCH: send only
+    // the edited keys; empty string clears company/specialization.
+    getProfile: () => request('/partner-portal/profile'),
+    updateProfile: (data) => request('/partner-portal/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+    setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
+    // Office-hours booking guidance the partner authors about themselves.
+    // Worker: cloudflare-worker/src/routes/partner_portal.ts (D1 migration
+    // 160_partner_office_hours_guidance.sql). Founders read it via the
+    // oh_* columns that ride along on GET /partners.
+    officeHoursGuidance: () => request('/partner-portal/office-hours-guidance'),
+    // Full replace, not a per-field merge: always send all four fields; a
+    // blank/omitted field is stored as NULL (i.e. unpublished).
+    updateOfficeHoursGuidance: ({ when_to_book, stage_fit, session_outcome, bring }) =>
+      request('/partner-portal/office-hours-guidance', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          when_to_book: when_to_book || null,
+          stage_fit: stage_fit || null,
+          session_outcome: session_outcome || null,
+          bring: Array.isArray(bring) ? bring : [],
+        }),
+      }),
+  },
+
+  // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
+  // /explain returns an SSE stream and is consumed via fetch + ReadableStream
+  // in the AC-3 chat UI; we expose a thin URL helper for that consumer
+  // instead of wrapping it through request() (which buffers JSON).
+  advisor: {
+    start: () => request('/advisor/start', { method: 'POST', body: JSON.stringify({}) }),
+    answer: (conversation_id, question_id, value, evidence) =>
+      request('/advisor/answer', {
+        method: 'POST',
+        body: JSON.stringify(
+          evidence != null && String(evidence).trim()
+            ? { conversation_id, question_id, value, evidence: String(evidence).trim() }
+            : { conversation_id, question_id, value },
+        ),
+      }),
+    skip: (conversation_id, question_id) =>
+      request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
+    progress: () => sharedRead('advisor:progress', () => request('/advisor/progress')),
+    // Task #2 (AR) — pinned next-question fetch + canonical manifest.
+    // D765: a press ("drill in"), so a POST: only a press may let the model rank.
+    nextQuestion: (focus) =>
+      request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`, { method: 'POST', body: JSON.stringify({}) }),
+    // Task #2 (CC) — read-only ranked queue used by the right-rail
+    // progress widget. Mirrors /turn output but never registers an
+    // "asked" timestamp so the widget can re-poll freely.
+    queue: (focus) =>
+      sharedRead(`advisor:queue:${focus || ''}`, () => request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`)),
+    manifest: () => request('/advisor/manifest'),
+    // Task #5 (AV) — Find & deep-link tool registry.
+    tools: () => request('/advisor/tools'),
+    tool: (name, args = {}) =>
+      request('/advisor/tool', { method: 'POST', body: JSON.stringify({ name, args }) }),
+    // LLM tool-binding entry point. The user types a free-form message;
+    // the worker calls aiRouter.run('tool_call') to pick a tool, validates
+    // the envelope, and dispatches via the same gated pipeline as `tool()`.
+    // D778 part 12: the press's rail headers (`railPressHeaders`) as an optional last argument.
+    toolAuto: (message, headers) =>
+      request('/advisor/tool/auto', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ message }) }),
+    conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
+    explainUrl: () => '/api/advisor/explain',
+    // Task #3 (AS) — list field_sources rows for the current user,
+    // optionally filtered to a single page_target. Used by
+    // <AdvisorFilledBanner> + the per-field sparkle icons.
+    sources: (page) =>
+      request(`/advisor/sources${page ? `?page=${encodeURIComponent(page)}` : ''}`),
+    // Task #13 — captured-answer list (saved + noop) for the right-rail
+    // "Completed" bucket. Same scope/predicate as the header answered count,
+    // so it includes free-form/reflection replies that never reach
+    // field_sources (and thus were missing from /sources).
+    answered: () => request('/advisor/answered'),
+    // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
+    // + its mime type to the Workers AI Whisper endpoint; returns { text }.
+    // The UI mic button that calls this is a separate task.
+    // D778 part 6: `headers` is the press's own rail context (`railPressHeaders`).
+    transcribe: (audio, mime, headers) =>
+      request('/advisor/transcribe', {
+        ...(headers ? { headers } : {}),
+        method: 'POST',
+        body: JSON.stringify({ audio, mime }),
+      }),
+  },
+
+  listPartners: () => request('/partners'),
+  createPartner: (data) => request('/partners', { method: 'POST', body: JSON.stringify(data) }),
+  recommendPartners: (sector) => request(`/partners/matchmaking/recommend${sector ? `?sector=${sector}` : ''}`),
+  matchPartners: (intent) => request('/partners/match', { method: 'POST', body: JSON.stringify({ intent }) }),
+
+  createCapitalCallV2: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
+  listCapitalCalls: (status) => request(`/capital/calls${status ? `?status=${status}` : ''}`),
+
+  listTickets: (status) => request(`/tickets${status ? `?status=${status}` : ''}`),
+  createTicket: (data) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
+  getTicket: (id) => request(`/tickets/${id}`),
+  updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  syncTickets: (options = {}) => request('/tickets/sync', { method: 'POST', body: JSON.stringify(options) }),
+  // Task #9 — GitHub-canonical ticket comments. (D232: the sync-mapping debug
+  // method went — no screen called it; `GET /api/tickets/:id/mapping` stays.)
+  commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  // D604 — an admin retries one saved ticket's mirror from its page.
+  retryTicketMirror: (id) => request(`/tickets/${id}/mirror`, { method: 'POST' }),
+
+  // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
+  // relationship with: invited or committed. A room request alone is not access.
+  listDeals: (status, scope) => {
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (scope) q.set('scope', scope);
+    const qs = q.toString();
+    return request(`/deals${qs ? `?${qs}` : ''}`);
+  },
+  createDeal: (data) => request('/deals', { method: 'POST', body: JSON.stringify(data) }),
+  getDeal: (id) => request(`/deals/${id}`),
+  updateDeal: (id, data) => request(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  // D1237 — room requests. Join returns {ok, requested, already_requested?};
+  // another firm's request is 409; a non-live/unknown deal is 404. Quota is
+  // 402 with code:'quota_dealrooms_exhausted' and no `required` field, so callers
+  // surface it inline. Leave is idempotent and grants no new deal access.
+  dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
+  dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
+  // D630 — used against cap ("Unlimited" when `unlimited`), the plan that
+  // raises it, and the rooms this firm is in. Read without joining anything.
+  dealroomQuota: () => request('/deals/dealroom/quota'),
+
+  // Task #4 — Deal Flow: funnel aggregates, admin drafting, Deal Room
+  // (documents / data room / commitments / activity) and investor invitations.
+  dealFunnel: () => request('/deals/funnel'),
+  // Canvas ID2's desk — the score history and its flags. The pass taxonomy is
+  // a SEPARATE call (`dealPassAnalytics`, already declared below beside the
+  // write that produces it): two stores, read apart so a screening read that
+  // fails costs its own zone rather than taking the fund's pass memory with
+  // it — the same split RevenuePage made for disputes.
+  dealScreening: () => request('/deals/screening'),
+  draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
+  // D4632: `from` is the stage the page shows; a retry of a landed advance moves nothing.
+  advanceDeal: (id, from) => request(`/deals/${id}/advance`, { method: 'POST', body: JSON.stringify(from ? { from } : {}) }),
+  // Task #127 — the only write path to the terminal stage. `reason` must be a
+  // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
+  passDeal: (id, { reason, note } = {}) =>
+    request(`/deals/${id}/pass`, { method: 'POST', body: JSON.stringify({ reason, note }) }),
+  dealPassAnalytics: (reason) =>
+    request(`/deals/pass-analytics${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
+  dealStageAnalytics: (days) =>
+    request(`/deals/stage-analytics${days ? `?days=${encodeURIComponent(days)}` : ''}`),
+  dealLeadPartners: () => request('/deals/lead-partners'),
+  dealInvestorOptions: () => request('/deals/investors'),
+  dealDocuments: (id) => request(`/deals/${id}/documents`),
+  // Data-room zip is a file download. FastAPI (dev preview) authenticates via
+  // the Bearer header only — a plain <a> click can't set that — so fetch the
+  // blob with auth headers and trigger a client-side download.
+  downloadDataRoom: async (id) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${BASE}/deals/${id}/data-room`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) throw await refusalError(res, 'Failed to download data room');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `data-room-deal-${id}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
+  dealActivity: (id) => request(`/deals/${id}/activity`),
+  dealInvitations: (id) => request(`/deals/${id}/invitations`),
+  createDealInvitations: (id, data) => request(`/deals/${id}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
+  myDealInvitations: () => request('/deals/invitations/mine'),
+  respondDealInvitation: (id, response) => request(`/deals/${id}/invitations/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+  // D462 — the Closing stage's money and paper (migration 335). A transfer is
+  // refused with 409 `open_conditions_block_transfer` while an IC condition on
+  // the deal is open; the page branches on `e.code`.
+  dealTransfers: (id) => request(`/deals/${id}/transfers`),
+  dealTransferRecord: (id, data) => request(`/deals/${id}/transfers`, { method: 'POST', body: JSON.stringify(data) }),
+  // The zone-wide read for the Wires view — registered ahead of /deals/:id.
+  dealsTransfers: () => request('/deals/transfers'),
+  dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
+  dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
+  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
+
+  matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
+  generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
+
+  founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
+
+  // The market-intelligence reads Research and the Spinout Lab still draw.
+  // D670 retired the /market-intel page, its sector digest and the reads only
+  // that page made.
+  marketPulse: () => request('/market-intel/market-pulse'),
+  privateRounds: () => request('/market-intel/private-rounds'),
+  studioBenchmarks: () => request('/market-intel/studio-benchmarks'),
+
+  // Task #15 (AA-2) — Aggregator-backed Market Intel surfaces. The worker
+  // returns 402 {error:'tier_required', required} on gated endpoints; the
+  // shared request() helper auto-fires the studioos:tier_required event so
+  // PaywallModal opens without per-call wiring. Free callers get only
+  // {sector, composite} from /sector-compass; full-lens callers get the
+  // dimensional breakdown.
+  miSectorCompass: () => request('/market-intel/sector-compass'),
+  miFounderLens: () => request('/market-intel/founder-lens'),
+  miCitations: (sector, limit = 50) => {
+    const q = new URLSearchParams();
+    if (sector) q.set('sector', sector);
+    if (limit) q.set('limit', String(limit));
+    const qs = q.toString();
+    return request(`/market-intel/citations${qs ? `?${qs}` : ''}`);
+  },
+  miSources: () => request('/market-intel/sources'),
+
+  // Task #4 — the investor profile (profiling chatbot)
+  getInvestorProfile: () => request('/investor-profile/me'),
+  saveInvestorProfile: (data) => request('/investor-profile/me', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Task #6 (AT-1) — Market Intelligence per-user contribution opt-out.
+  // Backend purges the user's signals + embeddings within 24h via the
+  // nightly reducer (or sooner if the queue runs first).
+  miContributionOptoutGet: () => request('/market-intel/contribution-optout'),
+  miContributionOptoutSet: (opt_out) => request('/market-intel/contribution-optout', {
+    method: 'POST', body: JSON.stringify({ opt_out: !!opt_out }),
+  }),
+
+  // Task #1 (AT-2) — a venture's fit against the anonymised cohort. Returns
+  // `{ matches, note?, k_min }`; cells with n<5 are suppressed server-side.
+  miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
+
+  // Task #26 — the financial model's export. D1180 (#3107): the builder page
+  // is retired; Use of funds › Runway › Forecast reads and saves the same
+  // store through `api/useOfFunds.js` and keeps this export.
+  // Returns a promise so callers can await it and surface real errors in
+  // their own UI instead of relying on alert(). The previous version
+  // swallowed the backend's actual reason ("Project not found", "No
+  // financial model saved yet", etc.) behind a generic "Export failed".
+  downloadFinancialModelXlsx: async (projectId) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/financials/${projectId}/export.xlsx`, {
+      // T6 — credentials:'include' so the cookie auth path also works for
+      // users who no longer have a Bearer token in localStorage.
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    // A body that isn't JSON (plain text, empty) keeps statusText, then the
+    // fallback — `refusalError` reads the rest through D258's one definition.
+    if (!res.ok) throw await refusalError(res, 'Export failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'financials.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  // Task #28 — Discovery / Roadmap / Metrics
+  listInterviews: (projectId) => request(`/progress/discovery/${projectId}`),
+  createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+
+  // Validate · hypotheses and · verdict (migration 211). The board is a
+  // curation layer over the same interviews `listInterviews` returns — it does
+  // not replace `hypotheses_json`, which the demo-day deck and the discovery
+  // signals score still read. D704 (#1666): the board's edits and the old
+  // decision methods went with the Hypotheses and Verdict pages; a claim is
+  // edited and linked through its record's actions, and a decision is the
+  // Verdict module's (`verdictApi`).
+  getValidationBoard: (projectId) => request(`/founder/validate/board/${projectId}`),
+  createHypothesis: (projectId, data) => request(`/founder/validate/board/${projectId}/hypotheses`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Build · Cadence (#176 FB4). ONE READ FOR THE WHOLE ZONE, because all four
+  // of its stat cards are counts over rows the same response carries — a
+  // separate `/stats` call would be a second answer to a question the rows
+  // already answer, and the two would disagree the moment a run is edited.
+  // The write surface is per-record because that is what a form submits.
+  getCadence: (projectId) => request(`/founder/cadence/${projectId}`),
+  getCadenceStarters: () => request('/founder/cadence/starters'),
+  createRitual: (projectId, data) => request(`/founder/cadence/${projectId}/rituals`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitual: (id, data) => request(`/founder/cadence/rituals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitual: (id) => request(`/founder/cadence/rituals/${id}`, { method: 'DELETE' }),
+  logRitualRun: (projectId, data) => request(`/founder/cadence/${projectId}/runs`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualRun: (id, data) => request(`/founder/cadence/runs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualRun: (id) => request(`/founder/cadence/runs/${id}`, { method: 'DELETE' }),
+  createRitualTemplate: (projectId, data) => request(`/founder/cadence/${projectId}/templates`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRitualTemplate: (id, data) => request(`/founder/cadence/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRitualTemplate: (id) => request(`/founder/cadence/templates/${id}`, { method: 'DELETE' }),
+
+  // Validate · the three exports.
+  //
+  // ONE DOWNLOAD HELPER, NOT THREE. The blob → Content-Disposition →
+  // synthesised `<a download>` dance is written out five times in this file
+  // already (financials, the two advisor transcript exports, the audit CSV,
+  // the market-intel render). A sixth, seventh and eighth would be the same
+  // twelve lines with a different fallback filename, and they had already
+  // drifted: one reads `Content-Disposition`, one reads `content-disposition`,
+  // one revokes the object URL immediately and one after sixty seconds.
+  //
+  // A plain `<a href>` cannot do this: the API authenticates on the
+  // Authorization header and a link click sets no headers, which is the same
+  // reason `downloadDataRoom` fetches the blob rather than linking to it.
+  _downloadCsv: async (path, fallbackName) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api${path}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    // The worker answers a refusal as JSON, so a 403 reads as its sentence
+    // rather than as a downloaded file containing the word.
+    if (!res.ok) throw await refusalError(res, 'Export failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '')
+      .match(/filename="?([^"]+)"?/)?.[1] || fallbackName;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return { filename, rows: Number(res.headers.get('X-Export-Rows') || 0) };
+  },
+  // Named for what they contain. The canvas calls the first "Export
+  // transcripts"; `discovery_interviews` stores no transcript, no recording and
+  // no severity, so this is the interview log — see
+  // `_founder_validate_exports.ts`.
+  exportValidateInterviews: (projectId) =>
+    api._downloadCsv(`/founder/validate/interviews/${projectId}/export.csv`, 'interviews.csv'),
+  exportValidatePainMap: (projectId) =>
+    api._downloadCsv(`/founder/validate/pain-map/${projectId}/export.csv`, 'pain-map.csv'),
+  exportValidateSummary: (projectId) =>
+    api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
+  updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Severity is per PAIN and not per interview — one conversation names a
+  // must-have and a nice-to-have in the same breath — so it is its own call
+  // rather than a field on the evidence PATCH above. `severity: null` clears
+  // the record, which is a third state and not the same as 'nice'.
+  setInterviewPainSeverity: (id, phrase, severity) =>
+    request(`/founder/validate/interviews/${id}/pain-severity`, {
+      method: 'PUT', body: JSON.stringify({ phrase, severity }),
+    }),
+
+  // ---------- Validate · "AI fills the blanks" (migration 214) ----------
+  // A proposal is written by the worker and decided by a person. Nothing here
+  // fires unless the founder turned the mode on AND asked for a run — the
+  // mode does not poll, and `listValidateProposals` reads rows that already
+  // exist rather than creating any.
+  listValidateProposals: (projectId) => request(`/founder/validate/proposals/${projectId}`),
+  // `timeoutMs` for the same reason `aiWorkspaceExplain` carries one: a model
+  // call is not a read, and the 30s default would abort a run still being
+  // paid for.
+  // D768: every run the rail starts carries `rail: { page, option, record }` (D765).
+  // D778 part 4: `headers` are the press's own rail context, taken on the click (FillProposals).
+  proposeValidate: (projectId, data, headers) => request(`/founder/validate/propose/${projectId}`, {
+    ...(headers ? { headers } : {}),
+    method: 'POST', timeoutMs: 60_000, body: JSON.stringify({ ...data, ...railBody() }),
+  }),
+  // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
+  // Omitted rather than sent as the unchanged original, because `fill_provenance`
+  // derives `edited` from comparing the two and a table where every row is marked
+  // corrected says nothing about any of them.
+  acceptValidateProposal: (id, body) => request(`/founder/validate/proposals/${id}/accept`, {
+    method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}),
+  }),
+  discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
+
+  // ---------- Validate · interview recordings (migration 215) ----------
+  // `duration_sec` is what the browser measured, and it is for DISPLAY only —
+  // the worker bills a transcription on the file's byte length instead,
+  // because a number the client chooses must not decide what a run costs.
+  uploadInterviewRecording: (id, file, durationSec) => {
+    const body = new FormData();
+    body.append('file', file);
+    if (Number.isFinite(durationSec) && durationSec > 0) body.append('duration_sec', String(Math.round(durationSec)));
+    // No `Content-Type`: the browser sets the multipart boundary, and setting
+    // it by hand produces a body the worker's formData() cannot parse.
+    return request(`/founder/validate/interviews/${id}/recording`, { method: 'POST', body, timeoutMs: 120_000 });
+  },
+  transcribeInterview: (id, headers) => request(`/founder/validate/interviews/${id}/transcribe`, {
+    // A model call is not a read, and an hour of audio is not a fast one.
+    ...(headers ? { headers } : {}),
+    method: 'POST', timeoutMs: 180_000,
+  }),
+  // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
+  // Customer Discovery (promote-to-interview, product-invitation email,
+  // follow-up email). Customer-audience only; project-scoped server-side.
+  listWaitlistCustomers: (projectId) => request(`/progress/discovery/${projectId}/waitlist`),
+  promoteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/promote`, { method: 'POST' }),
+  inviteWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/invite`, { method: 'POST' }),
+  followUpWaitlistCustomer: (projectId, signupId) =>
+    request(`/progress/discovery/${projectId}/waitlist/${signupId}/follow-up`, { method: 'POST' }),
+  // Task #29 — pain-group curation for the Spin-Out deck Slide 2.
+  painGroups: (projectId) => request(`/progress/pain-groups/${projectId}`),
+  assignPain: (projectId, body) => request(`/progress/pain-groups/${projectId}/assign`, { method: 'POST', body: JSON.stringify(body) }),
+  renamePainGroup: (id, title) => request(`/progress/pain-groups/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  deletePainGroup: (id) => request(`/progress/pain-groups/${id}`, { method: 'DELETE' }),
+  listOkrs: (projectId) => request(`/progress/roadmap/${projectId}`),
+  // #176 FB1 — the three week windows `/build/this-week` draws chips for, as ID
+  // SETS rather than objectives. The page already has every OKR from `listOkrs`;
+  // returning them again under four keys would be the same rows four times and a
+  // second answer to what an objective is called. Migration 252 logs the column
+  // moves this is derived from; `history_since` says how far back the log goes,
+  // because it is not backfilled and an older commitment would otherwise look
+  // like a broken filter.
+  listOkrWeeks: (projectId) => request(`/progress/roadmap/${projectId}/weeks`),
+  // #176 FB2 — swimlanes on the execution board. Migration 253 puts a `lane` on the
+  // card and the LIST of lanes in `project_lanes`, which is what turns
+  // `Configure lanes` from "there is nothing for an editor to change" into an editor.
+  //
+  // THE CARDS COME BACK WITH THE LANES, not from `pipelineDealDetail`. Reading lanes
+  // from one call and cards from another shows a card in a lane it has been moved
+  // out of; and the detail endpoint's `SELECT *` predates the column.
+  getBoardLanes: (projectId) => request(`/founder/board/${projectId}`),
+  setBoardLane: (projectId, data) => request(`/founder/board/${projectId}/lanes`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteBoardLane: (id) => request(`/founder/board/lanes/${id}`, { method: 'DELETE' }),
+  // `Bulk move`. All-or-nothing: a move that would put a lane over its WIP limit
+  // writes nothing and answers 409 with the lane and the overage, because the
+  // artboard's own note says "the limit is a configuration, not a suggestion".
+  bulkMoveBoardCards: (projectId, data) => request(`/founder/board/${projectId}/cards/bulk`, { method: 'POST', body: JSON.stringify(data) }),
+  createOkr: (projectId, data) => request(`/progress/roadmap/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateOkr: (id, data) => request(`/progress/roadmap/okr/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  moveOkr: (id, kanban_status, sort_order = 0) => request(`/progress/roadmap/okr/${id}/move`, { method: 'POST', body: JSON.stringify({ kanban_status, sort_order }) }),
+  deleteOkr: (id) => request(`/progress/roadmap/okr/${id}`, { method: 'DELETE' }),
+  // Task #176 (FB3) — the roadmap's dependency graph and its saved scenarios.
+  //
+  // ONE READ FOR THE WHOLE ZONE, because `/build/roadmap` needs every objective
+  // to turn a `Blocks` edge into a name anyway: splitting it would make the page
+  // fetch three times to draw one table.
+  //
+  // This is what the `Dependencies` chip was missing. It was LIVE before migration
+  // 254 and filtered on `item.dependency || item.dependencies || item.blocks`,
+  // none of which `roadmap_okrs` has or `/progress/roadmap/:id` returns — so it
+  // emptied the table under words that read as "this venture has none".
+  roadmapGraph: (projectId) => request(`/founder/roadmap/${projectId}`),
+  addOkrDependency: (projectId, data) => request(`/founder/roadmap/${projectId}/dependencies`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteOkrDependency: (id) => request(`/founder/roadmap/dependencies/${id}`, { method: 'DELETE' }),
+  saveRoadmapScenario: (projectId, data) => request(`/founder/roadmap/${projectId}/scenarios`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRoadmapScenario: (id) => request(`/founder/roadmap/scenarios/${id}`, { method: 'DELETE' }),
+  // Task #13 — MVP Scope prioritization (value-ranked feature planning).
+  listMvpFeatures: (projectId) => request(`/progress/mvp-scope/${projectId}`),
+  createMvpFeature: (projectId, data) => request(`/progress/mvp-scope/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMvpFeature: (id, data) => request(`/progress/mvp-scope/feature/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMvpFeature: (id) => request(`/progress/mvp-scope/feature/${id}`, { method: 'DELETE' }),
+  listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
+  // D363 — the revenue ledger (migration 311). Amounts are integer cents;
+  // verification is set by the Worker, never sent from here.
+  revenueEntries: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`),
+  revenueEntryCreate: (projectId, entry) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries`, { method: 'POST', body: JSON.stringify(entry) }),
+  revenueEntriesImport: (projectId, rows) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  // D587 — the founder's own Stripe charges, one verified entry each.
+  revenueEntriesImportStripe: (projectId) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/import-stripe`, { method: 'POST' }),
+  revenueEntryUpdate: (projectId, uid, patch) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  revenueEntryDelete: (projectId, uid) =>
+    request(`/revenue/projects/${encodeURIComponent(projectId)}/entries/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Task #194 — metric targets. `metric_targets` shipped in migration 173 and
+  // had no reader and no writer for 21 migrations; these are both ends. The
+  // plan number is per project and per metric, never per snapshot, which is
+  // why the setter is an upsert on `(project_id, metric_key)` rather than a
+  // create. Pass `target_value: null` to clear one — 0 is a real target
+  // ("get churn to zero") so it cannot double as "no target".
+  listMetricTargets: (projectId) => request(`/progress/metrics/${projectId}/targets`),
+  setMetricTarget: (projectId, data) => request(`/progress/metrics/${projectId}/targets`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — metric DEFINITIONS, which are not targets. The canvas's own note
+  // says why the op exists: "definitions live on this page precisely so 'net
+  // burn' means the same thing in month 14 as in month 1". They could not ride on
+  // `metric_targets` because its `target_value` is NOT NULL, so defining a metric
+  // would have forced a plan number for it. Migration 251. `definition: null`
+  // clears, for the same reason `target_value: null` does above.
+  listMetricDefinitions: (projectId) => request(`/progress/metrics/${projectId}/definitions`),
+  setMetricDefinition: (projectId, data) => request(`/progress/metrics/${projectId}/definitions`, { method: 'PUT', body: JSON.stringify(data) }),
+  // #176 FB5 — the CSV importer. `{ csv, dry_run }` in; a verdict PER LINE out,
+  // because an importer that reports OK while eleven of fourteen months went
+  // missing is worse than one that fails. `dry_run: true` runs the same parse and
+  // writes nothing, so a founder sees what a file would do first.
+  importMetricsCsv: (projectId, data) => request(`/progress/metrics/${projectId}/import-csv`, { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
+  // computed server-side from the snapshot series, with `unavailable[]`
+  // explaining any metric that could not be computed.
+  metricsSummary: (projectId) => request(`/progress/metrics/${projectId}/summary`),
+  importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
+  getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
+  getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
+  updateLifecycle: (projectId, data) => request(`/progress/lifecycle/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Task #36 — Service Provider Marketplace
+
+  // Task #53 — Public partner directory (no auth required).
+  publicListPartners: (params = {}) => {
+    const q = Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '');
+    return request(`/public/partners${q.length ? `?${new URLSearchParams(q)}` : ''}`);
+  },
+  publicGetPartner: (slug) => request(`/public/p/${encodeURIComponent(slug)}`),
+  // Task #3 — public Calendly booking URL lookup. Returns null on 404
+  // (provider not connected or no booking_url configured).
+  publicCalendlyBooking: (userId) =>
+    request(`/integrations/public/calendly/${userId}`).catch((e) => {
+      if (e?.status === 404) return null;
+      throw e;
+    }),
+  // Task #55 — public profile page (/u/:handle), unauthenticated.
+  publicGetUserByHandle: (handle) => request(`/public/u/${encodeURIComponent(handle)}`),
+  // Task #66 — public, shareable startup profile (/startups/:handle → project uid).
+  publicGetStartup: (handle) => request(`/public/startup/${encodeURIComponent(handle)}`),
+  // Task #66 — follow graph (people + startups). entityType is 'user' | 'project'.
+  follow: (entityType, entityId) =>
+    request('/follows', { method: 'POST', body: JSON.stringify({ entity_type: entityType, entity_id: entityId }) }),
+  unfollow: (entityType, entityId) =>
+    request('/follows', { method: 'DELETE', body: JSON.stringify({ entity_type: entityType, entity_id: entityId }) }),
+  followStatus: (entityType, entityId) =>
+    request(`/follows/status?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`),
+  followsMine: () => request('/follows/mine'),
+  // Admin-managed Service Provider Directory approval (Task #53).
+  // List = every partner with their current listed/featured flags;
+  // toggle = flip either flag (featured without listed is auto-corrected
+  // server-side to listed=false because the public route hides it anyway).
+  adminListDirectoryPartners: (q = '') =>
+    request(`/admin/partners/directory${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  adminSetPartnerDirectory: (partnerId, { listed, featured } = {}) =>
+    request(`/admin/partners/${partnerId}/directory`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...(typeof listed === 'boolean' ? { listed } : {}),
+        ...(typeof featured === 'boolean' ? { featured } : {}),
+      }),
+    }),
+
+  // Task #50 — Needs board + RFPs + Quotes
+  listNeeds: (params = {}) => request(`/needs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  getNeed: (id) => request(`/needs/${id}`),
+  createNeed: (data) => request('/needs', { method: 'POST', body: JSON.stringify(data) }),
+  updateNeed: (id, data) => request(`/needs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteNeed: (id) => request(`/needs/${id}`, { method: 'DELETE' }),
+  upsertRfp: (needId, data) => request(`/needs/${needId}/rfp`, { method: 'POST', body: JSON.stringify(data) }),
+  submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
+  listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
+  myQuotes: () => request('/quotes/me'),
+  // `period` is one of all | quarter | prev_quarter | ytd | shape — the
+  // Analytics chip row. Omitted is `all`, which is what the Studio home card
+  // sends (as the retired `/partner/operations/performance` did, D395), so its
+  // response shape is unchanged. It narrows what was DECIDED; the forecast is
+  // over the open pipeline either way, because an undecided quote sits in no
+  // quarter.
+  quotesAnalytics: (period) => request(
+    period && period !== 'all' ? `/quotes/analytics?period=${encodeURIComponent(period)}` : '/quotes/analytics',
+  ),
+  acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
+  rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
+  withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
+  listEngagements: () => request('/engagements'),
+  getEngagement: (id) => request(`/engagements/${id}`),
+  startEngagement: (id) => request(`/engagements/${id}/start`, { method: 'POST' }),
+  deliverEngagement: (id, data) => request(`/engagements/${id}/deliver`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  cancelEngagement: (id, data) => request(`/engagements/${id}/cancel`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  invoiceEngagement: (id) => request(`/engagements/${id}/invoice`, { method: 'POST' }),
+  // The invoice document itself (migration 188). Either party may read it;
+  // a non-party gets 404, not 403. `markInvoicePaid` records payment received
+  // OUT OF BAND — the platform has no payment rail and must not imply one.
+  engagementInvoice: (id) => request(`/engagements/${id}/invoice`),
+  markInvoicePaid: (id) => request(`/engagements/${id}/invoice/paid`, { method: 'POST' }),
+  listEngagementReviews: (id) => request(`/engagements/${id}/reviews`),
+  createEngagementReview: (id, data) => request(`/engagements/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Task #51 — Service catalogue
+  listServiceOfferings: (params = {}) => request(`/services/offerings${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  getServiceOffering: (id) => request(`/services/offerings/${id}`),
+  createServiceOffering: (data) => request('/services/offerings', { method: 'POST', body: JSON.stringify(data) }),
+  updateServiceOffering: (id, data) => request(`/services/offerings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteServiceOffering: (id) => request(`/services/offerings/${id}`, { method: 'DELETE' }),
+  // `listPartnerOfferings` is gone. It called GET /services/partners/:id/offerings,
+  // a route the worker has never served — it sat in the api-drift baseline as
+  // known-missing, and its one caller swallowed the 404 as an empty list, so the
+  // partner's own catalogue read "0 offerings" whatever they had published. The
+  // real read is `listServiceOfferings({ mine: 1 })`: services.ts scopes `?mine=1`
+  // on owner_user_id and includes inactive drafts, which is what an owner
+  // managing their own set needs. `partner_id` was never the right key — an
+  // offering is owned by a user, not by a partner org row.
+  engageServiceOffering: (id, data) => request(`/services/offerings/${id}/engage`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Task #51 — Stripe Connect onboarding (partner-only)
+  // Stripe Connect for service providers. These lived under /marketplace/*,
+  // which the worker has never mounted, so the Stripe tab failed hard for
+  // every partner. needs.ts:575 and :588 serve exactly these two operations —
+  // deliberately as typed stubs ("Stripe Connect onboarding is owned by AO;
+  // return a typed empty status so the SPA's check renders without crashing"),
+  // returning {connected:false, detail:'stripe_connect_not_configured'} and a
+  // 503 respectively. Pointing at them turns a "Request failed" into the
+  // not-configured state the tab was designed to render.
+  //
+  // There is no /refresh anywhere; refreshing a status means re-reading it, and
+  // the caller assigns the response straight to `status` either way.
+  getMyStripeStatus: () => request('/needs/providers/me/stripe'),
+  startStripeOnboarding: () => request('/needs/providers/me/stripe/onboard', { method: 'POST' }),
+  refreshStripeStatus: () => request('/needs/providers/me/stripe'),
+
+  // Task #52 — Demand heatmap + insight feed
+  insightsHeatmap: (windowDays = 180) => request(`/insights/heatmap?window_days=${windowDays}`),
+  insightsTrends: (months = 6) => request(`/insights/trends?months=${months}`),
+  insightsFeed: (windowDays = 90) => request(`/insights/feed?window_days=${windowDays}`),
+  insightsNewsletterStatus: () => request('/insights/newsletter'),
+  insightsNewsletterSubscribe: () => request('/insights/newsletter/subscribe', { method: 'POST' }),
+  insightsNewsletterUnsubscribe: () => request('/insights/newsletter/unsubscribe', { method: 'POST' }),
+  insightsNewsletterPreview: () => request('/insights/newsletter/preview'),
+
+  // Signals — the ranked list and its sources, read by Research's founder desk
+  // and market directory. Worker-only (dev FastAPI has no /api/signals). The
+  // /signals page and the reads only it made were retired by D670.
+  signals: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+      ).toString();
+      return request('/signals' + (qs ? `?${qs}` : ''));
+    },
+    sources: () => request('/signals/sources'),
+  },
+
+  // #2341: the Advisory page's ask, financial plan, diligence and advisor-
+  // profile methods left with the page (the owner: "Remove").
+
+  activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
+  activitySummary: () => request('/activity/summary'),
+
+  // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
+  // over the whole table. Called with no argument this is byte-for-byte the
+  // old request and still answers a flat array, which is what
+  // `SuperAdminHolders.jsx` reads. The envelope exists because the Users
+  // panel's role tiles were counting the returned PAGE and rendering it as the
+  // total — past 100 accounts, "All Users" read 100.
+  //
+  // D1300 — All accounts' filters, sort and paging. Each filter takes a value
+  // or a list (a list is "any of"): profile, sub, status, email, identity,
+  // limited, plan, country, persona, program, trust; and joined (7d, 30d) or
+  // joined_from / joined_to, active (7d, 30d, over_30d, never), sort and
+  // scope. The envelope then carries `matched` and `matched_by_role`, the
+  // totals over the filtered set, beside D128's whole-table `total`.
+  adminListUsers: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set('q', String(opts.q));
+    if (opts.envelope) qs.set('envelope', '1');
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    if (opts.offset) qs.set('offset', String(opts.offset));
+    for (const k of ADMIN_USER_FILTERS) {
+      const v = opts[k];
+      const list = Array.isArray(v) ? v.filter((x) => x != null && x !== '') : (v == null || v === '' ? [] : [v]);
+      if (list.length) qs.set(k, list.map(String).join(','));
+    }
+    const s = qs.toString();
+    return request(`/admin/users${s ? `?${s}` : ''}`);
+  },
+  adminListContracts: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/admin/contracts${q ? `?${q}` : ''}`);
+  },
+  adminContractStats: () => request('/admin/contracts/stats'),
+  adminContractTemplates: () => request('/admin/contracts/templates'),
+  // D454 / D480 — doc-type registry for HQ · Contracts (D1 store + code catalog).
+  adminContractDocTypes: () => request('/admin/contracts/registry/doc-types'),
+  adminContractRegistryHub: () => request('/admin/contracts/registry'),
+  adminContractRegistrySaveDraft: (body) =>
+    request('/admin/contracts/registry/draft', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminContractRegistryPublish: (docType, body) =>
+    request(`/admin/contracts/registry/${encodeURIComponent(docType)}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  adminContractTemplateUsage: (docType, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/admin/contracts/templates/${encodeURIComponent(docType)}/usage${q ? `?${q}` : ''}`);
+  },
+  adminGetContract: (uid) => request(`/admin/contracts/${uid}`),
+  adminResendContract: (uid) => request(`/admin/contracts/${uid}/resend`, { method: 'POST' }),
+  // Task #9 — Promo Code admin CRUD. List is a plain admin read; create/toggle/
+  // delete are money-adjacent so the server enforces TOTP + step-up (the global
+  // `request` helper auto-handles the 403 `step_up_required` challenge).
+  //   adminListPromos()           → { promos: [PromoView] }: every code. D1272 (#3298) made the read
+  //                                 paged; this walks its pages (100 a page) so today's console and
+  //                                 the product lightbox still see every code. The paged read, the
+  //                                 lifecycle and Replace are `adminPromosApi` (lib/api/adminPromos.js).
+  //   adminCreatePromo(body)      → { ok, promo_id, code }
+  //   adminSetPromoActive(id, on) → { ok, promo_id, active }
+  //   adminDeletePromo(id)        → { ok, promo_id }
+  adminListPromos: async () => {
+    const promos = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const r = await request(`/admin/promos?page=${page}&page_size=100`);
+      promos.push(...(r?.promos || []));
+      if (promos.length >= Number(r?.total ?? 0) || !(r?.promos || []).length) break;
+    }
+    return { promos };
+  },
+  adminCreatePromo: (body) =>
+    request('/admin/promos', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminSetPromoActive: (id, active) =>
+    request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+  adminDeletePromo: (id) =>
+    request(`/admin/promos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // Task #11 — admin billing: refunds (with per-product policy + referral
+  // commission clawback), dispute evidence, and customer LTV. All step-up
+  // gated server-side; the `request` helper auto-handles the step-up challenge.
+  //   adminBillingRefund(body)               → { ok, refund, policy, clawback }
+  //   adminBillingListDisputes(limit)        → { ok, disputes }
+  //   adminBillingGetDispute(id)             → { ok, dispute }
+  //   adminBillingSubmitEvidence(id, body)   → { ok, submitted, dispute }
+  //   adminBillingLTV(userId)                → { ok, ltv, charges, subscriptions }
+  adminBillingRefund: (body) =>
+    request('/admin/billing/refund', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminBillingListDisputes: (limit = 25) =>
+    request(`/admin/billing/disputes?limit=${encodeURIComponent(limit)}`),
+  adminBillingGetDispute: (id) =>
+    request(`/admin/billing/disputes/${encodeURIComponent(id)}`),
+  adminBillingSubmitEvidence: (id, body) =>
+    request(`/admin/billing/disputes/${encodeURIComponent(id)}/evidence`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminBillingLTV: (userId) =>
+    request(`/admin/billing/ltv?user_id=${encodeURIComponent(userId)}`),
+  // D224 — the refunds HQ issued in the last 30 days, read from their audit
+  // rows (super admin). → { available, window_days, count, by_currency, items }
+  adminBillingRefunds: () => request('/admin/billing/refunds'),
+
+  // Task #16 — Admin Stripe catalog CRUD + webhook/config management.
+  //
+  // Catalog:
+  //   adminCatalogList()                       → { products, mode }
+  //   adminCatalogSync()                       → { ok, synced }
+  //   adminCatalogCreateProduct(body)          → { ok, product }
+  //   adminCatalogUpdateProduct(id, body)      → { ok }
+  //   adminCatalogArchiveProduct(id, reason)   → { ok }
+  //   adminCatalogAddPrice(productId, body)    → { ok, price }
+  //   adminCatalogArchivePrice(priceId, reason) → { ok }
+  // Webhook:
+  //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
+  //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
+  //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
+  // Config (publishable key):
+  //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
+  //   adminStripeSetConfig(pk, reason)         → { ok, mode }
+  // D232 — `adminCatalogMode` went: no caller, and the mode already rides on
+  // `adminCatalogList` and `adminStripeGetConfig`. The route stays.
+  adminCatalogList: () => request('/admin/catalog/products'),
+  adminCatalogSync: () => request('/admin/catalog/sync', { method: 'POST', body: '{}' }),
+  adminCatalogCreateProduct: (body) =>
+    request('/admin/catalog/products', { method: 'POST', body: JSON.stringify(body || {}) }),
+  adminCatalogUpdateProduct: (id, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  // D1009: every product and price write carries the admin's `reason` (1 to
+  // 500 characters), recorded with the change; the bodies above take it as a
+  // field, the two archives and the key take it here (D1013).
+  adminCatalogArchiveProduct: (id, reason) =>
+    request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  adminCatalogAddPrice: (productId, body) =>
+    request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogUpdatePrice: (priceId, body) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body || {}),
+    }),
+  adminCatalogArchivePrice: (priceId, reason) =>
+    request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
+  adminStripeRegisterWebhook: () =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'register' }),
+    }),
+  adminStripeUpdateWebhookEvents: (endpointId) =>
+    request('/admin/stripe/webhook', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
+    }),
+  adminStripeGetConfig: () => request('/admin/stripe/config'),
+  adminStripeSetConfig: (publishableKey, reason) =>
+    request('/admin/stripe/config', {
+      method: 'PUT',
+      body: JSON.stringify({ publishable_key: publishableKey, reason }),
+    }),
+
+  adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
+  adminIssueContractShareLink: (uid, ttl_seconds = 300) =>
+    request(`/admin/contracts/${uid}/download-url?ttl_seconds=${ttl_seconds}`, { method: 'POST' }),
+  // Task #5 (Z) — Pairwise NDAs / Partner Deals tabs + Create-envelope wizard.
+  adminListPairwiseNdas: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/admin/contracts/pairwise-ndas${qs ? `?${qs}` : ''}`);
+  },
+  adminListPartnerDeals: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/admin/contracts/partner-deals${qs ? `?${qs}` : ''}`);
+  },
+  adminListLegalTemplates: () => request('/admin/contracts/templates/legal'),
+  // Task #8 — Worker-owned (D1) legal template store CRUD + versioning.
+  adminTemplateStoreList: (category) => {
+    const q = category ? `?category=${encodeURIComponent(category)}` : '';
+    return request(`/admin/contracts/templates/store${q}`);
+  },
+  adminTemplateStoreGet: (slug) => request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`),
+  adminTemplateStoreVersions: (slug) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}/versions`),
+  adminTemplateStoreCreate: (payload) =>
+    request('/admin/contracts/templates/store', { method: 'POST', body: JSON.stringify(payload) }),
+  adminTemplateStoreUpdate: (slug, payload) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  adminTemplateStoreDelete: (slug) =>
+    request(`/admin/contracts/templates/store/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  // D147 — push the library to every branch. THE WHOLE LIBRARY, not one
+  // template: a per-template push can add and update but can never say "this
+  // one is gone", so a withdrawn template would stay offerable on every branch
+  // forever. The response carries one row per branch in the fan-out's three
+  // states, and `branches: []` when none is bound — which is the true answer
+  // today, not an error.
+  adminTemplatesPublish: () =>
+    request('/admin/contracts/templates/publish', { method: 'POST' }),
+  // Task #9 — IRS-style forms catalog + on-the-fly PDF preview/download.
+  adminListForms: () => request('/admin/forms'),
+  // Returns { blob, url } for the rendered form PDF. The caller owns the
+  // object URL and must URL.revokeObjectURL(url) when done. `blank` renders a
+  // true blank; otherwise the form is filled with sample placeholder values.
+  adminFormPreviewBlob: async (id, { blank = false } = {}) => {
+    const token = localStorage.getItem('token');
+    const q = blank ? '?blank=1' : '';
+    const res = await fetch(`/api/admin/forms/${encodeURIComponent(id)}/preview${q}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'Preview failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `axal-form-${id}.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
+  // Task #31 — per-template preview PDF blob (binary endpoint, not typed drift).
+  // D711: `page` (letter|a4) and `cover` (dark|light) choose the paper.
+  adminTemplateStorePreviewPdfBlob: async (slug, { resolve = 'brackets', page = 'letter', cover = 'dark' } = {}) => {
+    const token = localStorage.getItem('token');
+    const q = new URLSearchParams({ resolve, page, cover }).toString();
+    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/preview.pdf?${q}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'PDF generation failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
+    // #1854: the renderer that drew it, so the phone preview can say when page breaks are the fallback's.
+    return { blob, url: URL.createObjectURL(blob), filename, renderer: res.headers.get('X-Axal-Renderer') };
+  },
+  // D711 — a template as Word, with a `docx_export` registry row (binary
+  // endpoint, not typed drift).
+  adminTemplateStoreDocxBlob: async (slug, { resolve = 'brackets', page = 'letter' } = {}) => {
+    const token = localStorage.getItem('token');
+    const q = new URLSearchParams({ resolve, page }).toString();
+    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/export.docx?${q}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'Word export failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}.docx`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
+  adminSendEnvelope: (payload) =>
+    request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
+  // The templates THIS caller may originate — see
+  // cloudflare-worker/src/services/esignOriginators.ts. Distinct from
+  // adminListLegalTemplates, which is the full catalogue behind requireAdmin.
+  esignTemplates: () => request('/legal/esign/templates'),
+  // D411 — one template's body and its fields, for the preview on /legal/send.
+  esignTemplate: (docType) => request(`/legal/esign/templates/${encodeURIComponent(docType)}`),
+  // D411 — the sender's two actions on an envelope they sent. Both are
+  // sender-scoped on the Worker (404 for anyone else) and metered by esign_send.
+  esignVoid: (id, reason) =>
+    request(`/legal/esign/${id}/void`, { method: 'POST', body: JSON.stringify({ reason: reason || undefined }) }),
+  esignRemind: (id) => request(`/legal/esign/${id}/remind`, { method: 'POST', body: '{}' }),
+  // The territory licence the caller administers, or 404. Migration 190 —
+  // licence_admins is what makes "which licence is this admin's?" answerable.
+  myLicence: () => request('/licence/mine'),
+  // D134 — these three are how an admin account is opened and closed. `add`
+  // promotes and binds in one audited step and needs `{ email, admin_role,
+  // reason }`; `remove` refuses with 409 `still_an_admin` until the account has
+  // been demoted, which is `adminDemoteAdmin` below. All three sit behind the
+  // super admin's write bar, so a 403 here can mean step-up rather than refusal.
+  licenceAdmins: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/admins`),
+  licenceAdminAdd: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceAdminRemove: (uid, userId) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins/${userId}`, { method: 'DELETE' }),
+  // Removing the admin role is deliberately NOT a role edit: `adminUpdateRole`
+  // refuses an admin target with `admin_demotion_disabled` and still does. The
+  // account lands in `exploring`, the platform's holding state, and keeps its
+  // licence binding until it is detached separately.
+  adminDemoteAdmin: (userId, reason) =>
+    request(`/admin/users/${userId}/demote-admin`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D135 — the compliance ladder. HQ's three are on the licence router behind
+  // the write bar; the addressee's two are on `/licence`, which is NOT an admin
+  // router — that is what stops the freeze locking somebody out of the one
+  // action that lifts it.
+  licenceNotices: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/notices`),
+  licenceNoticeIssue: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceNoticeReview: (uid, noticeUid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/notices/${encodeURIComponent(noticeUid)}/review`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  myNotices: () => request('/licence/notices'),
+  myNoticeRespond: (noticeUid, response) =>
+    request(`/licence/notices/${encodeURIComponent(noticeUid)}/respond`, {
+      method: 'POST', body: JSON.stringify({ response }),
+    }),
+  // D197 — the custom host. THE THREE WRITES ARE THE TENANT'S OWN and sit on
+  // `/licence`, which is NOT an admin router: binding a hostname is the holder
+  // configuring their own tenancy, and putting it behind `requireAdmin` would
+  // let the compliance freeze lock them out of their own settings. The fourth
+  // is HQ's, and it is the only thing H31 lets HQ do to a tenant's host —
+  // "there is no Approve, no Add domain, and no DNS editor for HQ to complete
+  // on a tenant's behalf."
+  //
+  // THERE IS NO READ METHOD, and that is deliberate rather than an omission:
+  // the bound host rides `myLicence()` and the HQ licence payload the way
+  // D196's `kind` does, so the strip and the wizard need no second fetch and
+  // cannot render a host the page's own licence read disagrees with.
+  myDomainBind: (hostname) =>
+    request('/licence/mine/domain', { method: 'POST', body: JSON.stringify({ hostname }) }),
+  myDomainCheck: () => request('/licence/mine/domain/check', { method: 'POST' }),
+  myDomainRemove: (hostname) =>
+    request('/licence/mine/domain', { method: 'DELETE', body: JSON.stringify({ hostname }) }),
+  licenceDomainDetach: (uid, reason) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/domain/detach`, {
+      method: 'POST', body: JSON.stringify({ reason }),
+    }),
+  // D198 — the white-label brand kit. All three are HQ's, on the super-admin
+  // write bar, because a licence is issued before any administrator is named
+  // on it (D134) — so at issue time there is nobody else to type the kit. HQ
+  // CAPTURES it; H26 is explicit that HQ does not approve it.
+  //
+  // THERE IS NO READ METHOD HERE EITHER, for D197's reason one table over: the
+  // kit rides the licence payload the console has already fetched. The mark's
+  // BYTES are a different thing from the kit's fields — they come back from
+  // `brand_kit.mark_url` as a plain `<img src>`, which is a gated R2 stream
+  // rather than a signed one-time token, because a one-time URL 404s the
+  // second time a page renders it.
+  licenceBrandSet: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/brand`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  licenceBrandMarkUpload: (uid, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/admin/licences/${encodeURIComponent(uid)}/brand/mark`, {
+      method: 'POST', body: fd,
+    });
+  },
+  licenceBrandMarkRemove: (uid) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/brand/mark`, { method: 'DELETE' }),
+  // Task #14 — forward signed PDF to legal partner(s).
+  adminForwardContract: (id, data) =>
+    request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
+  adminGetForwardLog: (id) =>
+    request(`/legal/esign/${id}/forward`),
+  // Task #14 — download signed PDF as blob (for iframe preview).
+  // Uses the decrypt-aware eSign document endpoint so .enc files are
+  // decrypted before reaching the iframe.
+  adminDownloadEsignDocumentBlob: (id) => {
+    const url = `/api/legal/esign/${id}/document`;
+    const token = localStorage.getItem('token');
+    return fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(async (r) => {
+      if (!r.ok) throw await refusalError(r, 'Download failed');
+      return r.blob();
+    });
+  },
+  adminVoidContractWithReason: (uid, reason) =>
+    request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  /**
+   * Open a support session.
+   *
+   * `reason` is REQUIRED — the worker refuses a session without one, and
+   * with fewer than ten characters, because an audit row that says only
+   * "someone impersonated someone" answers nothing. It is sent as
+   * `context`, the column `impersonation_sessions` has always had and that
+   * no caller ever filled.
+   */
+  adminImpersonate: async (userId, reason) => {
+    const res = await request(
+      `/admin/impersonate/${userId}?context=${encodeURIComponent(String(reason || '').trim())}`,
+      { method: 'POST' },
+    );
+    // Cohort Timing task — session audit trail. Remember the Worker-issued
+    // session id so exitImpersonation can stamp ended_at (best-effort; the
+    // dev backend doesn't return one).
+    try {
+      if (res?.impersonation_session_id) localStorage.setItem('impersonationSessionId', String(res.impersonation_session_id));
+      else localStorage.removeItem('impersonationSessionId');
+      // When the token dies. The banner counts down to it and hands the
+      // session back at zero — without this the client would meet the
+      // expiry as a 401, and `request` reads a 401 as a dead session and
+      // bounces to /login, ending the ADMIN's own session too.
+      if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
+      else localStorage.removeItem('impersonationExpiresAt');
+    } catch { /* storage unavailable */ }
+    // D290 — the reason the worker STORED, echoed back, kept beside the
+    // expiry so the H25 bar survives a reload. A missing or null echo clears
+    // the key; the bar then reads "Not recorded", never a stand-in.
+    storeReason(typeof res?.reason === 'string' ? res.reason : null);
+    return res;
+  },
+  /**
+   * Another thirty minutes on a session that is still open.
+   *
+   * D248 — the route asks for a reason of at least 10 characters, and refuses
+   * past two hours from when the session opened. The caller may pass the
+   * reason. The impersonation bar passes none, so this method asks for it with
+   * the same prompt Demote uses; a cancelled prompt extends nothing and returns
+   * null, which the bar reads as "no new expiry".
+   */
+  adminImpersonateExtend: async (sessionId, reason) => {
+    const why = reason ?? (typeof window !== 'undefined'
+      ? window.prompt('Why does this support session need another 30 minutes? At least 10 characters, and it is recorded.')
+      : null);
+    if (!why) return null;
+    const res = await request(`/admin/impersonate-sessions/${sessionId}/extend`, {
+      method: 'POST', body: JSON.stringify({ reason: why }),
+    });
+    try {
+      if (res?.token) localStorage.setItem('token', res.token);
+      if (res?.expires_at) localStorage.setItem('impersonationExpiresAt', String(res.expires_at));
+    } catch { /* storage unavailable */ }
+    return res;
+  },
+  adminImpersonateEnd: (sessionId) => request(`/admin/impersonate-sessions/${sessionId}/end`, { method: 'POST' }),
+  // Migrations 199/207 — the Super Admin holders. Reads need the elevation;
+  // writes also need a TOTP session with a recent step-up, the bar
+  // impersonation sets (routes/admin_super_admins.ts).
+  superAdmins: () => request('/admin/super-admins'),
+  // D133 — `transfer` is the holder handing the platform on. The elevation is
+  // capped at one, and with one holder revoke refuses three ways, so without
+  // this flag the grant would be permanently unreachable rather than merely
+  // guarded. The server does both writes in one batch. D221 — the change
+  // carries the holder's typed `reason`, which Security records beside it.
+  superAdminGrant: (userId, { transfer = false, reason = '' } = {}) =>
+    request(`/admin/super-admins/${userId}${transfer ? '?transfer=1' : ''}`, {
+      method: 'POST', body: JSON.stringify({ reason: String(reason || '').trim() }),
+    }),
+  superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
+  // Task #7 — admin-managed OAuth client credentials per provider.
+  adminListIntegrationKeys: () => request('/admin/integration-keys'),
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
+    }),
+  adminDeleteIntegrationKeys: (provider) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+  // Task #3 — Rotate the secret in place (client_id stays the same).
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
+      method: 'POST',
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
+    }),
+  // Task #3 — Dry-run a provider auth call to verify configured credentials.
+  adminTestIntegrationKeys: (provider) =>
+    request(`/admin/integration-keys/${encodeURIComponent(provider)}/test`, { method: 'POST' }),
+  // GitHub ticket sync — admin config panel.
+  adminGetGithubConfig: () => request('/admin/github'),
+  adminSaveGithubConfig: (body) =>
+    request('/admin/github', { method: 'PUT', body: JSON.stringify(body || {}) }),
+  // `write` opts into the create-and-close probe. Without it the route
+  // reports can_write:'unproven' rather than pretending a metadata read
+  // proved the token may open an issue.
+  adminTestGithub: (write = false) =>
+    request('/admin/github/test', { method: 'POST', body: JSON.stringify({ write: !!write }) }),
+  // D232 — `adminDeleteGithubConfig` went: GitHub Sync draws no Remove control.
+  // `DELETE /api/admin/github` stays, behind D223's holder bar.
+  // `overrideReason`, when given, asks the server to assign a role that the
+  // binding-agreement gate would otherwise refuse. It is NOT a formality: the
+  // route requires a super admin and a reason of real length, and writes the
+  // reason into the role_changed audit line. Passing a constant here would put
+  // a meaningless sentence into that audit, so callers send what was typed.
+  adminUpdateRole: (userId, role, overrideReason) => request(`/admin/users/${userId}/role?role=${role}`, {
+    method: 'PATCH',
+    ...(overrideReason ? { body: JSON.stringify({ override_reason: overrideReason }) } : {}),
+  }),
+  // D247 — an ADMIN target needs a reason of at least 10 characters (and the
+  // route asks for an authenticator-minted, freshly stepped-up session, which
+  // request() already handles by prompting for a step-up and retrying). A
+  // non-admin target needs none, so no reason means NO BODY, the shape
+  // adminUpdateRole above uses for the same reason.
+  adminToggleActive: (userId, reason) => request(`/admin/users/${userId}/toggle-active`, {
+    method: 'PATCH',
+    ...(reason ? { body: JSON.stringify({ reason }) } : {}),
+  }),
+  // Set per-user access level. `level` is 'limited' (browse-only, no signing
+  // until KYC) or null (revoke). Full access is granted via kycAdminApprove.
+  adminSetAccessLevel: (userId, level) =>
+    request(`/admin/users/${userId}/access-level`, { method: 'PATCH', body: JSON.stringify({ level }) }),
+
+  profilingChat: (data) => request('/profiling/chat', { method: 'POST', body: JSON.stringify(data) }),
+  profilingSave: (data) => request('/profiling/save', { method: 'POST', body: JSON.stringify(data) }),
+  adminListProfiles: () => request('/profiling/admin/list'),
+
+  kycStatus: () => request('/kyc/status'),
+  kycSubmit: (data) => request('/kyc/submit', { method: 'POST', body: JSON.stringify(data) }),
+  kycAdminQueue: (status = 'pending') => request(`/kyc/admin/queue?status=${encodeURIComponent(status)}`),
+  kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
+  // D634 — one masked KYC field in clear; the Worker logs the showing first.
+  kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
+  // D1303 (#3400): full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1306 (#3403): the drawer's full-access dialog sends both, from the one reason it asks for.
+  kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
+  kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
+  adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
+  // D634 — a partner profile's masked tax ID in clear; the showing is logged.
+  adminShowProfileField: (email, field) => request(`/profiling/admin/${encodeURIComponent(email)}/sensitive/${encodeURIComponent(field)}`),
+  adminVerifyProfile: (email, data) => request(`/profiling/admin/${encodeURIComponent(email)}/verify`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ----- eSignature -----
+  esignSend: (data) => request('/legal/esign/send', { method: 'POST', body: JSON.stringify(data) }),
+  esignList: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/legal/esign${q ? `?${q}` : ''}`);
+  },
+  esignDetail: (id) => request(`/legal/esign/${id}`),
+  esignDocumentUrl: (id) => `/api/legal/esign/${id}/document`,
+  // Public (token-gated, no auth header) — uses raw fetch since the sign page
+  // is reachable without a logged-in session.
+  esignFetchByToken: async (token) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`);
+    if (!res.ok) throw await refusalError(res, 'Failed to load signing envelope');
+    return await res.json();
+  },
+  // D711 — the signer's paper (faces inline), token-gated like the envelope read.
+  esignPaperByToken: async (token) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}/paper`);
+    if (!res.ok) throw await refusalError(res, 'Failed to load the formatted page');
+    return await res.json();
+  },
+  esignSubmitSignature: async (token, payload) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw await refusalError(res, 'Signing failed');
+    return await res.json();
+  },
+  esignReject: async (token, reason) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    if (!res.ok) throw await refusalError(res, 'Could not decline');
+    return await res.json();
+  },
+
+  privateProfile: () => request('/private-data/profile'),
+  privateSignals: () => request('/private-data/market/private-signals'),
+  privatePortfolioMetrics: () => request('/private-data/portfolio/metrics'),
+  privateFounderData: (userId) => request(`/private-data/founder/${userId}`),
+
+  referralCode: () => request('/network/referral/code'),
+  referralList: () => request('/network/referral/list'),
+  commissionsMe: () => request('/network/commissions/me'),
+  payoutsMe: () => request('/network/payouts/me'),
+  payoutRequest: (data) => request('/network/payout/request', { method: 'POST', body: JSON.stringify(data) }),
+  adminCommissions: () => request('/network/admin/commissions'),
+  adminCommissionRules: () => request('/network/admin/commission-rules'),
+  // D572 — edit one rule: any of amount_cents, percentage_bps, description, active.
+  adminUpdateCommissionRule: (ruleKey, data) => request(`/network/admin/commission-rules/${encodeURIComponent(ruleKey)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adminPayouts: () => request('/network/admin/payouts'),
+  adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // Refer & Earn — referral submission pipeline. (The Stripe Connect payout
+  // endpoints that used to live here were removed with the payouts backend;
+  // rewards are milestone labels settled off-platform.)
+  referralOverview: () => request('/refer-earn/overview'),
+  referralSubmissions: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null && v !== ''),
+    ).toString();
+    return request(`/refer-earn/submissions${qs ? `?${qs}` : ''}`);
+  },
+  referralSubmission: (uid) => request(`/refer-earn/submissions/${encodeURIComponent(uid)}`),
+  referralSubmit: (data) =>
+    request('/refer-earn/submissions', { method: 'POST', body: JSON.stringify(data) }),
+  referralAddContext: (uid, data) =>
+    request(`/refer-earn/submissions/${encodeURIComponent(uid)}/context`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  referralImport: (data) =>
+    request('/refer-earn/submissions/import', { method: 'POST', body: JSON.stringify(data) }),
+  referralStrategicAccess: (data) =>
+    request('/refer-earn/strategic-access', { method: 'POST', body: JSON.stringify(data) }),
+  adminReferralSubmissions: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null && v !== ''),
+    ).toString();
+    return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
+  },
+  adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D965 (#2798): the referral reward rules, and what they paid (a Super Admin's).
+  adminReferralRewards: () => request('/refer-earn/admin/rewards'),
+  // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
+  adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
+  adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
+  adminStrategicAccess: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/refer-earn/admin/strategic-access${qs ? `?${qs}` : ''}`);
+  },
+  adminStrategicAccessDecision: (userId, data) => request(`/refer-earn/admin/strategic-access/${encodeURIComponent(userId)}/decision`, { method: 'POST', body: JSON.stringify(data) }),
+  adminReferralReview: (uid, data) =>
+    request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
+
+  adminUserProfile: (userId) => request(`/admin/users/${userId}/profile`),
+  // Task #1 (DB) — dedicated transcript endpoints. The /profile call above
+  // returns the first + most-recent advisor conversation inline; these are
+  // the discoverable, per-conversation, audited entry-points for the
+  // admin user-detail drawer's Onboarding + Ongoing tabs.
+  adminUserOnboardingConversation: (userId) =>
+    request(`/admin/users/${userId}/conversations/onboarding`),
+  adminUserAdvisorConversations: (userId, opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.since) qs.set('since', opts.since);
+    if (opts.until) qs.set('until', opts.until);
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    const q = qs.toString();
+    return request(`/admin/users/${userId}/conversations/advisor${q ? `?${q}` : ''}`);
+  },
+  // Returns the same payload as the JSON endpoint above but as a CSV
+  // download URL (caller hits it via window.open / an <a download>).
+  adminUserAdvisorConversationsCsvUrl: (userId, opts = {}) => {
+    const qs = new URLSearchParams({ format: 'csv' });
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.since) qs.set('since', opts.since);
+    if (opts.until) qs.set('until', opts.until);
+    return `/api/admin/users/${userId}/conversations/advisor?${qs.toString()}`;
+  },
+  adminUserAdvisorConversation: (userId, conversationId) =>
+    request(`/admin/users/${userId}/conversations/advisor/${conversationId}`),
+  // Task #34 — message-level transcript CSV export. POST per spec (the body
+  // can include from/to/persona/model/conversation_id filters that would
+  // be awkward to express as a GET URL). Returns the CSV blob; caller is
+  // responsible for triggering the download.
+  adminUserAdvisorTranscriptExport: async (userId, opts = {}) => {
+    const res = await fetch(`/api/admin/users/${userId}/conversations/advisor/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      credentials: 'include',
+      body: JSON.stringify(opts || {}),
+    });
+    if (!res.ok) throw await refusalError(res, `Export failed (${res.status})`);
+    const blob = await res.blob();
+    const filename =
+      (res.headers.get('Content-Disposition') || '')
+        .match(/filename="?([^"]+)"?/)?.[1] || `advisor-transcript-${userId}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
+  adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
+  // D945 — Users' door to admit without an application: { cycle_id, reason,
+  // company_name?, confirm_over_places? }, into an open cohort. A free-text
+  // cohort label (the old second argument) is refused by the Worker.
+  adminSpinoutAdmit: (userId, admission) =>
+    request(`/admin/users/${userId}/spinout-admit`, {
+      method: 'POST', body: JSON.stringify(typeof admission === 'string' ? { cohort: admission } : (admission || {})),
+    }),
+  // Spin-Out Lab cohort application review queue. Accept → admitted flags +
+  // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
+  adminSpinoutApplications: () => request('/admin/spinout-applications'),
+  // Task #102 — optional `cohort` overrides the applied-to cohort on accept.
+  adminSpinoutDecide: (appId, decision, cohort) =>
+    request(`/admin/spinout-applications/${appId}/decide`, { method: 'POST', body: JSON.stringify(cohort ? { decision, cohort } : { decision }) }),
+  // Task #102 — admitted / active / graduated founders with milestone rows,
+  // derived tool unlocks, and the shared week catalog.
+  adminSpinoutParticipants: () => request('/admin/spinout-participants'),
+  // Lab participant moderation. Ejecting closes the LAB workspace
+  // (spinout_lab_active = 0); it never deactivates the platform account the
+  // way adminToggleActive does. Reason code is mandatory on every action,
+  // reinstatement included.
+  adminSpinoutModerationOpen: () => request('/admin/spinout-moderation'),
+  adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
+  adminSpinoutModerate: (userId, data) =>
+    request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
+  // D377 — who hosts Spin-Out Lab office hours. A partner or advisor applies
+  // from their own bookable profile (Investor / Advisor / Partner); an admin
+  // approves, rejects or revokes; /spinout-lab/office-hours lists approved
+  // hosts only. Worker: routes/lab_hosts.ts.
+  labHostsMe: () => request('/spinout-lab/hosts/me'),
+  labHostApply: (data) =>
+    request('/spinout-lab/hosts/apply', { method: 'POST', body: JSON.stringify(data) }),
+  labHostWithdraw: (uid) =>
+    request(`/spinout-lab/hosts/me/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
+  labHostDirectory: () => request('/spinout-lab/hosts/directory'),
+  adminLabHosts: (status) =>
+    request(`/admin/lab-hosts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminDecideLabHost: (uid, decision, note) =>
+    request(`/admin/lab-hosts/${encodeURIComponent(uid)}/decision`, { method: 'POST', body: JSON.stringify(note ? { decision, note } : { decision }) }),
+  // Cohort Timing & Gating — Worker-only endpoints (405/404 in dev backend;
+  // callers show a fallback). Timeline of monthly cycles + week windows,
+  // review queue (failed/grace/at-risk), grace extensions and pass/fail
+  // overrides (reason required, audited), impersonation session audit.
+  // Advisor↔cohort assignment (migration 206). Admin-only, and deliberately
+  // NOT beside the advisor's own `me/cohort` helpers: these grant access to
+  // another person's batch, and a zone page must never be one import away from
+  // calling them.
+  adminAdvisorCohortAssignments: () => request('/advisors/admin/cohort-assignments'),
+  adminAssignableAdvisors: () => request('/advisors/admin/cohort-assignments/assignable'),
+  adminAssignAdvisorCohort: (data) =>
+    request('/advisors/admin/cohort-assignments', { method: 'POST', body: JSON.stringify(data) }),
+  adminEndAdvisorCohortAssignment: (id) =>
+    request(`/advisors/admin/cohort-assignments/${id}`, { method: 'DELETE' }),
+  // D960 — every grant and end (migration 565), newest first: { items, total }.
+  // `params`: assignment_id, cohort_cycle_id, limit (1–200), offset.
+  adminAdvisorCohortHistory: (params = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['assignment_id', 'cohort_cycle_id', 'limit', 'offset']) {
+      if (params[k] != null && params[k] !== '') q.set(k, String(params[k]));
+    }
+    const qs = q.toString();
+    return request(`/advisors/admin/cohort-assignments/history${qs ? `?${qs}` : ''}`);
+  },
+
+  adminCohortTimeline: () => request('/admin/cohort/timeline'),
+  adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+  adminCohortGrace: (payload) => request('/admin/cohort/grace', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortOverride: (payload) => request('/admin/cohort/override', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortApplications: () => request('/admin/cohort/applications'),
+  adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
+  // D383 — the partner interview on an applicant (schedule replaces the live one).
+  adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
+  adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+  adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+
+  // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
+  // an active Crunchbase integration on the calling user's account.
+  crunchbaseSearch: (q, limit = 10) =>
+    request(`/crunchbase/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  crunchbaseApply: (projectId, payload) =>
+    request(`/crunchbase/projects/${projectId}/apply`, { method: 'POST', body: JSON.stringify(payload) }),
+  crunchbaseCompetitors: (projectId, limit = 10) =>
+    request(`/crunchbase/projects/${projectId}/competitors?limit=${limit}`),
+
+  // The connectors themselves are read and written through `connectorsApi`
+  // (`./api/connectors.js`, D651). This one remains for the pages outside
+  // Connectors that list a member's connections.
+  integrationsList: () => request('/integrations'),
+
+  searchSemantic: (q, type, limit = 10, grouped = false) => {
+    const params = new URLSearchParams({ q });
+    if (type) params.set('type', type);
+    if (limit) params.set('limit', String(limit));
+    if (grouped) params.set('grouped', '1');
+    return request(`/search?${params.toString()}`);
+  },
+  searchBackfill: (types) => request('/search/backfill', { method: 'POST', body: JSON.stringify({ types }) }),
+
+  // Phase 0.2 / Task #23 — onboarding wizard progress.
+  onboardingGetProgress: () => request('/onboarding/progress'),
+  onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
+  onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
+  // `accepted_terms` is required by the route, not decorative: this gate is where
+  // acceptance of the Terms and Privacy Policy is collected and recorded, because
+  // it is the one screen every fresh signup passes whatever the auth method.
+  // Passing it unconditionally here would defeat that — the caller sends the
+  // checkbox's real state and the server rejects a false one.
+  onboardingChooseLicence: (licence, acceptedTerms) => request('/onboarding/licence', {
+    method: 'POST',
+    body: JSON.stringify({ licence, accepted_terms: acceptedTerms === true }),
+  }),
+
+  // Task #24 — Brand & landing page generator.
+  brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
+  brandUploadLogo: (formData) => request('/brand/logo/upload', { method: 'POST', body: formData }),
+  brandSuggestPalette: (payload, headers) => request('/brand/palette/suggest', { method: 'POST', headers, body: JSON.stringify(payload) }),
+  brandSuggestTaglines: (payload, headers) => request('/brand/tagline/suggest', { method: 'POST', headers, body: JSON.stringify(payload) }),
+  brandAutofillLanding: (payload, headers) => request('/brand/landing/autofill', { method: 'POST', headers, body: JSON.stringify(payload) }),
+  brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
+  brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  brandListWaitlist: (projectId, opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.audience) q.set('audience', opts.audience);
+    const qs = q.toString();
+    return request(`/brand/landing/by-project/${projectId}/waitlist${qs ? `?${qs}` : ''}`);
+  },
+  brandGetPreviewUrl: (projectId) => request(`/brand/landing/by-project/${projectId}/preview-url`),
+  brandListTemplates: () => request('/brand/templates'),
+
+  // Task #2 — branded multi-page sites & saved templates.
+  brandGetSite: (projectId) => request(`/brand/site/by-project/${projectId}`),
+  brandSetSiteSlug: (projectId, slug) => request(`/brand/site/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify({ slug }) }),
+  // D583: `archived: true` lists the archived pages too (they are hidden by default).
+  brandListPages: (projectId, { archived = false } = {}) => request(`/brand/landing/by-project/${projectId}/pages${archived ? '?archived=1' : ''}`),
+  brandCreatePage: (projectId, payload) => request(`/brand/landing/by-project/${projectId}/pages`, { method: 'POST', body: JSON.stringify(payload) }),
+  brandGetPage: (pageId) => request(`/brand/landing/pages/${pageId}`),
+  brandUpdatePage: (pageId, payload) => request(`/brand/landing/pages/${pageId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
+  brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+  // D583: archive (unpublish and hide, kept) or restore one page.
+  brandArchivePage: (pageId, archived) => request(`/brand/landing/pages/${pageId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }),
+  brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
+  // The SHAREABLE public url (distinct from the noindex preview-token link
+  // above). Returns { url, published, page_slug }.
+  brandPagePublicUrl: (pageId) => request(`/brand/landing/pages/${pageId}/public-url`),
+  // Pre-flight for the slug editor. Returns { available, reason?, message?, slug? }.
+  brandPageSlugAvailable: (projectId, slug, excludePageId) => request(
+    `/brand/landing/by-project/${projectId}/page-slug-available?slug=${encodeURIComponent(slug)}`
+    + (excludePageId ? `&exclude_page_id=${encodeURIComponent(excludePageId)}` : ''),
+  ),
+  // D636: change one page's own address and nothing else. Refusals are sentences.
+  brandSetPageAddress: (pageId, pageSlug) => request(`/brand/landing/pages/${pageId}/address`, { method: 'PUT', body: JSON.stringify({ page_slug: pageSlug }) }),
+  brandListCustomTemplates: () => request('/brand/custom-templates'),
+  brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
+  brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
+
+  // Task #25 — Pitch deck builder.
+  deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
+  deckListVersions: (projectId) => request(`/decks/by-project/${projectId}`),
+  deckGet: (id) => request(`/decks/${id}`),
+  // D1500: every save names the document model it is in (editorModel's DECK_MODEL_VERSION); the Worker refuses another with 409 upgrade_required.
+  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify({ model_version: 2, ...payload }) }),
+  deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
+  deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
+  // Task #53 — viewer heartbeat for read-time tracking + founder engagement panel.
+  // D663 — `slides` is the viewer's running seconds per slide index.
+  deckShareHeartbeat: (token, viewId, seconds, slides) => request(
+    `/decks/share/${encodeURIComponent(token)}/heartbeat`,
+    { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
+  ),
+  deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
+  deckNotes: (id) => request(`/decks/${id}/notes`),
+  deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D900 (#2679) — the studio's review of one version (PD14), and the venture's reviews per version.
+  // `headers` is the press's own rail context (`railPressHeaders('review:deck-version')`).
+  deckReviewVersion: (id, headers) => request(`/decks/${id}/review`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+  deckReviews: (id) => request(`/decks/${id}/reviews`),
+  // The Super Admin's default template by sector and stage; an admin reads it.
+  deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
+  deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
+  // D4155 K4 (#4191): back to the engine's own pick. The reason rides in the body, never the URL.
+  deckResetRecommendOverride: ({ sector, stage, reason } = {}) => request(
+    `/decks/admin/recommend-overrides?sector=${encodeURIComponent(sector || '')}&stage=${encodeURIComponent(stage || '')}`,
+    { method: 'DELETE', body: JSON.stringify({ reason }) },
+  ),
+  // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
+  // deleting it, so the impression history stays attributable to a link the
+  // founder can still see they created; idempotent, so a double-click or a
+  // second tab cannot report that a withdrawn link might still be live.
+  deckRevokeShare: (id, shareId) => request(`/decks/${id}/shares/${shareId}`, { method: 'DELETE' }),
+  // Task #6 — share-link viewer onboarding + conversion endpoints.
+  deckShareContext: (token) => request(`/decks/share/${encodeURIComponent(token)}/context`),
+  deckShareSignup: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/signup`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareNda: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/nda`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  // D902 — the NDA's text before acceptance (PD20 A).
+  deckShareNdaText: (token) => request(`/decks/share/${encodeURIComponent(token)}/nda`),
+  deckShareFeedback: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/feedback`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareDealPack: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/deal-pack`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  deckShareSignDealPack: (token, payload) => request(
+    `/decks/share/${encodeURIComponent(token)}/deal-pack/sign`,
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+  ),
+  // Task #16 (DE) — Pitch Deck Builder rewrite.
+  deckMethods: () => request('/decks/methods'),
+  deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
+  // D778 part 5: a template the model fills answers `{ proposal }` (kept or
+  // discarded like a fill); the Spin-Out demo day still answers `{ deck }`.
+  // `headers` is the press's own rail context (`railPressHeaders`).
+  deckApplyMethod: (projectId, methodId, headers) =>
+    request('/decks/apply-method', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
+  // Task #14 — re-runs autofill against the deck's existing method_id.
+  // D767 (#2096): it PROPOSES the result and changes no version: the answer
+  // is `{ proposal }` plus a per-slide `slide_confidence[]`. 409
+  // `no_method_id` means the deck was created before the fielded editor;
+  // the client directs the user to /apply-method first.
+  deckAutofill: (id, headers) => request(`/decks/${id}/autofill`, { ...(headers ? { headers } : {}), method: 'POST', body: '{}' }),
+  // D767 — keep the proposal as the new current version, or discard it (only it).
+  deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
+  deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
+  // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
+  // (the Worker remaps the live Lab data). The browser renders/downloads the
+  // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
+  // { data, notes, gaps, draft, program_day }.
+  spinoutDeck: (projectId) => request(`/projects/${projectId}/spinout-deck`, { method: 'POST', body: '{}' }),
+  // Task #42 — pre-flight readiness: same assembler/gaps as spinoutDeck but
+  // returns ONLY { gaps, draft, program_day } (skips the heavy DATA + NOTES
+  // payload) so the deck page can show what's still missing BEFORE export.
+  spinoutDeckPreview: (projectId) => request(`/projects/${projectId}/spinout-deck?preview=1`, { method: 'POST', body: '{}' }),
+  // Deck-level MANUAL OVERRIDES. These edit the deck only — they do NOT rewrite
+  // the founder's canonical module data (which is what the slide editor used to
+  // do). Resolution at render time is override > module data > derived
+  // placeholder. Returns { overrides, overridable_keys }.
+  spinoutDeckOverrides: (projectId) => request(`/projects/${projectId}/spinout-deck/overrides`),
+  // Send a key with an empty string (or list it in `remove`) to REVERT it back
+  // to the module value; there is no separate delete call.
+  saveSpinoutDeckOverrides: (projectId, overrides, remove = []) =>
+    request(`/projects/${projectId}/spinout-deck/overrides`, {
+      method: 'PUT',
+      body: JSON.stringify({ overrides, remove }),
+    }),
+  // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
+  // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
+  // Rendering against the live SPA print template).
+  // D1112 (#2992): `{ notes, sources }`, PD17's two options, for PDF and PowerPoint too.
+  deckExport: (id, format, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ format, notes, sources }),
+    }),
+  // D901 (#2680) — the version as one self-contained HTML file; the Worker
+  // records it (`deck_exports` plus an audit row) before answering. Raw
+  // Response, like deckExport: the caller reads the file or the refusal.
+  deckExportHtml: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D1603 (#3882) — pd8b's "Slides-suite file (.odp)": the version as an
+  // editable OpenDocument Presentation. A raw Response, like deckExportHtml:
+  // the caller reads the blob, or the refusal on a non-200.
+  deckExportOdp: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/odp`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D904 (#2683) — the version as a new presentation in the member's own
+  // Google Drive; the answer is `{created, url, converted, …}` or `{error}`.
+  // Raw Response, like deckExport: the caller reads the answer or the refusal.
+  deckExportGoogleSlides: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/google-slides`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D901 — every export of the deck's venture, newest first (50).
+  deckExportList: (id) => request(`/decks/${id}/exports`),
+  // Task #2 — public, HMAC-token-gated deck payload consumed by the
+  // headless Browser-Rendering session driving server-side exports.
+  // No auth cookies/JWT are sent because the session has none; the
+  // token signs {deck_id, exp} and is short-lived (3–5 min).
+  deckPrintExportRead: (token) => request(`/decks/print-export/${encodeURIComponent(token)}`),
+  deckGetBrand: () => request('/decks/brand'),
+  // D898 group E: the studio names the venture, so the change is on its ledger.
+  deckSetWatermark: (url, projectId) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url, ...(projectId ? { project_id: projectId } : {}) }) }),
+
+  // #2324: the Network Effects page is removed; these are the syndicate reads
+  // and the close a deal room (components/deals/DealSyndicates.jsx) still uses.
+  networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
+  // D630 — the syndicates linked to one company. `syndicates.deal_id` holds a
+  // project id, so the filter is named for what it holds.
+  networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
+  networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
+
+  // D4623 part 2: `licence` 'investor' asks for the investor figures of a held licence that is not the
+  // primary one (the multi-licence Studio's Investor block). Omitted, the payload is the primary licence's.
+  getDashboard: (fresh = false, licence = '') => {
+    const query = [fresh ? 'fresh=1' : '', licence ? `licence=${encodeURIComponent(licence)}` : ''].filter(Boolean).join('&');
+    return request('/dashboard' + (query ? `?${query}` : ''));
+  },
+  // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
+  investorLifecycle: () => request('/dashboard/investor-lifecycle'),
+
+  // #4701 — one page of the Build desk list: `{ items, next_cursor, has_more, total }`.
+  // A list capped at its first page and silent about the rest read as "all of
+  // them", so `pipelineActive` follows `next_cursor` to the end and answers one envelope
+  // `{ items, total, complete, remainder_error }`.
+  pipelineActivePage: (cursor) => request(
+    cursor ? `/pipeline/active?cursor=${encodeURIComponent(cursor)}` : '/pipeline/active',
+  ),
+  pipelineActive: () => readAllPages((cursor) => api.pipelineActivePage(cursor)),
+  pipelineCreateProject: (data) => request('/pipeline/projects', { method: 'POST', body: JSON.stringify(data) }),
+  pipelineAdvance: (id, stage) => request(`/pipeline/projects/${id}/advance`, { method: 'POST', body: JSON.stringify({ stage }) }),
+  pipelineDealDetail: (id) => request(`/pipeline/projects/${id}/detail`),
+  pipelineCreateTask: (data) => request('/pipeline/mvp-tasks', { method: 'POST', body: JSON.stringify(data) }),
+  pipelineUpdateTask: (id, data) => request(`/pipeline/mvp-tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  pipelineSnapshot: (data) => request('/pipeline/metrics/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+  pipelineTriggerReview: (deal_id) => request('/pipeline/decision-gate/review', { method: 'POST', body: JSON.stringify({ deal_id }) }),
+  pipelineDecide: (gate_id, decision) => request('/pipeline/decision-gate/decide', { method: 'PATCH', body: JSON.stringify({ gate_id, decision }) }),
+
+  partnerSummary: () => request('/partnernet/summary'),
+  partnerRelationships: () => request('/partnernet/relationships'),
+  // D465 — the interaction log and the reminders (migration 338). The book's
+  // cold flag reads the log's MAX; a reminder surfaces on the desk when due.
+  partnerInteractionLog: (id) => request(`/partnernet/relationships/${id}/interactions`),
+  partnerInteractionAdd: (id, data) => request(`/partnernet/relationships/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerInteractionVoid: (id, uid) => request(`/partnernet/relationships/${id}/interactions/${encodeURIComponent(uid)}/void`, { method: 'POST', body: '{}' }),
+  partnerReminders: (all) => request(`/partnernet/reminders${all ? '?all=1' : ''}`),
+  partnerReminderSet: (id, data) => request(`/partnernet/relationships/${id}/reminders`, { method: 'POST', body: JSON.stringify(data) }),
+  partnerReminderDone: (uid, done) => request(`/partnernet/reminders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
+
+  // The firm relationship book (migration 224) — people the firm knows at
+  // client companies, each owned by someone at the firm or conspicuously not.
+  // A different object from `partnerRelationships`, which is a partner-to-
+  // partner edge; see the migration for why they are two tables.
+  // What an introduction is — a favour or a referral with a fee — and what came
+  // of it. One side's record on one side's row; the write refuses any
+  // proposition not addressed to the caller.
+  introSetTerms: (uid, data) => request(`/introductions/propositions/${encodeURIComponent(uid)}/terms`, {
+    method: 'PUT', body: JSON.stringify(data || {}),
+  }),
+  partnerBook: () => request('/partnernet/book'),
+  partnerBookAdd: (data) => request('/partnernet/book', { method: 'POST', body: JSON.stringify(data || {}) }),
+  // Who at the firm can be given a row: the caller plus everyone linked to a
+  // company the caller is linked to. The same set the PATCH below accepts, so
+  // the picker cannot offer a choice the write refuses.
+  partnerBookOwners: () => request('/partnernet/book/owners'),
+  // `null` unassigns. An owner who leaves puts the row back at the top of the
+  // book, which is where the page's own finding lives.
+  partnerBookSetOwner: (uid, firmOwnerId) => request(`/partnernet/book/${encodeURIComponent(uid)}/owner`, {
+    method: 'PATCH', body: JSON.stringify({ firm_owner_id: firmOwnerId ?? null }),
+  }),
+  partnerBookLogInteraction: (uid, data) => request(`/partnernet/book/${encodeURIComponent(uid)}/interactions`, {
+    method: 'POST', body: JSON.stringify(data || {}),
+  }),
+  // `client` | `prospect` | `referral_source`, or `null` to clear. Set per
+  // contact because there is no organization record to hang it on — which is
+  // the finding the Organizations zone is about.
+  partnerBookSetRelationship: (uid, relationship) => request(`/partnernet/book/${encodeURIComponent(uid)}/relationship`, {
+    method: 'PATCH', body: JSON.stringify({ relationship: relationship ?? null }),
+  }),
+  createRelationship: (data) => request('/partnernet/relationships', { method: 'POST', body: JSON.stringify(data) }),
+  updateRelationship: (id, data) => request(`/partnernet/relationships/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  relationshipEvents: (id) => request(`/partnernet/relationships/${id}/events`),
+  // D493 — a relationship about someone else is a request they answer. A
+  // pending row is in neither book and counts towards no score until accepted.
+  relationshipRequests: () => request('/partnernet/relationships/requests'),
+  respondRelationship: (id, decision) => request(`/partnernet/relationships/${id}/respond`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  withdrawRelationship: (id) => request(`/partnernet/relationships/${id}/withdraw`, { method: 'POST' }),
+  removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
+  activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
+  logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ───── Pipeline community voting ─────
+  getVotes: (dealId, includeComments = false) =>
+    request(`/pipeline/votes/${dealId}${includeComments ? '?include_comments=true' : ''}`),
+  castVote: (dealId, body) =>
+    request(`/pipeline/vote/${dealId}`, { method: 'POST', body: JSON.stringify(body) }),
+  voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
+  // D370: no `.catch(() => [])`. That turned a failed read into "no capital
+  // calls", which is a claim; a caller that wants a fallback writes its own.
+  capitalCalls: () => request('/capital/calls'),
+  complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
+
+  spinoutExecute: (data) => request('/legalcap/spinout/execute', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutStatus: (dealId) => request(`/legalcap/spinout/status/${dealId}`),
+  spinoutIpTransfer: (data) => request('/legalcap/spinout/ip-transfer', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutEquity: (data) => request('/legalcap/spinout/equity-allocate', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutAtlas: (data) => request('/legalcap/spinout/stripe-atlas', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutGoIndependent: (data) => request('/legalcap/spinout/go-independent', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutIterate: (data) => request('/legalcap/spinout/iterate', { method: 'POST', body: JSON.stringify(data) }),
+  independentSubsidiaries: () => request('/legalcap/spinout/independent').catch(() => []),
+
+  // ---------- Monitoring (admin) ----------
+  monitoringMetrics: (minutes = 60) => request(`/monitoring/metrics?minutes=${minutes}`),
+  monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
+  monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
+  monitoringAnomalies: () => request('/monitoring/anomalies'),
+  // D765: the AI summary is a press, never the page's poll.
+  monitoringAnomaliesSummary: () => request('/monitoring/anomalies', { method: 'POST', body: JSON.stringify({}) }),
+  // D157 — the caller's OWN privileged actions. Deliberately NOT a filter on
+  // `/analytics/audit`, which is super-admin-only because it joins `users` and
+  // renders other admins by name: the subject here is bound from the session,
+  // so there is no parameter that could name somebody else.
+  monitoringMyAudit: (limit = 25, offset = 0) =>
+    request(`/monitoring/analytics/audit/mine?limit=${limit}&offset=${offset}`),
+  monitoringCleanup: () => request('/monitoring/cleanup', { method: 'POST' }),
+  // Task #1 (AX) — admin AI router usage rollup (per-day spend, fallback
+  // rate, p50/p95 latency, top 10 most expensive users).
+  monitoringAiUsage: (days = 7) => request(`/monitoring/ai-usage?days=${days}`),
+
+  // Task #176 (Phase 4) — the CALLER'S OWN AI gateway spend, not the org's.
+  // `monitoringAiUsage` above is the admin rollup over every user; this is the
+  // self-view that feeds the AI rail's spend meter, so the meter reads live
+  // numbers instead of taking them as props. Distinguishes "no record" from
+  // "$0": `recorded: false` means the usage table could not be read, and the
+  // meter must say so rather than drawing an empty bar as a fact.
+  //
+  // D552 step 3 — with `surface`, one page's month and last run instead
+  // (`?surface=<the page's path, as the router records it>`).
+  myAiSpend: (surface) => request(surface == null
+    ? '/ai/me/spend'
+    : `/ai/me/spend?surface=${encodeURIComponent(surface)}`),
+
+  // The router's own routing table and price list. The rail quotes a cost
+  // before a run and shows a receipt after it; assistCost.js already forces
+  // both through ONE calculation, but the PRICES were a second copy — canvases
+  // carry hand-written per-1M figures while the receipt is computed from
+  // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
+  aiPricing: () => request('/ai/pricing'),
+
+  // Read back one workspace zone — the ONLY thing a workspace surface runs a
+  // model for, and the reason the rail on those pages is allowed to name one
+  // at all. `ASSIST_SURFACES` binds a surface to an aiRouter task class and the
+  // rail's model card is drawn from that binding, so until a workspace page had
+  // a call site the card would have named a model for a page that never called
+  // one. The call came first; the registration followed.
+  //
+  // `coverage` is the rail's OWN Coverage lines — counts and labels the page
+  // has already fetched and is already showing. Not the rows: those lines are
+  // the page's summary of itself, they carry no personal data, and sending the
+  // records behind them would put a client's name in a prompt to satisfy a
+  // feature nobody asked for that of.
+  //
+  // Longer than the default deadline because a model call is not a read: 30s
+  // would abort a run the router is still paying for.
+  // `model` is the founder's pick from the rail's menu, and it is OPTIONAL on
+  // purpose: omitted means "whatever the route says", which is what every
+  // caller sent before the menu existed and what a page with no stored choice
+  // sends now. The worker validates it against the task's `alternates` and
+  // refuses an unlisted one rather than substituting — see aiRouter.ts.
+  //
+  // D154 — `branch` is what makes H13 rule 4 true rather than false. It is the
+  // scope the PAGE read in, not a filter: when it is present the coverage
+  // lines being sent are one branch's figures, so the route writes an audit
+  // row saying a named branch was read back. Omitted means nothing privileged
+  // happened and nothing is logged, which is what D150 correctly refused to
+  // pretend otherwise about.
+  //
+  // `page` is the app path the rail sits on (D404). The router records it as
+  // the run's `surface`, which is what lets the rail show "This page this
+  // month"; it is a path, never page content.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model, branch, page }) =>
+    request('/ai/workspace/explain', {
+      method: 'POST',
+      timeoutMs: 60_000,
+      body: JSON.stringify({ workspace, zone, coverage, model, branch, page, ...railBody() }),
+    }),
+
+  // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
+  // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
+  // a transient D1 hiccup or worker cold-start doesn't surface as a red
+  // error card. The retry is bounded to GET reads only (no side effects).
+  analyticsOverview: (from, to, currency = '') =>
+    _analyticsRead(`/monitoring/analytics/overview?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsCurrencies: () => _analyticsRead('/monitoring/analytics/currencies'),
+  analyticsCohorts: (metric = 'retention', granularity = 'week') =>
+    _analyticsRead(`/monitoring/analytics/cohorts?metric=${metric}&granularity=${granularity}`),
+  analyticsUsers: ({ role = '', tier = '', search = '', limit = 50, offset = 0 } = {}) =>
+    _analyticsRead(`/monitoring/analytics/users?role=${encodeURIComponent(role)}&tier=${encodeURIComponent(tier)}&search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
+  analyticsUser: (id) => _analyticsRead(`/monitoring/analytics/user/${id}`),
+  analyticsFinancial: (from, to, currency = '') =>
+    _analyticsRead(`/monitoring/analytics/financial?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsTechnical: (from, to) =>
+    _analyticsRead(`/monitoring/analytics/technical?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  // D161 — traffic split by branch. SUPER ADMIN ONLY, and deliberately a
+  // separate method rather than a `?branch=` on `analyticsTechnical` above:
+  // that one is `requireAdmin`, and on this platform a plain admin is a branch
+  // admin, so attributing traffic to a named branch there would hand every
+  // branch admin every other branch's figures. Returns `{available, reason,
+  // as_of, rows}` — `available: false` is "the metrics store could not be
+  // read", which is not a count of zero.
+  analyticsTrafficByBranch: (from, to) =>
+    _analyticsRead(`/monitoring/analytics/traffic-by-branch?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`),
+  analyticsManagement: (from, to, currency = '') =>
+    _analyticsRead(`/monitoring/analytics/management?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}&currency=${encodeURIComponent(currency)}`),
+  analyticsBackfillSnapshots: (days = 7) =>
+    request('/monitoring/analytics/snapshots/backfill', { method: 'POST', body: JSON.stringify({ days }) }),
+  analyticsExport: (payload) =>
+    request('/monitoring/analytics/export', { method: 'POST', body: JSON.stringify(payload) }),
+  analyticsAudit: (limit = 25, action = 'analytics_export', opts = {}) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('action', action);
+    if (opts.offset) params.set('offset', String(opts.offset));
+    if (opts.plan_id) params.set('plan_id', opts.plan_id);
+    if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
+    if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
+    return _analyticsRead(`/monitoring/analytics/audit?${params.toString()}`);
+  },
+  // Task #20 — Stream the Plan change history CSV for the active filters.
+  // Returns a Blob + filename so the caller can trigger a download.
+  analyticsAuditExportCsv: async (opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.plan_id) params.set('plan_id', opts.plan_id);
+    if (opts.admin_user_id) params.set('admin_user_id', String(opts.admin_user_id));
+    if (opts.admin_q) params.set('admin_q', opts.admin_q);
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
+    const token = localStorage.getItem('token');
+    const qs = params.toString();
+    const res = await fetch(`/api/monitoring/analytics/audit/export.csv${qs ? `?${qs}` : ''}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'Export failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || 'plan-change-history.csv';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
+  analyticsListPlans: () => _analyticsRead('/monitoring/analytics/plans'),
+  analyticsCreatePlan: (payload) =>
+    request('/monitoring/analytics/plans', { method: 'POST', body: JSON.stringify(payload) }),
+  analyticsUpdatePlan: (planId, patch) =>
+    request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    }),
+  analyticsDeletePlan: (planId) =>
+    request(`/monitoring/analytics/plans/${encodeURIComponent(planId)}`, {
+      method: 'DELETE',
+    }),
+
+  // ---------- Infrastructure (admin) ----------
+  infraQueue: () => request('/infra/queue'),
+  infraMetrics: (minutes = 60) => request(`/infra/metrics?minutes=${minutes}`),
+  infraProcess: (batch = 10) => request(`/infra/process?batch=${batch}`, { method: 'POST' }),
+  infraEnqueue: (job_type, payload, max_retries) =>
+    request('/infra/enqueue', { method: 'POST', body: JSON.stringify({ job_type, payload, max_retries }) }),
+  infraCleanup: () => request('/infra/cleanup', { method: 'POST' }),
+  infraDLQ: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/infra/dlq${q ? `?${q}` : ''}`);
+  },
+  infraRetryDLQ: (id, source) => request(`/infra/dlq/${encodeURIComponent(id)}/retry?source=${encodeURIComponent(source)}`, { method: 'POST' }),
+  infraDeleteDLQ: (id, source) => request(`/infra/dlq/${encodeURIComponent(id)}?source=${encodeURIComponent(source)}`, { method: 'DELETE' }),
+  infraCronHistory: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)).toString();
+    return request(`/infra/cron-history${q ? `?${q}` : ''}`);
+  },
+  infraWSCheck: () => request('/infra/ws-check'),
+  infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
+
+  // ---------- Funds & LPs ----------
+  fundGet: (id) => request(`/funds/${id}`),
+  fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
+  fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  fundAddLP: (id, data) => request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
+  fundCapitalCall: (id, amount, note) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
+
+  // ---------- VC Funds / LP Portal / Distributions ----------
+  fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
+  fundsGet: (id) => request(`/funds/${id}`),
+  fundsCreateV2: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
+  fundsRegenerateLpa: (id) => request(`/funds/${id}/regenerate-lpa`, { method: 'POST' }),
+  fundsLpa: (id) => request(`/funds/${id}/lpa`),
+  // D174 — the LPA body is a download, not a field on the response above.
+  //
+  // `fundsLpa` reports only whether a body EXISTS (`content_available`), so
+  // opening the drawer never hands over the agreement. This is the click, and
+  // it is `downloadDataRoom`'s shape for the reason that method already
+  // states: a plain `<a>` click cannot set the session's Authorization
+  // header, so the blob is fetched with it and clicked client-side. The
+  // server re-checks LP membership on this hit — it does not trust the
+  // drawer's earlier answer.
+  downloadFundLpa: async (id) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${BASE}/funds/${id}/lpa/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    // The server distinguishes "you may not have it" (403) from "there is
+    // nothing to give you" (404), and the drawer says which — so the refusal
+    // is carried rather than flattened into one failure sentence. A body that
+    // is not JSON keeps statusText rather than inventing a reason.
+    if (!res.ok) throw await refusalError(res, 'Download failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '')
+      .match(/filename="?([^"]+)"?/)?.[1] || `lpa-fund-${id}.txt`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  // D371: `due_date` rides along (the worker always accepted it; this dropped
+  // it), and the call is written before the response — see funds.ts.
+  fundsCapitalCallV2: (id, amount_cents, note, due_date) =>
+    request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount_cents, note, due_date: due_date || undefined }) }),
+  // D371: the fund call ledger — each call with its LP lines, the ledger of
+  // calls and receipts (one LP's history with `lpId`), the split a call would
+  // make before it is issued, and the GP's receipt against one LP's line.
+  fundsCallLedger: (id) => request(`/funds/${id}/capital-calls`),
+  fundsLedger: (id, lpId) => request(`/funds/${id}/ledger${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsCallPreview: (id, amount_cents) =>
+    request(`/funds/${id}/capital-calls/preview`, { method: 'POST', body: JSON.stringify({ amount_cents }) }),
+  fundsRecordReceipt: (id, lineId, data) =>
+    request(`/funds/${id}/capital-calls/lines/${lineId}/receipts`, { method: 'POST', body: JSON.stringify(data) }),
+  fundsLpsList: (id) => request(`/funds/${id}/lps`),
+  fundsAddLpV2: (id, data) =>
+    request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
+  fundsSignLpa: (lpId) =>
+    request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  // D553 (#1146): an LP's type (one of five, or null to clear), and the comms
+  // log — what was sent to which LP and when. The log stores no message body.
+  fundsSetLpType: (id, lpId, lp_type) =>
+    request(`/funds/${id}/lps/${lpId}/type`, { method: 'PUT', body: JSON.stringify({ lp_type }) }),
+  fundsCommsList: (id, lpId) => request(`/funds/${id}/comms${lpId ? `?lp=${encodeURIComponent(lpId)}` : ''}`),
+  fundsLogComm: (id, data) =>
+    request(`/funds/${id}/comms`, { method: 'POST', body: JSON.stringify(data) }),
+  // Fund analytics over real D1 rows only. Metrics the schema cannot support
+  // (NAV, RVPI, TVPI, IRR) come back null with a reason in `unavailable`; the
+  // pages render "Not recorded" rather than an invented figure.
+  fundsAnalytics: () => request('/funds/analytics'),
+  fundAnalytics: (id) => request(`/funds/${id}/analytics`),
+  fundsLpPortal: () => request('/funds/lp-portal'),
+  // GP-only. Returns ONE limited partner's reporting data in the same shape as
+  // fundsLpPortal, so the quarterly-report renderer is a single code path
+  // whether the LP downloads their own statement or the GP produces it.
+  fundsLpReport: (fundId, lpId) => request(`/funds/${fundId}/lp-report/${lpId}`),
+  // GP-only. Quarterly reporting periods; a period is a DRAFT until issued, and
+  // issuing freezes the fund-level snapshot and the GP's letter.
+  fundsReportPeriods: (fundId) => request(`/funds/${fundId}/report-periods`),
+  fundsSaveReportPeriod: (fundId, data) =>
+    request(`/funds/${fundId}/report-periods`, { method: 'POST', body: JSON.stringify(data) }),
+  fundsSyndication: () => request('/funds/syndication'),
+  fundsDistributions: (fund_id) => request(`/funds/distributions?fund_id=${fund_id}`),
+  fundsExecuteDistribution: (data) =>
+    request('/funds/distributions/execute', { method: 'POST', body: JSON.stringify(data) }),
+  fundsMarkDistributionPaid: (id) =>
+    request(`/funds/distributions/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) }),
+
+  // ---------- Branded email (Gmail) ----------
+  emailSendReferralInvites: (contacts, custom_message) =>
+    request('/email/send-referral-invites', {
+      method: 'POST',
+      body: JSON.stringify({ contacts, custom_message }),
+    }),
+  // Task #4 — Sent invitations panel + per-row reminder action.
+  emailInvites: () => request('/email/invites'),
+  emailRemindInvite: (id) =>
+    request(`/email/invites/${encodeURIComponent(id)}/remind`, { method: 'POST' }),
+
+  // ---------- LinkedIn (Refer & Earn) ----------
+  // Sign-in with LinkedIn (OIDC) attaches a verified identity to the
+  // current user. The connections-CSV import is parsed in-browser and
+  // never hits the worker.
+  linkedinStatus: () => request('/linkedin/status'),
+  linkedinOAuthStart: ({ return_to, project_id } = {}) =>
+    request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to, ...(project_id ? { project_id } : {}) } : {}) }),
+  // D1352 (#3567): `{ delete_imported: true }` also deletes the contacts only LinkedIn gave; the reply says how many were deleted and kept.
+  linkedinDisconnect: (opts = {}) => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify(opts?.delete_imported ? { delete_imported: true } : {}) }),
+
+  // Task #67 — Autopopulate profile from LinkedIn (connected account OR a
+  // LinkedIn PDF export). preview() never writes; apply() persists the
+  // user-reviewed proposal. source is 'account' | 'pdf'.
+  linkedinImportPreview: ({ source, pdf_data_uri } = {}) =>
+    request('/settings/profile/linkedin-import/preview', {
+      method: 'POST',
+      body: JSON.stringify(pdf_data_uri ? { source, pdf_data_uri } : { source }),
+    }),
+  linkedinImportApply: (proposal) =>
+    request('/settings/profile/linkedin-import/apply', {
+      method: 'POST',
+      body: JSON.stringify(proposal || {}),
+    }),
+
+  // ---------- Settings (Epic 3) ----------
+  getSettings: () => request('/settings'),
+  updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  // Task #66 — structured career background (experience / education / certifications / website).
+  getProfileBackground: () => request('/settings/profile/background'),
+  updateProfileBackground: (data) =>
+    request('/settings/profile/background', { method: 'PUT', body: JSON.stringify(data) }),
+  uploadHeadshot: (data_uri) => request('/settings/headshot', { method: 'POST', body: JSON.stringify({ data_uri }) }),
+  requestEmailChange: (new_email) => request('/settings/email-change/request', { method: 'POST', body: JSON.stringify({ new_email }) }),
+  confirmEmailChange: (token) => request('/settings/email-change/confirm', { method: 'POST', body: JSON.stringify({ token }) }),
+  revokeEmailChange: (token) => request('/settings/email-change/revoke', { method: 'POST', body: JSON.stringify({ token }) }),
+  repairTotp: (totp_code) => request('/settings/totp/repair', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // Task #11 — first-time OPTIONAL authenticator enrolment (two-phase).
+  // start() proposes a secret (nothing persists server-side); confirm()
+  // round-trips the secret + a live 6-digit code, persists the enrolment,
+  // and upgrades the current session to full assurance in place.
+  enrolTotpStart: () => request('/settings/totp/enrol/start', { method: 'POST', body: JSON.stringify({}) }),
+  enrolTotpConfirm: (data) => request('/settings/totp/enrol/confirm', { method: 'POST', body: JSON.stringify(data) }),
+  revokeAllSessions: () => request('/settings/sessions/revoke-all', { method: 'POST', body: JSON.stringify({}) }),
+  requestAccountDeletion: () => request('/settings/account/delete-request', { method: 'POST', body: JSON.stringify({}) }),
+  cancelAccountDeletion: () => request('/settings/account/delete-request/cancel', { method: 'POST', body: JSON.stringify({}) }),
+  // The export endpoint streams a JSON file; we want the raw blob, not parsed JSON.
+  exportMyData: async () => {
+    const res = await fetch(`${BASE}/settings/data-export`, { headers: getAuthHeaders() });
+    if (!res.ok) throw await refusalError(res, 'Export failed');
+    return await res.blob();
+  },
+  listSessions: () => request('/settings/sessions'),
+  revokeSession: (id) => request(`/settings/sessions/${id}/revoke`, { method: 'POST', body: JSON.stringify({}) }),
+  regenerateRecoveryCodes: (totp_code) =>
+    request('/settings/totp/recovery-codes/regenerate', { method: 'POST', body: JSON.stringify({ totp_code }) }),
+  // Task #20 — settings sub-routes (user_settings table).
+  getProfileSettings: () => request('/settings/profile'),
+  updateProfileSettings: (data) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getPrivacySettings: () => request('/settings/privacy'),
+  updatePrivacySettings: (data) => request('/settings/privacy', { method: 'PUT', body: JSON.stringify(data) }),
+  // D4615 — public-profile switches, field by field, with the revision read: { fields: { name: true }, expected_revision }.
+  updatePublicProfileSwitches: (data) => request('/settings/privacy/public-profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getAppearanceSettings: () => request('/settings/appearance'),
+  updateAppearanceSettings: (data) => request('/settings/appearance', { method: 'PUT', body: JSON.stringify(data) }),
+  getNotificationSettings: () => request('/settings/notifications'),
+  updateNotificationSettings: (data) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
+  getSecuritySettings: () => request('/settings/security'),
+  getIntegrationSettings: () => request('/settings/integrations'),
+  listFounderInvites: () => request('/settings/founder/invites'),
+  createFounderInvite: (data) =>
+    request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),
+  revokeFounderInvite: (id) =>
+    request(`/settings/founder/invites/${id}`, { method: 'DELETE' }),
+
+  // Company Profiles (Growth & Expansion Track — Task 1)
+  companyMe: () => request('/company/me'),
+  listMyCompanies: () => request('/company/memberships'),
+  listCompanies: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/companies${qs ? `?${qs}` : ''}`);
+  },
+  createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
+  updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #3841: `getCompany`, the member edits and `teamVocabulary` moved to `lib/api/teams.js` (`teamsApi`, D527).
+  // D435 — the founder's Team page (migration 326): the roster, coverage and
+  // headcount plan of one company, plus the cap-table, option-pool and
+  // co-founder-decision reads it composes, each reported per source.
+  getCompanyTeam: (uid) => request(`/company/${uid}/team`),
+  addCompanyPerson: (uid, data) =>
+    request(`/company/${uid}/team/people`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCompanyPerson: (uid, personUid, data) =>
+    request(`/company/${uid}/team/people/${personUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  saveCompanyCoverage: (uid, rows) =>
+    request(`/company/${uid}/team/coverage`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+  saveCompanyHeadcountPlan: (uid, rows) =>
+    request(`/company/${uid}/team/plan`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+
+  // #3841: the company invitation methods moved to `lib/api/teams.js` (`teamsApi`, D527); the invitee's accept stays here.
+  acceptCompanyInvitation: (token) =>
+    request('/company/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  // ---------- Personas (Epic 1) ----------
+  getPersonaTaxonomy: () => request('/personas/taxonomy'),
+  getMyPersonas: () => request('/personas/me'),
+  classifyPersona: (first_message) =>
+    request('/personas/classify', { method: 'POST', body: JSON.stringify({ first_message }) }),
+  answerPersona: (persona_id, key, value) =>
+    request('/personas/answer', { method: 'POST', body: JSON.stringify({ persona_id, key, value }) }),
+  finalizePersona: (persona_id, confidence, source = 'router', secondary_persona_id = null) =>
+    request('/personas/finalize', {
+      method: 'POST',
+      body: JSON.stringify({ persona_id, confidence, source, secondary_persona_id }),
+    }),
+  listPersonasAdmin: () => request('/personas/admin/list'),
+  retagPersonaAdmin: (user_id, persona_id) =>
+    request(`/personas/admin/${user_id}/retag`, { method: 'POST', body: JSON.stringify({ persona_id }) }),
+
+  // ---------- Cap-table simulator (Task #27) ----------
+  simulateCapTable: (inputs) =>
+    request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
+  listCapTableScenarios: () => request('/captable/scenarios'),
+  getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${encodeURIComponent(projectId)}`),
+  // Wave 2 — option pools + vesting grants, both populated by the Carta sync
+  // (migration 057) and read by nothing until now. Shares, not money.
+  getEquityPlan: () => request('/captable/equity-plan'),
+
+  // Data room (migration 184 + routes/data_room.ts). Founder methods take the
+  // project uid; investor methods take the same uid but resolve through a
+  // grant rather than ownership.
+  dataRoom: (projectUid) => request(`/data-room/${encodeURIComponent(projectUid)}`),
+  dataRoomCreateFolder: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFolder: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFolder: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomUploadFile: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFile: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFile: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomGrant: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomRevoke: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+  // Task #55 — the advisor grant. A founder opens one project to one named
+  // advisor, scope by scope; the advisor reads it back through /shared/*.
+  advisorGrants: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}`),
+  advisorGrantCreate: (projectUid, data) => request(`/advisor-grants/${encodeURIComponent(projectUid)}`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  advisorGrantRevoke: (projectUid, grantUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/${encodeURIComponent(grantUid)}`, { method: 'DELETE' }),
+  advisorClientsSharedWithMe: () => request('/advisor-grants/shared/list'),
+  advisorClientBrief: (projectUid) => request(`/advisor-grants/shared/${encodeURIComponent(projectUid)}/brief`),
+
+  // Task #104 — the writer `advisor_client_document_shares` never had. The
+  // table shipped in migration 218 with a reader (the client brief resolves a
+  // shared document through it) and nothing that could create a row, so
+  // LibraryZone told the advisor nobody could send them a document. A share
+  // needs a live grant behind it: the brief is the only surface that reads
+  // these rows, so a share without one is written and then invisible.
+  advisorSharedDocuments: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents`),
+  advisorShareDocument: (projectUid, data) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  advisorUnshareDocument: (projectUid, shareUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/documents/${encodeURIComponent(shareUid)}`, { method: 'DELETE' }),
+  // `advisor_client_access_log` had the opposite gap: a writer since #82 and no
+  // reader, so the founder's record of what an advisor opened did not exist.
+  advisorClientAccessLog: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/access-log`),
+
+  // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
+  // on the catalogue response is load-bearing: it lets the page say "no credit
+  // allowance is set up" instead of "not enough credits", which are very
+  // different things to tell someone with a zero balance.
+  perksCatalog: (page = 1) => request(page === 1 ? '/perks' : `/perks?page=${encodeURIComponent(page)}`),
+  perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
+  perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
+  perksMine: (page = 1, ledgerPage = 1) => request(page === 1 && ledgerPage === 1 ? '/perks/mine' : `/perks/mine?page=${encodeURIComponent(page)}&ledger_page=${encodeURIComponent(ledgerPage)}`),
+  perkSubmissions: (page = 1) => request(page === 1 ? '/perks/partner' : `/perks/partner?page=${encodeURIComponent(page)}`),
+  perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkUpdate: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
+  // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
+  perkClaimsForListing: (uid, page = 1) => request(`/perks/partner/${encodeURIComponent(uid)}/claims${page === 1 ? '' : `?page=${encodeURIComponent(page)}`}`),
+  perkRedeem: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkRate: (uid, stars) =>
+    request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
+  adminPerkClaims: (weeks = 12) => request(`/perks/admin/claims?${new URLSearchParams({ weeks })}`),
+  adminPerkListings: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
+  },
+  perkReviewQueue: (page = 1) => request(page === 1 ? '/perks/admin/queue' : `/perks/admin/queue?page=${encodeURIComponent(page)}`),
+  perkReview: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
+  perkFeature: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/feature`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkGrantCredits: (data) =>
+    request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // Territory licences (migration 187 + routes/admin_licences.ts). The LEDGER
+  // half of the subsidiary model — who holds which countries, on what terms.
+  // Not the scoping half: nothing else in the product reads a territory from
+  // this yet, which is why `seats_used` comes back null rather than 0.
+  licences: () => request('/admin/licences'),
+  // HQ · Home. One payload for the franchisor's overview; the page's tenant
+  // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
+  //
+  // D153 — `branch` is the ONE argument that changes what the server READS
+  // rather than what the page shows. With it the route performs a single
+  // private-link read of that branch and answers a deliberately smaller
+  // payload — `{scope, branches: [one], branches_coverage}` and none of HQ's
+  // own platform fields — because H12's overlay is one branch's figures, not a
+  // platform payload with a filter drawn over it. No new method: the route is
+  // the same one, so `check-api-drift` has nothing to say.
+  hqOverview: (branch) => {
+    const b = String(branch || '').trim();
+    return request(`/admin/hq/overview${b ? `?branch=${encodeURIComponent(b)}` : ''}`);
+  },
+  // D138 — H9 · Team. Every administrator, filtered SERVER-SIDE on role with no
+  // LIMIT, with the licence each holds, their rung on the compliance ladder and
+  // the super-admin badge. `q` is not a filter on that list — it is what HQ
+  // ASKS EACH BRANCH, because a branch's accounts live on the branch's own
+  // database and cannot be listed from here (D.2). The returned roster is
+  // complete, so the page narrows it in the browser; that is honest here and was
+  // the defect in `SuperAdminHolders`, where the browser filtered a PAGE.
+  // D153 — `branch` scopes the read the same way it does on `hqOverview`, and
+  // with the same consequence: HQ's own roster is not narrowed, it is not read.
+  hqAdmins: (q, branch) => {
+    const s = String(q || '').trim();
+    const b = String(branch || '').trim();
+    const qs = [b ? `branch=${encodeURIComponent(b)}` : '', s ? `q=${encodeURIComponent(s)}` : '']
+      .filter(Boolean).join('&');
+    return request(`/admin/hq/admins${qs ? `?${qs}` : ''}`);
+  },
+  // D210 — H15 · Analytics. One weekly line per branch, and one for HQ's own
+  // deployment, of distinct signed-in accounts — read from Analytics Engine as
+  // counts, never as records. `range` is 8w, quarter or year; anything else is
+  // a 400 rather than eight weeks drawn under another label.
+  hqAnalytics: (range) => {
+    const r = String(range || '').trim();
+    return request(`/admin/hq/analytics${r ? `?range=${encodeURIComponent(r)}` : ''}`);
+  },
+  // D245 — H24 · Funds. HQ's own funds as the row "HQ", then every branch's,
+  // in the fan-out's three states. No total across funds: no fund table
+  // records a currency. Not scoped by the view-as overlay (see the route).
+  hqFunds: () => request('/admin/hq/funds'),
+  // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
+  // through adminBillingListDisputes, read separately so an outage there
+  // costs one zone rather than the page. D5039: `period` is a quarter key
+  // (`2026-Q4`); without it the Worker answers for today's quarter.
+  hqRevenue: (period) => request(`/admin/revenue/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  // HQ · Content and Platform (canvas H6). Two reads, two pages: the
+  // content pipeline over `articles` + `admin_publications`, and the
+  // platform view over `integrations` + `cron_run_history`.
+  hqContent: () => request('/admin/content/summary'),
+  // D487 — push HQ's published games to every branch; reports each branch.
+  hqPublishGames: () => request('/admin/content/games/publish', { method: 'POST' }),
+  hqPlatform: () => request('/admin/platform/summary'),
+  // 241 — the advisory take rate, in BASIS POINTS. 1500 is 15%. The write
+  // refuses a percentage rather than guessing: `15` is ambiguous between
+  // 0.15% and 15%, and a form that guessed wrong would be out by a hundred.
+  hqTakeRate: () => request('/admin/platform/take-rate'),
+  setHqTakeRate: (bps) =>
+    request('/admin/platform/take-rate', { method: 'PUT', body: JSON.stringify({ bps }) }),
+  // D203 — the operator switches: the kills HQ can throw without a deploy.
+  // The read carries both halves of each switch; the write takes
+  // { action: 'throw' | 'release', reason } and needs a TOTP session with a
+  // recent step-up, which this file prompts for on the 403.
+  hqPlatformSwitches: () => request('/admin/platform/switches'),
+  // D209 — H14, the topology stated once. Super admin; a branch reads its own
+  // half through branchDeployment() below.
+  hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
+  // D4703: a release names the throw it ends (`revision`, from the switch's
+  // stored half), so an old tab cannot release a newer throw.
+  hqSetPlatformSwitch: (key, action, reason, revision) =>
+    request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      body: JSON.stringify(action === 'release' ? { action, reason, revision } : { action, reason }),
+    }),
+  // HQ · Security. The overview is read-only; force re-auth signs every
+  // active account out everywhere (the caller included) and needs a TOTP
+  // session with a recent step-up, which lib/api.js prompts for on the 403.
+  hqSecurityOverview: () => request('/admin/security/overview'),
+  // HQ · Support (D204, canvas H22) — the escalation queue, the two ticket
+  // queues HQ can attribute from its own records, the tenant × queue matrix and
+  // the GitHub mirror strip, in one read. Each part answers for itself: an
+  // unreadable escalation board costs its own queue, never the tickets beside it.
+  hqSupport: () => request('/admin/hq-support'),
+  // D5031 (#5031) — the HQ-local half alone (escalations, HQ's ticket queues,
+  // the mirror strip, the SLA policy): it never waits on a branch, so the page
+  // draws HQ's desk while the branch hosts are still answering `hqSupport`.
+  hqSupportLocal: () => request('/admin/hq-support/local'),
+  hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
+  // Canvas H7's privileged-action feed, unioned across the four stores that
+  // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
+  // client-side filter would quietly show a handful of rows and read as
+  // "that is all there is". D4803 — the Events workspace's search, date,
+  // actor, outcome and source filters and the Load older cursor (`before`)
+  // go the same way: as query values, never applied to the page in the browser.
+  hqGovernance: (filter, params = {}) =>
+    request(`/admin/security/governance?${new URLSearchParams({ filter: filter || 'all', ...params })}`),
+  hqSecurityForceReauth: (reason) =>
+    request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D165 — ONE account, not every account. Same bar as the bulk revoke above
+  // (TOTP + a recent step-up + the elevation), and the reason is stored with the
+  // action the same way. It is a separate method rather than an optional argument
+  // on the one above because the two are different acts with different blast
+  // radii, and an argument that turns "sign out everyone" into "sign out this
+  // person" by its presence is a call site nobody can read.
+  hqForceReauthUser: (userId, reason) =>
+    request(`/admin/security/force-reauth/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
+  // D481 — the Sessions zone's list and its three acts. Every write takes a
+  // typed reason (stored with the act) and the same bar as force re-auth; a
+  // bulk revoke is one request and one audit row per session.
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
+  hqRevokeSession: (sessionId, reason) =>
+    request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  hqRevokeSessions: (ids, reason) =>
+    request('/admin/security/sessions/revoke', {
+      method: 'POST',
+      body: JSON.stringify({ ids, reason }),
+    }),
+  hqEndImpersonation: (sessionId, reason) =>
+    request(`/admin/security/impersonations/${encodeURIComponent(sessionId)}/end`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  // D168 — close a data-subject erasure request. `outcome` is 'fulfilled' or
+  // 'denied' and the server admits no third value from HQ: a withdrawal is the
+  // subject's own act, recorded when they cancel. `fulfilled` records that the
+  // MANUAL erasure was carried out — this platform performs none, and the
+  // server's own message says so rather than letting the word imply otherwise.
+  //
+  // D4675 — `review` names the exact request the operator reviewed
+  // (`requested_at`, `request_id` from the list) and the `close_key` the page
+  // made once for this close and reuses on every retry, so a retry is recorded
+  // once and a close never lands on a request nobody reviewed.
+  hqCloseDsrRequest: (userId, outcome, reason, review) =>
+    request(`/admin/security/dsr/${encodeURIComponent(userId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({
+        outcome,
+        reason,
+        requested_at: review?.requested_at,
+        request_id: review?.request_id ?? null,
+        close_key: review?.close_key,
+      }),
+    }),
+  licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
+  licenceTerritories: () => request('/admin/licences/territories'),
+  // D110 — H3 step 6. Asks GitHub to run branch-provision.yml and writes the
+  // licence_deployments row. A 409 `github_not_configured` is a STATE, not a
+  // failure: the workflow can still be run by hand, and the page renders the
+  // reason rather than an error.
+  licenceDeploy: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/deploy`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // H6 Platform → Deployments: the registry rows, each with a live health read
+  // that is a separate field from the provisioning status on purpose.
+  deployments: () => request('/admin/deployments'),
+  // D110 — H3 step 5. The contracts instantiated for this licence and the
+  // master templates available, in one payload: the screen's two states are
+  // "pick one" and "here is the one you picked".
+  licenceContract: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/contract`),
+  licenceContractCreate: (uid, templateSlug) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/contract`, {
+      method: 'POST',
+      body: JSON.stringify({ template_slug: templateSlug }),
+    }),
+  licenceContractSend: (uid, contractUid) =>
+    request(
+      `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
+      { method: 'POST' },
+    ),
+  // D4671 — complete the entity and signatory a contract names.
+  licenceEntityComplete: (uid, fields) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/entity`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    }),
+  // D111 — H5's statements ledger. `draw` computes owed from what the branch
+  // reported; `update` is the HQ-entered half (paid, disputed, status), which
+  // nothing reconciles against Stripe (D.8).
+  statements: (period) =>
+    request(`/admin/statements${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  statementDraw: (licenceUid, period) =>
+    request('/admin/statements/draw', {
+      method: 'POST',
+      body: JSON.stringify({ licence_uid: licenceUid, period }),
+    }),
+  statementUpdate: (uid, data) =>
+    request(`/admin/statements/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // The ceiling HQ sets and the branch issues within. `issued_cents` is HQ's
+  // column for the branch's issued figure, and nothing writes it on either
+  // tier yet (D266): no call carries an issued figure to HQ.
+  promoCeilings: () => request('/admin/promo-ceilings'),
+  promoCeilingSet: (licenceUid, data) =>
+    request(`/admin/promo-ceilings/${encodeURIComponent(licenceUid)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data || {}),
+    }),
+  // D112 — escalations, both directions. H1 lists what is open, H6 filters to
+  // kind=content for the localisation lane, and the PATCH is HQ's decision.
+  // `pushed` on the response says whether the branch RECEIVED it, which is a
+  // different fact from whether HQ made it.
+  escalations: (filter) => {
+    const q = new URLSearchParams();
+    if (filter?.status) q.set('status', filter.status);
+    if (filter?.kind) q.set('kind', filter.kind);
+    const s = q.toString();
+    return request(`/admin/escalations${s ? `?${s}` : ''}`);
+  },
+  escalationAnswer: (uid, data) =>
+    request(`/admin/escalations/${encodeURIComponent(uid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data || {}),
+    }),
+  // D243 — send the stored decision again. No body: a new answer is the PATCH.
+  escalationResend: (uid) =>
+    request(`/admin/escalations/${encodeURIComponent(uid)}/resend`, { method: 'POST' }),
+  // D121 — move an account from one provisioned branch to another. Needs TOTP
+  // and a recent step-up; the page says so when the server refuses.
+  hqMoveAccount: (code, userId, data) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/accounts/${encodeURIComponent(userId)}/move`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+  // D259 — HQ opens a support session on an account that lives on a branch
+  // (D120). The route answers the one-time `open_url` on the branch's host;
+  // the caller opens that URL as given and never builds one. TOTP and a recent
+  // step-up are the route's (request() handles the step-up challenge).
+  // D262 — take the admin role off an account on a branch database.
+  hqUnbindAdmin: (code, userId, reason) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/admins/${encodeURIComponent(userId)}/unbind`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  hqSupportSession: (code, userId, reason) =>
+    request(`/admin/branches/${encodeURIComponent(code)}/support-session`, {
+      method: 'POST',
+      body: JSON.stringify({ target_user_id: userId, reason }),
+    }),
+  // The BRANCH side, under its own prefix. Live only on a branch Worker; on HQ
+  // these answer 403 because HQ has no HQ to escalate to.
+  branchEscalations: () => request('/branch/escalations'),
+  // D130 — the four local queues as one list, oldest first. The board READS;
+  // every decision is still made in that queue's own console, and the payload
+  // says so on `decides: false` rather than leaving the page to remember.
+  branchApprovals: () => request('/branch/approvals'),
+  // D470 — a reviewer on a board item. Not a decision on the queue, and not a
+  // reply. History is the events that write recorded.
+  branchApprovalAssign: (data) =>
+    request('/branch/approvals/assignments', { method: 'POST', body: JSON.stringify(data || {}) }),
+  branchApprovalHistory: (lane, itemId) =>
+    request(`/branch/approvals/history?lane=${encodeURIComponent(lane)}&item_id=${encodeURIComponent(itemId)}`),
+  // D131 — S1's digest: queue pressure ordered by the oldest item, the
+  // programme clock with the zone it is enforced in, and the revenue-share
+  // rate. The three blocks S1 draws that have no source arrive as
+  // `unavailable`, each with its own reason, rather than as a silent gap.
+  branchHome: () => request('/branch/home'),
+  // D246 — Studio's operating-posture strip: the caller's own admin-bank answers.
+  adminPosture: () => request('/advisor/admin-posture'),
+  // D443 — one glance for Studio, on both tiers. Per-subsidiary figures on HQ
+  // come back recorded:false. The branch routes below stay for the pages that
+  // still call them.
+  adminStudioGlance: () => request('/admin/studio/glance'),
+  // D147 — HQ's master contract library as this branch holds it. A COPY: the
+  // payload carries HQ's `pushed_at`, and `not_carried` names what deliberately
+  // does not travel (the document bodies, and an archived-version state HQ's own
+  // library cannot produce) so the page never has to remember the reason.
+  branchTemplates: () => request('/branch/templates'),
+  // D148 — this territory's own figures, and the anonymised median HQ pushed.
+  // Two kinds of number on one payload and they are not interchangeable: the
+  // stats are facts about this branch, the benchmark is a COPY with HQ's
+  // `pushed_at` and its own `n_branches`. `unavailable` names the three stats
+  // S6 draws that have no branch-side source.
+  branchInsights: () => request('/branch/insights'),
+  // D446 — S13's audit line. The branch's own support-session rows.
+  branchSupportSessions: () => request('/branch/support-sessions'),
+  // D210 — S15 · Analytics. This branch over time from its own request log,
+  // the seats and decision ages it can measure, and each tile it cannot — with
+  // the reason on the payload. Same `range` vocabulary as `hqAnalytics`.
+  branchAnalytics: (range) => {
+    const r = String(range || '').trim();
+    return request(`/branch/analytics${r ? `?range=${encodeURIComponent(r)}` : ''}`);
+  },
+  // D209 — S14: what this branch Worker binds, exports and calls, and the three
+  // things it cannot do, each checked on this deployment rather than recited.
+  branchDeployment: () => request('/branch/deployment'),
+  branchEscalate: (data) =>
+    request('/branch/escalations', { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D243 — an undelivered raise, again. Not a new item, and not gated on a freeze.
+  branchEscalationRetry: (id) =>
+    request(`/branch/escalations/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceSetTerritories: (uid, countries) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
+  licenceSetSeats: (uid, seats) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/seats`, { method: 'PUT', body: JSON.stringify({ seats }) }),
+  licenceSetTerms: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terms`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  licenceActivation: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activation`),
+  licenceActivate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activate`, { method: 'POST' }),
+  licenceSuspend: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/suspend`, { method: 'POST', body: JSON.stringify({ note }) }),
+  licenceReinstate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/reinstate`, { method: 'POST' }),
+  licenceRenew: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceTerminate: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
+  dataRoomDownload: (projectUid, uid) =>
+    request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
+  // getCapTableByProject is NOT redeclared here. It was, and this copy — the
+  // later of the two in the same object literal — is the one that won, which
+  // meant the `encodeURIComponent` on the definition ~80 lines above was dead
+  // and every caller interpolated the id into the path raw. Both bodies hit
+  // the same route and every caller passes a numeric project id, so nothing
+  // was exploitable in practice, but the surviving form is the encoded one.
+  createCapTableVariant: (projectId, data) =>
+    request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),
+  getCapTableCompare: (projectId) => request(`/captable/scenarios/by-project/${projectId}/compare`),
+  getCapTableScenario: (uid) => request(`/captable/scenarios/${uid}`),
+  createCapTableScenario: (data) =>
+    request('/captable/scenarios', { method: 'POST', body: JSON.stringify(data) }),
+  updateCapTableScenario: (uid, data) =>
+    request(`/captable/scenarios/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCapTableScenario: (uid) =>
+    request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
+  // D1016: the CSV as a blob, with `request()`'s headers (bearer, CSRF, company, rail) and the
+  // cookie; a refusal throws its own sentence, which the page shows in place.
+  downloadCapTableCsv: async (uid) => {
+    const res = await fetch(`${BASE}/captable/scenarios/${encodeURIComponent(uid)}/export.csv`, {
+      method: 'GET', headers: rawRequestHeaders('GET'), credentials: 'include',
+    });
+    if (!res.ok) throw await refusalError(res, 'The CSV could not be downloaded.');
+    return res.blob();
+  },
+  // 409A safe harbour — appraisals on file plus the material events that
+  // can end the presumption before the 12 months are up.
+  get409a: (projectId) => request(`/captable/409a/${projectId}`),
+  record409a: (projectId, data) =>
+    request(`/captable/409a/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  record409aEvent: (projectId, data) =>
+    request(`/captable/409a/${projectId}/events`, { method: 'POST', body: JSON.stringify(data) }),
+  delete409aEvent: (projectId, id) =>
+    request(`/captable/409a/${projectId}/events/${id}`, { method: 'DELETE' }),
+  // Task #5 — live cap table (Carta-synced + manually-promoted rows).
+  liveCapTable: () => request('/captable/live'),
+  // Build queue #120 — audience-scoped share links. The raw token is
+  // returned exactly once at mint time; only its hash is stored, so a
+  // link that is lost cannot be recovered, only replaced.
+  capTableShareCreate: (uid, data) =>
+    request(`/captable/scenarios/${uid}/share`, { method: 'POST', body: JSON.stringify(data) }),
+  capTableShareList: (uid) => request(`/captable/scenarios/${uid}/shares`),
+  capTableShareRevoke: (id) => request(`/captable/shares/${id}`, { method: 'DELETE' }),
+  capTableShared: (token) => request(`/captable/share/${token}`),
+
+  // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
+  // 402 `tier_required` responses are auto-handled by `request` above (it
+  // dispatches `studioos:tier_required` so PaywallModal opens). These helpers
+  // are for explicit triggers from Settings → Billing and the modal itself.
+  tierStatus: () => request('/billing/tier/status'),
+  // D816 (#2262): `interval` is 'month' | 'year'; omitted, the Worker sells monthly as before.
+  tierCheckout: (tier, interval) =>
+    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify(interval ? { tier, interval } : { tier }) }),
+  tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
+
+  // ---------- Persona (account-plan) billing — partner, advisor, … ----------
+  // Generic subscription pipeline for every signed-in role that isn't a founder
+  // or investor. planStatus returns the caller's current plan/trial/renewal;
+  // planCheckout creates an incomplete subscription and returns a client_secret
+  // the SPA confirms inline (no redirect), or a dev-upgrade url in keyless dev.
+  planStatus: () => request('/billing/plan/status'),
+  planCheckout: (interval) =>
+    request('/billing/plan/checkout', { method: 'POST', body: JSON.stringify({ interval }) }),
+
+  // ---------- Task #5 — In-app billing dashboard (replaces Stripe portal) ----------
+  // `scope` is 'founder' (founder-tier customer) or 'investor' (investor
+  // customer). Overview returns active subs, cards, upcoming + recent invoices.
+  // Cancel/resume toggle cancel_at_period_end; swap previews proration then
+  // confirms the plan change — all server-side via the Stripe REST wrapper.
+  billingOverview: (scope) =>
+    request(`/billing/overview${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`),
+  billingCancelSubscription: (subscription_id, scope) =>
+    request('/billing/subscription/cancel', { method: 'POST', body: JSON.stringify({ subscription_id, scope }) }),
+  billingResumeSubscription: (subscription_id, scope) =>
+    request('/billing/subscription/resume', { method: 'POST', body: JSON.stringify({ subscription_id, scope }) }),
+  billingSwapPreview: (subscription_id, price_id, scope) =>
+    request('/billing/subscription/swap/preview', { method: 'POST', body: JSON.stringify({ subscription_id, price_id, scope }) }),
+  billingSwapConfirm: (subscription_id, price_id, scope) =>
+    request('/billing/subscription/swap/confirm', { method: 'POST', body: JSON.stringify({ subscription_id, price_id, scope }) }),
+  // In-app payment-method management (scope-aware; step-up gated server-side).
+  // setup-intent returns a SetupIntent client_secret the SPA confirms via Stripe
+  // Elements `confirmSetup` so raw card data never touches our servers.
+  billingPaymentMethodSetup: (scope) =>
+    request('/billing/payment-method/setup-intent', { method: 'POST', body: JSON.stringify({ scope }) }),
+  billingPaymentMethodDefault: (payment_method_id, scope) =>
+    request('/billing/payment-method/default', { method: 'POST', body: JSON.stringify({ payment_method_id, scope }) }),
+  billingPaymentMethodDetach: (payment_method_id, scope) =>
+    request('/billing/payment-method/detach', { method: 'POST', body: JSON.stringify({ payment_method_id, scope }) }),
+
+  // ---------- Task #4 — Axal-branded embedded checkout (Stripe Elements) ----------
+  // Server creates a PaymentIntent / incomplete Subscription and hands back a
+  // `client_secret`; the SPA confirms the card in-app via Stripe Elements so
+  // the user never leaves for checkout.stripe.com. Shapes:
+  //   { price_id, quantity?, nonce?, description?, promo_code? } → price-driven (sub or one-time)
+  // A body with no price_id is refused (D707): a charge needs a priced product.
+  // Response: { kind:'subscription'|'payment', client_secret, ... }
+  paymentIntent: (body) =>
+    request('/payments/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Task #7 — à la carte feature unlock. Creates a one-time PaymentIntent for a
+  // SKU with metadata.kind='alacarte'; on success the webhook grants the
+  // feature_unlock the product's metadata.feature_key maps to. Body:
+  //   { price_id, nonce? } → { kind:'payment', client_secret, payment_intent_id, ... }
+  alacarteIntent: (body) =>
+    request('/payments/alacarte/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // The caller's active (non-expired) feature unlocks:
+  //   → { unlocks: [{ feature_key, expires_at }] }
+  alacarteUnlocks: () => request('/payments/alacarte/unlocks'),
+  // Task #9 — preview a promo code against a catalog price. Server validates the
+  // code against the product allow-list + usage limit and recomputes the
+  // discount (never trusts a client amount). Body: { code, price_id }.
+  // → { valid:true, code, percent_off, amount_off, currency, original_amount,
+  //     discount_cents, discounted_amount, free } | { valid:false, reason }
+  validatePromo: (body) =>
+    request('/payments/promo/validate', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Mirrored Stripe catalog (read). `kind` filters: subscription | incorporation
+  // | session | alacarte. `audience` filters: founders | investors_lps |
+  // service_partners | advisors | legal_services (a product may match more
+  // than one; the filter is applied server-side against each product's
+  // derived `categories`). Returns { products: [{ id, name, kind, categories,
+  // prices: [...] }], audience_categories: [{ value, label }] }.
+  catalogProducts: (kind, audience) => {
+    const params = new URLSearchParams();
+    if (kind) params.set('kind', kind);
+    if (audience) params.set('audience', audience);
+    const qs = params.toString();
+    return request(`/catalog/products${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---------- Products page — explorer promo (30-day license codes) ----------
+  // The caller's issued one-time code (from completing the Explorer needs
+  // bank in the Personal Advisor): → { promo: { code, license_label,
+  // unlock_days, issued_at, expires_at, redeemed_at } | null }.
+  productsPromo: () => request('/products/promo'),
+  // Redeem it → { ok:true, confirmation: { code, license_label, unlock_days,
+  // amount_cents:0, currency, redeemed_at, license_expires_at } }
+  // | { ok:false, reason: 'not_found'|'already_redeemed'|'expired' } (400).
+  productsRedeem: (code) =>
+    request('/products/redeem', { method: 'POST', body: JSON.stringify({ code }) }),
+
+  // ---------- One-time cart order (checkout) ----------
+  // Runtime Stripe publishable key (mirror of stripe.js fetch — exposed here so
+  // pages/components can reuse it via the api surface). → { publishable_key }.
+  paymentsConfig: () => request('/payments/config'),
+  // Create/refresh ONE combined PaymentIntent for a cart of one-time items.
+  // Body: { items:[{price_id, quantity}], promo_code?, billing_country?, nonce? }
+  // → { client_secret, payment_intent_id, order_ref, currency, subtotal,
+  //     discount_cents, vat_cents, total, free, items:[...] }.
+  createOrderIntent: (body) =>
+    request('/orders/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
+  // Belt-and-suspenders fulfilment after Stripe confirmation.
+  // Body: { payment_intent_id } → { order:<Order> } | 409 { error:'not_paid', status }.
+  confirmOrder: (payment_intent_id) =>
+    request('/orders/confirm', { method: 'POST', body: JSON.stringify({ payment_intent_id }) }),
+  // Owner-only order fetch → { order:<Order> } | 404.
+  getOrder: (orderRef) => request(`/orders/${encodeURIComponent(orderRef)}`),
+  // Owner's orders, most recent first → { orders:[<Order>] }.
+  myOrders: () => request('/orders/mine'),
+  // Authenticated PDF invoice download (bearer-only fetch → Blob). NEVER use a
+  // plain <a href> — the endpoint requires the Authorization header.
+  orderInvoiceBlob: async (orderRef) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/orders/${encodeURIComponent(orderRef)}/invoice`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'Invoice download failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${orderRef}.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
+
+  // ---------- Task #7 (W-2) — Investor paywall (3-tier: free / pro / inst) ----------
+  // Mirrors `/api/billing/investor/*` + `/api/investor-seats/*` +
+  // `/api/introductions/quota`. The 402 `{required, message, …}` shape from
+  // the worker is auto-fanned into `studioos:tier_required` by the request
+  // helper above, so PaywallModal opens automatically on quota exhaustion.
+  investorBillingStatus: () => request('/billing/investor/status'),
+  // D816 (#2262): `interval` ('month' | 'year') overrides the plan key's own; omitted, the key's stands.
+  investorCheckout: (plan, interval) =>
+    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify(interval ? { plan, interval } : { plan }) }),
+  investorPortal: () => request('/billing/investor/portal', { method: 'POST' }),
+  listInvestorSeats: () => request('/investor-seats/'),
+  inviteInvestorSeat: (email) =>
+    request('/investor-seats/invite', { method: 'POST', body: JSON.stringify({ email }) }),
+  // D632 — what a seat invitation offers, read by its token before accepting.
+  readInvestorSeatInvitation: (token) =>
+    request('/investor-seats/invitation', { method: 'POST', body: JSON.stringify({ token }) }),
+  acceptInvestorSeat: (token, extra = {}) =>
+    request('/investor-seats/accept', { method: 'POST', body: JSON.stringify({
+      token,
+      ...(extra.confirm_role_change ? { confirm_role_change: true } : {}),
+    }) }),
+  revokeInvestorSeat: (id) =>
+    request(`/investor-seats/${id}`, { method: 'DELETE' }),
+  introductionsQuota: () => request('/introductions/quota'),
+  listIntroductions: () => request('/introductions/'),
+  // Task #82 — request a warm intro to a founder/project. Consumes the intro
+  // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
+  // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
+  // global PaywallModal does NOT auto-open — callers surface the limit inline.
+  introductionsRequest: (data) =>
+    request('/introductions/request', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // ---------- Network Introductions (all user types) ----------
+  // Curated warm-intro propositions under Network › Introductions. Accepting
+  // spends ONE introduction credit; the worker returns 402
+  // {code:'intro_credits_exhausted', packs, buy_path} when the balance is
+  // empty — callers surface the buy-more flow inline (no PaywallModal).
+  introPropositions: ({ status, refresh } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (refresh) qs.set('refresh', '1');
+    const q = qs.toString();
+    return request(`/introductions/propositions${q ? `?${q}` : ''}`);
+  },
+  // The founder Introductions ledger (FounderNetworkIntroductions). This
+  // called `/network-introductions`, which the worker does not mount and never
+  // has — the Secure Introductions family was removed and only its comment
+  // survived, which is what this method was written against. It 404'd for
+  // every caller. `/introductions/propositions` is the mounted equivalent and
+  // is the same source IntroductionsPanel reads: `requireAuth` only, scoped to
+  // the caller's own user_id, so every role can open it (unlike
+  // `/introductions/`, which is investor_only and would 403 a founder).
+  networkIntroductionsList: () => request('/introductions/propositions'),
+  introAccept: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
+  introDecline: (uid) =>
+    request(`/introductions/propositions/${encodeURIComponent(uid)}/decline`, { method: 'POST' }),
+  introCredits: () => request('/introductions/credits'),
+  introCreditHistory: () => request('/introductions/credits/history'),
+  // D755 (#1915): intro credit packs are no longer sold, so `introPacks` and
+  // `introCreditsIntent` are gone. Credits already bought still spend and show
+  // in `introCreditHistory`.
+
+  // The Secure Introductions (Task #12) family that used to sit here — a
+  // privacy-preserving flow under its own `/network-introductions/*` prefix —
+  // is gone, worker routes and client methods together, and
+  // network_consolidated.test.mjs holds it gone. The heading is kept only as
+  // this note: the prefix is NOT mounted, so nothing new belongs against it.
+
+  // ---------- Trust layer (Task #58) ----------
+  // Task #4 (Y-2) — Trust Center v2 endpoints. The page reads the obligation
+  // matrix (/trust/me), the required NDAs (/trust/nda/required), the
+  // pairwise list and the company KYB list. The first Trust Center's
+  // single-call /trust/summary and its /trust/kyb/start facade are retired
+  // (D432): neither had a caller, and their routes are gone with them.
+  trustMe: () => request('/trust/me'),
+  trustAgreements: () => request('/trust/agreements'),
+  trustIntroRequest: (founder_user_id) =>
+    request('/trust/intro/request', { method: 'POST', body: JSON.stringify({ founder_user_id }) }),
+  trustIntroStatus: (founder_user_id) =>
+    request(`/trust/intro/status?founder=${encodeURIComponent(founder_user_id)}`),
+  trustObligationStart: (key) =>
+    request(`/trust/obligation/${encodeURIComponent(key)}/start`, { method: 'POST' }),
+  trustMySigningUrl: (envelope_uuid) =>
+    request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/my_signing_url`),
+  // Trust Center v2's per-agreement timeline, fetched when a row is expanded.
+  // Recipients only; the worker returns 404 for anyone else and never ships
+  // the audit trail's ip / ua / signer_email.
+  trustAgreementHistory: (envelope_uuid) =>
+    request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/history`),
+  trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
+  // Task #40 — batch the per-row trust-score lookups on AdminPage (DealsPage, which also used it, is retired: D1242)
+  // into a single request. Returns { scores: [{ user_id, score, missing[],
+  // required_total }] } in the same order the ids were sent. D1074: the single
+  // read's rule for every id (self, this territory's admin, an open intro or
+  // deal's counterparty); one id the caller may not read refuses the batch.
+  trustScoreBatch: (userIds) => request('/trust/score/batch', {
+    method: 'POST',
+    body: JSON.stringify({ user_ids: userIds }),
+  }),
+  trustMatrix: (role) => request(`/trust/matrix${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+
+  // Task AH — pairwise NDA management + sanctions screening.
+  trustListPairwiseNdas: () => request('/trust/pairwise-ndas'),
+  trustResendPairwiseNda: (id) =>
+    request(`/trust/pairwise-ndas/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
+  trustVoidPairwiseNda: (id, reason) =>
+    request(`/trust/pairwise-ndas/${encodeURIComponent(id)}/void`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || '' }),
+    }),
+  trustListSanctions: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.user_id) qs.set('user_id', String(params.user_id));
+    if (params.only_hits) qs.set('only_hits', 'true');
+    if (params.limit) qs.set('limit', String(params.limit));
+    const s = qs.toString();
+    return request(`/trust/sanctions${s ? `?${s}` : ''}`);
+  },
+  trustScreenSanctions: (userId, payload = {}) =>
+    request(`/trust/sanctions/screen/${encodeURIComponent(userId)}`, {
+      method: 'POST', body: JSON.stringify(payload),
+    }),
+
+  // Task #108 — the COMPANY's entity record, beside the account's, never
+  // instead of it (D40/D42: "the account's entity is who signs your contracts;
+  // the company's is who the workspace belongs to"). The write takes its
+  // company from the X-Company-Id header every request already carries, which
+  // `resolveActiveCompany` verifies against user_company_links — a company id
+  // in the body would be an ownership claim the caller makes about themselves.
+  companyKybList: () => request('/trust/companies/kyb'),
+  // D433 — the Account page saves one company's entity from a list of several,
+  // so the row names its company by OVERRIDING the header for that one call.
+  // Same channel, same server-side membership check (`resolveActiveCompany`
+  // refuses a company the caller does not belong to); it is not a body field.
+  companyKybStart: (payload, companyId) => request('/trust/companies/kyb', {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+    ...(companyId === undefined || companyId === null ? {} : { headers: { 'X-Company-Id': String(companyId) } }),
+  }),
+  getRequiredNdas: () => request('/trust/nda/required'),
+
+  // ---------- Founder risk (Task #41, admin/partner/investor only) ----------
+  getFounderRiskByDeal: (dealId) => request(`/founder-risk/by-deal/${dealId}`),
+  getFounderRiskByFounder: (founderId) => request(`/founder-risk/by-founder/${founderId}`),
+  pullFounderRisk: (founderId) =>
+    request(`/founder-risk/${founderId}/pull`, { method: 'POST' }),
+  recomputeFounderRisk: (founderId) =>
+    request(`/founder-risk/${founderId}/recompute`, { method: 'POST' }),
+
+  // ---------- Venture risk (Task #10 — 10-layer rating system) ----------
+  // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
+  // Reads gate to admin/partner/investor; analyst writes (override/recompute)
+  // gate to admin/partner.
+  // D1260 (#3283): the venture-risk READ (its automatic layer scores) has no
+  // caller: VentureRiskPanel reads the scorecard. Analyst reviews are still
+  // written here, and feed the scorecard's Risk scope.
+  ventureRiskSetLayer: (projectId, layerKey, body) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  ventureRiskClearLayer: (projectId, layerKey) =>
+    request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'DELETE' }),
+
+  // ---------- Reference checks (Task #43, admin/investor only) ----------
+  listReferences: (dealId) =>
+    request(`/references${dealId != null ? `?deal_id=${dealId}` : ''}`),
+  getReference: (id) => request(`/references/${id}`),
+  createReference: (data) =>
+    request('/references', { method: 'POST', body: JSON.stringify(data) }),
+  updateReference: (id, data) =>
+    request(`/references/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteReference: (id) => request(`/references/${id}`, { method: 'DELETE' }),
+  captureReferenceConsent: (id, data) =>
+    request(`/references/${id}/consent`, { method: 'POST', body: JSON.stringify(data) }),
+  uploadReferenceRecording: (id, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/references/${id}/recording`, { method: 'POST', body: fd });
+  },
+  getReferenceRecordingUrl: (id) => request(`/references/${id}/recording-url`),
+  transcribeReference: (id) =>
+    request(`/references/${id}/transcribe`, { method: 'POST' }),
+  summarizeReference: (id) =>
+    request(`/references/${id}/summarize`, { method: 'POST' }),
+
+  // ---------- Advisor matching + office hours (Task #35) ----------
+  listAdvisors: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.specialty) qs.set('expertise', opts.specialty);
+    if (opts.sector) qs.set('sector', opts.sector);
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.free_only) qs.set('free_only', '1');
+    if (opts.max_rate != null) qs.set('max_rate', opts.max_rate);
+    if (opts.accepting_only === false) qs.set('accepting_only', 'false');
+    const s = qs.toString();
+    return request(`/advisors/${s ? `?${s}` : ''}`);
+  },
+  // Worker-only matching engine (founder/explorer vectors vs advisor pool);
+  // the dev API has no /advisors/match — callers treat a 404 as "engine
+  // unavailable in this environment" and fall back to the directory ranking.
+  // Optional refinement: { gap, focus }. Both narrow the same scored set on
+  // the Worker, so a refined shortlist is a subset of the unrefined one.
+  advisorsMatch: (params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match${s ? `?${s}` : ''}`);
+  },
+  // #3938 NE1, the founder's press: /advisors/match's list ranked against a typed need
+  // (bge-m3, the reranker, one line each). Rows `{ uid, position, line }`; 422 with no query.
+  advisorsMatchRank: (query, params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify({ query }) });
+  },
+  getAdvisor: (uid) => request(`/advisors/${uid}`),
+  openAdvisorBookingLink: (slug) =>
+    request('/advisors/booking-links/open', { method: 'POST', body: JSON.stringify({ slug }) }),
+  listMyAdvisorAccessLog: () => request('/advisors/me/access-log'),
+  upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
+  getMyAdvisor: () => request('/advisors/me'),
+  listAdvisorSlots: (uid, upcomingOnly = true) =>
+    request(`/advisors/${uid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  createAdvisorSlot: (data) => {
+    const startsAt = data.starts_at || data.start_at;
+    const endsAt = data.ends_at || (
+      startsAt && data.duration_min
+        ? new Date(new Date(startsAt).getTime() + Number(data.duration_min) * 60000).toISOString()
+        : undefined
+    );
+    const durationMin = data.duration_min || (
+      startsAt && endsAt
+        ? Math.max(1, Math.round((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 60000))
+        : undefined
+    );
+    const meetingUrl = data.meeting_url ?? data.location_uri ?? null;
+    return request('/advisors/me/slots', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        start_at: startsAt,
+        duration_min: durationMin,
+        meeting_url: meetingUrl,
+        location_kind: data.location_kind || 'video',
+        location_uri: meetingUrl,
+      }),
+    });
+  },
+  cancelAdvisorSlot: (slotId) => request(`/advisors/me/slots/${slotId}`, { method: 'DELETE' }),
+  bookAdvisorSlot: (slotId, data) =>
+    request(`/advisors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  advisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`),
+  saveAdvisorClientNote: (clientId, body) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, {
+    method: 'PUT', body: JSON.stringify({ body }),
+  }),
+  deleteAdvisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
+  // #4714: `page` ({ limit, offset }) reads one page; `page.next_offset` names the next.
+  listMyAdvisorBookings: (status, page) =>
+    request(`/advisors/me/bookings${expertisePage(page, { status })}`),
+  listMyMenteeBookings: (status) =>
+    request(`/advisors/bookings/me${status ? `?status=${status}` : ''}`),
+  confirmAdvisorBooking: (id) => request(`/advisors/bookings/${id}/confirm`, { method: 'POST' }),
+  cancelAdvisorBooking: (id, reason) =>
+    request(`/advisors/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  completeAdvisorBooking: (id) => request(`/advisors/bookings/${id}/complete`, { method: 'POST' }),
+  noShowAdvisorBooking: (id, reason) =>
+    request(`/advisors/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  fileAdvisorReview: (bookingId, data) =>
+    request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+  listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
+  // #4702 (D4702): review coverage over EVERY completed session in one read:
+  // { held, reviewed, awaiting, ratings: { count, sum }, items: [{ booking_id,
+  // reviews, advisor_filed }], items_complete }. A failed read is unknown, never "no review".
+  getMyAdvisorReviewCoverage: () => request('/advisors/me/review-coverage'),
+
+  // ---------- The advisor's own stores (migrations 203-206) ----------
+  // Every one of these is scoped server-side on the signed-in user; none takes
+  // an advisor id, because there is nowhere to put someone else's.
+  // #4689: the Expertise lists page. `page` is `{ offset, limit }`; each answer
+  // carries `page.next_offset` and counts over the whole list.
+  listMyAdvisorServices: (page) => request(`/advisors/me/services${expertisePage(page)}`),
+  createMyAdvisorService: (data) =>
+    request('/advisors/me/services', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorService: (id, data) =>
+    request(`/advisors/me/services/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteMyAdvisorService: (id) =>
+    request(`/advisors/me/services/${id}`, { method: 'DELETE' }),
+
+  listMyAdvisorProof: (page) => request(`/advisors/me/proof${expertisePage(page)}`),
+  createMyAdvisorProof: (data) =>
+    request('/advisors/me/proof', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMyAdvisorProof: (id) => request(`/advisors/me/proof/${id}`, { method: 'DELETE' }),
+  // Records the ask; it does not send it. D4670: the response and every later
+  // list carry `invite_token` while the ask is pending, so a refresh never loses
+  // the link. The link only shows the claim; answering needs a code mailed to
+  // the address named here (`attester_email`, required, not the advisor's own).
+  requestAdvisorProofConsent: (id, data) =>
+    request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // #5316 (D5316): `billing_state: 'included'` (with an optional `engagement_id`) records a session as included
+  // in an engagement: no price, in no billed or outstanding total. Refused on a priced line (409 `priced_line`);
+  // an included line leaves that state only when `billing_state` is sent (409 `included_line` otherwise).
+  updateMyAdvisorBookingBilling: (id, data) =>
+    request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
+
+  // Migration 241 — the money model. Every figure below is what a charge WOULD
+  // take: `settlement` on each response says which of none/test/live is
+  // running, and it says 'none' until the advisory charging flag ships.
+  //
+  // NO CLIENT-SIDE ARITHMETIC. The cut, the net and every total are computed
+  // in the worker from a rate an operator sets, in integer cents, because a
+  // rounding choice made in a component is one nobody can audit — and because
+  // a line keeps the rate it was stamped with, which the browser cannot know.
+  getMyAdvisorLedger: ({ from, until } = {}) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (until) q.set('until', until);
+    const s = q.toString();
+    return request(`/advisors/me/ledger${s ? `?${s}` : ''}`);
+  },
+  getMyAdvisorPayoutAccount: () => request('/advisors/me/payout-account'),
+  // PR5b — Stripe Connect onboarding. NEITHER of these moves money: the first
+  // returns a URL the advisor visits, the second reads a status back. Both
+  // work while advisory charging is off, which is how an account gets
+  // verified before the flag flips; the responses carry `settlement` so the
+  // page says which.
+  connectMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/connect', { method: 'POST' }),
+  refreshMyAdvisorPayoutAccount: () =>
+    request('/advisors/me/payout-account/refresh', { method: 'POST' }),
+  listMyAdvisorPayouts: () => request('/advisors/me/payouts'),
+  getMyAdvisorTaxSummary: (year) =>
+    request(`/advisors/me/tax-summary${year ? `?year=${encodeURIComponent(year)}` : ''}`),
+
+  // Migration 242 — the advisor's own note about one period, which is what
+  // D4's AI band needs for Accept to file anything. The key is a CALENDAR
+  // LABEL ('2026-Q3', '2026', 'all'), never a date range: two notes that
+  // overlapped on the same quarter could not both be the note for it.
+  //
+  // GET answers 200 with `note: null` when none exists — not writing one is
+  // the ordinary case, and a 404 would make the card treat it as a failure.
+  // DELETE is idempotent for the same reason: Discard must not fail on a
+  // second click.
+  getMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`),
+  saveMyAdvisorPeriodNote: (key, data) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteMyAdvisorPeriodNote: (key) =>
+    request(`/advisors/me/period-notes/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Migration 238 — the contract behind the sessions, and whether it renewed.
+  //
+  // FOUR VERBS AND NOT ONE PATCH, and the split is the worker's, not a
+  // convenience here: `lane`, `cycles` and `outcome` are the whole input to the
+  // renewal rate, so a merge-PATCH over them would let a caller assert a
+  // renewal with no cycle behind it. `updateMyAdvisorEngagement` carries the
+  // descriptive columns; the two POSTs carry a lane move and a decision. D71.
+  listMyAdvisorEngagements: (page) => request(`/advisors/me/engagements${expertisePage(page)}`),
+  createMyAdvisorEngagement: (data) =>
+    request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorEngagement: (id, data) =>
+    request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #4715 (D4715): signing, renewals, endings and corrections to signed terms, oldest first.
+  listMyAdvisorEngagementEvents: (id) => request(`/advisors/me/engagements/${id}/events`),
+  // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
+  advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
+    request(`/advisors/me/engagements/${id}/advance`, {
+      method: 'POST', body: JSON.stringify({ lane, ...(expectedLane ? { expected_lane: expectedLane } : {}) }),
+    }),
+  // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
+  // here rather than through `advance`, so the loss lands in the denominator.
+  // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
+  // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
+  // #5316 (D5316): ending needs `data.end_reason`, 'did_not_renew' or 'other' (400 `end_reason_required`
+  // otherwise); the engagement then reads it back as `end_reason`, null on one ended before it was asked.
+  recordMyAdvisorEngagementRenewal: (id, data) =>
+    request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Migration 239 — what you sent a client, and whether they opened it.
+  //
+  // THERE IS NO METHOD HERE THAT MARKS SOMETHING OPENED, and that is the point
+  // rather than an omission. `opened_at` is the client's to set; the founder
+  // side writes it through `/advisor-grants`. D72.
+  listMyAdvisorDeliverables: (page) => request(`/advisors/me/deliverables${expertisePage(page)}`),
+  createMyAdvisorDeliverable: (data) =>
+    request('/advisors/me/deliverables', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorDeliverable: (id, data) =>
+    request(`/advisors/me/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addMyAdvisorDeliverableVersion: (id, data) =>
+    request(`/advisors/me/deliverables/${id}/versions`, { method: 'POST', body: JSON.stringify(data) }),
+  // Refuses a client with no Axal account (409) — a version nobody can open
+  // would sit in Unopened forever and bias the median.
+  sendMyAdvisorDeliverableVersion: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+  // #5316 (D5316): mark a version ready to send, or take the mark off. NEITHER SENDS ANYTHING; the send
+  // clears the mark. A sent version is a 409 `already_sent`; one with no content a 422 `empty_version`.
+  // Each answers the version with `ready_at`, `ready_by_user_id` and `ready_by_name`.
+  markMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'POST' }),
+  clearMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'DELETE' }),
+
+  // Migration 240 — the three things that decide what the calendar contains.
+  // A price here is what the advisor ASKS FOR; nothing in this group charges
+  // anyone. The take-rate, the payout account and the Stripe Connect service
+  // leg land in 241 and after, in test mode behind a production flag. D75.
+  // The OWNER's view of the calendar, not the public `/:uid/slots` one. It
+  // carries `recording_state`, `payment_state` and `blocked_reason`, which a
+  // founder browsing an advisor's slots must never see: one would tell them
+  // the payout account is unverified, another is a private note about why an
+  // hour is not for sale.
+  listMyAdvisorSlots: ({ days = 14, from } = {}) => {
+    const qs = new URLSearchParams({ days: String(days) });
+    if (from) qs.set('from', from);
+    return request(`/advisors/me/slots?${qs}`);
+  },
+  // Withdraws hours nobody has taken. A booked hour is REFUSED rather than
+  // blocked, and the response reports how many were left alone — blocking one
+  // someone holds would take their session away without telling either side.
+  blockMyAdvisorSlotRange: (data) =>
+    request('/advisors/me/slots/block', { method: 'POST', body: JSON.stringify(data) }),
+  getMyAdvisorAvailability: () => request('/advisors/me/availability'),
+  // PUT, not PATCH: one row per advisor, and the rule set is the unit edited.
+  // A partial update would let a cap and a blackout disagree about which
+  // edit won.
+  saveMyAdvisorAvailability: (data) =>
+    request('/advisors/me/availability', { method: 'PUT', body: JSON.stringify(data) }),
+  listMyAdvisorSessionTypes: () => request('/advisors/me/session-types'),
+  // Refuses a free intro that carries a price (400): free and unpriced are
+  // different facts, and a type asserting both says nothing a reader can use.
+  createMyAdvisorSessionType: (data) =>
+    request('/advisors/me/session-types', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorSessionType: (id, data) =>
+    request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
+  // D1597 (#3870): Advisor › Expertise › Visibility — requests per booking link, opens of your writing; views and engagements are not recorded.
+  getMyAdvisorVisibility: (days, page) => request(`/advisors/me/visibility${expertisePage(page, days ? { days } : {})}`),
+  // 409 on a slug another advisor already holds — the slug resolves from the
+  // URL alone, so it is unique across the table rather than per advisor.
+  createMyAdvisorBookingLink: (data) =>
+    request('/advisors/me/booking-links', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorBookingLink: (id, data) =>
+    request(`/advisors/me/booking-links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // The CLIENT's half of 239 — the only writer of `opened_at` in the product.
+  // These two are read and called by the FOUNDER, not the advisor: the receipt
+  // is theirs to give, and the pair above deliberately has no equivalent. D73.
+  listReceivedDeliverables: () => request('/advisors/received/deliverables'),
+  openReceivedDeliverableVersion: (uid) =>
+    request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/open`, { method: 'POST' }),
+  acceptReceivedDeliverableVersion: (uid) =>
+    request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
+
+  // D4670 — the attester's side, unauthenticated on purpose (an attester is
+  // usually not a user of this product). The link reads the claim; a code
+  // emailed to the named address, on the attester's own request, answers it.
+  getAdvisorProofConsentClaim: (token) => request(`/advisors/proof-consents/${token}/claim`),
+  requestAdvisorProofConsentCode: (token) =>
+    request(`/advisors/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
+  respondToAdvisorProofConsent: (token, data) =>
+    request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- The partner firm's own stores (migrations 208-209) ----------
+  // Scoped server-side on the caller's `partners` row; none takes a partner id
+  // for the same reason the advisor block above does not take an advisor id.
+  // A quote or engagement belonging to another firm answers 404, not 403 — a
+  // non-owner is not told the row exists.
+  // The three sets the Leads zone keeps disjoint: open leads (never bid, never
+  // passed), the passes with their reasons, and — by their absence — the needs
+  // this firm already quoted on, which are proposals.
+  // `cursor` pages the open leads and `passedCursor` the passes (#4701): each list
+  // answers `next_cursor` / `passed_next_cursor`, and the totals describe all of them.
+  listPartnerLeads: (cursor, passedCursor) => {
+    const q = [cursor ? `cursor=${encodeURIComponent(cursor)}` : '', passedCursor ? `passed_cursor=${encodeURIComponent(passedCursor)}` : ''].filter(Boolean).join('&');
+    return request(`/partner/pipeline/leads${q ? `?${q}` : ''}`);
+  },
+  // #3938 IN10, the firm's press: open leads ranked by fit with its own audience fit
+  // (bge-m3, then the reranker). Rows `{ need_id, position, line: null }`; 409 when
+  // the firm wrote no fit, no service and typed nothing.
+  rankPartnerLeads: (query = '') =>
+    request('/partner/pipeline/leads/rank', { method: 'POST', body: JSON.stringify(query ? { query } : {}) }),
+  // A pass is not a loss: a lost bid is a bid, and this is the record of a bid
+  // never made. `reason` is a closed set; the note is what makes it useful to
+  // the next person who reads the same lead.
+  passPartnerLead: (needId, data) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'POST', body: JSON.stringify(data) }),
+  unpassPartnerLead: (needId) =>
+    request(`/partner/pipeline/leads/${needId}/pass`, { method: 'DELETE' }),
+  // Every bid this firm has made, with its version trail and the loss taxonomy.
+  // `read_receipts: 'none'` comes back with it: nothing records that a client
+  // opened a proposal, so a quiet one cannot be told from an unread one.
+  listPartnerProposals: (cursor) => request(
+    cursor ? `/partner/pipeline/proposals?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/proposals',
+  ),
+  // Append-only and self-numbering — the caller does not choose the version, so
+  // two edits cannot both claim to be v3.
+  addPartnerProposalVersion: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/versions`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  // From the taxonomy, never typed: free text makes the loss chart unreadable
+  // within a quarter. `loss_reason: null` clears it.
+  setPartnerProposalOutcome: (quoteId, data) =>
+    request(`/partner/pipeline/proposals/${quoteId}/outcome`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  listPartnerNegotiations: (cursor) => request(
+    cursor ? `/partner/pipeline/negotiations?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/negotiations',
+  ),
+  // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
+  // upsert. `{touch: true}` advances the stalled clock without changing stage.
+  savePartnerNegotiation: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createPartnerNegotiationTerm: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}/terms`, { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerNegotiationTerm: (id, data) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerNegotiationTerm: (id) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'DELETE' }),
+
+  // Returns `items`, plus `mrr_cents` and the `mrr_basis` sentence saying what
+  // that total counted. `mrr_cents` is null when no retainer carries an amount:
+  // a total of zero would claim the clients pay nothing.
+  listPartnerRetainers: (cursor) => request(
+    cursor ? `/partner/pipeline/retainers?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/retainers',
+  ),
+  savePartnerRetainer: (engagementId, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePartnerRetainer: (engagementId) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'DELETE' }),
+  // The period is in the path because it is the row's identity — hours for
+  // 2026-09 are one record, upserted, not a second row appended each save.
+  savePartnerRetainerUsage: (engagementId, period, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // A real delete rather than writing zero: zero hours is the claim that they
+  // worked none, which is not the same as no record for the period.
+  deletePartnerRetainerUsage: (engagementId, period) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, { method: 'DELETE' }),
+
+  // ---------- Offers: visibility, proof, audience fit (migration 209) ----------
+  // Returns `items` plus `engagement_total`, `unattributed_count` and the two
+  // figures the store cannot produce — `views` and `lead_ratio`, each null with
+  // its own reason. Nothing here counts a view, because nothing records one.
+  getPartnerVisibility: () => request('/partner/offers/visibility'),
+  createPartnerSurface: (data) =>
+    request('/partner/offers/surfaces', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerSurface: (id, data) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerSurface: (id) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'DELETE' }),
+
+  // Every engagement with the surface it names, for the attribution form. An
+  // engagement naming none is listed rather than hidden — it is what the
+  // unattributed count is counting.
+  listPartnerAttribution: (page = 1) => request(page === 1 ? '/partner/offers/attribution' : `/partner/offers/attribution?page=${encodeURIComponent(page)}`),
+  setPartnerEngagementSource: (engagementId, data) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  clearPartnerEngagementSource: (engagementId) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, { method: 'DELETE' }),
+
+  // `is_published` on each item is DERIVED from its consent rows, never stored.
+  // There is no method to set it, and that absence is the feature.
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
+  createPartnerProof: (data) =>
+    request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerProof: (id, data) =>
+    request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerProof: (id) =>
+    request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
+  requestPartnerProofConsent: (id, data) =>
+    request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
+  // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
+  // is the token holder's alone, which is what makes the record worth anything.
+  withdrawPartnerProofConsent: (id, consentId) =>
+    request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
+  respondToPartnerProofConsent: (token, data) =>
+    request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  listPartnerFitRules: () => request('/partner/offers/fit-rules'),
+  createPartnerFitRule: (data) =>
+    request('/partner/offers/fit-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerFitRule: (id, data) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerFitRule: (id) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'DELETE' }),
+
+  // ---------- Delivery: health, deliverables, capacity, reports (208) ----------
+  // `health` on each item is DERIVED over five tables at read time and is null
+  // when nothing is recorded — never 'on_track'. There is no method to set it,
+  // because green-because-empty is the failure the zone was written against.
+  getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // #5314 part 3 (D4822): every Delivery edit states the version it was read
+  // at — `expected_revision` in a body, or the query below for a DELETE (and
+  // `null` / `none` where the read found no record). A stale one answers 409
+  // `delivery_changed` with `current_version` and changes nothing.
+  // What the firm STATES about an engagement — owner, scope assessment, and
+  // the client's score with where it was said. None of the three is derivable
+  // from the five stores health is read across. An omitted key is untouched;
+  // an explicit null clears.
+  savePartnerEngagementHealth: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/health`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // The `pd1` board: one row per engagement in whichever of the two modes it
+  // is, with mode, grant, progress and health all derived server-side. See
+  // `routes/partner_delivery.ts` for why none of the four is stored. Mounted at
+  // `/api/partner/delivery`, beside its five siblings — NOT at
+  // `/api/partner-delivery`, which is what the drift guard caught.
+  getPartnerDeliveryBoard: () => request('/partner/delivery/board'),
+
+  listPartnerMilestones: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`),
+  createPartnerMilestone: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerMilestone: (id, data) =>
+    request(`/partner/delivery/milestones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerMilestone: (id, revision) =>
+    request(`/partner/delivery/milestones/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
+
+  // `side` is what lets a report name a client-side blocker plainly. A blockers
+  // list with no side would make every delay the firm's.
+  listPartnerBlockers: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`),
+  createPartnerBlocker: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerBlocker: (id, data) =>
+    request(`/partner/delivery/blockers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerBlocker: (id, revision) =>
+    request(`/partner/delivery/blockers/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
+
+  // NOTE WHAT IS ABSENT: nothing here sets `opened_at` or `signed_off_at`.
+  // Those are the client's to set — only the founder side can truthfully say a
+  // thing was read — and the worker ignores them in any body. On this build
+  // every sent deliverable therefore reads unopened, and the read says why.
+  listPartnerDeliverables: () => request('/partner/delivery/deliverables'),
+  createPartnerDeliverable: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/deliverables`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerDeliverable: (id, data) =>
+    request(`/partner/delivery/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerDeliverable: (id, revision) =>
+    request(`/partner/delivery/deliverables/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
+
+  // Returns `people` (project, seat and internal hours split), `seats`, and
+  // `cap_hours` — the number THIS FIRM stated, or null with the reason. Nothing
+  // is "over" a cap nobody set, so an unconfigured firm still reads null here.
+  getPartnerCapacity: (period) =>
+    request(`/partner/delivery/capacity${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  // The firm's own number, or one person's. `weekly_hours: null` clears it —
+  // a cap that could be set and not unset would make the first one permanent.
+  setPartnerCapacityCap: (data) =>
+    request('/partner/delivery/capacity/cap', { method: 'PUT', body: JSON.stringify(data) }),
+  // Hours with no client to bill. `hours: null` removes the statement; zero is
+  // a different answer and stays one.
+  setPartnerInternalHours: (data) =>
+    request('/partner/delivery/capacity/internal-hours', { method: 'PUT', body: JSON.stringify(data) }),
+  listPartnerPeople: () => request('/partner/delivery/people'),
+  grantPartnerSeat: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/seats`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerSeat: (id, data) =>
+    request(`/partner/delivery/seats/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Revoking is a state, not a delete: a struck-through seat stays on the page
+  // rather than the fact that access once existed silently disappearing.
+  revokePartnerSeat: (id, revision) =>
+    request(`/partner/delivery/seats/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
+  savePartnerHours: (engagementId, personId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // D637 — client hours by entry, this month and the two before it.
+  listPartnerHourEntries: (period) =>
+    request(`/partner/delivery/capacity/hours${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  deletePartnerHours: (engagementId, personId, period, revision) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}${deliveryRevisionQuery(revision)}`, {
+      method: 'DELETE',
+    }),
+
+  listPartnerStatusReports: () => request('/partner/delivery/status-reports'),
+  // Composes from the engagement's own rows. `blocked` is read at compose time
+  // and never copied into the report row — a prose copy would go stale the
+  // moment a blocker cleared.
+  getPartnerReportDraft: (engagementId, period) =>
+    request(`/partner/delivery/engagements/${engagementId}/report-draft/${period}`),
+  savePartnerStatusReport: (engagementId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/status-reports/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // Records that a PERSON sent it. Nothing here delivers anything — no email,
+  // no notification, no client-side surface exists.
+  sendPartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}/send`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
+  deletePartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
+
+  listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
+  listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
+  listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),
+  // D492 — the founder's side: which advisors can see them through a Lab
+  // cohort, and the per-advisor switch that hides them from one.
+  myCohortAdvisorAccess: () => request('/advisors/me/cohort-access'),
+  setCohortAdvisorVisibility: (advisorUserId, visible) => request(`/advisors/me/cohort-access/${advisorUserId}`, { method: 'PUT', body: JSON.stringify({ visible: !!visible }) }),
+
+  // Cohorts · Guidance and · Calendar, and Expertise · Thinking (PR C).
+  //
+  // Guidance is the only one of the three with a new store behind it
+  // (migration 212). Calendar is a read that joins the Lab's week windows to
+  // the advisor's own booked slots — the join the zone's card said nobody had
+  // written — and Thinking reads `articles`, which has carried an author and a
+  // view counter all along.
+  listMyAdvisorCohortGuidance: (cycleId) => request(`/advisors/me/cohort/${cycleId}/guidance`),
+  postMyAdvisorCohortGuidance: (cycleId, data) => request(`/advisors/me/cohort/${cycleId}/guidance`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorGuidance: (uid, data) => request(`/advisors/me/guidance/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listMyAdvisorCohortCalendar: (cycleId) => request(`/advisors/me/cohort/${cycleId}/calendar`),
+  listMyAdvisorThinking: (page) => request(`/advisors/me/thinking${expertisePage(page)}`),
+
+  // ---------- Unified calendar (Task #56) ----------
+  listCalendarEvents: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.from) qs.set('from', opts.from);
+    if (opts.to) qs.set('to', opts.to);
+    if (opts.kinds) qs.set('kinds', opts.kinds);
+    // D4154 (#4154): an admin's read-only staff scope, `studio` or `all` (D1206).
+    if (opts.scope && opts.scope !== 'mine') qs.set('scope', opts.scope);
+    const s = qs.toString();
+    return request(`/calendar/events${s ? `?${s}` : ''}`);
+  },
+  calendarIcsUrl: () => `${BASE}/calendar/events.ics`,
+
+  // IC meetings
+  listIcMeetings: () => request('/calendar/ic-meetings'),
+  createIcMeeting: (data) => request('/calendar/ic-meetings', { method: 'POST', body: JSON.stringify(data) }),
+  rsvpIcMeeting: (id, rsvp) =>
+    request(`/calendar/ic-meetings/${id}/rsvp?rsvp=${encodeURIComponent(rsvp)}`, { method: 'POST' }),
+  cancelIcMeeting: (id, reason) =>
+    request(`/calendar/ic-meetings/${id}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, { method: 'DELETE' }),
+
+  // Founder check-ins
+  listCheckins: () => request('/calendar/founder-checkins'),
+  createCheckin: (data) => request('/calendar/founder-checkins', { method: 'POST', body: JSON.stringify(data) }),
+  cancelCheckin: (id) => request(`/calendar/founder-checkins/${id}`, { method: 'DELETE' }),
+
+  // ---------- Profiling v2 (D357) ----------
+  // The caller's own profile snapshots and archetype publish consent. No user
+  // id is sent: the Worker reads the session.
+  profileHistory: (persona) =>
+    request(`/profile/history${persona ? `?persona=${encodeURIComponent(persona)}` : ''}`),
+  archetypePublished: () => request('/profile/archetype-published'),
+  setArchetypePublished: (published) =>
+    request('/profile/archetype-published', { method: 'PUT', body: JSON.stringify({ published: published === true }) }),
+  // D358 — the caller's answers old enough to be asked again ("is this still
+  // true?"). A read-only peek; nothing is marked asked.
+  profileReask: () => request('/profile/reask'),
+  // D602 — other members who published one of these archetypes (the card
+  // page's matches). Name, role and the published archetype only.
+  profilePublishedMembers: (slugs) =>
+    request(`/profile/published-members?archetypes=${encodeURIComponent((slugs || []).join(','))}`),
+  // D358 — admin: how the profiling population shifts over time. Counts only,
+  // small cells hidden by the Worker.
+  adminProfilingTrends: (months) =>
+    request(`/admin/profiling/trends${months ? `?months=${encodeURIComponent(months)}` : ''}`),
+
+  // ---------- Partner office hours (Task #54) ----------
+  createPartnerSlot: (data) =>
+    request('/partner-office-hours/me/slots', { method: 'POST', body: JSON.stringify(data) }),
+  listMyPartnerSlots: (upcomingOnly = true) =>
+    request(`/partner-office-hours/me/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  listPartnerSlots: (partnerUid, upcomingOnly = true) =>
+    request(`/partner-office-hours/partners/${partnerUid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
+  cancelPartnerSlot: (slotId) =>
+    request(`/partner-office-hours/me/slots/${slotId}`, { method: 'DELETE' }),
+  bookPartnerSlot: (slotId, data) =>
+    request(`/partner-office-hours/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),
+  listMyPartnerBookings: (status) =>
+    request(`/partner-office-hours/me/bookings${status ? `?status=${status}` : ''}`),
+  listMyPartnerRequests: (status) =>
+    request(`/partner-office-hours/bookings/me${status ? `?status=${status}` : ''}`),
+  confirmPartnerBooking: (id) =>
+    request(`/partner-office-hours/bookings/${id}/confirm`, { method: 'POST' }),
+  cancelPartnerBooking: (id, reason) =>
+    request(`/partner-office-hours/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  completePartnerBooking: (id) =>
+    request(`/partner-office-hours/bookings/${id}/complete`, { method: 'POST' }),
+  noShowPartnerBooking: (id, reason) =>
+    request(`/partner-office-hours/bookings/${id}/no-show`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D355 — what a session left behind. Both parties add and tick action items;
+  // only the booking's founder rates a completed session. No user id is sent:
+  // the Worker takes the actor, and their side, from the session.
+  listBookingActionItems: (bookingId) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`),
+  addBookingActionItem: (bookingId, { title, linked_tool, due_date }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/action-items`, {
+      method: 'POST', body: JSON.stringify({ title, linked_tool: linked_tool || null, due_date: due_date || null }),
+    }),
+  updateBookingActionItem: (itemId, patch) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteBookingActionItem: (itemId) =>
+    request(`/partner-office-hours/action-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  listMyBookingActionItems: () => request('/partner-office-hours/action-items/me'),
+  rateBooking: (bookingId, { rating, comment }) =>
+    request(`/partner-office-hours/bookings/${encodeURIComponent(bookingId)}/rating`, {
+      method: 'PUT', body: JSON.stringify({ rating, comment: comment ?? null }),
+    }),
+  partnerRatingSummary: () => request('/partner-office-hours/ratings/summary'),
+
+  // ---------- Co-marketing (Task #54) ----------
+  submitCoMarketingPitch: (data) =>
+    request('/comarketing/me/pitches', { method: 'POST', body: JSON.stringify(data) }),
+  listMyCoMarketingPitches: (status) =>
+    request(`/comarketing/me/pitches${status ? `?status=${status}` : ''}`),
+  // D637 — one pitch, for its own page (owner or admin).
+  getCoMarketingPitch: (uid) => request(`/comarketing/me/pitches/${encodeURIComponent(uid)}`),
+  editCoMarketingPitch: (uid, data) =>
+    request(`/comarketing/me/pitches/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  withdrawCoMarketingPitch: (uid) =>
+    request(`/comarketing/me/pitches/${uid}/withdraw`, { method: 'POST' }),
+  adminCoMarketingQueue: (status) =>
+    request(`/comarketing/admin/queue${status ? `?status=${status}` : ''}`),
+  // D1132 — one pitch for the board's item address, with who decided it.
+  adminCoMarketingPitch: (uid) => request(`/comarketing/admin/pitches/${encodeURIComponent(uid)}`),
+  approveCoMarketingPitch: (uid, notes) =>
+    request(`/comarketing/admin/pitches/${uid}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  rejectCoMarketingPitch: (uid, notes) =>
+    request(`/comarketing/admin/pitches/${uid}/reject`, { method: 'POST', body: JSON.stringify({ notes }) }),
+  publishCoMarketingPitch: (uid, data) =>
+    request(`/comarketing/admin/pitches/${uid}/publish`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  listPublishedCoMarketing: () => request('/comarketing/published'),
+  trackCoMarketing: (data) =>
+    request('/comarketing/track', { method: 'POST', body: JSON.stringify(data) }),
+  listMyCoMarketingAttributions: (pitchUid) =>
+    request(`/comarketing/me/attributions${pitchUid ? `?pitch_uid=${pitchUid}` : ''}`),
+  // Founder side: the pitches and attributions that touch one of the caller's
+  // own startups. `/me/*` above is the PARTNER side and refuses a founder.
+  founderCoMarketing: (projectId) =>
+    request(`/comarketing/founder/by-project/${encodeURIComponent(projectId)}`),
+
+  // Google Calendar sync
+  googleCalStatus: () => request('/calendar/google/status'),
+  googleCalConnect: ({ return_to, project_id } = {}) =>
+    request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
+  googleCalRemoveGmailAccess: () => request('/calendar/google/remove-gmail-access', { method: 'POST' }),
+  googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
+  googleCalForceDisconnect: () => request('/calendar/google/force-disconnect', { method: 'POST' }),
+  googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
+
+  // Microsoft 365 / Outlook Calendar sync
+  microsoftCalStatus: () => request('/calendar/microsoft/status'),
+  microsoftCalConnect: ({ return_to, project_id } = {}) =>
+    request(`/calendar/microsoft/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
+  microsoftCalDisconnect: () => request('/calendar/microsoft', { method: 'DELETE' }),
+  microsoftCalSync: () => request('/calendar/microsoft/sync', { method: 'POST' }),
+
+  // Telegram channel join request — maps caller's role → canonical
+  // channel; backend pings the studio Slack inbox so an admin can
+  // issue the invite link manually (bots can't add users to invite-only
+  // channels without prior interaction).
+  telegramJoinChannels: () => request('/telegram/channels'),
+  telegramJoinRequest: (data) =>
+    request('/telegram/join-request', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // Task #52 — "Add to my external calendar" — pushes one already-booked
+  // Axal session to whichever calendar(s) the caller has connected.
+  pushOneToExternal: (kind, sourceId) =>
+    request(`/calendar/push/${kind}/${sourceId}`, { method: 'POST' }),
+
+  // ---------- Co-founder matching (Task #38) ----------
+  cofounderMe: () => request('/cofounder/me'),
+  cofounderUpsertMe: (data) =>
+    request('/cofounder/me', { method: 'PUT', body: JSON.stringify(data) }),
+  cofounderUnlistMe: () => request('/cofounder/me', { method: 'DELETE' }),
+  cofounderBrowse: (opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['q', 'skill', 'sector', 'commitment']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    if (opts.remote_only) qs.set('remote_only', 'true');
+    if (opts.limit) qs.set('limit', String(opts.limit));
+    const s = qs.toString();
+    return request(`/cofounder/browse${s ? `?${s}` : ''}`);
+  },
+  // #3938 NE1, the founder's press: the browse cards (same filters) ranked against what the
+  // founder looks for, or their profile's own words. Rows `{ uid, position, line }`; 422 with neither.
+  cofounderBrowseRank: (query = '', opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['q', 'skill', 'sector', 'commitment']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    if (opts.remote_only) qs.set('remote_only', 'true');
+    const s = qs.toString();
+    return request(`/cofounder/browse/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify(query ? { query } : {}) });
+  },
+  cofounderExpressInterest: (data) =>
+    request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),
+  // D637 — the interest I sent and have not withdrawn.
+  cofounderSentInterests: () => request('/cofounder/interests/sent'),
+  cofounderWithdrawInterest: (userUid) =>
+    request(`/cofounder/interest/${userUid}`, { method: 'DELETE' }),
+  cofounderListConnections: () => request('/cofounder/connections'),
+  cofounderGetConnection: (uid) => request(`/cofounder/connections/${uid}`),
+
+  // ---------- Portfolio Health (Task #44) ----------
+  portfolioHealthList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.badge) qs.set('badge', opts.badge);
+    if (opts.interventionOnly) qs.set('intervention_only', 'true');
+    const s = qs.toString();
+    return request(`/portfolio/health${s ? `?${s}` : ''}`);
+  },
+  portfolioHealthGet: (projectUid, days) =>
+    request(`/portfolio/health/${projectUid}${days ? `?history_days=${days}` : ''}`),
+  portfolioHealthRecomputeAll: () =>
+    request('/portfolio/health/recompute', { method: 'POST' }),
+  portfolioHealthRecomputeOne: (projectUid) =>
+    request(`/portfolio/health/recompute/${projectUid}`, { method: 'POST' }),
+
+  // ---------- IC Decisions (Commit) ----------
+  icList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.status) q.set('status', opts.status);
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    const qs = q.toString();
+    return request(`/ic${qs ? `?${qs}` : ''}`);
+  },
+  icCreate: (data) => request('/ic', { method: 'POST', body: JSON.stringify(data) }),
+  icGet: (uid) => request(`/ic/${uid}`),
+  icUpdate: (uid, data) => request(`/ic/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  icVote: (uid, data) => request(`/ic/${uid}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+  // Canvas ID3 — the whole Commit room in one scoped read. Registered ahead of
+  // `/ic/:uid` in the worker so the literal is not swallowed by the parameter.
+  icCommitRoom: () => request('/ic/commit-room'),
+  // D461 — conditions on a decision (migration 334) and the meeting's minutes.
+  // `/ic/conditions` is registered ahead of `/ic/:uid` for the same reason.
+  icConditions: (status) => request(`/ic/conditions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  icAddCondition: (uid, body) => request(`/ic/${uid}/conditions`, { method: 'POST', body: JSON.stringify(body) }),
+  icResolveCondition: (uid, status) => request(`/ic/conditions/${uid}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  icRecordMinutes: (uid, minutes) => request(`/ic/meetings/${uid}/minutes`, { method: 'PATCH', body: JSON.stringify({ minutes }) }),
+
+  // ---------- LP Reporting (Support) ----------
+  lpReportsList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.fund_id != null && opts.fund_id !== '') q.set('fund_id', opts.fund_id);
+    const qs = q.toString();
+    return request(`/lp-reports${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---------- Company Updates (Support) ----------
+  portfolioUpdatesList: (opts = {}) => {
+    const q = new URLSearchParams();
+    if (opts.project_id != null && opts.project_id !== '') q.set('project_id', opts.project_id);
+    if (opts.period) q.set('period', opts.period);
+    const qs = q.toString();
+    return request(`/portfolio-updates${qs ? `?${qs}` : ''}`);
+  },
+  portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- Cap Table / Ownership (Support) ----------
+  // D4644: the list honours `as_of` as the analytics read does (PF-02's
+  // "Read the book as of"); without one it reads the latest marks.
+  positionsList: (asOf) => request(`/positions${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  portfolioUpdatesLatest: () => request('/portfolio-updates/latest'),
+  // Canvas IP1's `Mark history`. Every marking event across the accessible
+  // book in one call — the per-project read already returned this history, but
+  // looping it for a list page would be an N+1.
+  positionsMarkHistory: () => request('/positions/marks'),
+  positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
+  positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #125 — real portfolio performance. `analytics` returns
+  // gross-of-fees TVPI/DPI/RVPI/MOIC/IRR computed from positions, marks,
+  // and realisations, with mark_coverage so the UI can flag how much of
+  // NAV is still carried at cost.
+  positionsAnalytics: (asOf) => request(`/positions/analytics${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  positionsKpiCompliance: (cadence = 'quarterly') =>
+    request(`/positions/kpi-compliance?cadence=${encodeURIComponent(cadence)}`),
+  // ── Portfolio support ledger (IP3, migration 237) ───────────────────────
+  // The desk's whole store. `list` returns the entries, the per-company
+  // rollup, and the companies in the book carrying no entry at all — the last
+  // one anti-joined against `portfolio_positions` server-side, so "no support"
+  // is two stored sets compared rather than the ledger's silence read as an
+  // answer.
+  portfolioSupportList: (params = {}) => request(`/portfolio-support${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
+  // Logging is open to an investor for a company already in their book, not
+  // admin-only like the valuation writes: a ledger the workers cannot write to
+  // stays empty, which is the state IP3 existed in.
+  portfolioSupportLog: (data) =>
+    request('/portfolio-support', { method: 'POST', body: JSON.stringify(data) }),
+  // Delivering or withdrawing a promise. Without this the `state` column would
+  // freeze at 'promised' exactly as `investor_introductions`'s does.
+  portfolioSupportUpdate: (uid, data) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D4642 (#4642): the entry's amendment history — one row per accepted
+  // amendment, with the revision it produced and who made it. The desk needs
+  // it because `recorded_by` only says who created the entry: an amendment by
+  // a second member was otherwise unattributable from the page.
+  portfolioSupportHistory: (uid) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}/history`),
+  positionMarkCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
+  positionDistributionCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
+  // D464 — the chase (IP2's "Chase all overdue" / the Portfolio canvas's
+  // Nudge). Logged per company and the founder is notified; a repeat chase
+  // inside the hour answers the existing row.
+  portfolioChases: () => request('/portfolio/chases'),
+  portfolioChase: (projectIds) =>
+    request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
+
+  // ---------- Contacts (inbound relationship hub) ----------
+  // #4611 finding 8: `project_id` is a SERVER filter now, applied inside the
+  // authorized scope and before the page, and the read is paginated. The
+  // response carries `total`, `counts`, `has_more` and `next_cursor`, whose
+  // scopes the Worker documents; a caller that passes none of these behaves as
+  // it did, on a page rather than on a 500-row cap.
+  contactsList: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.audience) qs.set('audience', opts.audience);
+    if (opts.status) qs.set('status', opts.status);
+    if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    if (opts.project_id != null && opts.project_id !== '') qs.set('project_id', String(opts.project_id));
+    if (opts.limit != null) qs.set('limit', String(opts.limit));
+    if (opts.cursor) qs.set('cursor', String(opts.cursor));
+    const s = qs.toString();
+    return request(`/contacts${s ? `?${s}` : ''}`);
+  },
+  contactGet: (uid) => request(`/contacts/${uid}`),
+  contactCreate: (data) => request('/contacts', { method: 'POST', body: JSON.stringify(data) }),
+  contactInvite: (data) => request('/contacts/invite', { method: 'POST', body: JSON.stringify(data) }),
+  contactUpdate: (uid, data) => request(`/contacts/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  contactReply: (uid, data) => request(`/contacts/${uid}/reply`, { method: 'POST', body: JSON.stringify(data) }),
+  contactAddTask: (uid, data) => request(`/contacts/${uid}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
+  contactToggleTask: (uid, taskId) => request(`/contacts/${uid}/tasks/${taskId}/toggle`, { method: 'POST' }),
+  contactPromote: (uid) => request(`/contacts/${uid}/promote`, { method: 'POST' }),
+  raiseProspects: (projectId) => request(projectId ? `/contacts/raise-prospects?project_id=${projectId}` : '/contacts/raise-prospects'),
+  raiseProspectUpdate: (id, data) => request(`/contacts/raise-prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProspectGet: (id) => request(`/contacts/raise-prospects/${id}`),
+  raiseProspectCreate: (data) => request('/contacts/raise-prospects', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProspectsImport: (data) => request('/contacts/raise-prospects/import', { method: 'POST', body: JSON.stringify(data) }),
+  raiseRound: (projectId) => request(projectId ? `/contacts/raise-round?project_id=${projectId}` : '/contacts/raise-round'),
+  raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
+  raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
+  raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #129 — Round Manager. Closes are tranches of the single
+  // active round; pro-rata entitlements are computed server-side per
+  // request (services/roundMath.ts) so they cannot drift from round size.
+  raiseCloses: (projectId) => request(projectId ? `/contacts/raise-closes?project_id=${projectId}` : '/contacts/raise-closes'),
+  raiseCloseCreate: (data) => request('/contacts/raise-closes', { method: 'POST', body: JSON.stringify(data) }),
+  raiseCloseUpdate: (id, data) => request(`/contacts/raise-closes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProRata: (projectId) => request(projectId ? `/contacts/raise-pro-rata?project_id=${projectId}` : '/contacts/raise-pro-rata'),
+  raiseProRataCreate: (data) => request('/contacts/raise-pro-rata', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProRataUpdate: (id, data) => request(`/contacts/raise-pro-rata/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ---------- Notifications (Phase 0.2) ----------
+  listNotifications: (opts = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.limit) qs.set('limit', opts.limit);
+    if (opts.onlyUnread) qs.set('only_unread', '1');
+    const q = qs.toString();
+    return request(`/notifications${q ? `?${q}` : ''}`);
+  },
+  notificationsUnreadCount: () => request('/notifications/unread-count'),
+  markNotificationsRead: (data) =>
+    request('/notifications/mark-read', { method: 'POST', body: JSON.stringify(data) }),
+  getNotificationPrefs: () => request('/notifications/prefs'),
+  putNotificationPrefs: (prefs) =>
+    request('/notifications/prefs', { method: 'PUT', body: JSON.stringify({ prefs }) }),
+
+  // ---------- Web Push (Task #57) ----------
+  pushVapidKey: () => request('/notifications/push/vapid-key'),
+  pushSubscribe: (sub) =>
+    request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(sub) }),
+  // Codex review (D334, P2): sign-out captures the token before clearing it
+  // and passes it through here explicitly, because by the time the caller
+  // (`disablePush`) reaches this call, `request()`'s own `localStorage`
+  // read would already see it removed. `headers` merges in after
+  // `getAuthHeaders()` in `request()`, so an explicit Authorization here
+  // overrides that lookup rather than racing it.
+  pushUnsubscribe: (data, opts = {}) =>
+    request('/notifications/push/unsubscribe', { method: 'POST', body: JSON.stringify(data), headers: opts.headers }),
+  pushSubscriptions: () => request('/notifications/push/subscriptions'),
+  pushTest: () => request('/notifications/push/test', { method: 'POST' }),
+
+  // Task #46 — the waterfall simulator. Its reserve-allocation half was
+  // removed with the Reserve Allocation page (owner, 2026-10-20).
+  fundSimWaterfall: (fundId, body) =>
+    request(`/fund-sim/funds/${fundId}/waterfall/simulate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  fundSimScenariosList: (fundId, kind) =>
+    request(`/fund-sim/funds/${fundId}/scenarios${kind ? `?kind=${kind}` : ''}`),
+  fundSimScenarioCreate: (fundId, body) =>
+    request(`/fund-sim/funds/${fundId}/scenarios`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
+  fundSimScenarioDelete: (uid) =>
+    request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
+  // Reuse the existing /api/capital/funds endpoint for the fund picker —
+  // it returns the canonical VCFund list with id/uid/name/total_commitment.
+  capitalFundsList: () => request('/capital/funds'),
+
+  // Task #8 (IH) — Data import + migration tools.
+  importsList: () => request('/imports/'),
+  importsQuota: () => request('/imports/quota'),
+  importsGet: (id) => request(`/imports/${encodeURIComponent(id)}`),
+  universalPreview: (csv, target) =>
+    request('/imports/universal/preview', { method: 'POST', body: JSON.stringify({ csv, target }) }),
+  universalCommit: (csv, target, mapping) =>
+    request('/imports/universal/commit', { method: 'POST', body: JSON.stringify({ csv, target, mapping }) }),
+  angellistPreview: (csv) =>
+    request('/imports/angellist/preview', { method: 'POST', body: JSON.stringify({ csv }) }),
+  angellistCommit: (csv) =>
+    request('/imports/angellist/commit', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioPreview: (csv) =>
+    request('/imports/portfolio/preview', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioCommit: (csv) =>
+    request('/imports/portfolio/commit', { method: 'POST', body: JSON.stringify({ csv }) }),
+  portfolioHoldings: () => request('/imports/portfolio/holdings'),
+  cartaImport: (integrationId) =>
+    request('/imports/carta', { method: 'POST', body: JSON.stringify({ integration_id: integrationId }) }),
+  hubspotPipelines: () => request('/imports/hubspot/preview', { method: 'POST', body: JSON.stringify({}) }),
+  hubspotImport: (pipelineId, stageMap) =>
+    request('/imports/hubspot/commit', {
+      method: 'POST',
+      body: JSON.stringify({ pipeline_id: pipelineId, stage_map: stageMap }),
+    }),
+  affinityLists: () => request('/imports/affinity/preview', { method: 'POST', body: JSON.stringify({}) }),
+  affinityImport: (listId, stageMap) =>
+    request('/imports/affinity/commit', {
+      method: 'POST',
+      body: JSON.stringify({ list_id: listId, stage_map: stageMap }),
+    }),
+  deckImport: (file, projectId) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (projectId) fd.append('project_id', String(projectId));
+    return request('/imports/deck', { method: 'POST', body: fd });
+  },
+
+  // Task #11 — User Skill Profile. Worker-only (dev FastAPI lacks /api/skills;
+  // the page degrades to an error banner in dev). Paths are literal so the
+  // API↔Worker drift checker can match them to the /api/skills mount.
+  skills: {
+    getTaxonomy: () => request('/skills/taxonomy'),
+    getMySkills: () => request('/skills/me'),
+    saveMySkills: (ratings) =>
+      request('/skills/me', { method: 'PUT', body: JSON.stringify({ ratings }) }),
+    endorse: (data) =>
+      request('/skills/endorsements', { method: 'POST', body: JSON.stringify(data) }),
+    getMyAggregate: () => request('/skills/me/aggregate'),
+    // D318 — the caller's skill evidence from their own platform activity.
+    getMyEvidence: () => request('/skills/me/evidence'),
+    getUserAggregate: (userId) => request(`/skills/users/${userId}/aggregate`),
+  },
+
+  // Task #12 — Personal-Values Assessment. Worker-only (dev FastAPI lacks /api/values).
+  values: {
+    getSurvey: () => request('/values/survey'),
+    submit: (responses) =>
+      request('/values/submit', { method: 'POST', body: JSON.stringify({ responses }) }),
+    getMe: () => request('/values/me'),
+  },
+
+  // Task #13 — Radar / Spider-Graph Service. Worker-only (dev FastAPI lacks /api/radar).
+  radar: {
+    me: () => request('/radar/me'),
+    team: (userIds) =>
+      request('/radar/team', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
+  },
+
+  // Task #20 — Best-Fit cross-counterparty match summary (Worker-only).
+  // Default (no detail) ALWAYS returns 200: counts + one anonymized teaser per
+  // type for free callers, full ranked matches for studio/bypass roles.
+  // detail:'full' from a non-unlocked caller 402s → PaywallModal (auto-handled
+  // by `request` above). The UI gates the explicit "unlock" action via
+  // openPaywall() instead of forcing that 402, so prefer the default call.
+  matches: {
+    summary: ({ detail } = {}) =>
+      request(`/matches/summary${detail ? `?detail=${encodeURIComponent(detail)}` : ''}`),
+  },
+
+  // Task #20 — self Best-Fit (Worker-only). The caller's own per-persona Axal Fit
+  // scorecard + 5 Axal behavioral values. Read-only; no matches/spin-out (those
+  // stay gated via matches.summary / admin-only report).
+  bestFit: {
+    me: () => request('/best-fit/me'),
+  },
+
+  // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  // D778 part 9: `headers` on the five runs is the press's own rail context (`railPressHeaders`).
+  competitors: {
+    analyze: (data, headers) => request('/competitors/analyze', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/competitors'),
+    get: (id) => request(`/competitors/${id}`),
+    save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    addCandidate: (id, data, headers) => request(`/competitors/${id}/candidates`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
+    candidateUpdate: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+    addSource: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/sources`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    crawlCandidate: (id, cid, headers) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    rerun: (id, data, headers) => request(`/competitors/${id}/rerun`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id, headers) => request(`/competitors/${id}/refresh`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
+    fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
+    exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,
+  },
+
+  // Pitch Deck Reviewer — Cloudflare document conversion + investor-style review.
+  deckReviewer: {
+    // FormData upload: request() detects FormData and omits the JSON Content-Type.
+    upload: (formData) => request('/deck-reviewer/upload', { method: 'POST', body: formData }),
+    // D778 part 7: `headers` is the press's own rail context (`railPressHeaders`).
+    paste: (data, headers) => request('/deck-reviewer/paste', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    list: () => request('/deck-reviewer'),
+    get: (id) => request(`/deck-reviewer/${id}`),
+    save: (id, patch) => request(`/deck-reviewer/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
+    regenerate: (id, headers) => request(`/deck-reviewer/${id}/regenerate`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    purgeRaw: (id) => request(`/deck-reviewer/${id}/raw`, { method: 'DELETE' }),
+    remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
+    exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,
+  },
+
+  // Research · Library and · Ask. Every call is scoped to the signed-in user
+  // by the worker — there is no "whose library" parameter anywhere here,
+  // because there is no route that reads somebody else's.
+  research: {
+    // FormData upload: request() detects FormData and omits the JSON
+    // Content-Type, same as the deck reviewer above.
+    upload: (formData) => request('/research/documents', { method: 'POST', body: formData }),
+    documents: () => request('/research/documents'),
+    // Returns a short-lived one-time URL, not the bytes.
+    downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
+    remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    // `Re-index` in the Library ops row. Only an own document can be re-queued:
+    // a client-sourced one is indexed in their library, not yours, and its uid
+    // is not in your own set.
+    reindex: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/reindex`, { method: 'POST' }),
+    updateDocument: (uid, body) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    collections: () => request('/research/collections'),
+    createCollection: (name) => request('/research/collections', { method: 'POST', body: JSON.stringify({ name }) }),
+    renameCollection: (uid, name) => request(`/research/collections/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    deleteCollection: (uid) => request(`/research/collections/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    addCollectionDocument: (uid, documentUid) => request(`/research/collections/${encodeURIComponent(uid)}/documents`, { method: 'POST', body: JSON.stringify({ document_uid: documentUid }) }),
+    removeCollectionDocument: (uid, documentUid) => request(`/research/collections/${encodeURIComponent(uid)}/documents/${encodeURIComponent(documentUid)}`, { method: 'DELETE' }),
+    askUpdateAnswer: (uid, body) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    // `session_uid` is optional and the worker falls back to the caller's most
+    // recent thread, so a reader who has just landed can ask without one.
+    // D778 part 11: `headers` is the press's own rail context (`railPressHeaders`).
+    ask: (question, sessionUid, headers) => request('/research/ask', {
+      ...(headers ? { headers } : {}),
+      method: 'POST',
+      body: JSON.stringify(sessionUid ? { question, session_uid: sessionUid } : { question }),
+    }),
+    // Ask's thread (migration 221). `scope` is the header chip: 'session' for
+    // `This session`, 'all' for `All history`, 'saved' for the ops row's
+    // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
+    // back, in the page, because both are predicates over `reason` and
+    // `citations` rather than a different read.
+    // #4610: `cursor` and `limit`. The history is paginated, with `totals`
+    // covering the whole selected scope and `next_cursor`/`has_more` saying
+    // whether more of it exists — a caller passing neither gets the first page,
+    // which for every scope is the NEWEST rows.
+    askSessions: (scope = 'session', sessionUid, opts = {}) => {
+      const q = new URLSearchParams({
+        scope,
+        ...(sessionUid ? { session: sessionUid } : {}),
+        ...(opts.cursor ? { cursor: String(opts.cursor) } : {}),
+        ...(opts.limit != null ? { limit: String(opts.limit) } : {}),
+      }).toString();
+      return request(`/research/ask/sessions?${q}`);
+    },
+    askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
+    }),
+
+    // The AI band every Research and Network artboard ends with (migration
+    // 221). `surface` is the zone key and is allow-listed in the worker, so a
+    // page that has not mounted the band cannot spend on it.
+    // `scopeKey` narrows the read to one record's drafts (one data room), so a
+    // page about one record never shows a draft written about another.
+    zoneDrafts: (surface, scopeKey) => request(`/research/drafts?surface=${encodeURIComponent(surface)}${
+      scopeKey !== undefined ? `&scope_key=${encodeURIComponent(scopeKey)}` : ''}`),
+    // `page` is the app path the band sits on (D510). The worker records it as
+    // the run's `surface`, as the rail's read-back does (D404), so a band's
+    // runs count towards "This page this month"; it is a path, never content.
+    // D778 part 3: `headers` are the press's own rail context, taken on the click (ZoneDraft).
+    zoneDraftRun: (surface, scopeKey, page, headers) => request('/research/drafts', {
+      method: 'POST',
+      ...(headers ? { headers } : {}),
+      body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}), ...railBody() }),
+    }),
+    // Accept, having optionally edited first — one write, because editing then
+    // accepting is the same act with a different body.
+    zoneDraftAccept: (uid, body) => request(`/research/drafts/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(body ? { body } : {}),
+    }),
+    zoneDraftDiscard: (uid) => request(`/research/drafts/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // The firm's own half of a client brief (migration 222). `project` is the
+    // project uid; the worker checks a live grant before it writes, so a firm
+    // that never held one cannot keep a file on that founder here.
+    briefNotes: (projectUid) => request(`/research/brief-notes?project=${encodeURIComponent(projectUid)}`),
+    briefNoteCreate: (projectUid, section, body) => request('/research/brief-notes', {
+      method: 'POST', body: JSON.stringify({ project: projectUid, section, body }),
+    }),
+    briefNoteSetOpen: (uid, open) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify({ open: !!open }),
+    }),
+    briefNoteRemove: (uid) => request(`/research/brief-notes/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // `Attach to proposal`, shared by Client prep and Market. `kind` is
+    // 'brief' | 'reading' and `ref_key` is whatever that zone calls its thing.
+    attachments: (kind) => request(`/research/attachments?kind=${encodeURIComponent(kind)}`),
+    attach: (kind, refKey, quoteId) => request('/research/attachments', {
+      method: 'POST', body: JSON.stringify({ kind, ref_key: refKey, quote_id: quoteId }),
+    }),
+    detach: (uid) => request(`/research/attachments/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // Comparable ranges for the firm's own service lines (migration 223). The
+    // list is the catalog joined to the newest reading for each, so a service
+    // line nobody has priced the market for comes back with nulls rather than
+    // being left out — that row is what the zone is about.
+    marketReadings: () => request('/research/market-readings'),
+    marketReadingGet: (uid) => request(`/research/market-readings/${encodeURIComponent(uid)}`),
+    marketReadingCreate: (data) => request('/research/market-readings', {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    marketReadingRemove: (uid) => request(`/research/market-readings/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // Funds — founder-facing fund research (migration 216). Every read is
+    // owner-scoped in the worker; there is no cross-user listing to call.
+    // Sheet sync is Super Admin only (`requireSuperAdmin` on the worker).
+    funds: () => request('/research/funds'),
+    fundCreate: (data) => request('/research/funds', { method: 'POST', body: JSON.stringify(data || {}) }),
+    fundGet: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`),
+    fundUpdate: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+    fundRemove: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    fundReports: (uid) => request(`/research/funds/${encodeURIComponent(uid)}/reports`),
+    fundReportSave: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}/reports`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    fundReportRemove: (uid, reportUid) => request(`/research/funds/${encodeURIComponent(uid)}/reports/${encodeURIComponent(reportUid)}`, { method: 'DELETE' }),
+    fundSheetStatus: () => request('/research/funds/sheet/status'),
+    fundSheetConnect: () => request('/research/funds/sheet/connect', { method: 'POST' }),
+    fundSheetDisconnect: () => request('/research/funds/sheet', { method: 'DELETE' }),
+    fundSheetLink: (url) => request('/research/funds/sheet/link', {
+      method: 'PATCH', body: JSON.stringify({ url }),
+    }),
+    fundSheetPull: () => request('/research/funds/sheet/pull', { method: 'POST' }),
+    fundSheetPush: () => request('/research/funds/sheet/push', { method: 'POST' }),
+
+    companyDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/company-directory${qs ? `?${qs}` : ''}`);
+    },
+    companyDirectoryGet: (uid) => request(`/research/company-directory/${encodeURIComponent(uid)}`),
+    marketDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/market-directory${qs ? `?${qs}` : ''}`);
+    },
+    marketDirectoryGet: (slug) => request(`/research/market-directory/${encodeURIComponent(slug)}`),
+    fundDirectory: (params = {}) => {
+      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+      return request(`/research/fund-directory${qs ? `?${qs}` : ''}`);
+    },
+    fundDirectoryGet: (uid) => request(`/research/fund-directory/${encodeURIComponent(uid)}`),
+
+    // Benchmarks (migration 217). A peer figure without its source and sample
+    // size is refused by the route AND by the schema's CHECK.
+    benchmarks: () => request('/research/benchmarks'),
+    benchmarkCreate: (data) => request('/research/benchmarks', { method: 'POST', body: JSON.stringify(data || {}) }),
+    benchmarkRemove: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    // One benchmark and its named constituents (D314, migration 303). The edit
+    // is re-validated against 217's CHECK on the merged row, so a peer figure
+    // without its source and sample is refused as `peer_base_required`.
+    benchmarkGet: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`),
+    benchmarkUpdate: (uid, patch) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(patch || {}),
+    }),
+    benchmarkConstituentAdd: (uid, data) => request(`/research/benchmarks/${encodeURIComponent(uid)}/constituents`, {
+      method: 'POST', body: JSON.stringify(data || {}),
+    }),
+    benchmarkConstituentRemove: (uid, cuid) => request(
+      `/research/benchmarks/${encodeURIComponent(uid)}/constituents/${encodeURIComponent(cuid)}`, { method: 'DELETE' },
+    ),
+
+    // Diligence — no store of its own. Room access assembled from the grants
+    // this investor already holds.
+    diligence: () => request('/research/diligence'),
+    // One room and one document in it, keyed by the grant the investor holds.
+    // A grant they do not hold is a 404 (`room_not_found`), the same as one
+    // that does not exist; a document behind an NDA they have not signed is a
+    // 403 (`nda_required`) that carries the room and nothing about the file.
+    diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
+    diligenceFile: (grantUid, fileUid) =>
+      request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
+  },
+};
+
+// Task #3 — Due Diligence module. Admin/partner/investor/advisor only;
+// founders are blocked at the worker level (any 403 surfaces directly).
+export const dd = {
+  catalog: () => request('/dd/catalog'),
+  listCases: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/dd/cases${q ? `?${q}` : ''}`);
+  },
+  openCase: (data) => request('/dd/cases', { method: 'POST', body: JSON.stringify(data) }),
+  getCase: (uid) => request(`/dd/cases/${uid}`),
+  scan: (uid, connectors) => request(`/dd/cases/${uid}/scan`, { method: 'POST', body: JSON.stringify({ connectors }) }),
+  assignSection: (uid, sectionId, userId) =>
+    request(`/dd/cases/${uid}/sections/${sectionId}/assign`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  setVerdict: (uid, sectionId, verdict, reviewerNotes) =>
+    request(`/dd/cases/${uid}/sections/${sectionId}/verdict`, {
+      method: 'POST',
+      body: JSON.stringify({ verdict, reviewer_notes: reviewerNotes }),
+    }),
+  experts: (sectionKey) => request(`/dd/experts${sectionKey ? `?section_key=${encodeURIComponent(sectionKey)}` : ''}`),
+  recompute: (uid) => request(`/dd/cases/${uid}/recompute`, { method: 'POST' }),
+  generateReport: (uid) => request(`/dd/cases/${uid}/report`, { method: 'POST' }),
+  shareReport: (uid) => request(`/dd/cases/${uid}/report/share`, { method: 'POST' }),
+  audit: (uid) => request(`/dd/cases/${uid}/audit`),
+  acceptInvite: (uid, jti) => request(`/dd/cases/${uid}/reviewer-invite/${jti}`, { method: 'POST' }),
+  uploadNda: (uid, sectionId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/dd/cases/${uid}/sections/${sectionId}/nda`, { method: 'POST', body: fd });
+  },
+  // Build queue #128 — working checklists + information requests.
+  updateItem: (uid, itemId, patch) =>
+    request(`/dd/cases/${uid}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  createRequest: (uid, data) =>
+    request(`/dd/cases/${uid}/requests`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewRequest: (uid, id) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'reviewed' }) }),
+  // D1248 (#3263) — due dates, reminders, withdraw, item evidence and document links.
+  setRequestDue: (uid, id, dueDate) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ due_date: dueDate || null }) }),
+  remindRequest: (uid, id) => request(`/dd/cases/${uid}/requests/${id}/remind`, { method: 'POST' }),
+  withdrawRequest: (uid, id, reason) =>
+    request(`/dd/cases/${uid}/requests/${id}/withdraw`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) }),
+  addEvidenceLink: (uid, itemId, url, label) =>
+    request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: JSON.stringify({ url, label }) }),
+  addEvidenceFile: (uid, itemId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: fd });
+  },
+  /** A single-use, two-minute link for the caller alone: `kind` is `attachment` or `request_file`. */
+  documentLink: (uid, kind, id) =>
+    request(`/dd/cases/${uid}/documents/download`, { method: 'POST', body: JSON.stringify({ kind, id }) }),
+  // Subject-facing surface: the ONLY dd calls a founder may make. The
+  // payload carries no case internals — see routes/dd.ts invariant.
+  myRequests: () => request('/dd/requests/mine'),
+  respondRequest: (id, data) =>
+    request(`/dd/requests/${id}/respond`, { method: 'PATCH', body: JSON.stringify(data) }),
+};
+
+// Task #2 (AU) — Admin Publication Exports.
+export const publications = {
+  list: (status) => request(`/admin/publications${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  get: (id) => request(`/admin/publications/${id}`),
+  draft: (payload) => request('/admin/publications/draft', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/publications/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  // Render returns the artifact bytes directly (PDF/CSV/PNG) with the
+  // shareable 24h HMAC link in the `X-Download-URL` response header.
+  // We trigger an immediate browser download via an object URL and
+  // surface the shareable link to the caller for "copy share URL" UX.
+  render: async (id, format) => {
+    const res = await fetch(`/api/admin/publications/${id}/render`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ format }),
+    });
+    if (!res.ok) throw await refusalError(res, `Render failed (${res.status})`);
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    // Trigger download with a server-derived filename so the user gets
+    // the slug-based name (e.g. q2-sector-heat-brief.pdf), not a UUID.
+    const cd = res.headers.get('content-disposition') || '';
+    const m = /filename="?([^"]+)"?/i.exec(cd);
+    const filename = m ? m[1] : `publication-${id}.${format}`;
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    return {
+      format: res.headers.get('x-render-format') || format,
+      filename,
+      download_url: res.headers.get('x-download-url') || null,
+      expires_in_seconds: parseInt(res.headers.get('x-download-expires-in') || '0', 10) || null,
+      blob_size: blob.size,
+    };
+  },
+  publish: (id) => request(`/admin/publications/${id}/publish`, { method: 'POST', body: JSON.stringify({}) }),
+  // Public read uses /api/market-intel-public so it sits OUTSIDE the
+  // /api/admin/* CF Access perimeter — anonymous visitors must be able
+  // to load /insights/public/:slug without an Axal session.
+  publicGet: (slug) => request(`/market-intel-public/publications/${slug}`),
+  // Task #6 (ID) — Public index of published insights for /insights.
+  publicList: () => request('/market-intel-public/publications'),
+};
+
+// Task #10 (LD) — Admin team roster (Public /team page lives on axal.vc).
+export const adminTeam = {
+  list: () => request('/admin/team'),
+  create: (payload) => request('/admin/team', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/team/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  remove: (id) => request(`/admin/team/${id}`, { method: 'DELETE' }),
+  uploadPhoto: (id, dataUri) =>
+    request(`/admin/team/${id}/photo`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  reorder: (order) => request('/admin/team/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+};
+
+// Task #9 — Admin review queue for 'exploring' users (chat-onboarded,
+// awaiting binding agreement + final role assignment).
+export const adminExploring = {
+  list: ({ limit = 100, offset = 0 } = {}) =>
+    request(`/admin/exploring/users?limit=${limit}&offset=${offset}`),
+  sendBinding: (userId, payload = {}) =>
+    request(`/admin/exploring/users/${userId}/binding`, { method: 'POST', body: JSON.stringify(payload) }),
+  assignRole: (userId, role) =>
+    request(`/admin/exploring/users/${userId}/assign-role`, { method: 'POST', body: JSON.stringify({ role }) }),
+};
+
+// Task #1 — Admin advisor & partner network profiles (drives Spin-Out
+// Demo Day deck's Advisors & Network slide).
+export const adminNetworkProfiles = {
+  // D974: `{ state: 'shown' | 'hidden' | 'archived', q, limit }`; with no
+  // state the Worker lists shown and hidden rows.
+  list: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['state', 'q', 'limit']) if (params[k] != null && params[k] !== '') qs.set(k, String(params[k]));
+    const tail = qs.toString();
+    return request(`/admin/network-profiles${tail ? `?${tail}` : ''}`);
+  },
+  archive: (id) => request(`/admin/network-profiles/${id}/archive`, { method: 'POST' }),
+  restore: (id) => request(`/admin/network-profiles/${id}/restore`, { method: 'POST' }),
+  create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),
+  uploadPhoto: (id, dataUri) =>
+    request(`/admin/network-profiles/${id}/photo`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  reorder: (order) => request('/admin/network-profiles/reorder', { method: 'POST', body: JSON.stringify({ order }) }),
+};
+
+// Task #3 — Admin Telegram channels + posts + aggregator.
+export const adminTelegram = {
+  // Channels
+  listChannels: () => request('/admin/telegram/channels'),
+  createChannel: (payload) =>
+    request('/admin/telegram/channels', { method: 'POST', body: JSON.stringify(payload) }),
+  updateChannel: (id, patch) =>
+    request(`/admin/telegram/channels/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removeChannel: (id) =>
+    request(`/admin/telegram/channels/${id}`, { method: 'DELETE' }),
+  testChannel: (id) =>
+    request(`/admin/telegram/channels/${id}/test`, { method: 'POST', body: '{}' }),
+  // Posts
+  listPosts: ({ status, channel_id, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (channel_id) qs.set('channel_id', String(channel_id));
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/telegram/posts?${qs.toString()}`);
+  },
+  getPost: (id) => request(`/admin/telegram/posts/${id}`),
+  createPost: (payload) =>
+    request('/admin/telegram/posts', { method: 'POST', body: JSON.stringify(payload) }),
+  updatePost: (id, patch) =>
+    request(`/admin/telegram/posts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removePost: (id) =>
+    request(`/admin/telegram/posts/${id}`, { method: 'DELETE' }),
+  uploadMedia: (id, dataUri) =>
+    request(`/admin/telegram/posts/${id}/media`, {
+      method: 'POST',
+      body: JSON.stringify({ data_uri: dataUri }),
+    }),
+  lintPost: (id) =>
+    request(`/admin/telegram/posts/${id}/lint`, { method: 'POST', body: '{}' }),
+  sendPost: (id, { override_reason } = {}) =>
+    request(`/admin/telegram/posts/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(override_reason ? { override_reason } : {}),
+    }),
+  schedulePost: (id, scheduled_for) =>
+    request(`/admin/telegram/posts/${id}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify({ scheduled_for }),
+    }),
+  // Aggregator
+  previewAggregator: ({ kind, period_days = 7 } = {}) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    qs.set('period_days', String(period_days));
+    return request(`/admin/telegram/aggregator/preview?${qs.toString()}`);
+  },
+  runAggregator: ({ period_days = 7 } = {}) =>
+    request('/admin/telegram/aggregator/run', {
+      method: 'POST',
+      body: JSON.stringify({ period_days }),
+    }),
+};
+
+// Task #4 — Admin X (Twitter) accounts + posts + aggregator.
+export const adminX = {
+  // Accounts
+  listAccounts: () => request('/admin/x/accounts'),
+  createAccount: (payload) =>
+    request('/admin/x/accounts', { method: 'POST', body: JSON.stringify(payload) }),
+  updateAccount: (id, patch) =>
+    request(`/admin/x/accounts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removeAccount: (id) => request(`/admin/x/accounts/${id}`, { method: 'DELETE' }),
+  testAccount: (id) => request(`/admin/x/accounts/${id}/test`, { method: 'POST', body: '{}' }),
+  oauthStart: (account_id) =>
+    request(`/admin/x/oauth/start?account_id=${encodeURIComponent(account_id)}`),
+  // Posts
+  listPosts: ({ status, account_id, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (account_id) qs.set('account_id', String(account_id));
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/x/posts?${qs.toString()}`);
+  },
+  createPost: (payload) =>
+    request('/admin/x/posts', { method: 'POST', body: JSON.stringify(payload) }),
+  updatePost: (id, patch) =>
+    request(`/admin/x/posts/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  removePost: (id) => request(`/admin/x/posts/${id}`, { method: 'DELETE' }),
+  addMedia: (id, data_uri, alt_text) =>
+    request(`/admin/x/posts/${id}/media`, {
+      method: 'POST',
+      body: JSON.stringify(alt_text ? { data_uri, alt_text } : { data_uri }),
+    }),
+  // D780 part 2: generating proposes (`proposal`), and writes nothing to the post.
+  generateAltText: (id, index = 0) =>
+    request(`/admin/x/posts/${id}/alt-text`, {
+      method: 'POST', body: JSON.stringify({ index }),
+    }),
+  // D780 part 2: the Super Admin's Save of one image's alt text; `proposal_uid` names the proposal it began as.
+  saveAltText: (id, index, alt_text, proposal_uid) =>
+    request(`/admin/x/posts/${id}/alt-text`, {
+      method: 'PUT', body: JSON.stringify(proposal_uid ? { index, alt_text, proposal_uid } : { index, alt_text }),
+    }),
+  lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
+  // D780: Approve keeps the captions Eadwyn proposed that the composer still offers.
+  approvePost: (id, altTextProposalUids = []) => request(`/admin/x/posts/${id}/approve`, {
+    method: 'POST', body: JSON.stringify(altTextProposalUids.length ? { alt_text_proposal_uids: altTextProposalUids } : {}),
+  }),
+  sendPost: (id, { override_reason } = {}) =>
+    request(`/admin/x/posts/${id}/send`, {
+      method: 'POST',
+      body: JSON.stringify(override_reason ? { override_reason } : {}),
+    }),
+  resolvePost: (id, outcome) => request(`/admin/x/posts/${id}/resolve`, {
+    method: 'POST', body: JSON.stringify(outcome),
+  }),
+  schedulePost: (id, scheduled_for) =>
+    request(`/admin/x/posts/${id}/schedule`, {
+      method: 'POST', body: JSON.stringify({ scheduled_for }),
+    }),
+  retractPost: (id, reason) =>
+    request(`/admin/x/posts/${id}/retract`, {
+      method: 'POST', body: JSON.stringify(reason ? { reason } : {}),
+    }),
+  // Aggregator
+  previewAggregator: ({ kind, period_days = 7 } = {}) => {
+    const qs = new URLSearchParams();
+    if (kind) qs.set('kind', kind);
+    qs.set('period_days', String(period_days));
+    return request(`/admin/x/aggregator/preview?${qs.toString()}`);
+  },
+  runAggregator: ({ account_id, period_days = 7 }) =>
+    request('/admin/x/aggregator/run', {
+      method: 'POST',
+      body: JSON.stringify({ account_id, period_days }),
+    }),
+};
+
+// Task #2 — News (author + admin queue).
+export const news = {
+  // Public
+  list: ({ limit = 20, offset = 0, sector, tag } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (sector) qs.set('sector', sector);
+    if (tag) qs.set('tag', tag);
+    return request(`/news?${qs.toString()}`);
+  },
+  read: (slug) => request(`/news/${encodeURIComponent(slug)}`),
+  // Author
+  trustMe: () => request('/news/trust/me'),
+  mine: () => request('/news/mine'),
+  draft: (id) => request(`/news/draft/${id}`),
+  createDraft: (payload) =>
+    request('/news/draft', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDraft: (id, patch) =>
+    request(`/news/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  submit: (id) => request(`/news/${id}/submit`, { method: 'POST', body: '{}' }),
+  retract: (id) => request(`/news/${id}/retract`, { method: 'POST', body: '{}' }),
+  uploadCover: (id, dataUri) =>
+    request(`/news/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+};
+
+// Task #1 — Articles (author + admin queue). Mirrors `news` but uses
+// the /api/articles surface (role filter, by-author endpoint, sectors).
+export const articles = {
+  // Public
+  sectors: () => request('/articles/sectors'),
+  list: ({ limit = 20, offset = 0, sector, tag, role, q, featured } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (sector) qs.set('sector', sector);
+    if (tag) qs.set('tag', tag);
+    if (role) qs.set('role', role);
+    if (q) qs.set('q', q);
+    if (featured) qs.set('featured', '1');
+    return request(`/articles?${qs.toString()}`);
+  },
+  byAuthor: (userId, { limit = 20, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/articles/by-author/${userId}?${qs.toString()}`);
+  },
+  authorProfile: (userId) => request(`/public/authors/${userId}`),
+  read: (slug) => request(`/articles/${encodeURIComponent(slug)}`),
+  // Author
+  trustMe: () => request('/articles/trust/me'),
+  mine: () => request('/articles/mine'),
+  draft: (id) => request(`/articles/draft/${id}`),
+  createDraft: (payload) =>
+    request('/articles/draft', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDraft: (id, patch) =>
+    request(`/articles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
+  submit: (id) => request(`/articles/${id}/submit`, { method: 'POST', body: '{}' }),
+  retract: (id) => request(`/articles/${id}/retract`, { method: 'POST', body: '{}' }),
+  // D1293 — the author answers an admin's review comment on their own article.
+  replyToComment: (id, cid, body) =>
+    request(`/articles/${id}/comments/${cid}/replies`, { method: 'POST', body: JSON.stringify({ body }) }),
+  uploadCover: (id, dataUri) =>
+    request(`/articles/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  uploadImage: (id, dataUri) =>
+    request(`/articles/${id}/image`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  // D1406 — the author's (or an admin's) revision history: newest first, at most 50,
+  // → { revisions: [{ rev, title, status_at_save, reason, saved_by_name, created_at }] };
+  // and one revision with its text → { revision }. A support session is refused 403.
+  revisions: (id) => request(`/articles/${id}/revisions`),
+  revision: (id, rev) => request(`/articles/${id}/revisions/${rev}`),
+};
+
+export const adminArticles = {
+  // D1291: `status` is one raw status, as before; `stage` adds ready and
+  // scheduled (and `open`, `calendar`, `all`). Search `q`, filters `author`,
+  // `profile`, `sector`, `reviewer`, `submitted_from`, `submitted_to`,
+  // `open_comments` (1 or 0), `sort` (waiting, newest, goes_out, rounds,
+  // title) and the calendar's `from`/`to`. Empty values are left out.
+  // → { items, total, limit, offset, counts, publications? }
+  queue: ({ status, limit = 50, offset = 0, ...filters } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    for (const k of ['stage', 'q', 'author', 'profile', 'sector', 'reviewer', 'submitted_from', 'submitted_to', 'open_comments', 'sort', 'from', 'to']) {
+      const v = filters[k];
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/articles/queue?${qs.toString()}`);
+  },
+  get: (id) => request(`/admin/articles/${id}`),
+  startReview: (id) => request(`/admin/articles/${id}/start-review`, { method: 'POST', body: '{}' }),
+  requestChanges: (id, reason) =>
+    request(`/admin/articles/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  reject: (id, reason) =>
+    request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D1292 — an admin deciding their own article is refused; a Super Admin sends `override_reason`.
+  approve: (id, overrideReason) =>
+    request(`/admin/articles/${id}/approve`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
+  publish: (id, overrideReason) =>
+    request(`/admin/articles/${id}/publish`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
+  // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
+  schedule: (id, publishAt) =>
+    request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
+  // D1293 — the reason (at least eight characters) is the author's to read.
+  unpublish: (id, reason) =>
+    request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D1293 — Super Admin only, at most three at a time.
+  feature: (id, featured) =>
+    request(`/admin/articles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  revision: (id, rev) => request(`/admin/articles/${id}/revisions/${rev}`),
+  // D1293 — `parentId` answers a thread instead of starting one.
+  addComment: (id, body, anchor, parentId) =>
+    request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify(parentId ? { body, parent_id: parentId } : { body, anchor }) }),
+  resolveComment: (cid, resolved) =>
+    request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
+  deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
+  // D1294 — Authors and Performance: per-author counts, and views by week from the daily count (migration 637).
+  authors: () => request('/admin/articles/authors'),
+  performance: ({ from, to } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    const q = qs.toString();
+    return request(`/admin/articles/performance${q ? `?${q}` : ''}`);
+  },
+};
+
+// Spin-Out Lab — 4-week guided sprint, gated on evidence. Open to founders
+// with or without an entity already.
+// Namespaced separately from `api` to keep the surface small and obvious
+// for the call sites that wire milestone completion in feature pages.
+export const spinoutLab = {
+  state: () => request('/spinout-lab/state').then(rememberLabVenture),
+  start: () => request('/spinout-lab/start', { method: 'POST' }),
+  // D4659: name which of your own projects is the Lab venture.
+  chooseVenture: (project_id) =>
+    request('/spinout-lab/venture', { method: 'POST', body: JSON.stringify({ project_id }) }),
+  complete: (milestone_key) =>
+    request('/spinout-lab/milestone', {
+      method: 'POST',
+      body: JSON.stringify({ milestone_key }),
+    }),
+  exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+
+  // Public — real graduate companies for the "Graduate companies." section
+  // (renders on the logged-out marketing page too).
+  graduates: () => request('/spinout-lab/graduates'),
+  // Public — live "Active cohort." tracker members (same two surfaces).
+  cohort: () => request('/spinout-lab/cohort'),
+  // Public — real hero stats (companies built, total raised by graduates).
+  stats: () => request('/spinout-lab/stats'),
+  // Public — the six live values the Programme Brief prints, and only those
+  // (D141). The brief's tracks, tools, gates and jurisdictions are the
+  // programme's own description and come from `lib/spinoutBrief.js` and
+  // `lib/spinoutLabArsenal.js`; a route serving those too would be a store
+  // invented so a page could look dynamic.
+  brief: () => request('/spinout-lab/brief'),
+  // D383 — the caller's own application lifecycle. No id in any path: each
+  // acts on the signed-in account's draft or latest application only.
+  applyDraft: () => request('/spinout-lab/apply/draft'),
+  saveApplyDraft: (answers) => request('/spinout-lab/apply/draft', { method: 'PUT', body: JSON.stringify({ answers }) }),
+  discardApplyDraft: () => request('/spinout-lab/apply/draft', { method: 'DELETE' }),
+  withdrawApplication: () => request('/spinout-lab/apply/withdraw', { method: 'POST' }),
+  requestInterviewReschedule: (reason) => request('/spinout-lab/apply/interview/reschedule', { method: 'POST', body: JSON.stringify({ reason }) }),
+  // Signed in only — which cohort companies cleared which gate, and when.
+  // Deliberately gate-level and not milestone-level: `week` is already public
+  // on /cohort, so this adds a timestamp to a transition whose state is
+  // published, whereas individual milestones ("83(b) filed", "raise ask
+  // locked") are material facts about a private company that nobody consented
+  // to publish. The logged-out intro states that limit instead of calling it.
+  shipped: () => request('/spinout-lab/shipped'),
+  // Cohort application — signed-in founders only; contact info comes from
+  // the account. Sends a confirmation email (production Worker).
+  apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
+  // Auth'd — live program track record + Spin-Out Fund raise progress for the
+  // LP & Investor Workspace. Blocks carry `available`; the workspace falls
+  // back to its operator-maintained model when a block is not.
+  fundMetrics: () => request('/spinout-lab/fund-metrics'),
+  // LP request-for-access. `lpApplication()` returns { application } (null when
+  // the caller has never applied); `submitLpApplication(body)` upserts the
+  // caller's own row and returns the stored result. An application is an
+  // expression of interest, NOT an entitlement — it moves the workspace's
+  // access ladder from 'visitor' to 'pending', and 'pending' unlocks nothing.
+  lpApplication: () => request('/spinout-lab/lp-application'),
+
+  // GP application review (admin only). The queue returns every application
+  // for the fund plus per-status counts computed BEFORE filtering, so the tab
+  // badges stay stable while the reviewer switches views.
+  adminLpApplications: (fund) =>
+    request(`/admin/lp-applications${fund ? `?fund=${encodeURIComponent(fund)}` : ''}`),
+  adminLpApplicationReview: (id, body) =>
+    request(`/admin/lp-applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  submitLpApplication: (body) =>
+    request('/spinout-lab/lp-application', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// Task #39 — Event engine. `events` covers the authenticated host/attendee
+// surface (§8.1); `eventsPublic` the no-auth, Turnstile-gated public surface
+// (§8.2); `adminEvents` the admin review queue (§8.3).
+export const events = {
+  // Caller's events (hosting + attending) + CRUD
+  mine: () => request('/events'),
+  get: (id) => request(`/events/${id}`),
+  create: (payload) => request('/events', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  submitReview: (id) => request(`/events/${id}/submit-review`, { method: 'POST', body: '{}' }),
+  // Registration (self)
+  eligibility: (id) => request(`/events/${id}/eligibility`),
+  register: (id, answers) =>
+    request(`/events/${id}/register`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  cancelRegistration: (id) => request(`/events/${id}/registration`, { method: 'DELETE' }),
+  // Host: invitations + roster + registration actions
+  invite: (id, { user_ids, emails, message } = {}) =>
+    request(`/events/${id}/invitations`, { method: 'POST', body: JSON.stringify({ user_ids, emails, message }) }),
+  roster: (id) => request(`/events/${id}/roster`),
+  approveRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/approve`, { method: 'POST', body: '{}' }),
+  declineRegistration: (id, rid, reason) => request(`/events/${id}/registrations/${rid}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  promoteRegistration: (id, rid) => request(`/events/${id}/registrations/${rid}/promote`, { method: 'POST', body: '{}' }),
+  checkin: (id, code) => request(`/events/${id}/checkin/${encodeURIComponent(code)}`, { method: 'POST', body: '{}' }),
+  icsUrl: (id) => `/api/events/${id}/ics`,
+  exportUrl: (id) => `/api/events/${id}/export`,
+  // Agenda
+  agenda: (id) => request(`/events/${id}/agenda`),
+  addAgendaItem: (id, item) => request(`/events/${id}/agenda`, { method: 'POST', body: JSON.stringify(item) }),
+  updateAgendaItem: (id, aid, patch) => request(`/events/${id}/agenda/${aid}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  reorderAgenda: (id, item_ids) => request(`/events/${id}/agenda/reorder`, { method: 'POST', body: JSON.stringify({ item_ids }) }),
+  deleteAgendaItem: (id, aid) => request(`/events/${id}/agenda/${aid}`, { method: 'DELETE' }),
+};
+
+// Public (no-auth) event surface — feed, detail, register, invite response.
+export const eventsPublic = {
+  // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (type) qs.set('type', type);
+    if (format) qs.set('format', format);
+    if (price) qs.set('price', price);
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    if (q) qs.set('q', q);
+    if (past) qs.set('past', '1');
+    return request(`/public/events?${qs.toString()}`);
+  },
+  read: (slug) => request(`/public/events/${encodeURIComponent(slug)}`),
+  register: (slug, { name, email, turnstile_token, answers } = {}) =>
+    request(`/public/events/${encodeURIComponent(slug)}/register`, {
+      method: 'POST',
+      body: JSON.stringify({ name, email, turnstile_token, answers }),
+    }),
+  invite: (token) => request(`/public/invite/${encodeURIComponent(token)}`),
+  respondInvite: (token, { action, turnstile_token, name } = {}) =>
+    request(`/public/invite/${encodeURIComponent(token)}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action, turnstile_token, name }),
+    }),
+  icsUrl: (slug) => slug ? `/api/public/events/${encodeURIComponent(slug)}/ics` : '/api/public/events.ics',
+};
+
+// Admin event review queue (§8.3).
+export const adminEvents = {
+  // D918: status takes one word or a list; the other filters and the sort are
+  // the Worker's words (visibility, type (D1121), when, price, featured, q, sort, dir).
+  list: ({ status, visibility, type, when, price, featured, q, sort, dir, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', Array.isArray(status) ? status.join(',') : status);
+    for (const [k, v] of Object.entries({ visibility, type, when, price, q, sort, dir })) if (v) qs.set(k, v);
+    if (featured != null) qs.set('featured', featured ? '1' : '0');
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/events?${qs.toString()}`);
+  },
+  overview: (weeks = 12) => request(`/admin/events/overview?weeks=${encodeURIComponent(weeks)}`),
+  summary: (id) => request(`/admin/events/${id}/summary`),
+  history: (id) => request(`/admin/events/${id}/history`),
+  compPreview: (id) => request(`/admin/events/${id}/comp-preview`),
+  get: (id) => request(`/admin/events/${id}`),
+  approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
+  reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D917: the host is told, with the optional note (D922 sends it).
+  unpublish: (id, note = '') => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
+  feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  // D917: registrants with an account are told, with the optional note (D922 sends it).
+  cancel: (id, note = '') => request(`/admin/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
+  // capacity: null clears the cap (unlimited). Promotes the waitlist server-side.
+  setCapacity: (id, capacity) =>
+    request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),
+  analytics: () => request('/admin/events/analytics'),
+};
+
+// Task #68 — Job Board. `jobs` covers the authenticated founder surface (post
+// roles, review-submit, applicant review); `jobsPublic` the no-auth,
+// Turnstile-gated public surface (feed, detail, apply); `adminJobs` the admin
+// review queue. Each path maps 1:1 to a /api/{jobs,public/jobs,admin/jobs}
+// route on the worker (api-drift guard verifies the prefixes).
+export const jobs = {
+  // Founder's own postings + CRUD
+  mine: () => request('/jobs'),
+  get: (id) => request(`/jobs/${id}`),
+  create: (payload) => request('/jobs', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  submitReview: (id) => request(`/jobs/${id}/submit-review`, { method: 'POST', body: '{}' }),
+  close: (id) => request(`/jobs/${id}/close`, { method: 'POST', body: '{}' }),
+  // Applicant review (founder/admin only — the sole PII surface)
+  applications: (id) => request(`/jobs/${id}/applications`),
+  // Mints a one-time signed resume download URL ({ url, expires_at }).
+  resume: (id, appId) => request(`/jobs/${id}/applications/${appId}/resume`),
+  // Caller's own applications across all postings.
+  myApplications: () => request('/jobs/my-applications'),
+};
+
+// Public (no-auth) job surface — feed, detail, apply (Turnstile-gated).
+export const jobsPublic = {
+  list: ({ limit = 20, offset = 0, employment_type, seniority, remote, q } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    if (employment_type) qs.set('employment_type', employment_type);
+    if (seniority) qs.set('seniority', seniority);
+    if (remote) qs.set('remote', '1');
+    if (q) qs.set('q', q);
+    return request(`/public/jobs?${qs.toString()}`);
+  },
+  read: (slug) => request(`/public/jobs/${encodeURIComponent(slug)}`),
+  apply: (slug, payload) =>
+    request(`/public/jobs/${encodeURIComponent(slug)}/apply`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+};
+
+// Admin job review queue.
+export const adminJobs = {
+  list: ({ status, limit = 50, offset = 0 } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    qs.set('limit', String(limit));
+    qs.set('offset', String(offset));
+    return request(`/admin/jobs?${qs.toString()}`);
+  },
+  get: (id) => request(`/admin/jobs/${id}`),
+  approve: (id) => request(`/admin/jobs/${id}/approve`, { method: 'POST', body: '{}' }),
+  reject: (id, reason) => request(`/admin/jobs/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  unpublish: (id) => request(`/admin/jobs/${id}/unpublish`, { method: 'POST', body: '{}' }),
+};
+
+// Task #9 — Communities & Circles. `circlesPublic` is the no-auth public feed
+// (published circles only); `adminCircles` the admin CRUD surface. Each path
+// maps 1:1 to a /api/{public/circles,admin/circles} route on the worker
+// (api-drift guard verifies the prefixes).
+export const circlesPublic = {
+  list: () => request('/public/circles'),
+};
+
+export const adminCircles = {
+  list: ({ status } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    const suffix = qs.toString();
+    return request(`/admin/circles${suffix ? `?${suffix}` : ''}`);
+  },
+  get: (id) => request(`/admin/circles/${id}`),
+  create: (payload) => request('/admin/circles', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id, patch) => request(`/admin/circles/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  publish: (id) => request(`/admin/circles/${id}/publish`, { method: 'POST', body: '{}' }),
+  unpublish: (id) => request(`/admin/circles/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  feature: (id, featured) => request(`/admin/circles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  remove: (id) => request(`/admin/circles/${id}`, { method: 'DELETE' }),
+};
+
+// Assessment results — read-only client for archetype/skill display (Profile &
+// Fit section, archetype badges). The gamified "Play & Discover" player surface
+// was removed; only the results endpoints remain. Maps to /api/assessment on the
+// worker (api-drift guard checks this prefix).
+export const assessment = {
+  myResults: () => request('/assessment/results/me'),
+  // D325 — the archetype card's Level / XP bar (GET /api/assessment/xp/me).
+  myXp: () => request('/assessment/xp/me'),
+  results: (userId) => request(`/assessment/results/${userId}`),
+};
+
+// Assessment Studio was removed at the owner's request (2026-10-21).
+// Branch Programs still reads the saved games and runs through these methods.
+export const adminAssessment = {
+  listGames: () => request('/admin/assessment/games'),
+  listSessions: (cycleId) => {
+    const q = new URLSearchParams();
+    if (cycleId !== undefined && cycleId !== null && String(cycleId) !== '') q.set('cycle', String(cycleId));
+    const s = q.toString();
+    return request(`/admin/assessment/sessions${s ? `?${s}` : ''}`);
+  },
+};

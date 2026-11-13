@@ -1,0 +1,41 @@
+You are the senior product engineer for Axal StudioOS. Build a comprehensive, role-aware **Settings page** (/settings.html) for all user types (Founders, Partners/Investors, Operators, Service Providers, Admins).
+
+Use the existing user profile system and role detection.
+
+Exact requirements:
+
+1. **Layout**
+   - Sidebar navigation with "Settings" highlighted
+   - Main content with tabs or clear sections: Profile, Notifications, Security, Preferences, Role-Specific
+
+2. **Common Sections**
+   - Profile: editable name, bio, avatar upload (R2), LinkedIn/Twitter/website
+   - Notifications: toggles for "New deals", "Voting requests", "Spin-out alerts", "Market Intelligence updates", etc.
+   - Security: change password, TOTP enable/disable, session management
+   - Referral & Payout: show referral code, edit payout method
+
+3. **Role-Specific Sections** (show only for the user's role)
+   - Founders: Startup visibility, PMF signal sharing preferences
+   - Partners/Investors: Deal flow preferences (sectors, stages, check size), investment thesis editor
+   - Operators/Advisors: Availability (hours/week), expertise tags, Studio Ops preferences
+   - Service Providers: Services offered, pricing tiers, availability
+
+4. **Backend**
+   - Create or extend `backend/routers/settings.py`
+   - GET /api/settings → return all user settings by role
+   - PATCH /api/settings → update any field (profile, notifications, role-specific)
+
+5. **Integration**
+   - Link from sidebar in Partner Dashboard, Founder Portal, and Admin Console
+   - Avatar upload uses existing R2 helper
+   - Changes should immediately reflect in profile and matching/voting systems
+
+Build this step-by-step:
+1. First create the backend router and API endpoints for settings.
+2. Then build the full /settings.html page with all sections and role-based visibility.
+3. Then connect the page to the existing sidebar navigation.
+4. Finally test with different user roles (Founder, Partner, Operator).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

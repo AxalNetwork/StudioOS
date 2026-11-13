@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+  .tnum{font-variant-numeric:tabular-nums}
+  a{color:#6B46C1;text-decoration:none}
+  a:hover{color:#553C9A}
+  input,textarea,select{font-family:inherit}
+  ::-webkit-scrollbar{height:8px;width:8px}
+  ::-webkit-scrollbar-thumb{background:#CBD5E0;border-radius:8px}
+  @keyframes pdFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes pdOverlay{from{opacity:0}to{opacity:1}}
+  @keyframes pdSheet{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+  .pd-thumb{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;background:#F1F0F5;border-bottom:1px solid #EDF2F7;container-type:inline-size}
+  .pd-thumb-mount{position:absolute;top:0;left:0;width:1280px;height:720px;transform:scale(calc(100cqw / 1280px));transform-origin:top left}
+  .pd-editframe{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;box-shadow:0 20px 50px -18px rgba(30,27,58,.4);container-type:inline-size}
+  .pd-editframe-mount{position:absolute;top:0;left:0;width:1280px;height:720px;transform:scale(calc(100cqw / 1280px));transform-origin:top left}
+  .pd-src:hover{color:#553C9A}
+  @media (max-width:1080px){.pd-sidebar{display:none!important}.pd-main{padding-left:0!important}}
+  @media (max-width:1180px){.pd-split{grid-template-columns:1fr!important}}
+  @media (max-width:900px){.pd-grid{grid-template-columns:repeat(2,1fr)!important}}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:#F8F8FA">
+
+  <!-- SIDEBAR -->
+  <aside class="pd-sidebar" style="width:256px;flex:none;position:fixed;inset:0 auto 0 0;background:#fff;border-right:1px solid #E2E8F0;display:flex;flex-direction:column;z-index:20">
+    <div style="height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid #EDF2F7">
+      <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#8b5cf6,#6B46C1);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px">M</div>
+      <div style="font-weight:700;font-size:15px;letter-spacing:-.01em">Meridian</div>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:14px 12px">
+      <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="3">
+        <div style="margin-bottom:18px">
+          <div style="font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#A0AEC0;padding:0 10px;margin-bottom:6px">{{ group.label }}</div>
+          <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="4">
+            <div style="{{ item.style }}">
+              <span style="width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+              <span>{{ item.name }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="flex:none;padding:12px;border-top:1px solid #EDF2F7;display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#EDE9FE;color:#6B46C1;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">GL</div>
+      <div style="line-height:1.2"><div style="font-size:13px;font-weight:600">Guillaume L.</div><div style="font-size:11px;color:#A0AEC0">NovaCraft AI</div></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="pd-main" style="flex:1;min-width:0;padding-left:256px">
+    <header style="height:60px;position:sticky;top:0;z-index:15;background:rgba(248,248,250,.85);backdrop-filter:blur(8px);border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;padding:0 28px">
+      <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;color:#718096">
+        <span style="font-weight:600;color:#4A5568">Spin-Out Lab</span><span style="color:#CBD5E0">/</span><span style="font-weight:600;color:#1A202C">Pitch Deck Builder</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:12px;font-weight:600;color:#6B46C1;background:#EDE9FE;border-radius:7px;padding:5px 10px">Axal VC Spin-Out</span>
+        <div style="width:34px;height:34px;border-radius:50%;background:#EDE9FE;color:#6B46C1;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">GL</div>
+      </div>
+    </header>
+
+    <!-- ============ GRID VIEW ============ -->
+    <sc-if value="{{ isGrid }}" hint-placeholder-val="{{ true }}">
+    <main style="max-width:1280px;margin:0 auto;padding:28px 28px 80px">
+
+      <!-- BANNER -->
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:24px 26px;box-shadow:0 1px 2px rgba(0,0,0,.04);margin-bottom:28px">
+        <div style="display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:flex-start">
+          <div style="min-width:280px;flex:1">
+            <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Your Pitch Deck</h1>
+            <p style="margin:6px 0 16px;font-size:14px;color:#718096">Auto-assembled from your Spin-Out Lab work. Edit any slide, then export or share.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ weekPills }}" as="w" hint-placeholder-count="4">
+                <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;border-radius:999px;padding:6px 12px;{{ w.style }}"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ w.icon }}"></span>{{ w.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="position:relative" title="{{ exportTip }}">
+              <button onClick="{{ openExport }}" disabled="{{ exportDisabled }}" style="{{ exportBtnStyle }}"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ pdfIcon }}"></span>Export PDF</button>
+            </div>
+            <button onClick="{{ openShare }}" style="height:40px;padding:0 16px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;color:#4A5568;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ shareIcon }}"></span>Share Link</button>
+          </div>
+        </div>
+        <sc-if value="{{ sharedViews }}">
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid #EDF2F7;display:flex;align-items:center;gap:8px;font-size:12.5px;color:#718096"><span style="width:8px;height:8px;border-radius:50%;background:#3182CE"></span>Shared link active · Viewed {{ sharedViews }} times</div>
+        </sc-if>
+      </div>
+
+      <!-- SLIDE GRID -->
+      <div class="pd-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+        <sc-for list="{{ slides }}" as="s" hint-placeholder-count="11">
+          <div onClick="{{ s.onOpen }}" role="button" style="background:#fff;border:1px solid {{ s.cardBorder }};border-radius:14px;overflow:hidden;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,transform .15s,border-color .15s;position:relative" style-hover="border-color:#C4B5FD;box-shadow:0 12px 28px -14px rgba(107,70,193,.45);transform:translateY(-2px)">
+            <div class="pd-thumb">
+              <div class="pd-thumb-mount">
+                <dc-import name="AxalSlide" type="{{ s.type }}" data="{{ deckData }}" hint-size="1280px,720px"></dc-import>
+              </div>
+              <div style="position:absolute;top:10px;left:10px;width:24px;height:24px;border-radius:7px;background:#6B46C1;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2)">{{ s.n }}</div>
+              <sc-if value="{{ s.complete }}"><div style="position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;background:#38A169;color:#fff;display:flex;align-items:center;justify-content:center;padding:4px;box-shadow:0 2px 6px rgba(0,0,0,.2)" dangerouslySetInnerHTML="{{ checkIcon }}"></div></sc-if>
+              <div style="position:absolute;inset:0;background:rgba(30,27,58,.35);opacity:0;display:flex;align-items:center;justify-content:center;transition:opacity .15s" class="pd-ov"></div>
+            </div>
+            <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="min-width:0"><div style="font-size:13.5px;font-weight:700;color:#1A202C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</div><div style="font-size:11px;color:#A0AEC0">{{ s.statusText }}</div></div>
+              <span title="{{ s.statusText }}" style="width:9px;height:9px;flex:none;border-radius:50%;background:{{ s.dot }}"></span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- PROGRESS -->
+      <div style="margin-top:24px;display:flex;align-items:center;gap:14px">
+        <div style="flex:1;height:8px;border-radius:99px;background:#E2E8F0;overflow:hidden;max-width:360px"><div style="height:100%;width:{{ readyPct }};background:#6B46C1;border-radius:99px;transition:width .5s cubic-bezier(.16,1,.3,1)"></div></div>
+        <span class="tnum" style="font-size:13px;font-weight:600;color:#4A5568">{{ readyCount }} of 11 slides ready</span>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ EDITOR VIEW ============ -->
+    <sc-if value="{{ isEditor }}">
+    <div style="animation:pdFade .2s ease">
+      <!-- editor top nav -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 28px;border-bottom:1px solid #E2E8F0;background:#fff;position:sticky;top:60px;z-index:14">
+        <button onClick="{{ backToGrid }}" style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 8px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;color:#4A5568;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer"><span style="font-size:15px">←</span> Back to deck</button>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button onClick="{{ prevSlide }}" disabled="{{ atFirst }}" style="{{ prevStyle }}">← Prev</button>
+          <span class="tnum" style="font-size:13px;font-weight:600;color:#4A5568">Slide {{ cur.n }} of 11</span>
+          <button onClick="{{ nextSlide }}" disabled="{{ atLast }}" style="{{ nextStyle }}">Next →</button>
+          <button onClick="{{ toggleFull }}" style="height:32px;padding:0 13px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;color:#4A5568;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin-left:6px"><span style="font-size:14px">{{ fullIcon }}</span>{{ fullLabel }}</button>
+        </div>
+      </div>
+
+      <div class="pd-split" style="position:relative;min-height:calc(100vh - 121px);background:#EDF0F4;overflow:hidden">
+        <!-- DECK -->
+        <div style="{{ deckAreaStyle }}">
+          <div class="pd-editframe" style="width:min(96%, calc((100vh - 177px) * 16 / 9));max-width:100%">
+            <div class="pd-editframe-mount">
+              <dc-import name="AxalSlide" type="{{ cur.type }}" data="{{ deckData }}" hint-size="1280px,720px"></dc-import>
+            </div>
+          </div>
+        </div>
+
+        <!-- FIELDS -->
+        <div style="{{ sidebarAreaStyle }}">
+          <div style="padding:18px 22px;border-bottom:1px solid #E2E8F0;background:#fff;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:12;{{ sidebarHeaderRadius }}">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.01em">{{ cur.title }}</div>
+            <span style="font-size:11px;font-weight:700;color:#6B46C1;background:#EDE9FE;border-radius:999px;padding:4px 10px">Slide {{ cur.n }} / 11</span>
+          </div>
+
+          <sc-if value="{{ cur.hasSourceUpdate }}">
+            <div style="margin:14px 22px 0;display:flex;align-items:center;gap:9px;background:#FFFAF0;border:1px solid #FEEBC8;border-radius:10px;padding:10px 13px;font-size:12.5px;color:#92400E;cursor:pointer" onClick="{{ resyncAll }}"><span style="width:15px;height:15px;flex:none;display:flex" dangerouslySetInnerHTML="{{ refreshIcon }}"></span>Updated in source — click to resync</div>
+          </sc-if>
+
+          <div style="flex:1;overflow-y:auto;padding:18px 22px 24px;display:flex;flex-direction:column;gap:20px">
+            <sc-for list="{{ curFields }}" as="f" hint-placeholder-count="5">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                  <span style="font-size:13px;font-weight:600;color:#2D3748">{{ f.label }}</span>
+                  <span style="font-size:10.5px;font-weight:600;border-radius:999px;padding:2px 8px;{{ f.sourceStyle }}">{{ f.source }}</span>
+                  <sc-if value="{{ f.auto }}"><button onClick="{{ f.onRefresh }}" title="Refresh from source" style="width:22px;height:22px;margin-left:auto;flex:none;border-radius:6px;border:1px solid #E2E8F0;background:#fff;color:#A0AEC0;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:4px" dangerouslySetInnerHTML="{{ refreshIcon }}"></button></sc-if>
+                </div>
+
+                <sc-if value="{{ f.isText }}"><input type="text" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:100%;height:40px;padding:0 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;color:#1A202C;outline:none;background:#fff" style-focus="border-color:#B794F4;box-shadow:0 0 0 3px rgba(107,70,193,.12)" /></sc-if>
+
+                <sc-if value="{{ f.isTextarea }}">
+                  <textarea rows="3" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:100%;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13.5px;color:#1A202C;outline:none;resize:vertical;background:#fff;line-height:1.45" style-focus="border-color:#B794F4;box-shadow:0 0 0 3px rgba(107,70,193,.12)"></textarea>
+                  <div class="tnum" style="text-align:right;font-size:11px;color:#A0AEC0;margin-top:3px">{{ f.charCount }} / {{ f.max }} chars</div>
+                </sc-if>
+
+                <sc-if value="{{ f.isCurrency }}">
+                  <div style="display:flex;align-items:center;height:40px;border:1px solid #E2E8F0;border-radius:9px;background:#fff;overflow:hidden" style-focus-within="border-color:#B794F4"><span style="padding:0 12px;color:#718096;font-weight:600;border-right:1px solid #E2E8F0;height:100%;display:flex;align-items:center">$</span><input type="text" value="{{ f.value }}" onChange="{{ f.onChange }}" style="flex:1;height:100%;padding:0 12px;border:none;font-size:13.5px;color:#1A202C;outline:none" /></div>
+                </sc-if>
+
+                <sc-if value="{{ f.isList }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+                    <sc-for list="{{ f.items }}" as="it" hint-placeholder-count="3">
+                      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#6B46C1;background:#fff;border:1px solid #C4B5FD;border-radius:999px;padding:5px 6px 5px 11px">{{ it.label }}<button onClick="{{ it.onRemove }}" style="width:16px;height:16px;border-radius:50%;border:none;background:#EDE9FE;color:#6B46C1;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">×</button></span>
+                    </sc-for>
+                  </div>
+                  <input type="text" onKeyDown="{{ f.onAddKey }}" placeholder="Type and press Enter to add" style="width:100%;height:38px;padding:0 12px;border:1px dashed #CBD5E0;border-radius:9px;font-size:13px;color:#1A202C;outline:none;background:#fff" style-focus="border-color:#B794F4" />
+                </sc-if>
+
+                <sc-if value="{{ f.isUpload }}">
+                  <div style="border:1.5px dashed #CBD5E0;border-radius:11px;padding:22px;display:flex;flex-direction:column;align-items:center;gap:8px;background:#fff;cursor:pointer;text-align:center" style-hover="border-color:#B794F4;background:#FAF9FF"><span style="width:26px;height:26px;color:#A0AEC0;display:flex" dangerouslySetInnerHTML="{{ uploadIcon }}"></span><span style="font-size:12.5px;color:#718096;font-weight:500">Drag image here or click to upload</span><span style="font-size:11px;color:#A0AEC0">PNG, JPG up to 10MB</span></div>
+                </sc-if>
+
+                <sc-if value="{{ f.auto }}">
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:#A0AEC0"><span>{{ f.syncNote }}</span><a class="pd-src" onClick="{{ f.onEditSource }}" style="cursor:pointer;color:#6B46C1;font-weight:600">Edit source ↗</a></div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:14px 22px;border-top:1px solid #E2E8F0;background:#fff;position:sticky;bottom:0">
+            <div style="display:flex;gap:10px;align-items:center">
+              <button onClick="{{ saveSlide }}" style="height:40px;padding:0 18px;border-radius:10px;border:none;background:#6B46C1;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(107,70,193,.4)">Save changes</button>
+              <button onClick="{{ resetSlide }}" style="height:40px;padding:0 14px;border-radius:10px;border:1px solid #E2E8F0;background:#fff;color:#4A5568;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Reset to auto-data</button>
+              <sc-if value="{{ resetConfirm }}"><span style="font-size:12.5px;font-weight:600;color:#38A169;display:inline-flex;align-items:center;gap:5px;animation:pdFade .2s ease"><span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>Reset to source data</span></sc-if>
+            </div>
+            <div style="font-size:11px;color:#A0AEC0;margin-top:9px">Changes here update only this slide's presentation copy — your source data is unchanged.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+
+  <!-- ============ EXPORT MODAL ============ -->
+  <sc-if value="{{ exportOpen }}">
+  <div style="position:fixed;inset:0;z-index:80;background:rgba(26,32,44,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;animation:pdOverlay .18s ease">
+    <div style="width:100%;max-width:420px;background:#fff;border-radius:18px;padding:30px;text-align:center;box-shadow:0 30px 80px -20px rgba(26,32,44,.5);animation:pdSheet .22s ease">
+      <sc-if value="{{ exportDone }}">
+        <div style="width:52px;height:52px;border-radius:14px;background:#F0FFF4;color:#38A169;display:flex;align-items:center;justify-content:center;padding:12px;margin:0 auto 16px" dangerouslySetInnerHTML="{{ checkIcon }}"></div>
+        <h2 style="margin:0;font-size:18px;font-weight:800">PDF ready</h2>
+        <p style="margin:8px 0 20px;font-size:13px;color:#718096;line-height:1.5">Your download has started.<br/><span style="color:#4A5568;font-weight:600">{{ exportFilename }}</span></p>
+        <button onClick="{{ closeExport }}" style="width:100%;height:42px;border-radius:10px;border:none;background:#6B46C1;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer">Done</button>
+      </sc-if>
+      <sc-if value="{{ exportRunning }}" hint-placeholder-val="{{ true }}">
+        <div style="width:52px;height:52px;border-radius:14px;background:#EDE9FE;color:#6B46C1;display:flex;align-items:center;justify-content:center;padding:12px;margin:0 auto 16px" dangerouslySetInnerHTML="{{ pdfIcon }}"></div>
+        <h2 style="margin:0;font-size:18px;font-weight:800">Preparing your PDF…</h2>
+        <p style="margin:8px 0 18px;font-size:13px;color:#718096">Rendering 11 slides · Axal VC Spin-Out</p>
+        <div style="height:8px;border-radius:99px;background:#E2E8F0;overflow:hidden"><div style="height:100%;width:{{ exportProgress }};background:#6B46C1;border-radius:99px;transition:width .3s linear"></div></div>
+        <div class="tnum" style="font-size:12px;color:#A0AEC0;margin-top:8px">{{ exportProgress }}</div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ SHARE MODAL ============ -->
+  <sc-if value="{{ shareOpen }}">
+  <div onClick="{{ closeShare }}" style="position:fixed;inset:0;z-index:80;background:rgba(26,32,44,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;animation:pdOverlay .18s ease">
+    <div onClick="{{ stop }}" style="width:100%;max-width:460px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(26,32,44,.5);animation:pdSheet .22s ease">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #EDF2F7">
+        <h2 style="margin:0;font-size:17px;font-weight:800">Share deck</h2>
+        <button onClick="{{ closeShare }}" style="width:30px;height:30px;border-radius:8px;border:none;background:#F1F0F5;color:#718096;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="padding:22px 24px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;gap:16px;align-items:center">
+          <div style="flex:none;width:96px;height:96px;border:1px solid #E2E8F0;border-radius:12px;padding:8px;background:#fff" dangerouslySetInnerHTML="{{ qrSvg }}"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#A0AEC0;margin-bottom:6px">Read-only link</div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1;min-width:0;height:38px;border:1px solid #E2E8F0;border-radius:9px;display:flex;align-items:center;padding:0 12px;font-size:12.5px;color:#4A5568;background:#F8F8FA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ shareUrl }}</div>
+              <button onClick="{{ copyLink }}" style="flex:none;height:38px;padding:0 14px;border-radius:9px;border:none;background:#6B46C1;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">{{ copyLabel }}</button>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid #EDF2F7">
+          <div><div style="font-size:13px;font-weight:600;color:#2D3748">Password protect</div><div style="font-size:11.5px;color:#A0AEC0">Require a PIN to open</div></div>
+          <button onClick="{{ togglePw }}" style="{{ pwToggleStyle }}"><span style="{{ pwKnobStyle }}"></span></button>
+        </div>
+        <sc-if value="{{ pwOn }}">
+          <input type="text" placeholder="Set a 4–6 digit PIN" class="tnum" style="width:100%;height:38px;padding:0 12px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;outline:none;margin-top:-8px" style-focus="border-color:#B794F4" />
+        </sc-if>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;font-weight:600;color:#2D3748">Link expires</div>
+          <div style="display:flex;gap:6px">
+            <sc-for list="{{ expiryOpts }}" as="e" hint-placeholder-count="3">
+              <button onClick="{{ e.onClick }}" style="{{ e.style }}">{{ e.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props){ super(props); this.state = {
+    view:'grid', slide:0,
+    exportOpen:false, exportProgress:'0%', exportDone:false,
+    shareOpen:false, copied:false, pwOn:false, expiry:'7 days', sharedViews:0,
+    resetConfirm:false, savedTick:0, editorFull:false,
+    d: this.initialData(),
+  }; }
+
+  initialData(){ return {
+    company:'NovaCraft AI', tagline:'The intelligent async layer for distributed teams.', version:'Pre-Seed · July 2026',
+    logoInitials:'N', sector:'B2B SaaS · Workflow', stage:'Pre-seed / Incorporated', founderName:'Guillaume L.', readinessScore:'82 / 100',
+    // discovery counts
+    discCustomers:'18', discAdvisors:'4', discCofounders:'2', discInvestors:'6',
+    // problem
+    problemHead:'Distributed teams lose hours to fragmented async work',
+    problemPt1:'Context scattered across five disconnected tools', problemMentions1:'14 of 18',
+    problemPt2:'No single source of truth for decisions or status', problemMentions2:'11 of 18',
+    problemPt3:'Cross-timezone handoffs take 3x longer than they should', problemMentions3:'9 of 18',
+    icp:'Ops leads at distributed SaaS companies, 50–500 employees',
+    painQuote:'Current tools don’t handle async workflows — we lose the thread constantly.',
+    painAuthor:'Sarah T.', painRole:'VP Ops · SaaS', painInitials:'ST',
+    // validation
+    interviews:'30', distinctPains:'12', hypothesesValidated:'4 of 5',
+    funnelReached:'30', funnelQualified:'22', funnelPainConfirmed:'17', funnelSolutionFit:'11',
+    // market
+    tam:'$2.4B', tamDesc:'Workflow automation, global', tamSrc:'Gartner 2025', cagr:'18%',
+    sam:'$340M', samDesc:'Distributed SaaS teams', samSrc:'CB Insights Q1 2026',
+    som:'$34M', somDesc:'Reachable within 3 years',
+    seg1name:'Distributed SaaS', seg1val:'$210M', seg1pct:'62%',
+    seg2name:'Agencies', seg2val:'$82M', seg2pct:'24%',
+    seg3name:'Remote-first SMB', seg3val:'$48M', seg3pct:'14%',
+    marketConfidence:'Medium · 2 sources', marketSources:'Gartner 2025 Workflow Automation Report · CB Insights SaaS Market Sizing, Q1 2026.',
+    marketNote:'Pre-populated from your Week 1 problem definition — review and confirm before Week 3.',
+    marketProvenance:'Pulled from Market Intel · Week 1',
+    // solution
+    solHead:'One intelligent layer across every async tool',
+    solPt1:'Unifies threads, docs, and decisions in one timeline',
+    solPt2:'AI surfaces the context you need, when you need it',
+    solPt3:'Native Slack integration — zero workflow change',
+    differentiator:'Cross-team workflow graph competitors can’t replicate',
+    beforeTxt:'5 tools · scattered context · slow handoffs',
+    afterTxt:'1 layer · shared context · instant handoffs',
+    // demo
+    demoHead:'NovaCraft workspace', demoCaption:'Live product walkthrough', liveURL:'novacraft.ai',
+    feature1:'Unified timeline', feature2:'AI context surfacing', feature3:'Slack-native',
+    // roadmap
+    roadmapTitle:'NovaCraft AI · 12-month roadmap', roadmapProgress:'40%',
+    // team
+    founder1Name:'Guillaume Laurent', founder1Role:'Founder & CEO', founder1Bio:'Ex-Stripe. 8 years building async collaboration tools.', founder1Initials:'GL',
+    founder2Name:'Priya Nair', founder2Role:'Co-founder & CTO', founder2Bio:'Ex-Notion infra. Led real-time sync at scale.', founder2Initials:'PN',
+    adv1Name:'Rae Osei', adv1Domain:'GTM', adv1Equity:'0.5%',
+    adv2Name:'Marcus Lin', adv2Domain:'Enterprise SaaS', adv2Equity:'0.4%',
+    skill1:'Product', skill1pct:'85', skill2:'Engineering', skill2pct:'80', skill3:'Go-to-market', skill3pct:'50', skill4:'Finance / Ops', skill4pct:'45', skill5:'Design', skill5pct:'70',
+    skillGap:'Go-to-market & Finance',
+    // cap
+    optionPool:'10%', filed83b:true, filed83bDate:'Jul 8, 2026', totalShares:'10,000,000',
+    capFounder1:'5,500,000', capFounder1Pct:'55%', capFounder2:'3,500,000', capFounder2Pct:'35%',
+    // ask / use of funds
+    raise:'$750K', roundType:'Pre-Seed', runway:'18 months', postMoney:'$6.5M',
+    useCat1:'Engineering', usePct1:'55%', useAmt1:'$412K', useDetail1:'2 senior engineers + infra to ship public beta',
+    useCat2:'Go-to-market', usePct2:'30%', useAmt2:'$225K', useDetail2:'Founder-led sales + first GTM hire',
+    useCat3:'Operations', usePct3:'15%', useAmt3:'$113K', useDetail3:'Legal, compliance, and runway buffer',
+    // deal readiness
+    readinessPct:'82%',
+    dealSummary:'Incorporated Delaware C-Corp, clean cap table, 83(b) filed. 30 interviews and strong solution-fit validate pull.',
+    contact:'guillaume@novacraft.ai', dataRoomComplete:'4 of 6',
+  }; }
+
+  ic(p, sw=1.7){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+
+  slideMeta(){ return [
+    { type:'cover', title:'Cover', week:0, keys:['company','tagline','sector','stage','founderName','discCustomers'] },
+    { type:'problem', title:'Problem', week:1, keys:['problemHead','problemPt1','problemPt2','problemPt3','icp','painQuote'] },
+    { type:'validation', title:'Validation', week:1, keys:['interviews','distinctPains','hypothesesValidated','funnelSolutionFit'] },
+    { type:'market', title:'Market', week:1, keys:['tam','sam','som','cagr','seg1name','marketConfidence'] },
+    { type:'solution', title:'Solution', week:1, keys:['solHead','solPt1','solPt2','solPt3','differentiator','beforeTxt','afterTxt'] },
+    { type:'demo', title:'Product Demo', week:3, keys:['demoHead','liveURL','feature1','feature2','feature3'] },
+    { type:'roadmap', title:'Roadmap', week:3, keys:['roadmapTitle','roadmapProgress'] },
+    { type:'team', title:'Team & Network', week:2, keys:['founder1Name','founder1Role','founder2Name','adv1Name','adv2Name','skill1'] },
+    { type:'cap', title:'Cap Table', week:2, keys:['optionPool','totalShares','capFounder1'] },
+    { type:'ask', title:'The Ask · Use of Funds', week:4, keys:['raise','roundType','useCat1','usePct1','useCat2','useCat3','runway','postMoney'] },
+    { type:'review', title:'Deal Readiness', week:4, keys:['dealSummary','contact','readinessPct'] },
+  ]; }
+
+  fieldSpec(){
+    const W = { 0:'Studio profile', 1:'Week 1 Validate', 2:'Week 2 Structure', 3:'Week 3 Build', 4:'Week 4 Pitch' };
+    return {
+      cover:[ ['company','Company name','text',0],['tagline','Tagline / one-liner','text',0],['sector','Sector','text',0],['stage','Stage','text',0],['founderName','Founder','text',0],['logoInitials','Logo','upload',0],['discCustomers','Customer interviews','number',1],['discAdvisors','Advisor conversations','number',3],['discCofounders','Co-founder talks','number',3],['discInvestors','Investor conversations','number',4],['readinessScore','Venture-readiness score','text',3],['version','Deck version label','text',-1] ],
+      problem:[ ['problemHead','Problem headline','text',1],['problemPt1','Pain point 1','textarea',1],['problemMentions1','— mentioned by','text',1],['problemPt2','Pain point 2','textarea',1],['problemMentions2','— mentioned by','text',1],['problemPt3','Pain point 3','textarea',1],['problemMentions3','— mentioned by','text',1],['icp','Who feels this pain','textarea',1],['painQuote','Customer discovery quote','textarea',1],['painAuthor','Quote author','text',1],['painRole','Author role','text',1] ],
+      validation:[ ['interviews','Total interviews logged','number',1],['distinctPains','Distinct pains identified','number',1],['hypothesesValidated','Hypotheses validated','text',1],['funnelReached','Funnel · reached','number',1],['funnelQualified','Funnel · qualified','number',1],['funnelPainConfirmed','Funnel · pain confirmed','number',1],['funnelSolutionFit','Funnel · solution-fit','number',1] ],
+      market:[ ['tam','TAM','currency',1],['tamDesc','TAM description','text',1],['tamSrc','TAM source','text',1],['cagr','CAGR','text',1],['sam','SAM','currency',1],['samDesc','SAM description','text',1],['samSrc','SAM source','text',1],['som','SOM','currency',1],['somDesc','SOM description','text',1],['seg1name','Segment 1 (recommended)','text',1],['seg1val','Segment 1 value','currency',1],['seg1pct','Segment 1 % of SAM','text',1],['seg2name','Segment 2','text',1],['seg2val','Segment 2 value','currency',1],['seg2pct','Segment 2 %','text',1],['seg3name','Segment 3','text',1],['seg3val','Segment 3 value','currency',1],['seg3pct','Segment 3 %','text',1],['marketConfidence','Confidence','text',1],['marketSources','Sources','textarea',1],['marketNote','Provenance note','textarea',1] ],
+      solution:[ ['solHead','Solution headline','text',1],['solPt1','Solution pillar 1','textarea',1],['solPt2','Solution pillar 2','textarea',1],['solPt3','Solution pillar 3','textarea',1],['differentiator','Unfair advantage','text',0],['beforeTxt','Before','text',-1],['afterTxt','After','text',-1] ],
+      demo:[ ['demoHead','Demo headline','text',3],['__upload','Product screenshot','upload',3],['demoCaption','Demo caption','text',-1],['liveURL','Live URL','text',3],['feature1','Feature callout 1','text',3],['feature2','Feature callout 2','text',3],['feature3','Feature callout 3','text',3] ],
+      roadmap:[ ['roadmapTitle','Roadmap title','text',3],['roadmapProgress','Overall progress','text',3] ],
+      team:[ ['founder1Name','Founder 1 name','text',0],['founder1Role','Founder 1 role','text',0],['founder1Bio','Founder 1 bio','textarea',0],['founder2Name','Founder 2 name','text',0],['founder2Role','Founder 2 role','text',0],['founder2Bio','Founder 2 bio','textarea',0],['adv1Name','Advisor 1','text',3],['adv1Domain','Advisor 1 expertise','text',3],['adv2Name','Advisor 2','text',3],['adv2Domain','Advisor 2 expertise','text',3],['skill1','Skill 1','text',3],['skill1pct','Skill 1 coverage %','number',3],['skill2','Skill 2','text',3],['skill2pct','Skill 2 %','number',3],['skill3','Skill 3','text',3],['skill3pct','Skill 3 %','number',3],['skill4','Skill 4','text',3],['skill4pct','Skill 4 %','number',3],['skill5','Skill 5','text',3],['skill5pct','Skill 5 %','number',3],['skillGap','Identified skill gap','text',3] ],
+      cap:[ ['optionPool','Option pool %','text',2],['totalShares','Total authorized shares','text',2],['capFounder1Pct','Founder 1 ownership %','text',2],['capFounder2Pct','Founder 2 ownership %','text',2] ],
+      ask:[ ['raise','Raise amount','currency',4],['roundType','Round type','text',4],['useCat1','Use of funds 1','text',4],['usePct1','Allocation 1 %','text',4],['useAmt1','Amount 1','currency',4],['useDetail1','Detail 1','textarea',4],['useCat2','Use of funds 2','text',4],['usePct2','Allocation 2 %','text',4],['useAmt2','Amount 2','currency',4],['useDetail2','Detail 2','textarea',4],['useCat3','Use of funds 3','text',4],['usePct3','Allocation 3 %','text',4],['useAmt3','Amount 3','currency',4],['useDetail3','Detail 3','textarea',4],['runway','Runway','text',4],['postMoney','Post-money valuation','text',4] ],
+      review:[ ['readinessPct','Deal readiness %','text',4],['dealSummary','Deal summary','textarea',4],['contact','Contact / next step','text',0] ],
+      __W:W,
+    };
+  }
+
+  charMax(kind){ return kind==='textarea' ? 300 : 120; }
+
+  buildDeckData(d){
+    const fnl = (n)=>parseInt(String(d[n]).replace(/[^0-9]/g,''))||0;
+    return { ...d,
+      discovery:[ {k:'Customers',v:d.discCustomers},{k:'Advisors',v:d.discAdvisors},{k:'Co-founders',v:d.discCofounders},{k:'Investors',v:d.discInvestors} ],
+      problemPts:[ {t:d.problemPt1,mentions:d.problemMentions1},{t:d.problemPt2,mentions:d.problemMentions2},{t:d.problemPt3,mentions:d.problemMentions3} ],
+      funnel:[ {label:'Reached',value:fnl('funnelReached')},{label:'Qualified',value:fnl('funnelQualified')},{label:'Pain confirmed',value:fnl('funnelPainConfirmed')},{label:'Solution-fit',value:fnl('funnelSolutionFit')} ],
+      segments:[ {name:d.seg1name,value:d.seg1val,pct:d.seg1pct,recommended:true},{name:d.seg2name,value:d.seg2val,pct:d.seg2pct},{name:d.seg3name,value:d.seg3val,pct:d.seg3pct} ],
+      solPts:[d.solPt1,d.solPt2,d.solPt3],
+      features:[d.feature1,d.feature2,d.feature3],
+      roadmapPhases:[
+        { label:'Validate & Structure', window:'Weeks 1–2 · done', state:'done', tasks:[ {t:'Problem & ICP defined',done:true},{t:'30 customer interviews',done:true},{t:'Incorporated + 83(b) filed',done:true} ] },
+        { label:'Build & Pitch', window:'Weeks 3–4 · now', state:'active', tasks:[ {t:'MVP scope locked',done:true},{t:'Public beta shipped',done:false},{t:'Pitch deck v1',done:true} ] },
+        { label:'Scale post-program', window:'Months 2–12', state:'todo', tasks:[ {t:'500 teams onboarded',done:false},{t:'$1M ARR run-rate',done:false},{t:'Seed round closed',done:false} ] },
+      ],
+      founders:[ {name:d.founder1Name,role:d.founder1Role,bio:d.founder1Bio,initials:d.founder1Initials},{name:d.founder2Name,role:d.founder2Role,bio:d.founder2Bio,initials:d.founder2Initials} ],
+      advisors:[ {name:d.adv1Name,domain:d.adv1Domain,equity:d.adv1Equity},{name:d.adv2Name,domain:d.adv2Domain,equity:d.adv2Equity} ],
+      skills:[ {name:d.skill1,pct:parseInt(d.skill1pct)||0},{name:d.skill2,pct:parseInt(d.skill2pct)||0},{name:d.skill3,pct:parseInt(d.skill3pct)||0},{name:d.skill4,pct:parseInt(d.skill4pct)||0},{name:d.skill5,pct:parseInt(d.skill5pct)||0} ],
+      capRows:[ {name:d.founder1Name,shares:d.capFounder1,pct:d.capFounder1Pct,vesting:'4yr / 1yr cliff'},{name:d.founder2Name,shares:d.capFounder2,pct:d.capFounder2Pct,vesting:'4yr / 1yr cliff'},{name:'Option pool',shares:'1,000,000',pct:d.optionPool,vesting:'Reserved'} ],
+      founderPct:'90%',
+      capLegend:[ {name:d.founder1Initials,pct:d.capFounder1Pct,val:parseInt(d.capFounder1Pct)||0},{name:d.founder2Initials,pct:d.capFounder2Pct,val:parseInt(d.capFounder2Pct)||0},{name:'Pool',pct:d.optionPool,val:parseInt(d.optionPool)||0} ],
+      useOfFunds:[ {cat:d.useCat1,pct:d.usePct1,amount:d.useAmt1,detail:d.useDetail1},{cat:d.useCat2,pct:d.usePct2,amount:d.useAmt2,detail:d.useDetail2},{cat:d.useCat3,pct:d.usePct3,amount:d.useAmt3,detail:d.useDetail3} ],
+      filed83bLabel: d.filed83b ? ('83(b) filed ✓ '+d.filed83bDate) : '83(b) not yet filed',
+      dataRoom:[ {label:'Delaware C-Corp filed',done:true},{label:'83(b) election filed',done:d.filed83b},{label:'Cap table on Carta',done:true},{label:'Financial model',done:true},{label:'Pitch deck complete',done:false},{label:'Data room / diligence',done:false} ],
+    };
+  }
+
+  slideStatus(meta, d){
+    const realKeys = meta.keys.filter(k => k!=='__upload');
+    const missing = realKeys.filter(k => !d[k] || String(d[k]).trim()==='').length;
+    const manualPartial = { demo:1 };
+    let miss = missing + (manualPartial[meta.type]||0);
+    return { complete: miss===0, missing: miss };
+  }
+
+  renderVals(){
+    const d = this.state.d;
+    const metas = this.slideMeta();
+    const spec = this.fieldSpec();
+    const deckData = this.buildDeckData(d);
+
+    // sidebar
+    const nic = {
+      home:this.ic('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>'),
+      grid:this.ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      flask:this.ic('<path d="M9 3h6"/><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3"/><path d="M7 15h10"/>'),
+      deck:this.ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>'),
+      deals:this.ic('<path d="M3 6h18"/><path d="M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6"/><path d="M9 10h6"/>'),
+      docs:this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+    };
+    const nav = (name, icon, active=false) => ({ name, icon,
+      style:`display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:${active?600:500};margin-bottom:2px;cursor:pointer;${active?'background:#F5F3FF;color:#553C9A':'color:#4A5568'}` });
+    const navGroups = [
+      { label:'Workspace', items:[ nav('Dashboard', nic.home) ] },
+      { label:'Products', items:[ nav('All Products', nic.grid), nav('Spin-Out Lab', nic.flask, true), nav('Deal Flow', nic.deals) ] },
+      { label:'Resources', items:[ nav('Data Room', nic.docs) ] },
+    ];
+
+    // slides + statuses
+    const openSlide = (i) => this.setState({ view:'editor', slide:i, resetConfirm:false });
+    const dotFor = (st) => st.complete ? '#38A169' : (st.missing<=2 ? '#D97706' : '#CBD5E0');
+    const statusText = (st) => st.complete ? 'Data populated from your work' : (st.missing<=2 ? ('Partial — '+st.missing+' field(s) missing') : 'No data yet — manual entry needed');
+    const slides = metas.map((m,i) => { const st = this.slideStatus(m,d); return {
+      n:i+1, type:m.type, title:m.title, onOpen:()=>openSlide(i),
+      complete:st.complete, dot:dotFor(st), statusText:statusText(st),
+      cardBorder: st.complete ? '#E2E8F0' : '#E2E8F0' }; });
+    const readyCount = slides.filter(s=>s.complete).length;
+    const readyPct = Math.round(readyCount/11*100)+'%';
+
+    // week pills
+    const wp = (label, state) => ({ label,
+      icon: state==='done'? this.ic('<path d="M20 6 9 17l-5-5"/>',2.4) : state==='warn'? this.ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0z"/>') : this.ic('<circle cx="12" cy="12" r="9"/>'),
+      style: state==='done'?'background:#F0FFF4;color:#2F855A;border:1px solid #C6F6D5' : state==='warn'?'background:#FFFAF0;color:#B45309;border:1px solid #FEEBC8' : 'background:#F1F0F5;color:#A0AEC0;border:1px solid #E2E8F0' });
+    const weekPills = [ wp('Validate — Week 1','done'), wp('Structure — Week 2','done'), wp('Build — Week 3, 2 items missing','warn'), wp('Pitch — Week 4','pending') ];
+
+    const exportDisabled = readyCount < 6;
+
+    // editor
+    const cur = { ...metas[this.state.slide], n:this.state.slide+1 };
+    const curSpec = spec[cur.type] || [];
+    const setD = (k,v) => this.setState(s => ({ d:{...s.d,[k]:v} }));
+    const srcStyle = (w) => w===-1 ? 'background:#EDF2F7;color:#718096' : 'background:#EDE9FE;color:#6B46C1';
+    const srcLabel = (w) => w===-1 ? 'Manual entry' : ('Auto — '+spec.__W[w]);
+    const curFields = curSpec.map(([key,label,kind,w]) => {
+      const auto = w!==-1;
+      const base = { key, label, source:srcLabel(w), sourceStyle:srcStyle(w), auto,
+        syncNote:'Synced Jul 14, 2026 · 9:43 AM', onRefresh:()=>this.forceUpdate(),
+        onEditSource:()=>this.setState({ view:'grid' }),
+        isText:kind==='text', isTextarea:kind==='textarea', isCurrency:kind==='currency', isUpload:kind==='upload', isList:kind==='list',
+        max:this.charMax(kind) };
+      if (kind==='upload') return { ...base };
+      const val = kind==='currency' ? String(d[key]||'').replace(/^\$/,'') : (d[key]||'');
+      return { ...base, value: val, charCount:String(d[key]||'').length,
+        onChange:(e)=> setD(key, kind==='currency' ? ('$'+e.target.value.replace(/^\$/,'')) : e.target.value) };
+    });
+
+    // export flow
+    const runExport = () => {
+      this.setState({ exportOpen:true, exportProgress:'0%', exportDone:false });
+      let p = 0; const iv = setInterval(()=>{ p += 12; if (p>=100){ p=100; clearInterval(iv); this.setState({ exportProgress:'100%' }); setTimeout(()=>this.setState({ exportDone:true }), 350); } else { this.setState({ exportProgress:p+'%' }); } }, 160);
+    };
+
+    // share
+    const shareUrl = 'meridian.so/deck/nc-7f3a9';
+    const expiryOpts = ['Never','7 days','30 days'].map(l => ({ label:l, onClick:()=>this.setState({ expiry:l }),
+      style:`height:30px;padding:0 11px;border-radius:8px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;${this.state.expiry===l?'background:#6B46C1;color:#fff;border:1px solid #6B46C1':'background:#fff;color:#4A5568;border:1px solid #E2E8F0'}` }));
+
+    // QR (deterministic pseudo-pattern)
+    const N=21; let seed=99; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+    let rects='';
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){ const finder=(x<7&&y<7)||(x>=N-7&&y<7)||(x<7&&y>=N-7); const on= finder ? ((x===0||x===6||y===0||y===6|| (x>=2&&x<=4&&y>=2&&y<=4)) ? 1 : (x>=N-7? ((x===N-1||x===N-7||y===0||y===6||(x>=N-5&&x<=N-3&&y>=2&&y<=4))?1:0) : 0)) : (rnd()>0.55?1:0); if(on) rects+=`<rect x="${x}" y="${y}" width="1" height="1" fill="#1A202C"/>`; }
+    const qrSvg = { __html:`<svg viewBox="0 0 ${N} ${N}" style="width:100%;height:100%;display:block" shape-rendering="crispEdges"><rect width="${N}" height="${N}" fill="#fff"/>${rects}</svg>` };
+
+    const pwOn = this.state.pwOn;
+    return {
+      navGroups, deckData, slides, readyCount, readyPct, weekPills,
+      isGrid: this.state.view==='grid', isEditor: this.state.view==='editor',
+      exportDisabled, exportBtnStyle:`height:40px;padding:0 16px;border-radius:10px;border:none;font-family:inherit;font-size:13.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;${exportDisabled?'background:#E2E8F0;color:#A0AEC0;cursor:not-allowed':'background:#6B46C1;color:#fff;cursor:pointer;box-shadow:0 1px 2px rgba(107,70,193,.4)'}`,
+      exportTip: exportDisabled ? 'Complete at least 6 slides to export' : 'Export all 11 slides as PDF',
+      openExport: exportDisabled ? ()=>{} : runExport,
+      sharedViews: this.state.sharedViews,
+
+      // editor
+      cur, curFields,
+      atFirst:this.state.slide===0, atLast:this.state.slide===10,
+      editorFull:this.state.editorFull, toggleFull:()=>this.setState(s=>({editorFull:!s.editorFull})),
+      fullIcon: this.state.editorFull ? '✖' : '⛶', fullLabel: this.state.editorFull ? 'Exit full size' : 'Full size deck',
+      deckAreaStyle: this.state.editorFull
+        ? 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:28px'
+        : 'position:absolute;left:0;top:0;right:460px;bottom:0;display:flex;align-items:center;justify-content:center;padding:28px;border-right:1px solid #E2E8F0',
+      sidebarAreaStyle: this.state.editorFull
+        ? 'position:absolute;top:16px;right:16px;bottom:16px;width:420px;background:rgba(255,255,255,.98);backdrop-filter:blur(8px);border-radius:16px;box-shadow:0 24px 60px -20px rgba(30,27,58,.4);overflow-y:auto;z-index:5;display:flex;flex-direction:column'
+        : 'position:absolute;top:0;right:0;bottom:0;width:460px;background:#F8F8FA;overflow-y:auto;display:flex;flex-direction:column',
+      sidebarHeaderRadius: this.state.editorFull ? 'border-radius:16px 16px 0 0' : '',
+      prevStyle:`height:32px;padding:0 12px;border-radius:8px;border:1px solid #E2E8F0;font-family:inherit;font-size:12.5px;font-weight:600;background:#fff;${this.state.slide===0?'color:#CBD5E0;cursor:not-allowed':'color:#4A5568;cursor:pointer'}`,
+      nextStyle:`height:32px;padding:0 12px;border-radius:8px;border:1px solid #E2E8F0;font-family:inherit;font-size:12.5px;font-weight:600;background:#fff;${this.state.slide===10?'color:#CBD5E0;cursor:not-allowed':'color:#4A5568;cursor:pointer'}`,
+      prevSlide:()=> this.state.slide>0 && this.setState(s=>({slide:s.slide-1,resetConfirm:false})),
+      nextSlide:()=> this.state.slide<10 && this.setState(s=>({slide:s.slide+1,resetConfirm:false})),
+      backToGrid:()=>this.setState({view:'grid'}),
+      saveSlide:()=>this.setState({view:'grid'}),
+      resetSlide:()=>{ const init=this.initialData(); const keys=(spec[cur.type]||[]).map(f=>f[0]).filter(k=>k!=='__upload'); this.setState(s=>{ const nd={...s.d}; keys.forEach(k=>nd[k]=init[k]); return {d:nd,resetConfirm:true}; }); setTimeout(()=>this.setState({resetConfirm:false}),2000); },
+      resetConfirm:this.state.resetConfirm,
+      hasSourceUpdate: cur.type==='validation',
+      resyncAll:()=>this.forceUpdate(),
+
+      // export modal
+      exportOpen:this.state.exportOpen, exportProgress:this.state.exportProgress,
+      exportRunning:!this.state.exportDone, exportDone:this.state.exportDone,
+      exportFilename:'NovaCraft AI — Axal VC Pitch · July 2026.pdf',
+      closeExport:()=>this.setState({exportOpen:false}),
+
+      // share modal
+      shareOpen:this.state.shareOpen, openShare:()=>this.setState({shareOpen:true,sharedViews:47}),
+      closeShare:()=>this.setState({shareOpen:false}), stop:(e)=>e.stopPropagation(),
+      shareUrl, copyLabel:this.state.copied?'Copied ✓':'Copy link',
+      copyLink:()=>{ try{navigator.clipboard&&navigator.clipboard.writeText('https://'+shareUrl);}catch(e){} this.setState({copied:true}); setTimeout(()=>this.setState({copied:false}),1600); },
+      pwOn, togglePw:()=>this.setState(s=>({pwOn:!s.pwOn})),
+      pwToggleStyle:`width:40px;height:23px;border-radius:99px;border:none;cursor:pointer;position:relative;transition:background .15s;${pwOn?'background:#6B46C1':'background:#CBD5E0'}`,
+      pwKnobStyle:`position:absolute;top:3px;left:${pwOn?'20px':'3px'};width:17px;height:17px;border-radius:50%;background:#fff;transition:left .15s`,
+      expiryOpts,
+      qrSvg,
+
+      // icons
+      checkIcon:this.ic('<path d="M20 6 9 17l-5-5"/>',2.6),
+      pdfIcon:this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>'),
+      shareIcon:this.ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>'),
+      refreshIcon:this.ic('<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>'),
+      uploadIcon:this.ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M12 3v13M7 8l5-5 5 5"/>'),
+    };
+  }
+}
+</script>
+</body>
+</html>

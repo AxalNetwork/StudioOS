@@ -1,0 +1,1049 @@
+/**
+ * D753 (#1875): each connector's page, as data. The registry describes a card
+ * (`REGISTRY`, `CONNECTOR_METADATA`); this module describes the page behind it:
+ * a tagline and a long description, the tools Axal VC runs through the
+ * connector, the Eadwyn prompts the code supports, who made it, how to sign in,
+ * the service's endpoints, when it was added, its links and the trust sentence.
+ *
+ * Every fact here is held to the code by `test/connector_pages_d753.test.ts`:
+ * each tool's `calls` fragments are found in its connector's sources, every
+ * request that writes is named by a tool, prompts exist only for a connector
+ * Eadwyn reads, and "never writes" and "cannot move money" follow the tools.
+ *
+ * IMPORT RULE. `registry.ts` re-exports this module, so the two form a cycle.
+ * This file imports only types and `audienceFor` from `./registry`, calls
+ * `audienceFor` inside functions only, and never reads a registry value at its
+ * top level. It imports no provider and no service: the provider constants
+ * quoted in `endpoints` are checked by the test, not imported.
+ */
+import type { ConnectorCategory, DescriptorViewer, ProviderDescriptor } from './registry';
+import { audienceFor, PUBLISHERS } from './registry';
+
+export type ToolAccess = 'read' | 'write' | 'account' | 'inbound';
+
+/** One thing Axal VC reads or does through a connector; `calls` are literal fragments of the source that makes the call. */
+export interface PageTool {
+  name: string;
+  label: string;
+  access: ToolAccess;
+  what: string;
+  lands_in: string | null;
+  calls: string[];
+}
+
+/** An example ask for Eadwyn the code supports. `proposes` is a `SEND_TARGETS` field of the same connector, or null. */
+export interface PagePrompt {
+  name: string;
+  ask: string;
+  proposes: 'project_id' | 'deal_id' | null;
+}
+
+/** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
+export type SignInKind = 'none' | 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
+
+export interface ConnectorPage {
+  /** At most 120 characters. */
+  tagline: string;
+  /** One to four paragraphs. */
+  long_description: string[];
+  tools: PageTool[];
+  works_without_signing_in?: Array<{ name: string; what: string; built: boolean }>;
+  never_does?: string[];
+  prompts: PagePrompt[];
+  /** Null exactly when `prompts` is not empty. */
+  prompts_reason: string | null;
+  made_by: { name: 'Axal VC' };
+  service: { name: string; href: string | null };
+  sign_in: { kind: SignInKind; label: string; key_help_href: string | null };
+  endpoints: { sign_in: string | null; api: string | null };
+  /** The month it became connectable, `YYYY-MM`, or null. */
+  added: string | null;
+  links: { help: string | null; developer_docs: string | null; support: string | null; privacy: string | null };
+  /** The date of a recorded live connect on production (`YYYY-MM-DD`), or null (D753 decision 7). */
+  verified_on: string | null;
+}
+
+/** Mercury's pages: a member's own, by role (D879: there is no entity page; Axal VC's accounts are HQ's only). */
+export interface VariantPages {
+  personal: Record<string, ConnectorPage>;
+}
+
+const AXAL = { name: 'Axal VC' } as const;
+const NO_LINKS = { help: null, support: null, privacy: null };
+
+const tool = (name: string, label: string, access: ToolAccess, what: string, lands_in: string | null, calls: string[]): PageTool =>
+  ({ name, label, access, what, lands_in, calls });
+
+const notRead = (name: string) => `Eadwyn does not read ${name} yet.`;
+
+// ── Mercury: a member's own account, by role (D879) ───────────────────────────
+
+const MERCURY_API = 'https://api.mercury.com/api/v1';
+const MERCURY_DOCS = 'https://docs.mercury.com';
+/** D840 (#2346): Mercury's MCP server, which a member's sign-in reads through (`services/mercury/mcp.ts`). */
+const MERCURY_MCP = 'https://mcp.mercury.com/mcp';
+
+type MercuryVariant = 'founder' | 'partner' | 'investor';
+
+/**
+ * Each tool names the API path a pasted token reads and, for a member, the
+ * MCP tool their sign-in calls instead (D840). `mercury_feeds_d840.test.ts`
+ * holds the MCP names to `integrations/mercuryFeeds.ts`.
+ */
+function mercuryTools(variant: MercuryVariant): PageTool[] {
+  // Each MCP read is one JSON-RPC POST (`mcp.ts`), named here so the page's write check knows it reads.
+  const mcp = (name: string) => [`'${name}'`, "jsonrpc: '2.0'"];
+  const tools = [
+    tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'", ...mcp('getOrganization')]),
+    tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'", ...mcp('getAccounts')]),
+  ];
+  // D752: an investor's proof of funds reads accounts only, never a transaction.
+  if (variant !== 'investor') {
+    tools.push(
+      tool('list_transactions', 'transactions', 'read',
+        variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
+          : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
+        variant === 'founder' ? 'revenue_and_traction' : null,
+        ['`/account/${accountId}/transactions`', ...mcp('listTransactions')]),
+    );
+  }
+  if (variant !== 'investor') {
+    tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
+      ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
+  }
+  // D840 part 2 (#2347): the founder's Raise modules, through a sign-in only. Facts land; judgement waits for Accept.
+  if (variant === 'founder') {
+    tools.push(
+      tool('read_cashflow', 'your cashflow summary', 'read', 'Reads the last 3 full months’ cashflow, with your cash on hand, for a measured runway in Fundraising readiness.',
+        'fundraising_readiness', mcp('getCashflowSummary')),
+      tool('raise_spend', 'spending by category', 'read', 'Sums your spending by Mercury category over 3, 6 and 12 months, beside your planned split. Which section a category counts under is proposed for you to accept.',
+        'use_of_funds', mcp('listTransactions')),
+      tool('list_statements', 'your monthly statements', 'read', 'Lists your last 12 statements. Each one you accept is stored in your data room, behind NDA and seen by no investor until you open it.',
+        'data_room', mcp('getAccountStatements')),
+      tool('list_safe_requests', 'your SAFEs', 'read', 'Lists your Mercury SAFEs. Each one you accept becomes an instrument on your cap table.',
+        'cap_table', mcp('getSafeRequests')),
+      tool('raise_credits', 'credits that look like investment', 'read', 'Lists wires and ACH credits of $10,000 or more. Matching one to an investor, or adding a new one, waits for your Accept.',
+        'capital_relationships', mcp('listTransactions')),
+      tool('raise_figures', 'revenue, burn and runway', 'read', 'Measures revenue growth, burn and runway as figures your narrative can cite, from Mercury with their date. They are never typed into your text.',
+        'investor_narrative', mcp('listTransactions')),
+      tool('raise_deck_figures', 'traction figures', 'read', 'Offers the same figures to your deck’s traction slide, from Mercury with their date. They are never typed into your slides.',
+        'pitch_deck', mcp('getCashflowSummary')),
+    );
+  }
+  // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
+  if (variant === 'investor') {
+    tools.push(
+      tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
+      tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
+      tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
+      tool('list_categorised_transactions', 'transactions and their categories', 'read', 'Lists your fund’s transactions with Mercury’s categories, to propose a ledger entry for each. An entry is posted only when you accept it.', 'fund_ledger', [...mcp('listTransactions')]),
+      tool('read_statements', 'statements', 'read', 'Reads your accounts’ monthly statements, for month-end cash in your period report, and proposes attaching a statement to its period.', 'fund_reporting', [...mcp('getAccountStatements')]),
+    );
+  }
+  // D840 part 3 (#2348): what the founder's Grow sync reads, each where it lands.
+  if (variant === 'founder') {
+    tools.push(
+      tool('list_invoices', 'invoices', 'read', 'Reads your invoices, to count them paid, open and overdue, and to land a credit that matches exactly one paid invoice.', 'revenue_and_traction', mcp('listInvoices')),
+      tool('list_customers', 'customer names', 'read', 'Reads your invoice customers’ names, to name a credit that matches their paid invoice. No email or address is kept.', null, mcp('listCustomers')),
+      tool('read_treasury', 'treasury balance', 'read', 'Reads your treasury balance, shown with cash and runway to your team only.', 'durable_company_building', mcp('getTreasury')),
+      tool('payroll_by_month', 'payroll by month', 'read', 'Sums each month’s payroll from your transactions, shown to your team only.', 'team_expansion', mcp('listTransactions')),
+      tool('marketing_spend', 'marketing spend', 'read', 'Sums each month’s marketing and advertising spend, and by channel where a payee names one of your channels.', 'distribution', mcp('listTransactions')),
+      tool('partner_payments', 'payments to Axal partners', 'read', 'Finds payments to an Axal partner’s company and proposes linking them; nothing is linked until you accept.', 'partner_network', mcp('listTransactions')),
+    );
+  }
+  tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
+    'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
+    null, ['server.registration_endpoint', 'server.revocation_endpoint']));
+  return tools;
+}
+
+const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other.';
+
+function mercuryPage(variant: MercuryVariant): ConnectorPage {
+  return {
+    tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
+      : variant === 'investor' ? 'Your capacity in Deals › Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
+        : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
+    long_description: [...(variant === 'founder'
+        ? [
+          'Your own Mercury account, read-only.',
+          'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
+          'When you sync Grow, it fills Revenue and traction, Durable company-building, Team expansion, Distribution and Partner network: facts are written, a partner match is proposed for you to accept, and cash, treasury, runway, payroll and spend are shown to your team only.',
+        ]
+        : variant === 'investor'
+          // D884 (#2557): what it reads, then Deals and Pipeline first, then Fund, then proof of funds.
+          ? [
+            'Your own Mercury account, read-only, on HQ or in a branch. Axal VC reads your accounts’ names, kinds and last four digits, their available balances, your transactions and your statements. A balance is shown to you alone, and it never sends, transfers or requests money.',
+            'Deals first. Deals › Commit reads your capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
+            'Then Fund › Calls, Accounting and Reporting, whose proposals write nothing until you accept them. Portfolio gets nothing from Mercury. On HQ, a proof of funds: Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
+          ]
+          : [
+          'Your own Mercury account, read-only.',
+          'Axal VC lists your transactions so you can match an invoice, a payout or a partner-deal settlement to the line that settled it. It never sends, transfers or requests money.',
+        ]), MERCURY_SIGN_IN],
+    tools: mercuryTools(variant),
+    prompts: [],
+    prompts_reason: notRead('Mercury'),
+    made_by: AXAL,
+    service: { name: 'Mercury', href: null },
+    // D840 (#2346), D881 (#2554): a member connects only by signing in with Mercury (its MCP server, read-only).
+    sign_in: { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null },
+    endpoints: { sign_in: MERCURY_MCP, api: MERCURY_API },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: MERCURY_DOCS },
+    verified_on: null,
+  };
+}
+
+// ── The pages ─────────────────────────────────────────────────────────────────
+
+/**
+ * One page per `REGISTRY` row, keyed by registry key. Mercury's is by audience
+ * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
+ */
+export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  facebook: {
+    tagline: 'Connect the Facebook Pages you manage.',
+    long_description: ['Sign in with Facebook and choose the Pages for this company. Grow imports are planned separately.'],
+    tools: [], prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
+    never_does: ['StudioOS does not publish or comment on Facebook.'],
+    service: { name: 'Facebook', href: 'https://www.facebook.com' },
+    sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },
+    endpoints: { sign_in: 'https://www.facebook.com/v26.0/dialog/oauth', api: 'https://graph.facebook.com/v26.0' },
+    added: '2026-11', links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business' }, verified_on: null,
+  },
+  tiktok: {
+    tagline: 'Connect your TikTok account with read-only access.',
+    long_description: ['Sign in with TikTok to grant access to your basic profile, audience counts and public videos. This release connects your account. Grow imports come later.'],
+    tools: [],
+    never_does: ['StudioOS does not upload videos or post to TikTok.'],
+    prompts: [],
+    prompts_reason: notRead('TikTok'),
+    made_by: AXAL,
+    service: { name: 'TikTok', href: 'https://www.tiktok.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with TikTok', key_help_href: null },
+    endpoints: { sign_in: 'https://www.tiktok.com/v2/auth/authorize/', api: 'https://open.tiktokapis.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
+    verified_on: null,
+  },
+  lovable: {
+    tagline: 'Works without signing in. Launch links and app links for your venture.',
+    long_description: [
+      'No Lovable account is connected to Axal VC. The Worker never calls Lovable.',
+      'Build in Lovable launch links are being built in part 2. App links and founder-pressed live checks are being built in part 3. Neither is available from this directory entry yet.',
+      'A Lovable project synced to GitHub can already use the existing GitHub connector. That is a GitHub connection, not a Lovable sign-in.',
+    ],
+    works_without_signing_in: [
+      { name: 'Build in Lovable', what: 'Part 2: on a Planned experiment or Prototype / MVP, review a prompt, then open Lovable in your browser (D1082).', built: true },
+      { name: 'App links and live checks', what: 'Part 3: record your app’s address and check its public page when you ask. Not built yet.', built: false },
+    ],
+    never_does: ['No Lovable sign-in or stored Lovable key.', 'No prompt sent by the Worker.', 'Nothing built or published for you.'],
+    tools: [], prompts: [], prompts_reason: 'Eadwyn does not read Lovable. No Lovable data is read by the Worker.',
+    made_by: AXAL, service: { name: 'Lovable', href: 'https://lovable.dev' },
+    sign_in: { kind: 'none', label: 'Works without signing in', key_help_href: null },
+    endpoints: { sign_in: null, api: null }, added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://docs.lovable.dev/integrations/build-with-url' }, verified_on: null,
+  },
+
+  figma: {
+    tagline: 'Design files for Prototype / MVP. Coming soon.',
+    long_description: [
+      'Figma will bring design files into Prototype / MVP.',
+      'Axal VC has not built this connector yet. Nothing connects, and nothing is read or written.',
+    ],
+    tools: [],
+    prompts: [],
+    prompts_reason: 'Nothing to ask yet: this connector is not built.',
+    made_by: AXAL,
+    service: { name: 'Figma', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Figma', key_help_href: null },
+    endpoints: { sign_in: null, api: null },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: null },
+    verified_on: null,
+  },
+  hubspot: {
+    tagline: 'Deals, companies and contacts between Axal VC and your HubSpot CRM.',
+    long_description: [
+      'Sync deals, companies and contacts between Axal VC and your HubSpot CRM.',
+      'Deals read from HubSpot land in Capital relationships. When a deal’s stage changes on Axal VC, its HubSpot deal is updated automatically. A company and its founder contact go to HubSpot only when you ask.',
+      'Connect with a HubSpot Private App token, or by signing in with HubSpot. Axal VC never deletes a HubSpot record.',
+    ],
+    tools: [
+      tool('read_token_info', 'the token’s account', 'account', 'Reads which HubSpot account the token belongs to, when you connect.', null,
+        ['`${HS_API}/oauth/v1/access-tokens/${encodeURIComponent(accessToken)}`']),
+      tool('search_deals', 'recently changed deals', 'read', 'Searches for deals changed in the last half hour, to keep stages in step.', null, ["'/crm/v3/objects/deals/search'"]),
+      tool('list_deals', 'deals', 'read', 'Lists your deals with their name, stage, pipeline and amount.', 'capital_relationships',
+        ['`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,pipeline,amount']),
+      tool('list_pipelines', 'deal pipelines', 'read', 'Reads your deal pipelines and their stages, to map stages both ways.', null, ["'/crm/v3/pipelines/deals'"]),
+      tool('create_deal', 'deals', 'write', 'Creates a HubSpot deal, automatically, when a deal’s stage changes on Axal VC and HubSpot has none yet.', null,
+        ["hsFetch(env, row, '/crm/v3/objects/deals', {"]),
+      tool('update_deal', 'deal stages', 'write', 'Updates the HubSpot deal’s stage, automatically, when its stage changes on Axal VC.', null,
+        ['`/crm/v3/objects/deals/${encodeURIComponent(deal.hubspot_deal_id)}`']),
+      tool('create_company', 'companies', 'write', 'Creates a HubSpot company for a project, when you ask.', null, ["hsFetch(env, row, '/crm/v3/objects/companies', {"]),
+      tool('update_company', 'company details', 'write', 'Updates the project’s HubSpot company, when you ask.', null,
+        ['`/crm/v3/objects/companies/${encodeURIComponent(companyId)}`']),
+      tool('create_contact', 'founder contacts', 'write', 'Creates the founder’s contact with the company, when you ask and HubSpot has none yet.', null, ["'/crm/v3/objects/contacts'"]),
+      tool('receive_deal_updates', 'deal updates', 'inbound', 'HubSpot tells Axal VC when a deal changes.', null, ['async function webhook(']),
+      tool('revoke_refresh_token', 'the sign-in', 'account', 'Revokes the HubSpot sign-in when you disconnect.', null, ['/oauth/v1/refresh-tokens/']),
+    ],
+    prompts: [
+      { name: 'recent_deals', ask: 'Which HubSpot deals were updated most recently, and at what stage?', proposes: null },
+      { name: 'deal_amounts', ask: 'What is each HubSpot deal for <project> worth?', proposes: null },
+      { name: 'send_company', ask: 'Add <project> to HubSpot as a company', proposes: 'project_id' },
+      { name: 'update_deal', ask: 'Update the HubSpot deal for <project>', proposes: 'deal_id' },
+    ],
+    prompts_reason: null,
+    made_by: AXAL,
+    service: { name: 'HubSpot', href: null },
+    sign_in: { kind: 'oauth_or_key', label: 'Private App token, or sign in with HubSpot', key_help_href: 'https://developers.hubspot.com/docs/api/overview' },
+    endpoints: { sign_in: 'https://app.hubspot.com/oauth/authorize', api: 'https://api.hubapi.com' },
+    added: '2026-05',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.hubspot.com/docs/api/overview' },
+    verified_on: null,
+  },
+  calendly: {
+    tagline: 'Bookings from your Calendly land in Customer research.',
+    long_description: [
+      'Calendly bookings flow into Customer research: Axal VC reads your scheduled events and their invitees.',
+      'To hear about new bookings, Axal VC adds a webhook subscription to your Calendly account, and can remove it again.',
+      'Connect with a Calendly Personal Access Token, or by signing in with Calendly. Axal VC never books, changes or cancels a meeting in Calendly.',
+    ],
+    tools: [
+      tool('read_profile', 'your profile', 'read', 'Reads your Calendly user and organization, when you connect.', null, ["clBearerFetch(token, '/users/me')"]),
+      tool('create_webhook_subscription', 'a booking webhook', 'account', 'Subscribes Axal VC to your booking events.', null, ['`${CL_API}/webhook_subscriptions`']),
+      tool('delete_webhook_subscription', 'the booking webhook', 'account', 'Removes that subscription.', null, ["await fetch(uri, { method: 'DELETE'"]),
+      tool('list_scheduled_events', 'scheduled events', 'read', 'Lists your scheduled events.', 'customer_research', ['`/scheduled_events?user=${encodeURIComponent(userUri)}`']),
+      tool('read_invitee', 'invitees', 'read', 'Reads who booked each event.', null, ['`${path}/invitees?count=1`']),
+      tool('receive_bookings', 'bookings', 'inbound', 'Calendly tells Axal VC when an event is booked or canceled.', null, ['async function webhook(']),
+      tool('list_event_types', 'event types', 'read', 'Lists your active event types, to offer a booking link.', null,
+        ['`/event_types?user=${encodeURIComponent(userUri)}&active=true&count=50`']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Calendly'),
+    made_by: AXAL,
+    service: { name: 'Calendly', href: null },
+    sign_in: { kind: 'oauth_or_key', label: 'Personal Access Token, or sign in with Calendly', key_help_href: 'https://developer.calendly.com/api-docs' },
+    endpoints: { sign_in: 'https://auth.calendly.com/oauth/authorize', api: 'https://api.calendly.com' },
+    added: '2026-05',
+    links: { ...NO_LINKS, developer_docs: 'https://developer.calendly.com/api-docs' },
+    verified_on: null,
+  },
+  salesforce: {
+    tagline: 'Opportunities and accounts in your Salesforce org. Coming soon.',
+    long_description: [
+      'Push opportunities and accounts to your Salesforce org.',
+      'New connections are paused while Salesforce is coming soon. A connection made before the pause keeps working: Axal VC reads opportunity stages into Capital relationships, updates an opportunity when its deal stage changes, and creates or updates an account and its contact when you ask.',
+    ],
+    tools: [
+      tool('read_identity', 'your identity', 'read', 'Reads your Salesforce identity, when you connect.', null, ['await fetch(idUrl,']),
+      tool('query_opportunities', 'opportunity stages', 'read', 'Reads your opportunities and their stages.', 'capital_relationships', ['`/query?q=${encodeURIComponent(soql)}`']),
+      tool('describe_opportunity', 'opportunity fields', 'read', 'Reads the opportunity’s fields and stages, to map stages both ways.', null, ["'/sobjects/Opportunity/describe'"]),
+      tool('update_opportunity', 'opportunity stages', 'write', 'Updates an opportunity, automatically, when its deal stage changes on Axal VC.', null,
+        ['`/sobjects/Opportunity/${encodeURIComponent(deal.sf_opportunity_id)}`', 'sfFetch(env, row, path, {']),
+      tool('create_opportunity', 'opportunities', 'write', 'Creates an opportunity, automatically, when a deal’s stage changes and Salesforce has none yet.', null,
+        ["'/sobjects/Opportunity', { method: 'POST'", 'sfFetch(env, row, path, {']),
+      tool('update_account', 'account details', 'write', 'Updates the project’s account, when you ask.', null,
+        ['`/sobjects/Account/${encodeURIComponent(accountId)}`', 'sfFetch(env, row, path, {']),
+      tool('create_account', 'accounts', 'write', 'Creates an account for a project, when you ask.', null, ["'/sobjects/Account', { method: 'POST'", 'sfFetch(env, row, path, {']),
+      tool('create_contact', 'founder contacts', 'write', 'Creates the founder’s contact with the account, when you ask.', null, ["'/sobjects/Contact', { method: 'POST'"]),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Salesforce sign-in when you disconnect.', null, ['/services/oauth2/revoke']),
+    ],
+    prompts: [],
+    prompts_reason: 'Salesforce is coming soon, so Eadwyn cannot read it yet.',
+    made_by: AXAL,
+    service: { name: 'Salesforce', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Salesforce', key_help_href: null },
+    endpoints: { sign_in: 'https://login.salesforce.com/services/oauth2/authorize', api: null },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://developer.salesforce.com/docs' },
+    verified_on: null,
+  },
+  carta: { personal: { founder: {
+    tagline: 'Your Carta cap table in Founding team, refreshed every six hours. Read-only.',
+    long_description: [
+      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync. Choose Playground for a playground app, or Production for an approved production app.',
+      'Read-only: Axal VC reads your cap table and never changes it in Carta. When you disconnect, it revokes its Carta sign-in.',
+    ],
+    tools: [
+      tool('list_issuers', 'issuers', 'read', 'Lists the companies your Carta sign-in can see.', null, ["cartaFetch(env, row, '/issuers')"]),
+      tool('list_stakeholders', 'stakeholders', 'read', 'Reads each issuer’s stakeholders.', 'founding_team', ["/stakeholders`, 'stakeholders'"]),
+      tool('list_securities', 'securities', 'read', 'Reads each issuer’s securities.', 'founding_team', ["/securities`, 'securities'"]),
+      tool('list_vesting_schedules', 'vesting schedules', 'read', 'Reads each issuer’s vesting schedules.', null, ['/vesting-schedules`']),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Carta'),
+    made_by: AXAL,
+    service: { name: 'Carta', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
+    verified_on: null,
+  }, investor: {
+    tagline: 'Your own Carta firms, funds, investments, securities and cap tables. Read-only.',
+    long_description: [
+      'For investors, sign in to your own Carta firm. Axal VC reads only the firms and funds you share, their portfolio investments, investment securities and capitalization tables. It never changes Carta or imports these records into a founder’s cap table.',
+      'Founders have a separate connection to their company’s issuer, stakeholders, securities and vesting. An investor grant never requests founder issuer permissions.',
+      'Carta returns only investments with cap-table data on Carta. Other investments are not recorded here. A denied or failed read is Unreadable, and missing figures are Not recorded.',
+      'Choose Playground for a playground app, or Production for an approved production app. Disconnect revokes this sign-in.',
+    ],
+    tools: [
+      tool('list_firms', 'your firms', 'read', 'Reads the investment firms you shared in Carta.', null, ["path: '/firms'"]),
+      tool('list_funds', 'their funds', 'read', 'Reads funds in the selected firm.', null, ["path: '/firms/:firmId/funds'"]),
+      tool('list_investments', 'portfolio investments', 'read', 'Reads the selected fund’s portfolio companies with Carta cap-table data.', null, ["path: '/firms/:firmId/funds/:fundId/investments'"]),
+      tool('list_securities', 'investment securities', 'read', 'Reads certificates, convertible notes and warrants of the selected investment.', null, ["'certificates', 'convertibleNotes', 'warrants'"]),
+      tool('read_capitalization_tables', 'capitalization tables', 'read', 'Reads a portfolio company’s cap tables and share-class summary, without stakeholder names or emails.', null, ["kind: 'capitalizationTable'"]),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Carta'),
+    made_by: AXAL,
+    service: { name: 'Carta', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
+    verified_on: null,
+  } } },
+  slack: {
+    tagline: 'Alerts from Axal VC in the Slack channel you choose.',
+    long_description: [
+      'Receive deal-flow alerts in the Slack channel you choose. Axal VC sends one-way notifications.',
+      'Slack gives Axal VC a webhook for that one channel. Axal VC reads nothing from Slack: no messages, members or channels.',
+    ],
+    tools: [
+      tool('post_message', 'alerts', 'write', 'Posts an alert to the channel you chose, when Axal VC has one for you.', null,
+        ['async function postSlackBlocks(webhook: string', 'await fetch(webhook, {']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Slack'),
+    made_by: AXAL,
+    service: { name: 'Slack', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Slack and choose a channel', key_help_href: null },
+    endpoints: { sign_in: 'https://slack.com/oauth/v2/authorize', api: null },
+    added: '2026-05',
+    links: { ...NO_LINKS, developer_docs: 'https://api.slack.com/messaging/webhooks' },
+    verified_on: null,
+  },
+  docusign: {
+    tagline: 'Send agreements for signature through DocuSign and follow their status.',
+    long_description: [
+      'Send incorporation, NDA and co-founder agreements through DocuSign, with its audit trail.',
+      'Axal VC sends an envelope only when you send it. It then follows the envelope’s status and recipients in Company creation, and keeps the signed document.',
+      'To hear about changes, Axal VC registers a Connect listener with its own signing key on your DocuSign account.',
+    ],
+    tools: [
+      tool('read_user_info', 'your account', 'read', 'Reads your DocuSign user and account, when you connect.', null, ['/oauth/userinfo`']),
+      tool('send_envelope', 'envelopes', 'write', 'Sends an envelope for signature, when you send it.', null, ["dsFetch(env, row, '/envelopes', {"]),
+      tool('read_envelope_status', 'envelope status', 'read', 'Reads an envelope’s status.', 'company_creation', ['`/envelopes/${encodeURIComponent(dsEnvelopeId)}`)']),
+      tool('read_recipients', 'recipients', 'read', 'Reads who has signed.', 'company_creation', ['/recipients`']),
+      tool('download_signed_document', 'signed documents', 'read', 'Downloads the completed document.', null, ['/documents/combined`']),
+      tool('create_connect_listener', 'a status listener', 'account', 'Registers a Connect listener for envelope events.', null, ["dsFetch(env, row, '/connect', { method: 'POST'"]),
+      tool('set_listener_signing_key', 'the listener’s signing key', 'account', 'Gives the listener Axal VC’s signing key.', null, ['/hmac`']),
+      tool('delete_connect_listener', 'the status listener', 'account', 'Removes the listener.', null, ["`/connect/${encodeURIComponent(connectId)}`, { method: 'DELETE' }"]),
+      tool('receive_envelope_events', 'envelope events', 'inbound', 'DocuSign tells Axal VC when an envelope changes.', null, ['async function webhook(']),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the DocuSign sign-in when you disconnect.', null, ['/oauth/revoke`']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('DocuSign'),
+    made_by: AXAL,
+    service: { name: 'DocuSign', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with DocuSign', key_help_href: null },
+    endpoints: { sign_in: 'https://account.docusign.com/oauth/auth', api: null },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.docusign.com/' },
+    verified_on: null,
+  },
+  crunchbase: {
+    tagline: 'Company data from Crunchbase, with your own Basic key. Read-only.',
+    long_description: [
+      'Enrich projects with Crunchbase company data: funding, headcount and sector tags.',
+      'Read-only, with your own Crunchbase Basic API key: Axal VC searches and looks up organizations for Market intelligence, and lists likely competitors by sector. Investor, round and people data needs Crunchbase Enterprise and is not built.',
+    ],
+    tools: [
+      tool('search_organizations', 'organizations', 'read', 'Searches organizations by name. A one-result search also checks your key.', null,
+        ["crunchbaseFetch(apiKey, '/searches/organizations'"]),
+      tool('lookup_organization', 'company profiles', 'read', 'Reads one organization’s profile.', 'market_intelligence',
+        ['`/entities/organizations/${encodeURIComponent(uuidOrPermalink)}`']),
+      tool('find_competitors', 'likely competitors', 'read', 'Searches active organizations in the same sector.', null, ['export async function findCompetitors(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Crunchbase'),
+    made_by: AXAL,
+    service: { name: 'Crunchbase', href: null },
+    sign_in: { kind: 'key', label: 'Crunchbase Basic API key', key_help_href: 'https://data.crunchbase.com/docs' },
+    endpoints: { sign_in: null, api: 'https://api.crunchbase.com/api/v4' },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://data.crunchbase.com/docs' },
+    verified_on: null,
+  },
+  stripe: {
+    tagline: 'MRR, ARR, churn and paying customers from your Stripe account. Read-only.',
+    long_description: [
+      'Pull live MRR, ARR, paying customers and churn from your Stripe account into Revenue and traction. Read-only.',
+      'Axal VC reads your account, subscriptions and charges, and hears about changes through Stripe events. The grant is read-only, so nothing here can charge, refund or pay out.',
+    ],
+    tools: [
+      tool('read_account', 'your account', 'read', 'Reads your Stripe account’s name and id.', null, ["'/v1/account'"]),
+      tool('list_subscriptions', 'subscriptions', 'read', 'Lists active and trialing subscriptions, for MRR, ARR and churn.', 'revenue_and_traction',
+        ["'/v1/subscriptions?status=active'", "'/v1/subscriptions?status=trialing'"]),
+      tool('list_charges', 'charges', 'read', 'Lists your charges, for paying customers.', null, ["listAll<RawCharge>(token, '/v1/charges')"]),
+      tool('receive_events', 'account events', 'inbound', 'Stripe tells Axal VC when a subscription or charge changes.', null, ['async function webhook(']),
+      tool('deauthorize', 'the grant', 'account', 'Deauthorizes Axal VC’s grant when you disconnect.', null, ['`${STRIPE_CONNECT}/oauth/deauthorize`']),
+    ],
+    prompts: [
+      { name: 'mrr_arr', ask: 'What are MRR and ARR from Stripe for this company’s projects?', proposes: null },
+      { name: 'churn_customers', ask: 'What is monthly churn, and how many paying customers does <project> have?', proposes: null },
+    ],
+    prompts_reason: null,
+    made_by: AXAL,
+    service: { name: 'Stripe', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Stripe (read-only)', key_help_href: null },
+    endpoints: { sign_in: 'https://connect.stripe.com/oauth/authorize', api: 'https://api.stripe.com' },
+    added: '2026-05',
+    links: { ...NO_LINKS, developer_docs: 'https://stripe.com/docs/connect/standard-accounts' },
+    verified_on: null,
+  },
+  github: {
+    tagline: 'Issues, milestones, pull requests and releases from the repositories you choose. Read-only.',
+    long_description: [
+      'Read issues, milestones, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only. In Prototype / MVP, a must-have follows its pull request: draft is Planned, open is In progress, asked for review or approved is In review, merged is Built, and closed unmerged is Dropped, which you undo by marking it a must-have again. Each release records, on each must-have, whether it is in that release or was still open when it was published.',
+      'In Product roadmap, a milestone groups its issues’ items and gives them its due date as their target. Each release is a row there, and marks Shipped the items it closed: an issue its notes name, or one a pull request merged before it closed.',
+      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. In Build › Solution design, each repository\'s languages and topics show as Built with. Its architecture decision records, and the README and docs sections headed Architecture, Design or Decisions, arrive as proposals: nothing is written until you accept one. In Build › Founding team, each repository\'s contributors and their commits in the last 90 days arrive for you to match: you map each GitHub login to a founder once, and Axal VC never guesses it from a name or an email. Only your project\'s members see the logins. In Build › Company creation, a repository a personal account owns brings a proposed step, moving the code into the company\'s GitHub organisation, which you accept or dismiss; one an organisation owns is recorded as evidence on your IP assignment step. A repository with no licence file says so.',
+      'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection. Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. You can mark a picked repository Synced with Lovable, and Build shows the mark beside it. Only you set or clear it; a sync never changes it.',
+    ],
+    tools: [
+      tool('read_installations', 'app installations', 'read', 'Lists where the Axal VC app is installed for you.', null, ["'/user/installations'"]),
+      tool('list_repositories', 'repository names', 'read', 'Lists the repositories each installation can see, so you can choose.', null,
+        ['`/user/installations/${id}/repositories`']),
+      tool('read_account', 'your account name', 'read', 'Reads your GitHub login, when you connect.', null, ["ghJson<any>(token, '/user')"]),
+      tool('read_issues', 'issues', 'read', 'Reads issues in the repositories you chose.', 'product_roadmap', ['`${path}/issues?state=all`']),
+      tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose. Each must-have follows its pull request, and records its release checks.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
+      tool('read_pull_request_reviews', 'pull request reviews', 'read', 'Reads the reviews of up to 30 open pull requests a sync, to see which are approved and so In review.', 'prototype_mvp',
+        ['`${path}/pulls/${pr.number}/reviews?per_page=100`']),
+      tool('read_milestones', 'milestones', 'read', 'Reads milestones in the repositories you chose. Each groups its issues’ items in Product roadmap, with its due date as their target.', 'product_roadmap',
+        ['`${path}/milestones?state=all&per_page=${PER_PAGE}&page=${page}`']),
+      tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. Each is a release row in Product roadmap, and marks Shipped the items it closed.', 'product_roadmap',
+        ['`${path}/releases`']),
+      tool('read_design_docs', 'README, docs and decision records', 'read',
+        'Reads the README and the Markdown in docs/, doc/ and adr/, at most 40 files and 200 KB per repository, newest first. Each decision record or Architecture, Design or Decisions section is proposed on Solution design; you accept or dismiss it.',
+        'solution_design', ['`${path}/readme`', '`${path}/contents/${', '`${path}/commits?path=${']),
+      tool('read_stack', 'languages and topics', 'read', 'Reads each repository\'s languages and topics, shown on Solution design as Built with.', 'solution_design',
+        ['`${path}/languages`', 'stackTopics(meta?.topics)']),
+      tool('read_contributors', 'contributors and recent commits', 'read',
+        'Reads each repository\'s contributors and its last 90 days of commits, at most 500 per repository, for you to map each login to a founder on Founding team. Bots are left out.',
+        'founding_team', ['`${path}/contributors?per_page=${PER_PAGE}`', '`${path}/commits?since=${']),
+      tool('read_ownership', 'owner and licence', 'read',
+        'Reads who owns each repository and its licence. A personal account proposes a step on Company creation, to move the code into the company\'s organisation; you accept or dismiss it.',
+        'company_creation', ['repoFacts(await res.json())']),
+      tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
+        ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
+    ],
+    prompts: [
+      { name: 'fed_by_github', ask: 'What has GitHub brought into this company’s projects?', proposes: null },
+      { name: 'roadmap_from_issues', ask: 'How many GitHub issues became roadmap items for <project>?', proposes: null },
+    ],
+    prompts_reason: null,
+    made_by: AXAL,
+    service: { name: 'GitHub', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with GitHub and choose repositories', key_help_href: null },
+    endpoints: { sign_in: 'https://github.com/login/oauth/authorize', api: 'https://api.github.com' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app' },
+    verified_on: null,
+  },
+  // D1096 (#2961): each tool names its call site in `services/vercel/api.ts`; part 1's sync calls the installation, projects and domains reads.
+  vercel: {
+    tagline: 'Your Vercel projects, deployments and domains, for the venture you choose. Read-only.',
+    long_description: [
+      'Connect Vercel through its own install screen, pick a personal account or a team, and choose the projects that feed one venture. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
+      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is the Hosting system, with each sync and its production health: a failed deploy, a rollback, a domain unverified, misconfigured or expiring. Solution design shows what the product runs on. The same sync keeps each project\'s newest 200 deployments: production deploys feed Product roadmap, and previews feed Prototype / MVP.',
+      'Axal VC asks Vercel for Read on projects, deployments and domains, nothing else. If Vercel grants more, Axal VC uninstalls the integration and refuses the connection. Disconnecting uninstalls it on Vercel and deletes what Axal VC read.',
+    ],
+    tools: [
+      tool('read_installation', 'the installation', 'read', 'Reads which account and projects the installation covers, and the permissions it holds.', null,
+        ['`/v1/integrations/configuration/${key(auth.configuration_id)}`)']),
+      tool('read_projects', 'project names and settings', 'read', 'Lists the projects the installation reaches, so you can choose, and reads each chosen project.', 'operating_systems',
+        ["'/v10/projects'", '`/v9/projects/${key(id)}`)']),
+      tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain, and each domain\'s configuration and the account\'s registered domains, for production health.', 'operating_systems',
+        ['`/v9/projects/${key(id)}/domains`', '`/v6/domains/${key(name)}/config`', "'/v5/domains'"]),
+      tool('read_deployments', 'deployments', 'read', 'Reads each chosen project\'s newest 200 deployments: state, times, build length, commit, branch and pull request. Never who made one or its commit message. Production deploys feed Product roadmap; previews feed Prototype / MVP. The sync also reads one page of production deployments per project for production health (D1097).', 'prototype_mvp',
+        ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
+      tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
+        ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Vercel'),
+    made_by: AXAL,
+    service: { name: 'Vercel', href: 'https://vercel.com' },
+    sign_in: { kind: 'oauth', label: 'Install the Vercel integration and choose projects', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://api.vercel.com' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://vercel.com/docs/integrations/create-integration/vercel-api-integrations' },
+    verified_on: null,
+  },
+  zoom: {
+    tagline: 'Interview calls on your own Zoom, and their cloud transcripts.',
+    long_description: [
+      'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
+      'Axal VC creates a meeting only when you schedule an interview call, and deletes it when you cancel. It reads a meeting’s recordings only to download its transcript into Customer research.',
+      'A call that ends without a cloud transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
+      'When you disconnect, Axal VC revokes its Zoom grant.',
+    ],
+    tools: [
+      tool('read_user', 'your Zoom user', 'read', 'Reads your Zoom user id, to tell your grant apart.', null, ['`${ZOOM_API}/users/me`', "zoomApi(env, conn, '/users/me')"]),
+      tool('create_meeting', 'interview meetings', 'write', 'Creates a meeting, when you schedule an interview call.', null, ["zoomApi(env, conn, '/users/me/meetings', {"]),
+      tool('delete_meeting', 'interview meetings', 'write', 'Deletes that meeting, when you cancel its interview call.', null, ["`/meetings/${externalRef}`, { method: 'DELETE' }"]),
+      tool('read_meeting', 'a pasted meeting', 'read', 'Reads a meeting you paste, to confirm you host it.', null, ['zoomApi(env, conn, `/meetings/${meetingId}`)']),
+      tool('list_recordings', 'cloud recordings', 'read', 'Lists a meeting’s recording files, to find its transcript.', null, ['/recordings`']),
+      tool('download_transcript', 'transcripts', 'read', 'Downloads the transcript into the interview.', 'customer_research', ['async function downloadTranscript(']),
+      tool('list_past_instances', 'past instances', 'read', 'Lists a meeting’s past instances, to recover a restarted call.', null,
+        ['`/past_meetings/${meetingPathId(meetingId)}/instances`']),
+      tool('receive_events', 'meeting events', 'inbound', 'Zoom tells Axal VC when a transcript is ready or the app is removed.', null, ['export async function handleZoomWebhook(']),
+      tool('revoke_grant', 'the grant', 'account', 'Revokes the Zoom grant when you disconnect.', null, ['`${ZOOM_AUTH}/oauth/revoke`']),
+      tool('notetaker_join_token', 'the notetaker’s join', 'read', 'Gets a one-time token for Axal’s notetaker to join your call, only while you are in it. It is never stored.', null,
+        ['`/users/me/token?type=onbehalf&meeting_id=${meetingId}`']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Zoom'),
+    made_by: AXAL,
+    service: { name: 'Zoom', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Zoom', key_help_href: null },
+    endpoints: { sign_in: 'https://zoom.us/oauth/authorize', api: 'https://api.zoom.us/v2' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.zoom.us/docs/integrations/oauth/' },
+    verified_on: null,
+  },
+  google_workspace: {
+    tagline: 'Choose Google files for your modules. Coming soon.',
+    long_description: [
+      'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
+      'Connect Google first at /account/connectors/google, then allow Google files and choose them on this page, for a venture and a module. Google’s file picker opens once Axal VC’s Google Cloud project is set up for it.',
+      'Validate reads what you map: a Doc of interview notes becomes a session’s text, and a Form’s qualifying responses wait as signals for you to confirm. No respondent name or email is kept. Build, Raise and Grow imports ship in later parts.',
+      'Stopping use or disconnecting keeps accepted facts; linked source records are removed.',
+    ],
+    tools: [
+      tool('pick_files', 'Choose files', 'read', 'Confirms each file chosen in Google’s Picker.', null, ["'files.get'"]),
+      tool('read_form', 'Form questions', 'read', 'Previews the chosen Form’s questions without respondent identity.', null, ["'forms.get'"]),
+      tool('read_doc', 'Documents', 'read', 'Reads a chosen Doc of interview notes into the session of the interview you map it to.', null, ["'documents.get'"]),
+      tool('read_sheet', 'Sheets', 'read', 'Previews up to five rows; stores no cells.', null, ["'spreadsheets.values.get'"]),
+      tool('read_slides', 'Slides', 'read', 'Reads chosen slides; deck imports are not built yet.', null, ["'presentations.get'"]),
+      tool('read_form_responses', 'Forms', 'read', 'Reads each response’s answer to the question you mapped, never who sent it, and proposes the qualifying ones as signals to confirm.', null, ["'forms.responses.list'"]),
+      tool('copy_file_to_data_room', 'Data room', 'read', 'Not built yet: a future import may read an exported or downloaded copy.', null, ["'files.export'", "'alt=media'"]),
+      tool('revoke_grant', 'Disconnect Google', 'account', 'Revokes the combined Google grant at your request.', null, ['clearWorkspaceConnection(']),
+    ],
+    prompts: [], prompts_reason: 'Eadwyn does not read Google Workspace yet.',
+    made_by: AXAL, service: { name: 'Google Workspace', href: 'https://workspace.google.com' },
+    sign_in: { kind: 'first_party', label: 'Allow Google files', key_help_href: null },
+    endpoints: { sign_in: 'https://accounts.google.com/o/oauth2/v2/auth', api: null },
+    added: null, links: { ...NO_LINKS, developer_docs: 'https://developers.google.com/workspace/drive/picker/guides/web-picker' }, verified_on: null,
+  },
+  google_calendar: {
+    tagline: 'Your Google Calendar events and interview slots, and sign-in with Google.',
+    long_description: [
+      'Calendar events and interview slots from your Google sign-in.',
+      'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research. With that permission, a call you start in Record a Session is a Meet Axal creates: Open, so Eadwyn AI joins, and transcribing itself where your plan allows.',
+      'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
+      'Google Docs, Sheets, Slides, Forms and Drive files are chosen on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+    ],
+    tools: [
+      tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
+      tool('read_profile', 'your profile', 'read', 'Reads your email address and name, when you sign in.', null, ['fetchWithTimeout(GOOGLE_USERINFO_URL']),
+      tool('create_event', 'calendar events', 'write', 'Adds an event to your primary calendar, when you schedule one.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events`,']),
+      tool('update_event', 'calendar events', 'write', 'Updates an event Axal VC added, when you change it.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`']),
+      tool('delete_event', 'calendar events', 'write', 'Removes an event Axal VC added, when you cancel it.', null, ['export async function deleteEventFromGoogle(']),
+      tool('create_meet_event', 'Meet interview calls', 'write', 'Adds an interview call with a Google Meet link, when you schedule one.', null,
+        ["'/calendars/primary/events?conferenceDataVersion=1'"]),
+      tool('create_meet_space', 'Meet interview calls', 'write', 'Creates an Open Google Meet call that Eadwyn AI can join, set to transcribe itself where your plan allows, when you start a call in Record a Session after allowing it.', null,
+        ['return await fetch(`${MEET_API}/spaces`, {']),
+      tool('list_events', 'calendar events', 'read', 'Reads events on your primary calendar.', 'customer_research',
+        ['calendarFetch(token, `/calendars/primary/events?${q}`)', 'calendarFetch(token, `/calendars/primary/events/${eventId}`)']),
+      tool('read_meet_transcripts', 'Meet transcripts', 'read', 'Reads a Meet call’s transcript, when you have allowed it.', 'customer_research', ['fetch(`${MEET_API}${path}`']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Google Calendar'),
+    made_by: AXAL,
+    service: { name: 'Google', href: null },
+    sign_in: { kind: 'first_party', label: 'Sign in with Google', key_help_href: null },
+    endpoints: { sign_in: 'https://accounts.google.com/o/oauth2/v2/auth', api: 'https://www.googleapis.com/calendar/v3' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: null },
+    verified_on: null,
+  },
+  microsoft_365: {
+    tagline: 'Your Outlook calendar events and interview slots.',
+    long_description: [
+      'Calendar events and interview slots from your Microsoft sign-in.',
+      'Axal VC adds, updates and removes the events it schedules on your Outlook calendar, and reads your profile to confirm who you are.',
+    ],
+    tools: [
+      tool('read_profile', 'your profile', 'read', 'Reads your email address and name, when you sign in.', null, ['`${MICROSOFT_GRAPH}/me`, {']),
+      tool('create_event', 'calendar events', 'write', 'Adds an event to your calendar, when you schedule one.', null, ['`${MICROSOFT_GRAPH}/me/events`,']),
+      tool('update_event', 'calendar events', 'write', 'Updates an event Axal VC added, when you change it.', null, ['`${MICROSOFT_GRAPH}/me/events/${eventId}`']),
+      tool('delete_event', 'calendar events', 'write', 'Removes an event Axal VC added, when you cancel it.', null, ['export async function deleteEventFromMicrosoft(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Microsoft 365'),
+    made_by: AXAL,
+    service: { name: 'Microsoft', href: 'https://www.microsoft.com/microsoft-365' },
+    sign_in: { kind: 'first_party', label: 'Sign in with Microsoft', key_help_href: null },
+    endpoints: { sign_in: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize', api: 'https://graph.microsoft.com/v1.0' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: null },
+    verified_on: null,
+  },
+  mercury: {
+    personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
+  },
+  // D1085 (#2950, #2405 part 1): each tool is one of `NOTION_READ_TOOLS`, by its call site in `services/notion/reads.ts`.
+  notion: {
+    tagline: 'Read the Notion pages and databases you share, read-only, through Notion’s own sign-in.',
+    long_description: [
+      'Sign in with Notion, and Axal VC searches and reads the pages and databases your Notion sign-in can see, through Notion’s MCP server.',
+      'Notion’s own sign-in allows reading and writing. Axal VC calls three read tools only, from a fixed list; every other tool Notion offers is refused before any request is made.',
+      'Nothing lands in a module yet. The Notion parts that follow add what lands, and where, one at a time.',
+    ],
+    tools: [
+      tool('search', 'page and database titles', 'read', 'Searches the pages and databases your Notion sign-in can see, by title and text.', null, ["call('notion-search'"]),
+      tool('read_page', 'the pages you open', 'read', 'Reads one page you pick: its text, title, link and when it was last edited.', null, ["call('notion-fetch'"]),
+      tool('read_rows', 'database rows', 'read', 'Reads a database’s rows a page at a time, as rows or through one of its views. Never by SQL.', null, ["call('notion-query-data-sources'"]),
+    ],
+    never_does: [
+      'No page, database or comment is created, edited, moved or deleted in Notion.',
+      'No SQL query is sent to a Notion database.',
+      'No instruction written in a page is followed: page text is read as data.',
+      'No Notion token is pasted or shown: Sign in with Notion only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('Notion'),
+    made_by: AXAL,
+    service: { name: 'Notion', href: 'https://www.notion.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with Notion', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.notion.com/mcp', api: null },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.notion.com/docs/mcp' },
+    verified_on: null,
+  },
+  // D1385 (#3731, #2409 part 1): each tool is one of `POSTHOG_READ_TOOLS`, by its call site in `services/posthog/reads.ts`.
+  posthog: {
+    tagline: 'Read your PostHog product analytics, read only, through PostHog’s own sign-in: one project per company.',
+    long_description: [
+      'Sign in with PostHog, and choose the one PostHog project each of your companies reads. Axal VC reads it through PostHog’s MCP server, in read-only mode.',
+      'Axal VC calls 19 read tools only, from a fixed list: organisations and projects, saved insights and their results, experiments, surveys and feature flags. Every other tool is refused before any request is made.',
+      'Nothing lands in a module yet. The PostHog parts that follow add what lands, and where, one at a time.',
+    ],
+    tools: [
+      tool('projects', 'your organisations and projects', 'read', 'Lists the organisations and projects your PostHog sign-in can open, so you can choose one per company.', null, ["call('organizations-get'", "call('projects-get'"]),
+      tool('insights', 'saved insights', 'read', 'Lists the saved insights in the linked project and reads the one you choose, without its results.', null, ["call('insights-list'", "call('insight-get'"]),
+      tool('insight_results', 'insight results', 'read', 'Runs a saved insight you track, or a trends, funnel, retention or lifecycle query of that kind only. Never SQL or HogQL.', null, ["call('insight-query'", "call('query-trends'", "call('query-funnel'", "call('query-retention'", "call('query-lifecycle'"]),
+      tool('web_overview', 'website totals', 'read', 'Reads visitors, pageviews, sessions, session length and bounce rate for a window.', null, ["call('query-web-overview'"]),
+      tool('experiments', 'experiments and results', 'read', 'Reads your experiments, their variants and their results.', null, ["call('experiment-list'", "call('experiment-get'", "call('experiment-results-get'"]),
+      tool('surveys', 'surveys and answers', 'read', 'Reads your surveys, their response counts and their answers, without who gave them.', null, ["call('surveys-get-all'", "call('survey-get'", "call('survey-stats'", "call('surveys-responses-list'"]),
+      tool('flags', 'feature flags', 'read', 'Reads your feature flags, whether each is on and its rollout.', null, ["call('feature-flag-get-all'", "call('feature-flag-get-definition'"]),
+    ],
+    never_does: [
+      'Nothing is created, edited or deleted in PostHog: every request is in PostHog’s read-only mode.',
+      'No person, recording, cohort or raw event is read, and no SQL or HogQL is sent.',
+      'No person identifier is kept: survey answers arrive without who gave them.',
+      'No PostHog token or API key is pasted or shown: Sign in with PostHog only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('PostHog'),
+    made_by: AXAL,
+    service: { name: 'PostHog', href: 'https://posthog.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with PostHog', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.posthog.com/mcp', api: null },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://posthog.com/docs/model-context-protocol' },
+    verified_on: null,
+  },
+  // D2407 (#2407 parts 1–3): each read tool is one of `BEEHIIV_READ_TOOLS`, by its call site in `services/beehiiv/reads.ts`;
+  // the one write tool is the draft tool, by its call site in `services/beehiiv/drafts.ts` (part 3).
+  beehiiv: {
+    tagline: 'Read your newsletter on Beehiiv: subscriber counts, open and click rates, and each post’s performance.',
+    long_description: [
+      'Reads your publication’s subscriber counts, open and click rates, and each post’s performance. Never reads your subscribers’ addresses.',
+      'Sign in with Beehiiv, and choose the one publication each of your companies reads. You press each sync from Grow: the figures land in Distribution and in Revenue and traction with their date, and a figure you delete stays deleted.',
+      'Creates a draft in your Beehiiv when you press Send. You publish it from Beehiiv. Each publication is switched on per company under Publishing, and starts off. Read works on every Beehiiv plan. Drafts need a paid plan.',
+    ],
+    tools: [
+      tool('publications', 'your publications', 'read', 'Lists the publications your Beehiiv sign-in can see, so you can choose one per company.', null, ["call('list_publications'"]),
+      tool('audience', 'subscriber counts and average open and click rates', 'read', 'Reads your publication’s active, free and premium subscriber counts and its average open and click rates, as a dated snapshot.', 'distribution', ["call('get_publication_stats'"]),
+      tool('traction', 'active and premium subscribers', 'read', 'Shows active and premium subscribers in Revenue and traction, beside revenue and never as revenue. Paid-subscription revenue is not read.', 'revenue_and_traction', ["call('get_publication_stats'"]),
+      tool('posts', 'sent posts and their figures', 'read', 'Reads your last 20 sent posts, each with its recipients, unique opens and clicks, and its open and click rates.', 'distribution', ["call('list_posts'", "call('get_post_stats'"]),
+      tool('draft', 'a draft post', 'write', 'Creates a draft post in a publication you switched on, only when you press Send in Publish to…: a title and the text you previewed, never published, scheduled or sent.', null, ['session.callTool(DRAFT_TOOL']),
+    ],
+    never_does: [
+      'No subscriber, email address or segment is read or kept: only counts and rates arrive.',
+      'Nothing is published, scheduled or sent from Axal VC, and no post is edited or deleted: a draft is created only when you press Send, and you publish it from Beehiiv.',
+      'Your Beehiiv readers are never joined to Axal VC’s own newsletters, and no Axal VC audience is offered to Beehiiv.',
+      'No Beehiiv API key is pasted or shown: Sign in with Beehiiv only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('Beehiiv'),
+    made_by: AXAL,
+    service: { name: 'Beehiiv', href: 'https://www.beehiiv.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with Beehiiv', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.beehiiv.com/mcp', api: null },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://www.beehiiv.com/support/article/39255979546263-getting-started-with-the-beehiiv-mcp' },
+    verified_on: null,
+  },
+};
+
+/** Connectors with a page but no registry row (D753 decision 2). */
+export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
+  linkedin: {
+    // D1352 (#3567): true, and no more. No line claims API access; part 5 (#3569) adds one only when it is live.
+    tagline: 'Sign in with LinkedIn, then import your connections from LinkedIn\'s data download.',
+    long_description: [
+      'Sign in with LinkedIn to confirm who you are. Axal VC reads your identity once, at sign-in, and then discards the token.',
+      'Your connections come from a file you download from LinkedIn yourself (Settings → Data privacy → Get a copy of your data → Connections). You upload it here, see what it would add, and then import it into your Network.',
+      'Axal VC cannot read your LinkedIn messages, post for you, or see your connections without your file.',
+    ],
+    tools: [
+      tool('read_identity', 'your identity', 'read', 'Confirms who you are: your name and email address, once, at sign-in.', null, ['fetch(LINKEDIN_USERINFO_URL']),
+      tool('import_connections', 'your connections file', 'read', 'Imports the Connections.csv you download from LinkedIn and upload. Nothing is read from LinkedIn without your file. They land in your Network.', null, ['parseConnectionsCsv(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('LinkedIn'),
+    made_by: AXAL,
+    service: { name: 'LinkedIn', href: null },
+    sign_in: { kind: 'first_party', label: 'Sign in with LinkedIn', key_help_href: null },
+    endpoints: { sign_in: 'https://www.linkedin.com/oauth/v2/authorization', api: 'https://api.linkedin.com/v2/userinfo' },
+    added: '2026-05',
+    links: { ...NO_LINKS, developer_docs: null },
+    verified_on: null,
+  },
+};
+
+/**
+ * LinkedIn's card facts (D753 W2, #1878): what the catalogue knows of a
+ * connector with no registry row. The values the SPA's `FIRST_PARTY` uses
+ * (`connectorsModel.js`); `users` holds the LinkedIn identity. No
+ * `has_implementation` (whether it can connect is `/api/linkedin/status`'s
+ * `configured`) and no `already_connected` (the SPA keeps reading that route).
+ */
+export interface FirstPartyCard {
+  key: 'linkedin'; display_name: string; category: ConnectorCategory; status: 'live'; tier: 'free';
+  auth_type: 'oauth2'; supports_pat: false; docs_url: null; first_party: true; connection_source: 'users';
+}
+export const FIRST_PARTY_CARDS: { readonly linkedin: Readonly<FirstPartyCard> } = Object.freeze({
+  linkedin: Object.freeze({
+    key: 'linkedin', display_name: 'LinkedIn', category: 'Data', status: 'live', tier: 'free',
+    auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'users',
+  } as const),
+});
+
+/**
+ * The interview channels (D753 task C1): pages for the keys `GET /api/channels`
+ * reports, which are not registry rows. The words are D754 §11's and D756
+ * §1.11's; the tools are read off `services/channels/`. Neither is connectable
+ * on production yet, so `added` is null.
+ */
+export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage } = {
+  whatsapp: {
+    tagline: 'Customers’ chats with your business number wait here for 30 days. Add one to an interview.',
+    long_description: [
+      'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
+      'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Check Meta’s current messaging rates and your WhatsApp Business Account’s limits.',
+      'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed.',
+    ],
+    tools: [
+      tool('list_numbers', 'your business account’s numbers', 'read', 'Lists the numbers in your WhatsApp Business Account, to confirm the one you signed up is yours, and again before you disconnect.', null,
+        ['/phone_numbers?fields=id,display_phone_number,verified_name,messaging_limit_tier`', '/phone_numbers?fields=id&limit=100`']),
+      tool('read_number', 'your number’s name and quality', 'read', 'Reads your number’s name, quality rating and messaging limit, when you test the connection.', null,
+        ['?fields=verified_name,quality_rating,messaging_limit_tier,display_phone_number`']),
+      tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
+        ['export async function fetchWhatsAppMedia(', "graph('media',"]),
+      tool('send_message', 'messages you send', 'write', 'Sends a text to a customer, when you send it from Axal, within 24 hours of their last message.', null,
+        ['`${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`']),
+      tool('subscribe_app', 'your business account’s webhooks', 'account', 'Subscribes Axal to your WhatsApp Business Account’s webhooks, when you connect.', null, ["graph('subscribe',"]),
+      tool('unsubscribe_app', 'your business account’s webhooks', 'account', 'Removes that subscription when you disconnect, unless another Axal member still uses a number in the account.', null, ["graph('unsubscribe',"]),
+      tool('receive_messages', 'customer messages', 'inbound', 'WhatsApp tells Axal when a customer writes to your number.', null, ['export function normaliseWhatsAppPayload(']),
+      tool('receive_delivery_status', 'delivery status', 'inbound', 'WhatsApp tells Axal when a message Axal sent is delivered or fails.', null, ['export async function applyDeliveryStatus(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('WhatsApp'),
+    made_by: AXAL,
+    service: { name: 'WhatsApp', href: null },
+    sign_in: { kind: 'channel', label: 'Meta sign-up', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://graph.facebook.com/v23.0' },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/docs/whatsapp/cloud-api' },
+    verified_on: null,
+  },
+  telegram: {
+    tagline: 'Telegram Business: the customer chats you choose, and their voice notes, into Validate.',
+    long_description: [
+      'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
+      'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
+      'What it can’t do: group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead. Calls: Axal does not join, place or answer Telegram calls. Forwarded recordings (Send to Axal) are built but not switched on yet. When enabled, Axal waits for you to confirm everyone agreed before it downloads or transcribes the audio.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed. Up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
+    ],
+    tools: [
+      tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
+        ["call(env, 'getFile', { file_id: note.file })", '`${TELEGRAM_API}/file/bot${token}/${path}`']),
+      tool('send_reply', 'replies you send', 'write', 'Sends a reply in a customer chat, when you send it from Axal, within 24 hours of their last message.', null,
+        ['export async function sendBusinessMessage(', '`${TELEGRAM_API}/bot${token}/${method}`']),
+      tool('send_private_message', 'messages to you', 'write', 'Sends you the link prompts, confirmations and the test, in your own chat with the Axal bot.', null,
+        ['export async function sendPrivateMessage(', '`${TELEGRAM_API}/bot${token}/${method}`']),
+      tool('set_webhook', 'the bot’s webhook', 'account', 'Points the Axal bot’s updates at Axal, when a Super Admin registers the webhook.', null, ["call(env, 'setWebhook', {"]),
+      tool('receive_updates', 'chats you choose', 'inbound', 'Telegram tells Axal about messages in the chats you chose, and when you connect or change the bot.', null,
+        ['export function normaliseTelegramUpdate(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Telegram'),
+    made_by: AXAL,
+    service: { name: 'Telegram', href: null },
+    sign_in: { kind: 'channel', label: 'Telegram bot link', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://api.telegram.org' },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://core.telegram.org/bots/api' },
+    verified_on: null,
+  },
+};
+
+/** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
+export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing', 'Social',
+] as const);
+
+/** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */
+export const PAGE_ALIAS = Object.freeze({ google: 'google_calendar', microsoft: 'microsoft_365' } as const);
+
+/** Connectors that can move money. None can. */
+export const MONEY_MOVERS: ReadonlySet<string> = new Set<string>();
+
+
+export interface Trust {
+  built_by: 'Axal VC';
+  reads: string[];
+  writes: string[];
+  read_only: boolean;
+  moves_money: boolean;
+  sentence: string;
+}
+
+const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPages => !!e && 'personal' in e;
+
+/** The page for a key (registry or page key) and an optional Mercury variant: a role. */
+function pageFor(key: string, variant?: string): ConnectorPage | null {
+  const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
+  if (k === 'linkedin') return FIRST_PARTY_PAGES.linkedin;
+  if (Object.hasOwn(CHANNEL_PAGES, k)) return CHANNEL_PAGES[k as keyof typeof CHANNEL_PAGES];
+  if (!Object.hasOwn(CONNECTOR_PAGES, k)) return null;
+  const entry = CONNECTOR_PAGES[k];
+  if (!isVariant(entry)) return entry;
+  return variant && Object.hasOwn(entry.personal, variant) ? entry.personal[variant] : null;
+}
+
+/** "a", "a and b", "a, b and c". */
+function listWords(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+const unique = (items: string[]) => [...new Set(items)];
+
+/** The trust notice (D753 decision 5), from the page's tools. */
+export function trustFor(key: string, variant?: string): Trust | null {
+  const page = pageFor(key, variant);
+  if (!page) return null;
+  const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
+  const service = page.service.name;
+  const reads = unique(page.tools.filter((t) => t.access === 'read').map((t) => t.label));
+  const writes = unique(page.tools.filter((t) => t.access === 'write').map((t) => t.label));
+  const readOnly = writes.length === 0;
+  const movesMoney = MONEY_MOVERS.has(k);
+  const comingSoon = /Coming soon\.$/.test(page.tagline);
+  const parts: string[] = [];
+  if (comingSoon && page.tools.length === 0) {
+    parts.push('Axal VC has not built this connector yet, so it reads and writes nothing.');
+  } else {
+    if (comingSoon) parts.push('New connections are paused.');
+    parts.push('Axal VC built and runs this connector.');
+    parts.push(reads.length ? `It reads ${listWords(reads)} from ${service}.` : `It reads nothing from ${service}.`);
+    parts.push(readOnly ? `It never writes to ${service}.` : `It writes to ${service}: ${listWords(writes)}. Each tool below says when.`);
+  }
+  if (PUBLISHERS.has(k)) parts.push('It posts only when you press Send.');
+  if (!movesMoney) parts.push('Nothing it does can move money.');
+  return { built_by: 'Axal VC', reads, writes, read_only: readOnly, moves_money: movesMoney, sentence: parts.join(' ') };
+}
+
+/** The same pattern as `CONNECTOR_KEY_RE` (`services/eadwynConnectors.ts`); the test holds them equal. */
+const PAGE_KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
+const HUB = '/account/connectors';
+
+/** A connector's page path, from a registry key or a page key; the hub for anything unknown. */
+export function connectorPagePath(key: string): string {
+  if (typeof key !== 'string' || !PAGE_KEY_RE.test(key)) return HUB;
+  const pageKey = key === PAGE_ALIAS.google ? 'google' : key === PAGE_ALIAS.microsoft ? 'microsoft' : key;
+  const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CHANNEL_PAGES, pageKey) || Object.hasOwn(CONNECTOR_PAGES, pageKey);
+  return known ? `${HUB}/${pageKey}` : HUB;
+}
+
+/**
+ * The registry key and the page key a directory request names (D753 W2,
+ * #1878), or null for a key no page could have. Pure: whether the key exists
+ * is the route's to check. `google` and `microsoft` are page keys
+ * (`PAGE_ALIAS`, own properties only); every other key is its own page key.
+ */
+export function directoryKeyFor(raw: string): { key: string; page_key: string } | null {
+  if (typeof raw !== 'string' || !PAGE_KEY_RE.test(raw)) return null;
+  if (Object.hasOwn(PAGE_ALIAS, raw)) return { key: PAGE_ALIAS[raw as keyof typeof PAGE_ALIAS], page_key: raw };
+  return { key: raw, page_key: raw };
+}
+
+export type PageDescriptor = ConnectorPage & { key: string; page_key: string; page_href: string; trust: Trust };
+
+/**
+ * One connector's page for this viewer, or null. Mercury's variant follows
+ * `audienceFor` (D753 decision 15): a founder, partner or investor gets their
+ * `personal` role; an admin on HQ (`preview`, D879) the founder's, read-only;
+ * anyone else null. It does not merge
+ * `publicDescriptor`; the route's `catalogueEntry` (#1878) joins the two.
+ */
+export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>, viewer?: DescriptorViewer): PageDescriptor | null {
+  const key = p?.key;
+  if (typeof key !== 'string') return null;
+  let page: ConnectorPage | null = null;
+  let variant: string | undefined;
+  if (key === 'linkedin') {
+    page = FIRST_PARTY_PAGES.linkedin;
+  } else if (Object.hasOwn(CHANNEL_PAGES, key)) {
+    page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
+  } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
+    const entry = CONNECTOR_PAGES[key];
+    const audience = viewer && (p.preview_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
+    if (audience === 'none') return null;
+    if (isVariant(entry)) {
+      variant = audience === 'preview' ? 'founder' : audience === 'personal' ? String(viewer?.role || '').toLowerCase() : undefined;
+      page = variant ? pageFor(key, variant) : null;
+    } else {
+      page = entry;
+    }
+  }
+  if (!page) return null;
+  const page_href = connectorPagePath(key);
+  return {
+    ...page,
+    key,
+    page_key: page_href.slice(HUB.length + 1) || key,
+    page_href,
+    trust: trustFor(key, variant)!,
+  };
+}
+
+/**
+ * A channel's page (`whatsapp`, `telegram`), or null for any other key. For
+ * `GET /api/connectors/directory/:key` (#1878), which answers the channel keys
+ * from here because they are not registry rows.
+ */
+export function channelPage(key: string): PageDescriptor | null {
+  return typeof key === 'string' && Object.hasOwn(CHANNEL_PAGES, key) ? pageDescriptor({ key }) : null;
+}

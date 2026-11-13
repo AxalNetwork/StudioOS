@@ -1,0 +1,173 @@
+Use this Replit prompt:
+
+> Build a production-ready **ticket management binding service** for Axal VC that syncs tickets between the **Axal VC platform** and **GitHub Issues** in this repo: [StudioOS issues](https://github.com/AxalNetwork/StudioOS/issues). 
+>
+> The goal is to create a **Cloudflare-based integration** that can:
+> - create GitHub Issues when tickets are opened in the Axal VC platform,
+> - update GitHub Issues when tickets are edited in the platform,
+> - assign GitHub Issues from the platform,
+> - sync GitHub Issue changes back to the Axal VC platform automatically,
+> - sync GitHub comments to the Axal VC platform,
+> - sync GitHub issue state changes like open / closed / reopened to the Axal VC platform automatically. 
+>
+> Build this as a **Cloudflare Worker + webhook integration + small admin API**. Use TypeScript. Use Cloudflare Workers, optional Cloudflare Queues for async event processing, and KV or D1 only if needed for idempotency, mapping, and event logs. Keep the architecture minimal and production-safe. 
+>
+> ### Main requirements
+>
+> 1. **Axal VC platform → GitHub**
+> - When a ticket is created in the Axal VC platform, create a matching GitHub Issue.
+> - When a ticket is updated in the Axal VC platform, update the matching GitHub Issue title, body, labels, assignees, and state if needed.
+> - When a ticket is assigned in the Axal VC platform, assign the corresponding GitHub Issue.
+> - When a ticket gets comments in the Axal VC platform, create matching GitHub Issue comments. 
+>
+> 2. **GitHub → Axal VC platform**
+> - Listen to GitHub webhooks for:
+>   - issues
+>   - issue_comment
+>   - edited
+>   - assigned / unassigned
+>   - closed / reopened
+> - When a GitHub Issue is closed, update the linked ticket in the Axal VC platform automatically.
+> - When a GitHub Issue is reopened, update the linked ticket in the Axal VC platform automatically.
+> - When a GitHub Issue comment is added or edited, sync it back to the Axal VC platform.
+> - When labels or assignees change in GitHub, reflect those changes in the Axal VC platform. 
+>
+> 3. **Ticket schema**
+> Support these fields from the Axal VC platform and map them to GitHub:
+>
+> **Labels**
+> - audit
+> - beta-readiness
+> - tracking 
+>
+> **Type**
+> - Bug
+> - Feature
+> - Task 
+>
+> **Priority**
+> - Urgent
+> - High
+> - Medium
+> - Low 
+>
+> 4. **Mapping rules**
+> - Use GitHub labels to represent:
+>   - labels: audit, beta-readiness, tracking
+>   - type: bug, feature, task
+>   - priority: priority:urgent, priority:high, priority:medium, priority:low
+> - Preserve bi-directional mapping so changes on either side remain consistent.
+> - Maintain a mapping record between `axalTicketId` and `githubIssueNumber` / `githubIssueId`.
+> - Prevent infinite sync loops using source markers, event deduplication, and idempotency keys. 
+>
+> 5. **API + webhooks**
+> Create endpoints like:
+> - `POST /api/tickets/create`
+> - `POST /api/tickets/update`
+> - `POST /api/tickets/comment`
+> - `POST /api/tickets/assign`
+> - `POST /webhooks/github`
+> - `GET /api/health`
+> - `GET /api/mappings/:ticketId` 
+>
+> 6. **Security**
+> - Verify GitHub webhook signatures.
+> - Secure Axal VC platform API calls with bearer token or HMAC.
+> - Store secrets in Cloudflare environment variables.
+> - Validate all payloads with Zod.
+> - Add structured error handling and audit logs. 
+>
+> 7. **GitHub integration details**
+> - Use GitHub REST API.
+> - Repo owner: `AxalNetwork`
+> - Repo: `StudioOS`
+> - Work specifically with repo issues.
+> - Support issue creation, updating, closing, reopening, assignee changes, label changes, and comments. 
+>
+> 8. **Cloudflare deployment**
+> - Include `wrangler.toml`
+> - Include environment variable examples
+> - Include local development instructions
+> - Include webhook setup instructions for GitHub
+> - Include a short architecture README
+> - Make the project deployable directly from Replit or via Wrangler. 
+>
+> 9. **Project structure**
+> Use a clean structure such as:
+> - `src/index.ts`
+> - `src/routes/...`
+> - `src/services/github.ts`
+> - `src/services/axal.ts`
+> - `src/services/sync.ts`
+> - `src/lib/labels.ts`
+> - `src/lib/idempotency.ts`
+> - `src/lib/signature.ts`
+> - `src/types.ts`
+> - `README.md`
+> - `wrangler.toml` 
+>
+> 10. **Implementation quality**
+> - Write real code, not pseudocode.
+> - Add comments only where useful.
+> - Keep the service focused only on tickets/issues syncing.
+> - Include retry-safe patterns.
+> - Include example request payloads for Axal VC platform ticket creation and update.
+> - Include sample GitHub webhook payload handling.
+> - Add a small mapping layer that can be swapped later for Axal VC’s real backend.
+> - If the Axal VC backend is not yet available, scaffold an adapter interface with mock methods for:
+>   - createTicketUpdate
+>   - updateTicketStatus
+>   - syncComment
+>   - syncAssignee
+>   - syncLabels 
+>
+> 11. **Business logic expectations**
+> - Closing a GitHub Issue closes the Axal VC ticket.
+> - Reopening a GitHub Issue reopens the Axal VC ticket.
+> - New GitHub comments appear on the Axal VC ticket.
+> - New Axal VC comments appear on the GitHub Issue.
+> - Assignments stay synchronized both ways.
+> - Labels, type, and priority stay synchronized both ways. 
+>
+> 12. **Nice-to-have**
+> - Add an event log endpoint for debugging.
+> - Add replay protection.
+> - Add a dry-run mode for testing.
+> - Add unit-testable service functions. 
+>
+> Generate:
+> - the full codebase,
+> - setup instructions,
+> - environment variable template,
+> - sample payloads,
+> - and a short explanation of how the sync lifecycle works. 
+
+## Shorter version
+
+If you want a tighter prompt for faster output:
+
+> Create a TypeScript Cloudflare Worker service that syncs Axal VC platform tickets with GitHub Issues in `AxalNetwork/StudioOS`. It must support create, update, assign, close/reopen, and comment sync in both directions using GitHub webhooks and Axal platform API endpoints. Map Axal fields to GitHub labels: `audit`, `beta-readiness`, `tracking`; type labels `bug`, `feature`, `task`; priority labels `priority:urgent`, `priority:high`, `priority:medium`, `priority:low`. Prevent sync loops with idempotency and source tracking. Include `wrangler.toml`, secure webhook verification, Zod validation, mapping storage, deploy instructions, README, and production-ready code. 
+
+## One improvement
+
+I’d also ask Replit to make **priority and type first-class normalized fields internally**, then derive GitHub labels from them. That avoids messy logic later when you want reporting or filtering beyond GitHub labels.
+
+Sources
+[1] Issues · axelarnetwork/support https://github.com/axelarnetwork/support/issues
+[2] GitHub Issueを自動AI補強コメントさせる仕組みを作った話 (GAS + ... https://qiita.com/ogaryo/items/7cf744502ba9b5cc2a79
+[3] Build a Slackbot · Cloudflare Workers docs https://developers.cloudflare.com/workers/tutorials/build-a-slackbot/
+[4] Cloudflare Workers como webhook receptor: HMAC, Gotify y ... https://www.jaimealberto.io/post/86_cloudflare_workers_webhook/
+[5] Issues · axelarnetwork/axelar-core https://github.com/axelarnetwork/axelar-core/issues
+[6] [BUG]: Compatibility issue with Cloudflare Workers #1139 https://github.com/octokit/webhooks.js/issues/1139
+[7] gr2m/cloudflare-worker-github-app-example https://github.com/gr2m/cloudflare-worker-github-app-example
+[8] Triggering Github Actions from Cloudflare Workers https://willread.ca/post/triggering-github-actions-from-cloudflare-workers
+[9] Cloudflare Worker 기반 GitHub → Discord 알림 시스템 구축 https://ashtonsw.tistory.com/62
+[10] axa · GitHub Topics https://github.com/topics/axa?l=java
+[11] Adding and managing issue fields https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-and-managing-issue-fields
+[12] Integrating Reporter with GitHub using custom fields https://securityreporter.app/blog/integrating-reporter-github-using-custom-fields
+[13] Github webhook acces with cloudflare one-time-pin ... https://community.cloudflare.com/t/github-webhook-acces-with-cloudflare-one-time-pin-protection/484216
+[14] How to allow only webhooks from Github to my internal ... https://community.cloudflare.com/t/how-to-allow-only-webhooks-from-github-to-my-internal-server/341736
+[15] GitHub Webhooks: Complete Guide with Event Examples https://www.magicbell.com/blog/github-webhooks-guide
+[16] Solução de problemas de webhooks https://docs.github.com/pt/enterprise-cloud@latest/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks
+[17] I get an invalid HTTP request (302) error. Can't sync. · Issue #69 · mAAdhaTTah/wordpress-github-sync https://github.com/mAAdhaTTah/wordpress-github-sync/issues/69
+[18] Résolution des problèmes liés aux webhooks https://docs.github.com/fr/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks

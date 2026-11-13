@@ -1,0 +1,43 @@
+You are the senior product engineer for Axal StudioOS. Update the Market Intelligence page to use **only real, live data** (no invented companies or numbers).
+
+Use these sources:
+- Public Markets → live data from yfinance
+- Market Pulse → real RSS feeds from TechCrunch, Axios, and a16z blog
+- Private Rounds and High Conviction → seed with real recent deals (provided below)
+
+Exact data to seed for Private Rounds and High Conviction:
+
+**Private Rounds tab (table):**
+- Perplexity | AI Infrastructure | $250M | $3.2B | Series D (real recent round)
+- Anthropic | AI Infrastructure | $3.5B | $61B | Series E (real)
+- Scale AI | Data / Analytics | $1B | $14B | Series F (real)
+- Groq | AI Infrastructure | $300M | $2.8B | Series D (real)
+- xAI | AI Infrastructure | $6B | $45B | Series C (real)
+- Anduril | Defense / Cybersecurity | $1.5B | $14B | Series E (real)
+
+**High Conviction tab (cards) - real recent signals:**
+- Agentic B2B: Replacement Play, 22.4x, "High churn in legacy CRM; 40% migration to AI-first middleware." → "Unified API for autonomous agent billing."
+- AI Infrastructure: Efficiency Play, 28.7x, "High 28.7x multiple + aggressive sentiment = launch at 1/10th cost via studio." → "Edge inference orchestration layer for real-time AI."
+- Data / Analytics: Exit Play, 19.8x, "Sector multiples at 19.8x — favorable exit timing." → "Real-time data quality monitoring for AI pipelines."
+- Cybersecurity: Efficiency Play, 24.2x, "High 24.2x multiple + aggressive sentiment = launch at 1/10th cost via studio." → "AI-powered threat detection for API-first architectures."
+- Autonomous Robotics: Efficiency Play, 26.3x → "Unified agentic control layer for heterogeneous robot fleets."
+- Climate Intelligence: Exit Play, 17.9x → "Real-time MRV API for enterprise net-zero compliance."
+
+Requirements:
+- Keep all five tabs: Market Pulse, Public Markets, Private Rounds, High Conviction, Studio Benchmarks.
+- Make Public Markets a clean table view with live yfinance data (NVDA, MSFT, GOOGL, AMD, etc.).
+- Make Market Pulse pull real articles from RSS feeds and display as cards.
+- Make Private Rounds a clean table view using the seeded real data above.
+- Keep High Conviction as card view using the seeded data.
+- Add "Last updated" timestamp at the top.
+- Make all data dynamic from the backend (extend the existing market_intelligence router).
+
+Build this step-by-step:
+1. First add dependencies (yfinance and feedparser) and create/update backend/market_data.py with live Public Markets and RSS Market Pulse logic.
+2. Then update the router to serve all tabs (live for Public Markets + Market Pulse, seeded for the others).
+3. Then update /market-intelligence.html to display the new dynamic data across all tabs.
+4. Finally test all tabs.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

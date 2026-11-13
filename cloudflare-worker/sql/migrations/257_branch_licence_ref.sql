@@ -1,0 +1,26 @@
+-- 257 — the licence's human-readable reference, missing from the copy 256 made.
+--
+-- WHAT WENT WRONG, stated rather than quietly patched. Migration 256 built
+-- `branch_licence` as the local copy of HQ's `territory_licences` row, and
+-- carried `licence_uid` — the opaque identifier — but not `licence_ref`, the
+-- reference a person uses: AXL-001. Every HQ surface names a licence by that
+-- ref (the H2 ledger's first column is "Licence id"), and the subsidiary's own
+-- read of it, `MyLicencePage`, prints "licence {licence_ref}" in its header.
+-- So the one screen the copy exists to render would have shown a licence with
+-- no name on it.
+--
+-- WHY A NEW MIGRATION RATHER THAN A CORRECTION TO 256. 256 is applied: it is
+-- in `main` and in the ledger of every database that has run migrations since.
+-- Editing an applied migration changes what a FRESH build produces without
+-- changing any existing database, which is how two databases claiming the same
+-- schema version come to have different schemas. The rule is additive-only,
+-- and it holds even when — as here — the table it corrects is empty in every
+-- database that exists, because the rule is what makes that emptiness
+-- something we can stop having to check.
+--
+-- NULLABLE, with no default. A branch whose licence HQ pushed before this
+-- column existed has no ref to backfill from: the value is HQ's, and inventing
+-- one here would be the copy asserting something HQ never said. The page reads
+-- a missing ref the way it reads every other absent field.
+
+ALTER TABLE branch_licence ADD COLUMN licence_ref TEXT;

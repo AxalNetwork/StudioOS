@@ -1,0 +1,47 @@
+{
+  "skill": "marketing-funnel-cohort-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "cohorts": [
+          {
+            "name": "April",
+            "leads": 100,
+            "paid": 20,
+            "age_days": 60
+          },
+          {
+            "name": "May",
+            "leads": 100,
+            "paid": 5,
+            "age_days": 7
+          }
+        ],
+        "conversion_window_days": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "April",
+      "May",
+      "maturation"
+    ],
+    "must_say_not_recorded": [
+      "conversion window days"
+    ],
+    "must_not_include": [
+      "May campaign failed"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why conversion window days is missing rather than inventing it.",
+    "Do not assert: May campaign failed.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "April; May; maturation. conversion window days: Not recorded. Human review required."
+}

@@ -1,0 +1,64 @@
+Objective
+  Fix every Settings sub-section that returns "Not found":
+    Profile > Identity            Profile > Profile details
+    Profile > Legal entity        Notifications > Digest & quiet hours
+    Privacy > Visibility           Integrations panel
+    Developer                       Appearance > Theme / Density / Sidebar
+
+  Many of these endpoints simply don't exist yet. Land them with
+  validation, encryption (where PII), and inline error UI.
+
+Worker (cloudflare-worker/src/routes/settings.ts — extend)
+  Add the granular sub-routes:
+    GET  PUT  /profile/identity
+    GET  PUT  /profile/details
+    GET  PUT  /profile/legal-entity
+    GET  PUT  /notifications
+    GET  PUT  /privacy
+    GET  PUT  /appearance
+    GET  PUT  /developer            (admin only)
+    GET       /integrations         (proxies /api/integrations safely)
+
+  Extend ensureSchema() with every column the UI saves:
+    display_name, headline, bio, pronouns, timezone, locale,
+    profile_slug (unique), full_legal_name, date_of_birth,
+    nationality, tax_residency_country, tax_id_number_ciphertext,
+    tax_id_last4, phone_e164_ciphertext, phone_last4, address_line1,
+    address_line2, city, state_or_region, postal_code, country,
+    digest_frequency, quiet_hours_start, quiet_hours_end,
+    quiet_hours_tz, visibility, show_in_directory, discoverable,
+    theme, density, sidebar_default, dismissed_explainers,
+    profile_completion_pct.
+  Add `corporate_profiles` table for Legal entity tab.
+
+  Validation rules (return 400 with field-level error JSON, never 500):
+    country / nationality / tax_residency_country → ISO 3166-1 alpha-2
+    timezone → Intl.supportedValuesOf('timeZone')
+    locale → ['en','fr','es','pt']
+    quiet_hours → HH:MM regex
+    profile_slug → [a-z0-9-]{3,32}, unique
+    postal_code → per-country regex (small map)
+
+  PII encryption: tax_id and phone go through column cipher (Prompt B).
+
+  profile_completion_pct recomputed on every relevant PUT.
+
+Frontend (frontend/src/pages/SettingsPage.jsx)
+  Convert each broken section into a self-contained component that:
+    - GETs its endpoint on mount; renders skeleton during load.
+    - PUTs on save; shows inline field errors, never a generic toast.
+    - For Appearance: applies theme/density/sidebar_default through a
+      SettingsContext globally + persists.
+    - Profile gets Identity / Profile details / Legal entity sub-tabs.
+    - Notifications digest dropdown + quiet hours + tz picker.
+    - Privacy: radio group + two toggles + Export-my-data button.
+    - Developer (admin): feature-flag toggles + debug logging.
+    - Integrations panel: connected list + available catalogue;
+      empty state for users with none.
+  Surface profile_completion_pct ring at top of Settings.
+
+Acceptance
+  - Every sub-section persists data across reload.
+  - Validation errors show inline.
+  - Theme/density/sidebar apply globally and survive reload.
+  - No "Not found" in any tab.

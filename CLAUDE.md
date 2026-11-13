@@ -1,0 +1,183 @@
+# Architecture truth — read first
+
+This document is the canonical, authoritative description of where production
+runs and how this repo is laid out. Other docs (README.md, replit.md,
+documentation/architecture/GOTCHAS.md, documentation/architecture/PRODUCTION.md) defer to this file when they conflict. The detailed
+operational gotchas previously inline in `replit.md` now live in `documentation/architecture/GOTCHAS.md`.
+
+## The four facts
+
+1. **The Cloudflare Worker is the production API at `axal.vc`.** Source of
+   truth lives in `cloudflare-worker/src/index.ts` and `cloudflare-worker/src/routes/*.ts`.
+   Wrangler config: `wrangler.toml`. **`npm run deploy`** dispatches the
+   production release workflow on `main`. It verifies the exact candidate,
+   checks queues and Worker startup, applies D1 migrations and deploys with
+   `--env production`. Use the workflow to preserve these release gates.
+2. **D1 (`studioos-db`) is the canonical user store.** Every production user
+   account lives in D1. The dev FastAPI uses a separate SQLite file
+   (`backend/app.db`) and is **not** kept in sync.
+3. **The FastAPI in `backend/` is Replit-dev-only.** It exists for local
+   iteration speed during Replit sessions. It is **never** deployed to
+   production — Cloudflare Workers do not run Python. Do not change
+   `wrangler.toml`'s `main` field.
+4. **The Worker serves the frontend on both hosts.** `axal.vc` and
+   `app.axal.vc` are whole-host Workers Custom Domains of the `studioos`
+   Worker (`custom_domain = true`, mirrored in `[[routes]]` and
+   `[[env.production.routes]]` of `wrangler.toml`), answered from the
+   Worker's own `[assets]` copy of `docs/` (built from `frontend/`;
+   `not_found_handling = "single-page-application"`) plus the `/api/*`
+   handlers. One build sits behind both hosts and ships on every `wrangler
+   deploy` — `.github/workflows/cloudflare-worker-deploy.yml` on each push to
+   `main` or an operator dispatch (admission → build and preflight → D1 migrations → deploy) —
+   so the two hosts always carry the same build. This has been so since
+   2026-09-01: `1d320dda9` ("Remove stale documentation asset files", author
+   Replit Agent) replaced the Pages cutover's three path routes (`e1de44c2f`,
+   2026-08-31) with the `axal.vc` custom domain in both tables and touched
+   no document, so this fact described Pages as the apex for two days while
+   the toml, the guard tests and the deploy log said otherwise. Who serves a
+   host is settled by the deploy log's "Deployed studioos triggers" lines,
+   never by prose.
+   **Cloudflare Pages is retired (2026-09-03, `DECISIONS.md` D36).** The
+   `studioos` Pages project (`studioos-2p8.pages.dev`) was a mirror fed by a
+   workflow that is now deleted, together with the Pages Advanced Mode
+   `_worker.js` that ran only there; on 2026-09-03 its dashboard had shown
+   "Production" rows for two commits whose Worker deploy failed at the
+   migration step. Nothing ships a build anywhere but the Worker. The static
+   security headers on the SPA HTML come from `frontend/public/_headers`
+   (built to `docs/_headers`), which Workers static assets read natively and
+   apply to every assets-binding response; `scripts/check-spa-live.mjs`
+   asserts them on every shell route, and that run — not this sentence — is
+   what answered U10 in `documentation/architecture/UNRESOLVED_ITEMS.md`:
+   smoke 33774445968 (2026-09-03 15:45Z) found HSTS, nosniff,
+   `X-Frame-Options` and `Referrer-Policy` on twenty-six shell routes across
+   both hosts. Every later run re-checks it.
+   **Never add a path-scoped apex route** (`axal.vc/*`, `axal.vc/assets/*`)
+   to either table: it would take those URLs away from the assets binding
+   and break the SPA fallback. That is how 2026-08-31 paired apex HTML with
+   a different asset build — the entry module 404'd and the boot watchdog
+   spun on `?__reboot=` — and it is guarded by
+   `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+   `frontend/test/apex_route_coverage.test.mjs`. **`docs/` is not committed**
+   (D529): it is gitignored, and every job that needs it builds it from
+   `frontend/src` — CI, the PR preview, branch provisioning and the deploy —
+   so reviewers read the source and the deploy ships that source's build. The
+   old-bundle window (hashed assets served during the past 72 hours, at least three
+   builds, within the 18,000-asset safety cap, so a tab opened before a deploy
+   keeps working) is carried by the deploy itself: it restores
+   the previous deploy's `docs/assets` and retention ledger from the Actions
+   cache before building and saves them after shipping
+   (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
+   Pages are both decommissioned; the Worker is the only host.
+
+## File map
+
+| Path                  | Role                                                      |
+| --------------------- | --------------------------------------------------------- |
+| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker on both hosts |
+| `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
+| `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
+| `backend/`            | FastAPI for Replit dev only — **never deployed**          |
+| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — deployed as its own Worker and Cloudflare Container (#3588), `MEETING_BOT=canary` (Super Admins only); the live Meet/Zoom check is open on #3588 |
+| `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
+| `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
+| `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
+| `docs/`               | Built frontend bundle, **not committed** (D529) — the Worker's `[assets]` directory, built by `npm run build`; its `_headers` sets the static security headers |
+
+**`documentation/` and `docs/` are different things.** `documentation/` is
+prose a person wrote; `docs/` is build output a person must never edit. The
+repo root once held 38 loose markdown files — they all live under
+`documentation/` now, and `frontend/test/repo_layout.test.mjs` fails the build
+if an eighth appears at the root (seven stay because a tool reads them from
+there: this file, `AGENTS.md` (read by Codex, Cursor and other agents),
+`replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md` and
+`CHANGELOG.md`).
+
+**Every folder that carries weight explains itself.** There is a `README.md` in
+each significant directory saying what lives there and the rule for adding to
+it, and `scripts/check-folder-docs.mjs` fails the build if one is missing, if it
+does not name its own subfolders, or if it cites a file that does not exist —
+the first run caught a route README documenting a mount for a file that has
+never existed. Start at the README of whatever folder you land in. A README
+whose folder lists its files (routes, services, `frontend/src/lib/api`) holds
+a **generated** list between `<!-- files:begin -->` and `<!-- files:end -->`:
+each file's header comment describes it, the list is never committed
+(`--write` fills it locally, `--clean` empties it), and a file there without a
+header comment fails the build (#4104). Adding such a file edits no README.
+
+## Rules for new work
+
+- **New features must be implemented in `cloudflare-worker/src/routes/` first.**
+  FastAPI ports in `backend/app/api/routes/` are an optional dev convenience
+  for fast local iteration; they are not the production behaviour.
+- **Do not add a `/api/*` method to `frontend/src/lib/api.js`, or to a module
+  under `frontend/src/lib/api/`,** without a matching mounted worker route. A
+  new API domain goes in its own module there (D527); `node
+  scripts/build-api-index.mjs` generates `frontend/src/lib/apiModules.generated.js`,
+  which `api.js` re-exports with one fixed line, so nobody edits `api.js`'s
+  module list by hand (#4105). The drift smoke test (`npm run test:drift`)
+  enforces both on every PR.
+- **A new Worker router mounts itself; a new route area collects itself**
+  (#4105). A new `cloudflare-worker/src/routes/<name>.ts` exports `mount`
+  (`{ path, router, before?: [routers it must precede] }`, see
+  `cloudflare-worker/src/util/routeRegistry.ts`) and `node
+  scripts/build-route-registry.mjs` generates `routes/_registry.ts`; do not
+  add an `app.route(...)` line to `index.ts`. A new
+  `frontend/src/routes/<area>.jsx` is picked up by `App.jsx`'s glob with no
+  edit there (`frontend/src/routes/README.md`). The mounts already in
+  `index.ts` and the routes already in `App.jsx` stay where they are.
+- **Never commit a generated module** (D5612). `routes/_registry.ts`,
+  `frontend/src/lib/apiModules.generated.js` and
+  `cloudflare-worker/src/services/agents/skillLibrary.generated.ts` are
+  gitignored; `node scripts/build-generated.mjs` writes all three before every
+  build, typecheck and test (the `npm run build`, `dev`, `test:*` and `lint`
+  hooks and each CI job run it), so a new route, API module or skill is one
+  new file and nothing else. Each generator's `--check` fails if one is
+  tracked again.
+- **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
+  entry. FastAPI is not deployable on Workers.
+- **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
+  files, applied via `wrangler d1 execute studioos-db --file=...`. Mirror the
+  same change in `backend/app/models/migrations.py` only if you need dev
+  parity for a feature you're actively iterating on.
+- **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
+  one. It covers slots, the `state:*` labels, STATUS comments, and who gives
+  instructions.
+- **A new decision is its own file.** From D526 on, each decision is
+  `documentation/architecture/decisions/D<n>.md`.
+  `DECISIONS.md` keeps D1 to D525 and takes no new entries. From D4106 on, `<n>` is the issue's number
+  (the decision for issue #4102 is D4102), so parallel PRs never pick the same
+  one; the heading cites it, `## D4102 — <title> (#4102)`. Numbers below D4000
+  are the ones issues handed out before that, and keep them.
+  `node scripts/check-decision-ids.mjs` reads both places and fails on a
+  number used twice, or a D4000+ heading that does not cite its own issue.
+- **A new migration is named by its UTC minute and its issue** (D4106, D5398):
+  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<issue>_<slug>.sql`. It sorts
+  after every numbered file and applies once like any other; numbered files
+  stop at 799. Two PRs writing in the same minute twice turned main red
+  (D5398), so from 2026-11-11 00:00 UTC the issue number is required; a file
+  stamped earlier keeps its name. `scripts/check-sql-migrations.mjs` fails on a
+  shared number or identity, naming both files.
+- **A red main gets one repair, not one per branch** (D5398). Read
+  `AGENTS.md` § "Red main and a backed-up queue" before you merge main into a
+  PR, port a fix or re-run CI.
+
+## Why this doc exists
+
+Three earlier audits ("audit #4" in particular) attempted to flip the
+architecture so FastAPI would become canonical with the worker as a thin
+proxy. That migration was never completed: the production user accounts
+already lived in D1 and FastAPI was never publicly deployed. Some legacy
+docs still reflect the never-finished migration. This file is the corrective.
+
+If a doc disagrees with this file, **this file wins** — fix the doc.
+
+Everything else worth reading is indexed in
+[documentation/README.md](documentation/README.md): the architecture set
+(`CODEBASE_MAP`, the route map in `route-map/` (one file per canvas row, D4102;
+its two projections are built by CI, not committed, D4103),
+`DECISIONS` with the per-decision files in
+`decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
+dated snapshots under `documentation/audits/`, which are true as of their
+date and are **not** maintained afterwards — never
+treat an audit finding as a live bug without re-checking the code; runbooks
+under `documentation/operations/`; positioning under `documentation/product/`.

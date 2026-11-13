@@ -1,0 +1,61 @@
+{
+  "$id": "deckComments",
+  "title": "GET /api/decks/:id/comments (D1570, #3817)",
+  "description": "The reply the deck v2 adapter's `comments` method passes through: the deck, its version, who is reading (a founder manages; an advisor or Operating Partner comments under the founder's scope_deck grant), the people who can be mentioned, assigned or named an approver, the venture's comments oldest first (at most 500), and the count of open threads (`routes/deck_comments.ts`). A thread is a comment with `parent_uid` null; its replies name it. `assignee` and `resolved_by` are a person or null; `area` and `card_uid` a string or null. No model writes into a thread. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "version", "viewer", "people", "comments", "open"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "viewer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["user_id", "kind", "can_manage"],
+      "properties": {
+        "user_id": { "type": "integer", "minimum": 1 },
+        "kind": { "$ref": "#/$defs/kind" },
+        "can_manage": { "type": "boolean" }
+      }
+    },
+    "people": {
+      "type": "array", "maxItems": 100,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "kind"],
+        "properties": { "id": { "type": "integer", "minimum": 1 }, "name": {}, "kind": { "$ref": "#/$defs/kind" } }
+      }
+    },
+    "comments": {
+      "type": "array", "maxItems": 500,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["uid", "deck_id", "deck_version", "card_index", "card_uid", "area", "parent_uid", "author", "body", "mentions", "assignee", "resolved_at", "resolved_by", "created_at"],
+        "properties": {
+          "uid": { "type": "string" },
+          "deck_id": { "type": "integer", "minimum": 1 },
+          "deck_version": { "type": "integer", "minimum": 1 },
+          "card_index": { "type": "integer", "minimum": 0 },
+          "card_uid": {},
+          "area": {},
+          "parent_uid": {},
+          "author": { "$ref": "#/$defs/person" },
+          "body": { "type": "string" },
+          "mentions": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/person" } },
+          "assignee": {},
+          "resolved_at": {},
+          "resolved_by": {},
+          "created_at": { "type": "string" }
+        }
+      }
+    },
+    "open": { "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "kind": { "enum": ["founder", "advisor", "operating_partner"] },
+    "person": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "integer", "minimum": 1 }, "name": {} }
+    }
+  }
+}

@@ -1,0 +1,202 @@
+# frontend/test — what the frontend guarantees
+
+```
+node --import ./frontend/test/_deck-loader.mjs --test 'frontend/test/*.test.mjs'
+```
+or, more usefully, `npm run test:drift`, which runs these plus the worker
+tests, the schema guards, `tsc`, and the dark-mode check.
+
+These are **not** browser tests. There is no DOM here. They read source files
+and assert things about them — which sounds odd until you see what class of bug
+it catches:
+
+- a page calls `api.getAdvisorSlots()` and the real method is `listAdvisorSlots`
+  → renders empty inside a `catch`, silently, forever;
+- an endpoint returns a bare array and the page reads `.items` → the pane looks
+  fine and shows nothing;
+- a surface renders a company, an advisor or a fund figure that no table holds.
+
+None of those throw. All of them ship. So the tests here assert the *wiring*:
+that a method exists on both sides, that a component is mounted and not merely
+defined, that a page reads the shape the worker actually returns, and that a
+number on screen traces back to a column.
+
+D1180 retired the old Financials page and the suite that mounted it (D1174's);
+`capital_model_retired_d1180.test.mjs` pins the retirement, and Forecast's own
+suite (`use_of_funds_d1178.test.mjs`) holds the model. The cap-table suite
+also exercises a `project_id` deep link.
+
+| File | Guarantee |
+| --- | --- |
+| `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
+| `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
+| `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
+| `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
+| `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
+| `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
+| `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
+| `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
+| `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
+| `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
+| `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
+| `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
+
+## Conventions
+
+- One file per surface or per rule; the header comment says what went wrong and
+  why the file exists.
+- Assert against code, not comments — several of these tests were first written
+  against a doc comment and passed over broken code.
+- When a test bans a word, check the file's own comments do not use it.
+- `_deck-loader.mjs` is the JSX/asset loader; every run needs `--import` on it.
+- A test that asks a whole-app route question (is this path registered, what
+  does its guard admit, does the admin walk reach it) reads
+  `readRoutesSource()` from `_routesSource.mjs`, never `App.jsx` alone: since
+  D528 a new area's routes live in `frontend/src/routes/` and the helper is
+  `App.jsx` plus every module. `fixtures/` holds the small trees such helpers
+  are exercised against (`fixtures/routes_modules/`, modules collected by a
+  glob, one of them with an `order` and one whose export is misnamed;
+  `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
+  name for different pages), never real pages.
+- `App.jsx` collects its route modules with Vite's `import.meta.glob`
+  (#4105); `_importMetaGlob.mjs` expands it for the node loader, so a test that
+  renders `App.jsx` sees every module. A test that pins an API module's line
+  in the re-export block reads `apiModulesBlock()` from `_apiModulesBlock.mjs`:
+  the block is generated into `frontend/src/lib/apiModules.generated.js`, not `api.js`.
+
+D1604's editor suites (`pitch_v2_chrome_d1604.test.mjs`,
+`pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck editor through
+`_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
+restored on close. Its `onDocument` hook (D1515) runs after the synthetic
+document is installed and before the editor renders, so
+`pitch_editing_ops_d1515.test.mjs` can put a fake IndexedDB, kept across two
+mounts, and a keydown recorder on the window.
+
+D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
+parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
+(allowlisted content, dated download and one-page measured bounds).
+`record_mode_d696.test.mjs` checks mounted record reads and writes; its mutation targets the record-mode guard separately from Distribution tab guards.
+`_record_d696.mjs` supplies synthetic records and isolated mutation imports.
+Each behavioral assertion group runs against the original source, against
+changes it must reject, and again against the restored source; no checkout
+file is changed by a mutation. No live API or personal data is used.
+
+D695's independent form UI is exercised by `add_lightbox_d695.test.mjs`.
+`_form_d695.mjs` supplies a small React DOM/effect harness and isolated source
+mutations. The tests drive real inputs, payloads, loaded choices, refusals,
+done views, responsive page transitions and modal focus/Escape behavior.
+`add_addresses_d695.test.mjs` pins every form's `key` and `cta`, the T, CH
+and CK kinds in `initialValues` and `validate` (each legacy form checked
+against the rules it had before), the four `/:slug/new` routes and Customer
+research's redirect, and the Add link's `state`. The helper resolves an
+extensionless or directory import in a mutated source as the loader hook does.
+`add_routes_d695.test.mjs` renders every registered form in the dialog, and
+mounts the real `CycleRoute` (the Worker stubbed) for the `/new` addresses, the
+phone page, `?add=1`, a save's re-read and Edit through `state.editing`, each
+against source mutations of `CycleRoute.jsx` too.
+`form_options_d695.test.mjs` is test 11's client half: `formOptions`'s path and
+query for every cycle module against a stubbed `request`, the refused cycles
+and slugs, and the drift parser's `GET /cycles/:p/modules/:p/form-options`.
+`add_forms_validate_d695.test.mjs` mounts Validate's five specs and their
+Edits against a stubbed write table, with PR 2b's registration, chip loaders,
+search and record-opened Edits. It reads each body's keys against
+`cloudflare-worker/src/routes/cycle_validate.ts` on `main`;
+`cloudflare-worker/test/cycle_forms_d695.test.ts` sends them through the real routes.
+`add_forms_build_d695.test.mjs` does the same for Build's six specs (PR 3a) and
+PR 3b's registration, loaders, Proof and stored words, reading each body
+against `cloudflare-worker/src/routes/cycle_build.ts` on `main`.
+`add_forms_raise_grow_d695.test.mjs` mounts Grow's and Raise's seven canvas
+forms and their Edits (#1657) against a stubbed write table, Raise's with each
+module's `form-options` reply, and checks their client writes.
+`cloudflare-worker/test/cycle_forms_raise_grow_d695.test.ts` sends Raise's
+bodies through the real routes.
+Registry and routing integration cases follow when their dependencies merge.
+
+D755 CR7 (#1985): `checkout_token_pack_d755.test.mjs` mounts the checkout and
+confirmation with stubbed API/Stripe modules, drives billing country, payment,
+redirects and bounded polling, and checks 14 scenarios against 31 isolated
+source mutations. Every mutant must fail its scenario and the restored source
+must pass. No real payment or credit write runs. `ai_topup_cart_d629.test.mjs`
+keeps the ordinary cart regression; the top-up cart path is retired.
+
+The CR7 suite also mounts `TokenPacksSection.jsx` with fixture public reads, covering Buy identifiers (including the environment fallback), visitor sign-in links, unavailable/unreadable/retry and cart exclusion. Shared-model regression/mutation checks keep ready packs authoritative over the deprecated product switch and centralize the UI destination without rejecting API endpoints.
+
+D781 (#2106) renders the whole app. `_airailRender.mjs` mounts the real `App`
+in a `MemoryRouter` at every route in D768's page map, signed in as a member
+of the route's profile, on `_appDom.mjs` (a DOM that keeps elements,
+attributes and text, and answers the browser APIs App calls inertly), with
+`_airailRender-hook.mjs` loading JSON modules and an empty `import.meta.env`.
+The Worker is never called: a fixture table answers the session and the pages
+that need data before they draw, and every other request answers 503, then
+200 `{}`. The six `airail_render_<profile>_d781.test.mjs` files each render one
+profile, and fail on a route that does not draw exactly one rail with its page
+key unless `RENDER_NOT_YET` lists it. `airail_every_page_d781.test.mjs` holds
+the rules to fixtures.
+
+D1123 extends the Lab desks, overview and operations tests for Formation scope, cohort details, structured admission and grant/refusal states.
+
+| File | Purpose |
+|---|---|
+| `raise_evidence_client_d1263.test.mjs` | D1263: request methods, project paging, snapshot/version guards and encoded evidence/claim paths. |
+| --- | --- |
+| `deal_insights_client_d1151.test.mjs` | D1151: encoded deal clients preserve response states. |
+| `safari_regex_compat_3592.test.mjs` | #3592: number segments and image descriptions match the previous expressions; an empty-allowlist source guard rejects regex lookbehind. |
+| `messages_retirement_d1345.test.mjs` | EM10 routing and acknowledgment, blocked storage, account isolation, GP fund selection, and retirement of old client calls. |
+| `linkedin_brand_d1355.test.mjs` | D1355: official logo/button source pins, unchanged asset bytes, approved theme variants, minimum sizing and truthful sign-in/import entry points. |
+| `route_error_recording_3593.test.mjs` | #3593: recording-safe chunk-error copy, SPA return links, deferred manual reload and unchanged idle recovery. |
+| `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
+| `pitch_diagrams_d1542.test.mjs` | D1542 (#3780): `deckV2Adapter.diagrams` swapped to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the canvas, and the check line. |
+| `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening; four failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up refresh and refusal reset), plus missing-task text during a board reload. |
+| `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
+| `general_counsel_4421.test.mjs` | #4421: rendered rule book, open/history queue, proposal and Ask notices; answered payment/plan pills removed. |
+| `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |
+| `redirect_retirement_d2319.test.mjs` | D2319 (#2319), #4415: retired aliases, protected outside links and retained beacon groups. |
+| `_retiredRedirects_2319.mjs` | D2319: recorded policy for route-pin tests, including concrete addresses matching retired dynamic patterns. |
+| `comarketing_split_4439.test.mjs` | D4439: founder Partner network door and counted forward, partner Offers, investor guard and navigation, and visit attribution path. |
+| `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
+| `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
+| `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
+| `distribution_results_4491.test.mjs` | D4491: Results' named Not recorded reasons, cost-per-lead rounding, the MRR note and link, the read-error card with no raw error, the window check and the CycleRoute line. |
+| `learning_home_actions_4481.test.mjs` | D4481: desktop/phone Register and refusals, rapid double-click guards, Join and enrolled progress, Browse courses, phone primary and unknown seats through existing clients. |
+| `distribution_inbox_4494.test.mjs` | D4494: real Inbox/composer behavior, actual count/empty states, client requests, source alignment, and stale selection/search guards. |
+| `distribution_newsletter_4495.test.mjs` | D4495: the not-connected copy, the disabled Connect with its visible reason, Not recorded results, and no request at all (never `/api/newsletter`). |
+| `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
+
+`team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
+| `account_licences_4472.test.mjs` | D4472: account licence client paths, payload and verbs. |
+| `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
+| `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |
+| `distribution_states_4496.test.mjs` | D4496 cross-tab triggers, fixed error copy, manual/AI separation and responsive Overview. |
+| `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
+| `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
+| `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
+| `hub_freeze_5615.test.mjs` | D5615: every name in the five hub files is on `scripts/hub-freeze.json`; a new `api` key, `app.route(…)`, import or advisors registration fails naming the entry and its `HUBS.md` section; a removal passes with no list edit; `CycleRoute.jsx` holds no cycle entry. |
+
+- `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
+
+- `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
+
+- `network_relationships_fixes_4740.test.mjs` — #4740 (S1 audit): the RI3/RI4/RI6 "Ask Eadwyn to draft…" buttons quote before they run and open in the composer or the reason field, a refusal reads the mapped copy, IntroCompose's unreadable mailboxes get their own alert, `?intro=<uid>` highlights its row or says it left the desk, the D4464 summary reads "Not recorded" (never 0) and Unreadable, and a failed `RecordEmailSheet` shares read is Unreadable for a member.
+`distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.
+`platform_populations_4856.test.mjs` checks HQ › Platform › Storage's populations: the split in the total's note, the members tile's own denominator, and no zero when the plans cannot be read (D4856).
+
+`venture_context_5074.test.mjs` checks D5074: every venture alias resolves to one context, the one `?project_id=` form, legacy redirects keeping the query and hash, the Data room on the shared context only, and its controls drawn from the Worker's capabilities. `_data_room_capabilities.mjs` holds those capability maps for fixtures; the Worker's `data_room_capabilities_5074.test.ts` pins them to `cloudflare-worker/src/services/dataRoomCapabilities.ts`.
+
+`raise_refused_no_data_5079.test.mjs` checks D5079: a refused authoritative read ends the rendering of authoritative data for that Raise tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure and not a refusal, a Data room `summary` answer says it is not the room rather than drawing nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line is broken on disk and the file re-run in a child process filtered to the tests that must then fail, because the refusal travels from a tool's read through `CycleRoute` into the module page.
+
+- `scan_triggers_5602.test.mjs` — D5602 admission, artifact fencing, real alert CLI transitions and mutation coverage.
+`runner_lanes_5611.test.mjs` checks branch-only benchmark triggers, exact merged suite-step parity and free-runner placement of non-token secret jobs (D5611).
+`pipeline_accessibility_4705.test.mjs` checks native studio deal entry, shared creation-sheet semantics, associated fields, fixed failure copy, retained drafts and a synthetic API-call baseline (D4705).
+`delivery_stale_writes_4710.test.mjs` mounts all four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a stale Mark sent never claims success or retries on reload (D4710).
+| `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
+
+| `notification_routing_5666.test.mjs` | D5666: lifecycle, shared incidents, claim ambiguity, required-check cutover and SQLite rollback/replay. |
+| `health_alert_repair_5663.test.mjs` | D5663: health episode concurrency, crash/retry and future-clock evidence regressions. |
+| `engineering_events_5664.test.mjs` | D5664: signed metadata ingress, immutable attempts, capped REST reconciliation and Workers SQLite restart. |
+| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
+| `cloudflare_delivery_5671.test.mjs` | D5671: authenticated source, isolation, replay, paging, sharing and Workers restart. |
+| `platform_policy_5672.test.mjs` | D5672: sensor states, denominator, persistence prerequisites and episode recovery. |
+| `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
+| `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
+| `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
+| `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |

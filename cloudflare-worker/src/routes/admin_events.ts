@@ -1,0 +1,494 @@
+/**
+ * Task #39 — Event engine: admin routes (design §8.3).
+ *
+ * Mounted at /api/admin/events, BEFORE the catch-all /api/admin router (same
+ * mount-before-catch-all precedence as admin_articles). Every handler is
+ * requireAdmin; mutating actions append to admin_audit_log with
+ * report_type='events' (the audit writer mirrors admin_telegram.ts, tolerating
+ * the optional `actor` column).
+ *
+ * The public-feed publish gate (design §1.3) is enforced here: only an admin
+ * `approve` flips a pending_review event to status='published' +
+ * admin_published=1, which is what the public feed predicate requires.
+ */
+import { scheduleCalendarCancellation } from './_eventCalendar';
+import { onEventApproved, onEventCancelled, onEventUnpublished } from '../services/eventSyndication/hooks';
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
+import { notify } from '../services/notify';
+import { ensureEventsSchema } from '../services/eventsSchema';
+import { shapeEvent } from '../services/eventsCommon';
+import { mintCompInvitations, parseAudienceRules } from '../services/eventAudience';
+import { deliverEventInvite } from '../services/eventMessaging';
+import { promoteWaitlist, type EventSeatRow } from '../services/eventCapacity';
+import {
+  OVERVIEW_WEEKS, parseListQuery, readCompPreview, readEventHistory, readEventList, readEventSummary, readOverview,
+} from '../services/adminEventsReads';
+import { hostEventLink, memberEventLink } from '../services/eventLinks';
+
+const adminEvents = new Hono<{ Bindings: Env }>();
+
+adminEvents.use('*', async (c, next) => {
+  await ensureEventsSchema(c.env);
+  await next();
+});
+
+async function admin(c: any) {
+  try {
+    return await requireAdmin(c);
+  } catch (e) {
+    const msg = (e as Error)?.message;
+    return c.json({ error: msg || 'Admin required' }, msg === 'Unauthorized' ? 401 : 403);
+  }
+}
+
+// admin_audit_log writer (report_type='events'). Tolerates the optional `actor`
+// column the same way admin_telegram.ts / admin_publications.ts do.
+let _auditHasActor: boolean | null = null;
+async function auditHasActor(env: Env): Promise<boolean> {
+  if (_auditHasActor !== null) return _auditHasActor;
+  try {
+    const r: any = await env.DB.prepare("PRAGMA table_info('admin_audit_log')").all();
+    _auditHasActor = (r.results || []).some((col: any) => String(col.name) === 'actor');
+  } catch {
+    _auditHasActor = false;
+  }
+  return _auditHasActor === true;
+}
+
+async function hashEmail(email: string): Promise<string> {
+  try {
+    const data = new TextEncoder().encode(email.toLowerCase());
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
+}
+
+async function writeAudit(
+  env: Env,
+  opts: { adminId: number; adminEmail: string; action: string; eventId?: number; extra?: Record<string, unknown> },
+) {
+  try {
+    const filters = JSON.stringify({ event_id: opts.eventId, ...(opts.extra || {}) });
+    if (await auditHasActor(env)) {
+      const actor = await hashEmail(opts.adminEmail);
+      await env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json, actor) VALUES (?, ?, 'events', ?, ?)`,
+      ).bind(opts.adminId, opts.action, filters, actor).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, 'events', ?)`,
+      ).bind(opts.adminId, opts.action, filters).run();
+    }
+  } catch (e) {
+    console.warn('[admin_events] audit write failed:', (e as Error).message);
+  }
+}
+
+async function loadEvent(env: Env, id: number): Promise<any | null> {
+  return env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(id).first();
+}
+
+function intParam(v: string | undefined): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+// ── GET / — the paged list (D918) ──────────────────────────────────────────
+// Today's fields per event, plus its counts, host line, venture and clash flag.
+// Filters: status (several, comma-separated or repeated), visibility, type (D1121), when,
+// price, featured, q (title, host, venture). Sorts: starts, created,
+// seats_taken, fill, show_up, waiting. With no sort, newest created first.
+adminEvents.get('/', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const query = parseListQuery((k) => c.req.query(k), (k) => c.req.queries(k));
+  if ('error' in query) return c.json({ error: query.error }, 400);
+  const list = await readEventList(c.env, query);
+  return c.json({
+    events: list.rows.map(({ row, counts }) => ({ ...shapeEvent(row, { includePrivate: true }), ...counts })),
+    total: list.total,
+    limit: list.limit,
+    offset: list.offset,
+  });
+});
+
+// ── GET /overview?weeks=4|12|52 — the Overview tab's one read (D918) ───────
+// MUST stay registered before GET /:id, like /analytics below.
+adminEvents.get('/overview', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const raw = c.req.query('weeks');
+  const weeks = raw == null || raw === '' ? 12 : Number(raw);
+  if (!(OVERVIEW_WEEKS as readonly number[]).includes(weeks)) return c.json({ error: 'invalid_weeks' }, 400);
+  return c.json(await readOverview(c.env, weeks));
+});
+
+// ── GET /analytics — portfolio-wide event metrics ──────────────────────────
+// MUST stay registered before GET /:id (a numeric :id guard would 404 the
+// word "analytics", but Hono matches in registration order regardless).
+adminEvents.get('/analytics', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const unreadable: string[] = [];
+  let summary: Record<string, number> | null = null;
+  try {
+    const ev: any = await c.env.DB.prepare(
+      `SELECT
+         COUNT(*) AS total_events,
+         COUNT(CASE WHEN status='published' THEN 1 END) AS published,
+         COUNT(CASE WHEN status='pending_review' THEN 1 END) AS pending_review,
+         COUNT(CASE WHEN status='draft' THEN 1 END) AS draft,
+         COUNT(CASE WHEN status='cancelled' THEN 1 END) AS cancelled
+       FROM events`,
+    ).first();
+    const reg: any = await c.env.DB.prepare(
+      `SELECT
+         COUNT(CASE WHEN status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
+         COUNT(CASE WHEN status='attended' THEN 1 END) AS attended,
+         COUNT(CASE WHEN status='waitlisted' THEN 1 END) AS waitlisted
+       FROM event_registrations`,
+    ).first();
+    if (!ev || !reg) throw new Error('Analytics summary was not returned');
+    summary = {
+      total_events: Number(ev?.total_events || 0),
+      published: Number(ev?.published || 0),
+      pending_review: Number(ev?.pending_review || 0),
+      draft: Number(ev?.draft || 0),
+      cancelled: Number(ev?.cancelled || 0),
+      total_registrations: Number(reg?.registrations || 0),
+      total_attended: Number(reg?.attended || 0),
+      total_waitlisted: Number(reg?.waitlisted || 0),
+    };
+  } catch (e) {
+    unreadable.push('summary');
+    console.warn('[admin_events] analytics summary failed:', (e as Error).message);
+  }
+
+  let events: any[] | null = null;
+  const now = Date.now();
+  // The editor's localInputToIso writes UTC instants. Legacy offset-free D1 timestamps are UTC.
+  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.capacity, e.featured,
+              COUNT(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
+              COUNT(CASE WHEN r.status='attended' THEN 1 END) AS attended,
+              COUNT(CASE WHEN r.status='waitlisted' THEN 1 END) AS waitlisted,
+              COUNT(CASE WHEN r.status='cancelled' THEN 1 END) AS cancelled
+         FROM events e
+         LEFT JOIN event_registrations r ON r.event_id = e.id
+        GROUP BY e.id
+        ORDER BY e.starts_at DESC
+        LIMIT 200`,
+    ).all();
+    if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Analytics events were not returned');
+    events = (rows.results as any[]).map((r) => {
+      const registrations = Number(r.registrations || 0);
+      const attended = Number(r.attended || 0);
+      const capacity = r.capacity != null ? Number(r.capacity) : null;
+      const endMissing = r.ends_at == null || (typeof r.ends_at === 'string' && !r.ends_at.trim());
+      const endedAt = endMissing ? timestamp(r.starts_at) + 24 * 60 * 60 * 1000 : timestamp(r.ends_at);
+      return {
+        id: Number(r.id),
+        slug: r.slug,
+        title: r.title,
+        status: r.status,
+        starts_at: r.starts_at,
+        ends_at: r.ends_at ?? null,
+        featured: !!r.featured,
+        capacity,
+        registrations,
+        attended,
+        waitlisted: Number(r.waitlisted || 0),
+        cancelled: Number(r.cancelled || 0),
+        capacity_util: capacity && capacity > 0 ? round2(registrations / capacity) : null,
+        conversion: endedAt < now && registrations > 0 ? round2(attended / registrations) : null,
+      };
+    });
+  } catch (e) {
+    unreadable.push('events');
+    console.warn('[admin_events] analytics rows failed:', (e as Error).message);
+  }
+
+  return c.json({ summary, events, unreadable });
+});
+
+// ── GET /:id — admin event detail ──────────────────────────────────────────
+adminEvents.get('/:id', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+});
+
+// ── GET /:id/summary — one event's counts, no names (D918) ─────────────────
+adminEvents.get('/:id/summary', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json(await readEventSummary(c.env, event));
+});
+
+// ── GET /:id/history — the desk's actions and the host's, actors unnamed ──
+adminEvents.get('/:id/history', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json({ event_id: id, history: await readEventHistory(c.env, event) });
+});
+
+// ── GET /:id/comp-preview — what approve would invite; mints nothing ──────
+adminEvents.get('/:id/comp-preview', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json(await readCompPreview(c.env, event));
+});
+
+// ── POST /:id/approve — publish to the public feed ─────────────────────────
+adminEvents.post('/:id/approve', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const approved = await c.env.DB.prepare(
+    `UPDATE events SET status = 'published', admin_published = 1, approved_at = ?,
+       changed_after_approval_at = NULL, updated_at = datetime('now')
+       WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(new Date().toISOString(), id).first();
+  if (!approved) return c.json({ error: 'not_waiting' }, 409);
+  await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_approved', eventId: id });
+  const fresh = await loadEvent(c.env, id);
+  // D1490: the channels ticked for this event post now. A failure here never fails the approval.
+  await onEventApproved(c.env, fresh);
+  if (event.host_user_id) {
+    await notify(c.env, {
+      userId: event.host_user_id, type: 'event_approved', category: 'events',
+      title: `Your event is live: ${event.title}`, link: hostEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  // Comp-on-publish (design §7.3): auto-mint comp invites for the event's
+  // configured partner/LP audiences, then deliver ONLY the newly minted ones
+  // (inbox + email-with-.ics). A re-approve mints nothing new, so nobody is
+  // re-mailed.
+  try {
+    const rules = parseAudienceRules(event.audience_rules_json);
+    if (Object.keys(rules).length > 0) {
+      const comp = await mintCompInvitations(c.env, id, rules, event.host_user_id ?? null, a.id);
+      for (const inv of comp.created) {
+        await deliverEventInvite(c.env, fresh, {
+          userId: inv.invited_user_id, email: inv.invited_email,
+          name: inv.invited_name, token: inv.token, comp: true,
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('[admin_events] comp mint/deliver failed:', (e as Error).message);
+  }
+  return c.json({ event: shapeEvent(fresh, { includePrivate: true }) });
+});
+
+// ── POST /:id/reject — bounce back from the review queue ────────────────────
+adminEvents.post('/:id/reject', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => ({} as any));
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 1000) : '';
+  if (!reason) return c.json({ error: 'reason_required' }, 400);
+  const rejected = await c.env.DB.prepare(
+    `UPDATE events SET status = 'rejected', admin_published = 0, review_note = ?,
+       updated_at = datetime('now') WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(reason, id).first();
+  if (!rejected) return c.json({ error: 'not_waiting' }, 409);
+  await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_rejected', eventId: id, extra: { reason } });
+  if (event.host_user_id) {
+    await notify(c.env, {
+      userId: event.host_user_id, type: 'event_rejected', category: 'events',
+      title: `Event needs changes: ${event.title}`, body: reason || undefined,
+      link: hostEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/unpublish — pull from the public feed ────────────────────────
+adminEvents.post('/:id/unpublish', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (event.status !== 'published') return c.json({ error: 'not_published' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  const unpublished = await c.env.DB.prepare(
+    `UPDATE events SET admin_published = 0, status = 'draft', updated_at = datetime('now')
+       WHERE id = ? AND status = 'published' RETURNING id`,
+  ).bind(id).first();
+  if (!unpublished) return c.json({ error: 'not_published' }, 409);
+  await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_unpublished', eventId: id });
+  await onEventUnpublished(c.env, id); // D1490: posted listings are withdrawn
+  if (event.host_user_id) {
+    await notify(c.env, {
+      userId: event.host_user_id, type: 'event_unpublished', category: 'events',
+      title: `Your event is back with you as a draft: ${event.title}`,
+      body: note || undefined, link: hostEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/feature — toggle the featured flag (admin curation) ──────────
+adminEvents.post('/:id/feature', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  // D142 — a suspended branch cannot put anything NEW under the brand. The
+  // gate is after the admin check, so an anonymous caller still gets 401
+  // rather than learning the licence state.
+  await requireBranchNotSuspended(c);
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => ({} as any));
+  const featured = body.featured ? 1 : 0;
+  await c.env.DB.prepare(
+    `UPDATE events SET featured = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(featured, id).run();
+  await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_featured', eventId: id, extra: { featured: !!featured } });
+  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/cancel — admin cancels an event ──────────────────────────────
+adminEvents.post('/:id/cancel', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (event.status === 'cancelled') return c.json({ error: 'already_cancelled' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  // Read before changing state: an unreadable payment ledger must not look like zero.
+  const paid = await c.env.DB.prepare(
+    `SELECT e.currency, COUNT(*) AS count, SUM(r.amount_cents) AS amount_cents
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = ? AND r.payment_status = 'paid'
+       GROUP BY e.currency ORDER BY e.currency`,
+  ).bind(id).all<{ currency: string; count: number; amount_cents: number }>();
+  const paidRows = paid.results || [];
+  const cancelled = await c.env.DB.prepare(
+    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now')
+       WHERE id = ? AND status != 'cancelled' RETURNING id`,
+  ).bind(id).first();
+  if (!cancelled) return c.json({ error: 'already_cancelled' }, 409);
+  await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_cancelled', eventId: id });
+  await scheduleCalendarCancellation(c, 'event', id);
+  await onEventCancelled(c.env, id); // D1490: posted listings are cancelled on their channel
+  // Notify seated registrants (best-effort).
+  const seated = await c.env.DB.prepare(
+    `SELECT DISTINCT user_id FROM event_registrations
+       WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,
+  ).bind(id).all();
+  for (const r of (seated.results || []) as any[]) {
+    await notify(c.env, {
+      userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    paid_tickets: {
+      count: paidRows.reduce((total, row) => total + Number(row.count), 0),
+      by_currency: paidRows.map((row) => ({ currency: row.currency, amount_cents: Number(row.amount_cents) })),
+    },
+  });
+});
+
+// ── POST /:id/capacity — admin capacity override ───────────────────────────
+// Body: { capacity: int>=0 | null }. null clears the cap (unlimited). Raising
+// or clearing the cap can free seats, so we promote the waitlist + notify the
+// promoted registrants.
+adminEvents.post('/:id/capacity', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  let capacity: number | null;
+  if (body.capacity === null || body.capacity === undefined || body.capacity === '') {
+    capacity = null;
+  } else {
+    const n = Number(body.capacity);
+    if (!Number.isInteger(n) || n < 0) return c.json({ error: 'invalid_capacity' }, 400);
+    capacity = n;
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE events SET capacity = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(capacity, id).run();
+  await writeAudit(c.env, {
+    adminId: a.id, adminEmail: a.email, action: 'event_capacity_override', eventId: id,
+    extra: { capacity },
+  });
+
+  let promoted: Array<{ user_id: number | null }> = [];
+  try {
+    const fresh = await loadEvent(c.env, id);
+    promoted = await promoteWaitlist(c.env, fresh as EventSeatRow);
+    for (const p of promoted) {
+      if (p.user_id != null) {
+        await notify(c.env, {
+          userId: Number(p.user_id), type: 'event_waitlist_promoted', category: 'events',
+          title: `You're off the waitlist: ${event.title}`,
+          link: memberEventLink(id), payload: { event_id: id },
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('[admin_events] capacity waitlist promote failed:', (e as Error).message);
+  }
+
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    promoted: promoted.length,
+  });
+});
+
+export default adminEvents;

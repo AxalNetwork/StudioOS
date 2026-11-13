@@ -1,0 +1,45 @@
+{
+  "skill": "regulatory-jurisdiction-research",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "research.library": {
+        "activity": "Launch payment service",
+        "sources": [
+          {
+            "title": "Consultation draft",
+            "status": "proposed",
+            "date": "2025-02-01"
+          }
+        ],
+        "jurisdiction": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Consultation draft",
+      "proposed",
+      "2025-02-01"
+    ],
+    "must_say_not_recorded": [
+      "jurisdiction"
+    ],
+    "must_not_include": [
+      "binding law requires"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why jurisdiction is missing rather than inventing it.",
+    "Do not assert: binding law requires.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Consultation draft; proposed; 2025-02-01. jurisdiction: Not recorded. Human review required."
+}

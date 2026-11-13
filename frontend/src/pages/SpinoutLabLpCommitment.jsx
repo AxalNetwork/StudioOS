@@ -1,0 +1,404 @@
+// I5 · "My commitment" — the LP's own position, per fund, on the LP workspace
+// (D372). It is also where `/lp-portal` now lands: every job the old portal
+// did is here — the commitment table, called / due / uncalled, the capital
+// calls, distributions, TVPI and DPI, and viewing and signing the LPA.
+//
+// Every figure is summed from the caller's own rows in GET /api/funds/lp-portal
+// by `lib/lpCommitmentModel.js`. A read that failed says so with a retry; a
+// figure with nothing behind it says "not recorded". Neither is ever a zero.
+import React, { useMemo, useReducer, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { EmailAction } from './email/emailParts';
+import { Unreadable, Unrecorded } from '../ui';
+import { api } from '../lib/api';
+import { bankAccountsApi } from '../lib/api/bankAccounts';
+import { commitmentsByFund, commitmentBar } from '../lib/lpCommitmentModel';
+import { PHONE_CHECK, initialWire, revealWire, showsInstructions, wireReducer } from '../lib/lpWireGate';
+import { formatCents } from './investor/fundCallsModel';
+import { LPADrawer } from './FundsPage';
+import { ProofDoor } from './investor/ProofOfFunds';
+import { targetOf } from './investor/proofOfFundsModel';
+
+const CARD = 'rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900';
+const LBL = 'text-[11px] font-bold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500';
+const MONO = 'font-mono tabular-nums';
+
+const money = (cents) => formatCents(cents);
+const STATE = {
+  paid: ['Paid', 'text-emerald-700 dark:text-emerald-400'],
+  part_received: ['Part received', 'text-amber-700 dark:text-amber-400'],
+  overdue: ['Overdue', 'text-red-700 dark:text-red-400'],
+  pending: ['Due', 'text-amber-700 dark:text-amber-400'],
+};
+const multiple = (x) => (typeof x === 'number' ? `${x.toFixed(2)}×` : null);
+
+/** The paper notice's split, which no column records (D717 decision 3). */
+const SPLIT_REASON = 'This call records one amount. How it divides between investments, the management fee and partnership expenses is not recorded.';
+const ROW = 'flex min-h-[40px] items-center justify-between gap-3 border-b border-[#f0eff3] dark:border-gray-800 text-[14px]';
+
+/**
+ * D717 decision 2, items 1 to 4 (L12 `p-call`): what the call asks for, before
+ * anything about where to send it — the amount due, the due date and LP
+ * number, and the four rows of the paper notice's commitment table.
+ */
+export function WireHead({ line }) {
+  const amount = money(line.outstanding_cents);
+  const lp = line.limited_partner_id != null ? `LP no. L${line.limited_partner_id}` : null;
+  const when = line.due_date ? `Due ${line.due_date}` : 'No due date recorded';
+  const split = <Unrecorded reason={SPLIT_REASON} />;
+  return (
+    <div>
+      <div className="text-[10.5px] font-extrabold uppercase tracking-[.09em] text-[#7d7889] dark:text-gray-400">Amount due</div>
+      <div className="mt-1 text-[30px] font-extrabold tracking-[-.02em] tabular-nums text-gray-900 dark:text-gray-100">
+        {amount ?? <Unrecorded />}
+      </div>
+      <div className="mt-[14px] text-[13px] text-[#615c6e] dark:text-gray-400">{lp ? `${when} · ${lp}` : when}</div>
+      <div className="mt-3">
+        <div className={ROW}><span>Investments</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}><span>Management fee</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}><span>Partnership expenses</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}>
+          <span>Unfunded after this call</span>
+          <span className="font-bold tabular-nums">{money(line.unfunded_after_cents) ?? <Unrecorded />}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D717 decision 2, items 5 to 7, and decision 4's gate: the phone-check box,
+ * one tick, and "Show wire instructions", disabled until the box is ticked.
+ * #1860 draws the same gate on the notice screen.
+ */
+export function WireGate({ wire, onConfirm, onShow, testId = '' }) {
+  return (
+    <div>
+      <p className="mb-[10px] mt-4 rounded-[12px] border-[1.5px] border-[#9E3338] px-[14px] py-[12px] text-[13px] font-bold leading-[1.45] text-[#9E3338] dark:border-red-400 dark:text-red-300">
+        {PHONE_CHECK}
+      </p>
+      <label className="flex min-h-[44px] cursor-pointer items-center gap-[10px] text-[14px] text-gray-800 dark:text-gray-200">
+        <input
+          type="checkbox"
+          checked={wire.confirmed}
+          onChange={(e) => onConfirm(e.target.checked)}
+          className="h-[22px] w-[22px] shrink-0 rounded-[6px] border-[1.5px] border-[#c9c6d2] accent-indigo-600"
+          data-testid={testId ? `wire-gate-confirm-${testId}` : undefined}
+        />
+        I confirmed by phone
+      </label>
+      {wire.step === 'gate' && (
+        <button
+          type="button"
+          onClick={onShow}
+          disabled={!wire.confirmed}
+          className="mt-2 min-h-[50px] w-full rounded-[14px] bg-indigo-600 text-[15px] font-bold text-white disabled:bg-[#f4f3f7] disabled:text-[#9a95a6] dark:disabled:bg-gray-800 dark:disabled:text-gray-500 md:w-auto md:px-6"
+          data-testid={testId ? `wire-gate-show-${testId}` : undefined}
+        >
+          Show wire instructions
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * D708 (#1773) — where to wire one open Fund I line: the Fund's bank, the
+ * masked account, the reference to quote and the Worker's warning, which
+ * prints with every set of instructions (D708 decision 10). The full number
+ * is fetched only when the LP asks, and is held in the caller's state alone.
+ */
+export function WireInstructions({ p, full, busy, err, onReveal, onHide, testId = '' }) {
+  const i = full?.instructions;
+  return (
+    <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300">
+      <div className={LBL}>Wire details</div>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        <dt>Bank</dt><dd>{p.bank_name}</dd>
+        {p.beneficiary_name && <><dt>Beneficiary</dt><dd>{p.beneficiary_name}</dd></>}
+        <dt>Account</dt><dd className={MONO}>{i?.account_number || p.account_masked}</dd>
+        {i && <><dt>ABA routing</dt><dd className={MONO}>{i.routing_number}</dd></>}
+        {i?.swift_code && <><dt>SWIFT</dt><dd className={MONO}>{i.swift_code}{i.intermediary_swift_code ? ` · intermediary ${i.intermediary_swift_code}` : ''}</dd></>}
+        {i && <><dt>Bank address</dt><dd>{i.bank_address}</dd></>}
+        {i && <><dt>Beneficiary address</dt><dd>{i.beneficiary_address}</dd></>}
+        <dt>Reference</dt><dd className={MONO}>{full?.reference || p.reference}</dd>
+      </dl>
+      <p className="mt-1.5 font-semibold text-amber-700 dark:text-amber-400">{full?.warning || p.warning}</p>
+      {err && <p className="mt-1 text-red-700 dark:text-red-400" role="alert">{err}</p>}
+      <div className="mt-1.5">
+        {full ? (
+          <button type="button" onClick={onHide} className="font-semibold underline">Hide the full details</button>
+        ) : (
+          <button type="button" onClick={onReveal} disabled={busy} className="font-semibold underline disabled:opacity-50" data-testid={testId ? `wire-details-show-${testId}` : undefined}>
+            {busy ? 'Opening…' : 'Show the full account number'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D717 decision 13 (#1859) — one open Fund I line's panel. It opens on the
+ * amount and the due date (`WireHead`); the masked instructions sit behind
+ * the phone check (`WireGate`), and the full number one tap after that,
+ * through `revealWire`, the one place the reveal route is called. Unticking
+ * goes back to the gate and drops the number. Nothing is stored.
+ */
+export function WireDetails({ fundId, line }) {
+  const p = line.pay_instructions;
+  const [wire, dispatch] = useReducer(wireReducer, undefined, initialWire);
+  const [full, setFull] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if (!p) return null;
+  const confirm = (value) => {
+    if (!value) { setFull(null); setErr(''); }
+    dispatch({ type: 'confirm', value });
+  };
+  const reveal = async () => {
+    const asked = revealWire(wire, () => bankAccountsApi.linePayInstructions(fundId, line.id));
+    if (!asked) return;
+    setBusy(true); setErr('');
+    try { setFull(await asked); dispatch({ type: 'revealed' }); }
+    catch (e) { setErr(e?.data?.message || e?.message || 'The account number could not be shown.'); }
+    finally { setBusy(false); }
+  };
+  const hide = () => { setFull(null); dispatch({ type: 'hide' }); };
+  return (
+    <div className="mx-3 mb-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-4 text-gray-900 dark:text-gray-100" data-testid={`wire-details-${line.id}`}>
+      <WireHead line={line} />
+      {!p.available ? (
+        <p className="mt-4 rounded-[12px] border-[1.5px] border-[#92400e] px-[14px] py-[12px] text-[13px] font-bold leading-[1.45] text-[#92400e] dark:border-amber-400 dark:text-amber-300">
+          {p.message || 'No payment instructions can be given for this call yet. Do not send money until Axal gives them.'}
+        </p>
+      ) : (
+        <>
+          <WireGate wire={wire} onConfirm={confirm} onShow={() => dispatch({ type: 'show' })} testId={line.id} />
+          {showsInstructions(wire) && (
+            <WireInstructions p={p} full={full} busy={busy} err={err} onReveal={reveal} onHide={hide} testId={line.id} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The whole section: an anchor `/lp-portal` redirects to, and one card per fund. */
+// D752 (#1891): `proof` ({ targets, onShare }), an HQ investor's proof-of-funds
+// doors, one per Fund I card whose lp_id is a target. Without it, nothing changes.
+export function MyCommitment({ portal, failed, onReload, proof = null }) {
+  const rows = useMemo(() => commitmentsByFund(portal), [portal]);
+  const [lpaFor, setLpaFor] = useState(null);
+  const [signing, setSigning] = useState(null);
+  const [signErr, setSignErr] = useState('');
+
+  async function sign(row) {
+    setSigning(row.lp_id); setSignErr('');
+    try { await api.fundsSignLpa(row.lp_id); await onReload(); }
+    catch (e) { setSignErr(e?.message || 'The LPA could not be signed.'); }
+    finally { setSigning(null); }
+  }
+
+  return (
+    <section id="my-commitment" data-testid="section-my-commitment" className="scroll-mt-20">
+      <div className="mb-2.5 flex items-end justify-between gap-3">
+        <div className={LBL}>My commitment</div>
+        <span className="text-[11.5px] text-gray-400 dark:text-gray-500">Your own rows on each fund's register</span>
+      </div>
+      {failed ? (
+        <div className={`${CARD} p-5`} data-testid="status-commitment-unreadable">
+          <Unreadable what="Your LP position" claim="This is not a claim that you hold no commitment." onRetry={onReload} />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className={`${CARD} p-5 text-[12.5px] text-gray-500 dark:text-gray-400`} data-testid="status-no-commitment">
+          No commitment is recorded for your account. A commitment appears here once the fund's general partner
+          records it on the register.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {rows.length > 1 && <Totals rows={rows} />}
+          {rows.map((row) => (
+            <FundCommitment
+              key={`${row.fund_id}-${row.lp_id}`}
+              row={row}
+              onViewLpa={() => setLpaFor(row.fund_id)}
+              onSign={() => sign(row)}
+              signing={signing === row.lp_id}
+              onRetry={onReload}
+              proof={proof}
+            />
+          ))}
+          {signErr && <p className="text-[11.5px] text-red-600 dark:text-red-400" role="alert">{signErr}</p>}
+          {/* The rest of the I5 artboard, said rather than drawn empty. */}
+          <div className={`${CARD} p-4 text-[11.5px] text-gray-500 dark:text-gray-400`} data-testid="commitment-not-built">
+            <div><span className="font-semibold text-gray-700 dark:text-gray-300">Co-invest offers</span> · Not recorded: no store holds a co-invest offer, so none can be listed, taken or passed here.</div>
+            <div className="mt-1"><span className="font-semibold text-gray-700 dark:text-gray-300">Ask the report</span> · Not built: Eadwyn has no investor reading surface for issued reports yet.</div>
+          </div>
+        </div>
+      )}
+      {lpaFor && <LPADrawer fundId={lpaFor} onClose={() => setLpaFor(null)} />}
+    </section>
+  );
+}
+
+function Totals({ rows }) {
+  const add = (key) => (rows.every((r) => r[key] != null) ? rows.reduce((s, r) => s + r[key], 0) : null);
+  const items = [
+    ['Committed', add('commitment_cents')],
+    ['Called', add('called_cents')],
+    ['Due now', add('due_cents')],
+    ['Distributed', add('distributed_cents')],
+  ];
+  return (
+    <div className={`${CARD} grid grid-cols-2 gap-3 p-4 sm:grid-cols-4`} data-testid="commitment-totals">
+      {items.map(([k, v]) => (
+        <div key={k}>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{k} · {rows.length} funds</div>
+          <div className={`${MONO} mt-1 text-base font-bold text-gray-900 dark:text-gray-100`}>
+            {v == null ? <Unrecorded reason="One fund's figure could not be read or is not recorded, so no total is given." /> : money(v)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FundCommitment({ row, onViewLpa, onSign, signing, onRetry, proof = null }) {
+  const bar = commitmentBar(row);
+  return (
+    <div className={`${CARD} p-5`} data-testid={`commitment-fund-${row.fund_id}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{row.fund_name || `Fund #${row.fund_id}`}</div>
+        <div className="text-[11px] text-gray-500 dark:text-gray-400">
+          {row.lpa_signed
+            ? `LPA signed${row.lpa_signed_at ? ` ${row.lpa_signed_at}` : ''}`
+            : 'LPA not signed'}
+          {row.committed_on ? ` · committed ${row.committed_on}` : ''}
+        </div>
+      </div>
+      <div className={`${MONO} mt-2 text-2xl font-extrabold text-gray-900 dark:text-gray-100`}>
+        {row.commitment_cents == null ? <Unrecorded reason="The register records no commitment amount for you on this fund." /> : money(row.commitment_cents)}
+        <span className="ml-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500">committed</span>
+      </div>
+
+      {!row.calls_known ? (
+        <div className="mt-3" data-testid="status-calls-unreadable">
+          <Unreadable what="Your capital calls" claim="This is not a claim that nothing has been called." onRetry={onRetry} />
+        </div>
+      ) : (
+        <>
+          {bar && (
+            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" aria-hidden="true">
+              <div className="h-full bg-violet-600" style={{ width: `${bar.settled}%` }} />
+              <div className="h-full bg-amber-400" style={{ width: `${bar.due}%` }} />
+            </div>
+          )}
+          <div className={`${MONO} mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-gray-600 dark:text-gray-400`} data-testid="commitment-split">
+            <span>{money(row.called_cents)} called</span>
+            <span><span className="text-violet-600">■</span> {money(row.settled_cents)} paid</span>
+            <span><span className="text-amber-500">■</span> {money(row.due_cents)} due{row.next_due ? ` · next ${row.next_due}` : ''}</span>
+            <span>{row.uncalled_cents == null ? 'Uncalled not recorded' : `${money(row.uncalled_cents)} uncalled`}</span>
+          </div>
+          {proof && <ProofDoor target={targetOf(proof.targets, 'lp_commitment', row.lp_id)} onShare={proof.onShare} />}
+          {row.over_called && (
+            <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              More has been called than the register records as your commitment. Ask the GP which figure is right.
+            </p>
+          )}
+          <div className="mt-3 overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
+            {row.calls.length === 0 ? (
+              <div className="px-3 py-3 text-[11.5px] text-gray-500 dark:text-gray-400">Nothing has been called on this commitment.</div>
+            ) : row.calls.map((c) => {
+              const [label, tone] = STATE[c.state] || STATE.pending;
+              return (
+                <div key={c.id} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2 text-[11.5px]" data-testid={`commitment-call-${c.id}`}>
+                  <span className="text-gray-700 dark:text-gray-300">
+                    {c.call_number != null ? `Call ${c.call_number}` : 'Capital call'}
+                    <span className="text-gray-400 dark:text-gray-500"> · {c.state === 'paid'
+                      ? `paid ${c.paid_date || 'date not recorded'}`
+                      : c.due_date ? `due ${c.due_date}` : `issued ${c.issued_on || 'date not recorded'}, no due date recorded`}</span>
+                  </span>
+                  <span className={`${MONO} text-gray-900 dark:text-gray-100`}>{money(c.owed_cents) ?? 'Not recorded'}</span>
+                  <span className={`font-semibold ${tone}`}>{label}</span>
+                </div>
+                {c.state !== 'paid' && c.pay_instructions && <WireDetails fundId={row.fund_id} line={c} />}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10.5px] text-gray-400 dark:text-gray-500">
+            Calls not yet issued are not listed: the fund keeps no schedule of future calls. A call is paid when
+            the general partner records your wire.
+          </p>
+        </>
+      )}
+
+      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 dark:border-gray-800 pt-4 text-xs sm:grid-cols-4">
+        <Fact k="Paid in" v={money(row.invested_cents)} />
+        <Fact k="Distributed" v={money(row.distributed_cents)} note={`${row.distributions.length} distribution${row.distributions.length === 1 ? '' : 's'}`} />
+        <Fact k="TVPI" v={multiple(row.tvpi)} reason="Nothing has been paid in yet, so there is no multiple." />
+        <Fact k="DPI" v={multiple(row.dpi)} reason="Nothing has been paid in yet, so there is no multiple." />
+      </dl>
+      {row.distributions.length > 0 && (
+        <ul className="mt-3 space-y-1 text-[11px] text-gray-600 dark:text-gray-400" data-testid={`commitment-distributions-${row.fund_id}`}>
+          {row.distributions.map((d) => (
+            <li key={d.id} className="flex justify-between gap-2">
+              <span>{d.on || 'Date not recorded'} · {d.status || 'status not recorded'}</span>
+              <span className={MONO}>{money(d.amount_cents) ?? 'Not recorded'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={onViewLpa} data-testid={`button-view-lpa-${row.fund_id}`}
+          className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300">
+          View LPA
+        </button>
+        {!row.lpa_signed && (
+          <button type="button" onClick={onSign} disabled={signing} data-testid={`button-sign-lpa-${row.lp_id}`}
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+            {signing ? 'Signing…' : 'Sign LPA'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Fact({ k, v, note, reason }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{k}</dt>
+      <dd className={`${MONO} mt-0.5 font-bold text-gray-900 dark:text-gray-100`}>
+        {v ?? <Unrecorded reason={reason || 'Not recorded on the register.'} />}
+      </dd>
+      {note && <div className="text-[10px] text-gray-400 dark:text-gray-500">{note}</div>}
+    </div>
+  );
+}
+
+/** D1345: the LP's GP of record opens a draft in Email, one selected fund at a time. */
+export function EmailGp({ portal }) {
+  const rows = useMemo(() => commitmentsByFund(portal), [portal]);
+  const reachable = rows.filter((r) => r.gp?.contact_email);
+  const [fundId, setFundId] = useState(null);
+  const target = reachable.find((r) => r.fund_id === fundId) || reachable[0] || null;
+  if (!target) return (
+    <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="status-no-gp-contact">
+      {rows.length ? 'No general partner of record with a platform account is set on your fund. ' : 'Questions before you invest go to the fund team. '}
+      <Link to="/help" className="font-semibold text-violet-700 dark:text-violet-400">Contact the fund team</Link>
+    </p>
+  );
+  return <div className="flex w-full flex-wrap items-center gap-2" data-testid="email-gp">
+    {reachable.length > 1 && <select value={target.fund_id} onChange={(e) => setFundId(Number(e.target.value))}
+      aria-label="Fund to email about" data-testid="select-email-gp-fund"
+      className="min-h-[44px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 text-xs text-gray-900 dark:text-gray-100">
+      {reachable.map((r) => <option key={r.fund_id} value={r.fund_id}>{r.fund_name || `Fund #${r.fund_id}`}</option>)}
+    </select>}
+    <span className="text-[11px] text-gray-500 dark:text-gray-400">{target.gp.name || 'General partner of record'} · {target.fund_name || `Fund #${target.fund_id}`}</span>
+    <EmailAction person={`fund_gp:${target.fund_id}`} from="LP commitment" />
+  </div>;
+}

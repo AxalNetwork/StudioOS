@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="./fund-model.js"></script>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#6d28d9}
+    .ex-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+    .ex-btn{cursor:pointer;transition:filter .14s,background .14s,border-color .14s,transform .14s}
+    .ex-btn:hover{filter:brightness(.96)}
+    .ex-card{transition:border-color .18s,background .18s}
+    .ex-card:hover{border-color:#c9c2e6;background:#fdfcff}
+    .ex-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#71717a}
+    .ex-rule{height:1px;background:linear-gradient(90deg,rgba(139,92,246,.4),rgba(139,92,246,0))}
+    @keyframes exUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+    .ex-in{animation:exUp .5s cubic-bezier(.16,.84,.44,1) both}
+    @media (max-width:1000px){
+      .ex-2{grid-template-columns:1fr!important}.ex-3{grid-template-columns:1fr 1fr!important}
+      .ex-4{grid-template-columns:1fr 1fr!important}.ex-hero{grid-template-columns:1fr!important}
+      .ex-j{grid-template-columns:1fr!important}
+    }
+    @media (max-width:620px){.ex-3{grid-template-columns:1fr!important}.ex-4{grid-template-columns:1fr!important}}
+    /* Presentation mode: fills the viewport and hides host chrome (sidebar/shell) when embedded. */
+    .ex-root.ex-present{position:fixed;inset:0;z-index:9999;overflow-y:auto;overflow-x:hidden;background:#F8F8FA;-webkit-overflow-scrolling:touch}
+    body:has(.ex-root.ex-present){overflow:hidden}
+  </style>
+</helmet>
+
+<div class="ex-root {{ presentClass }}" style="min-height:100vh">
+
+  <!-- ============ PRESENTATION TOGGLE (floating) ============ -->
+  <button class="ex-btn" onClick="{{ toggleFull }}" title="{{ fullTitle }}" style="position:fixed;bottom:24px;right:24px;z-index:10000;display:flex;align-items:center;gap:8px;padding:11px 17px;border-radius:11px;border:1px solid #d4d4d8;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(24,24,27,.10);font-size:12.5px;font-weight:700;color:#3f3f46;cursor:pointer">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:#6d28d9"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    {{ fullLabel }}
+  </button>
+
+  <!-- ============ NAV ============ -->
+  <div style="position:sticky;top:0;z-index:40;background:rgba(248,248,250,.88);backdrop-filter:blur(14px);border-bottom:1px solid #ececf1">
+    <div style="max-width:1240px;margin:0 auto;padding:0 32px;height:62px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <img src="./uploads/axal01colourvar2.png" alt="Axal VC" style="width:27px;height:27px;object-fit:contain;flex:none;display:block">
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.01em;white-space:nowrap">Axal VC · Spin-Out Lab</div>
+        <span style="display:inline-block;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:rgba(52,211,153,.12);color:#15803d;border:1px solid rgba(52,211,153,.25);white-space:nowrap">Fund I open</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px">
+        <a class="ex-btn" href="LP Investor Workspace.dc.html" style="padding:8px 15px;border-radius:9px;border:1px solid #d4d4d8;font-size:12.5px;font-weight:600;color:#3f3f46">LP workspace</a>
+        <a class="ex-btn" href="LP Investor Workspace.dc.html" style="padding:8px 16px;border-radius:9px;background:#7c3aed;border:none;font-size:12.5px;font-weight:700;color:#fff">Review the fund →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HERO ============ -->
+  <div style="position:relative;overflow:hidden;border-bottom:1px solid #ececf1;background-image:url('./uploads/axal-vc-future-66669dce.png');background-size:cover;background-position:center 30%">
+    <div style="position:absolute;inset:0;background:linear-gradient(100deg,rgba(248,248,250,.97) 0%,rgba(248,246,252,.94) 42%,rgba(237,233,248,.86) 100%);pointer-events:none"></div>
+    <div style="position:absolute;top:-220px;right:-140px;width:640px;height:640px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.10),transparent 66%);pointer-events:none"></div>
+    <div style="position:absolute;bottom:-320px;left:-200px;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle,rgba(13,148,136,.06),transparent 68%);pointer-events:none"></div>
+    <div class="ex-in" style="position:relative;max-width:1240px;margin:0 auto;padding:78px 32px 66px">
+      <div class="ex-hero">
+        <div style="max-width:760px">
+          <div class="ex-lbl" style="margin-bottom:20px">AXAL VC SPIN-OUT LAB FUND I · PRE-SEED · VINTAGE 2026</div>
+          <h1 style="margin:0;font-size:52px;line-height:1.06;font-weight:900;letter-spacing:-.035em;max-width:660px">Back companies at the moment they become companies.</h1>
+          <div style="font-size:16.5px;color:#52525b;line-height:1.68;margin-top:22px;max-width:600px">The Spin-Out Lab is a 28-day company-formation environment. Founders enter with an idea and leave incorporated, 83(b)-filed, cap-table-clean, with verified customer discovery and revenue proof — and Axal VC underwrites them on observed execution, not a pitch.</div>
+          <div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:30px">
+            <a class="ex-btn" href="LP Investor Workspace.dc.html" style="padding:13px 24px;border-radius:11px;background:#6d28d9;color:#fff;font-size:14px;font-weight:800">Review the fund</a>
+            <a class="ex-btn" href="Fund Brief One-Pager.dc.html" style="padding:13px 24px;border-radius:11px;border:1px solid #d4d4d8;color:#18181b;font-size:14px;font-weight:700">See the investment brief</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- studio proof strip -->
+      <div class="ex-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#ececf1;border:1px solid #ececf1;border-radius:16px;overflow:hidden;margin-top:52px">
+        <sc-for list="{{ heroProof }}" as="p" hint-placeholder-count="4">
+          <div style="background:#fff;padding:22px 24px">
+            <div class="ex-mono" style="font-size:29px;font-weight:800;color:{{ p.tone }};letter-spacing:-.03em">{{ p.v }}</div>
+            <div class="ex-lbl" style="margin-top:7px;letter-spacing:.1em">{{ p.k }}</div>
+            <div style="font-size:11.5px;color:#71717a;margin-top:5px;line-height:1.5">{{ p.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 1 · WHAT FOUNDERS ARE DOING ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 0">
+    <div class="ex-lbl">01 · Inside the lab</div>
+    <div class="ex-rule" style="margin:14px 0 26px"></div>
+    <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start">
+      <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">Founders do not pitch here. They execute against a fixed 28-day schedule.</h2>
+      <div style="font-size:14.5px;color:#52525b;line-height:1.72">Each week has defined deliverables, gated tools, and evidence requirements. Nothing advances on assertion — a week closes when the artifact exists in the system. That schedule is what makes founder behavior comparable across cohorts, and comparable behavior is what we underwrite.</div>
+    </div>
+
+    <div class="ex-j" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:38px">
+      <sc-for list="{{ journey }}" as="j" hint-placeholder-count="4">
+        <div class="ex-card" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:24px 24px 22px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="ex-mono" style="font-size:11.5px;font-weight:700;color:#6d28d9">{{ j.wk }}</div>
+            <div style="flex:1;height:1px;background:rgba(139,92,246,.22)"></div>
+          </div>
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em;margin-top:14px">{{ j.t }}</div>
+          <div style="font-size:12.5px;color:#71717a;line-height:1.62;margin-top:8px;flex:1">{{ j.body }}</div>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid #ececf1">
+            <div class="ex-lbl" style="font-size:9.5px;letter-spacing:.11em;color:#71717a">Evidence produced</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+              <sc-for list="{{ j.out }}" as="o" hint-placeholder-count="3">
+                <div style="display:flex;gap:8px;font-size:11.5px;color:#3f3f46;line-height:1.5"><span style="color:#15803d;flex:none">·</span>{{ o }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ============ 2 · OPERATING STACK ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 0">
+    <div class="ex-lbl">02 · Founder operating stack</div>
+    <div class="ex-rule" style="margin:14px 0 26px"></div>
+    <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start">
+      <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">Nineteen working tools, gated by week — not a curriculum.</h2>
+      <div style="font-size:14.5px;color:#52525b;line-height:1.72">Founders do the work inside the system, so the system holds the record. Interview logs, pricing tests, cap tables, filings, and pitch materials are all first-class objects — which is why we can score readiness rather than take a founder's word for it.</div>
+    </div>
+
+    <div class="ex-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:38px">
+      <sc-for list="{{ stack }}" as="s" hint-placeholder-count="6">
+        <div class="ex-card" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px 24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div style="font-size:14.5px;font-weight:800;letter-spacing:-.012em">{{ s.t }}</div>
+            <span style="{{ s.chip }}">{{ s.week }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-top:8px">{{ s.body }}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
+            <sc-for list="{{ s.tools }}" as="tl" hint-placeholder-count="3">
+              <span style="font-size:11px;font-weight:600;color:#3f3f46;background:#f4f4f5;border:1px solid #ececf1;border-radius:7px;padding:4px 9px">{{ tl }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ============ 3 · WHY NOW ============ -->
+  <div style="border-top:1px solid #ececf1;border-bottom:1px solid #ececf1;margin-top:82px;background:linear-gradient(180deg,rgba(124,58,237,.05),transparent)">
+    <div style="max-width:1240px;margin:0 auto;padding:74px 32px">
+      <div class="ex-lbl">03 · Why this model works now</div>
+      <div class="ex-rule" style="margin:14px 0 26px"></div>
+      <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start">
+        <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">AI collapsed the cost of building. It did not collapse the cost of being wrong.</h2>
+        <div style="font-size:14.5px;color:#52525b;line-height:1.72">When anyone can ship a working product in a weekend, a demo stops being evidence. The scarce signal moves from build capability to validation discipline — and that is precisely what an unstructured pre-seed process cannot observe.</div>
+      </div>
+      <div class="ex-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:38px">
+        <sc-for list="{{ whyNow }}" as="w" hint-placeholder-count="4">
+          <div class="ex-card" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:24px 26px;display:flex;gap:18px">
+            <div class="ex-mono" style="flex:none;font-size:12px;font-weight:700;color:#7c3aed;padding-top:3px">{{ w.n }}</div>
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.014em">{{ w.t }}</div>
+              <div style="font-size:13px;color:#71717a;line-height:1.66;margin-top:7px">{{ w.body }}</div>
+              <div style="font-size:12.5px;color:#6d28d9;line-height:1.6;margin-top:10px;padding-left:12px;border-left:2px solid rgba(139,92,246,.4)">{{ w.so }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 4 · UNDERWRITING EDGE ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 0">
+    <div class="ex-lbl">04 · Why Axal VC sees more than the market</div>
+    <div class="ex-rule" style="margin:14px 0 26px"></div>
+    <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start">
+      <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">Twenty-eight days of observed behavior beats a sixty-minute meeting.</h2>
+      <div style="font-size:14.5px;color:#52525b;line-height:1.72">Traditional pre-seed underwrites a narrative delivered by a prepared founder. We underwrite a record we watched accumulate — including what the founder got wrong, and how fast they corrected.</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:18px;overflow:hidden;margin-top:38px">
+      <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;background:#fafafa;border-bottom:1px solid #ececf1">
+        <div class="ex-lbl" style="padding:14px 26px;letter-spacing:.1em">Signal</div>
+        <div class="ex-lbl" style="padding:14px 18px;letter-spacing:.1em">Traditional pre-seed</div>
+        <div class="ex-lbl" style="padding:14px 18px 14px 18px;letter-spacing:.1em;color:#6d28d9">Spin-Out Lab</div>
+      </div>
+      <sc-for list="{{ edge }}" as="e" hint-placeholder-count="6">
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;border-bottom:1px solid #f4f4f5">
+          <div style="padding:15px 26px;font-size:13px;font-weight:700;color:#18181b">{{ e.k }}</div>
+          <div style="padding:15px 18px;font-size:12.5px;color:#52525b;line-height:1.55">{{ e.trad }}</div>
+          <div style="padding:15px 18px;font-size:12.5px;color:#3f3f46;line-height:1.55;background:rgba(124,58,237,.05)">{{ e.lab }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="ex-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
+      <sc-for list="{{ network }}" as="n" hint-placeholder-count="3">
+        <div class="ex-card" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px 24px">
+          <div class="ex-mono" style="font-size:24px;font-weight:800;color:#6d28d9;letter-spacing:-.03em">{{ n.v }}</div>
+          <div style="font-size:14px;font-weight:800;margin-top:8px">{{ n.t }}</div>
+          <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-top:6px">{{ n.body }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ============ 5 · PROOF ============ -->
+  <div style="border-top:1px solid #ececf1;margin-top:82px;background:#fff">
+    <div style="max-width:1240px;margin:0 auto;padding:74px 32px">
+      <div class="ex-lbl">05 · Studio &amp; portfolio proof</div>
+      <div class="ex-rule" style="margin:14px 0 26px"></div>
+      <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start;margin-bottom:38px">
+        <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">The metrics that should move an LP — and the ones that shouldn't.</h2>
+        <div style="font-size:14.5px;color:#52525b;line-height:1.72">Application volume and demo-day attendance are not evidence. Formation velocity, verified discovery, revenue proof, and graduation-to-investment conversion are. Below is the full set, current as of this quarter.</div>
+      </div>
+
+      <div class="ex-lbl" style="margin-bottom:12px;color:#71717a">Studio throughput</div>
+      <div class="ex-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#ececf1;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+        <sc-for list="{{ proofStudio }}" as="p" hint-placeholder-count="8">
+          <div style="background:#fff;padding:20px 22px">
+            <div class="ex-mono" style="font-size:24px;font-weight:800;color:{{ p.tone }};letter-spacing:-.03em">{{ p.v }}</div>
+            <div style="font-size:11.5px;font-weight:700;color:#3f3f46;margin-top:6px">{{ p.k }}</div>
+            <div style="font-size:11px;color:#52525b;margin-top:4px;line-height:1.5">{{ p.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:20px;padding:16px 20px;background:#fff;border:1px solid #ececf1;border-radius:14px">
+        <span style="font-size:12.5px;color:#52525b;line-height:1.6;flex:1;min-width:260px">Fund-level position — committed, called, deployed, portfolio marks, MOIC, and reserve — is maintained in the LP workspace and the quarterly reporting archive.</span>
+        <a class="ex-btn" href="LP Investor Workspace.dc.html" style="flex:none;padding:9px 17px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">See fund position →</a>
+      </div>
+      <div style="font-size:11.5px;color:#71717a;line-height:1.6;margin-top:16px;max-width:760px">Past cohort outcomes are not indicative of future results.</div>
+    </div>
+  </div>
+
+  <!-- ============ 6 · VENTURE EXAMPLES ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 0">
+    <div class="ex-lbl">06 · What moves through the system</div>
+    <div class="ex-rule" style="margin:14px 0 26px"></div>
+    <div class="ex-2" style="display:grid;grid-template-columns:1.1fr 1fr;gap:44px;align-items:start">
+      <h2 style="margin:0;font-size:35px;font-weight:800;letter-spacing:-.028em;line-height:1.16">Cohort 4, in progress — and what we can already see.</h2>
+      <div style="font-size:14.5px;color:#52525b;line-height:1.72">Six companies, day 11 of 28. These are live readings from the system, not curated highlights: the weak signals are shown alongside the strong ones, because the ability to see both early is the point.</div>
+    </div>
+    <div class="ex-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:38px">
+      <sc-for list="{{ ventures }}" as="v" hint-placeholder-count="6">
+        <div class="ex-card" style="background:#fff;border:1px solid {{ v.border }};border-radius:16px;padding:22px 24px">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="{{ v.avStyle }}">{{ v.initials }}</div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13.5px;font-weight:800">{{ v.sector }}</div>
+              <div style="font-size:11px;color:#52525b;margin-top:1px">{{ v.meta }}</div>
+            </div>
+            <span style="{{ v.chip }}">{{ v.read }}</span>
+          </div>
+          <div style="display:flex;gap:16px;margin:15px 0 13px">
+            <sc-for list="{{ v.stats }}" as="st" hint-placeholder-count="3">
+              <div><div class="ex-mono" style="font-size:15px;font-weight:700;color:#18181b">{{ st.v }}</div><div class="ex-lbl" style="font-size:9px;letter-spacing:.09em;margin-top:2px">{{ st.k }}</div></div>
+            </sc-for>
+          </div>
+          <div style="font-size:12.5px;color:#71717a;line-height:1.62;padding-top:13px;border-top:1px solid #ececf1">{{ v.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ============ 7 · INVESTMENT CASE ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 0">
+    <div class="ex-lbl">07 · The investment case</div>
+    <div class="ex-rule" style="margin:14px 0 26px"></div>
+    <div class="ex-2" style="display:grid;grid-template-columns:1.25fr .8fr;gap:32px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ caseItems }}" as="c" hint-placeholder-count="4">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px 26px;display:flex;gap:18px">
+            <div class="ex-mono" style="flex:none;font-size:12px;font-weight:700;color:#7c3aed;padding-top:3px">{{ c.n }}</div>
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.014em">{{ c.t }}</div>
+              <div style="font-size:13px;color:#71717a;line-height:1.66;margin-top:7px">{{ c.body }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background:linear-gradient(155deg,#f6f2ff,#fff);border:1px solid rgba(139,92,246,.24);border-radius:18px;padding:26px 28px">
+        <div class="ex-lbl" style="color:#6d28d9;margin-bottom:14px">Where the numbers live</div>
+        <div style="font-size:13.5px;color:#3f3f46;line-height:1.7">This page explains why the pipeline is worth underwriting. Fund terms, the raise status, capital accounts, and the quarterly reporting archive are maintained in the LP workspace — one place, one source of truth.</div>
+        <a class="ex-btn" href="LP Investor Workspace.dc.html" style="display:block;text-align:center;margin-top:20px;padding:11px;border-radius:10px;background:#6d28d9;color:#fff;font-size:13px;font-weight:700">Open the LP workspace →</a>
+        <a class="ex-btn" href="Fund Brief One-Pager.dc.html" style="display:block;text-align:center;margin-top:9px;padding:11px;border-radius:10px;border:1px solid #ececf1;background:#fff;color:#3f3f46;font-size:13px;font-weight:700">Investment brief (PDF)</a>
+        <div style="font-size:11px;color:#71717a;line-height:1.6;margin-top:14px">Full terms and capital account statements are available to approved LPs.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 8 · FINAL CTA ============ -->
+  <div style="max-width:1240px;margin:0 auto;padding:82px 32px 96px">
+    <div style="position:relative;overflow:hidden;background:linear-gradient(140deg,#f3efff,#fff);border:1px solid rgba(139,92,246,.26);border-radius:22px;padding:52px 48px">
+      <div style="position:absolute;top:-160px;right:-100px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.12),transparent 68%);pointer-events:none"></div>
+      <div style="position:relative;max-width:660px">
+        <div class="ex-lbl" style="color:#6d28d9;margin-bottom:16px">First close · Sep 15, 2026 · {{ capacityRemaining }} capacity remaining</div>
+        <h2 style="margin:0;font-size:36px;font-weight:900;letter-spacing:-.03em;line-height:1.14">This is not pre-seed exposure. It is a formation system with an underwriting record.</h2>
+        <div style="font-size:15px;color:#52525b;line-height:1.7;margin-top:18px">Access is curated and application-based. Approved LPs see the full pipeline, capital accounts, and quarterly reporting; commitments at {{ allocThresholdLabel }} carry allocation and decision rights on cohort demo days.</div>
+        <div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:30px">
+          <a class="ex-btn" href="LP Investor Workspace.dc.html" style="padding:14px 26px;border-radius:11px;background:#6d28d9;color:#fff;font-size:14.5px;font-weight:800">Request LP access</a>
+          <a class="ex-btn" href="Fund Brief One-Pager.dc.html" style="padding:14px 26px;border-radius:11px;border:1px solid #d4d4d8;color:#18181b;font-size:14.5px;font-weight:700">Fund brief (PDF)</a>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:36px;padding-top:24px;border-top:1px solid #ececf1">
+      <div style="font-size:11.5px;color:#71717a;line-height:1.65;max-width:720px">Confidential — prepared for curated investors only. This page is a summary for discussion, does not constitute an offer to sell or a solicitation to buy any security, and is qualified in its entirety by the fund's legal documents. Axal VC · Guillaume Lauzier, General Partner · guillaume.lauzier@axal.vc</div>
+      <a href="LP Investor Workspace.dc.html" style="font-size:12px;font-weight:600;white-space:nowrap">LP workspace →</a>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+class Component extends DCLogic {
+  state = { present:false };
+  componentDidMount() { this._awaitModel(); this._esc = (e) => { if (e.key === 'Escape' && this.state.present) this.setState({ present:false }); }; window.addEventListener('keydown', this._esc); }
+  componentWillUnmount() { if (this._esc) window.removeEventListener('keydown', this._esc); }
+  // fund-model.js is a classic script in <helmet>, normally present on first paint.
+  _awaitModel(tries) {
+    const n = tries == null ? 40 : tries;
+    if (window.FundModel) { if (!this._m) { this._m = true; this.forceUpdate(); } return; }
+    if (n > 0) setTimeout(() => this._awaitModel(n - 1), 50);
+    else console.error('fund-model.js did not load — figures render as em-dashes.');
+  }
+  _model() {
+    if (window.FundModel) return window.FundModel();
+    const dash = { toFixed: () => '—' };
+    return { ok:false, positions:[], fund:{ target:'—', committed:0, called:0, softCircled:0,
+      lpCount:'—', minTicketK:'—', allocThresholdK:250 }, investedK:0, heldK:0, followOnK:0,
+      followOnCount:'—', grossMoic:dash, capacityRemainingM:dash, reserveOpenM:dash, reserveCloseM:dash };
+  }
+
+  renderVals() {
+    const M = this._model(), F = M.fund, ok = M.ok;
+    const m = (k) => ok ? window.FundMoney.m(k) : '—';
+    const tag = (bg,fg,bd) => 'display:inline-block;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';border:1px solid '+bd+';white-space:nowrap';
+    const green = tag('rgba(52,211,153,.12)','#15803d','rgba(52,211,153,.25)');
+    const amber = tag('rgba(251,191,36,.1)','#b45309','rgba(251,191,36,.25)');
+    const purple = tag('rgba(139,92,246,.14)','#6d28d9','rgba(139,92,246,.3)');
+    const grey = tag('#f4f4f5','#71717a','#e4e4e7');
+    const av = (bg) => 'width:34px;height:34px;border-radius:10px;background:'+bg+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex:none';
+
+    const heroStats = [
+      { k:'Soft-circled', v: m(F.softCircled*1000), tone:'#18181b' },
+      { k:'Accepted LPs', v: String(F.lpCount), tone:'#18181b' },
+      { k:'Minimum ticket', v: ok ? '$' + F.minTicketK + 'K' : '—', tone:'#18181b' },
+      { k:'Capacity remaining', v: ok ? '$' + M.capacityRemainingM.toFixed(1) + 'M' : '—', tone:'#6d28d9' },
+    ];
+    const heroProof = [
+      { k:'Graduates to date', v:'37', tone:'#18181b', note:'Across three completed cohorts' },
+      { k:'Incorporated on time', v:'86%', tone:'#15803d', note:'Within the 28-day schedule' },
+      { k:'Raised post-program', v:'$8.6M', tone:'#15803d', note:'External capital, alumni companies' },
+      { k:'Deployed by the fund', v: m(M.investedK), tone:'#6d28d9', note: ok ? M.positions.length + ' positions held' : '—' },
+    ];
+
+    const journey = [
+      { wk:'Week 1', t:'Validate', body:'Problem definition, ICP, and market sizing — then at least five logged customer interviews with pain severity and willingness-to-pay captured per contact.',
+        out:['≥5 structured interview records','Sized TAM/SAM with citations','Founder profiling assessment'] },
+      { wk:'Week 2', t:'Solution & roadmap', body:'MVP scope, 90-day OKRs, brand and landing pages live, pitch deck v1 drafted. Distribution gets tested, not assumed.',
+        out:['Priced offer with WTP evidence','Live landing page + inbound leads','Pitch deck v1'] },
+      { wk:'Week 3', t:'Validate & team', body:'Venture-readiness scoring against nine weighted dimensions, advisor matching on skill-gap coverage, co-founder decision, and first revenue proof.',
+        out:['Evidence-confidence score','Advisor cadence established','Revenue proof: Stripe, import, or manual'] },
+      { wk:'Week 4', t:'Incorporate & capital', body:'Entity formed, founder stock issued with vesting, 83(b) filed inside the IRS window, co-founder agreement executed, use of funds and data room built.',
+        out:['Delaware C-Corp + EIN','Vesting cap table, 83(b) filed','Investor-ready data room'] },
+    ];
+
+    const stack = [
+      { t:'Company formation', week:'Week 4', chip:purple, body:'Entity recommendation by activity and financing path, generated filings, agent setup, EIN, and university IP assignment where relevant.', tools:['Incorporate','Cap Table','83(b) Tracker','Co-founder Agreement','Compliance'] },
+      { t:'Customer discovery', week:'Week 1', chip:purple, body:'Structured interview capture with pain severity, ICP fit scoring, quote extraction, and inbound lead routing from published pages.', tools:['Customer Discovery','Market Intel','Brand & Landing Pages'] },
+      { t:'Product & iteration', week:'Week 2', chip:purple, body:'MVP prioritization by added value and effort, OKR locking, and an execution loop that pulls the highest-value scope into the active cycle.', tools:['Roadmap','MVP Priorities','Studio Ops'] },
+      { t:'Revenue discipline', week:'Week 3', chip:purple, body:'Revenue captured via Stripe sync, document import, or manual entry — each entry carries a verification state, so claimed traction and proven traction stay distinct.', tools:['Revenue','Proof vault','Data Room'] },
+      { t:'Investor readiness', week:'Week 3–4', chip:purple, body:'Nine-dimension readiness scoring with evidence-confidence bands, weak-point remediation, and a deck assembled from system data rather than written from scratch.', tools:['Scoring Engine','Pitch Deck Builder','Capital','Use of Funds'] },
+      { t:'Expert & network access', week:'All weeks', chip:grey, body:'Matched advisors on skills, values, and archetype complementarity, plus booked sessions with operators, investors, and counsel from the Axal VC partner network.', tools:['Advisors','Office Hours','Co-founder Match','Profiling'] },
+    ];
+
+    const whyNow = [
+      { n:'01', t:'Build cost fell; noise rose', body:'A working product is no longer a filter. Cohorts now arrive with functioning software in week one, which means the differentiator has moved upstream to whether anyone will pay.',
+        so:'We score willingness-to-pay evidence, not product completeness.' },
+      { n:'02', t:'Speed rewards learners, not shippers', body:'Faster iteration only compounds if each cycle produces a corrected belief. Founders who ship quickly without validating simply reach the wrong answer sooner.',
+        so:'The 28-day schedule forces a documented learning loop per week.' },
+      { n:'03', t:'Formation errors are still permanent', body:'AI has not made a broken cap table, a missed 83(b) window, or an unassigned university IP claim any easier to unwind. These kill otherwise fundable companies at seed.',
+        so:'Formation is a gated workflow with deadline tracking, not founder homework.' },
+      { n:'04', t:'Pitch quality decoupled from company quality', body:'Generated decks and polished narratives are now free. A strong pitch says less about the underlying business than it did three years ago.',
+        so:'Every deck slide here is populated from system data with source citations.' },
+    ];
+
+    const edge = [
+      { k:'What we observe', trad:'A prepared narrative in a scheduled meeting', lab:'28 days of logged behavior across 19 tools' },
+      { k:'Customer evidence', trad:'Founder-reported interview counts', lab:'Structured interview records with quotes and severity' },
+      { k:'Revenue claims', trad:'A number on a slide', lab:'Verification state per entry — Stripe-synced, document-backed, or manual' },
+      { k:'Team assessment', trad:'Résumés and reference calls', lab:'Skills, values, and archetype profiling with coverage gaps flagged' },
+      { k:'Formation risk', trad:'Discovered in seed diligence', lab:'Resolved before graduation, or the company does not graduate' },
+      { k:'Correction speed', trad:'Not observable pre-investment', lab:'Week-over-week readiness deltas and weak-point closure rates' },
+      { k:'Access to allocation', trad:'Competitive round, priced by market', lab:'Proprietary — first look at graduates before external outreach' },
+    ];
+
+    const network = [
+      { v:'38', t:'Matched advisors', body:'Operators, investors, and subject-matter experts assigned on complementarity, holding equity agreements and a tracked cadence.' },
+      { v:'6', t:'Jurisdictions supported', body:'Delaware and Wyoming live; Singapore, London, Estonia, Dubai and Alberta staged — so a founder\u2019s domicile is a choice, not a constraint.' },
+      { v:'19', t:'Working tools', body:'One operating environment, so evidence produced in week one is still the same object underwriting the investment in week four.' },
+    ];
+
+    const proofStudio = [
+      { k:'Graduates to date', v:'37', tone:'#18181b', note:'Cohorts 1–3 complete' },
+      { k:'Incorporation rate', v:'92%', tone:'#15803d', note:'34 of 37 graduates' },
+      { k:'Incorporated on time', v:'86%', tone:'#15803d', note:'Inside the 28-day window' },
+      { k:'Verified discovery', v:'89%', tone:'#15803d', note:'≥5 structured interviews logged' },
+      { k:'Revenue proof at exit', v:'62%', tone:'#6d28d9', note:'Stripe-synced or document-backed' },
+      { k:'Alumni follow-on', v:'$8.6M', tone:'#15803d', note:'Raised externally post-program' },
+      { k:'Active pipeline', v:'6', tone:'#18181b', note:'Cohort 4 · day 11 of 28' },
+      { k:'Formation velocity', v:'24 days', tone:'#18181b', note:'Median idea → incorporated' },
+    ];
+    const proofFund = [
+      { k:'Committed', v: m(F.committed*1000), tone:'#18181b', note: F.lpCount + ' accepted LPs' },
+      { k:'Called to date', v: m(F.called*1000), tone:'#18181b', note: ok ? Math.round(F.called/F.committed*100) + '% of commitments' : '—' },
+      { k:'Deployed', v: m(M.investedK), tone:'#6d28d9', note: ok ? M.positions.length + ' positions' : '—' },
+      { k:'Portfolio value', v: m(M.heldK), tone:'#15803d', note:'Unrealized' },
+      { k:'Gross MOIC', v: ok ? M.grossMoic.toFixed(2) + '×' : '—', tone:'#15803d', note:'At current marks' },
+      { k:'Reserve at close', v: ok ? '$' + M.reserveCloseM.toFixed(2) + 'M' : '—', tone:'#18181b', note:'After follow-on draw' },
+      { k:'Follow-ons completed', v: String(M.followOnCount), tone:'#18181b', note: ok ? '$' + M.followOnK + 'K deployed' : '—' },
+      { k:'Graduation → investment', v:'30%', tone:'#6d28d9', note:'11 of 37 graduates backed' },
+    ];
+
+    const ventures = [
+      { sector:'Workflow automation', initials:'C4', bg:'#7c3aed', meta:'Solo founder · technical · Week 2', read:'Strong', chip:green, border:'rgba(52,211,153,.2)',
+        stats:[{k:'Readiness',v:'71'},{k:'Interviews',v:'18'},{k:'Revenue',v:'$12.8K'}],
+        note:'Pain confirmed in 14 of 18 interviews with a consistent $500–800/mo WTP band. Priced offer published; champion converted to paid pilot.' },
+      { sector:'Sensor analytics', initials:'C4', bg:'#b45309', meta:'Solo founder · Week 3', read:'Watch', chip:amber, border:'rgba(251,191,36,.2)',
+        stats:[{k:'Readiness',v:'62'},{k:'Interviews',v:'14'},{k:'Revenue',v:'$6.1K'}],
+        note:'Two paying pilots, but 62% of revenue sits with one customer and discovery has drifted toward friendly segments. Concentration flagged in week 3.' },
+      { sector:'Materials science', initials:'C4', bg:'#15803d', meta:'University spin-out · Week 4', read:'At risk', chip:tag('rgba(248,113,113,.1)','#b91c1c','rgba(248,113,113,.25)'), border:'rgba(248,113,113,.2)',
+        stats:[{k:'Readiness',v:'49'},{k:'Interviews',v:'9'},{k:'Revenue',v:'—'}],
+        note:'IP assignment unresolved with the tech-transfer office, blocking a clean cap table. Seven of nine interviews are academic peers, not buyers. Unlikely to graduate on schedule.' },
+      { sector:'Clinical operations', initials:'C4', bg:'#0d9488', meta:'Two founders · Week 3', read:'Solid', chip:green, border:'#ececf1',
+        stats:[{k:'Readiness',v:'68'},{k:'Interviews',v:'16'},{k:'Revenue',v:'$3.4K'}],
+        note:'Complementary founding team with full archetype coverage. Regulated-market pace is slower; pricing evidence is the open dimension.' },
+      { sector:'Data infrastructure', initials:'C4', bg:'#334155', meta:'Two founders · Week 2', read:'Strong', chip:green, border:'rgba(52,211,153,.2)',
+        stats:[{k:'Readiness',v:'74'},{k:'Interviews',v:'21'},{k:'Revenue',v:'$9.2K'}],
+        note:'Highest interview volume in the cohort and the fastest weak-point closure rate. Two design partners signed before week 2 closed.' },
+      { sector:'Cybersecurity', initials:'C4', bg:'#be185d', meta:'Solo founder · technical · Week 2', read:'Watch', chip:amber, border:'rgba(251,191,36,.2)',
+        stats:[{k:'Readiness',v:'58'},{k:'Interviews',v:'11'},{k:'Revenue',v:'—'}],
+        note:'Product depth is strong, commercial coverage is absent. Advisor matched on enterprise GTM in week 3; next two weeks determine trajectory.' },
+    ].map(v => Object.assign({}, v, { avStyle: av(v.bg) }));
+
+    const caseItems = [
+      { n:'01', t:'Proprietary access, not a competitive round', body:'We see graduates before any external outreach and price the first check without an auction. Allocation is a function of program access, not deal-flow luck.' },
+      { n:'02', t:'Selection on evidence, not narrative', body:'Every investment decision references artifacts the founder produced under observation — interview records, verified revenue, readiness deltas. The base rate of pleasant surprises falls, and so does the base rate of unpleasant ones.' },
+      { n:'03', t:'Repeatable by construction', body:'A fixed 28-day schedule with fixed deliverables makes cohorts comparable. That is what turns founder support into an underwriting process that improves with each cohort rather than resetting.' },
+      { n:'04', t:'Formation risk priced out before entry', body:'Companies arrive incorporated, 83(b)-filed, and cap-table-clean. The diligence failures that typically surface at seed are resolved as a graduation condition.' },
+      { n:'05', t:'Reserve discipline against observed winners', body:'A 30–40% reserve is deployed into graduates whose post-program execution data justifies more exposure — follow-on conviction is informed by the same instrumentation, not a board deck.' },
+    ];
+
+    const terms = [
+      { k:'Target / hard cap', v: ok ? '$' + F.target + 'M / $25M' : '—' },
+      { k:'Committed', v: m(F.committed*1000) },
+      { k:'Minimum ticket', v: ok ? '$' + F.minTicketK + 'K' : '—' },
+      { k:'Allocation rights from', v:'$' + F.allocThresholdK + 'K' },
+      { k:'Average initial check', v:'$100–150K' },
+      { k:'High-conviction check', v:'Up to $250K' },
+      { k:'Reserve policy', v:'30–40%' },
+      { k:'Portfolio construction', v:'25–40 companies' },
+      { k:'First close', v:'Sep 15, 2026' },
+      { k:'Fees / term', v:'2 / 20 · 10 years' },
+      { k:'Reporting', v:'Quarterly + audited annual' },
+    ];
+
+    return {
+      presentClass: this.state.present ? 'ex-present' : '',
+      fullLabel: this.state.present ? 'Exit full screen' : 'Present',
+      fullTitle: this.state.present ? 'Exit presentation mode (Esc)' : 'Present full screen',
+      toggleFull: () => this.setState(s => ({ present: !s.present })),
+      committedLabel: m(F.committed*1000),
+      targetLabel: ok ? '$' + F.target + 'M' : '—',
+      raiseBarPct: ok ? (F.committed / F.target * 100).toFixed(0) + '%' : '0%',
+      capacityRemaining: ok ? '$' + M.capacityRemainingM.toFixed(1) + 'M' : '—',
+      allocThresholdLabel: '$' + F.allocThresholdK + 'K',
+      heroStats, heroProof, journey, stack, whyNow, edge, network,
+      proofStudio, proofFund, ventures, caseItems, terms,
+    };
+  }
+}
+</script>
+</body>
+</html>

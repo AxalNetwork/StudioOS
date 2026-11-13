@@ -1,0 +1,49 @@
+#16 - Wellbeing — experts directory, matching, booking, calendar sync
+What & Why
+Today /wellbeing is just check-ins + static resources. Build out a verified experts directory across coaching / therapy / advisory / physical / clinical categories, with completed profiles, weighted matching, Stripe-paid bookings that land on the founder's and expert's calendars, Google + Outlook sync, and two-side notifications.
+Done looks like
+* New schema applied: experts, expert_services, expert_availability, expert_ratings, expert_bookings (with indexes from the brief).
+* Expert categories taxonomy lives in cloudflare-worker/src/data/expert_categories.ts as the single source.
+* Profile completion is computed server-side per the rubric; experts only surface in "matched to you" when completion ≥ 70 and verified.
+* Weighted matching service cloudflare-worker/src/services/wellbeing/match.ts returns experts with composite score + human-readable reasons; founder needs derived from check-ins + advisor answers + Settings goals.
+* Worker routes added: public directory + slug + match + rate + book + cancel + bookings/mine + bookings/expert-side; expert-side CRUD (profile, services, availability, photo).
+* Stripe Checkout-based booking flow: server validates availability, creates pending_payment row, returns checkout URL; webhook flips to confirmed, inserts a calendar_events row, mirrors to Google + Outlook via the existing sync hook, mints a Meet link, and notifies both sides (in-app + email + Slack where connected).
+* Frontend: ExpertProfilePage.jsx (public), ExpertProfileEditorPage.jsx (coach-side incl. Stripe Connect onboarding + configurable application fee), expanded WellbeingPage.jsx with "Experts matched to you" + filters + directory + recent bookings.
+* Public profile gains "Articles" tab cross-fetched from /api/articles/by-author/:user_id (depends on the Articles task being merged first).
+* Confirmed bookings show up on CalendarPage.jsx immediately (uses existing calendar_events query).
+* Wellbeing check-in data stays encrypted and is never exposed to experts; expert only sees the booker_note the founder typed at booking time.
+* Admin can hide a review with reason.
+* npm run test:drift still passes.
+Out of scope
+* Group sessions / cohort programmes.
+* Subscription pricing or retainers (single-session bookings only this round).
+* In-product video conferencing (Meet/Zoom links only).
+* New non-Stripe payout rails.
+Steps
+1. Schema migration — Add the five tables + indexes; additive only.
+2. Taxonomy + completion rubric — Centralise categories; implement profile completion calculator.
+3. Worker routes — Implement the full route set in an expanded cloudflare-worker/src/routes/wellbeing.ts (or a sibling file mounted under the same prefix).
+4. Matching service — Implement services/wellbeing/match.ts with the documented weights; derive founder needs from check-ins + advisor answers + Settings goals.
+5. Stripe booking flow — Implement /book (validate availability → create pending_payment row → create Checkout Session → return URL), extend the existing Stripe webhook to handle checkout.session.completed for bookings, persist stripe_payment_intent_id + amounts.
+6. Calendar + notifications on confirm — Insert calendar_events, call the existing onAxalSessionCreated() hook for Google + Outlook sync, mint Meet link, send notifications both sides (in-app + email + Slack), write activity_logs.
+7. Coach Stripe Connect onboarding — Reuse the existing Stripe Connect flow; payouts route to the coach; application fee defaults to 15%, configurable.
+8. Public expert profile page — ExpertProfilePage.jsx with About / Services / Availability / Reviews / Articles tabs + sticky "Book consultation" CTA.
+9. Coach editor page — ExpertProfileEditorPage.jsx with profile, services CRUD, weekday × hour availability grid, photo upload, Stripe Connect.
+10. Wellbeing page UX — Top: today's check-in (existing); middle: matched experts (6 cards); bottom: filters + directory + recent bookings; honest empty state.
+11. Privacy guards — Check-in data stays encrypted; experts only see booker_note; admin review hide.
+12. Drift + smoke — Update api.js shim; confirm npm run test:drift is green.
+Relevant files
+* cloudflare-worker/src/index.ts
+* cloudflare-worker/src/routes/wellbeing.ts
+* cloudflare-worker/src/services/wellbeing.helpers.ts
+* cloudflare-worker/src/services/calendar/
+* cloudflare-worker/src/services/notifications.ts
+* cloudflare-worker/sql/migrations/
+* frontend/src/pages/WellbeingPage.jsx
+* frontend/src/pages/CalendarPage.jsx
+* frontend/src/App.jsx
+* scripts/check-api-drift.mjs
+Dependencies
+
+Articles — author flow, admin approval, public reader
+Main

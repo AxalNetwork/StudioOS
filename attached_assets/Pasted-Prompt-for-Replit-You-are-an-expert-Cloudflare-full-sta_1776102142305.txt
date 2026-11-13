@@ -1,0 +1,42 @@
+Prompt for Replit:
+You are an expert Cloudflare + full-stack engineer. Work with the existing repository https://github.com/AxalNetwork/StudioOS — it is not a fresh Jekyll site. It has a frontend folder, cloudflare.toml, cloudflare-worker folder (or similar backend), build scripts, and existing deployment setup for Cloudflare Pages.
+Goal: Replace any Resend usage with Cloudflare native Email Routing / send_email binding (or the new Cloudflare Email Service SEND_EMAIL if available on the account) to handle secure email confirmations from a form.
+Steps to follow:
+
+Analyze the current repo
+List all relevant files: cloudflare.toml, any cloudflare-worker/ or backend/ folders, existing forms in frontend/, wrangler.toml if present, build scripts, and any current email/Resend code.
+Check the current form handling (contact, newsletter, or signup form).
+
+Form Updates
+Locate or create a suitable form (e.g. contact or newsletter signup with name + email).
+Add Cloudflare Turnstile widget for spam protection.
+Make the form POST to a Cloudflare Worker/Pages Function endpoint.
+
+Worker / Function Implementation
+Update or create the Cloudflare Worker (TypeScript preferred) to:
+• Handle the POST request from the form.
+• Validate Turnstile token.
+• Rate limit the endpoint.
+• Send a secure confirmation email using the native send_email binding (from Email Routing) or SEND_EMAIL binding (Cloudflare Email Service).
+• For now, send a thank-you confirmation or notification to a verified destination email.
+• Use proper HTML formatting (recommend mimetext package if needed).
+Configure bindings correctly in wrangler.toml (include send_email with destination_address for security).
+
+Configuration & Deployment
+Update cloudflare.toml, wrangler.toml, and any _headers/_redirects as needed.
+Provide exact Cloudflare dashboard steps:
+• Enable Email Routing.
+• Add and verify destination email addresses.
+• Enable the send_email / SEND_EMAIL binding on the account if required.
+Give deployment commands using Wrangler from this Replit.
+
+Documentation
+Update README.md or create EMAIL-SETUP.md with:
+• Full step-by-step checklist.
+• Important limitations of Cloudflare native email sending (only to verified destinations for now).
+• Local testing instructions (wrangler dev, Turnstile, etc.).
+• Security best practices.
+
+
+Start by analyzing and listing the current relevant files and code (especially any forms and worker/backend code). Then propose the exact code changes and apply them step by step. Ask me for the preferred destination email address and whether we should aim for simple notifications or full user confirmations (noting limitations).
+Begin analysis now!

@@ -1,0 +1,36 @@
+# Task #2 (IB) — Email Pipeline + Notification Center
+
+## What landed in this task
+- **Unified sender**: `cloudflare-worker/src/services/email/send.ts` is now the single entry point for transactional email. It renders a template from `templates/email/registry.ts`, mirrors the message into `notifications_inbox`, writes an `email_send_log` row, and enqueues an `email_send` job onto `JOB_QUEUE`. When the queue binding is missing (dev/preview) or enqueue throws, it falls back to immediate Gmail OAuth delivery so dev never silently drops mail.
+- **Templates registry**: `cloudflare-worker/src/templates/email/registry.ts` holds all 42 spec'd templates (`auth_*`, `account_welcome_*`, `billing_*`, `contract_*`, `nda_*`, `dd_*`, `partner_*`, `referral_*`, `mentor_*`, `spinout_*`, `daily_digest`, `weekly_digest`, `contact/support/github` acknowledgements). Each entry carries `category`, `severity`, `replyTo`, and `marketing` flags; the shared chrome (Axal wordmark header, footer with unsubscribe + account + legal links + registered address) lives in `templates/email/layout.ts`.
+- **Queue consumer**: `cloudflare-worker/src/services/queueWorker.ts` now handles `email_send` — it imports `deliverNow()` from `services/email/send.ts`. **Transport is the existing D1-backed `queue_jobs` table drained by `processQueueBatch()`**, NOT native Cloudflare Queues (`env.JOB_QUEUE.send()`). Retry semantics: `Jobs.enqueue(..., { max_retries: 5 })` sets the attempt cap; on throw, `Jobs.markFailed()` increments `attempts` and either re-pends the row or stamps `status='failed'` once the cap is hit. There is no native CF Queues DLQ binding because the rest of the worker's queue traffic also flows through D1 — failed `email_send` rows stay in `queue_jobs` with `status='failed'` and `last_error` for forensic inspection (see `routes/admin/queue.ts`). Migrating to native CF Queues + `studioos-job-queue-dlq` is a follow-up that should be done for the whole worker queue, not just email.
+- **Migration**: `cloudflare-worker/sql/migrations/053_notifications_center.sql` adds spec columns (`category`, `severity`, `cta_url`, `template_key`) to `notifications_inbox`, creates a `notifications` view (alias for the inbox so the spec-named endpoints feel right), creates `email_send_log`, and adds `users.marketing_unsubscribed_at`. Dev/preview is self-healing: `notify.ts::ensureInbox()` runs idempotent `ALTER TABLE` for the same columns on first call.
+- **Notification API (Task #2 spec endpoints)**: `routes/notifications.ts` adds `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`, `DELETE /api/notifications/:id`, plus `GET /api/notifications?unread=true&category=`. Legacy `POST /mark-read {ids|all}` stays mounted for back-compat. The `dto()` helper now surfaces `category/severity/cta_url/template_key`.
+- **One-click List-Unsubscribe**: `GET|POST /api/notifications/unsubscribe?token=…` accepts the HMAC-signed token produced by `services/email/send.ts::buildUnsubscribeUrl()` and stamps `users.marketing_unsubscribed_at`. Both verbs hit the same handler to satisfy RFC 8058 one-click. Marketing-class templates (`marketing: true` in registry) automatically get the `List-Unsubscribe` + `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers added by the Gmail sender.
+- **Mirror-to-inbox**: `services/notify.ts` now stamps `category`, `severity`, `cta_url`, `template_key` on every `notifications_inbox` insert (severity defaults to `critical` for security/billing categories, else `info`). The Bell + slide-over UI in `frontend/src/components/NotificationBell.jsx` and the per-category × per-channel matrix in `SettingsPage` already existed.
+- **Auth verify wired**: `routes/auth.ts::sendVerification()` calls `send(env, 'auth_verify_email', …)` first and falls back to the legacy `sendVerificationEmail()` only if the unified pipeline throws BEFORE enqueueing.
+
+## Spec deviations (drift)
+1. **Templates are co-located in `registry.ts` rather than 42 separate files.** Same vars contract, same `Reply-To` semantics, same header/footer chrome, but one file instead of one-per-template. If you ever want to split them out, the registry shape is intentionally a flat object — `registry[key]` is already the per-template module.
+2. **Only the auth-verify call site has been migrated to `send()` so far.** Every other existing transactional callsite still calls its legacy helper (deals, DD, e-sign, mentors, billing, partner invites, referrals, spinout milestones). They continue to work; they just don't yet benefit from queued retries, the email_send_log row, or List-Unsubscribe headers on marketing emails. **Follow-up**: walk `rg "sendNotificationEmail\|sendVerificationEmail" cloudflare-worker/src/routes` and re-route each through `send()` with the matching `template_key`. This is mechanical but touches ~25 files — kept out of this task to keep the diff reviewable.
+3. **Digest cron**: the existing `flushPendingDigests()` in `services/notify.ts` already composes daily/weekly digests respecting `quiet_hours` and `digest_frequency`. The `daily_digest` / `weekly_digest` templates are now in the registry; the cron in `index.ts` does NOT yet call `send()` with those keys — it still uses the legacy email path. **Follow-up**: swap the digest dispatch in `flushPendingDigests()` to `send(env, 'daily_digest'|'weekly_digest', …)` once the per-callsite migration above is done so everything flows through the same pipeline.
+4. **SMS column**: the spec calls for a per-channel matrix including SMS. The matrix is rendered but the SMS column is disabled — there is no SMS provider wired (out of scope per spec). Toggle persists for forward-compat.
+
+## Migration apply
+```
+export PATH=/nix/store/51gywl5jn4nna7al9waj142pw4vfhy0k-nodejs-22.19.0/bin:$PATH
+wrangler d1 execute studioos-db --remote --file=cloudflare-worker/sql/migrations/053_notifications_center.sql
+```
+053 is composed of `CREATE TABLE IF NOT EXISTS` + idempotent `ALTER … ADD COLUMN` + `CREATE VIEW IF NOT EXISTS`. D1 rolls back the whole file on first error, but every column in 053 is wrapped by `notify.ts::ensureInbox()` so a partial apply self-heals on first `notify()` call.
+
+## Required env / config (no changes from current `wrangler.toml`)
+- `JOB_QUEUE` binding (existing) — `email_send` jobs route here.
+- `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` (existing) — Gmail OAuth primary sender.
+- `AXAL_ENCRYPTION_SECRET || JWT_SECRET` — used for unsubscribe-token HMAC. No new secret required.
+
+## End-to-end verification (manual, beta gate)
+1. `POST /api/auth/register` with a fresh email → row appears in `email_send_log` with `template_key='auth_verify_email'`, status flips queued → sent; a notification row appears in `notifications_inbox` with `category='security'`.
+2. Bell shows unread `1`; clicking opens slide-over; CTA navigates to `/verify-email?token=…`.
+3. Click verify link → land on app → welcome email enqueued via `account_welcome_*` (pending the call-site migration above).
+4. `POST /api/notifications/read-all` zeroes the badge.
+5. `GET /api/notifications/unsubscribe?token=<from marketing footer>` flips `users.marketing_unsubscribed_at`; subsequent marketing-class `send()` returns `{ok:false, reason:'suppressed_unsubscribed'}`.

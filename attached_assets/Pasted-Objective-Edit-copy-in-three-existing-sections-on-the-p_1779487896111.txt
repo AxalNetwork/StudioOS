@@ -1,0 +1,97 @@
+Objective
+  Edit copy in three existing sections on the public-marketing
+  surface. Do not add new sections. Pull the same content from
+  Prompt MB so the front page and /spinout-lab tell the same story
+  without duplicating wording.
+
+Target file
+  frontend/src/pages/SpinoutLabMarketingPage.jsx is the public
+  Spin-Out Lab page; if these three blocks live there, edit in
+  place. If they live on a separate landing/home (e.g.
+  frontend/src/pages/LandingPage.jsx), edit there instead. Search
+  for the section headings to locate the file:
+    grep -rn "4-week playbook\|What you get\|What we look for" frontend/src
+
+Updates
+
+  1. "The 4-week playbook"
+     Use the four-week list from Prompt MB §2 condensed to one
+     bullet per week. Each bullet:
+       Week N — <theme>: <one-line outcome>
+     Example: "Week 1 — Idea & Customer: 5 logged interviews,
+     sized TAM with citations, working ICP."
+     Add a tiny inline CTA per row: "See Week N →" → deep-links
+     into /spinout-lab anchor.
+
+  2. "What you get"
+     Trim Prompt MB §3 to six bullets max. Each bullet ≤ 16 words.
+     Suggested cut:
+       - Personal Advisor on every page.
+       - Three warm investor introductions in Week 4.
+       - Mentor track matched by expertise + rating.
+       - Services partners at Axal-network rates.
+       - Sector + investor + sentiment intelligence.
+       - Document automation: incorporation, 83(b), cofounder
+         agreement, NDAs.
+
+  3. "What we look for"
+     Two columns:
+       Strong signals (6 items) — see Prompt MB §4.
+       Filters (4 items) — sector fit, geography, age ≥ 18,
+         sanctions/PEP clean.
+     One closing line: "We say no for clear reasons. Common ones
+     listed on /spinout-lab."
+
+Acceptance
+  - Three sections updated in place; layout untouched.
+  - Each block links to the matching detail on /spinout-lab.
+  - Mobile layout unchanged.
+  - Lighthouse perf within 2 points.  Objective
+  Edit copy in three existing sections on the public-marketing
+  surface. Do not add new sections. Pull the same content from
+  Prompt MB so the front page and /spinout-lab tell the same story
+  without duplicating wording.
+
+Target file
+  frontend/src/pages/SpinoutLabMarketingPage.jsx is the public
+  Spin-Out Lab page; if these three blocks live there, edit in
+  place. If they live on a separate landing/home (e.g.
+  frontend/src/pages/LandingPage.jsx), edit there instead. Search
+  for the section headings to locate the file:
+    grep -rn "4-week playbook\|What you get\|What we look for" frontend/src
+
+Updates
+
+  1. "The 4-week playbook"
+     Use the four-week list from Prompt MB §2 condensed to one
+     bullet per week. Each bullet:
+       Week N — <theme>: <one-line outcome>
+     Example: "Week 1 — Idea & Customer: 5 logged interviews,
+     sized TAM with citations, working ICP."
+     Add a tiny inline CTA per row: "See Week N →" → deep-links
+     into /spinout-lab anchor.
+
+  2. "What you get"
+     Trim Prompt MB §3 to six bullets max. Each bullet ≤ 16 words.
+     Suggested cut:
+       - Personal Advisor on every page.
+       - Three warm investor introductions in Week 4.
+       - Mentor track matched by expertise + rating.
+       - Services partners at Axal-network rates.
+       - Sector + investor + sentiment intelligence.
+       - Document automation: incorporation, 83(b), cofounder
+         agreement, NDAs.
+
+  3. "What we look for"
+     Two columns:
+       Strong signals (6 items) — see Prompt MB §4.
+       Filters (4 items) — sector fit, geography, age ≥ 18,
+         sanctions/PEP clean.
+     One closing line: "We say no for clear reasons. Common ones
+     listed on /spinout-lab."
+
+Acceptance
+  - Three sections updated in place; layout untouched.
+  - Each block links to the matching detail on /spinout-lab.
+  - Mobile layout unchanged.
+  - Lighthouse perf within 2 points.

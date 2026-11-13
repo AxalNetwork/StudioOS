@@ -1,0 +1,97 @@
+{
+  "skill": "portfolio-follow-on-reserve-scenarios",
+  "version": 1,
+  "note": "Synthetic cents-based USD reserve records at one date. The USD 6 million pool includes a USD 2 million commitment, leaving USD 4 million against USD 5 million incremental requests and a USD 1 million shortfall. Draw timing and participation rights are absent.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "snapshot_date": "2026-06-30",
+        "fund_id": "fund-aster-ii",
+        "reserve_pools": [
+          {
+            "id": "reserve-aster-0630",
+            "currency": "USD",
+            "amount_cents": 600000000,
+            "basis": "Unspent follow-on reserve inclusive of existing unpaid commitments",
+            "as_of": "2026-06-30"
+          }
+        ],
+        "commitments": [
+          {
+            "id": "commit-bay-01",
+            "company": "Bay Circuit",
+            "currency": "USD",
+            "amount_cents": 200000000,
+            "status": "executed, unpaid",
+            "included_in_pool": "reserve-aster-0630",
+            "draw_schedule": null
+          }
+        ],
+        "incremental_requests": [
+          {
+            "id": "request-larch-01",
+            "company": "Larch Robotics",
+            "currency": "USD",
+            "amount_cents": 300000000,
+            "status": "unapproved incremental request",
+            "as_of": "2026-06-30"
+          },
+          {
+            "id": "request-cove-01",
+            "company": "Cove Sensors",
+            "currency": "USD",
+            "amount_cents": 200000000,
+            "status": "unapproved incremental request",
+            "as_of": "2026-06-30"
+          }
+        ],
+        "scenario": {
+          "id": "scenario-all-requests",
+          "scope": "Existing commitment remains payable; both incremental requests funded in full hypothetically",
+          "probabilities": null
+        }
+      },
+      "cap_table.read": {
+        "as_of": "2026-06-30",
+        "holdings": [
+          {
+            "id": "holding-larch-0630",
+            "company": "Larch Robotics",
+            "fund": "fund-aster-ii",
+            "ownership_percent": 12,
+            "basis": "fully diluted before proposed round",
+            "pro_rata_rights": null
+          },
+          {
+            "id": "holding-cove-0630",
+            "company": "Cove Sensors",
+            "fund": "fund-aster-ii",
+            "ownership_percent": 8,
+            "basis": "fully diluted before proposed round",
+            "pro_rata_rights": null
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "reserve-aster-0630",
+      "USD 4,000,000",
+      "USD 5,000,000",
+      "USD 1,000,000",
+      "shortfall",
+      "Propose"
+    ],
+    "must_say_not_recorded": [
+      "draw schedule",
+      "pro rata rights"
+    ],
+    "must_not_include": [
+      "The reserve shortfall is USD 3,000,000",
+      "The reserve allocation is approved",
+      "The payment has been initiated"
+    ]
+  }
+}

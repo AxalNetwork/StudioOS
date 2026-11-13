@@ -1,0 +1,191 @@
+import { exportView } from '../lib/csvExport';
+
+/**
+ * One builder, four profiles.
+ *
+ * A zone action table declares, for each zone, exactly the `ops:` array of its
+ * artboard in `design/canvases/integrated/Pages · …` — in the canvas's order,
+ * nothing invented and nothing dropped. Each entry is one of four things:
+ *
+ *   `kind: 'export'`  — runs here, over the rows the page has loaded.
+ *   `kind: 'handler'` — the PAGE performs it, because it owns state a table
+ *                       cannot hold. The table declares the op and names the
+ *                       handler; the page supplies the function. See below.
+ *   `to: '/path'`     — the flow is built, on a route the reader may open, and
+ *                       this is a link to it. Every one is re-checked against
+ *                       `App.jsx`'s guard by `frontend/test/profile_zone_actions.test.mjs`.
+ *   `unbuilt: '…'`    — nothing performs it yet. Rendered DISABLED, with the
+ *                       reason on hover, so the header row is the artboard's
+ *                       row and every control on it is honest about whether it
+ *                       can run. `hover: '…'` overrides the tooltip where the
+ *                       engineering reason is too long to be one.
+ *
+ * WHY `handler` EXISTS, AND WHY IT IS NOT A WORKAROUND. Until it did, this
+ * builder could say three things, and across all four profiles' 218 entries not
+ * one op was performed by the page that drew it. `/validate/*` is the zone set
+ * that could not be expressed: three of its ops open a modal the workspace owns
+ * (`setLogOpen`, `setHypOpen`, `setLinkOpen`) and its exports are SERVER-side
+ * calls with a busy spinner and a shared error line, not `exportView` over rows
+ * already loaded. So `FounderValidateWorkspace` built its own `ACTIONS` map
+ * locally — which worked, and which meant the zone's header row was outside
+ * every guard this file's tables are checked by. The four Validate zones sat in
+ * `profile_zone_filters.test.mjs`'s `excluded` list for exactly that reason: the
+ * filter half requires an action table for the same zone, and there could not be
+ * one. A fourth kind for "the page performs this" is the vocabulary that was
+ * missing, not a way around the rule. Recorded as D67.
+ *
+ * A HANDLER THE PAGE DOES NOT SUPPLY RENDERS NOTHING, exactly as `unbuilt` does,
+ * because the alternative is a button that does nothing — the failure this whole
+ * file exists to refuse. `profile_zone_actions.test.mjs` fails the build for it
+ * too, so the silent runtime fallback is the second line, never the first.
+ *
+ * WHY `unbuilt` IS DRAWN AND DISABLED, HAVING BEEN BOTH OTHER THINGS FIRST.
+ *
+ * It began as `note`, drawn INLINE as `{label} — {note}`, so the design's
+ * `Comparables` chip shipped to customers as "Comparables — no competitor can
+ * be filed as a comparable: the form offers direct or adjacent, and every
+ * writer coerces anything else to direct". A true sentence in the wrong place;
+ * five zone headers became essays.
+ *
+ * The correction was to render nothing, and that created the report this
+ * change answers. Measured across the four profiles: 170 canvas controls
+ * invisible, 54 of them in the founder buckets alone, and every one read as a
+ * missing feature. Five separate reports in one week said "elements are
+ * missing" about zones that had dropped nothing the artboard drew.
+ *
+ * So: drawn, disabled, reason on HOVER. What makes this different from `note`
+ * rather than a return to it is that a tooltip is opt-in — nothing is printed
+ * beside the control, the row reads as the artboard's row, and the explanation
+ * appears only for a reader who asks. Recorded as the user's decision of
+ * 2026-09-13, taken after the trade-off was put to them: a disabled control can
+ * read as broken, which is exactly what the greyed exports were reported as.
+ *
+ * THE DISABLED EXPORT KEEPS ITS LABEL SUFFIX AND DOES NOT MOVE TO A TOOLTIP.
+ * The two states are not the same claim. An unbuilt op has no feature behind
+ * it; an export with no rows is built, wired and correct and is waiting on
+ * data, which is a state that CHANGES while the reader watches. `· nothing yet`
+ * says that without a hover, and the eight reports that produced it were about
+ * a control whose only explanation was a `title` nobody hovered.
+ *
+ * WHY THE BUILDER IS SHARED AND THE TABLES ARE NOT. The rules are identical
+ * across profiles — what an empty export says, how a link carries the reader's
+ * current scope, what an unbuilt op does — and this repo already carries three
+ * copies of one CSV escaper that disagree with each other. The tables are per
+ * profile because the answers are: a route one licence may open is a closed
+ * door for another, and the same label under the same canvas heading is
+ * therefore a link on one and absent on the other. ("Request an intro" was the
+ * example, a link to `/matches` for an investor only; that page was removed.)
+ */
+
+/** Merge a page's `?project_id=…` into a link that may carry its own query. */
+export function withQuery(to, query) {
+  if (!query) return to;
+  const [path, own = ''] = String(to).split('?');
+  const params = new URLSearchParams(own);
+  for (const [k, v] of new URLSearchParams(String(query).replace(/^\?/, ''))) params.set(k, v);
+  const s = params.toString();
+  return s ? `${path}?${s}` : path;
+}
+
+/**
+ * D1424 (#3700): the one primary a zone's header draws, or null. The first
+ * item still marked `primary` after the builder, and only if it can run: a
+ * link, or a handler the page supplied. Anything else is no primary at all.
+ */
+export function primaryOf(items = []) {
+  return (items || []).find((i) => i && i.primary === true && (i.to || typeof i.onClick === 'function')) || null;
+}
+
+/**
+ * Bind a table, and get back the `(key, { query, view })` function a page calls.
+ *
+ * `view` is the export payload: `{ scope, header, rows, cells }`. `cells` maps
+ * one loaded record to the array of values under `header`, so the file carries
+ * the columns the page is showing rather than whatever keys the API returns —
+ * and it runs on the click, not on every render.
+ *
+ * AN EXPORT OVER NOTHING LOADED IS THE ONE CONTROL THAT STAYS AND GOES QUIET.
+ * It is not unbuilt — the store is there and the writer is there; the rows have
+ * simply not arrived. So it keeps the canvas's `Export` label and renders
+ * disabled, which is the state that is actually true, and it becomes live the
+ * moment the page has rows. A file with a header row and no body reads as
+ * "there is no data" when the truth is almost always "it has not loaded yet".
+ */
+export function makeZoneActions(TABLE, accent = null) {
+  return function zoneActions(key, { query = '', view = null, handlers = {} } = {}) {
+    const spec = TABLE[key];
+    if (!spec) return [];
+    const slug = key.split('/').pop();
+    return spec.map((item) => {
+      const testid = `action-${slug}-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      // D1424 (#3700, owner B): `primary: true` survives only on the two LIVE
+      // kinds, a link and a page-supplied handler, and carries the table's
+      // licence so `ZonePrimary` wears that accent (owner A). An export or an
+      // unbuilt op marked primary is drawn as the ghost it is: a button is a
+      // promise, and a zone with no live first step shows no primary.
+      const lead = item.primary === true ? { primary: true, accent } : {};
+      // A page-supplied op. `handlers[name]` is either the click itself or
+      // `{ onClick, disabled, busy, title }` when the page has more to say about
+      // it — a server-side export knows when it is in flight, and a control that
+      // needs a venture knows when there isn't one. Anything without a callable
+      // `onClick` drops out rather than drawing a dead control.
+      if (item.kind === 'handler') {
+        const supplied = handlers[item.handler];
+        const bound = typeof supplied === 'function' ? { onClick: supplied } : supplied;
+        if (typeof bound?.onClick !== 'function') return null;
+        return {
+          ...lead,
+          label: item.label,
+          testid,
+          onClick: bound.onClick,
+          disabled: bound.disabled === true,
+          busy: bound.busy === true,
+          title: bound.title,
+        };
+      }
+      if (item.kind === 'export') {
+        const rows = view?.rows || [];
+        if (!rows.length) {
+          // THE STATE GOES IN THE LABEL, because a grey button whose only
+          // explanation is a `title` is indistinguishable from a missing
+          // feature — and was reported as one on eight zones across four
+          // buckets in a single afternoon. Every one of those exports was
+          // built, wired and correct; the account simply had no rows.
+          //
+          // `· nothing yet` rather than a sentence beside the control: this
+          // file's own history is that a `note` field drawing `{label} — {note}`
+          // turned a five-op header into five paragraphs, and `ZoneActions`
+          // keeps that lesson in its docblock. The suffix is the convention the
+          // live branch below already uses, so the control reads as one thing
+          // in two states rather than two different controls — and a hover
+          // still explains which rows it means.
+          return {
+            label: `${item.label} · nothing yet`,
+            testid,
+            disabled: true,
+            title: 'This export writes the rows this view is showing, and it has none yet.',
+          };
+        }
+        return {
+          label: `${item.label} · this view`,
+          testid,
+          onClick: () => exportView({
+            scope: view.scope,
+            zone: view.zone || slug,
+            header: view.header,
+            rows: view.cells ? rows.map(view.cells) : rows,
+          }),
+        };
+      }
+      if (item.to) {
+        return { ...lead, label: item.label, testid, to: withQuery(item.to, query), title: item.linkNote };
+      }
+      if (item.unbuilt) {
+        // No `onClick`: a control nothing performs must not be clickable, or a
+        // reader learns it is dead by pressing it and watching nothing happen.
+        return { label: item.label, testid, disabled: true, title: item.hover || item.unbuilt };
+      }
+      return null;
+    }).filter(Boolean);
+  };
+}

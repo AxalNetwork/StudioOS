@@ -1,0 +1,274 @@
+Design the “Signals” page for founders inside the Axal VC platform as a real market intelligence and opportunity-sensing product.
+
+This is not a fake dashboard.
+Do not use placeholder charts, dummy metrics, invented companies, synthetic trend lines, or decorative market data.
+The page must be designed around real, ingestible, explainable external signals that help founders decide what to build, what opportunity is emerging, what pain points are intensifying, and where there is evidence of unmet demand.
+
+Primary purpose:
+The Signals page should help a founder answer:
+- What should I build?
+- What problem is getting stronger?
+- Which market or workflow is showing momentum?
+- What customer pain appears repeatedly in the market?
+- Where is there evidence of budget, urgency, compliance pressure, workflow friction, talent demand, tooling gaps, or behavior change?
+- Which themes are noise, and which show durable signal?
+
+The experience should feel like:
+- founder intelligence
+- venture-grade market sensing
+- product opportunity discovery
+- demand detection
+- evidence-backed decision support
+
+It should not feel like:
+- a generic BI dashboard
+- a stock market terminal
+- a trend report PDF
+- a fake startup analytics mockup
+- an investor-only sourcing page
+
+The page is for founders.
+It should help them identify and validate opportunities, not merely observe trends.
+
+Core concept:
+Signals is a structured decision page where the platform aggregates real external market signals from free or low-cost public data sources, normalizes them, groups them by theme, and shows founders interpretable opportunity evidence.
+
+The page should synthesize signals across categories such as:
+- search demand shifts
+- developer activity
+- hiring demand
+- product/review pain points
+- community discussion velocity
+- app/store/product launch activity
+- regulatory / policy changes
+- funding and company formation density
+- technology adoption cues
+- infrastructure cost shifts
+- sector-specific activity depending on startup type
+
+Important:
+Do not assume all signals are equally reliable.
+The UI should clearly distinguish:
+- raw signals
+- interpreted signals
+- inferred opportunities
+- confidence level
+- recency
+- source coverage
+- signal strength vs noise
+
+Page goals:
+The founder should be able to:
+1. Discover relevant themes and market movements
+2. See what evidence supports each theme
+3. Understand why the signal matters
+4. Compare multiple signal types together
+5. Translate signal into product opportunity
+6. Save or act on promising opportunities
+7. Feed the insight into customer discovery, startup scoring, roadmap, or idea validation workflows
+
+Design the full page with these major areas:
+
+1. Hero / page framing
+A strong top area that frames Signals as a decision engine for founders.
+This should explain what the page does in one sentence.
+It should not oversell “AI.”
+It should foreground evidence and clarity.
+
+Include:
+- page title
+- concise positioning line
+- source freshness indicator
+- selected market / sector / geography context
+- primary CTA such as Refresh signals, Save thesis, Start customer discovery, or Compare opportunities
+
+2. Opportunity summary strip
+Design a top summary area showing the most useful current outputs, such as:
+- strongest rising pain point
+- fastest-growing workflow category
+- most discussed unmet need
+- highest hiring-to-tooling mismatch
+- most active keyword cluster
+- best evidence-backed opportunity this week
+
+These should not be vanity cards.
+Each summary card should immediately answer “why this matters.”
+
+3. Signal feed / opportunity clusters
+This is the core of the page.
+
+Design a structured feed of opportunity clusters, where each cluster represents a possible founder opportunity theme.
+Each cluster should include:
+- cluster title
+- plain-English opportunity framing
+- short explanation of what is changing
+- supporting signals from multiple sources
+- confidence score or confidence band
+- recency
+- evidence count
+- market tags
+- source icons
+- possible ICP or buyer
+- suggested product angle
+- CTA to validate further
+
+This should feel like a high-quality mix of:
+- trend intelligence
+- customer pain synthesis
+- product opportunity memo
+- signal-backed hypothesis generation
+
+4. Evidence drawer / detail panel
+When a founder clicks a signal cluster, open a detail panel or subview that shows:
+- why the cluster exists
+- all supporting evidence
+- source-level breakdown
+- timeline view
+- raw excerpts or links where relevant
+- keywords / tags
+- geography / sector filters
+- related clusters
+- suggested customer interview angles
+- suggested product thesis
+- recommended next step
+
+This detail view should be highly transparent.
+Founders should be able to see the evidence, not just a score.
+
+5. Signal source taxonomy
+Design a section or modal that explains where the data comes from.
+This is critical.
+The product must be explicit that data is real and source-based.
+
+Potential source categories:
+- Google Trends or search-interest proxies
+- GitHub activity
+- Hacker News discussion frequency
+- Reddit discussion trends
+- Product Hunt launches
+- G2 / Capterra / public review text where legally usable
+- public job postings
+- YC / startup directory / Crunchbase-like public datasets where legally and freely usable
+- USPTO / patents where relevant
+- SEC / government datasets where relevant
+- regulatory websites
+- app store rankings where public
+- Stack Overflow / dev communities where available
+- open web indexing or RSS/news aggregation
+- public pricing/infrastructure changes from major platforms
+- public grant / procurement / RFP data where relevant
+- scientific publication trends for deeptech / lifesciences / climate / hardware
+
+The UI should show that not every source applies to every startup type.
+
+6. Filters and lenses
+Design a high-quality filter system so founders can slice signals by:
+- sector
+- customer type
+- business model
+- geography
+- company stage
+- signal type
+- time range
+- confidence
+- source type
+- urgency / market maturity
+- B2B vs consumer
+- technical vs workflow vs regulatory opportunity
+
+This should feel like a serious research interface, but still easy to use.
+
+7. Founder action layer
+Signals should not end at reading.
+Design clear actions such as:
+- save opportunity
+- convert to startup idea
+- generate customer discovery questions
+- send to roadmap
+- add to thesis
+- compare against existing startup idea
+- track this signal over time
+- mark as weak / noise / interesting
+
+The page should help founders move from insight to action.
+
+8. “Why this matters” logic
+The UI should repeatedly answer:
+- what changed?
+- why now?
+- who cares?
+- what product could exist here?
+- how strong is the evidence?
+- how much of this is real vs inferred?
+
+Design the page to avoid black-box behavior.
+
+9. Empty / low-signal states
+Design thoughtful states for:
+- no data for selected niche
+- low confidence cluster
+- too few sources
+- waiting for refresh
+- unsupported sector
+- founder with no filters selected
+- signals that are noisy or contradictory
+
+These states should be honest and useful, not padded with fake data.
+
+10. Integration points
+The Signals page should visibly connect to other founder workflows such as:
+- Customer Discovery
+- Startup / idea profile
+- Roadmap
+- Startup scoring
+- Market validation
+- Brand & Pages
+- Fundraise narrative / “Why now”
+
+Design these integrations into the page.
+
+Design principles:
+- no fake charts
+- no meaningless KPI cards
+- no generic market-size graphics
+- no invented competitor logos
+- no decorative “trend” UI with no evidence
+- transparent scoring logic
+- source-first design
+- confidence-aware UX
+- evidence before recommendation
+- opportunity framing in plain English
+
+Visual direction:
+The page should feel like a premium research and founder-intelligence tool.
+Think:
+- clean venture-grade product design
+- structured data density
+- modern but sober
+- analytical but not intimidating
+- strong information hierarchy
+- expandable evidence
+- tags, chips, timelines, signal cards, and source references used thoughtfully
+
+Output format:
+Return:
+1. product concept
+2. page information architecture
+3. core sections
+4. best component patterns
+5. signal cluster card design
+6. evidence detail view
+7. filter system
+8. founder action system
+9. source transparency patterns
+10. low-data/edge-case states
+11. scoring/confidence display recommendations
+12. integration ideas with the rest of the founder workflow
+13. final recommendation for the best version of the page
+
+Quality bar:
+This should feel like a real founder market-intelligence product that could ship in a serious venture platform.
+Be implementation-aware.
+Be highly specific.
+Do not use fake data in examples.
+Design around real-source architecture and explainable opportunity synthesis.

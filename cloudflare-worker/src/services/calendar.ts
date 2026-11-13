@@ -1,0 +1,1877 @@
+/**
+ * Calendar service — port of backend/app/services/calendar_unified.py.
+ *
+ * Two responsibilities:
+ *   1. Personal calendar readers and separate read-only staff scopes across
+ *      the Worker D1 calendar stores.
+ *   2. OAuth + push-sync — Google Calendar v3 and Microsoft Graph v1.0.
+ *
+ * Both providers expose the same eight functions (status check, auth-URL,
+ * token exchange, refresh, userinfo, push event, delete event, sync user).
+ * They are kept as side-by-side pairs (no shared interface) so each
+ * provider's quirks stay legible.
+ */
+import { cohortDateEvents, complianceDueEvents, complianceState, dealClosingEvents, interviewCallEvents, type ComplianceFacts } from './calendar/sourceReaders';
+import { contentPlannedEvents, publishSendEvents } from './calendar/growReaders';
+import { pageOnlyKinds } from './calendar/registry';
+import { runBounded } from './calendar/gatherPool';
+import type { Env, User } from '../types';
+import { getSQL } from '../db';
+import { isSuperAdmin } from '../auth';
+import { branchOf } from '../util/branch';
+import { branchBindings } from './branches';
+import { encryptString, decryptString } from './cryptoBox';
+import { hostedEvents, staleMyEventCopies, ticketEvents, placeOf } from './calendar/myEvents';
+import { investorMeetingEvents } from './calendar/investorMeetings';
+import { describeItems, type CalendarItem } from './calendar/items';
+import { HQ_STUDIO, companyOf, personName, scopeCompanies, scopeOpenHref, scopeRowFacts, scopeWhere,
+  type ScopeCompany, type ScopeOwner, type ScopeRowFacts, type ScopeStudio } from './calendar/scopeFacts';
+
+/**
+ * Refresh tokens were originally written in plaintext and migrated to
+ * AES-GCM via cryptoBox. Reads first attempt decryption; if that fails
+ * (legacy plaintext row, or any malformed blob), the value is returned
+ * verbatim. After a successful sync the caller re-encrypts the row so
+ * each user transparently rolls forward.
+ */
+// Task #52 — exported so services/calendar/sync.ts can reuse the same
+// decryption + legacy-plaintext fallback path on its push hooks.
+export { loadRefreshToken as loadRefreshTokenExport };
+export { reencryptRefreshToken as reencryptRefreshTokenExport };
+async function loadRefreshToken(
+  env: Env, table: 'google_oauth_tokens' | 'microsoft_oauth_tokens', userId: number,
+): Promise<{ raw: string; wasPlaintext: boolean } | null> {
+  const sql = getSQL(env);
+  const rows = await sql.unsafe(
+    `SELECT refresh_token FROM ${table} WHERE user_id = ?`, [userId],
+  ) as any[];
+  const row = rows[0];
+  if (!row?.refresh_token) return null;
+  const stored: string = row.refresh_token;
+  const decrypted = await decryptString(env, stored);
+  if (decrypted) return { raw: decrypted, wasPlaintext: false };
+  // decryptString returns null on any failure (wrong key, malformed,
+  // legacy plaintext). Fall back to the raw value so existing connections
+  // keep working through the migration. We log a one-line warning so ops
+  // can tell apart "still migrating" from "secret rotated / misconfigured"
+  // — the latter shows up as a flood of fallbacks for already-migrated rows.
+  console.warn(`[CAL] refresh_token decrypt fallback table=${table} user=${userId} (legacy plaintext or wrong key)`);
+  return { raw: stored, wasPlaintext: true };
+}
+
+async function reencryptRefreshToken(
+  env: Env, table: 'google_oauth_tokens' | 'microsoft_oauth_tokens',
+  userId: number, plaintext: string,
+): Promise<void> {
+  try {
+    const enc = await encryptString(env, plaintext);
+    const sql = getSQL(env);
+    await sql.unsafe(
+      `UPDATE ${table} SET refresh_token = ? WHERE user_id = ?`,
+      [enc, userId],
+    );
+  } catch (e: any) {
+    console.warn('[CAL] reencrypt failed:', e?.message || e);
+  }
+}
+
+// ===========================================================================
+// Google constants
+// ===========================================================================
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
+const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+// Task #52 — request both read+write (`calendar.events`) AND read-only
+// (`calendar.readonly`) scopes so the future external→Axal mirror
+// (follow-up #58) can list external events via sync_token without a
+// second consent screen. `userinfo.profile` is included so the consent
+// screen names the connecting user.
+// Task #2413 — the Calendar connector does not read Gmail, so its consent
+// stays limited to Calendar and the identity scopes used to link the account.
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
+  'openid',
+];
+export const GOOGLE_MEET_TRANSCRIPT_SCOPE = 'https://www.googleapis.com/auth/meetings.space.readonly';
+/**
+ * D1376: create Meet spaces through the Meet API, so a call Axal makes is Open
+ * (Eadwyn joins without knocking) and transcribes itself. It reaches only the
+ * spaces Axal created. Asked in the same consent as transcripts.
+ */
+export const GOOGLE_MEET_SPACE_SCOPE = 'https://www.googleapis.com/auth/meetings.space.created';
+
+// ===========================================================================
+// Microsoft constants — Graph v1.0 + Azure AD v2 endpoints. Tenant defaults
+// to "common" so personal + work/school accounts both work.
+// ===========================================================================
+const MICROSOFT_AUTHORITY = 'https://login.microsoftonline.com';
+const MICROSOFT_GRAPH = 'https://graph.microsoft.com/v1.0';
+const MICROSOFT_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  'Calendars.ReadWrite',
+  'User.Read',
+];
+
+function msTenant(env: Env): string {
+  return env.MICROSOFT_TENANT_ID || 'common';
+}
+function msAuthorize(env: Env): string {
+  return `${MICROSOFT_AUTHORITY}/${msTenant(env)}/oauth2/v2.0/authorize`;
+}
+function msToken(env: Env): string {
+  return `${MICROSOFT_AUTHORITY}/${msTenant(env)}/oauth2/v2.0/token`;
+}
+
+// ---------------------------------------------------------------------------
+// Redirect-URI resolution. Task #5 (DC) — the explicit
+// GOOGLE_CALENDAR_REDIRECT_URI / MICROSOFT_CALENDAR_REDIRECT_URI env vars
+// remain authoritative when set (so an operator can override per-env without
+// a redeploy), but if absent we derive the canonical URI from APP_URL. That
+// makes the worker self-bootstrapping on production where APP_URL =
+// https://axal.vc and removes the failure mode where a missing redirect var
+// makes the provider unconfigured even though the rest of the OAuth client is
+// in place.
+// ---------------------------------------------------------------------------
+// Task #35 — PUBLIC_BASE_URL is the canonical source of truth for the
+// public app origin; APP_URL is kept as a back-compat alias. Either
+// resolves the OAuth redirect URI; PUBLIC_BASE_URL wins when both are
+// set.
+function appBase(env: Env): string {
+  const e = env as Env & { PUBLIC_BASE_URL?: string; OAUTH_CALLBACK_BASE_URL?: string };
+  return ((e.OAUTH_CALLBACK_BASE_URL || e.PUBLIC_BASE_URL || e.APP_URL || '')).replace(/\/+$/, '');
+}
+// Reject any override that still points at the workers.dev sandbox in
+// production — a stale env var set before Task #5 (DC) would otherwise
+// regenerate a workers.dev consent screen and the browser would round-
+// trip through the new 410-Gone callback guard, breaking the connect.
+function isProd(env: Env): boolean {
+  const e = String((env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+  return e === 'production' || e === 'prod';
+}
+function overrideAcceptable(env: Env, override: string | undefined): string | null {
+  if (!override) return null;
+  if (isProd(env)) {
+    try {
+      const host = new URL(override).hostname.toLowerCase();
+      if (host.endsWith('.workers.dev')) return null;
+    } catch { return null; }
+  }
+  return override;
+}
+export function googleRedirectUri(env: Env): string {
+  const ov = overrideAcceptable(env, env.GOOGLE_CALENDAR_REDIRECT_URI);
+  if (ov) return ov;
+  const base = appBase(env);
+  return base ? `${base}/api/calendar/google/callback` : '';
+}
+export function microsoftRedirectUri(env: Env): string {
+  const ov = overrideAcceptable(env, env.MICROSOFT_CALENDAR_REDIRECT_URI);
+  if (ov) return ov;
+  const base = appBase(env);
+  return base ? `${base}/api/calendar/microsoft/callback` : '';
+}
+
+// ---------------------------------------------------------------------------
+// Availability checks. Provider is "available" only when every required
+// secret is present and a redirect URI can be resolved (explicit env var OR
+// derived from APP_URL).
+// ---------------------------------------------------------------------------
+// Task #52 — operators may configure a *calendar-specific* OAuth client
+// (`GOOGLE_CAL_CLIENT_ID/SECRET`, `MICROSOFT_CAL_CLIENT_ID/SECRET`) so the
+// Calendar consent screen is decoupled from the platform-wide sign-in client
+// (`GOOGLE_AUTH_CLIENT_ID/SECRET` → Task #51) and the legacy combined
+// (`GOOGLE_CLIENT_ID/SECRET`). Resolution order: CAL-specific → legacy → null.
+export function googleCalClientId(env: Env): string | undefined {
+  return (env as any).GOOGLE_CAL_CLIENT_ID || env.GOOGLE_CLIENT_ID;
+}
+export function googleCalClientSecret(env: Env): string | undefined {
+  return (env as any).GOOGLE_CAL_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET;
+}
+export function microsoftCalClientId(env: Env): string | undefined {
+  return (env as any).MICROSOFT_CAL_CLIENT_ID || env.MICROSOFT_CLIENT_ID;
+}
+export function microsoftCalClientSecret(env: Env): string | undefined {
+  return (env as any).MICROSOFT_CAL_CLIENT_SECRET || env.MICROSOFT_CLIENT_SECRET;
+}
+export function googleOAuthAvailable(env: Env): boolean {
+  return !!(googleCalClientId(env) && googleCalClientSecret(env) && googleRedirectUri(env));
+}
+export function microsoftOAuthAvailable(env: Env): boolean {
+  return !!(microsoftCalClientId(env) && microsoftCalClientSecret(env) && microsoftRedirectUri(env));
+}
+
+/**
+ * Task #35 — pre-flight check that the server has every secret needed to
+ * start an OAuth round-trip. Returning the `missing` list lets an admin
+ * fix the config without reading worker logs. Lives here (not in
+ * routes/calendar.ts) so tests can import it without dragging Hono in.
+ */
+/**
+ * D751 — the client names an admin sets for each calendar, canonical first,
+ * then the legacy fallback `googleCalClientId` and friends also read. Admin →
+ * Integration keys names them, and `preflightOAuthSecrets` reports the same.
+ */
+export const GOOGLE_CAL_ENV_VARS = ['GOOGLE_CAL_CLIENT_ID', 'GOOGLE_CAL_CLIENT_SECRET'] as const;
+export const GOOGLE_CAL_FALLBACK_ENV_VARS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as const;
+export const MICROSOFT_CAL_ENV_VARS = ['MICROSOFT_CAL_CLIENT_ID', 'MICROSOFT_CAL_CLIENT_SECRET'] as const;
+export const MICROSOFT_CAL_FALLBACK_ENV_VARS = ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET'] as const;
+
+export function preflightOAuthSecrets(
+  env: Env,
+  provider: 'google' | 'microsoft',
+): string[] {
+  const missing: string[] = [];
+  if (!env.JWT_SECRET) missing.push('JWT_SECRET');
+  if (provider === 'google') {
+    // Surface the calendar-specific env names FIRST (`GOOGLE_CAL_*`).
+    // The legacy `GOOGLE_CLIENT_*` vars are still accepted as a
+    // back-compat fallback (see `googleCalClientId/Secret`), but the
+    // preflight payload reports the canonical CAL-prefixed names so
+    // admins know which secret to set on a fresh deploy.
+    if (!googleCalClientId(env)) missing.push(GOOGLE_CAL_ENV_VARS[0]);
+    if (!googleCalClientSecret(env)) missing.push(GOOGLE_CAL_ENV_VARS[1]);
+    if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+  } else {
+    if (!microsoftCalClientId(env)) missing.push(MICROSOFT_CAL_ENV_VARS[0]);
+    if (!microsoftCalClientSecret(env)) missing.push(MICROSOFT_CAL_ENV_VARS[1]);
+    if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
+  }
+  return missing;
+}
+
+// ===========================================================================
+// Auth URL builders
+// ===========================================================================
+export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, includeMeetTranscripts = false, includeWorkspaceFiles = false): string {
+  // Task #1 — `select_account consent` forces Google's account chooser
+  // every time, even when the browser is already signed into exactly one
+  // Google account. Without `select_account` Google silently re-uses the
+  // most-recently-used account, which is how a user can end up granting
+  // calendar access on the wrong identity. `consent` is retained so we
+  // always get a fresh refresh_token. `login_hint` (when provided) pre-
+  // selects/highlights the row matching the Axal user's email in the
+  // chooser, so the user has to actively pick a different account to
+  // override.
+  const p = new URLSearchParams({
+    client_id: googleCalClientId(env)!,
+    redirect_uri: googleRedirectUri(env),
+    response_type: 'code',
+    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE, GOOGLE_MEET_SPACE_SCOPE] : []), ...(includeWorkspaceFiles ? ['https://www.googleapis.com/auth/drive.file'] : [])].join(' '),
+    access_type: 'offline',
+    prompt: 'select_account consent',
+    state,
+    // Do not carry forward a previously granted scope that this consent no
+    // longer requests (notably Gmail on existing connections).
+    include_granted_scopes: 'false',
+  });
+  if (loginHint) p.set('login_hint', loginHint);
+  return `${GOOGLE_AUTH_URL}?${p.toString()}`;
+}
+
+/** Revoke every Google OAuth scope attached to this refresh token. */
+export async function revokeGoogleOAuthGrant(
+  refreshToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const body = new URLSearchParams({ token: refreshToken });
+  const response = await fetchWithTimeout('https://oauth2.googleapis.com/revoke', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  }, 10_000, fetcher);
+  if (response.ok) return;
+
+  let providerError = '';
+  try {
+    const data = await response.json() as { error?: string };
+    providerError = String(data?.error || '');
+  } catch { /* Google's error body is optional. */ }
+  // Google documents invalid_token as an already expired or revoked grant.
+  if (providerError === 'invalid_token') return;
+  throw new Error(`google_revoke_failed:${response.status}:${providerError || 'unknown'}`);
+}
+
+export function buildMicrosoftAuthUrl(env: Env, state: string): string {
+  const p = new URLSearchParams({
+    client_id: microsoftCalClientId(env)!,
+    redirect_uri: microsoftRedirectUri(env),
+    response_type: 'code',
+    response_mode: 'query',
+    scope: MICROSOFT_SCOPES.join(' '),
+    state,
+    prompt: 'consent',
+  });
+  return `${msAuthorize(env)}?${p.toString()}`;
+}
+
+// ===========================================================================
+// Token exchange / refresh — fetch with explicit timeout, fail with thrown
+// Error so callers can map to a HTTP status.
+// ===========================================================================
+async function fetchWithTimeout(
+  url: string, init: RequestInit, timeoutMs = 10_000, fetcher: typeof fetch = fetch,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetcher(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export async function exchangeGoogleCode(env: Env, code: string): Promise<any> {
+  if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
+  const body = new URLSearchParams({
+    code,
+    client_id: googleCalClientId(env)!,
+    client_secret: googleCalClientSecret(env)!,
+    redirect_uri: googleRedirectUri(env),
+    grant_type: 'authorization_code',
+  });
+  const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    let code = '';
+    try { code = (JSON.parse(txt) as any)?.error || ''; } catch {}
+    console.warn('[CAL] google token exchange', r.status, code, txt.slice(0, 300));
+    throw new Error(`token_exchange_failed:${r.status}:${code || 'unknown'}`);
+  }
+  return r.json();
+}
+
+export async function refreshGoogleAccessToken(env: Env, refreshToken: string): Promise<string> {
+  if (!googleOAuthAvailable(env)) throw new Error('google_oauth_unavailable');
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: googleCalClientId(env)!,
+    client_secret: googleCalClientSecret(env)!,
+    grant_type: 'refresh_token',
+  });
+  const r = await fetchWithTimeout(GOOGLE_TOKEN_URL, {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] google refresh', r.status);
+    throw new Error(`refresh_failed:${r.status}`);
+  }
+  return ((await r.json()) as any).access_token as string;
+}
+
+export async function fetchGoogleUserinfo(accessToken: string): Promise<any> {
+  try {
+    const r = await fetchWithTimeout(GOOGLE_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r.ok) return r.json();
+  } catch (e: any) {
+    console.warn('[CAL] google userinfo failed:', e?.message || e);
+  }
+  return {};
+}
+
+export async function exchangeMicrosoftCode(env: Env, code: string): Promise<any> {
+  if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
+  const body = new URLSearchParams({
+    code,
+    client_id: microsoftCalClientId(env)!,
+    client_secret: microsoftCalClientSecret(env)!,
+    redirect_uri: microsoftRedirectUri(env),
+    grant_type: 'authorization_code',
+    scope: MICROSOFT_SCOPES.join(' '),
+  });
+  const r = await fetchWithTimeout(msToken(env), {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] ms token exchange', r.status);
+    throw new Error(`token_exchange_failed:${r.status}`);
+  }
+  return r.json();
+}
+
+export async function refreshMicrosoftAccessToken(env: Env, refreshToken: string): Promise<string> {
+  if (!microsoftOAuthAvailable(env)) throw new Error('microsoft_oauth_unavailable');
+  const body = new URLSearchParams({
+    refresh_token: refreshToken,
+    client_id: microsoftCalClientId(env)!,
+    client_secret: microsoftCalClientSecret(env)!,
+    grant_type: 'refresh_token',
+    scope: MICROSOFT_SCOPES.join(' '),
+  });
+  const r = await fetchWithTimeout(msToken(env), {
+    method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!r.ok) {
+    console.warn('[CAL] ms refresh', r.status);
+    throw new Error(`refresh_failed:${r.status}`);
+  }
+  return ((await r.json()) as any).access_token as string;
+}
+
+export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> {
+  try {
+    const r = await fetchWithTimeout(`${MICROSOFT_GRAPH}/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r.ok) return r.json();
+  } catch (e: any) {
+    console.warn('[CAL] ms userinfo failed:', e?.message || e);
+  }
+  return {};
+}
+
+// ===========================================================================
+// Calendar readers use the Worker D1 stores, including advisor/partner slots.
+// Missing schema is not an empty calendar: the agenda reports not_configured
+// for that source; strict exports refuse an incomplete answer.
+// ===========================================================================
+export interface CalendarEvent {
+  id: string;
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item' | 'agent_session' | 'grow_campaign' | 'ad_flight' | 'newsletter_send' | 'sequence_step';
+  source_id: number;
+  source_uid: string;
+  title: string;
+  start_at: string;
+  end_at: string;
+  status: string;
+  location_kind: string | null;
+  location_uri: string | null;
+  organizer_email: string | null;
+  attendees: { email: string | null; name: string | null; role: string; rsvp?: string }[];
+  notes: string | null;
+  deal_id?: number | null;
+  project_id?: number | null;
+  /** D1585 (#3832): an investor meeting's prospect, so the drawer's "Prep" reads its brief. */
+  prospect_id?: number | null;
+  /**
+   * D1033 — set only by the two My events kinds (`calendar/myEvents.ts`). The
+   * venue words (`location_text`), the event row the copy came from, its page,
+   * and whether a calendar client should show it as held or tentative. The
+   * other six kinds leave them unset, so their .ics and provider payloads are
+   * unchanged.
+   */
+  place?: string | null;
+  event_id?: number;
+  url?: string;
+  ics_status?: 'CONFIRMED' | 'TENTATIVE';
+  /**
+   * Providers this exact event has already been copied to, from
+   * `calendar_sync_records`. Only `GET /calendar/events` fills it in
+   * (`attachPushRecords`); the readers above do not, because .ics export and
+   * the push lookup have no use for it and it costs a query.
+   */
+  pushed_to?: string[];
+  /** D1206: a scoped projection can never be copied or acted on. */
+  read_only?: true;
+  /**
+   * D5204 (#5204) — AN ALL-DAY EVENT IS A CALENDAR DATE, NOT AN INSTANT.
+   *
+   * A provider's date-only event ("2026-11-09") used to travel in `start_at` alone, and the page grouped it with
+   * `new Date(...)`, which reads a bare ISO date at UTC midnight. West of UTC that is the evening BEFORE, so a
+   * member in Los Angeles saw an all-day event on the wrong day.
+   *
+   * So an all-day event says so, and carries the provider's own dates as dates: `start_date` inclusive and
+   * `end_date` EXCLUSIVE, exactly as Google states them (a one-day event ends on the next day). The page groups
+   * all-day rows by these and never parses them into an instant. `start_at` and `end_at` keep whatever they held,
+   * so the feed, the .ics file and every existing reader are untouched.
+   */
+  all_day?: boolean;
+  start_date?: string;
+  end_date?: string;
+  /**
+   * D1207 — the reader's own words about this row for the person reading it:
+   * where they stand (`my_role`, see `services/calendar/items.ts`) and, on a
+   * cancelled row, why (`cancel_reason`, null when nothing recorded one). The
+   * organiser's time zone where a row records one (`time_zone`), else null.
+   */
+  my_role?: string;
+  cancel_reason?: string | null;
+  time_zone?: string | null;
+  /**
+   * D1485 (#3979): an external Google or Outlook event's provider, its iCalUID
+   * and the member's own account (`calendar/externalReaders.ts`). Set on the
+   * owner's own page read only; never in a feed, a copy or a staff scope.
+   */
+  external?: { provider: 'google' | 'microsoft'; ical_uid: string | null; account: { provider: 'google' | 'microsoft'; address: string | null } };
+  /** D1485: the providers this Axal item also shows on, from the dedupe (CAL6). */
+  also_on?: string[];
+  /** D1485: an external event that starts within a minute of an Axal item with an overlapping title. Flagged, never merged. */
+  possible_duplicate?: boolean;
+  /** D1207 — the booked advisor's uid, for the booking's page. */
+  advisor_uid?: string | null;
+  /** D1384 — a compliance deadline's own facts (`compliance_due` only). */
+  compliance?: ComplianceFacts;
+}
+
+/**
+ * D1207 — what a reader is asked for beyond its window. Only the page read
+ * (`GET /calendar/events`) asks for cancelled rows: the .ics feed, the
+ * Google and Outlook sync and the one-event push never see one, so a
+ * cancelled meeting is never copied back into anyone's calendar.
+ */
+export interface ReadOptions {
+  withCancelled?: boolean;
+  /**
+   * D1384 — the caller's active company, set by the page read and the item
+   * read only. A reader that scopes by company (`compliance_due`) narrows to
+   * it; the others ignore it.
+   */
+  companyId?: number | null;
+}
+
+/** A booking's stored cancel code, in words; free text passes as written. */
+export function bookingCancelReason(code: string | null | undefined): string | null {
+  const v = String(code ?? '').trim();
+  if (!v) return null;
+  if (v === 'slot_cancelled') return 'The host cancelled this time.';
+  if (v === 'capacity_race') return 'The time filled up before this booking was confirmed.';
+  return v;
+}
+
+function addMinutes(iso: string, mins: number): string {
+  return new Date(new Date(iso).getTime() + mins * 60_000).toISOString();
+}
+
+async function icEvents(env: Env, userId: number,
+                        fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  const withCancelled = opts.withCancelled ? 1 : 0;
+  const rows = await sql`
+    SELECT m.* FROM ic_meetings m
+    WHERE m.start_at >= ${fromIso} AND m.start_at <= ${toIso}
+      AND (m.status != 'cancelled' OR ${withCancelled} = 1)
+  ` as any[];
+  const out: CalendarEvent[] = [];
+  for (const m of rows) {
+    const attendeeRows = await sql`
+      SELECT a.user_id, a.rsvp, u.email, u.name
+      FROM ic_meeting_attendees a
+      LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.meeting_id = ${m.id}
+    ` as any[];
+    const invited = new Set(attendeeRows.map(a => a.user_id));
+    if (!(m.organizer_user_id === userId || invited.has(userId))) continue;
+    const organizer = (await sql`SELECT email FROM users WHERE id = ${m.organizer_user_id}` as any[])[0];
+    out.push({
+      id: `ic_meeting:${m.id}`,
+      kind: 'ic_meeting',
+      source_id: m.id,
+      source_uid: m.uid,
+      title: m.title,
+      start_at: m.start_at,
+      end_at: addMinutes(m.start_at, m.duration_min),
+      status: m.status,
+      location_kind: m.location_kind,
+      location_uri: m.location_uri,
+      organizer_email: organizer?.email || null,
+      attendees: attendeeRows.map(a => ({
+        email: a.email || null, name: a.name || null, role: 'attendee', rsvp: a.rsvp,
+      })),
+      notes: m.agenda || null,
+      deal_id: m.deal_id,
+      my_role: m.organizer_user_id === userId ? 'organiser' : 'invited',
+      cancel_reason: m.status === 'cancelled' ? (m.cancel_reason || null) : null,
+      time_zone: null,
+    });
+  }
+  return out;
+}
+
+async function checkinEvents(env: Env, userId: number,
+                             fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  const withCancelled = opts.withCancelled ? 1 : 0;
+  const rows = await sql`
+    SELECT * FROM founder_checkins
+    WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND (status != 'cancelled' OR ${withCancelled} = 1)
+      AND (founder_user_id = ${userId} OR counterpart_user_id = ${userId})
+  ` as any[];
+  const out: CalendarEvent[] = [];
+  for (const c of rows) {
+    const founder = (await sql`SELECT email, name FROM users WHERE id = ${c.founder_user_id}` as any[])[0];
+    const counter = c.counterpart_user_id
+      ? (await sql`SELECT email, name FROM users WHERE id = ${c.counterpart_user_id}` as any[])[0]
+      : null;
+    const attendees: CalendarEvent['attendees'] = [];
+    if (founder) attendees.push({ email: founder.email, name: founder.name, role: 'founder' });
+    if (counter) attendees.push({ email: counter.email, name: counter.name, role: 'counterpart' });
+    out.push({
+      id: `founder_checkin:${c.id}`,
+      kind: 'founder_checkin',
+      source_id: c.id,
+      source_uid: c.uid,
+      title: c.title,
+      start_at: c.start_at,
+      end_at: addMinutes(c.start_at, c.duration_min),
+      status: c.status,
+      location_kind: c.location_kind,
+      location_uri: c.location_uri,
+      organizer_email: counter?.email || founder?.email || null,
+      attendees,
+      notes: c.notes || null,
+      project_id: c.project_id,
+      // A check-in stores no booker: the organiser is the one this reader
+      // has always named (`organizer_email`), the counterpart, else the founder.
+      my_role: (c.counterpart_user_id ? c.counterpart_user_id === userId : c.founder_user_id === userId) ? 'organiser' : 'invited',
+      // founder_checkins has no reason column (D1207 §2).
+      cancel_reason: null,
+      time_zone: null,
+    });
+  }
+  return out;
+}
+
+// Schema failures are classified at the aggregator; source errors never carry
+// database messages or member content to a page or a log.
+function isMissingTableError(e: any): boolean {
+  const msg = String(e?.message || e || '').toLowerCase();
+  return msg.includes('no such table') || msg.includes('does not exist');
+}
+
+function isMissingColumnError(e: any): boolean {
+  const msg = String(e?.message || e || '').toLowerCase();
+  return msg.includes('no such column');
+}
+
+async function advisorBookingEvents(env: Env, userId: number,
+                                   fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  try {
+    // Match the linked advisor only when it belongs to this account, then
+    // fall back to advisors.user_id, as the advisor router does.
+    const me = (await sql`SELECT advisor_id FROM users WHERE id = ${userId}` as any[])[0];
+    const linked = me?.advisor_id
+      ? (await sql`SELECT id FROM advisors WHERE id = ${me.advisor_id} AND user_id = ${userId}` as any[])[0]
+      : null;
+    const fallback = linked || (await sql`SELECT id FROM advisors WHERE user_id = ${userId}` as any[])[0];
+    const myAdvisorId = fallback?.id || null;
+    // A booking carries no time of its own — the slot does. `advisor_bookings`
+    // has (slot_id, advisor_id, founder_user_id, topic, notes, status); the
+    // scheduled_start / scheduled_end / requester_user_id / meeting_uri /
+    // questions / project_id this function used to read exist on no table.
+    // The first SELECT threw, isMissingColumnError caught it, and office-hour
+    // bookings have therefore never appeared on anyone's calendar.
+    const withCancelled = opts.withCancelled ? 1 : 0;
+    const rows = await sql`
+      SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+        FROM advisor_bookings b
+        JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+       WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
+         AND (b.status IN ('pending', 'confirmed', 'completed') OR (b.status = 'cancelled' AND ${withCancelled} = 1))
+    ` as any[];
+    const out: CalendarEvent[] = [];
+    for (const b of rows) {
+      // 'requested' was in the status list too; bookings are written 'pending'
+      // (routes/advisors.ts), so that filter matched nothing either.
+      const isRequester = b.founder_user_id === userId;
+      const isAdvisor = !!(myAdvisorId && b.advisor_id === myAdvisorId);
+      if (!(isRequester || isAdvisor)) continue;
+      const advisor = (await sql`SELECT uid, email, display_name AS name, timezone FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
+      out.push({
+        id: `advisor_booking:${b.id}`,
+        kind: 'advisor_booking',
+        source_id: b.id,
+        source_uid: b.uid,
+        title: `Advisor session — ${b.topic || ''}`.trim(),
+        start_at: b.starts_at,
+        end_at: b.ends_at,
+        status: b.status,
+        location_kind: 'video',
+        location_uri: b.meeting_url || null,
+        organizer_email: advisor?.email || null,
+        attendees: [
+          { email: advisor?.email || null, name: advisor?.name || null, role: 'advisor' },
+          { email: requester?.email || null, name: requester?.name || null, role: 'mentee' },
+        ],
+        notes: b.notes || null,
+        // Nothing links an office-hour booking to a project, so this is null
+        // rather than a value invented to fill the field.
+        project_id: null,
+        my_role: isAdvisor ? 'giving' : 'booked',
+        cancel_reason: b.status === 'cancelled' ? bookingCancelReason(b.cancel_reason) : null,
+        time_zone: advisor?.timezone || null,
+        advisor_uid: advisor?.uid || null,
+      });
+    }
+    return out;
+  } catch (e) {
+    throw e;
+  }
+}
+
+async function partnerOfficeHourEvents(env: Env, userId: number,
+                                       fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
+  const sql = getSQL(env);
+  try {
+    const me = (await sql`SELECT partner_id FROM users WHERE id = ${userId}` as any[])[0];
+    const myPartnerId = me?.partner_id || null;
+    // Same shape, same defects as advisorBookingEvents above: the time lives
+    // on partner_office_hour_slots, the requester is founder_user_id, and
+    // bookings are written 'pending' (routes/partner_office_hours.ts).
+    const withCancelled = opts.withCancelled ? 1 : 0;
+    const rows = await sql`
+      SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+        FROM partner_bookings b
+        JOIN partner_office_hour_slots s ON s.id = b.slot_id
+       WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
+         AND (b.status IN ('pending', 'confirmed', 'completed') OR (b.status = 'cancelled' AND ${withCancelled} = 1))
+    ` as any[];
+    const out: CalendarEvent[] = [];
+    for (const b of rows) {
+      const isRequester = b.founder_user_id === userId;
+      const isPartnerSide = !!(myPartnerId && b.partner_id === myPartnerId);
+      if (!(isRequester || isPartnerSide)) continue;
+      const partner = (await sql`SELECT email, name FROM partners WHERE id = ${b.partner_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
+      out.push({
+        id: `partner_office_hour:${b.id}`,
+        kind: 'partner_office_hour',
+        source_id: b.id,
+        source_uid: b.uid,
+        title: `Partner office hours — ${b.topic || ''}`.trim(),
+        start_at: b.starts_at,
+        end_at: b.ends_at,
+        status: b.status,
+        location_kind: 'video',
+        location_uri: b.meeting_url || null,
+        organizer_email: partner?.email || null,
+        attendees: [
+          { email: partner?.email || null, name: partner?.name || null, role: 'partner' },
+          { email: requester?.email || null, name: requester?.name || null, role: 'requester' },
+        ],
+        notes: b.notes || null,
+        project_id: null,
+        my_role: isPartnerSide ? 'giving' : 'booked',
+        cancel_reason: b.status === 'cancelled' ? bookingCancelReason(b.cancel_reason) : null,
+        time_zone: null,
+      });
+    }
+    return out;
+  } catch (e) {
+    throw e;
+  }
+}
+
+// Task #3 — Calendly events surfaced in the unified calendar. Read from
+// the local `calendar_events` projection table written by the Calendly
+// provider's webhook + sync. Visibility: owner only, including an admin’s personal calendar.
+async function calendlyEvents(env: Env, userId: number,
+                              fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  try {
+    const stmt = env.DB.prepare(
+      "SELECT * FROM calendar_events WHERE source = 'calendly' AND user_id = ? AND start_at >= ? AND start_at <= ?",
+    ).bind(userId, fromIso, toIso);
+    const res = await stmt.all<{
+      id: number; uid: string; user_id: number; external_uri: string;
+      title: string | null; start_at: string; end_at: string; status: string;
+      location_kind: string | null; location_uri: string | null;
+      organizer_email: string | null; invitee_email: string | null;
+      invitee_name: string | null; notes: string | null;
+    }>();
+    return (res.results || []).map(r => ({
+      id: `calendly_event:${r.id}`,
+      kind: 'calendly_event',
+      source_id: r.id,
+      source_uid: r.uid,
+      title: r.title || 'Calendly meeting',
+      start_at: r.start_at,
+      end_at: r.end_at,
+      status: r.status,
+      location_kind: r.location_kind || 'video',
+      location_uri: r.location_uri,
+      organizer_email: r.organizer_email,
+      attendees: [
+        ...(r.organizer_email ? [{ email: r.organizer_email, name: null, role: 'organizer' as const }] : []),
+        ...(r.invitee_email ? [{ email: r.invitee_email, name: r.invitee_name, role: 'invitee' as const }] : []),
+      ],
+      notes: r.notes,
+      project_id: null,
+    }));
+  } catch (e) {
+    throw e;
+  }
+}
+
+/**
+ * Rows written straight into `calendar_events` by a feature that owns no
+ * table of its own — today only `expert_booking`, from a confirmed wellbeing
+ * session.
+ *
+ * SEPARATE FROM `calendlyEvents` BECAUSE THE FILTER IS THE POINT. That reader
+ * takes `source = 'calendly'`; these rows carry `source = 'axal'`, so the two
+ * never see each other's rows and neither needs to know the other's kinds.
+ * Reading by `kind` is what makes this generic: a second such feature adds a
+ * `KNOWN_KINDS` entry and nothing here changes.
+ */
+async function directEvents(env: Env, userId: number,
+                            fromIso: string, toIso: string,
+                            kind: string): Promise<CalendarEvent[]> {
+  try {
+    // Personal calendars never inherit a staff member's wider read access.
+    const stmt = env.DB.prepare(
+      "SELECT * FROM calendar_events WHERE source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?",
+    ).bind(kind, userId, fromIso, toIso);
+    const res = await stmt.all<{
+      id: number; uid: string; kind: string; source_id: number | null; source_uid: string | null;
+      title: string | null; start_at: string; end_at: string; status: string;
+      location_kind: string | null; location_uri: string | null;
+      organizer_email: string | null; attendees_json: string | null; notes: string | null;
+    }>();
+    return (res.results || []).map(r => {
+      let attendees: CalendarEvent['attendees'] = [];
+      // A malformed blob costs the row its attendee list, never the row.
+      try {
+        const parsed = JSON.parse(r.attendees_json || '[]');
+        if (Array.isArray(parsed)) attendees = parsed;
+      } catch { /* keep the empty list */ }
+      return {
+        id: `${r.kind}:${r.source_id ?? r.id}`,
+        kind: r.kind as CalendarEvent['kind'],
+        source_id: r.source_id ?? r.id,
+        source_uid: r.source_uid ?? r.uid,
+        title: r.title || 'Session',
+        start_at: r.start_at,
+        end_at: r.end_at,
+        status: r.status,
+        location_kind: r.location_kind || 'video',
+        location_uri: r.location_uri,
+        organizer_email: r.organizer_email,
+        attendees,
+        notes: r.notes,
+        project_id: null,
+      };
+    });
+  } catch (e) {
+    throw e;
+  }
+}
+
+/**
+ * D1484 (#3977): the events a member adds with "New event". `POST
+ * /calendar/events` writes them to `calendar_events` with `kind = 'other'`
+ * (and `source = 'manual'` unless the caller named another); nothing read them
+ * until now. The caller's own rows only, bound; never Calendly's rows.
+ */
+async function manualEvents(env: Env, userId: number, fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const res = await env.DB.prepare(
+    `SELECT id, uid, title, start_at, end_at, status, location_kind, location_uri, notes FROM calendar_events
+      WHERE kind = 'other' AND user_id = ? AND source <> 'calendly' AND start_at >= ? AND start_at <= ?
+      ORDER BY start_at, id`,
+  ).bind(userId, fromIso, toIso).all<{
+    id: number; uid: string; title: string | null; start_at: string; end_at: string | null; status: string | null;
+    location_kind: string | null; location_uri: string | null; notes: string | null;
+  }>();
+  return (res.results || []).map((r) => ({
+    id: `manual:${r.id}`, kind: 'manual' as const, source_id: Number(r.id), source_uid: r.uid,
+    title: r.title || 'Event', start_at: r.start_at, end_at: r.end_at || r.start_at, status: r.status || 'scheduled',
+    location_kind: r.location_kind, location_uri: r.location_uri, organizer_email: null, attendees: [], notes: r.notes, project_id: null,
+  }));
+}
+
+/**
+ * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, in one place.
+ *
+ * The default set below used to be a five-element array literal that had to be
+ * kept in step with the `CalendarEvent` union above and with three separate
+ * hardcoded lists on the page. It was not: `partner_office_hour` had no filter
+ * chip on `/calendar`, so office hours were reachable only under "All", and
+ * `expert_booking` was in the union with nothing reading it. Exporting the set
+ * lets the page derive its filters from what the server can actually emit
+ * rather than from a list someone remembered to update.
+ */
+type CalendarReader = (
+  env: Env, userId: number, fromIso: string, toIso: string, opts?: ReadOptions,
+) => Promise<CalendarEvent[]>;
+
+/**
+ * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, AND THE READER THAT PRODUCES IT.
+ *
+ * `Record<CalendarEvent['kind'], …>` is the point of the shape: tsc refuses a
+ * union member with no reader and a reader with no union member, so the two
+ * cannot drift. What used to sit here was a five-element array literal kept in
+ * step with the union by hand, alongside three more hardcoded kind lists on
+ * `/calendar`. They were not in step: `partner_office_hour` had no filter chip,
+ * so office hours were reachable only under "All", and `expert_booking` was in
+ * the union with nothing reading it.
+ */
+const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
+  ic_meeting: icEvents,
+  founder_checkin: checkinEvents,
+  advisor_booking: advisorBookingEvents,
+  partner_office_hour: partnerOfficeHourEvents,
+  calendly_event: calendlyEvents,
+  expert_booking: (env, userId, from, to) => directEvents(env, userId, from, to, 'expert_booking'),
+  event_ticket: ticketEvents,
+  event_hosted: hostedEvents,
+  // D1190 (#3124): a founder's meeting or call with an investor, from Capital relationships.
+  investor_meeting: investorMeetingEvents,
+  // D1384 (#3692): the Compliance layer. D1208's reader; the page read alone
+  // asks for done deadlines (they stay on their day) and passes the company.
+  compliance_due: async (env, userId, from, to, opts) => (await complianceDueEvents(env, userId, from, to, {
+    withDone: !!opts?.withCancelled, companyId: opts?.companyId,
+  })) as CalendarEvent[],
+  // D1484 (#3977): D1208's three personal readers, page only, the owner's rows alone.
+  interview_call: async (env, userId, from, to) => (await interviewCallEvents(env, userId, from, to)) as CalendarEvent[],
+  cohort_date: async (env, userId, from, to) => (await cohortDateEvents(env, userId, from, to)) as CalendarEvent[],
+  deal_closing: async (env, userId, from, to) => (await dealClosingEvents(env, userId, from, to)) as CalendarEvent[],
+  // D1484: what "New event" writes (`POST /calendar/events`, kind 'other'), page only.
+  manual: manualEvents,
+  // #3959: the "Learning" source — the member's own plan occurrences and the webinars they registered for.
+  learning: async (env, userId, from, to) => (await (await import('./learningPlan')).learningEvents(env, userId, from, to)) as CalendarEvent[],
+  // D1486 §b (#3981): Publish's sends and Grow › Distribution's planned pieces, page only, the team's rows alone.
+  publish_send: publishSendEvents,
+  content_planned: contentPlannedEvents,
+  bot_call: async (env, userId, from, to) => (await (await import('./calendar/botCalls')).botCallEvents(env, userId, from, to)) as CalendarEvent[],
+  // #3982 (D1486 §c): Raise's dated stores, page only, all day: a round's close for the venture's members, an NDA's expiry for its two parties.
+  round_close: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).roundCloseEvents(env, userId, from, to)),
+  nda_expiry: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).ndaExpiryEvents(env, userId, from, to)),
+  // #3983 (D1486 §d): tasks and engagement milestones, page only, all day, the member's own rows alone.
+  workflow_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).workflowTaskEvents(env, userId, from, to)),
+  mvp_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).mvpTaskEvents(env, userId, from, to)),
+  // D1614 W4 (#3972): the open tasks of the projects the member can read, in their time block or on their due day.
+  work_item: async (env, userId, from, to) => (await (await import('./calendar/workItems')).workItemEvents(env, userId, from, to)),
+  contact_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).contactTaskEvents(env, userId, from, to)),
+  engagement_milestone: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).engagementMilestoneEvents(env, userId, from, to)),
+  // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
+  external_google: async (env, userId, from, to) => (await import('./calendar/externalReaders')).googleEvents(env, userId, from, to),
+  external_microsoft: async (env, userId, from, to) => (await import('./calendar/externalReaders')).microsoftEvents(env, userId, from, to),
+  // #3957: the AI agent sessions of the teams the member reads, page only: each live session's slots and the runs it made.
+  agent_session: async (env, userId, from, to) => (await (await import('./agents/sessions')).sessionEvents(env, userId, from, to)) as CalendarEvent[],
+  // #5131 (D1486 §e): Grow's campaign plans, ad flights, Beehiiv sends and sequence steps, page only, the venture's readers alone.
+  grow_campaign: async (env, userId, from, to) => (await (await import('./calendar/growDates')).growCampaignEvents(env, userId, from, to)),
+  ad_flight: async (env, userId, from, to) => (await (await import('./calendar/growDates')).adFlightEvents(env, userId, from, to)),
+  newsletter_send: async (env, userId, from, to) => (await (await import('./calendar/growDates')).newsletterSendEvents(env, userId, from, to)),
+  sequence_step: async (env, userId, from, to) => (await (await import('./calendar/growDates')).sequenceStepEvents(env, userId, from, to)),
+};
+
+export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
+
+/**
+ * D1384 — kinds the page reads but no .ics file, subscription or provider
+ * copy carries. A deadline is a whole day with no time, which `eventsToIcs`
+ * and the Google and Outlook payloads do not write; `fetchUserEvents` leaves
+ * these out, so a feed never holds one by accident.
+ */
+// #3959: Learning is page-only until its feed and provider copy are designed (an occurrence id is not a row id);
+// the registry says so (`page_only`), as it does for every kind.
+export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = pageOnlyKinds();
+export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k));
+
+/** Whether one source answered, so a page can say which of the eight did not. */
+export interface CalendarSourceStatus {
+  kind: CalendarEvent['kind'];
+  ok: boolean;
+  /** D1485: `reconnect` (an expired or revoked connection) and `rate_limited` are the connected calendars'. */
+  error: 'unreadable' | 'not_configured' | 'reconnect' | 'rate_limited' | null;
+  /** D1485: a connected calendar that stopped at its page cap. */
+  truncated?: true;
+  /**
+   * D5202 (#5202) — SAFE SOURCE HEALTH. Why it failed, how long it took, how many items it gave and when. A
+   * read that is Connected but not healthy is the state this page could not show before: the rail said
+   * Connected while the events were missing. Support reads these to tell a provider-wide outage from one
+   * account's problem. Fixed words and numbers only: never a title, an attendee, an address, a join link, a
+   * token or a provider's body.
+   */
+  reason?: string;
+  latency_ms?: number;
+  items?: number;
+  at?: string;
+}
+
+/**
+ * D5203 (#5203) — HOW MANY SOURCES ARE READ AT ONCE.
+ *
+ * Axal's own sources are D1 reads; the connected calendars are network reads
+ * that can page four times and wait ten seconds a page. They run in separate
+ * lanes, each bounded, started together: a slow Google or Outlook read never
+ * holds a D1 source's slot, and at most LOCAL + NETWORK reads are ever in
+ * flight for one request (never one per source).
+ */
+export const CALENDAR_LOCAL_CONCURRENCY = 6;
+export const CALENDAR_NETWORK_CONCURRENCY = 2;
+/** The kinds whose readers call a provider over the network rather than D1. */
+export const NETWORK_KINDS: readonly CalendarEvent['kind'][] = ['external_google', 'external_microsoft'];
+
+/** D5203: one source's read, for the timing log. Kind, time, outcome and a count; never a payload. */
+export interface CalendarSourceTiming { kind: CalendarEvent['kind']; ms: number; ok: boolean; count: number }
+export interface CalendarGatherTiming { ms: number; sources: CalendarSourceTiming[] }
+
+export interface GatherOptions {
+  limits?: { local?: number; network?: number };
+  /** Where the timing goes; the default is one `console.info` line per gather. */
+  onTiming?: (timing: CalendarGatherTiming) => void;
+  now?: () => number;
+}
+
+function logTiming(timing: CalendarGatherTiming): void {
+  console.info('[calendar] gather timing', timing);
+}
+
+/**
+ * ONE SOURCE FAILING USED TO BLANK THE WHOLE CALENDAR.
+ *
+ * The aggregator used to await readers in a row with no catch of its own, so
+ * a single unreadable source turned the entire agenda into a 500.
+ * A founder with five working sources saw nothing at all, and nothing on the
+ * page could say which one was at fault.
+ *
+ * This gathers per source instead and reports each one. The two contracts built
+ * on it are deliberately different, because a page and a file want opposite
+ * things from a partial answer:
+ *
+ *   · `fetchUserEventsWithSources` degrades — the agenda renders what loaded and
+ *     names what did not.
+ *   · `fetchUserEvents` rethrows — an .ics feed or a push lookup that quietly
+ *     dropped a source would write a wrong calendar into someone's client, or
+ *     report an event as "not found" when the truth is that its source broke.
+ *
+ * D5203 (#5203): the sources are read in bounded parallel (`runBounded`, two
+ * lanes above), no longer one after another. Only the kinds asked for are
+ * read. The merge walks the outcomes in `readers` order, never finish order,
+ * and the sort is stable, so the answer is the one a serial read gave.
+ */
+async function gather(
+  env: Env, userId: number, _role: string, fromIso: string, toIso: string,
+  kinds?: string[], opts: ReadOptions = {},
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  return gatherSources(READERS, env, userId, fromIso, toIso, kinds, opts);
+}
+
+/** `gather` over a given reader table: the production one, or a test's. Exported for tests. */
+export async function gatherSources(
+  readers: Readonly<Partial<Record<CalendarEvent['kind'], CalendarReader>>>,
+  env: Env, userId: number, fromIso: string, toIso: string,
+  kinds?: string[], opts: ReadOptions = {}, pool: GatherOptions = {},
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  const now = pool.now || Date.now;
+  const started = now();
+  const order = Object.keys(readers) as CalendarEvent['kind'][];
+  const wanted = new Set<string>(kinds && kinds.length ? kinds : order);
+  const asked = order.filter((kind) => wanted.has(kind));
+  const network = asked.filter((kind) => NETWORK_KINDS.includes(kind));
+  const local = asked.filter((kind) => !NETWORK_KINDS.includes(kind));
+  const external = await import('./calendar/externalReaders');
+  const read = (kind: string) => readers[kind as CalendarEvent['kind']]!(env, userId, fromIso, toIso, opts) as Promise<CalendarEvent[] & { truncated?: boolean }>;
+  const [localOut, networkOut] = await Promise.all([
+    runBounded(local, pool.limits?.local ?? CALENDAR_LOCAL_CONCURRENCY, read, now),
+    runBounded(network, pool.limits?.network ?? CALENDAR_NETWORK_CONCURRENCY, read, now),
+  ]);
+  const byKind = new Map([...localOut, ...networkOut].map((o) => [o.kind, o]));
+  const events: CalendarEvent[] = [];
+  const sources: CalendarSourceStatus[] = [];
+  const timings: CalendarSourceTiming[] = [];
+  // D5202: the moment a row was built, so a stale read is visible as a time rather than guessed at.
+  const at = () => new Date().toISOString();
+  for (const kind of asked) {
+    const outcome = byKind.get(kind)!;
+    if (outcome.ok) {
+      const got = outcome.value;
+      events.push(...got);
+      // D5202: every source carries its own latency and item count, so a slow or capped provider is a number, not a blank agenda.
+      // D5203 measured each read already; that figure is the latency, so nothing is timed twice.
+      sources.push({
+        kind, ok: true, error: null, ...(got.truncated ? { truncated: true as const } : {}),
+        latency_ms: outcome.ms, items: got.length, at: at(),
+      });
+      timings.push({ kind, ms: outcome.ms, ok: true, count: got.length });
+      continue;
+    }
+    const e = outcome.error;
+    // D1485: a member with no Google or Outlook connection has no such source at all.
+    if (e instanceof external.NoSource) continue;
+    const error = e instanceof external.ExternalReadError ? e.code
+      : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+    // D5202: the reason is the reader's own word where it has one, else the shape of the failure.
+    const reason = e instanceof external.ExternalReadError ? e.reason
+      : isMissingTableError(e) || isMissingColumnError(e) ? 'schema_missing' : 'threw';
+    console.warn('[calendar] source failed', { kind, outcome: error, reason, latency_ms: outcome.ms });
+    sources.push({ kind, ok: false, error, reason, latency_ms: outcome.ms, items: 0, at: at() });
+    timings.push({ kind, ms: outcome.ms, ok: false, count: 0 });
+  }
+  events.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  (pool.onTiming || logTiming)({ ms: now() - started, sources: timings });
+  return { events, sources };
+}
+
+/**
+ * The degrading read: whatever loaded, plus which sources answered. Only the
+ * page asks it for cancelled rows (`opts.withCancelled`, D1207).
+ */
+export async function fetchUserEventsWithSources(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  kinds?: string[], opts: ReadOptions = {},
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  return gather(env, userId, role, fromIso, toIso, kinds, opts);
+}
+
+/** Private external meetings and wellbeing sessions never enter a staff scope. */
+export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
+/** D1484: read for their owner alone; a staff scope has no reader for them, so it does not list them. */
+// D1486 §b (#3981): Publish sends and planned content are the venture team's, never a staff scope's.
+export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone',
+  // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
+  'external_google', 'external_microsoft',
+  // D1614 W4 (#3972): a project's work items, on the member's own page only.
+  'work_item',
+  // #3957: a team's AI agent sessions are read by that team's members, never by a staff scope.
+  'agent_session',
+  // #5131 (D1486 §e): Grow's dated plans and sends are the venture's readers', never a staff scope's.
+  'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step'] as const;
+export const SCOPED_SOURCE_LIMIT = 1000;
+export function validScopeWindow(from: string, to: string): boolean {
+  const start = Date.parse(from), end = Date.parse(to);
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start && end - start <= 180 * 86_400_000;
+}
+
+/**
+ * D5203 (#5203) — the personal read's window, bounded like the staff scope's.
+ *
+ * `GET /calendar/events` for the member's own calendar had no ceiling, so a
+ * caller could ask every source for years at once. The page's widest view is
+ * Agenda's 90 days (Month ≤ 31, Week 7), so 180 days, the staff scope's own
+ * bound, leaves every view room and refuses the multi-year read. A window must
+ * also end after it starts: an empty or reversed one is refused, never read.
+ * Returns why the window is refused, or null when it may be read.
+ */
+export const PERSONAL_WINDOW_MAX_DAYS = 180;
+export function personalWindowRefusal(from: string, to: string): 'invalid_window' | 'window_too_wide' | null {
+  const start = Date.parse(from), end = Date.parse(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 'invalid_window';
+  return end - start > PERSONAL_WINDOW_MAX_DAYS * 86_400_000 ? 'window_too_wide' : null;
+}
+
+type ScopedRow = Record<string, any>;
+/**
+ * One set-based statement per source. Membership is decided in SQL, against
+ * this deployment, without widening any of the personal readers above.
+ * Each source deliberately reads no email, note, join link or private address.
+ */
+async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEvent['kind'], from: string, to: string): Promise<{ rows: ScopedRow[]; truncated: boolean }> {
+  let query: string;
+  switch (kind) {
+    case 'ic_meeting':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT m.id AS id, m.uid, m.title, m.start_at AS start_at, m.duration_min, m.status, m.location_kind, m.deal_id, m.cancel_reason,
+          o.uid AS owner_user_uid, o.name AS owner_user_name,
+          (SELECT json_group_array(json_object('name',u.name,'role','attendee','rsvp',a.rsvp))
+             FROM ic_meeting_attendees a LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = m.id) AS people_json
+        FROM ic_meetings m LEFT JOIN users o ON o.id = m.organizer_user_id WHERE m.start_at >= ? AND m.start_at <= ?
+          AND (m.organizer_user_id IN (SELECT id FROM members)
+            OR EXISTS (SELECT 1 FROM ic_meeting_attendees a WHERE a.meeting_id = m.id AND a.user_id IN (SELECT id FROM members)))`;
+      break;
+    case 'founder_checkin':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT c.id AS id,c.uid,c.title,c.start_at AS start_at,c.duration_min,c.status,c.location_kind,c.project_id,
+               f.name AS founder_name,p.name AS counterpart_name,f.uid AS owner_user_uid,f.name AS owner_user_name
+        FROM founder_checkins c LEFT JOIN users f ON f.id = c.founder_user_id LEFT JOIN users p ON p.id = c.counterpart_user_id
+        WHERE c.start_at >= ? AND c.start_at <= ?
+          AND (c.founder_user_id IN (SELECT id FROM members) OR c.counterpart_user_id IN (SELECT id FROM members))`;
+      break;
+    case 'advisor_booking':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+               a.display_name AS host_name,a.timezone AS time_zone,u.name AS requester_name,u.uid AS owner_user_uid,u.name AS owner_user_name
+        FROM advisor_bookings b JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          LEFT JOIN advisors a ON a.id = b.advisor_id LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE s.starts_at >= ? AND s.starts_at <= ?
+          AND b.status IN ('pending','confirmed','completed','cancelled')
+          AND (b.founder_user_id IN (SELECT id FROM members) OR a.user_id IN (SELECT id FROM members))`;
+      break;
+    case 'partner_office_hour':
+      query = `WITH members AS (SELECT id,partner_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+               p.name AS host_name,u.name AS requester_name,u.uid AS owner_user_uid,u.name AS owner_user_name
+        FROM partner_bookings b JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          LEFT JOIN partners p ON p.id = b.partner_id LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE s.starts_at >= ? AND s.starts_at <= ?
+          AND b.status IN ('pending','confirmed','completed','cancelled')
+          AND (b.founder_user_id IN (SELECT id FROM members) OR b.partner_id IN (SELECT partner_id FROM members WHERE partner_id IS NOT NULL))`;
+      break;
+    case 'event_ticket':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT r.id AS id, r.status AS reg_status,r.payment_status,r.waitlist_position,e.id AS event_id,e.title,
+               e.starts_at AS start_at,e.ends_at AS end_at,e.project_id,e.location_kind,e.slug AS event_slug,e.status AS event_status,
+               o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM event_registrations r JOIN events e ON e.id = r.event_id LEFT JOIN users o ON o.id = r.user_id
+        WHERE e.starts_at >= ? AND e.starts_at <= ? AND r.user_id IN (SELECT id FROM members)
+          AND r.status IN ('registered','confirmed','attended','waitlisted') AND e.status <> 'cancelled'
+          AND COALESCE(e.host_user_id,0) <> r.user_id`;
+      break;
+    case 'event_hosted':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT e.id AS id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind,
+               e.slug AS event_slug,e.status AS event_status,o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM events e LEFT JOIN users o ON o.id = e.host_user_id WHERE e.starts_at >= ? AND e.starts_at <= ?
+          AND e.host_user_id IN (SELECT id FROM members) AND e.status <> 'cancelled'`;
+      break;
+    case 'investor_meeting':
+      query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT ev.id AS id,ev.kind,ev.starts_at AS start_at,ev.calendar_item_uid AS uid,p.name AS prospect_name,p.firm AS prospect_firm,
+               pr.id AS project_id,o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM raise_prospect_events ev JOIN raise_prospects p ON p.id = ev.prospect_id JOIN projects pr ON pr.id = p.project_id
+          LEFT JOIN users o ON o.id = ev.created_by
+        WHERE ev.starts_at >= ? AND ev.starts_at <= ? AND ev.kind IN ('meeting','call') AND ev.calendar_item_uid IS NOT NULL
+          AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
+      break;
+    // D1384: what /compliance showed an admin, read-only, for the scope's ventures.
+    case 'compliance_due':
+      query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT e.id AS id,e.uid,e.title,date(e.due_date) AS start_at,date(e.due_date,'+1 day') AS end_at,
+               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name,
+               o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM compliance_events e JOIN projects pr ON pr.id = e.project_id AND pr.deleted_at IS NULL
+          LEFT JOIN users o ON o.id = e.owner_user_id
+        WHERE julianday(date(e.due_date), '+1 day') > julianday(?) AND julianday(date(e.due_date)) < julianday(?)
+          AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
+      break;
+    default: return { rows: [], truncated: false };
+  }
+  const result = await env.DB.prepare(query + ' ORDER BY start_at, id LIMIT ?').bind(actor.id, all ? 1 : 0, from, to, SCOPED_SOURCE_LIMIT + 1).all<ScopedRow>();
+  const rows = result.results || [];
+  return { rows: rows.slice(0, SCOPED_SOURCE_LIMIT), truncated: rows.length > SCOPED_SOURCE_LIMIT };
+}
+
+/** A staff scope's row, deliberately carrying only the detail that view may show. */
+function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent {
+  const people: CalendarEvent['attendees'] = [];
+  const person = (name: unknown, role: string, rsvp?: string) => {
+    // D4154 C1: a name that is itself an address is not shown; a staff scope names people, never emails.
+    const shown = personName(name);
+    if (shown) people.push({ name: shown, email: null, role, ...(rsvp ? { rsvp } : {}) });
+  };
+  if (row.people_json) for (const p of JSON.parse(row.people_json)) person(p.name,p.role,p.rsvp);
+  person(row.founder_name,'founder'); person(row.counterpart_name,'counterpart');
+  person(row.host_name,kind === 'advisor_booking' ? 'advisor' : 'partner'); person(row.requester_name,'requester');
+  let title = row.title;
+  let status = row.status;
+  let uid = row.uid;
+  if (kind === 'advisor_booking') title = `Advisor session — ${row.topic || ''}`.trim();
+  if (kind === 'partner_office_hour') title = `Partner office hours — ${row.topic || ''}`.trim();
+  if (kind === 'event_ticket') {
+    const place = placeOf({ status: row.reg_status, payment_status: row.payment_status, waitlist_position: row.waitlist_position });
+    status = place?.code; title = place?.mark ? `${place.mark}: ${row.title}` : row.title; uid = `reg-${row.id}`;
+  }
+  if (kind === 'event_hosted') uid = `event-${row.id}`;
+  if (kind === 'investor_meeting') {
+    const who = String(row.prospect_firm || row.prospect_name || '').trim() || 'an investor';
+    title = `Investor ${row.kind === 'call' ? 'call' : 'meeting'} · ${who}`; status = 'scheduled';
+  }
+  if (kind === 'compliance_due') status = row.completion_status === 'completed' ? 'completed' : 'scheduled';
+  const compliance: ComplianceFacts | undefined = kind === 'compliance_due' ? {
+    state: complianceState(row.completion_status, String(row.start_at), new Date().toISOString().slice(0, 10)),
+    due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
+    recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
+    source: row.source ?? null,
+    // D1614 CO4 (#3976): a staff scope reads venture rows only, so never a company-level task.
+    // The company badge is filled from the one batched lookup in fetchCalendarScope (D4154), not a second join here.
+    company: null,
+    company_task: false,
+  } : undefined;
+  return {
+    id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
+    title: title || 'Not recorded: this item has no title.', start_at: row.start_at,
+    end_at: row.end_at || (row.duration_min != null ? addMinutes(row.start_at,row.duration_min) : row.start_at),
+    status, location_kind: row.location_kind || null, location_uri: null, organizer_email: null, attendees: people,
+    notes: null, deal_id: row.deal_id ?? null, project_id: row.project_id ?? null,
+    ...(kind === 'event_ticket' || kind === 'event_hosted' ? { event_id: Number(row.event_id || row.id) } : {}),
+    cancel_reason: row.status === 'cancelled'
+      ? (kind === 'advisor_booking' || kind === 'partner_office_hour' ? bookingCancelReason(row.cancel_reason) : row.cancel_reason ?? null)
+      : null,
+    time_zone: row.time_zone || null,
+    ...(compliance ? { compliance } : {}),
+  };
+}
+
+/** D1206: deployment-bound read-only scope. Personal readers stay unchanged. */
+export interface CalendarScopeCoverage {
+  complete: boolean;
+  error: 'unreadable' | 'not_configured' | null;
+  reason: string | null;
+  truncated_kinds?: CalendarEvent['kind'][];
+  studios: { name: string | null; code: string | null; ok: boolean; error: 'unreadable' | 'not_configured' | null; reason: string | null }[];
+}
+export interface CalendarScopeItem extends CalendarItem {
+  read_only: true;
+  can: { rsvp: false; reschedule: false; cancel: false; copy: false };
+  /** D4154 C1 (#4196, `calendar/scopeFacts.ts`): who it belongs to, by name, never an email. */
+  owner: ScopeOwner | null;
+  /** C1: the company its venture sits in; null when none is recorded or the lookup failed. */
+  company: ScopeCompany | null;
+  /** C1: `scope=all` only, on every row: HQ's rows are HQ-held. */
+  studio?: ScopeStudio;
+  /** C1: the item's page inside its company — a link, never a write — or null. */
+  open_href: string | null;
+  /** C1: "<company> › <module>", or null when the company is not known. */
+  where: string | null;
+}
+export async function fetchCalendarScope(
+  env: Env, actor: User, scope: 'studio' | 'all', fromIso: string, toIso: string, kinds?: string[],
+): Promise<{ events: CalendarScopeItem[]; sources: CalendarSourceStatus[]; coverage: CalendarScopeCoverage }> {
+  const branch = branchOf(env);
+  if (actor.role !== 'admin' || (scope === 'all' && (branch || !isSuperAdmin(actor)))) throw new Error('Forbidden');
+  if (!validScopeWindow(fromIso,toIso)) throw new Error('Invalid calendar scope window');
+  // D1484: the personal page-only readers have no staff projection; they never enter a scope.
+  const wanted = KNOWN_KINDS.filter(kind => !SCOPED_EXCLUDED_KINDS.some(privateKind => privateKind === kind)
+    && !(PERSONAL_ONLY_KINDS as readonly string[]).includes(kind) && (!kinds?.length || kinds.includes(kind)));
+  const unavailable = (error: 'unreadable' | 'not_configured', reason: string) => ({
+    events: [], sources: wanted.map(kind => ({ kind, ok: false, error })),
+    coverage: { complete: false, error, reason, studios: [] },
+  });
+  if (scope === 'studio' && !branch) {
+    return unavailable('not_configured', 'Not read here yet: HQ has no member-to-licence association. Open the studio deployment.');
+  }
+  let name: string | null = null;
+  if (scope === 'studio') {
+    try {
+      const licence = await env.DB.prepare('SELECT licence_uid, brand_name, status FROM branch_licence WHERE id = ?')
+        .bind(1).first<{ licence_uid: string; brand_name: string | null; status: string }>();
+      if (!licence?.licence_uid || licence.status === 'terminated') return unavailable('not_configured', 'Not read here yet: this deployment has no current studio licence.');
+      name = licence.brand_name || null;
+    } catch {
+      return unavailable('unreadable', 'Unreadable: the studio licence could not be read. Try again.');
+    }
+  }
+  const coverage: CalendarScopeCoverage = { complete: true, error: null, reason: null, studios: [] };
+  if (scope === 'all') {
+    // No calendar RPC exists. The owner chose explicit unavailable remote
+    // coverage, not guessed membership or a call to another studio's database.
+    try {
+      const remote = await env.DB.prepare(`SELECT l.brand_name, d.code FROM territory_licences l
+        LEFT JOIN licence_deployments d ON d.licence_uid = l.uid WHERE l.status <> ? ORDER BY l.id`)
+        .bind('terminated').all<{ brand_name: string | null; code: string | null }>();
+      for (const row of remote.results || []) coverage.studios.push({ name: row.brand_name || null, code: row.code,
+        ok: false, error: 'not_configured', reason: 'Not read here yet: remote studio calendars have no reader.' });
+      for (const binding of branchBindings(env)) {
+        if (!coverage.studios.some(row => row.code === binding.code)) coverage.studios.push({ name: null, code: binding.code,
+          ok: false, error: 'not_configured', reason: 'Not read here yet: remote studio calendars have no reader.' });
+      }
+      if (coverage.studios.length) {
+        coverage.complete = false; coverage.error = 'not_configured';
+        coverage.reason = 'Not read here yet: remote studios are not included. These are HQ items only.';
+      }
+    } catch {
+      coverage.complete = false; coverage.error = 'unreadable';
+      coverage.reason = 'Unreadable: the studio register could not be read. These are HQ items only. Try again.';
+    }
+  }
+  // Verify the membership store can be read before returning any scoped data.
+  try {
+    await env.DB.prepare('SELECT id FROM users WHERE is_active = ? LIMIT ?').bind(1,1).all();
+  } catch {
+    return unavailable('unreadable', 'Unreadable: studio membership could not be read. Try again.');
+  }
+  const byId = new Map<string, CalendarEvent>();
+  const facts = new Map<string, ScopeRowFacts>();
+  const truncated: CalendarEvent['kind'][] = [];
+  // A staff scope reads only Axal tables, so its sources fail only as not configured or unreadable.
+  const sources: Array<CalendarSourceStatus & { error: 'not_configured' | 'unreadable' | null }> = [];
+  for (const kind of wanted) {
+    try {
+      const result = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);
+      if (result.truncated) truncated.push(kind);
+      for (const row of result.rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); facts.set(event.id,scopeRowFacts(kind,row)); }
+      sources.push({ kind, ok: true, error: null });
+    } catch (e) {
+      const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+      sources.push({ kind, ok: false, error });
+      console.warn('[calendar] scoped source failed', { kind, outcome: error });
+    }
+  }
+  if (truncated.length) {
+    coverage.complete = false; coverage.truncated_kinds = truncated;
+    coverage.reason = [coverage.reason, 'More items are recorded than this window can show. Narrow the date window to read them.'].filter(Boolean).join(' ');
+  }
+  const sourceFailure = sources.find(source => source.error === 'unreadable') || sources.find(source => !source.ok);
+  const sourceReason = !sourceFailure ? null : sourceFailure.error === 'not_configured'
+    ? 'Not read here yet: some calendar sources are not configured.'
+    : 'Unreadable: some calendar sources could not be read. Try again.';
+  if (sourceFailure) {
+    coverage.complete = false;
+    if (coverage.error !== 'unreadable') coverage.error = sourceFailure.error;
+    coverage.reason = [coverage.reason, sourceReason].filter(Boolean).join(' ');
+  }
+  coverage.studios.unshift({ name: scope === 'studio' ? name : 'HQ', code: branch || 'hq',
+    ok: !sourceFailure, error: sourceFailure?.error || null,
+    reason: sourceReason });
+  const described = await describeItems(env, actor, [...byId.values()].sort((a, b) => a.start_at.localeCompare(b.start_at)));
+  // D4154 C1: one batched company lookup for the whole read; a failure leaves each company null.
+  const companies = await scopeCompanies(env, described);
+  const events: CalendarScopeItem[] = described.map(event => {
+    const company = companyOf(event, companies);
+    // D1614 CO4: the deadline's own company badge is the same company the scope item names.
+    const compliance = event.kind === 'compliance_due' && event.compliance
+      ? { ...event.compliance, company: company ? { uid: company.uid, name: company.name } : null }
+      : undefined;
+    return {
+      ...event, ...(compliance ? { compliance } : {}),
+      organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
+      location_uri: null, notes: null, url: undefined, pushed_to: [], read_only: true as const,
+      my_role: { code: 'read_only', words: 'Read only' }, href: null,
+      can: { rsvp: false as const, reschedule: false as const, cancel: false as const, copy: false as const },
+      owner: facts.get(event.id)?.owner ?? null,
+      company,
+      ...(scope === 'all' ? { studio: { ...HQ_STUDIO } } : {}),
+      open_href: scopeOpenHref(event, facts.get(event.id), company),
+      where: scopeWhere(company, event.source?.module),
+    };
+  });
+  return { events, sources, coverage };
+}
+
+/** The strict read: a source that failed is an error, not a shorter list. */
+export async function fetchUserEvents(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  kinds?: string[],
+): Promise<CalendarEvent[]> {
+  // D1384: an empty ask is every feed kind, never every kind.
+  const wanted = (kinds && kinds.length ? kinds : FEED_KINDS).filter((k) => !(PAGE_ONLY_KINDS as readonly string[]).includes(k));
+  if (!wanted.length) return [];
+  const { events, sources } = await gather(env, userId, role, fromIso, toIso, wanted);
+  const failed = sources.find((s) => !s.ok);
+  if (failed) throw new Error(`calendar source ${failed.kind} failed: ${failed.error}`);
+  return events;
+}
+
+/**
+ * Stamp each event with the providers it has already been copied to.
+ *
+ * WHY THE PAGE NEEDS THIS AND COULD NOT HAVE IT. `/calendar` draws a
+ * "Pushed to Google" pill so a reader can tell a copied event from one that
+ * still needs pushing — push is one-time per event, so without the pill the
+ * only way to find out is to press the button again. The record has always
+ * existed in `calendar_sync_records` (written by the sync on every successful
+ * push, keyed on user + provider + source_kind + source_id); nothing ever read
+ * it back out to the feed.
+ *
+ * ONE QUERY FOR THE WHOLE PAGE, not one per event: a user has few of these
+ * rows, so the whole set is read and matched in memory rather than joined per
+ * kind across six readers with six different base tables.
+ *
+ * A row whose `last_error` is set is still counted as pushed — that column
+ * records a CANCEL that the provider refused (migration 181), which means the
+ * copy is, if anything, more certainly still sitting on their calendar.
+ */
+export async function attachPushRecords(
+  env: Env, userId: number, events: CalendarEvent[],
+): Promise<CalendarEvent[]> {
+  if (!events.length) return events;
+  try {
+    const sql = getSQL(env);
+    const rows = await sql`
+      SELECT provider, source_kind, source_id FROM calendar_sync_records WHERE user_id = ${userId}
+    ` as { provider: string; source_kind: string; source_id: number }[];
+    if (!rows.length) return events;
+    const byKey = new Map<string, string[]>();
+    for (const r of rows) {
+      const key = `${r.source_kind}:${r.source_id}`;
+      const list = byKey.get(key);
+      if (list) { if (!list.includes(r.provider)) list.push(r.provider); }
+      else byKey.set(key, [r.provider]);
+    }
+    return events.map((e) => {
+      const hit = byKey.get(`${e.kind}:${e.source_id}`);
+      return hit ? { ...e, pushed_to: hit } : e;
+    });
+  } catch (e) {
+    // The pill is an extra, not the page. If the mapping table cannot be read
+    // the agenda still renders; it just cannot say what was already pushed.
+    if (isMissingTableError(e) || isMissingColumnError(e)) return events;
+    console.warn('[calendar] push records unreadable', { user_id: userId }, e);
+    return events;
+  }
+}
+
+// ===========================================================================
+// ICS export — RFC 5545.
+// ===========================================================================
+function icsDt(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+}
+function icsEscape(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
+}
+
+/** The venue words and the URI together (D1033); for the six older kinds, the URI alone as before. */
+function locationLine(ev: CalendarEvent): string {
+  return [ev.place, ev.location_uri].filter(Boolean).join(' — ');
+}
+
+/** The notes, then the event page when the copy has one (D1033). */
+function bodyText(ev: CalendarEvent): string {
+  return [ev.notes || '', ev.url ? `Event page: ${ev.url}` : ''].filter(Boolean).join('\n\n');
+}
+
+export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal StudioOS'): string {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Axal StudioOS//EN',
+    `X-WR-CALNAME:${icsEscape(calendarName)}`,
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+  ];
+  const now = icsDt(new Date().toISOString());
+  for (const ev of events) {
+    if (ev.read_only) continue;
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${ev.kind}-${ev.source_uid}@axal.vc`);
+    lines.push(`DTSTAMP:${now}`);
+    lines.push(`DTSTART:${icsDt(ev.start_at)}`);
+    lines.push(`DTEND:${icsDt(ev.end_at)}`);
+    lines.push(`SUMMARY:${icsEscape(ev.title)}`);
+    if (ev.notes) lines.push(`DESCRIPTION:${icsEscape(ev.notes)}`);
+    const where = locationLine(ev);
+    if (where) lines.push(`LOCATION:${icsEscape(where)}`);
+    if (ev.url) lines.push(`URL:${icsEscape(ev.url)}`);
+    if (ev.ics_status) lines.push(`STATUS:${ev.ics_status}`);
+    for (const a of ev.attendees) {
+      if (a.email) lines.push(`ATTENDEE;CN=${icsEscape(a.name || a.email)}:mailto:${a.email}`);
+    }
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n') + '\r\n';
+}
+
+// ===========================================================================
+// Push to Google Calendar primary
+// ===========================================================================
+function googlePayload(ev: CalendarEvent): any {
+  const body: any = {
+    summary: ev.title,
+    description: bodyText(ev),
+    start: { dateTime: ev.start_at, timeZone: 'UTC' },
+    end: { dateTime: ev.end_at, timeZone: 'UTC' },
+    source: { title: 'Axal StudioOS', url: ev.url || 'https://axal.vc' },
+  };
+  const where = locationLine(ev);
+  if (where) body.location = where;
+  if (ev.ics_status === 'TENTATIVE') body.status = 'tentative';
+  // D4703: said outright, so the PATCH that follows a confirm turns a tentative copy firm.
+  else if (ev.ics_status === 'CONFIRMED') body.status = 'confirmed';
+  const att = ev.attendees
+    .filter(a => a.email && a.email !== ev.organizer_email)
+    .map(a => ({ email: a.email, displayName: a.name }));
+  if (att.length) body.attendees = att;
+  return body;
+}
+
+export type GoogleCalendarWriteLimit = 'rate' | 'usage';
+
+// Google Calendar reports both short rate limits and longer usage limits as 403.
+async function googleCalendarWriteLimit(response: Response): Promise<GoogleCalendarWriteLimit | undefined> {
+  if (response.status !== 403) return;
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const limit = 8_192;
+  const decoder = new TextDecoder();
+  let size = 0;
+  let body = '';
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => {});
+  }, 10_000);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) return;
+      body += decoder.decode(value, { stream: true });
+    }
+    if (timedOut) return;
+    const reasons = JSON.parse(body + decoder.decode())?.error?.errors;
+    if (!Array.isArray(reasons)) return;
+    if (reasons.some((entry) => entry?.reason === 'quotaExceeded')) return 'usage';
+    if (reasons.some((entry) => entry?.reason === 'rateLimitExceeded' || entry?.reason === 'userRateLimitExceeded')) {
+      return 'rate';
+    }
+  } catch {
+    return;
+  } finally {
+    clearTimeout(timeout);
+    void reader.cancel().catch(() => {});
+  }
+}
+
+export async function pushEventToGoogle(
+  accessToken: string, ev: CalendarEvent, googleEventId: string | null,
+  createKey?: string, refused?: (status: number, limit: GoogleCalendarWriteLimit | undefined) => void,
+): Promise<string | null> {
+  if (ev.read_only || ev.kind === 'calendly_event') return null;
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const payload = JSON.stringify(googlePayload(ev));
+  const patchEvent = (googleEventId: string) => fetchWithTimeout(
+    `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
+    { method: 'PATCH', headers, body: payload },
+  );
+  try {
+    if (googleEventId) {
+      const r = await patchEvent(googleEventId);
+      if (r.status === 404) {
+        // Remote was deleted — fall through to a fresh insert.
+      } else if (!r.ok) {
+        refused?.(r.status, await googleCalendarWriteLimit(r));
+        console.warn('[CAL] gcal patch', r.status);
+        return null;
+      } else {
+        return ((await r.json()) as any).id as string;
+      }
+    }
+    const r = await fetchWithTimeout(
+      `${GOOGLE_CALENDAR_API}/calendars/primary/events`,
+      { method: 'POST', headers, body: createKey ? JSON.stringify({ ...googlePayload(ev), id: createKey }) : payload },
+    );
+    if (r.status === 409 && createKey) {
+      const saved = await patchEvent(createKey);
+      if (saved.ok) return createKey;
+      refused?.(saved.status, await googleCalendarWriteLimit(saved));
+      return null;
+    }
+    if (!r.ok) {
+      refused?.(r.status, await googleCalendarWriteLimit(r));
+      console.warn('[CAL] gcal insert', r.status);
+      return null;
+    }
+    return ((await r.json()) as any).id as string;
+  } catch {
+    console.warn('[CAL] google_copy_failed');
+    return null;
+  }
+}
+
+export async function deleteEventFromGoogle(accessToken: string, googleEventId: string): Promise<boolean> {
+  try {
+    const r = await fetchWithTimeout(
+      `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
+  } catch (e: any) {
+    console.warn('[CAL] google_delete_failed');
+    return false;
+  }
+}
+
+// ===========================================================================
+// Push to Microsoft Graph /me/events
+// ===========================================================================
+function microsoftPayload(ev: CalendarEvent): any {
+  const body: any = {
+    subject: ev.title,
+    body: { contentType: 'text', content: bodyText(ev) },
+    start: { dateTime: ev.start_at, timeZone: 'UTC' },
+    end: { dateTime: ev.end_at, timeZone: 'UTC' },
+  };
+  const where = locationLine(ev);
+  if (where) body.location = { displayName: where };
+  if (ev.ics_status === 'TENTATIVE') body.showAs = 'tentative';
+  else if (ev.ics_status === 'CONFIRMED') body.showAs = 'busy';
+  const att = ev.attendees
+    .filter(a => a.email && a.email !== ev.organizer_email)
+    .map(a => ({
+      emailAddress: { address: a.email, name: a.name || a.email },
+      type: 'required',
+    }));
+  if (att.length) body.attendees = att;
+  return body;
+}
+
+export async function pushEventToMicrosoft(
+  accessToken: string, ev: CalendarEvent, eventId: string | null,
+  createKey?: string, refused?: (status: number) => void,
+): Promise<string | null> {
+  if (ev.read_only || ev.kind === 'calendly_event') return null;
+  const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  const payload = JSON.stringify(microsoftPayload(ev));
+  try {
+    if (eventId) {
+      const r = await fetchWithTimeout(
+        `${MICROSOFT_GRAPH}/me/events/${eventId}`,
+        { method: 'PATCH', headers, body: payload },
+      );
+      if (r.status === 404) {
+        // Fall through to fresh insert.
+      } else if (!r.ok) {
+        refused?.(r.status);
+        console.warn('[CAL] ms patch', r.status);
+        return null;
+      } else {
+        return ((await r.json()) as any).id as string;
+      }
+    }
+    const r = await fetchWithTimeout(
+      `${MICROSOFT_GRAPH}/me/events`,
+      { method: 'POST', headers, body: createKey ? JSON.stringify({ ...microsoftPayload(ev), transactionId: createKey }) : payload },
+    );
+    if (!r.ok) {
+      refused?.(r.status);
+      console.warn('[CAL] ms insert', r.status);
+      return null;
+    }
+    return ((await r.json()) as any).id as string;
+  } catch {
+    console.warn('[CAL] microsoft_copy_failed');
+    return null;
+  }
+}
+
+export async function deleteEventFromMicrosoft(accessToken: string, eventId: string): Promise<boolean> {
+  try {
+    const r = await fetchWithTimeout(
+      `${MICROSOFT_GRAPH}/me/events/${eventId}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
+  } catch (e: any) {
+    console.warn('[CAL] microsoft_delete_failed');
+    return false;
+  }
+}
+
+// ===========================================================================
+// User → provider sync. Iterates the user's events in window, upserts each
+// via the provider's API, mirrors the result into calendar_sync_records.
+// ===========================================================================
+export interface SyncSummary {
+  pushed: number; updated: number; failed: number; skipped: number; total: number;
+  /** These sources are excluded before any read; totals cover copy-eligible items. */
+  excluded_kinds: ['calendly_event'];
+  /** D1033 — My events copies taken off the provider because their place or event left. */
+  removed: number;
+}
+
+/**
+ * D1209 — a refused token refresh is the one failure the page words
+ * differently ("Reconnect"), so it is thrown as `connection_refused`.
+ */
+async function refreshOrRefuse(refresh: () => Promise<string>): Promise<string> {
+  try {
+    return await refresh();
+  } catch {
+    throw Object.assign(new Error('connection_refused'), { code: 'connection_refused' });
+  }
+}
+
+export async function syncUserToGoogle(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+): Promise<SyncSummary> {
+  const tok = await loadRefreshToken(env, 'google_oauth_tokens', userId);
+  if (!tok) throw new Error('not_connected');
+  const accessToken = await refreshOrRefuse(() => refreshGoogleAccessToken(env, tok.raw));
+  if (tok.wasPlaintext) await reencryptRefreshToken(env, 'google_oauth_tokens', userId, tok.raw);
+  return syncUserToProvider(env, userId, role, fromIso, toIso, 'google', accessToken);
+}
+
+export async function syncUserToMicrosoft(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+): Promise<SyncSummary> {
+  const tok = await loadRefreshToken(env, 'microsoft_oauth_tokens', userId);
+  if (!tok) throw new Error('not_connected');
+  const accessToken = await refreshOrRefuse(() => refreshMicrosoftAccessToken(env, tok.raw));
+  if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
+  return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
+}
+
+async function syncUserToProvider(
+  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  provider: 'google' | 'microsoft', accessToken: string,
+): Promise<SyncSummary> {
+  const sql = getSQL(env);
+  const copyKinds = KNOWN_KINDS.filter(kind => kind !== 'calendly_event');
+  const events = await fetchUserEvents(env, userId, role, fromIso, toIso, copyKinds);
+  let pushed = 0, updated = 0, failed = 0;
+  const { calendarCopyKey } = await import('./calendar/sync');
+  for (const ev of events) {
+    const rec = (await sql`
+      SELECT external_event_id FROM calendar_sync_records
+      WHERE user_id = ${userId} AND provider = ${provider}
+        AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
+    ` as any[])[0];
+    const existing = rec?.external_event_id || null;
+    const createKey = await calendarCopyKey(env, userId, provider, ev);
+    const newId = provider === 'google'
+      ? await pushEventToGoogle(accessToken, ev, existing, createKey)
+      : await pushEventToMicrosoft(accessToken, ev, existing, createKey);
+    if (!newId) { failed++; continue; }
+    const nowIso = new Date().toISOString();
+    if (rec) {
+      await sql`
+        UPDATE calendar_sync_records
+           SET external_event_id = ${newId}, last_synced_at = ${nowIso}
+         WHERE user_id = ${userId} AND provider = ${provider}
+           AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
+      `;
+      updated++;
+    } else {
+      try {
+        await sql`
+          INSERT INTO calendar_sync_records
+            (user_id, provider, source_kind, source_id, external_event_id, last_synced_at)
+          VALUES (${userId}, ${provider}, ${ev.kind}, ${ev.source_id}, ${newId}, ${nowIso})
+        `;
+        pushed++;
+      } catch {
+        // Concurrent insert — count as failed rather than silently update.
+        failed++;
+      }
+    }
+  }
+  const removed = await removeStaleMyEventCopies(env, userId, provider, accessToken);
+  const nowIso = new Date().toISOString();
+  const tokenTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
+  await sql.unsafe(
+    `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
+    [nowIso, userId],
+  );
+  return { pushed, updated, failed, skipped: 0, total: events.length, removed, excluded_kinds: ['calendly_event'] };
+}
+
+/**
+ * D1033 — a cancelled place or event leaves Google and Outlook on the next sync.
+ *
+ * The push above only ever adds and updates. For the six older kinds a cancel
+ * route calls `onAxalSessionCancelled`; nothing in the event routes does, so
+ * without this a ticket the member cancelled would sit on their Google calendar
+ * for good. The copies are found from the source rows (`staleMyEventCopies`),
+ * not from this sync's window. A refused delete keeps its mapping and records
+ * the error, as `onAxalSessionCancelled` does, so the next sync tries again.
+ */
+async function removeStaleMyEventCopies(
+  env: Env, userId: number, provider: 'google' | 'microsoft', accessToken: string,
+): Promise<number> {
+  const stale = await staleMyEventCopies(env, userId, provider);
+  let removed = 0;
+  for (const r of stale) {
+    const ok = provider === 'google'
+      ? await deleteEventFromGoogle(accessToken, r.external_event_id)
+      : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+    if (ok) {
+      await env.DB.prepare(
+        'DELETE FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?',
+      ).bind(userId, provider, r.source_kind, r.source_id).run();
+      removed++;
+    } else {
+      await env.DB.prepare(
+        `UPDATE calendar_sync_records SET last_error = ?, last_synced_at = ?
+          WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?`,
+      ).bind('delete_refused', new Date().toISOString(), userId, provider, r.source_kind, r.source_id).run();
+    }
+  }
+  return removed;
+}

@@ -1,0 +1,72 @@
+Objective
+  New investors and founders arrive with data already in Carta,
+  AngelList, HubSpot, Excel. Remove the re-typing barrier.
+
+Imports
+
+  1. Carta (founders)
+     Already partial coverage via Prompt L (integration). Add a
+     one-shot importer that walks the founder through linking and
+     pulls: company, securities, holders, vesting, option pool.
+     Imported rows tagged source='carta'.
+
+  2. AngelList Stack (founders)
+     CSV-only for now (their API is gated). Provide a CSV template
+     download + upload flow. Map to projects, captable_holders,
+     rounds.
+
+  3. Pitch deck (founders)
+     Upload PowerPoint or PDF deck → extract text per slide →
+     pre-fill the Pitch Deck Builder with the founder's existing
+     content. Use Cloudflare Browser Rendering or PDF-to-text
+     library for extraction.
+
+  4. Investor portfolio (investors)
+     CSV import: company name, ticker if public, investment date,
+     amount, instrument, current valuation. Map to a new
+     investor_portfolio_holdings table. Used in the
+     Investor Portal "Portfolio" tab.
+
+  5. HubSpot / Affinity (investors + partners)
+     Use existing integration token to import pipelines. Map to deals.
+     User picks which list/pipeline to import; confirms mapping
+     for stages.
+
+  6. Spreadsheet generic importer
+     Universal CSV importer for any list:
+       - User uploads CSV.
+       - Detects columns; user maps to platform fields.
+       - Preview before commit.
+       - Commits in batches of 100; reports row-level errors.
+     Useful for cap tables, contacts, KYC partners' lists, etc.
+
+Schema
+  CREATE TABLE data_imports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    source TEXT NOT NULL,            -- 'carta','angellist_csv',
+                                      -- 'deck_pdf','portfolio_csv',
+                                      -- 'hubspot','affinity','spreadsheet'
+    target TEXT NOT NULL,
+    rows_attempted INTEGER, rows_succeeded INTEGER, rows_failed INTEGER,
+    errors_json TEXT,
+    raw_file_r2_key TEXT,
+    started_at DATETIME, finished_at DATETIME,
+    status TEXT                       -- 'pending','running','succeeded',
+                                      -- 'partial','failed'
+  );
+
+UX
+  Settings > Data Imports page lists past imports with status + error
+  details. "Start a new import" routes to the type-specific wizard.
+
+Limits
+  Free tier: 1 import per month.
+  Growth: 10 / month.
+  Studio: unlimited.
+
+Acceptance
+  - Carta integration round-trips into platform cap-table.
+  - CSV importer handles a 1000-row file without timing out.
+  - Deck PDF extraction populates ≥ 5 slides of the new builder.
+  - Free / Growth limits enforced.

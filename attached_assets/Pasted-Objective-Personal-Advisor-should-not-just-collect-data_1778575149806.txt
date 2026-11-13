@@ -1,0 +1,63 @@
+Objective
+  Personal Advisor should not just collect data — it should *find*
+  things on the platform and route the user with one click. Examples:
+  "find a mentor for B2B sales in fintech", "open my pitch deck",
+  "where do I file 83(b)?", "show me investors matching my thesis",
+  "draft a co-founder agreement with vesting 4y/1y".
+
+Tool registry (server-side, cloudflare-worker/src/services/
+                advisor/tools.ts)
+  findMentor({sector, expertise[], availability})
+  findInvestor({sector, stage, ticket_range})
+  findPartner({offer_type, sector})
+  findDeal({sector, stage})
+  openPage(pageKey)                  returns deep-link path
+  startContract(template_key, params)
+  bookOfficeHours({with, when})
+  exploreDocs(topic)
+  draftCofounderAgreement({equity_split, vesting})
+  scheduleMeeting({with, when, agenda})
+  listMyTasks()
+  surfacePaywall({feature})
+
+Each tool:
+  - Wrapped with auth + tier + persona gating.
+  - Returns a small JSON shape with a `cta` block:
+      { label, route, primary: bool, secondary?: { label, route } }
+  - The advisor renders `cta` as a clickable button in the chat row.
+
+LLM tool-binding
+  qwen2.5-coder-32b-instruct used here — it follows JSON tool schemas
+  well. Fallback to llama-3.3-70b-fp8-fast if qwen times out.
+
+Search backing
+  Use the existing Vectorize binding (`axal-search`, 768-dim) plus
+  per-resource filters. Index every entity the advisor might surface
+  (mentors, investors, partners, founders' projects).
+  Cron job re-embeds new rows hourly via bge-base.
+
+Examples (these must work end-to-end)
+  User: "find a mentor for B2B sales in fintech"
+    → tool findMentor → returns top-3 mentor cards with book buttons.
+  User: "open my pitch deck"
+    → tool openPage('pitch_deck') → returns route /pitch-deck.
+  User: "I need a co-founder agreement, 50/50, 4y vesting"
+    → tool startContract('cofounder_agreement', {...}) → returns
+      route /legal/cofounder-agreement?prefill=... with a CTA card.
+  User: "show me investors who like seed AI infra"
+    → findInvestor → returns investor cards (locked behind pairwise
+      NDA stubs).
+  User: "what's TALC?"
+    → exploreDocs('talc') → returns docs anchor + 1-line summary.
+
+UI
+  Chat rows can now contain inline CTA buttons. Clicking routes
+  immediately, persists the action in advisor_messages, and updates
+  progress.
+
+Acceptance
+  - Each tool returns within p95 1.5s for warm path.
+  - Tool routes never bypass auth/tier.
+  - Free-tier user asking for a Studio-tier action gets a paywall
+    CTA, not a route.
+  - All actions logged.

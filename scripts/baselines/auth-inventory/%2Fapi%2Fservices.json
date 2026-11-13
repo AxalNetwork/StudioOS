@@ -1,0 +1,7 @@
+{
+  "POST /api/services/offerings/:id/engage": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

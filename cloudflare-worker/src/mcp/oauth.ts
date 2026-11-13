@@ -1,0 +1,240 @@
+/**
+ * D666 (#1496) — the StudioOS MCP server's OAuth 2.1 provider (D665, #1495),
+ * through `@cloudflare/workers-oauth-provider`: dynamic client registration
+ * (RFC 7591), PKCE (S256 only), authorization-server metadata (RFC 8414) and
+ * protected-resource metadata (RFC 9728).
+ *
+ * THE PATHS. `/mcp` is the protected resource (D784, #2204): the MCP server
+ * is its own protocol, answered before the Hono `/api` app, so its address is
+ * not under `/api`. `/api/mcp`, where it answered until 2026-10-20, answers
+ * 308 to the same path under `/mcp`. The authorization server's own endpoints
+ * sit at `/api/oauth/*`, OUTSIDE `/mcp`, because the provider treats
+ * everything under its `apiRoute` as a resource that needs a token, and a
+ * founder reaching the authorize endpoint has none yet. The discovery
+ * documents are at `/.well-known/oauth-*`. wrangler.toml's `run_worker_first`
+ * sends `/mcp`, `/mcp/*` and both discovery paths to this Worker instead of
+ * the SPA's fallback.
+ *
+ * THE FLAG. With `MCP_SERVER_ENABLED` anything but "true", `routeMcp` answers
+ * 404 for every one of those paths and the provider is never built.
+ *
+ * CONSENT GOES THROUGH THE SPA. The SPA signs requests with a bearer token
+ * from localStorage, not a cookie, so a plain redirect to the authorize
+ * endpoint says nothing about who is signed in. The authorize endpoint parks
+ * the parsed request in OAUTH_KV for ten minutes and redirects to
+ * `/connect/assistant?request=<id>`; the SPA reads and answers it through
+ * `routes/mcp_consent.ts`, signed in. Nothing is ever auto-approved.
+ */
+import { OAuthProvider, getOAuthApi, type OAuthProviderOptions, type AuthRequest } from '@cloudflare/workers-oauth-provider';
+import type { Env } from '../types';
+import { mcpApiHandler, serveMcp } from './server';
+import { apiKeysEnabled, looksLikeKey, rowCompanies, rowScopes, touchLastUsed, verifyKey, type KeyRow, type VerifyFailure } from '../services/apiKeys';
+import { keyFailuresExceeded, keyLimitId, recordKeyFailure, withinGrantLimit, type GrantProps } from './grants';
+
+export const MCP_PATH = '/mcp';
+/** D784: where the server answered until 2026-10-20; every path under it answers 308 to `MCP_PATH`. */
+export const LEGACY_MCP_PATH = '/api/mcp';
+export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oauth/token', register: '/api/oauth/register' } as const;
+/**
+ * D846 (#2467): the three read scopes are granted only by an explicit consent
+ * (or, from #2464 on, a key's own scopes). Each scope's wording on the
+ * consent page is `SCOPE_COPY` in `routes/mcp_consent.ts`.
+ */
+// D1343 (#3551): `mail:read` reads an email's context; `mail:write` drafts one. No scope sends.
+// D1588 (#3835): `raise:write` proposes deck changes and keeps follow-up drafts; it never saves a deck or sends.
+export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'raise:write', 'connectors:read', 'mail:read', 'mail:write', 'team:read', 'team:propose'] as const;
+export const CONSENT_TTL_SECONDS = 600;
+export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
+export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;
+export const requestedScopes = (scope: readonly string[] | undefined) => [...new Set(scope ?? [])].filter((s) => (SCOPES as readonly string[]).includes(s));
+export const offeredScopes = (env: Env) => SCOPES.filter(s => env.TEAM_AGENTS_ENABLED === 'true' || !s.startsWith('team:'));
+const HOUR = 3600;
+const DAY = 86_400;
+
+export const mcpEnabled = (env: Env) => env.MCP_SERVER_ENABLED === 'true' && !!env.OAUTH_KV;
+
+/** The origin the resource is named by: production's apex unless a deployment says otherwise. */
+export function publicOrigin(env: Env): string {
+  const raw = String(env.MCP_PUBLIC_ORIGIN || '').trim();
+  try { if (raw) return new URL(raw).origin; } catch { /* fall through */ }
+  return 'https://axal.vc';
+}
+
+/** Every path this module answers; the Worker's fetch sends these here before `app.fetch`. */
+export function isMcpPath(pathname: string): boolean {
+  if (pathname.startsWith(`${LEGACY_MCP_PATH}/consent/`)) return false; // the SPA's consent API, in routes/mcp_consent.ts
+  return pathname === MCP_PATH
+    || pathname.startsWith(`${MCP_PATH}/`)
+    || pathname === LEGACY_MCP_PATH
+    || pathname.startsWith(`${LEGACY_MCP_PATH}/`)
+    || Object.values(OAUTH_PATHS).includes(pathname as any)
+    || pathname.startsWith('/.well-known/oauth-authorization-server')
+    || pathname.startsWith('/.well-known/oauth-protected-resource');
+}
+
+/** A parked consent request, keyed by a random id. */
+export const consentKey = (id: string) => `mcp_consent:${id}`;
+export interface ParkedRequest { authRequest: AuthRequest; createdAt: number }
+
+/** The authorize endpoint: check the request, park it, and send the founder to the SPA's consent page. */
+async function authorize(request: Request, env: Env, helpers: ReturnType<typeof getOAuthApi>): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname !== OAUTH_PATHS.authorize || request.method !== 'GET') return new Response(null, { status: 404 });
+  let authRequest: AuthRequest;
+  try {
+    authRequest = await helpers.parseAuthRequest(request);
+  } catch {
+    return Response.json({ error: 'invalid_request', detail: 'The authorization request could not be read' }, { status: 400 });
+  }
+  // PKCE is required, and only S256 (the provider refuses `plain` itself).
+  if (!authRequest.codeChallenge || authRequest.codeChallengeMethod !== 'S256') {
+    return Response.json({ error: 'invalid_request', detail: 'PKCE with S256 is required' }, { status: 400 });
+  }
+  const offered = offeredScopes(env);
+  const scopes = requestedScopes(authRequest.scope).filter(s => (offered as readonly string[]).includes(s));
+  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: `Request at least one of ${offered.join(', ')}.` }, { status: 400 });
+  authRequest.scope = scopes;
+  const client = await helpers.lookupClient(authRequest.clientId);
+  if (!client) return Response.json({ error: 'invalid_client', detail: 'Unknown client' }, { status: 400 });
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const parked: ParkedRequest = { authRequest, createdAt: Date.now() };
+  await env.OAUTH_KV!.put(consentKey(id), JSON.stringify(parked), { expirationTtl: CONSENT_TTL_SECONDS });
+  return Response.redirect(`${url.origin}/connect/assistant?request=${id}`, 302);
+}
+
+export function providerOptions(env: Env): OAuthProviderOptions<Env> {
+  const origin = publicOrigin(env);
+  return {
+    apiRoute: `${origin}${MCP_PATH}`,
+    apiHandler: mcpApiHandler,
+    defaultHandler: { fetch: (req: Request, e: Env) => authorize(req, e, getOAuthApi(providerOptions(e), e)) } as any,
+    authorizeEndpoint: `${origin}${OAUTH_PATHS.authorize}`,
+    tokenEndpoint: `${origin}${OAUTH_PATHS.token}`,
+    clientRegistrationEndpoint: `${origin}${OAUTH_PATHS.register}`,
+    clientRegistrationTTL: CLIENT_REGISTRATION_TTL_SECONDS,
+    accessTokenTTL: HOUR,
+    refreshTokenTTL: 30 * DAY,
+    refreshTokenIdleTTL: 30 * DAY,
+    scopesSupported: offeredScopes(env),
+    resourceMetadata: {
+      resource: `${origin}${MCP_PATH}`,
+      authorization_servers: [origin],
+      scopes_supported: offeredScopes(env),
+      bearer_methods_supported: ['header'],
+      resource_name: 'StudioOS',
+    },
+  };
+}
+
+/** The OAuth helpers for the SPA's consent and grants routes. */
+export const oauthHelpers = (env: Env) => getOAuthApi(providerOptions(env), env);
+
+/** Answer an MCP or OAuth path, or 404 with the flag off. */
+export async function routeMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  if (!mcpEnabled(env)) return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+  const url = new URL(request.url);
+  const path = url.pathname;
+  // D784: the old address keeps working. 308 keeps the method and the body,
+  // so an MCP client's POST arrives at `/mcp` as it was sent.
+  if (path === LEGACY_MCP_PATH || path.startsWith(`${LEGACY_MCP_PATH}/`)) {
+    url.pathname = MCP_PATH + path.slice(LEGACY_MCP_PATH.length);
+    return new Response(null, { status: 308, headers: { location: url.toString() } });
+  }
+  // D842 (#2470): a member API key is answered here and never reaches the
+  // OAuth provider, which knows only its own tokens.
+  const bearer = bearerOf(request);
+  if ((path === MCP_PATH || path.startsWith(`${MCP_PATH}/`)) && looksLikeKey(bearer)) return serveWithKey(request, env, bearer!);
+  const bucket = path === OAUTH_PATHS.register ? 'register' : path === OAUTH_PATHS.authorize ? 'authorize' : null;
+  if (bucket && !(await withinPublicOAuthLimit(env, request, bucket))) {
+    return Response.json({ error: 'rate_limited', detail: 'Too many requests. Wait a minute.' }, { status: 429, headers: { 'Retry-After': '60' } });
+  }
+  return new OAuthProvider(providerOptions(env)).fetch(request, env, ctx);
+}
+
+/** The bearer token on a request, or null. */
+export function bearerOf(request: Request): string | null {
+  const m = /^Bearer\s+(\S+)$/i.exec(request.headers.get('Authorization') || '');
+  return m ? m[1] : null;
+}
+
+/** D842: what a refused key reads. Short, and never whether the key's id exists (plan §3). */
+export const KEY_REFUSALS: Readonly<Record<VerifyFailure | 'rate_limited', string>> = Object.freeze({
+  invalid_key: 'That API key is not valid.',
+  revoked_key: 'That API key has been revoked.',
+  expired_key: 'That API key has expired.',
+  rate_limited: 'Too many requests. Wait a minute and try again.',
+});
+
+const keyRefusal = (code: keyof typeof KEY_REFUSALS, status: number, headers: Record<string, string> = {}) =>
+  Response.json({ error: code, message: KEY_REFUSALS[code] }, {
+    status,
+    headers: status === 401 ? { 'WWW-Authenticate': `Bearer error="invalid_token", error_description="${code}"`, ...headers } : headers,
+  });
+
+/**
+ * D842 (#2470) — `/mcp` with a member API key (D841). The key resolves to the
+ * same principal an OAuth grant does (`GrantProps`), so every per-call check
+ * in `callTool` applies unchanged: the user is re-read, each company is
+ * re-checked against its owner's access, the scope is the key's own.
+ *
+ * - With `API_KEYS_ENABLED` off, every key is `invalid_key`.
+ * - An IP that has failed 10 key lookups this minute is refused before the
+ *   lookup, so ids cannot be enumerated; each failure answers 401 and never
+ *   says whether the id exists (`verifyKey`).
+ * - A live key's requests are counted at its own `rate_per_minute`
+ *   (`mcp_rl:key:<uid>`), 429 with `Retry-After` past it.
+ * - The bearer is never logged.
+ */
+async function serveWithKey(request: Request, env: Env, bearer: string): Promise<Response> {
+  const auth = await authenticateKey(request, env, bearer);
+  if (auth instanceof Response) return auth;
+  return serveMcp(request, env, auth.props, null, auth.scopes);
+}
+
+/**
+ * D1361: a member API key turned into the principal `/mcp` and the connector
+ * API (`routes/connector_api.ts`) both serve, or the refusal to answer with.
+ * The flag, the per-IP failure throttle, the key check, the key's own rate and
+ * `last_used_at` all happen here, once, for both. The bearer is never logged.
+ */
+export async function authenticateKey(request: Request, env: Env, bearer: string | null):
+  Promise<Response | { key: KeyRow; props: GrantProps; scopes: string[] }> {
+  if (!apiKeysEnabled(env) || !bearer) return keyRefusal('invalid_key', 401);
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (await keyFailuresExceeded(env, ip)) return keyRefusal('rate_limited', 429, { 'Retry-After': '60' });
+  const verified = await verifyKey(env, bearer);
+  if (!verified.ok) {
+    await recordKeyFailure(env, ip);
+    return keyRefusal(verified.reason, 401);
+  }
+  const { key } = verified;
+  if (!(await withinGrantLimit(env, keyLimitId(key.uid), Date.now(), key.rate_per_minute))) {
+    return keyRefusal('rate_limited', 429, { 'Retry-After': '60' });
+  }
+  await touchLastUsed(env, key.uid);
+  const createdMs = Date.parse(`${key.created_at.replace(' ', 'T')}Z`);
+  const props: GrantProps = {
+    userId: key.user_id,
+    clientId: `apikey:${key.uid}`,
+    companies: rowCompanies(key),
+    clientName: key.name,
+    redirectHost: null,
+    redirectUri: null,
+    grantedAt: Math.floor(createdMs / 1000),
+    keyUid: key.uid,
+  };
+  return { key, props, scopes: rowScopes(key) };
+}
+
+/** Edge per-IP throttle, before the provider; fail closed when the counter is unavailable.
+ * KV counters are best effort across edges. Durable D1 guards protect stored daily quotas.
+ */
+export async function withinPublicOAuthLimit(env: Env, request: Request, bucket: keyof typeof PUBLIC_OAUTH_LIMITS, now = Date.now()): Promise<boolean> {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const key = `mcp_public:${bucket}:${ip}:${Math.floor(now / 60_000)}`;
+  try {
+    const count = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
+    await env.RATE_LIMITS.put(key, String(count), { expirationTtl: 120 });
+    return count <= PUBLIC_OAUTH_LIMITS[bucket];
+  } catch { return false; }
+}

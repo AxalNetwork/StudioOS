@@ -1,0 +1,681 @@
+/**
+ * D786 (#2211) part 2 — /pricing, built to the owner's "Pricing" canvas
+ * (`design/incoming/StudioOS Pricing.dc.html`, 2026-10-20 revision).
+ *
+ * One page for visitors and members:
+ *   - a visitor reads it inside the public site's frame (`SitePage`: the
+ *     site's header, footer and light palette), as the canvas draws it;
+ *   - a signed-in member reads it inside the app's own shell, the top bar and
+ *     the left sidebar (`App.jsx` mounts it behind `guard`), with their own
+ *     plan marked "Current plan".
+ *
+ * Five tabs (Founder, Investor, Advisors, Operating Partners, Models), the
+ * selected one kept in `?for=`. Every figure is read: the plans, their monthly
+ * and yearly prices and the AI each includes from `GET /api/public/plans-and-packs`,
+ * the models and their billed prices from `GET /api/public/ai/models`
+ * (`pricingModel.js`). The copy is the canvas's (`sitePricing.js`).
+ */
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import SitePage from '../components/site/SitePage';
+import { usePageMeta } from '../lib/seo';
+import { track } from '../lib/funnel';
+import { api } from '../lib/api';
+import { publicPricingApi } from '../lib/api/publicPricing';
+import { useViewMode } from '../contexts/ViewModeContext';
+import { aiBudgetApi } from '../lib/api/aiBudget';
+import { usageApi } from '../lib/api/usage';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { addState, autoReloadLine, planBlock, storageLine } from './tokensBandModel';
+import { ADD_TOKENS_HASH, ADD_TOKENS_PATH, CUSTOM_PACK, TOPUP_UNAVAILABLE, customRangeLine, sellableCustom, usageMoney } from '../lib/aiTokens';
+import CheckoutSheet from '../components/checkout/CheckoutSheet';
+import PackSheet from '../components/checkout/PackSheet';
+import { planKeyOf } from '../components/checkout/checkoutModel';
+import {
+  PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  storageGroup, modelUsage, priceOf, usd,
+} from '../lib/pricingModel';
+import {
+  AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
+} from '../lib/sitePricing';
+import './pricing.css';
+
+/**
+ * The display face for lines that are not headings (a card's name, a price):
+ * the site's `ax-display` for a visitor, nothing for a member, whose shell's
+ * own face carries the page (app_typography: no page stylesheet sets a face).
+ */
+const Face = createContext('');
+
+const TICK = (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** One read's state: `loading`, `ready` with its body, or `unreadable`. */
+function useRead(fetcher) {
+  const [state, setState] = useState({ status: 'loading', body: null });
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState({ status: 'loading', body: null });
+    fetcher().then(
+      (body) => { if (live) setState({ status: 'ready', body }); },
+      () => { if (live) setState({ status: 'unreadable', body: null }); },
+    );
+    return () => { live = false; };
+  }, [fetcher, round]);
+  return [state, useCallback(() => setRound((n) => n + 1), [])];
+}
+
+function Tabs({ tab, onPick }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    const on = el?.querySelector('[aria-selected="true"]');
+    if (on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - 8);
+  }, [tab]);
+  return (
+    <div className="axp-tabwrap">
+      <div className="axp-tabs" role="tablist" aria-label="Pricing for" ref={ref}>
+        {PRICING_TABS.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={t.key === tab} data-testid={`pricing-tab-${t.key}`}
+            className={`axp-tab${t.key === tab ? ' is-on' : ''}`} onClick={() => onPick(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlanCard({ card, onCheckout, onSelect }) {
+  const D = useContext(Face);
+  const cls = `axp-card${card.highlight ? ' is-hi' : ''}${card.current ? ' is-current' : ''}`;
+  return (
+    <div className={cls} data-testid={`pricing-card-${card.id}`}>
+      {card.kick && <div className="axp-kick">{card.kick}</div>}
+      <div className="axp-card-head">
+        <span className={`axp-card-name${D}`}>{card.name}</span>
+        {card.current && <span className="axp-pill axp-pill-plan">Your plan</span>}
+      </div>
+      <div className="axp-card-tag">{card.tag}</div>
+      {card.offered ? (
+        <>
+          <div className="axp-price">
+            <span className={`axp-price-n${D}`} data-testid={`pricing-price-${card.id}`}>{card.price}</span>
+            {card.unit && <span className="axp-price-u">{card.unit}</span>}
+          </div>
+          <div className="axp-price-note">{card.note}</div>
+          {card.allowanceComparison && (
+            <p className="axp-small" data-testid={`pricing-ai-interval-${card.id}`}>
+              Included AI allowance per month: {card.allowanceComparison.monthly} with monthly billing;
+              {' '}{card.allowanceComparison.yearly} with yearly billing.
+              {card.allowanceComparison.differs && ' The annual subscription discount also reduces the monthly included AI allowance.'}
+            </p>
+          )}
+        </>
+      ) : (
+        <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
+      )}
+      {card.button.checkout && !card.button.disabled ? (
+        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
+      ) : card.button.to && !card.button.disabled ? (
+        <Link to={card.button.to} onClick={card.button.to.split('?')[0] === '/register' ? () => onSelect(card) : undefined} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
+      ) : (
+        <button type="button" className="axp-btn" disabled>{card.button.label}</button>
+      )}
+      <div className="axp-rule" />
+      {card.lead && <div className="axp-lead">{card.lead}</div>}
+      <ul className="axp-feats">
+        {card.feats.map((f) => <li key={f}><span className="axp-tick">{TICK}</span><span>{f}</span></li>)}
+      </ul>
+    </div>
+  );
+}
+
+/** A group's heading; D1172's Storage group carries the canvas's New pill. */
+function GroupHead({ t, meta }) {
+  return <div className="axp-group">{t}{meta?.fresh && <span className="axp-pill axp-pill-new axp-group-pill">New</span>}</div>;
+}
+
+/** D1172: "Best suited for" is a sentence, set in words rather than figures. */
+const cellClass = (meta, label) => (meta?.fresh && label === STORAGE_COMPARE.best ? 'axp-cell axp-cell-words' : 'axp-cell');
+
+function Compare({ tab, cards, storage = null }) {
+  const D = useContext(Face);
+  // D1172 (#3085, STG18–STG19): the Storage group comes last, from the public read.
+  const groups = [...(COMPARE[tab] || []), ...(storage ? [storage] : [])];
+  // The phone shows one plan: the member's own, else the second (the canvas's default).
+  const [pick, setPick] = useState(() => {
+    const own = cards.findIndex((c) => c.current);
+    return own >= 0 ? own : Math.min(1, cards.length - 1);
+  });
+  const at = Math.min(pick, cards.length - 1);
+  const cell = (v, key, cn = 'axp-cell') => {
+    const c = compareCell(v);
+    return (
+      <span key={key} role="cell" className={cn}>
+        {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
+        {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
+        {c.text}
+      </span>
+    );
+  };
+  const cols = { gridTemplateColumns: `minmax(0,1.6fr) repeat(${cards.length},minmax(0,1fr))` };
+  return (
+    <section className="axp-sec axp-compare" aria-labelledby="axp-compare-h">
+      <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>
+      <div className="axp-desk axp-table" role="table" aria-labelledby="axp-compare-h">
+        <div className="axp-thead" role="row" style={cols}><span role="columnheader">Feature</span>{cards.map((c) => <span key={c.id} role="columnheader" className={`axp-th${D}`}>{c.name}</span>)}</div>
+        {groups.map(([t, rows, meta]) => (
+          <React.Fragment key={t}>
+            <div role="row"><div role="cell" aria-colspan={cards.length + 1}><GroupHead t={t} meta={meta} /></div></div>
+            {rows.map((r) => (
+              <div key={r[0]} className="axp-row" role="row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
+                <span className="axp-row-l" role="rowheader">{r[0]}</span>
+                {r.slice(1).map((v, i) => cell(v, i, cellClass(meta, r[0])))}
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+      <div className="axp-phone">
+        <div className="axp-chips" role="tablist" aria-label="Plan">
+          {cards.map((c, i) => (
+            <button key={c.id} type="button" role="tab" aria-selected={i === at} className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
+          ))}
+        </div>
+        <div className="axp-table" role="table" aria-label={`${cards[at]?.name ?? ''} plan features`}>
+          {groups.map(([t, rows, meta]) => (
+            <React.Fragment key={t}>
+              <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
+              {rows.map((r) => (
+                <div key={r[0]} className="axp-row axp-row-phone" role="row"><span className="axp-row-l" role="rowheader">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
+              ))}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * #4651: back from sign-up or sign-in, the plan the visitor chose is said plainly when the price is not the one
+ * they saw, or when the plan or its yearly price is no longer sold. Nothing is chosen for them instead.
+ */
+function ReturnedNotice({ notice, onClose }) {
+  const D = useContext(Face);
+  const text = notice.kind === 'price'
+    ? `The price of ${notice.name} is now ${notice.now}${notice.interval === 'yearly' ? ' a year' : ' a month'}; it was ${notice.was} when you chose it. Checkout shows today’s price: review it before you pay.`
+    : notice.kind === 'interval'
+      ? `Yearly billing is not offered for ${notice.name} right now. Choose monthly or another plan below; nothing was chosen for you.`
+      : 'The plan you chose is no longer offered here. Choose a plan below; nothing was chosen for you.';
+  return (
+    <section className="axp-sec" role="status" data-testid={`pricing-returned-${notice.kind}`}>
+      <div className="axp-unavail">
+        <div><div className={`axp-unavail-t${D}`}>{text}</div></div>
+        <button type="button" className="axp-btn" onClick={onClose}>OK</button>
+      </div>
+    </section>
+  );
+}
+
+function Unavailable({ onRetry }) {
+  const D = useContext(Face);
+  return (
+    <div className="axp-unavail" role="alert">
+      <div>
+        <div className={`axp-unavail-t${D}`}>Prices unavailable. Try again.</div>
+        <div className="axp-unavail-s">The price list could not be read just now.</div>
+      </div>
+      <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="axp-grid axp-grid-3" aria-busy="true" aria-label="Loading prices">
+      {[0, 1, 2].map((k) => (
+        <div key={k} className="axp-card axp-skel">
+          <i style={{ width: '40%', height: 18 }} /><i style={{ width: '75%' }} /><i style={{ width: '45%', height: 38 }} />
+          <i style={{ height: 44 }} /><i style={{ width: '85%' }} /><i style={{ width: '70%' }} /><i style={{ width: '80%' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Models({ read, onRetry }) {
+  if (read.status === 'loading') return <Skeleton />;
+  const tab = read.status === 'ready' ? modelsTab(read.body) : { unreadable: true };
+  if (tab.unreadable) return <Unavailable onRetry={onRetry} />;
+  return modelGroups(tab.models, MODEL_GROUPS).map((g) => {
+    const units = [];
+    for (const m of g.rows) for (const p of modelPrices(m)) if (!units.some((u) => u.unit === p.unit)) units.push(p);
+    const cols = { gridTemplateColumns: `minmax(0,1.3fr) minmax(0,1.7fr) repeat(${units.length},minmax(110px,150px))` };
+    return (
+      <div key={g.t} className="axp-mgroup">
+        <h3 className="axp-mgroup-t">{g.t}</h3>
+        <div className="axp-desk axp-table">
+          <div className="axp-mhead" style={cols}>
+            <span>Model</span><span>Used for</span>
+            {units.map((u) => <span key={u.unit} className="axp-num">{u.label}</span>)}
+          </div>
+          {g.rows.map((m) => {
+            const prices = modelPrices(m);
+            return (
+              <div key={m.id} className="axp-mrow" style={cols} data-testid={`pricing-model-${m.id}`}>
+                <span className="axp-mname"><b>{m.name}</b>{m.is_new && <span className="axp-pill axp-pill-new">New</span>}{m.paid_only && <span className="axp-pill">Paid plans</span>}</span>
+                <span className="axp-mused">{modelUsage(m)}</span>
+                {units.map((u) => <span key={u.unit} className="axp-num axp-mono">{prices.find((p) => p.unit === u.unit)?.value ?? '—'}</span>)}
+              </div>
+            );
+          })}
+        </div>
+        <div className="axp-phone axp-mcards">
+          {g.rows.map((m) => (
+            <div key={m.id} className="axp-mcard">
+              <span className="axp-mname"><b>{m.name}</b>{m.is_new && <span className="axp-pill axp-pill-new">New</span>}{m.paid_only && <span className="axp-pill">Paid plans</span>}</span>
+              <span className="axp-mused">{modelUsage(m)}</span>
+              {modelPrices(m).map((p) => <span key={p.unit} className="axp-mprice"><span className="axp-mono">{p.value}</span> {p.label}</span>)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  });
+}
+
+/**
+ * D1285 (#2452): the "Your AI tokens" band, first on the Models tab for a
+ * signed-in member (the "Add tokens" canvas's CRP1, CRP11 and CRP14). The
+ * balance is `GET /api/ai-budget/me`'s; a failed read says so and never draws
+ * a zero. Add tokens opens the checkout sheet's pack mode in place (D1287).
+ *
+ * D1286 (#3369): the middle block (the plan, its allowance left and the reset
+ * day, or the profile's line, CRP13), the storage line from D1166's read, the
+ * allowance-then-tokens bar with each part labelled, the auto-reload line from
+ * D794's read, the Super Admin's pointer to HQ (CRP18), and Add tokens
+ * disabled with its line when nothing is on sale (CRP10). The words and rules
+ * are `tokensBandModel.js`'s; this only draws them.
+ */
+function TokensBand({ read, onRetry, onAdd, storage, autoReload, packs, user }) {
+  const D = useContext(Face);
+  const me = read.status === 'ready' ? read.body : null;
+  const balance = me && Number.isSafeInteger(me.balance_microusd) ? usageMoney(me.balance_microusd) : null;
+  const plan = me ? planBlock(me, { superAdmin: isSuperAdminUser(user) }) : null;
+  const store = plan?.state === 'ok' ? storageLine(storage) : null;
+  const auto = autoReloadLine(autoReload);
+  const add = addState({ meLoading: read.status === 'loading', packCount: packs.status === 'ready' ? packCards(packs.body).length : null,
+    custom: packs.status === 'ready' && sellableCustom(packs.body?.custom) });
+  return (
+    <section className="axp-sec axp-tokband" id="add-tokens" aria-label="Your AI tokens" data-testid="pricing-tokens-band">
+      {me?.ai_paused && <p className="axp-tokband-note" role="status">{TOKENS_BAND.paused}</p>}
+      <div className="axp-tokband-card">
+        <div className="axp-tokband-row">
+          <div className="axp-tokband-main">
+            <div>
+              <div className="axp-kick">{TOKENS_BAND.kick}</div>
+              {read.status === 'loading' && <div className="axp-muted" aria-busy="true">{TOKENS_BAND.reading}</div>}
+              {balance != null && <div className={`axp-tokband-n axp-mono${D}`}>{balance}</div>}
+              {balance != null && <div className="axp-muted">{TOKENS_BAND.never}</div>}
+              {read.status !== 'loading' && balance == null && (
+                <div className="axp-tokband-bad" role="alert">
+                  <span>{TOKENS_BAND.unreadable}</span>
+                  <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+                </div>
+              )}
+            </div>
+            {plan && (
+              <div className="axp-tokband-plan" data-testid="pricing-tokens-plan">
+                {plan.state === 'unreadable' ? <span className="axp-tokband-line">{plan.line}</span> : (<>
+                  <span className="axp-kick">{plan.eye}</span>
+                  {plan.plan && <span className="axp-tokband-name">{plan.plan}</span>}
+                  {plan.lines.map((l) => <span key={l} className="axp-tokband-line">{l}</span>)}
+                  {store && (
+                    <span className="axp-tokband-sub" data-testid="pricing-tokens-storage">
+                      {store.text}{store.state !== 'unreadable' && <> <Link to="/account/usage/storage" className="axp-tokband-link">{TOKENS_BAND.storageLink}</Link></>}
+                    </span>
+                  )}
+                  {plan.hq && (
+                    <span className="axp-tokband-sub" data-testid="pricing-tokens-hq">
+                      {TOKENS_BAND.hq} <Link to="/admin/platform/allowances" className="axp-tokband-link">{TOKENS_BAND.hqLink}</Link>
+                    </span>
+                  )}
+                </>)}
+              </div>
+            )}
+          </div>
+          <div className="axp-tokband-act">
+            {add.enabled
+              ? <button type="button" className="axp-btn is-primary axp-tokband-add" onClick={() => onAdd(null)} data-testid="pricing-tokens-add">{TOKENS_BAND.add}</button>
+              : (<>
+                <button type="button" className="axp-btn is-primary axp-tokband-add" disabled aria-disabled="true" aria-describedby="axp-tokband-off" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</button>
+                <span id="axp-tokband-off" className="axp-tokband-sub" data-testid="pricing-tokens-add-off">{add.line}</span>
+              </>)}
+            {auto && (
+              <span className="axp-tokband-sub" data-testid="pricing-tokens-auto">
+                {auto.text} · <Link to="/account/billing#auto-reload" className="axp-tokband-link">{auto.link}</Link>
+              </span>
+            )}
+          </div>
+        </div>
+        {plan?.state === 'ok' && (
+          <div className="axp-tokband-barwrap" data-testid="pricing-tokens-bar">
+            <div className="axp-tokband-bar" role="img" aria-label={plan.bar.label}>
+              {plan.bar.parts.map((p) => (p.pct > 0 ? <span key={p.id} className={`axp-tokband-seg is-${p.id}`} style={{ width: `${p.pct.toFixed(1)}%` }} /> : null))}
+            </div>
+            <div className="axp-tokband-legend">
+              {plan.bar.parts.map((p) => <span key={p.id} className="axp-tokband-key"><span className={`axp-tokband-dot is-${p.id}`} aria-hidden="true" />{p.label}</span>)}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * D1285 (#2452): Token packs, above the model tables (CRP1, CRP6, CRP10–CRP12).
+ * One Buy per pack, which opens the checkout sheet's pack mode on that pack
+ * (D1287), never a second pricing page; a visitor signs in and comes back
+ * here. A failed read says so with Try again, never an empty list.
+ */
+function Packs({ read, onRetry, signedIn, onBuy }) {
+  const D = useContext(Face);
+  const packs = read.status === 'ready' ? packCards(read.body) : [];
+  // D1434: the custom amount is its own card, after the packs, and the only one when no pack is on sale.
+  const anyAmount = read.status === 'ready' ? customRangeLine(read.body?.custom) : null;
+  const back = `/login?next=${encodeURIComponent(ADD_TOKENS_PATH)}`;
+  return (
+    <section className="axp-sec" id="token-packs" aria-labelledby="axp-packs-h" data-testid="pricing-token-packs">
+      <div className="axp-kick">{PACKS.kick}</div>
+      <h2 id="axp-packs-h" className="axp-h2 axp-h2-s">{PACKS.title}</h2>
+      <p className="axp-p">{PACKS.text}</p>
+      {read.status === 'loading' && (
+        <div className="axp-packs" aria-busy="true">
+          {[0, 1, 2].map((k) => <div key={k} className="axp-pack axp-skel"><span className="axp-muted">Reading…</span></div>)}
+        </div>
+      )}
+      {read.status === 'unreadable' && (
+        <div className="axp-unavail" role="alert">
+          <div className="axp-unavail-s">{PACKS.unreadable}</div>
+          <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+        </div>
+      )}
+      {read.status === 'ready' && (packs.length || anyAmount ? (
+        <div className="axp-packs">
+          {packs.map((p) => (
+            <div key={p.uid} className="axp-pack" data-testid={`pricing-pack-${p.uid}`}>
+              <span className="axp-pack-t">{p.price} of AI tokens</span>
+              <span className={`axp-pack-n${D}`}>{p.price}</span>
+              {p.offers.map((o) => <span key={o} className="axp-pill axp-pill-offer">{o}</span>)}
+              {signedIn
+                ? <button type="button" className="axp-btn" onClick={() => onBuy(p.uid)} data-testid={`pricing-pack-buy-${p.uid}`}>Buy</button>
+                : <Link to={back} className="axp-btn">Sign in to buy</Link>}
+            </div>
+          ))}
+          {anyAmount && (
+            <div className="axp-pack" data-testid="pricing-pack-custom">
+              <span className="axp-pack-t">AI tokens, any amount</span>
+              <span className={`axp-pack-n${D}`}>Any amount</span>
+              <span className="axp-pill">{anyAmount}</span>
+              {signedIn
+                ? <button type="button" className="axp-btn" onClick={() => onBuy(CUSTOM_PACK)} data-testid="pricing-pack-buy-custom">Choose an amount</button>
+                : <Link to={back} className="axp-btn">Sign in to buy</Link>}
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="axp-p axp-muted">{TOPUP_UNAVAILABLE}</p>
+      ))}
+      <p className="axp-small axp-muted">{PACKS.foot}</p>
+    </section>
+  );
+}
+
+function Faq({ tab }) {
+  const items = tab === 'investor' ? [...FAQ_INVESTOR, ...FAQ] : FAQ;
+  const [open, setOpen] = useState(0);
+  return (
+    <section className="axp-sec axp-faq" aria-labelledby="axp-faq-h">
+      <h2 id="axp-faq-h" className="axp-h2">Questions</h2>
+      <div className="axp-faq-list">
+        {items.map(([q, a], i) => (
+          <div key={q} className="axp-faq-item">
+            <button type="button" aria-expanded={i === open} onClick={() => setOpen(i === open ? -1 : i)}>
+              <span>{q}</span><span className="axp-faq-chev" aria-hidden="true">{i === open ? '−' : '+'}</span>
+            </button>
+            {i === open && <p>{a}</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** The page's body: the same in both frames. `user` is the signed-in member, or null for a visitor. */
+export function PricingBody({ user = null }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const role = useViewMode()?.shellRole ?? null;
+  const tab = initialTab(location.search, user ? role : null);
+  const [billing, setBilling] = useState('monthly');
+  useEffect(() => {
+    if (tab !== 'models') track('pricing_view', { audience: tab, plan: null, interval: billing });
+  }, [tab, billing]);
+  const selectPlan = (card) => {
+    if (card.selection?.plan) track('pricing_plan_selected', { audience: tab, ...card.selection });
+  };
+  // D1048 (#2451): the card whose checkout sheet is open, over this page; no route change.
+  const [checkout, setCheckout] = useState(null);
+  // D1287: Add tokens and a pack's Buy open the sheet's pack mode in place, on that pack.
+  const [packSheet, setPackSheet] = useState(null);
+  const [plans, retryPlans] = useRead(publicPricingApi.plansAndPacks);
+  const [models, retryModels] = useRead(publicPricingApi.aiModels);
+  // D1285 (#2452): a member's token balance, read on the Models tab only.
+  const roleTab = tab !== 'models';
+  const meFetch = useCallback(() => (user && !roleTab ? aiBudgetApi.mine() : Promise.resolve(null)), [user, roleTab]);
+  const [me, retryMe] = useRead(meFetch);
+  // D1286 (#3369): the band's storage and auto-reload lines, read on the Models tab only.
+  const storageFetch = useCallback(() => (user && !roleTab ? usageApi.storage() : Promise.resolve(null)), [user, roleTab]);
+  const [storage] = useRead(storageFetch);
+  const autoFetch = useCallback(() => (user && !roleTab ? aiBudgetApi.autoReload() : Promise.resolve(null)), [user, roleTab]);
+  const [autoReload] = useRead(autoFetch);
+  // D1049 (#2900): an Advisor's or Operating Partner's plan is in account_subscriptions,
+  // read from their plan status only on their own tab.
+  const wantPlan = needsPlanStatus(user, role, tab);
+  const planFetch = useCallback(() => (wantPlan ? api.planStatus() : Promise.resolve(null)), [wantPlan]);
+  const [planRead, retryPlan] = useRead(planFetch);
+
+  const pickTab = (key) => {
+    const q = new URLSearchParams(location.search);
+    q.set('for', key);
+    navigate({ pathname: location.pathname, search: `?${q}`, hash: location.hash }, { replace: true });
+  };
+
+  const specs = PLAN_CARDS[tab] || [];
+  const built = roleTab && plans.status === 'ready'
+    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user, tab })
+    : null;
+  const ready = built && !built.unreadable;
+  const D = user ? '' : ' ax-display';
+
+  // D1053 (#2904, PAYX19a): back from sign-in, the sheet opens on the plan the member chose
+  // (`?checkout=<plan key>&interval=`), and the address drops the request so Back does not reopen it.
+  // #4651: `seen` is the amount the card showed when it was chosen. A different price now, or a plan
+  // or interval no longer sold, is said before the sheet, and nothing else is chosen instead.
+  const wanted = new URLSearchParams(location.search).get('checkout');
+  const [returned, setReturned] = useState(null);
+  // #4651: only a member's Pricing takes the ask. The Google return lands here signed out until its forced /me
+  // answers; taking it then read signed-out cards (none opens checkout), dropped the ask from the address, and the
+  // member's Pricing that mounts a moment later had nothing to open. A visitor's address keeps it untouched.
+  useEffect(() => {
+    if (!wanted || !ready || !user) return;
+    const q = new URLSearchParams(location.search);
+    const iv = q.get('interval');
+    const seen = Number(q.get('seen'));
+    q.delete('checkout'); q.delete('interval'); q.delete('seen');
+    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
+    const card = built.cards.find((c) => c.button?.checkout && planKeyOf(c.plan) === wanted);
+    if (!card) { setReturned({ kind: 'gone' }); return; }
+    const interval = iv === 'yearly' ? 'yearly' : 'monthly';
+    const now = priceOf(card.plan, interval === 'yearly' ? 'year' : 'month');
+    if (interval === 'yearly' && !now) { setReturned({ kind: 'interval', name: card.name }); return; }
+    if (iv === 'yearly' || iv === 'monthly') setBilling(iv);
+    if (Number.isSafeInteger(seen) && seen > 0 && now && now.unit_amount !== seen) {
+      setReturned({ kind: 'price', name: card.name, was: usd(seen), now: usd(now.unit_amount), interval });
+    }
+    setCheckout(card);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, ready, !!user]);
+
+  // D1288 (#3371): `ADD_TOKENS_PATH` (Models with `ADD_TOKENS_HASH`, and `&pack=<uid>` from an
+  // old address) opens the sheet on Models for a member, once; the address then drops the ask so
+  // Back does not reopen it. A visitor stays on the packs, whose Buy signs in and comes back here.
+  const addAsk = location.hash === ADD_TOKENS_HASH ? new URLSearchParams(location.search).get('pack') || '' : null;
+  useEffect(() => {
+    if (addAsk == null || !user || roleTab) return;
+    const q = new URLSearchParams(location.search);
+    q.delete('pack');
+    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: '' }, { replace: true });
+    setPackSheet({ pack: addAsk || null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAsk, user, roleTab]);
+
+  return (
+    <Face.Provider value={D}>
+    <div className={`axp${user ? ' axp-app' : ''}`} data-testid="pricing-page">
+      <section className="axp-hero">
+        <img src="/site/home-hero.webp" alt="" className="axp-hero-image" />
+        <div aria-hidden="true" className="axp-hero-shade" />
+        <h1 className="axp-h1">{HERO.title}</h1>
+        <p className="axp-hero-p">{HERO.line}</p>
+        <Tabs tab={tab} onPick={pickTab} />
+        {ready && built.sells && (
+          <div className="axp-bill">
+            <div className="axp-bill-sw" role="group" aria-label="Billing">
+              {[['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([k, t]) => (
+                <button key={k} type="button" aria-pressed={billing === k} className={billing === k ? 'is-on' : ''} onClick={() => setBilling(k)}>{t}</button>
+              ))}
+            </div>
+            {built.saving && <span className="axp-save">{built.saving}</span>}
+            <span className="axp-small" data-testid="pricing-billing-allowance-note">
+              Compare each plan's monthly AI allowance below; yearly billing can change the included amount. Full annual charges are shown on the cards.
+            </span>
+          </div>
+        )}
+      </section>
+
+      {roleTab && returned && <ReturnedNotice notice={returned} onClose={() => setReturned(null)} />}
+
+      {roleTab && (
+        <section className="axp-sec axp-plans">
+          {plans.status === 'loading' && <Skeleton />}
+          {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
+          {ready && (
+            <div className={`axp-grid axp-grid-${built.cards.length}`}>
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} onSelect={selectPlan} />)}
+            </div>
+          )}
+          {ready && tab === 'investor' && (
+            <div className="axp-lp">
+              <div className="axp-lp-main">
+                <div className="axp-kick">{LP_ACCESS.kick}</div>
+                <div className="axp-lp-head"><span className={`axp-lp-name${D}`}>{LP_ACCESS.name}</span><span className={`axp-lp-name${D}`}>$0</span><span className="axp-price-u">/ month</span></div>
+                <div className="axp-p">{LP_ACCESS.text}</div>
+                <div className="axp-small">{LP_ACCESS.note}</div>
+                {(() => {
+                  // D1172 (#3085, STG18b): the LP band's storage line, from lp_access's row in the public read.
+                  const line = lpStorageLine(plans.body, STORAGE_COMPARE);
+                  return (
+                    <div className="axp-lp-storage" data-testid="pricing-lp-storage">
+                      {line ? (<>
+                        <span className="axp-lp-storage-t">{line.text}<span className="axp-pill axp-pill-new axp-group-pill">New</span></span>
+                        <span className="axp-small">{line.note}</span>
+                      </>) : <span className="axp-small">{STORAGE_COMPARE.lpMissing}</span>}
+                    </div>
+                  );
+                })()}
+                <Link to={LP_ACCESS.link.to} className="axp-btn axp-btn-inline">{LP_ACCESS.link.label}</Link>
+              </div>
+              <ul className="axp-lp-feats">
+                {LP_ACCESS.feats.map((f) => <li key={f}><span className="axp-tick">{TICK}</span>{f}</li>)}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+      {ready && (
+        <section className="axp-sec">
+          <div className="axp-band">
+            <div>
+              <div className="axp-kick">{AI_BAND.kick}</div>
+              <p className="axp-band-p">{AI_BAND.text}</p>
+            </div>
+            <button type="button" className="axp-btn axp-btn-band" onClick={() => pickTab('models')}>{AI_BAND.link}</button>
+          </div>
+        </section>
+      )}
+
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} />}
+
+      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} onAdd={(uid) => setPackSheet({ pack: uid })} />}
+      {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} onBuy={(uid) => setPackSheet({ pack: uid })} />}
+      {!roleTab && (
+        <section className="axp-sec axp-models">
+          <p className="axp-p">{MODELS_LINE}</p>
+          <Models read={models} onRetry={retryModels} />
+        </section>
+      )}
+
+      <Faq key={`faq-${tab}`} tab={tab} />
+
+      {!user && (
+        <section className="axp-sec">
+          <div className="axp-closing">
+            <div>
+              <div className={`axp-closing-t${D}`}>{CLOSING.title}</div>
+              <div className="axp-closing-s">{CLOSING.line}</div>
+            </div>
+            <div className="axp-closing-a">
+              <Link to="/register" className="axp-btn axp-btn-white">Get started</Link>
+              <Link to="/contact" className="axp-btn axp-btn-ghost">Talk to us</Link>
+            </div>
+          </div>
+        </section>
+      )}
+      {checkout && (
+        <CheckoutSheet plan={checkout.plan} spec={specs.find((x) => x.id === checkout.id)} user={user} role={role}
+          held={heldCard(user, role, tab, planRead)} planRead={wantPlan ? planRead : null} onRetryPlan={retryPlan} interval={billing} onClose={() => setCheckout(null)} />
+      )}
+      {packSheet && user && <PackSheet pack={packSheet.pack} from="Models" onClose={() => { setPackSheet(null); retryMe(); }} />}
+    </div>
+    </Face.Provider>
+  );
+}
+
+/** A member's /pricing: inside the app shell, so the page sets its own title. */
+function MemberPricing({ user }) {
+  usePageMeta({ title: 'Pricing' });
+  return <PricingBody user={user} />;
+}
+
+/**
+ * `/pricing`. `App.jsx` passes `user` for a signed-in member and mounts it
+ * behind `guard`, inside the app's top bar and left sidebar; a visitor gets
+ * the public site's frame.
+ */
+export default function PricingPage({ user = null }) {
+  if (user) return <MemberPricing user={user} />;
+  return (
+    <SitePage title="Pricing">
+      <PricingBody />
+    </SitePage>
+  );
+}

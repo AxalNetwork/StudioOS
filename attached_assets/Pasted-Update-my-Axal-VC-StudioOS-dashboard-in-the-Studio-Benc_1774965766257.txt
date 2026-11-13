@@ -1,0 +1,44 @@
+Update my Axal VC StudioOS dashboard in the "Studio Benchmarks" section.
+
+Current layout (exactly as in the first screenshot):
+- Light background (#f8f9fa or similar)
+- Top navigation: "Market Intelligence" with 5 tabs (Market Pulse, Public Markets, Private Rounds, High Conviction, Studio Benchmarks). Studio Benchmarks tab is purple (#7e22ce) and active.
+- 8 white rounded cards in a 2-row × 4-column responsive grid.
+- Each card style: 
+  - Title in uppercase gray text (small font)
+  - Big bold black number/metric (very large)
+  - Smaller gray line below: "Target: xxx"
+  - Subtle shadow, clean sans-serif font, generous padding
+
+Existing cards (keep these exactly, with their current values):
+1. AVG TIME TO INC. → 11 days (Target: < 14 days)
+2. FOUNDER MATCH RATE → 88% (Target: > 80%)
+3. API REUSABILITY → 65% (Target: > 60%)
+4. DRY POWDER → $4.5M (Target: Active)
+5. TIME TO FIRST CHECK → 28 days (Target: < 30 days)
+6. IDEA → FUNDED RATE → 23% (Target: > 20%)
+7. ACTIVE BATCH SIZE → 8 (Target: 5-10)
+8. PORTFOLIO COMPANIES → 12 (Target: Growing)
+
+Now expand the grid by adding these 6 new high-impact benchmark cards (based on the studio flowchart in the second screenshot). Add them as a clean third row (or make the whole grid responsive 4-column with 3 rows total). Use the exact same card design and styling.
+
+New cards (with realistic sample values and my suggested targets):
+9. DECISION GATE PASS RATE → 72% (Target: > 65%)
+10. AVG TIME TO SPIN-OUT → 68 days (Target: < 90 days)
+11. AVG FOUNDER EQUITY AT SPIN-OUT → 68% (Target: 60-75%)
+12. FOLLOW-ON FUNDING RATE → 75% (Target: > 70%)
+13. AVG VALUATION AT FIRST ROUND → $9.2M (Target: > $8M)
+14. COST PER SPIN-OUT → $185k (Target: <$250k)
+
+Optional 5th new card if space allows:
+15. DEPLOYMENT VELOCITY → 35% (Target: > 40% / quarter)   ← ties directly to the $4.5M Dry Powder card
+
+Requirements:
+- Keep the exact visual style and spacing of the original 8 cards.
+- Use Tailwind CSS classes (or plain modern CSS if no Tailwind is set up).
+- Make the grid responsive (on mobile it should stack nicely).
+- Add very light labels above each new row if possible (e.g. "Decision Gate" and "Post Spin-Out Performance") to match the flowchart flow.
+- The whole section should still feel like one cohesive "Studio Benchmarks" page.
+- Return only the updated grid/component code (React + Tailwind preferred, or full HTML if it's a vanilla project). Include any necessary state/variables so I can easily swap the numbers later.
+
+Make it look professional and ready to ship. This should turn the dashboard into a complete end-to-end studio performance OS.

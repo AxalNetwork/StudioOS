@@ -1,0 +1,178 @@
+I'll start by auditing the current implementation. Let me explore the codebase structure and find the relevant files for the Personal Advisor / Profile & Fit system.
+
+Ran a command, searched code
+The build artifacts in docs/ are noise. Let me focus on source files. Let me read the core Profile & Fit component and find the profiling backend routes.
+
+Read a file, ran a command
+This is a large, mature codebase. Let me audit the key backend pieces — starting with the advisor progress endpoint (where the completion bug lives), profiling, and the question bank.
+
+Ran a command, searched code
+The key is the questionBank service. Let me read it and the /progress endpoint, plus the radar/values/best_fit/matches services.
+
+Ran a command, read 2 files
+Now I see the core bug. bankFor() concatenates the entire persona dashboard bank (founder=120, partner=200, etc.) with the fit bank, and total_questions is set to that whole length — that's the "200+". Let me confirm by reading the /progress endpoint and the fit/scoring services.
+Found /progress route body in advisor.ts
+Let me read the /progress endpoint in full and the persona detection that determines the bank size.
+Read
+advisor.ts
+Now the completion bug is confirmed: overall.total = visibleBank.length = the entire dashboard-population bank (founder ~120–145, partner ~200+, admin ~10). Let me read the scoring service (axalFit.ts) and a fit bank to understand how the four Profile & Fit dimensions are actually driven.
+
+Ran 4 commands
+Now I have the fit-bank picture: fit_founder=25, fit_investor=18, fit_partner=17, fit_mentor=17, fit_coach=17 — these are the fixed, well-designed profiling banks. Let me read the scoring service and the radar/values/assessment/matches routes to complete the audit.
+Read
+axalFit.ts
+The scoring core is solid. Let me find the radar axes, value dimensions, and the archetype/assessment implementation, plus the contact-routing (brand/contacts/network) picture.
+
+Ran 4 commands
+Let me read the helper functions in advisor.ts (personaFor, workingBankFor, conversation helpers) so my fix stays consistent, and check the assessment scoring for archetype.
+
+Ran a command, read a file
+Let me quickly audit the contact-capture / matches / best-fit routing to complete the picture, then I'll design and implement.
+
+Ran a command, read a file
+The infrastructure is more built-out than expected. Let me read ingestContact (the routing logic) and the contacts promote/schema to finish the audit.
+
+Ran 2 commands
+The Contacts/Network backbone already exists (contacts table with audience → routeFor → discovery/raise/network, plus ingestContact, invite, promote, raise_prospects). Let me check the frontend API layer and whether a radial values chart exists, then I'll have the full picture.
+Checked frontend API and chart/page inventory
+The picture is complete. Notably, there is no radial values chart — values render as a text list. Let me read SkillRadar.jsx (to match its charting approach) and the values API shape so I can build a matching radial chart.
+Read
+SkillRadar.jsx
+Recharts is available. Let me read the values API shape and the /api/values/me route response so a radial chart consumes the real data structure.
+
+Ran 2 commands
+I now have a complete, accurate audit. Let me read the remainder of /values/me to confirm the exact response fields for the radial chart, then set up task tracking and implement.
+Read
+values.ts
+I have a complete, accurate audit. Let me set up task tracking, then implement. First the question-bank helper that defines the true profiling sections.
+
+Used 7 tools
+Now let me implement. Starting with the question-bank helper.
+
+Edited a file, used a tool
+Now the /progress endpoint. Let me update the import and add the profiling block.
+Edited
+advisor.ts
++1
+-0
+Now add the profiling block to the /progress response:
+
+Edited a file, used 3 tools
+Now update the frontend CompletionCard to consume the new profiling block with a per-section breakdown, empty state, and legacy fallback.
+
+Edited a file, used 2 tools
+Now build the radial values chart. Let me consult the dataviz skill quickly since I'm creating a chart, then write the component.
+Read
+assessmentMeta.js
+Now I'll create the radial values chart component:
+Created
+ValuesRadial.jsx
++103
+-0
+Now render the radial chart in ValuesLeanCard. Let me update the import and the card body.
+
+Edited a file, used 2 tools
+Before writing the doc, let me verify the code compiles. Let me check available scripts and run typecheck.
+Discovered typecheck/build scripts
+The worker has tsc --noEmit. Let me run it plus the advisor drift check and relevant tests to confirm nothing broke.
+Typechecked the worker
+The type error is just missing installed deps (@cloudflare/workers-types), not my code. Let me install worker deps and re-run.
+
+Ran 2 commands
+Worker typecheck passes cleanly. Now let me run the advisor bank-drift check and the advisor/values tests that touch my changes.
+
+Ran 2 commands
+All worker tests and drift checks pass. Let me verify the frontend compiles (the two changed/added files).
+
+Ran 2 commands
+Let me install frontend deps and run the build to verify my changes compile.
+
+Ran 2 commands
+Frontend build succeeds. The build regenerated docs/ artifacts — let me check git status to avoid committing noisy build output.
+Checked what the build changed in git
+The build wrote 709 docs/ artifact changes — that's build output the maintainer's pipeline regenerates (and my local Vite differs from what produced the committed bundle). I'll revert all docs/ changes and keep only the source changes.
+Reverted docs build artifacts
+Clean. Now let me write the architecture/audit document — the primary deliverable for the maintainer.
+
+Created a file, used 2 tools
+Let me verify the edited /progress region is well-formed.
+Read
+advisor.ts
+Let me verify the helper produces the expected per-persona counts at runtime (proving the fix end-to-end).
+Verified profiling counts per persona
+Path issue — let me put the script in the repo root so the relative import resolves.
+Ran profiling verification from repo root
+Confirmed — the fix reproduces and corrects the exact reported symptoms: partner 227→17 (the "200+"), admin 11→0 (now applicable:false), founder 165→25. Let me check for any stray changes (lock files from npm install) before committing.
+Fulled git status incl lock files
+Clean working tree — only my 5 intended changes. Let me commit and push to the designated branch.
+
+Ran 2 commands
+Pushed. Now let me check for an existing PR and a PR template, then open a draft PR.
+
+Ran a command, used a tool
+No existing PR. There's a PR template — let me read it and mirror its structure.
+
+Read a file, used a tool
+Draft PR #121 created. Let me mark the task complete and check CI status as requested by the subscription.
+
+Used 2 tools
+The combined-status endpoint is blocked for this integration. Let me try the checks/actions APIs instead.
+
+Used 3 tools
+The output is huge. Let me extract just the workflow run statuses with jq.
+Extracted workflow run statuses
+CI is running on my commit (de6eb3d): Semgrep, gitleaks, CodeQL, and "Code Quality: PR #121" all in progress. Note Semgrep/CodeQL already show failure on the base main commit — those are pre-existing, not from my change. Let me find the send_later tool to schedule a check-in per the subscription instructions.
+Used ToolSearch
+No send_later (that MCP isn't loaded), but CronCreate can schedule a one-shot self check-in. Let me get the current local time to pin it ~1 hour out.
+
+Ran a command, used a tool
+Done. Here's the summary.
+Audit — current state
+Area	Verdict
+Profiling completion	Was the bug. The card read /progress's flat total, which counts the entire dashboard-population advisor bank (exists to fill every page). Measured live: partner 227 ("200+"), admin 11, founder 165, investor 80.
+Skills radar	Works — 8 canonical axes (RADAR_AXES), Recharts, fed by fit.* questions tagged skill_axis.
+Values	Backend works (value_dimensions, Schwartz+founder); visualization was a text list only — no wheel existed.
+Archetype	Works but is a separate gamified system (assessment_*, centroid match), not the fit banks.
+Axal Fit & values	Works — axalFit.ts weighted rubrics → 0–100 + band, 5 Axal values, red-flag probes.
+Best-fit matches	Works, privacy-safe (counts + anonymized teaser free; full list paywalled/admin).
+Brand & Landing routing	Backbone already exists and is good: contacts table + routeFor(audience) (customer→discovery, investor→raise, rest→network) + ingestContact. One home, no fragmentation.
+The key insight: a fixed, well-designed question bank per dimension already exists — the fit_* banks (founder 25, investor 18, partner 17, mentor 17, coach 17), each question tagged with skill_axis / value_dim / rubric_category / axal_value. The bug was that completion counted the page-fill bank, not these.
+What I implemented (PR #121, draft)
+questionBank.ts — profilingSectionsForBank() buckets fit.* questions into Skills / Work values / Axal Fit & values (each in exactly one bucket).
+advisor.ts GET /progress — new profiling block scoped to fit.* only; full-bank fields left intact so the advisor rail is unaffected.
+ProfileFitSection.jsx — completion card reads profiling with per-section bars + an "not set up for this account type" state for admin.
+ValuesRadial.jsx (new) — Recharts radial "values wheel" mirroring the Personal Values Profile reference.
+PROFILE_FIT_ARCHITECTURE.md — full audit, data model (question banks / scores / contacts backbone / matches), best-fit→introductions wiring, NDA/three-party flow, and Book-with-Guillaume snapshot — as concrete next steps.
+Result: partner 227→17, admin 11→0 (applicable:false), founder 165→25, investor 80→18, mentor 64→34 — the exact reported symptoms, corrected.
+Verified: worker tsc clean · check-advisor-bank-drift OK · advisor tests 23/23 · vite build green (build artifacts reverted — docs/ is regenerated by deploy).
+PR watch
+Subscribed to #121. CI is in progress on my commit (Semgrep/CodeQL/gitleaks/Code Quality). Note Semgrep and CodeQL already fail on the main baseline — so I'll only flag new failures my change introduces. No review comments yet. I've scheduled a self check-in (~1h) to re-verify CI/mergeability since webhooks don't deliver CI success; I'll re-arm silently if nothing's changed and act on any failure or comment.
+One open design decision worth your call later (not blocking): mentors get 34 profiling questions because they're scored on both the mentor and coach rubrics — truthful, but heavier than the others. I left it as-is; say the word if you'd rather cap mentors to their primary rubric.
+The failed check is CodeQL "analyze (python)". My change is TypeScript + JSX + Markdown only — zero Python. And CodeQL already failed on the main baseline (commit 3a799cb). Let me confirm both facts before concluding.
+
+Ran a command, used a tool
+Confirmed: my commit changes 0 Python files. Let me read the actual CodeQL log to see the failure reason.
+Used github: get job logs
+Diagnosis: the log says "CodeQL job status was configuration error." — the Python CodeQL database failed to build/analyze. That's an infrastructure/config error in the repo's CodeQL setup, not a code finding, and:
+My commit changes 0 Python files (only TS, JSX, Markdown), so nothing in my diff can affect Python analysis.
+CodeQL already failed on the main baseline (3a799cb) before my branch existed.
+No action needed on this PR. This is a pre-existing, repo-wide CodeQL-Python configuration failure. Fixing it would mean editing the repo's .github/ CodeQL workflow/config — out of scope for this change, architecturally significant, and it touches security scanning, so I won't do it unless you ask. If you do want it addressed, it should be its own PR (likely the CodeQL Python build/languages config or a codeql-config.yml path filter).
+I'll leave the subscription active. The other checks (gitleaks, Code Quality: PR #121) were still running; my ~1h check-in will confirm those and flag only new failures attributable to this change. I won't comment on the PR for this pre-existing failure (keeping PR noise down).
+This one analyzes JavaScript/TypeScript — which my change does touch, so I need to check whether it's a real finding or the same config error. Let me read the log.
+Used github: get job logs
+Same root cause: "CodeQL job status was configuration error." — identical to the Python job. Both CodeQL language analyses fail at the setup/database-build stage before producing any findings (it uploads a codeql-failed-run.sarif, i.e. no code findings against my diff). This is a repo-level CodeQL configuration failure, present on the main baseline too, and not caused by my TypeScript/JSX changes.
+No action on this PR. Both CodeQL checks are pre-existing infra failures; fixing them means editing the repo's CodeQL workflow config, which is a separate, security-scanning-scoped PR — I won't touch it unless you ask.
+Net so far on #121: the two failing checks are both pre-existing CodeQL config errors. The change-relevant gates — worker tsc, advisor bank-drift, advisor tests, vite build — passed locally, and "Code Quality: PR #121" (the drift/test suite) is the one that actually validates this diff. My scheduled ~1h check-in will confirm that job's result and I'll report only if it reveals something new.
+The "Scan" check (Semgrep) also failed on the main baseline — but it scans TS/JSX, so I must check whether it's flagging my code. Let me read the log.
+Used github: get job logs
+The "Scan" (Semgrep) failure is not a code finding either. Semgrep ran and produced semgrep.sarif successfully — the job failed at the SARIF upload step with:
+##[error]Resource not accessible by integration - .../workflow-runs#get-a-workflow-run
+That's a token/permissions infra error in the upload-sarif action (can't post results/telemetry back to GitHub), not something in my TS/JSX. It's also pre-existing on the main baseline.
+Consolidated status for #121
+All three failing checks are pre-existing, repo-level infra failures unrelated to my diff:
+Check	Root cause	Mine?
+analyze (python)	CodeQL "configuration error" (DB build)	No — 0 Python files
+analyze (javascript-typescript)	CodeQL "configuration error" (DB build)	No — failed-run SARIF, no findings
+Scan (Semgrep)	upload-sarif permissions error	No — scan produced SARIF, upload step lacks perms
+All three also fail on main (3a799cb), confirming they predate this branch. No code action taken — each fix lives in the repo's .github/ security-scanning config, which is a separate PR and out of scope here; I won't touch security config without your go-ahead.
+The gate that actually validates this change is "Code Quality: PR #121" (the test:drift suite: worker tsc, bank-drift, advisor tests). It was still running; I verified all its relevant parts locally. My scheduled ~1h check-in will confirm that job's outcome, and I'll surface it only if it fails for a reason tied to this change. Nothing to fix right now.

@@ -1,0 +1,32 @@
+#12 - Invitation & lane continuity through signup
+What & Why
+Per the signup friction audit (PR #135), the invitation's promise breaks after signup: ?next= return paths are honored by /login but ignored by /register (AcceptInvitePage sends new users to /register?next=… and it's dropped) and lost by the Google-signup callback, so invited users finish the gauntlet and land in a generic AI interview instead of the thing they were invited to. The ?lane= intent (e.g. "Open LP Account") is stored client-side only and never sent to the server — everyone is created as partner and the 14-day investor trial wired to role === 'investor' is unreachable from the public funnel, even though the register endpoint already accepts role. The forced full-screen onboarding chat then holds users hostage with no skip. This is audit fixes 4, 8, 9 plus the partner-wizard name prefill.
+Done looks like
+* A user who clicks a project/team invitation and registers lands on that invitation after signup — through the email-verification round-trip, the Google OAuth path, and the onboarding gate
+* Registering via "Open LP Account" / ?lane=investor creates an investor account and activates the investor trial; other lanes map to their roles
+* The onboarding chat has a visible "Skip for now" that drops the user on the dashboard (partial answers persisted; a later nag is fine); invited users are routed to their next target before the chat gate
+* The partner wizard no longer asks for the full legal name the admin already entered — it prefills and asks to confirm
+* Invitation emails that land on /register prefill the email field
+Out of scope
+* Magic-link UI and TOTP policy (previous tasks — but the next threading must survive whatever entry flow those tasks shipped)
+* Redesigning the onboarding chat content or the admin-review process
+* New invitation types
+Steps
+1. Thread next through register — Read and validate the return path on register, persist it across the email round-trip alongside the existing intent storage, and redirect to it once the user is signed in (before the onboarding gate)
+2. Google path continuity — Carry the redirect/invite context through the Google signup callback instead of hard-routing new signups to the chat
+3. Wire lane→role — Send the role derived from the lane in the register payload so investor trials and role routing engage; keep server-side validation authoritative
+4. Skippable onboarding — Add "Skip for now" to the onboarding chat gate, persist partial answers, and soften the "admin will review" copy per the audit
+5. Partner wizard prefill — Prefill the legal-name question from the invite's recipient name with a confirm step; add ?email= prefill to invitation links that target register
+Relevant files
+* frontend/src/pages/RegisterPage.jsx:81,204
+* frontend/src/pages/AcceptInvitePage.jsx:51
+* frontend/src/pages/OnboardingChatPage.jsx
+* frontend/src/App.jsx:891-924
+* cloudflare-worker/src/routes/auth_google.ts:640
+* cloudflare-worker/src/routes/auth.ts:241-332
+* frontend/src/pages/PartnerOnboardPage.jsx
+* cloudflare-worker/src/templates/email/registry.ts:294
+Dependencies
+Optional TOTP + enrollment correctness
+
+Open task

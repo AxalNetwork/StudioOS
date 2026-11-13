@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f7f7fa;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .tc-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .tc-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:#615c6e}
+    .tc-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s,box-shadow .12s}
+    .tc-btn:hover{filter:brightness(.98)}
+    .tc-tab{cursor:pointer;transition:color .13s,border-color .13s,background .13s}
+    .tc-row{transition:background .12s}
+    .tc-obl:hover{background:#fcfcfd}
+    .tc-in{width:100%;box-sizing:border-box;padding:10px 13px;border-radius:9px;border:1px solid #e4e2ea;background:#fff;font-size:13px;color:#18181b;outline:none;font-family:inherit;transition:border-color .12s,box-shadow .12s}
+    .tc-in:focus{border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.11)}
+    .tc-in::placeholder{color:#6f6a7d}
+    .tc-check{cursor:pointer}
+    .tc-sk{background:linear-gradient(90deg,#f1f0f4 25%,#e7e5ec 50%,#f1f0f4 75%);background-size:200% 100%;animation:tcSk 1.4s ease-in-out infinite;border-radius:6px}
+    @keyframes tcSk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    @keyframes tcPulse{0%,100%{opacity:1}50%{opacity:.45}}
+    .tc-live{animation:tcPulse 2s ease-in-out infinite}
+    @media (max-width:900px){
+      .tc-2{grid-template-columns:1fr!important}
+      .tc-hero{grid-template-columns:1fr!important}
+      .tc-sc-hide{display:none!important}
+      /* header row is hidden below 900px, so stack each screening into a labelled card */
+      .tc-sc-grid{grid-template-columns:1fr!important;padding:4px 0 10px}
+      .tc-sc-grid > *{padding:5px 22px 5px 19px!important}
+      .tc-sc-grid > [data-cell]::before{content:attr(data-cell);display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#6f6a7d;margin-bottom:2px}
+    }
+  </style>
+</helmet>
+
+<div style="min-height:100vh">
+
+  <!-- ============ HEADER ============ -->
+  <div style="background:#fff;border-bottom:1px solid #e4e2ea">
+    <div style="max-width:1180px;margin:0 auto;padding:24px 28px 0">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0;display:flex;align-items:flex-start;gap:13px">
+          <div style="width:36px;height:36px;border-radius:11px;background:{{ shieldBg }};color:{{ shieldInk }};display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:19px;height:19px;display:flex" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Trust Center</h1>
+            <div style="font-size:13px;color:#6b6577;margin-top:4px">Your obligations, agreements, and verification status — tailored to your role.</div>
+          </div>
+        </div>
+
+        <!-- role switcher + score -->
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span class="tc-lbl" style="font-size:9px">Viewing as</span>
+            <div style="display:flex;gap:2px;padding:3px;border-radius:9px;background:#f4f3f7;border:1px solid #e4e2ea">
+              <sc-for list="{{ roleTabs }}" as="r" hint-placeholder-count="4">
+                <div class="tc-btn" onClick="{{ r.go }}" style="{{ r.style }}">{{ r.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:9px 15px 9px 11px;border-radius:13px;background:{{ score.wrapBg }};border:1px solid {{ score.wrapBd }}">
+            <div style="position:relative;width:52px;height:52px;flex:none">
+              <svg viewBox="0 0 44 44" style="width:52px;height:52px;transform:rotate(-90deg);display:block">
+                <circle cx="22" cy="22" r="18" fill="none" stroke="{{ score.track }}" stroke-width="5"></circle>
+                <circle cx="22" cy="22" r="18" fill="none" stroke="{{ score.ink }}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{{ score.dash }}"></circle>
+              </svg>
+              <div class="tc-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:{{ score.ink }}">{{ score.value }}</div>
+            </div>
+            <div>
+              <div class="tc-lbl" style="font-size:9px">Trust score</div>
+              <div style="font-size:13px;font-weight:800;color:{{ score.ink }};margin-top:2px">{{ score.band }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div style="display:flex;gap:2px;margin-top:20px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <div class="tc-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            {{ t.label }}
+            <sc-if value="{{ t.badge }}"><span style="{{ t.badgeStyle }}">{{ t.badge }}</span></sc-if>
+            <sc-if value="{{ t.adminOnly }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#6f6a7d;border:1px solid #e4e2ea;border-radius:4px;padding:1px 4px">Admin</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1180px;margin:0 auto;padding:22px 28px 90px">
+
+    <!-- ============ OVERVIEW ============ -->
+    <sc-if value="{{ isOverview }}">
+      <!-- hero: score + summary -->
+      <div class="tc-hero" style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:stretch">
+        <div style="border-radius:16px;padding:26px 24px;background:{{ score.heroBg }};border:1px solid {{ score.wrapBd }};text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="position:relative;width:132px;height:132px">
+            <svg viewBox="0 0 44 44" style="width:132px;height:132px;transform:rotate(-90deg);display:block">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="{{ score.track }}" stroke-width="4"></circle>
+              <circle cx="22" cy="22" r="18" fill="none" stroke="{{ score.ink }}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{{ score.dash }}"></circle>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <div class="tc-mono" style="font-size:38px;font-weight:700;letter-spacing:-.03em;line-height:1;color:{{ score.ink }}">{{ score.value }}</div>
+              <div class="tc-lbl" style="font-size:8.5px;margin-top:3px">of 100</div>
+            </div>
+          </div>
+          <div style="font-size:15px;font-weight:800;letter-spacing:-.015em;margin-top:16px;color:{{ score.ink }}">{{ score.band }}</div>
+          <div style="font-size:12px;color:#6b6577;line-height:1.55;margin-top:6px">{{ score.summary }}</div>
+          <div style="display:flex;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid {{ score.wrapBd }};width:100%;justify-content:center">
+            <sc-for list="{{ score.bands }}" as="b" hint-placeholder-count="3">
+              <div style="{{ b.style }}">{{ b.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden;display:flex;flex-direction:column">
+          <div style="padding:17px 22px;border-bottom:1px solid #f1f0f4;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Your obligations</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:3px">{{ oblSummary }}</div>
+            </div>
+            <div style="display:flex;gap:14px">
+              <sc-for list="{{ oblCounts }}" as="oc" hint-placeholder-count="3">
+                <div style="text-align:right">
+                  <div class="tc-mono" style="font-size:16px;font-weight:700;color:{{ oc.ink }}">{{ oc.n }}</div>
+                  <div class="tc-lbl" style="font-size:8.5px;margin-top:1px">{{ oc.k }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ obligations }}" as="o" hint-placeholder-count="5">
+            <div class="tc-obl" style="{{ o.rowStyle }}">
+              <div style="{{ o.railStyle }}"></div>
+              <div style="display:flex;align-items:center;gap:13px;padding:14px 22px 14px 19px;flex-wrap:wrap">
+                <div style="{{ o.dotWrap }}">
+                  <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ o.icon }}"></span>
+                </div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <div style="font-size:13.5px;font-weight:700;letter-spacing:-.01em">{{ o.label }}</div>
+                    <span style="{{ o.reqStyle }}">{{ o.req }}</span>
+                  </div>
+                  <div style="font-size:11.5px;color:#615c6e;margin-top:2px">{{ o.meta }}</div>
+                </div>
+                <span style="{{ o.pill }}">
+                  <span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>
+                  {{ o.statusLabel }}
+                </span>
+                <sc-if value="{{ o.action }}">
+                  <div class="tc-btn" data-obl="{{ o.k }}" onClick="{{ startObligation }}" style="{{ o.actionStyle }}">{{ o.action }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ IDENTITY (KYC) ============ -->
+    <sc-if value="{{ isIdentity }}">
+      <!-- status card -->
+      <div style="{{ kyc.cardStyle }}">
+        <div style="{{ kyc.railStyle }}"></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;flex-wrap:wrap">
+          <div style="{{ kyc.iconWrap }}">
+            <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ kyc.icon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <div style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Identity (KYC)</div>
+              <span style="{{ kyc.pill }}">
+                <span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>
+                {{ kyc.statusLabel }}
+              </span>
+            </div>
+            <div style="font-size:12.5px;color:#6b6577;line-height:1.55;margin-top:4px;max-width:640px">{{ kyc.note }}</div>
+          </div>
+          <div class="tc-mono" style="font-size:11px;color:#6f6a7d;flex:none">{{ kyc.stamp }}</div>
+        </div>
+      </div>
+
+      <!-- form -->
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+        <sc-for list="{{ kycSections }}" as="sec" hint-placeholder-count="3">
+          <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:11px;padding:15px 22px;background:#fafafc;border-bottom:1px solid #f1f0f4">
+              <div class="tc-mono" style="width:22px;height:22px;border-radius:7px;background:#efeafb;color:#6d28d9;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ sec.n }}</div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ sec.title }}</div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:1px">{{ sec.hint }}</div>
+              </div>
+              <div class="tc-lbl" style="font-size:9px;flex:none">{{ sec.count }}</div>
+            </div>
+            <div style="padding:20px 22px">
+              <div class="tc-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+                <sc-for list="{{ sec.fields }}" as="fd" hint-placeholder-count="4">
+                  <div style="{{ fd.wrap }}">
+                    <label style="display:block;font-size:11.5px;font-weight:600;color:#3f3b47;margin-bottom:6px">{{ fd.label }}<sc-if value="{{ fd.req }}"><span style="color:#dc2626;margin-left:3px">*</span></sc-if></label>
+                    <sc-if value="{{ fd.isSelect }}">
+                      <select class="tc-in">
+                        <sc-for list="{{ fd.options }}" as="op" hint-placeholder-count="3">
+                          <option>{{ op }}</option>
+                        </sc-for>
+                      </select>
+                    </sc-if>
+                    <sc-if value="{{ fd.isText }}">
+                      <input class="tc-in" placeholder="{{ fd.ph }}">
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ sec.hasUpload }}">
+                <div class="tc-btn" onClick="{{ pickFile }}" style="margin-top:16px;border:1.5px dashed #cfc9dd;border-radius:12px;padding:20px;text-align:center;background:#fcfbfe">
+                  <div style="width:34px;height:34px;border-radius:11px;background:#efeafb;color:#6d28d9;display:flex;align-items:center;justify-content:center;margin:0 auto">
+                    <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ upIcon }}"></span>
+                  </div>
+                  <div style="font-size:13px;font-weight:700;margin-top:10px">{{ uploadTitle }}</div>
+                  <div style="font-size:11.5px;color:#615c6e;margin-top:3px">JPG, PNG, WEBP, or PDF — max 6MB</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sec.hasDisclosures }}">
+                <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">
+                  <sc-for list="{{ disclosures }}" as="d" hint-placeholder-count="2">
+                    <div class="tc-check" data-disc="{{ d.k }}" onClick="{{ toggleDisc }}" style="display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border-radius:11px;background:{{ d.bg }};border:1px solid {{ d.bd }}">
+                      <div style="{{ d.boxStyle }}">{{ d.glyph }}</div>
+                      <div style="min-width:0;flex:1">
+                        <div style="font-size:12.5px;color:#3f3b47;line-height:1.6">{{ d.text }}</div>
+                        <sc-if value="{{ d.sub }}"><div style="font-size:11px;color:#615c6e;margin-top:3px">{{ d.sub }}</div></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div class="tc-btn" onClick="{{ submitKyc }}" style="{{ submitStyle }}">
+                  <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ shieldSmall }}"></span>
+                  Submit for Verification
+                </div>
+                <div style="font-size:11px;color:#615c6e;text-align:center;margin-top:10px;line-height:1.55">{{ submitNote }}</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- ============ ENTITY (KYB) ============ -->
+    <sc-if value="{{ isEntity }}">
+      <div style="{{ kyb.cardStyle }}">
+        <div style="{{ kyb.railStyle }}"></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;flex-wrap:wrap">
+          <div style="{{ kyb.iconWrap }}"><span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ kyb.icon }}"></span></div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <div style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Entity (KYB)</div>
+              <span style="{{ kyb.pill }}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>{{ kyb.statusLabel }}</span>
+            </div>
+            <div style="font-size:12.5px;color:#6b6577;margin-top:4px">Business verification for the entity you operate through.</div>
+          </div>
+        </div>
+      </div>
+      <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;padding:20px 22px;margin-top:14px">
+        <div class="tc-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+          <sc-for list="{{ kybFields }}" as="fd" hint-placeholder-count="3">
+            <div style="{{ fd.wrap }}">
+              <label style="display:block;font-size:11.5px;font-weight:600;color:#3f3b47;margin-bottom:6px">{{ fd.label }}<sc-if value="{{ fd.req }}"><span style="color:#dc2626;margin-left:3px">*</span></sc-if></label>
+              <sc-if value="{{ fd.isSelect }}">
+                <select class="tc-in"><sc-for list="{{ fd.options }}" as="op" hint-placeholder-count="3"><option>{{ op }}</option></sc-for></select>
+              </sc-if>
+              <sc-if value="{{ fd.isText }}"><input class="tc-in" placeholder="{{ fd.ph }}"></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div class="tc-btn" onClick="{{ submitKyb }}" style="{{ submitStyle }}">Submit entity for verification</div>
+      </div>
+    </sc-if>
+
+    <!-- ============ ACCREDITATION ============ -->
+    <sc-if value="{{ isAccred }}">
+      <div style="{{ acc.cardStyle }}">
+        <div style="{{ acc.railStyle }}"></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;flex-wrap:wrap">
+          <div style="{{ acc.iconWrap }}"><span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ acc.icon }}"></span></div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <div style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Accreditation</div>
+              <span style="{{ acc.pill }}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>{{ acc.statusLabel }}</span>
+            </div>
+            <div style="font-size:12.5px;color:#6b6577;margin-top:4px">Required before you can view gated deal materials.</div>
+          </div>
+        </div>
+      </div>
+      <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;padding:20px 22px;margin-top:14px">
+        <label style="display:block;font-size:11.5px;font-weight:600;color:#3f3b47;margin-bottom:6px">Accreditation basis<span style="color:#dc2626;margin-left:3px">*</span></label>
+        <select class="tc-in" style="max-width:420px">
+          <sc-for list="{{ accBasis }}" as="ab" hint-placeholder-count="3"><option>{{ ab }}</option></sc-for>
+        </select>
+        <div class="tc-btn" onClick="{{ pickFile }}" style="margin-top:16px;border:1.5px dashed #cfc9dd;border-radius:12px;padding:20px;text-align:center;background:#fcfbfe">
+          <div style="width:34px;height:34px;border-radius:11px;background:#efeafb;color:#6d28d9;display:flex;align-items:center;justify-content:center;margin:0 auto">
+            <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ upIcon }}"></span>
+          </div>
+          <div style="font-size:13px;font-weight:700;margin-top:10px">Upload supporting evidence</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:3px">JPG, PNG, WEBP, or PDF — max 6MB</div>
+        </div>
+        <div class="tc-btn" onClick="{{ submitAcc }}" style="{{ submitStyle }}">Submit for review</div>
+      </div>
+    </sc-if>
+
+    <!-- ============ AGREEMENTS ============ -->
+    <sc-if value="{{ isAgreements }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <!-- role agreements -->
+        <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:17px 22px;border-bottom:1px solid #f1f0f4">
+            <div style="width:30px;height:30px;border-radius:9px;background:#efeafb;color:#6d28d9;display:flex;align-items:center;justify-content:center;flex:none">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ penIcon }}"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Role agreements</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:2px">Standing NDAs and disclosures required for your role.</div>
+            </div>
+          </div>
+          <sc-if value="{{ hasRoleAgs }}">
+            <sc-for list="{{ roleAgs }}" as="a" hint-placeholder-count="2">
+              <div style="{{ a.rowStyle }}">
+                <div style="{{ a.railStyle }}"></div>
+                <div style="display:flex;align-items:center;gap:13px;padding:14px 22px 14px 19px;flex-wrap:wrap">
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:13.5px;font-weight:700">{{ a.name }}</div>
+                    <div style="font-size:11.5px;color:#615c6e;margin-top:2px">{{ a.meta }}</div>
+                  </div>
+                  <span style="{{ a.pill }}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>{{ a.statusLabel }}</span>
+                  <sc-if value="{{ a.action }}"><div class="tc-btn" style="{{ a.actionStyle }}">{{ a.action }}</div></sc-if>
+                  <div class="tc-btn" data-ag="{{ a.k }}" onClick="{{ toggleHistory }}" style="flex:none;width:26px;height:26px;border-radius:7px;border:1px solid #e4e2ea;display:flex;align-items:center;justify-content:center;font-size:11px;color:#615c6e">{{ a.chev }}</div>
+                </div>
+                <sc-if value="{{ a.open }}">
+                  <div style="padding:0 22px 16px 52px">
+                    <div class="tc-lbl" style="font-size:9px;margin-bottom:10px">History</div>
+                    <sc-for list="{{ a.history }}" as="h" hint-placeholder-count="3">
+                      <div style="display:flex;gap:11px;align-items:flex-start;padding-bottom:11px">
+                        <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                          <div style="width:7px;height:7px;border-radius:50%;background:{{ h.tone }};margin-top:4px"></div>
+                          <sc-if value="{{ h.line }}"><div style="width:1.5px;flex:1;min-height:16px;background:#eeecf2"></div></sc-if>
+                        </div>
+                        <div style="min-width:0">
+                          <div style="font-size:12px;font-weight:600;color:#3f3b47">{{ h.event }}</div>
+                          <div class="tc-mono" style="font-size:10.5px;color:#6f6a7d;margin-top:1px">{{ h.when }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{ noRoleAgs }}">
+            <div style="padding:32px 22px;text-align:center">
+              <div style="width:36px;height:36px;border-radius:11px;background:#f4f3f7;color:#6f6a7d;display:flex;align-items:center;justify-content:center;margin:0 auto">
+                <span style="width:17px;height:17px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#3f3b47;margin-top:12px">No role-level agreements required</div>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:4px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.55">Your role carries no standing NDA. Pairwise NDAs below still apply per relationship.</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- pairwise NDAs -->
+        <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:17px 22px;border-bottom:1px solid #f1f0f4;flex-wrap:wrap">
+            <div style="width:30px;height:30px;border-radius:9px;background:#efeafb;color:#6d28d9;display:flex;align-items:center;justify-content:center;flex:none">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Pairwise NDAs</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:2px">Every founder ↔ investor mutual NDA. Resend re-emails any unsigned recipients; Void cancels the envelope and revokes access.</div>
+            </div>
+            <div class="tc-btn" onClick="{{ toggleLoading }}" style="flex:none;padding:6px 11px;border-radius:8px;border:1px solid #e4e2ea;font-size:11px;font-weight:600;color:#615c6e" title="Demo: toggle loading state">{{ loadLabel }}</div>
+          </div>
+
+          <sc-if value="{{ ndaLoading }}">
+            <div style="padding:6px 22px 16px">
+              <sc-for list="{{ skeletons }}" as="sk" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:13px;padding:14px 0;border-bottom:1px solid #f7f6fa">
+                  <div class="tc-sk" style="width:30px;height:30px;border-radius:9px;flex:none"></div>
+                  <div style="flex:1;min-width:0">
+                    <div class="tc-sk" style="height:11px;width:{{ sk.w1 }}"></div>
+                    <div class="tc-sk" style="height:9px;width:{{ sk.w2 }};margin-top:7px"></div>
+                  </div>
+                  <div class="tc-sk" style="width:74px;height:20px;border-radius:99px;flex:none"></div>
+                  <div class="tc-sk" style="width:58px;height:26px;border-radius:8px;flex:none"></div>
+                </div>
+              </sc-for>
+              <div class="tc-lbl" style="font-size:9px;margin-top:14px;text-align:center;color:#6f6a7d">Loading envelopes from the e-sign provider…</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ ndaReady }}">
+            <sc-for list="{{ ndas }}" as="n" hint-placeholder-count="4">
+              <div style="{{ n.rowStyle }}">
+                <div style="{{ n.railStyle }}"></div>
+                <div style="display:flex;align-items:center;gap:13px;padding:14px 22px 14px 19px;flex-wrap:wrap">
+                  <div style="{{ n.avStyle }}">{{ n.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:13.5px;font-weight:700">{{ n.party }}</div>
+                    <div style="font-size:11.5px;color:#615c6e;margin-top:2px">{{ n.meta }}</div>
+                  </div>
+                  <span style="{{ n.pill }}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>{{ n.statusLabel }}</span>
+                  <sc-if value="{{ n.action }}"><div class="tc-btn" style="{{ n.actionStyle }}">{{ n.action }}</div></sc-if>
+                  <sc-if value="{{ n.adminCtl }}">
+                    <div style="display:flex;gap:6px;flex:none">
+                      <div class="tc-btn" style="padding:6px 11px;border-radius:8px;border:1px solid #e4e2ea;font-size:11px;font-weight:600;color:#3f3b47">Resend</div>
+                      <div class="tc-btn" style="padding:6px 11px;border-radius:8px;border:1px solid #f3d4d4;background:#fef7f7;font-size:11px;font-weight:600;color:#b91c1c">Void</div>
+                    </div>
+                  </sc-if>
+                  <div class="tc-btn" data-ag="{{ n.k }}" onClick="{{ toggleHistory }}" style="flex:none;width:26px;height:26px;border-radius:7px;border:1px solid #e4e2ea;display:flex;align-items:center;justify-content:center;font-size:11px;color:#615c6e">{{ n.chev }}</div>
+                </div>
+                <sc-if value="{{ n.open }}">
+                  <div style="padding:0 22px 16px 52px">
+                    <div class="tc-lbl" style="font-size:9px;margin-bottom:10px">Envelope history</div>
+                    <sc-for list="{{ n.history }}" as="h" hint-placeholder-count="3">
+                      <div style="display:flex;gap:11px;align-items:flex-start;padding-bottom:11px">
+                        <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                          <div style="width:7px;height:7px;border-radius:50%;background:{{ h.tone }};margin-top:4px"></div>
+                          <sc-if value="{{ h.line }}"><div style="width:1.5px;flex:1;min-height:16px;background:#eeecf2"></div></sc-if>
+                        </div>
+                        <div style="min-width:0">
+                          <div style="font-size:12px;font-weight:600;color:#3f3b47">{{ h.event }}</div>
+                          <div class="tc-mono" style="font-size:10.5px;color:#6f6a7d;margin-top:1px">{{ h.when }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ SANCTIONS (admin) ============ -->
+    <sc-if value="{{ isSanctions }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:17px 22px;border-bottom:1px solid #f1f0f4;background:#fafafc">
+            <div style="width:30px;height:30px;border-radius:9px;background:#efeafb;color:#6d28d9;display:flex;align-items:center;justify-content:center;flex:none">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Run a sanctions screening</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:2px">OFAC SDN + EU CFSP + UK HMT consolidated lists. Hits are stored for review.</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;flex:none">
+              <sc-for list="{{ listChips }}" as="lc" hint-placeholder-count="3">
+                <span style="font-size:10px;font-weight:700;letter-spacing:.03em;padding:4px 9px;border-radius:99px;background:#f4f3f7;color:#6b6577;border:1px solid #e4e2ea;white-space:nowrap">{{ lc }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:20px 22px">
+            <div class="tc-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+              <sc-for list="{{ screenFields }}" as="fd" hint-placeholder-count="4">
+                <div>
+                  <label style="display:block;font-size:11.5px;font-weight:600;color:#3f3b47;margin-bottom:6px">{{ fd.label }}<sc-if value="{{ fd.req }}"><span style="color:#dc2626;margin-left:3px">*</span></sc-if></label>
+                  <input class="tc-in" placeholder="{{ fd.ph }}">
+                </div>
+              </sc-for>
+            </div>
+            <div class="tc-btn" onClick="{{ runScreening }}" style="margin-top:18px;display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700">
+              <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+              Run screening
+            </div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #e4e2ea;border-radius:16px;background:#fff;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:17px 22px;border-bottom:1px solid #f1f0f4;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Recent screenings</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:2px">Most recent runs across all users. Severity = none (clear), review (possible match), or block (high-confidence hit).</div>
+            </div>
+            <div class="tc-check" onClick="{{ toggleFlagged }}" style="display:flex;align-items:center;gap:9px;flex:none;padding:7px 12px;border-radius:9px;border:1px solid {{ flagBd }};background:{{ flagBg }}">
+              <div style="{{ flagBox }}">{{ flagGlyph }}</div>
+              <span style="font-size:11.5px;font-weight:600;color:{{ flagInk }}">Only show review/block</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ hasScreenings }}">
+            <div class="tc-sc-hide" style="display:grid;grid-template-columns:1.4fr 1fr .8fr .9fr 1fr;background:#fafafc;border-bottom:1px solid #f1f0f4">
+              <div style="padding:9px 22px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#615c6e">Subject</div>
+              <div style="padding:9px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#615c6e">User ID</div>
+              <div style="padding:9px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#615c6e">Lists</div>
+              <div style="padding:9px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#615c6e">Run</div>
+              <div style="padding:9px 22px 9px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#615c6e">Severity</div>
+            </div>
+            <sc-for list="{{ screenings }}" as="s" hint-placeholder-count="5">
+              <div style="{{ s.rowStyle }}">
+                <div style="{{ s.railStyle }}"></div>
+                <div style="display:grid;grid-template-columns:1.4fr 1fr .8fr .9fr 1fr;align-items:center" class="tc-sc-grid">
+                  <div style="padding:14px 22px 14px 19px;min-width:0">
+                    <div style="font-size:13px;font-weight:700">{{ s.name }}</div>
+                    <div style="font-size:11px;color:#615c6e;margin-top:2px">{{ s.role }}</div>
+                  </div>
+                  <div class="tc-mono" data-cell="User ID" style="padding:14px 12px;font-size:11.5px;color:#6b6577;min-width:0;overflow-wrap:anywhere">{{ s.uid }}</div>
+                  <div class="tc-mono" data-cell="Lists" style="padding:14px 12px;font-size:11.5px;color:#615c6e">{{ s.lists }}</div>
+                  <div class="tc-mono" data-cell="Run" style="padding:14px 12px;font-size:11.5px;color:#615c6e">{{ s.when }}</div>
+                  <div data-cell="Severity" style="padding:14px 22px 14px 12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="{{ s.pill }}">
+                      <span style="width:6px;height:6px;border-radius:50%;background:currentColor;flex:none"></span>
+                      {{ s.severity }}
+                    </span>
+                    <sc-if value="{{ s.hitNote }}"><span style="font-size:11px;font-weight:600;color:{{ s.hitInk }}">{{ s.hitNote }}</span></sc-if>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{ noScreenings }}">
+            <div style="padding:36px 22px;text-align:center">
+              <div style="width:36px;height:36px;border-radius:11px;background:#f4f3f7;color:#6f6a7d;display:flex;align-items:center;justify-content:center;margin:0 auto">
+                <span style="width:17px;height:17px;display:flex" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#3f3b47;margin-top:12px">{{ emptyScreenTitle }}</div>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:4px;max-width:360px;margin-left:auto;margin-right:auto;line-height:1.55">{{ emptyScreenBody }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div style="border-top:1px solid #e4e2ea;background:#fff">
+    <div style="max-width:1180px;margin:0 auto;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:#6f6a7d">© Copyright 2026, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.</div>
+      <div style="display:flex;gap:20px">
+        <a href="#" style="font-size:11.5px;color:#615c6e">Terms of service</a>
+        <a href="#" style="font-size:11.5px;color:#615c6e">Privacy policy</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <sc-if value="{{ toast }}">
+    <div style="position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:900;padding:11px 18px;border-radius:11px;background:#18181b;color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 8px 26px rgba(24,24,27,.3)">{{ toast }}</div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180}}">
+class Component extends DCLogic {
+  state = { role:'founder', tab:'overview', openAg:null, ndaLoading:false,
+    disc:{}, flagged:false, toast:'', screened:false };
+
+  // xmlns is required for the markup to survive raster/PDF export paths.
+  ic(p, sw){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  flash(msg){ this.setState({ toast:msg }); setTimeout(() => this.setState({ toast:'' }), 2600); }
+
+  renderVals() {
+    const st = this.state;
+    const V = '#7c3aed', V7 = '#6d28d9';
+
+    // ---- status vocabulary: exact API values, severity legible before the word ----
+    const TONE = {
+      positive: { ink:'#047857', bg:'rgba(4,120,87,.08)', bd:'rgba(4,120,87,.2)', rail:'#059669' },
+      progress: { ink:'#92400e', bg:'rgba(161,98,7,.08)', bd:'rgba(161,98,7,.2)',  rail:'#d97706' },
+      blocked:  { ink:'#b91c1c', bg:'rgba(185,28,28,.07)', bd:'rgba(185,28,28,.22)', rail:'#dc2626' },
+      neutral:  { ink:'#6b6577', bg:'#f4f3f7', bd:'#e4e2ea', rail:'#cfcdd6' },
+    };
+    // API status -> severity tier. Vocabulary unchanged.
+    const SEV = {
+      satisfied:'positive', signed:'positive', verified:'positive',
+      in_review:'progress', self_attested:'progress', pending:'progress',
+      expired:'blocked', rejected:'blocked',
+      not_started:'neutral', unverified:'neutral', waived:'neutral',
+    };
+    const LABEL = {
+      satisfied:'Satisfied', signed:'Signed', verified:'Verified',
+      in_review:'In Review', self_attested:'Self-Attested', pending:'Pending',
+      expired:'Expired', rejected:'Rejected',
+      not_started:'Not Started', unverified:'Unverified', waived:'Waived',
+    };
+    const tone = (s) => TONE[SEV[s] || 'neutral'];
+    const pill = (s) => { const t = tone(s);
+      return 'display:inline-flex;align-items:center;gap:6px;flex:none;padding:4px 11px;border-radius:99px;font-size:11px;font-weight:700;background:'
+        + t.bg + ';color:' + t.ink + ';border:1px solid ' + t.bd + ';white-space:nowrap'; };
+    // Row gets a severity rail so state is peripherally legible without reading.
+    const rowStyle = (s, last) => 'position:relative;border-bottom:' + (last ? 'none' : '1px solid #f4f3f7')
+      + ';background:' + (SEV[s] === 'blocked' ? 'rgba(185,28,28,.022)' : '#fff');
+    const railStyle = (s) => 'position:absolute;left:0;top:0;bottom:0;width:3px;background:' + tone(s).rail
+      + ';opacity:' + (SEV[s] === 'neutral' ? '.45' : '1');
+    const cardStyle = (s) => 'position:relative;overflow:hidden;border:1px solid ' + tone(s).bd
+      + ';border-radius:16px;background:' + (SEV[s] === 'neutral' ? '#fff' : tone(s).bg);
+    const iconWrap = (s) => 'width:36px;height:36px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:'
+      + (SEV[s] === 'neutral' ? '#f4f3f7' : '#fff') + ';color:' + tone(s).ink
+      + ';border:1px solid ' + tone(s).bd;
+    const av = (bg) => 'width:30px;height:30px;border-radius:9px;background:' + bg + ';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+
+    const I = {
+      shield: this.ic('<path d="M12 3 4 6v6c0 5 3.4 8.6 8 9.6 4.6-1 8-4.6 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>'),
+      id: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M13 10h5M13 14h3M6 16c.7-1.3 3.3-1.3 4 0"/>'),
+      building: this.ic('<path d="M4 21V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v15M16 11h2a2 2 0 0 1 2 2v8"/><path d="M8 8h4M8 12h4M8 16h4M2 21h20"/>'),
+      badge: this.ic('<circle cx="12" cy="9" r="5"/><path d="m8.5 13.5-1 7.5 4.5-2.5 4.5 2.5-1-7.5"/>'),
+      pen: this.ic('<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M18 2.5a1.8 1.8 0 0 1 2.5 2.5L15 10.5l-3 .8.8-3z"/>'),
+      lock: this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      search: this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      up: this.ic('<path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>'),
+      alert: this.ic('<path d="M12 8v5M12 17v.01"/><circle cx="12" cy="12" r="9"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      ban: this.ic('<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>'),
+    };
+
+    // ============ ROLE GATING ============
+    const ROLES = [
+      { k:'founder', l:'Founder' }, { k:'investor', l:'Investor' },
+      { k:'partner', l:'Partner' }, { k:'admin', l:'Admin' },
+    ];
+    const role = st.role;
+    const roleTabs = ROLES.map(r => ({ label:r.l, go: () => this.setState({ role:r.k, tab:'overview' }),
+      style:'padding:5px 11px;border-radius:7px;font-size:11.5px;font-weight:'+(role===r.k?'700':'600')
+        +';background:'+(role===r.k?'#fff':'transparent')+';color:'+(role===r.k?V7:'#615c6e')
+        +';box-shadow:'+(role===r.k?'0 1px 2px rgba(24,24,27,.08)':'none') }));
+
+    // Identity: founders, partners, investors, admins. Entity/Accreditation: only when the
+    // obligation applies. Sanctions: admin-only.
+    const showIdentity = true;
+    const showEntity = role === 'partner' || role === 'founder';
+    const showAccred = role === 'investor';
+    const showSanctions = role === 'admin';
+
+    // ============ OBLIGATIONS (per role) ============
+    const OBL = {
+      founder: [
+        { k:'tos', label:'Terms of Service', req:true, status:'satisfied', expiry:'', src:'Accepted at signup' },
+        { k:'nda', label:'Founder NDA', req:true, status:'signed', expiry:'Renews Mar 14, 2027', src:'Envelope AX-1183' },
+        { k:'kyc', label:'Identity verification (KYC)', req:true, status:'not_started', expiry:'', src:'Required before any wire', tab:'identity' },
+        { k:'kyb', label:'Entity verification (KYB)', req:false, status:'in_review', expiry:'', src:'Submitted Aug 19 · 2 business days', tab:'entity' },
+        { k:'83b', label:'83(b) election on file', req:false, status:'expired', expiry:'Window closed Aug 2, 2026', src:'IRS 30-day window missed' },
+      ],
+      investor: [
+        { k:'tos', label:'Terms of Service', req:true, status:'satisfied', expiry:'', src:'Accepted at signup' },
+        { k:'nda', label:'Investor NDA', req:true, status:'signed', expiry:'Renews Jan 8, 2027', src:'Envelope AX-0994' },
+        { k:'kyc', label:'Identity verification (KYC)', req:true, status:'verified', expiry:'Re-verify by Jun 30, 2027', src:'Persona · verified Jun 30, 2026', tab:'identity' },
+        { k:'acc', label:'Accreditation', req:true, status:'pending', expiry:'', src:'Income-based · evidence uploaded', tab:'accreditation' },
+        { k:'sanc', label:'Sanctions screening', req:true, status:'satisfied', expiry:'Re-screened quarterly', src:'Cleared Aug 1, 2026 · no matches' },
+      ],
+      partner: [
+        { k:'tos', label:'Terms of Service', req:true, status:'satisfied', expiry:'', src:'Accepted at signup' },
+        { k:'nda', label:'Service Partner NDA', req:true, status:'signed', expiry:'Renews Nov 2, 2026', src:'Envelope AX-1042' },
+        { k:'kyc', label:'Identity verification (KYC)', req:true, status:'in_review', expiry:'', src:'Submitted Aug 22 · under review', tab:'identity' },
+        { k:'kyb', label:'Entity verification (KYB)', req:true, status:'rejected', expiry:'', src:'Registration ID did not match registry', tab:'entity' },
+        { k:'w9', label:'Tax form (W-9 / W-8BEN)', req:true, status:'not_started', expiry:'', src:'Required before first payout' },
+      ],
+      admin: [
+        { k:'tos', label:'Terms of Service', req:true, status:'satisfied', expiry:'', src:'Accepted at signup' },
+        { k:'nda', label:'Staff confidentiality agreement', req:true, status:'signed', expiry:'Renews Feb 1, 2027', src:'Envelope AX-0031' },
+        { k:'kyc', label:'Identity verification (KYC)', req:true, status:'verified', expiry:'Re-verify by Feb 1, 2027', src:'Persona · verified Feb 1, 2026', tab:'identity' },
+        { k:'train', label:'AML / sanctions training', req:true, status:'satisfied', expiry:'Renews annually', src:'Completed Feb 12, 2026' },
+        { k:'access', label:'Privileged access review', req:true, status:'self_attested', expiry:'Attested Aug 1, 2026', src:'Quarterly attestation · self-reported' },
+      ],
+    };
+    const oblRaw = OBL[role];
+    const open = oblRaw.filter(o => SEV[o.status] === 'blocked' || o.status === 'not_started');
+    // Only a REQUIRED obligation can block the viewer — an optional one in a blocked
+    // state still needs attention, but claiming it blocks them would overstate it.
+    const blocking = oblRaw.filter(o => SEV[o.status] === 'blocked' && o.req);
+    const attention = oblRaw.filter(o => SEV[o.status] === 'blocked' && !o.req);
+    const obligations = oblRaw.map((o, i) => {
+      const sev = SEV[o.status], t = tone(o.status);
+      const needsAction = sev === 'blocked' || o.status === 'not_started';
+      return { k:o.k, label:o.label,
+        req: o.req ? 'Required' : 'Optional',
+        reqStyle:'font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border-radius:4px;'
+          + (o.req ? 'background:#efeafb;color:'+V7 : 'background:#f4f3f7;color:#615c6e'),
+        meta: o.expiry ? o.src + ' · ' + o.expiry : o.src,
+        statusLabel: LABEL[o.status], pill: pill(o.status),
+        rowStyle: rowStyle(o.status, i === oblRaw.length - 1), railStyle: railStyle(o.status),
+        dotWrap:'width:30px;height:30px;border-radius:9px;flex:none;display:flex;align-items:center;justify-content:center;background:'
+          + (sev === 'neutral' ? '#f4f3f7' : t.bg) + ';color:' + t.ink,
+        icon: sev === 'positive' ? I.check : sev === 'progress' ? I.clock : sev === 'blocked' ? I.alert : I.shield,
+        action: needsAction ? (sev === 'blocked' ? 'Resolve' : 'Start') : '',
+        actionStyle:'flex:none;padding:7px 15px;border-radius:9px;font-size:12px;font-weight:700;'
+          + (sev === 'blocked' ? 'background:#dc2626;color:#fff' : 'background:'+V+';color:#fff'),
+        tab: o.tab || '',
+      };
+    });
+    const oblCounts = [
+      { k:'Satisfied', n:String(oblRaw.filter(o => SEV[o.status] === 'positive').length), ink:'#047857' },
+      { k:'In progress', n:String(oblRaw.filter(o => SEV[o.status] === 'progress').length), ink:'#92400e' },
+      { k:'Needs action', n:String(open.length), ink: open.length ? '#b91c1c' : '#6b6577' },
+    ];
+    const oblSummary = open.length === 0
+      ? 'Every obligation for your role is satisfied.'
+      : (blocking.length
+          ? blocking.length + ' item' + (blocking.length === 1 ? '' : 's') + ' blocking you, ' + open.length + ' open in total.'
+          : attention.length
+            ? attention.length + ' item' + (attention.length === 1 ? '' : 's') + ' needs attention, ' + open.length + ' open in total — none blocking.'
+            : open.length + ' open requirement' + (open.length === 1 ? '' : 's') + ' — none blocking yet.');
+
+    // ============ TRUST SCORE — banded, derived from obligations ============
+    const scoreOf = { founder:52, investor:88, partner:34, admin:96 };
+    const val = scoreOf[role];
+    const band = val >= 90 ? 'positive' : val >= 60 ? 'progress' : 'blocked';
+    const bt = TONE[band];
+    const CIRC = 2 * Math.PI * 18;
+    const score = {
+      value:String(val), ink:bt.ink, track:'#eeecf2',
+      dash: (CIRC * val / 100).toFixed(1) + ' ' + CIRC.toFixed(1),
+      wrapBg: band === 'positive' ? bt.bg : band === 'progress' ? bt.bg : bt.bg,
+      wrapBd: bt.bd, heroBg:'#fff',
+      band: val >= 90 ? 'Fully compliant' : val >= 60 ? 'Partially compliant' : 'Not compliant',
+      summary: open.length === 0 ? 'No open requirements.' : 'You have ' + open.length + ' open requirement' + (open.length === 1 ? '' : 's') + '.',
+      bands: [
+        { label:'<60', k:'blocked' }, { label:'60–89', k:'progress' }, { label:'90+', k:'positive' },
+      ].map(b => ({ label:b.label,
+        style:'font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:3px 9px;border-radius:99px;'
+          + (b.k === band
+              ? 'background:'+TONE[b.k].bg+';color:'+TONE[b.k].ink+';border:1px solid '+TONE[b.k].bd
+              : 'background:#f7f6fa;color:#7d7889;border:1px solid #f1f0f4') })),
+    };
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'overview', l:'Overview', i:I.globe, show:true },
+      { k:'identity', l:'Identity', i:I.id, show:showIdentity },
+      { k:'entity', l:'Entity', i:I.building, show:showEntity },
+      { k:'accreditation', l:'Accreditation', i:I.badge, show:showAccred },
+      { k:'agreements', l:'Agreements', i:I.pen, show:true },
+      { k:'sanctions', l:'Sanctions', i:I.search, show:showSanctions, adminOnly:true },
+    ].filter(t => t.show);
+    const tab = TABS.some(t => t.k === st.tab) ? st.tab : 'overview';
+    const badgeFor = (k) => {
+      const o = oblRaw.filter(x => x.tab === k && (SEV[x.status] === 'blocked' || x.status === 'not_started'));
+      return o.length ? String(o.length) : '';
+    };
+    const tabs = TABS.map(t => {
+      const on = tab === t.k, badge = badgeFor(t.k);
+      return { label:t.l, icon:t.i, adminOnly: !!t.adminOnly, badge,
+        badgeStyle:'font-size:9.5px;font-weight:800;min-width:15px;height:15px;padding:0 4px;border-radius:99px;background:#dc2626;color:#fff;display:inline-flex;align-items:center;justify-content:center',
+        go: () => this.setState({ tab:t.k }),
+        style:'display:flex;align-items:center;gap:7px;padding:11px 15px;font-size:13px;font-weight:'+(on?'700':'600')
+          +';color:'+(on?V7:'#6b6577')+';border-bottom:2px solid '+(on?V:'transparent')
+          +';white-space:nowrap;flex:none' };
+    });
+
+    // ============ KYC ============
+    const kycStatus = { founder:'not_started', investor:'verified', partner:'in_review', admin:'verified' }[role];
+    const kyc = {
+      statusLabel: LABEL[kycStatus], pill: pill(kycStatus),
+      cardStyle: cardStyle(kycStatus), railStyle: railStyle(kycStatus), iconWrap: iconWrap(kycStatus),
+      icon: SEV[kycStatus] === 'positive' ? I.check : SEV[kycStatus] === 'progress' ? I.clock : I.id,
+      note: kycStatus === 'not_started' ? 'Government-issued ID for AML compliance. Nothing is screened until you submit — status syncs into your Trust score.'
+        : kycStatus === 'in_review' ? 'Submitted and awaiting third-party verification. No action needed from you; we will email when the result lands.'
+        : 'Verified against a government-issued ID. Re-verification is required annually.',
+      stamp: kycStatus === 'not_started' ? '' : kycStatus === 'in_review' ? 'Submitted Aug 22, 2026' : 'Verified Jun 30, 2026',
+    };
+    const f = (label, ph, req, wide) => ({ label, ph:ph||'', req:!!req, isText:true, isSelect:false,
+      wrap: wide ? 'grid-column:1 / -1' : '' });
+    const sel = (label, options, req, wide) => ({ label, options, req:!!req, isSelect:true, isText:false,
+      wrap: wide ? 'grid-column:1 / -1' : '' });
+    // Section counts are DERIVED from the rendered field list (+ upload/attestation suffix)
+    // so the header can never drift from what the form actually shows.
+    const nDisc = 2;
+    const kycSections = [
+      { n:'1', title:'Legal identity', hint:'Must match the government ID you upload below.',
+        fields:[ f('Legal First Name','', true), f('Legal Last Name','', true),
+                 f('Date of Birth','YYYY-MM-DD', true), f('Nationality','e.g. American'),
+                 f('Phone','+1 555…') ],
+        hasUpload:false, hasDisclosures:false },
+      { n:'2', title:'Residential address', hint:'Your permanent residence, not a mailing or office address.',
+        fields:[ sel('Country',['Select country','United States','United Kingdom','Switzerland','Canada','Germany','France','Singapore','Other'], true),
+                 f('Address Line 1','', true), f('Address Line 2'), f('City','', true),
+                 f('State / Region'), f('Postal Code','', true) ],
+        hasUpload:false, hasDisclosures:false },
+      { n:'3', title:'Government ID', hint:'One clear photo or scan — all four corners visible.',
+        fields:[ sel('ID Type',['Passport','National ID card','Driver\u2019s license','Residence permit'], true),
+                 f('ID Number','', true) ],
+        hasUpload:true, hasDisclosures:false },
+      { n:'4', title:'Disclosures & consent', hint:'Both required before we can screen and verify.',
+        fields:[], hasUpload:false, hasDisclosures:true },
+    ].map(s => {
+      const n = s.fields.length;
+      const parts = [];
+      if (n) parts.push(n + ' field' + (n === 1 ? '' : 's'));
+      if (s.hasUpload) parts.push('upload');
+      if (s.hasDisclosures) parts.push(nDisc + ' attestations');
+      return Object.assign({}, s, { count: parts.join(' + ') });
+    });
+    const DISC = [
+      { k:'pep', text:'I am, or am closely related to, a Politically Exposed Person (PEP).',
+        sub:'Checking this does not disqualify you — it routes your file for enhanced due diligence.' },
+      { k:'sanc', text:'I confirm I am not on any sanctions list (OFAC, UN, EU, UK) and the information above is accurate. I authorize Axal VC to verify my identity with third-party providers (Persona / Sumsub).',
+        sub:'' },
+    ];
+    const disclosures = DISC.map(d => {
+      const on = !!st.disc[d.k];
+      return { k:d.k, text:d.text, sub:d.sub,
+        bg: on ? 'rgba(124,58,237,.04)' : '#fff', bd: on ? 'rgba(124,58,237,.28)' : '#e4e2ea',
+        glyph: on ? '✓' : '',
+        boxStyle:'flex:none;width:18px;height:18px;border-radius:5px;margin-top:1px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;'
+          + (on ? 'background:'+V+';color:#fff;border:none' : 'background:#fff;border:1.5px solid #cfcdd6;color:transparent') };
+    });
+    const consented = !!st.disc.sanc;
+
+    // ============ KYB / ACCREDITATION ============
+    const kybStatus = { founder:'in_review', partner:'rejected', investor:'not_started', admin:'not_started' }[role];
+    const kyb = { statusLabel: LABEL[kybStatus], pill: pill(kybStatus), cardStyle: cardStyle(kybStatus),
+      railStyle: railStyle(kybStatus), iconWrap: iconWrap(kybStatus),
+      icon: SEV[kybStatus] === 'blocked' ? I.alert : SEV[kybStatus] === 'progress' ? I.clock : I.building };
+    const kybFields = [
+      f('Legal entity name','', true, true),
+      f('Business registration ID','', true),
+      sel('Country of incorporation',['Select country','United States — Delaware','United Kingdom','Switzerland','Canada','Singapore','Other'], true),
+    ];
+    const accStatus = 'pending';
+    const acc = { statusLabel: LABEL[accStatus], pill: pill(accStatus), cardStyle: cardStyle(accStatus),
+      railStyle: railStyle(accStatus), iconWrap: iconWrap(accStatus), icon: I.clock };
+    const accBasis = ['Income-based','Net-worth-based','Licensed professional','Entity accreditation','Third-party verification letter'];
+
+    // ============ AGREEMENTS ============
+    const hist = (rows) => rows.map((r, i) => ({ event:r[0], when:r[1], tone:r[2] || TONE.neutral.rail, line: i < rows.length - 1 }));
+    const ROLE_AGS = {
+      founder: [
+        { k:'ra1', name:'Founder NDA', status:'signed', meta:'Signed Mar 14, 2026 · renews Mar 14, 2027 · envelope AX-1183',
+          history: hist([['Envelope sent','Mar 12, 2026 · 09:14','#a1a1aa'],['Viewed by you','Mar 13, 2026 · 18:02','#d97706'],['Signed by you','Mar 14, 2026 · 08:47','#059669'],['Countersigned by Axal VC','Mar 14, 2026 · 11:20','#059669']]) },
+        { k:'ra2', name:'Program participation disclosure', status:'satisfied', meta:'Accepted Mar 14, 2026 · no renewal',
+          history: hist([['Presented at onboarding','Mar 14, 2026 · 08:40','#a1a1aa'],['Accepted','Mar 14, 2026 · 08:49','#059669']]) },
+      ],
+      investor: [
+        { k:'ra1', name:'Investor NDA', status:'signed', meta:'Signed Jan 8, 2026 · renews Jan 8, 2027 · envelope AX-0994',
+          history: hist([['Envelope sent','Jan 6, 2026 · 14:02','#a1a1aa'],['Signed by you','Jan 8, 2026 · 10:31','#059669'],['Countersigned by Axal VC','Jan 8, 2026 · 15:44','#059669']]) },
+        { k:'ra2', name:'Confidential information disclosure', status:'expired', meta:'Expired Jul 1, 2026 · re-signature required for gated materials',
+          history: hist([['Signed by you','Jul 1, 2025 · 09:00','#059669'],['Expired — 12-month term ended','Jul 1, 2026 · 00:00','#dc2626']]) },
+      ],
+      partner: [
+        { k:'ra1', name:'Service Partner NDA', status:'signed', meta:'Signed Nov 2, 2025 · renews Nov 2, 2026 · envelope AX-1042',
+          history: hist([['Envelope sent','Oct 30, 2025 · 11:15','#a1a1aa'],['Signed by you','Nov 2, 2025 · 16:20','#059669'],['Countersigned by Axal VC','Nov 3, 2025 · 09:05','#059669']]) },
+        { k:'ra2', name:'Conflict-of-interest disclosure', status:'self_attested', meta:'Self-attested Aug 1, 2026 · reviewed annually',
+          history: hist([['Attested by you','Aug 1, 2026 · 12:00','#d97706']]) },
+      ],
+      admin: [],
+    };
+    const roleAgsRaw = ROLE_AGS[role];
+    const mapAg = (a, i, arr, adminCtl) => {
+      const sev = SEV[a.status];
+      return Object.assign({}, a, {
+        statusLabel: LABEL[a.status], pill: pill(a.status),
+        rowStyle: rowStyle(a.status, i === arr.length - 1), railStyle: railStyle(a.status),
+        action: sev === 'blocked' ? 'Re-sign' : a.status === 'not_started' ? 'Sign' : a.status === 'pending' ? 'Sign' : '',
+        actionStyle:'flex:none;padding:7px 15px;border-radius:9px;font-size:12px;font-weight:700;'
+          + (sev === 'blocked' ? 'background:#dc2626;color:#fff' : 'background:'+V+';color:#fff'),
+        open: st.openAg === a.k, chev: st.openAg === a.k ? '\u2212' : '+',
+        adminCtl: !!adminCtl && (a.status === 'pending' || a.status === 'not_started'),
+      });
+    };
+    const roleAgs = roleAgsRaw.map((a, i) => mapAg(a, i, roleAgsRaw, false));
+
+    const NDAS = [
+      { k:'n1', party:'Sofia Marchetti · Marchetti Family Office', initials:'SM', bg:'#0f766e', status:'signed',
+        meta:'Mutual NDA · both parties signed Aug 4, 2026 · envelope AX-1207',
+        history: hist([['Envelope created','Aug 2, 2026 · 10:00','#a1a1aa'],['Signed by you','Aug 3, 2026 · 14:12','#059669'],['Signed by Sofia Marchetti','Aug 4, 2026 · 09:30','#059669'],['Data room access granted','Aug 4, 2026 · 09:31','#059669']]) },
+      { k:'n2', party:'David Reyes · Angel', initials:'DR', bg:'#b45309', status:'pending',
+        meta:'Sent Aug 20, 2026 · awaiting counterparty signature · envelope AX-1219',
+        history: hist([['Envelope created','Aug 20, 2026 · 08:15','#a1a1aa'],['Signed by you','Aug 20, 2026 · 08:22','#059669'],['Viewed by David Reyes','Aug 21, 2026 · 19:40','#d97706']]) },
+      { k:'n3', party:'Northlake Capital', initials:'NC', bg:'#1d4ed8', status:'expired',
+        meta:'Term ended Aug 1, 2026 · access revoked · envelope AX-0871',
+        history: hist([['Both parties signed','Aug 1, 2025 · 11:00','#059669'],['Term ended — access revoked','Aug 1, 2026 · 00:00','#dc2626']]) },
+      { k:'n4', party:'Halvorsen Ventures', initials:'HV', bg:'#be185d', status:'rejected',
+        meta:'Counterparty declined Aug 12, 2026 · requested redlines · envelope AX-1211',
+        history: hist([['Envelope created','Aug 10, 2026 · 16:00','#a1a1aa'],['Declined by counterparty','Aug 12, 2026 · 10:05','#dc2626']]) },
+      { k:'n5', party:'Ferrostack (waived)', initials:'FS', bg:'#64748b', status:'waived',
+        meta:'Waived by admin Jul 18, 2026 — existing master NDA covers this relationship',
+        history: hist([['Waiver applied by admin','Jul 18, 2026 · 13:22','#a1a1aa']]) },
+    ];
+    const ndas = NDAS.map((a, i) => mapAg(a, i, NDAS, role === 'admin'));
+
+    // ============ SANCTIONS ============
+    const screenFields = [
+      { label:'User ID', ph:'usr_…', req:true },
+      { label:'Full legal name (override)', ph:'Defaults to corporate or user name', req:false },
+      { label:'Date of birth (optional)', ph:'YYYY-MM-DD', req:false },
+      { label:'Nationality (ISO-2, optional)', ph:'US', req:false },
+    ];
+    const listChips = ['OFAC SDN','EU CFSP','UK HMT'];
+    const SEV_SCREEN = {
+      none:  { label:'None — clear', tone:'positive', note:'', },
+      review:{ label:'Review', tone:'progress', note:'Possible match — 2 candidates', },
+      block: { label:'Block', tone:'blocked', note:'High-confidence hit · OFAC SDN', },
+    };
+    const SCREENINGS = [
+      { name:'Guillaume Lauzier', role:'Admin · Axal VC', uid:'usr_8f21ac', lists:'3 of 3', when:'Aug 24, 09:12', sev:'none' },
+      { name:'Priya Menon', role:'Founder · LoopSense', uid:'usr_4c99de', lists:'3 of 3', when:'Aug 23, 16:40', sev:'none' },
+      { name:'A. Novak', role:'Investor prospect', uid:'usr_71b0f3', lists:'3 of 3', when:'Aug 23, 11:05', sev:'review' },
+      { name:'V. Kuznetsov', role:'Investor prospect', uid:'usr_2ad417', lists:'3 of 3', when:'Aug 22, 14:28', sev:'block' },
+      { name:'James Whitfield', role:'Founder · Halyard Security', uid:'usr_9e3b52', lists:'3 of 3', when:'Aug 22, 08:51', sev:'none' },
+      { name:'Diana Kessler', role:'Founder · Kelp Bio', uid:'usr_5d7c18', lists:'3 of 3', when:'Aug 21, 17:33', sev:'none' },
+    ];
+    const shown = SCREENINGS.filter(s => !st.flagged || s.sev !== 'none');
+    // A block hit must be impossible to skim past; a clear pass must read as resolved.
+    const screenings = shown.map((s, i) => {
+      const m = SEV_SCREEN[s.sev], key = m.tone === 'positive' ? 'satisfied' : m.tone === 'progress' ? 'in_review' : 'rejected';
+      const t = TONE[m.tone];
+      return { name:s.name, role:s.role, uid:s.uid, lists:s.lists, when:s.when,
+        severity:m.label,
+        pill:'display:inline-flex;align-items:center;gap:6px;flex:none;padding:'+(s.sev==='block'?'5px 13px':'4px 11px')
+          +';border-radius:99px;font-size:'+(s.sev==='block'?'11.5px':'11px')+';font-weight:'+(s.sev==='block'?'800':'700')
+          +';background:'+(s.sev==='block'?t.rail:t.bg)+';color:'+(s.sev==='block'?'#fff':t.ink)
+          +';border:1px solid '+(s.sev==='block'?t.rail:t.bd)+';white-space:nowrap'
+          + (s.sev==='block' ? ';box-shadow:0 1px 6px rgba(220,38,38,.3)' : ''),
+        hitNote: m.note, hitInk: t.ink,
+        rowStyle:'position:relative;border-bottom:'+(i === shown.length-1 ? 'none' : '1px solid #f4f3f7')
+          +';background:'+(s.sev === 'block' ? 'rgba(220,38,38,.045)' : s.sev === 'review' ? 'rgba(217,119,6,.03)' : '#fff'),
+        railStyle:'position:absolute;left:0;top:0;bottom:0;width:'+(s.sev==='block'?'4px':'3px')+';background:'+t.rail
+          +';opacity:'+(s.sev==='none'?'.5':'1'),
+      };
+    });
+
+    return {
+      shieldIcon:I.shield, shieldSmall:I.shield, upIcon:I.up, penIcon:I.pen, lockIcon:I.lock,
+      searchIcon:I.search, checkIcon:I.check,
+      shieldBg: score.wrapBg, shieldInk: score.ink,
+
+      roleTabs, tabs, score,
+      isOverview: tab === 'overview', isIdentity: tab === 'identity', isEntity: tab === 'entity',
+      isAccred: tab === 'accreditation', isAgreements: tab === 'agreements', isSanctions: tab === 'sanctions',
+
+      obligations, oblCounts, oblSummary,
+      startObligation: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-obl]');
+        const k = n && n.getAttribute('data-obl');
+        const o = obligations.find(x => x.k === k);
+        if (o && o.tab) this.setState({ tab:o.tab });
+        else if (o) this.flash(o.label + ' — opening the relevant flow.');
+      },
+
+      kyc, kycSections, disclosures,
+      toggleDisc: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-disc]');
+        const k = n && n.getAttribute('data-disc');
+        if (k) this.setState(s => ({ disc: Object.assign({}, s.disc, { [k]: !s.disc[k] }) }));
+      },
+      uploadTitle:'Upload ID document',
+      pickFile: () => this.flash('Select a file — JPG, PNG, WEBP, or PDF up to 6MB.'),
+      submitStyle:'margin-top:16px;width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:9px;padding:13px 0;border-radius:11px;font-size:13.5px;font-weight:800;'
+        + (consented ? 'background:'+V+';color:#fff' : 'background:#f1f0f4;color:#6f6a7d;cursor:not-allowed'),
+      submitNote: consented
+        ? 'Screened against OFAC, UN, EU, and UK lists on submission. Most results return within two business days.'
+        : 'Tick the sanctions attestation and verification consent to submit.',
+      submitKyc: () => { if (consented) this.flash('Submitted for verification — status moved to In Review.');
+        else this.flash('Sanctions attestation and verification consent are required.'); },
+
+      kyb, kybFields, submitKyb: () => this.flash('Entity submitted — status moved to In Review.'),
+      acc, accBasis, submitAcc: () => this.flash('Accreditation evidence submitted for review.'),
+
+      roleAgs, hasRoleAgs: roleAgs.length > 0, noRoleAgs: roleAgs.length === 0,
+      ndas, ndaLoading: st.ndaLoading, ndaReady: !st.ndaLoading,
+      skeletons:[{ w1:'46%', w2:'62%' },{ w1:'38%', w2:'55%' },{ w1:'52%', w2:'44%' }],
+      loadLabel: st.ndaLoading ? 'Show loaded' : 'Show loading',
+      toggleLoading: () => this.setState(s => ({ ndaLoading: !s.ndaLoading })),
+      toggleHistory: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-ag]');
+        const k = n && n.getAttribute('data-ag');
+        if (k) this.setState(s => ({ openAg: s.openAg === k ? null : k }));
+      },
+
+      screenFields, listChips, screenings,
+      hasScreenings: screenings.length > 0, noScreenings: screenings.length === 0,
+      emptyScreenTitle: st.flagged ? 'No review or block results' : 'No screenings yet',
+      emptyScreenBody: st.flagged
+        ? 'Every run in the current window came back clear. Untick the filter to see all results.'
+        : 'Run a screening above to populate this log. Results are retained for audit.',
+      runScreening: () => this.flash('Screening queued against OFAC SDN + EU CFSP + UK HMT.'),
+      toggleFlagged: () => this.setState(s => ({ flagged: !s.flagged })),
+      flagGlyph: st.flagged ? '✓' : '',
+      flagBox:'width:16px;height:16px;border-radius:5px;flex:none;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;'
+        + (st.flagged ? 'background:'+V+';color:#fff;border:none' : 'background:#fff;border:1.5px solid #cfcdd6;color:transparent'),
+      flagBd: st.flagged ? 'rgba(124,58,237,.28)' : '#e4e2ea',
+      flagBg: st.flagged ? 'rgba(124,58,237,.04)' : '#fff',
+      flagInk: st.flagged ? V7 : '#6b6577',
+
+      toast: st.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>

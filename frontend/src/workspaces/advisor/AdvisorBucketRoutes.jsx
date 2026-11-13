@@ -1,0 +1,478 @@
+import React, { Suspense, lazy, useMemo } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Card, Skeleton, WorkerRail } from '../../ui';
+import WorkspaceShell from '../WorkspaceShell';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
+import NoStoreYet from '../NoStoreYet';
+import BucketBoard from '../BucketBoard';
+import { boardFor } from '../boards';
+import { api } from '../../lib/api';
+import { ADVISOR_COPY } from '../noStoreCopy';
+import { CohortSectionNav, CohortWorkspaceProvider } from '../../pages/advisor/cohorts/CohortWorkspace';
+import { COHORT_PROMPTS } from '../../pages/advisor/cohorts/cohortModel';
+
+const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
+const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
+const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
+const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
+const PracticeOpportunitiesZone = lazy(() => import('../../pages/advisor/practice/OpportunitiesZone'));
+const PracticeEngagementsZone = lazy(() => import('../../pages/advisor/practice/EngagementsZone'));
+const PracticeDeliveryZone = lazy(() => import('../../pages/advisor/practice/DeliveryZone'));
+const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
+const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
+const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
+const ExpertiseServicesZone = lazy(() => import('../../pages/advisor/expertise/ServicesZone'));
+const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/ProofZone'));
+const ExpertiseThinkingZone = lazy(() => import('../../pages/advisor/expertise/ThinkingZone'));
+// D1597 (#3870), mounted by D1424 (#3700): requests per booking link and opens of your writing.
+const ExpertiseVisibilityZone = lazy(() => import('../../pages/advisor/expertise/VisibilityZone'));
+const CohortsGuidanceZone = lazy(() => import('../../pages/advisor/cohorts/GuidanceZone'));
+const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/CalendarZone'));
+// D4813 (#4813, package 1): `/cohorts` is the command centre, not a directory.
+const CohortsOverviewZone = lazy(() => import('../../pages/advisor/cohorts/OverviewZone'));
+
+/**
+ * Practice, Cohorts and Expertise — one component, three buckets.
+ *
+ * WHY TOGETHER. All three are the same job: put a canvas bucket's zones on real
+ * routes, mount the live surface where one exists, and say so honestly where
+ * one does not. Splitting that into three near-identical files would be three
+ * places to keep in step.
+ *
+ * PRACTICE IS WHOLE NOW, AND THIS PARAGRAPH USED TO SAY THE OPPOSITE. It read
+ * "Practice partly exists… Sessions and Earnings have no code anywhere. The
+ * three that overlap mount the live workspace" — true when written, and false
+ * in every clause by the time PR3 landed. Migration 205 gave Sessions and
+ * Earnings their stores; the canvas series gave the other three their own
+ * pages, one artboard at a time. Leaving the sentence standing would have told
+ * the next reader that two zones are empty and three are somebody else's.
+ *
+ * `/advisor/advisory/*` shipped five tabs: Opportunities, Clients, Engagements,
+ * Delivery, Contracts. The canvas asks for five zones: Opportunities,
+ * Engagements, Delivery, Sessions, Earnings. Three overlapped, and all three
+ * have moved to a page of their own because in each case the tab answered a
+ * different question than the artboard asked. **Clients and Contracts have no
+ * zone in the canvas**, so they keep their `/advisor/advisory/*` routes and are
+ * linked from Opportunities rather than being dropped — the canvas having no
+ * seat for a working tab is a gap in the canvas, not permission to delete the
+ * tab. What each tab could do that its artboard did not ask for moved with it:
+ * Delivery's post-session review loop is a section of the new Delivery page.
+ *
+ * COHORTS READS SPIN-OUT LAB DATA, read-only both ways: it owns no Lab route,
+ * writes nothing back, and every founder-sourced object carries the seam mark.
+ * Migration 206 added the advisor↔cohort assignment this bucket waited on, so
+ * Founders, This week and Outcomes are real pages now. The assignment is the
+ * authorisation — an admin grants it, the worker refuses without it, and a
+ * refusal renders as a stated boundary rather than an empty cohort.
+ *
+ * EXPERTISE NOW HAS THREE REAL ZONES, and two that still say what is missing.
+ * Migrations 202, 203 and 204 gave Profile, Services and Proof stores of their
+ * own, so each mounts its own page instead of all five rendering one
+ * undifferentiated component. Thinking and Visibility keep a NoStoreYet card
+ * naming exactly which store is absent.
+ *
+ * /office-hours IS RETIRED. It coupled the storefront to booking and was
+ * broken at both — it read five keys the DTOs never emitted, so an advisor
+ * could not accept a booking there and every slot showed "Invalid Date".
+ * Expertise owns the storefront now and Practice owns booking, which is the
+ * split the canvas asked for; the old path redirects to Opportunities.
+ */
+
+function Loading() {
+  return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-56" /></div>;
+}
+
+/**
+ * One line per zone, for the zones that have a page behind them.
+ *
+ * A zone with NO store is deliberately absent from this map: its card is
+ * written from `COPY` below — the same sentence the zone's own page shows —
+ * so an overview card can never promise what the page behind it denies. That
+ * is not hypothetical. This map first shipped describing Guidance as "what
+ * you have told the batch, and who has acted on it" over a page that reads
+ * "Cohort guidance has no store"; Visibility as "what it converts" over
+ * "Nothing counts profile views"; Earnings as "what the platform took" beside
+ * a rail on the same screen denying any cut at all (both wrong then, and both
+ * still wrong now for opposite reasons — 241 records a rate, and nothing has
+ * been charged under it, so neither the claim nor the denial is available);
+ * and Services as "how
+ * often it is booked", which `units_sold` returns null for by design. Four
+ * cards advertising a feature and one contradicting a recorded decision, on
+ * the one surface an advisor reads before choosing where to click.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a no-store zone
+ * reappears here, and if a blurb re-acquires the settled-money or
+ * booking-count claims.
+ */
+const ZONE_BLURB = {
+  // Practice — all five zones read a real store.
+  opportunities: 'Inbound requests and proposals — what is asking for your time.',
+  // THE ARTBOARD'S OWN BLURB, with one word changed. It reads "including the two
+  // that ended"; two is this canvas's fixture count and would be a claim about
+  // the reader's own book, so it becomes "the ones that ended". The clause after
+  // it is why the zone exists and stays verbatim.
+  engagements: 'Every client with their scope, contract state and renewal date — including the ones that ended, because a practice is judged on renewals.',
+  // THE ARTBOARD'S OWN BLURB, verbatim. What it replaced — "what you have sent
+  // a client, and what is still outstanding" — described the legacy tab, which
+  // sent nothing and tracked no document: its own disclaimer said deliverables
+  // "are not tracked yet". Migration 239 is what made the sentence true.
+  delivery: 'Every work product, every version, and whether anyone opened it.',
+  sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
+  // The second clause used to read "Axal settles nothing and takes no cut",
+  // which migration 241 made false in one half and unknowable in the other: a
+  // rate IS recorded per priced line, and whether anything settles is
+  // `settlement` on the response, which a static blurb cannot read. It states
+  // the rate and leaves the settlement question to the page. D75.
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed, with the platform rate recorded against each priced session.',
+  // Expertise — all five zones read a store now (visibility since D1424, over
+  // D1597's read).
+  profile: 'What a founder sees before they book you.',
+  services: 'What you sell and at what price. Nothing counts how often a service is booked.',
+  proof: 'Claims you have made, and whether the person named has confirmed each one.',
+  // Views are this hub's own count. Where a piece ran is not recorded anywhere,
+  // so no blurb here may imply a combined reach figure.
+  thinking: 'What you have published, and how many people opened it here.',
+  // No profile view is recorded, so this blurb names only the two recorded counts.
+  visibility: 'Requests through each booking link, and opens of your writing here. Profile views are not recorded.',
+  // Cohorts — all five read a store since migration 212 and the calendar join.
+  founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
+  'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
+  // No "how fast you reply": nothing stores a response commitment, so the
+  // blurb must not imply one is being kept.
+  guidance: 'What you have said to this batch, and which founders recorded acting on it.',
+  // "Booked" and "the batch's dates" only — an unbooked slot is availability,
+  // not an obligation, and the zone deliberately leaves those out.
+  calendar: 'The batch’s dates and your own booked sessions, on one page.',
+  outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
+};
+
+// Zones served by the legacy five-tab Advisory workspace, which carries its
+// own shell and must therefore be mounted `embedded`.
+//
+// THIS SET IS EMPTY NOW, AND THE MECHANISM STAYS ANYWAY. It is the generic
+// escape hatch for a bucket whose zone is served by a workspace of its own
+// making, and `/practice` is simply the first bucket to have finished emptying
+// it — all five zones have their own page. Keeping the key and the branch is
+// also what lets the three canvas PRs' guards keep reading this block for the
+// slugs that are NOT in it.
+//
+// NO ZONE SLUG APPEARS IN SINGLE QUOTES IN THESE COMMENTS, on purpose.
+// `advisor_expertise_zones.test.mjs` reads this whole slice as text and counts a
+// quoted slug as a zone the legacy workspace still serves, so a comment
+// explaining that a zone left would assert it had not. Backticks throughout.
+const LIVE = {
+  // The zone named `opportunities` LEFT THIS SET when PR1 landed. The Advisory
+  // tab it pointed at was an inbox — pending requests plus a slot editor — and
+  // the artboard asks for a decision LOG over every request that ever arrived.
+  // Both read `advisor_bookings`; only one of them answers the canvas.
+  //
+  // `engagements` LEFT ON PR2, and the gap was wider than PR1's. That tab was a
+  // flat list of BOOKINGS with Upcoming/Past/All chips and three lifecycle
+  // buttons — a session list keyed on `advisor_bookings.status`. The artboard is
+  // a CONTRACT board with renewal cycles and written scope, which nothing in the
+  // schema could hold until migration 238.
+  //
+  // `delivery` LEFT ON PR3 AND EMPTIED THE SET. Its tab was a post-session
+  // REVIEW loop — sessions held, how many you had reviewed, your average rating
+  // — and the artboard is a collection of WORK PRODUCTS with a version trail and
+  // an open receipt. The tab's own disclaimer said document deliverables were
+  // not tracked, which was accurate: nothing in twenty `advisor_*` tables
+  // carried a version, a sent stamp or an opened stamp until migration 239. The
+  // review loop was not deleted with the tab — it is a section of the new page,
+  // because it is the one capability that lives nowhere else.
+  '/practice': new Set([]),
+};
+
+// One page per zone, each over the store its migration created. These render a
+// BODY only — the shell below draws the crumb, h1, pills and rail — so unlike
+// the Advisory workspace they need no `embedded` prop.
+const ZONE = {
+  '/cohorts': {
+    founders: CohortsFoundersZone,
+    'this-week': CohortsThisWeekZone,
+    guidance: CohortsGuidanceZone,
+    calendar: CohortsCalendarZone,
+    outcomes: CohortsOutcomesZone,
+  },
+  '/practice': {
+    opportunities: PracticeOpportunitiesZone,
+    engagements: PracticeEngagementsZone,
+    delivery: PracticeDeliveryZone,
+    sessions: PracticeSessionsZone,
+    earnings: PracticeEarningsZone,
+  },
+  '/expertise': {
+    profile: ExpertiseProfileZone,
+    services: ExpertiseServicesZone,
+    proof: ExpertiseProofZone,
+    thinking: ExpertiseThinkingZone,
+    visibility: ExpertiseVisibilityZone,
+  },
+};
+
+/**
+ * ONE CARD LEFT, AND IT IS THE ONLY ONE THAT WAS STILL TRUE.
+ *
+ * Practice emptied first: Sessions and Earnings said they had "no store at
+ * all", true when written and false the moment migration 205 shipped. Cohorts
+ * emptied next — Founders, This week and Outcomes went the same way after 206.
+ *
+ * THE THREE DELETED HERE WERE CHECKED AGAINST PRODUCTION, NOT ASSUMED, and two
+ * of them turned out to be describing gaps that had already closed:
+ *
+ *   · `expertise/thinking` claimed `articles` "has no advisor owner, no reach
+ *     figure and no record of where a piece ran". `author_user_id` is NOT NULL
+ *     and `views` is a live counter incremented on every published read
+ *     (`routes/articles.ts:320`). Two of its three claims were false; the zone
+ *     now states the third on itself.
+ *   · `cohorts/calendar` said "both halves exist and nothing joins them" — the
+ *     one card whose diagnosis was exactly right and whose fix needed no
+ *     migration at all. The zone is that join.
+ *   · `cohorts/guidance` was right that nothing stored it. Migration 212 does.
+ *
+ * A card describing a closed gap is worse than no card: it tells an advisor a
+ * working feature is missing. That is why these are DELETED rather than
+ * reworded, and why every remaining card in this bucket was re-read against
+ * `PRAGMA table_info` before this pass rather than trusted.
+ *
+ * `expertise/visibility` WAS THE LAST CARD, and D1597 (#3870) closed it the
+ * way Thinking's closed: not with a view counter (owner answer H declined one)
+ * but by reading what is recorded, requests per booking link and opens of
+ * the advisor's writing, with profile views drawn "Not recorded" on the page
+ * itself. D1424 (#3700) mounted it, so this bucket has no card left.
+ */
+const COPY = ADVISOR_COPY;
+
+/** #4834 (D4834): the Practice v2 section row, in `Practice v2 Page.dc.html`'s `ZONES` order. */
+const PRACTICE_ROW = Object.freeze({
+  overview: 'Overview',
+  order: ['opportunities', 'engagements', 'sessions', 'delivery', 'earnings'],
+  scroll: true,
+});
+
+export default function AdvisorBucketRoutes({ preview = false }) {
+  const location = useLocation();
+  const bucket = bucketForPath('advisor', location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
+  const prefix = bucket?.prefix;
+  const slug = zone?.slug;
+
+  const body = useMemo(() => {
+    // Bucket root: render the canvas overview — the zone grid that says what
+    // this bucket holds and opens each zone from there. The sidebar row must
+    // land here, not on the first zone.
+    // D4813: THE COHORTS ROOT IS ITS OVERVIEW. It used to be the bucket grid —
+    // five cards labelled WORK BOARD, FEED and COLLECTION that described the
+    // zones instead of the cohort. Board C1 replaces it with what the advisor
+    // opens the workspace for: who needs them, the four-week progress, the
+    // next seven days and recorded activity.
+    if (isRoot && prefix === '/cohorts') {
+      return <Suspense fallback={<Loading />}><CohortsOverviewZone /></Suspense>;
+    }
+    if (isRoot) {
+      // `unbuilt` is derived from COPY — the same object each zone page
+      // renders — so a card cannot describe a store the page denies having.
+      const board = boardFor('advisor', prefix, api);
+      return board ? (
+        <BucketBoard bucket={bucket} role="advisor" board={board} />
+      ) : (
+        <BucketOverview
+          bucket={bucket}
+          role="advisor"
+          descriptions={ZONE_BLURB}
+          unbuilt={unbuiltFrom(COPY[prefix])}
+        />
+      );
+    }
+
+    const Zone = ZONE[prefix]?.[slug];
+    if (Zone) return <Suspense fallback={<Loading />}><Zone /></Suspense>;
+
+    if (LIVE[prefix]?.has(slug)) {
+      // `embedded`: the WorkspaceShell below already draws the crumb, the h1,
+      // the zone pills and the rail. AdvisorAdvisoryWorkspace carries its own
+      // AdvisorWorkspaceShell, which would draw a second of each inside it.
+      return <Suspense fallback={<Loading />}><AdvisorAdvisoryWorkspace embedded /></Suspense>;
+    }
+    const copy = COPY[prefix]?.[slug];
+    if (copy) return <NoStoreYet {...copy} accentClass="text-emerald-700" />;
+    return <NoStoreYet
+      accentClass="text-emerald-700"
+      heading="Nothing here yet"
+      what="This zone is named by the canvas and has no surface behind it."
+      why="It ships empty rather than as a placeholder that could be mistaken for real data."
+    />;
+  }, [prefix, slug, preview, isRoot, bucket]);
+
+  // ONE SENTENCE PER BUCKET, DRAWN ON THE BUCKET ROOT. Keyed by prefix, which
+  // is right for a root and wrong for a zone: all five Expertise zones printed
+  // this same line under five different headings, so Profile, Services, Proof
+  // and Thinking each told the reader how the market finds them.
+  const INTRO = {
+    '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
+    // D4813: the canvas's own subtitle, on every Cohorts section.
+    '/cohorts': 'Guide founders from milestones to outcomes.',
+    '/expertise': 'How the market finds you, and what it finds when it does.',
+  };
+
+  /**
+   * The heading and the line under it, per Expertise zone, from the canvas.
+   *
+   * `Pages · Advisor Expertise` (`design/incoming/`) gives each artboard an
+   * `h1` that is NOT the zone's nav label — `Practice profile` under a pill
+   * reading `Profile`, `Evidence` under `Proof` — and a `sub` naming what that
+   * zone lists. The shell was passing `title` only on the bucket root, so every
+   * zone fell back to its pill label, and `intro` only ever carried the bucket
+   * sentence above. Both are the canvas's own strings.
+   *
+   * Only Expertise has them because only Expertise has a canvas in this shape;
+   * `/practice` and `/cohorts` keep the bucket sentence on every zone, which is
+   * what their own canvases draw.
+   */
+  const EXPERTISE_ZONE_HEAD = {
+    profile: { h1: 'Practice profile', sub: 'Positioning, sectors, stages, languages, geography, availability.' },
+    services: { h1: 'Service ledger', sub: 'Named services, durations and prices.' },
+    proof: { h1: 'Evidence', sub: 'Completed engagements, published outcomes, credentials.' },
+    thinking: { h1: 'Published thinking', sub: 'Points of view, newest first.' },
+    // D1424: the canvas's sub named impressions and views, which nothing records (owner answer H).
+    visibility: { h1: 'Surfaces & funnel', sub: 'Requests per booking link and opens of your writing. Profile views are not recorded.' },
+  };
+  const zoneHead = prefix === '/expertise' && !isRoot ? EXPERTISE_ZONE_HEAD[slug] : null;
+
+  // The Worker AI rail, absent from all fifteen of these routes until now: the
+  // shell has taken a `rail` slot since the founder pass and this caller never
+  // filled it, so every Practice, Cohorts and Expertise zone rendered with an
+  // empty right-hand column. That is the report, for the third licence running:
+  // "some pages doesn't have it, it does show anything, it looks blank".
+  //
+  // What it says here is what is true here. A zone with no store behind it
+  // reports exactly that, rather than a coverage count it cannot produce — the
+  // rail is the one component on the page that must never be more confident
+  // than the body beside it.
+  // LIVE ∪ ZONE, and the union is the fix. `live` drives the rail's coverage
+  // line, and it used to read `LIVE` alone — which holds only the three legacy
+  // Advisory tabs. Every zone served through `ZONE` therefore rendered
+  // "<Zone> has no store behind it" while reading a real store: five shipped
+  // pages saying the opposite of the truth, on the rail, which is the one
+  // component on the page that must never be more confident than the body
+  // beside it. It was the opposite failure and just as wrong.
+  const live = Boolean(LIVE[prefix]?.has(slug) || ZONE[prefix]?.[slug]);
+  const coverage = isRoot
+    ? [`${bucket?.label || 'This bucket'} overview — ${bucket?.zones?.length || 0} zones`]
+    : [live
+      ? `${zone?.label || 'This zone'} reads the stored record`
+      : `${zone?.label || 'This zone'} has no store behind it`];
+  const RAIL = {
+    '/practice': {
+      workspace: 'Practice',
+      stance: 'Manual practice record',
+      note: 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
+      unavailable: [
+        // "takes no cut" and "nothing on this bucket settles anything" were
+        // both here, and 241 made the first false outright. The rail is
+        // static and cannot read `settlement`, so it names what is recorded
+        // and sends the settlement question to Earnings, which reads it. D75.
+        ['Money movement', 'A session amount is your own bookkeeping note, and a platform rate is recorded against each priced session. Axal issues no invoice, runs no checkout and holds nothing on your behalf. Whether anything has been charged is stated on Earnings, which reads that live.'],
+        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other sessions. Every amount here is one you typed.'],
+        // D571 — the Ops canvas puts a proposal on its deliverables, session
+        // types and booking links screens. `routes/research.ts` registers no
+        // draft surface for any of the three, so the rail says so instead.
+        ['Drafts for clients', 'Eadwyn drafts no status update on Delivery, and no session description or booking follow-up on Sessions. None of the three has a draft source yet.'],
+      ],
+    },
+    '/cohorts': {
+      workspace: 'Cohorts',
+      stance: 'Read-only, both ways',
+      note: 'Cohort data belongs to the Lab and to the founder. This bucket owns no Lab route and writes nothing back.',
+      unavailable: [
+        ['Assigning yourself a batch', 'An admin decides which cohort you advise. Nothing on this bucket can grant, extend or end your own access, and a refusal is shown as a boundary rather than as an empty cohort.'],
+        ['Writing to the Lab', 'Every founder row here is the Lab’s record read as-is. Nothing edits a week result, a deadline, an admission or a graduation.'],
+      ],
+    },
+    '/expertise': {
+      workspace: 'Expertise',
+      stance: 'Manual profile record',
+      // D4711: this said nothing is drafted here, beside a Services form that
+      // offers Ask on a new service's Title and What it covers (D1329). The
+      // rail says what Ask does there, and what it never touches.
+      note: 'Profile, services and proof read and write the stored practice record. On a new service, Ask can draft its title and what it covers, only when you ask, and nothing is saved until you add it. No positioning line, price, claim or attestation is drafted.',
+      unavailable: [
+        ['Attestation', 'Confirmation is asked of a named person and recorded from their own answer, never assumed. An unconfirmed claim stays visibly weaker than a confirmed one, and nothing here can move a claim between those two states on your behalf.'],
+        ['Money movement', 'A service price is your record of what you charge. Axal issues no invoice, runs no checkout, and settles nothing.'],
+      ],
+    },
+  }[prefix];
+
+  // D4813: Cohorts draws its own header row — the one cohort selector and six
+  // section tabs (Overview first), every link carrying `?cohort=` — through
+  // the shell's `sectionNav`, under a provider every section reads the
+  // selection from.
+  const cohorts = prefix === '/cohorts';
+  const shell = (
+    <WorkspaceShell
+      role="advisor"
+      title={cohorts ? 'Cohorts' : (isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
+      sectionNav={cohorts ? <CohortSectionNav /> : undefined}
+      // #4834 (D4834): Practice v2's section row (PX-10): Overview first, the
+      // canvas's order, one line that scrolls sideways on a phone.
+      zoneRow={prefix === '/practice' ? PRACTICE_ROW : null}
+      // NO `scope` PROP. It read `scope={prefix === '/cohorts' ? 'One cohort'
+      // : 'One practice'}` — a conditional literal the frame contract's
+      // attribute-only pattern missed. The shell fills that slot from
+      // `ActiveCompanyContext`, so the badge names the company instead of
+      // restating the rule.
+      intro={zoneHead?.sub || INTRO[prefix]}
+      activeSlug={isRoot ? null : undefined}
+      rail={RAIL && (
+        <WorkerRail
+          workspace={RAIL.workspace}
+          role="advisor"
+          stance={RAIL.stance}
+          note={RAIL.note}
+          coverage={coverage}
+          unavailable={RAIL.unavailable}
+          // D4813 package 4: Eadwyn's advisor prompts on every Cohorts section.
+          // They fill the Ask composer and send nothing (`promptOptions`).
+          prompts={cohorts ? COHORT_PROMPTS : undefined}
+        />
+      )}
+    >
+      {/* THE BOUNDARY IS A LINE ABOVE THE ZONE, NOT THE ZONE. This used to be
+          `if (preview) return <AdvisorPreviewNotice />` inside `body`, so an
+          admin previewing the Advisor role got one card instead of a page on
+          all eighteen of these routes — reported as unnecessary, and it was:
+          the boundary was stated eighteen times and the product never once.
+
+          What the card was defending is still defended. When Cohorts joined
+          this gate the argument was that an admin would otherwise see "no
+          batch assigned" and read a BOUNDARY as an ABSENCE. That argument is
+          about whether the boundary is STATED, not about whether it takes over
+          the page — and the strip states it, in words, directly above the zone
+          it applies to.
+
+          Access is unchanged: every `/api/advisors/me/*` read goes through
+          `requireMyAdvisor`, which throws for a caller with no advisor row. The
+          zone renders its own frame over no rows; no endpoint hands back a
+          practice that is not the caller's. */}
+      {preview && <AdvisorPreviewNotice />}
+      {body}
+      {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
+        <Card className="mt-4 p-4">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+            Still here, still working
+          </div>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
+            <Link to="/advisor/advisory/clients" className="text-emerald-700 underline">Clients</Link> and{' '}
+            <Link to="/advisor/advisory/contracts" className="text-emerald-700 underline">Contracts</Link> are
+            live tabs the canvas has no zone for. They keep their routes rather than being dropped — a working
+            tab with no seat in a taxonomy is a gap in the taxonomy, not permission to delete the tab.
+          </p>
+        </Card>
+      )}
+    </WorkspaceShell>
+  );
+  return cohorts ? <CohortWorkspaceProvider preview={preview}>{shell}</CohortWorkspaceProvider> : shell;
+}

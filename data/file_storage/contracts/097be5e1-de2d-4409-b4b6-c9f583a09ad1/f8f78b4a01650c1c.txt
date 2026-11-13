@@ -1,0 +1,40 @@
+SECTION 83(b) ELECTION UNDER THE INTERNAL REVENUE CODE
+
+Taxpayer: Bob
+SSN: ____________________
+Tax Year: 2026
+
+To: Internal Revenue Service
+    [Appropriate IRS Service Center based on taxpayer address]
+
+The undersigned taxpayer hereby makes an election under Section 83(b) of the Internal
+Revenue Code with respect to the property described below:
+
+1. PROPERTY DESCRIPTION
+   Shares of carried interest / membership units in Test Wizard Inc.
+
+2. DATE OF TRANSFER: 2026-04-22
+
+3. TAXABLE YEAR: Calendar Year ____
+
+4. PROPERTY DETAILS
+   (a) Number of units/shares: __________
+   (b) Fair market value at time of transfer: $__________
+   (c) Amount paid for the property: $__________
+   (d) Amount to include in gross income: $__________
+
+5. RESTRICTIONS
+   The property is subject to a vesting schedule of __ years with a __-year cliff.
+   The property is subject to forfeiture if the taxpayer ceases service before fully vesting.
+
+6. COPIES FURNISHED TO:
+   (a) IRS (this filing)
+   (b) Test Wizard Inc. (employer/partnership)
+   (c) Taxpayer's personal records
+
+CRITICAL DEADLINE: This election must be filed with the IRS within 30 days of the
+transfer date. Failure to file timely results in taxation at ordinary income rates
+as the property vests, which can result in significantly higher tax liability.
+
+Signed: ____________________
+Date: ____________________

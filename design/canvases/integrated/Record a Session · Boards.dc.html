@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:Inter,system-ui,sans-serif;color:#18181b;-webkit-font-smoothing:antialiased}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+    <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">{{ r.title }}</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">{{ r.note }}</span></div>
+      <div style="display:flex;gap:56px;align-items:flex-start">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="2">
+          <div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px;flex:none">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</span><span style="font:800 14px/1.2 Inter,system-ui,sans-serif">{{ b.title }}</span></div>
+            <div style="display:flex;gap:28px;align-items:flex-start">
+              <div style="width:1440px;flex:none;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f8f8fa;box-shadow:0 2px 14px rgba(24,24,27,.08)"><dc-import name="Cycle Overview" cycle="{{ b.cycle }}" variant="{{ b.variant }}" page="{{ b.page }}" module="{{ b.module }}" hint-size="1440px,1300px"></dc-import></div>
+              <sc-if value="{{ b.phone }}" hint-placeholder-val="{{ false }}"><div style="width:390px;height:844px;flex:none;border:10px solid #18181b;border-radius:40px;overflow:auto;background:#f8f8fa"><dc-import name="Cycle Overview" cycle="{{ b.cycle }}" variant="{{ b.variant }}" page="{{ b.page }}" module="{{ b.module }}" mobile="{{ true }}" hint-size="370px,844px"></dc-import></div></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+<section id="recording" style="padding:44px 48px 36px;border-top:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:14px;background:#f1f0f5">
+  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 18px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.015em">Validate · Record a session → the recording view</span><span style="font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)">Opened by Record a session (/validate/record → /validate/record/live): phone and desktop, the talking-points drawer, every state, and the minimised view.</span></div>
+  <dc-import name="Recording View Canvas" hint-size="100%,3200px"></dc-import>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const B = (id, title, cycle, variant, phone, page, module) => ({ id, title, cycle, variant, phone, page: page || '', module: module ?? -1 });
+    return { rows: [
+      { title: 'Validate', note: 'Research → Insights → Evidence. Headline figures, then one chart card per module in tab order. No module lists, no status pills, no Pro strip.', boards: [B('O1', 'Validate overview', 'Validate', 'full', true), B('O1n', 'Validate · a new venture', 'Validate', 'new', false)] },
+      { title: 'Build', note: 'From Concept → Company.', boards: [B('O2', 'Build overview', 'Build', 'full', true), B('O2n', 'Build · new venture', 'Build', 'new', true)] },
+      { title: 'Raise', note: 'From Story → Capital.', boards: [B('O3', 'Raise overview', 'Raise', 'full', true), B('O3n', 'Raise · new venture', 'Raise', 'new', false)] },
+      { title: 'Grow', note: 'From Traction → Impact.', boards: [B('O4', 'Grow overview', 'Grow', 'full', true), B('O4n', 'Grow · new venture', 'Grow', 'new', false)] },
+      { title: 'Card states', note: 'Loading, empty, too little data, Not recorded and Unreadable.', boards: [B('O5', 'Card states', 'Validate', 'states', false)] },
+    ] };
+  }
+}
+</script>
+</body></html>

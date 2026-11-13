@@ -1,0 +1,40 @@
+{
+  "skill": "brand-identity-system-spec",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "mark": "Arc symbol",
+        "approved_color": "#441199",
+        "small_size_variant": null,
+        "rights_review": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Arc symbol",
+      "#441199",
+      "variant"
+    ],
+    "must_say_not_recorded": [
+      "rights review"
+    ],
+    "must_not_include": [
+      "trademark cleared"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why rights review is missing rather than inventing it.",
+    "Do not assert: trademark cleared.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Arc symbol; #441199; variant. rights review: Not recorded. Human review required."
+}

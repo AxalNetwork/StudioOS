@@ -1,0 +1,1487 @@
+import { Hono } from 'hono';
+import { refuse } from '../util/refusal';
+import type { Env } from '../types';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
+import { getSQL } from '../db';
+import { requireAuth } from '../auth';
+import { newUid } from './_t13t14t15_helpers';
+import { notify } from '../services/notify';
+import { logAdminAction } from '../services/adminAudit';
+import {
+  BOARD_LIMIT, CHANGE_DAYS, LEADERBOARD_METRICS, LEADERBOARD_PERIODS, PERIODS_FOR,
+  changeOf, comparisonFor, liveRanking, periodKey,
+  type LeaderboardMetric, type LeaderboardPeriod,
+} from '../services/partnerLeaderboard';
+
+const partnernet = new Hono<{ Bindings: Env }>();
+
+const REL_TYPES = new Set(['co_investor', 'advisor_founder', 'operator_partner', 'strategic_alliance', 'advisor_mentee']);
+const ACTION_TYPES = new Set([
+  'dashboard_view', 'deal_review', 'syndicate_join', 'syndicate_create', 'referral_convert',
+  'studio_ops_task', 'ai_scoring', 'payout_request', 'pipeline_advance', 'metric_snapshot',
+  'relationship_create', 'profile_update', 'login', 'logout',
+]);
+const REL_CREATE_RATE_LIMIT = 20;
+/**
+ * U8 (D493, migration 368) — a relationship row about another person is a
+ * request. Only 'accepted' counts anywhere: a book, a network score, the
+ * leaderboards, edits, events, interactions and reminders. The other states
+ * are the request's life: 'pending' (asked), 'declined' (the other person said
+ * no), 'withdrawn' (the author took it back), 'removed' (either side ended an
+ * accepted one). Rows that existed before 368 are 'accepted' by default — the
+ * owner chose to keep them and tell their subjects (`noticeLegacyRelationships`).
+ */
+export const REL_STATUSES = ['pending', 'accepted', 'declined', 'withdrawn', 'removed'] as const;
+const NOTE_TOUCH_MAX = 2000;
+const NOTE_REMINDER_MAX = 500;
+const KIND_MAX = 40;
+/** D572 — an interaction's outcome, free text, as migration 393's CHECK bounds it. */
+const OUTCOME_MAX = 200;
+const ABSURD_YEAR_MIN = 1990;
+const ABSURD_YEAR_MAX = 2100;
+
+const INTERACTION_COLUMNS = [
+  `ALTER TABLE partner_interactions ADD COLUMN voided_at TEXT`,
+  `ALTER TABLE partner_interactions ADD COLUMN voided_by INTEGER`,
+  // D572 (migration 393): what came of the touch, optional.
+  `ALTER TABLE partner_interactions ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR length(outcome) <= 200)`,
+];
+
+// D958 (migration 563): the columns network.ts's canonical `commissions` adds,
+// so this defensive copy converges with it (check-schema-pair-drift).
+const COMMISSION_COLUMNS = [
+  `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
+  `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+  // D4292 (migration 202611031345): when a held subscription commission becomes payable.
+  `ALTER TABLE commissions ADD COLUMN payable_at TEXT`,
+];
+
+const REL_REQUEST_COLUMNS = [
+  `ALTER TABLE partner_relationships ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'`,
+  `ALTER TABLE partner_relationships ADD COLUMN requested_by INTEGER`,
+  `ALTER TABLE partner_relationships ADD COLUMN requested_at TEXT`,
+  `ALTER TABLE partner_relationships ADD COLUMN responded_at TEXT`,
+  `ALTER TABLE partner_relationships ADD COLUMN legacy_noticed_at TEXT`,
+];
+const REL_TYPE_LABEL: Record<string, string> = {
+  co_investor: 'co-investor', advisor_founder: 'advisor and founder', operator_partner: 'operator and partner',
+  strategic_alliance: 'strategic alliance', advisor_mentee: 'advisor and mentee',
+};
+const REL_NOTICE_TYPE = 'relationship_request';
+const REL_LINK = '/network/relationships';
+const SCORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — keep recompute off the hot read path
+const scoreCache = new Map<number, number>(); // userId -> next-allowed-recompute-timestamp
+
+const MIGRATED = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env) {
+  if (MIGRATED.get(bindingKey(env))) return;
+  const alters = [
+    `ALTER TABLE users ADD COLUMN kyc_status TEXT DEFAULT 'pending'`,
+    `ALTER TABLE users ADD COLUMN partner_since TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN total_earnings INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN network_score REAL DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN verified_badges TEXT DEFAULT '[]'`,
+    `ALTER TABLE users ADD COLUMN last_active TIMESTAMP`,
+  ];
+  // These six columns are already on `users` in production, and `users` is at
+  // D1's 100-column limit, so re-running the ALTERs raises "too many columns"
+  // rather than "duplicate column" — SQLite checks the limit before the
+  // duplicate-name test, verified against sqlite 3.45 with the limit set to
+  // 100. The old loop treated that as a real failure and RETURNED, which
+  // abandoned the rest of this bootstrap — the CREATE TABLEs for
+  // partner_relationships and relationship_events among them — and re-ran the
+  // same six doomed statements on every request, forever, because `migrated`
+  // was never set. runSchemaBootstrap skips an ADD COLUMN whose column is
+  // already there, so in production there is nothing left to fail.
+  //
+  // Still logged rather than thrown: none of the six is load-bearing for the
+  // tables below, so a genuinely missing column must not take the partner
+  // network down with it.
+  try {
+    await runSchemaBootstrap(env, alters);
+  } catch (e: any) {
+    console.error('partnernet: users columns unavailable —', e?.message);
+  }
+
+  // The legacy activity_logs table (pre-partnernet) only had
+  // (action, details, actor, ...) columns. partnernet writes/reads a
+  // different set; gracefully add them when the legacy table exists.
+  // If activity_logs doesn't exist yet, these ALTERs will fail with
+  // "no such table" — also benign because the CREATE IF NOT EXISTS below
+  // covers the fresh-DB case.
+  const activityAlters = [
+    `ALTER TABLE activity_logs ADD COLUMN action_type TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN entity_type TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN entity_id TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN ip_address TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN user_agent TEXT`,
+    `ALTER TABLE activity_logs ADD COLUMN metadata TEXT DEFAULT '{}'`,
+  ];
+  for (const a of activityAlters) {
+    try { await env.DB.prepare(a).run(); } catch {}
+  }
+
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS partner_relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      partner_a_id INTEGER NOT NULL,
+      partner_b_id INTEGER NOT NULL,
+      relationship_type TEXT NOT NULL,
+      strength_score REAL DEFAULT 50,
+      metadata TEXT DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (partner_a_id < partner_b_id),
+      CHECK (strength_score >= 0 AND strength_score <= 100)
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_pr_pair ON partner_relationships(partner_a_id, partner_b_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pr_a ON partner_relationships(partner_a_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pr_b ON partner_relationships(partner_b_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pr_type ON partner_relationships(relationship_type)`,
+
+    `CREATE TABLE IF NOT EXISTS relationship_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      relationship_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      details TEXT DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (relationship_id) REFERENCES partner_relationships(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_re_rel ON relationship_events(relationship_id, created_at)`,
+
+    // D465 — the interaction log and the reminders (migration 338). Runtime
+    // safety nets for the DECLARED tables (D235), in this file's own pattern.
+    `CREATE TABLE IF NOT EXISTS partner_interactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT UNIQUE NOT NULL,
+      relationship_id INTEGER NOT NULL REFERENCES partner_relationships(id),
+      kind TEXT NOT NULL DEFAULT 'note',
+      note TEXT,
+      interacted_at TEXT NOT NULL,
+      recorded_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      voided_at TEXT,
+      voided_by INTEGER
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_pint_rel ON partner_interactions(relationship_id, interacted_at)`,
+    `CREATE TABLE IF NOT EXISTS partner_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT UNIQUE NOT NULL,
+      relationship_id INTEGER NOT NULL REFERENCES partner_relationships(id),
+      remind_at TEXT NOT NULL,
+      note TEXT,
+      done INTEGER NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      done_at TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_prem_due ON partner_reminders(created_by, done, remind_at)`,
+    `CREATE TRIGGER IF NOT EXISTS partner_reminders_done_ok_ins
+      BEFORE INSERT ON partner_reminders
+      FOR EACH ROW WHEN NEW.done NOT IN (0, 1)
+      BEGIN SELECT RAISE(ABORT, 'done'); END`,
+    `CREATE TRIGGER IF NOT EXISTS partner_reminders_done_ok_upd
+      BEFORE UPDATE ON partner_reminders
+      FOR EACH ROW WHEN NEW.done NOT IN (0, 1)
+      BEGIN SELECT RAISE(ABORT, 'done'); END`,
+    `CREATE TRIGGER IF NOT EXISTS partner_interactions_kind_ok
+      BEFORE INSERT ON partner_interactions
+      FOR EACH ROW WHEN NEW.kind IS NULL OR length(NEW.kind) = 0 OR length(NEW.kind) > 40
+      BEGIN SELECT RAISE(ABORT, 'kind'); END`,
+
+    // activity_logs may already exist from the legacy schema with columns
+    // (action, details, actor, ...). The CREATE IF NOT EXISTS below covers
+    // a fresh DB; the ALTERs below cover an existing legacy DB. Keep both.
+    `CREATE TABLE IF NOT EXISTS activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      action_type TEXT,
+      entity_type TEXT,
+      entity_id TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      metadata TEXT DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_al_user ON activity_logs(user_id, created_at DESC)`,
+
+    `CREATE TABLE IF NOT EXISTS activity_stats (
+      user_id INTEGER NOT NULL,
+      stat_date TEXT NOT NULL,
+      action_count INTEGER DEFAULT 0,
+      earnings_cents INTEGER DEFAULT 0,
+      relationships_added INTEGER DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, stat_date)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_as_date ON activity_stats(stat_date)`,
+
+    // Defensive copies of tables referenced by the partner_summary view.
+    // SHAPES MUST MATCH CANONICAL DEFINITIONS in network.ts / networkfx.ts —
+    // CREATE TABLE IF NOT EXISTS is a no-op when the table exists, so a
+    // mismatched shape here would silently win the race on a fresh DB and
+    // later canonical inserts would 500 on missing columns.
+    // commissions: canonical from network.ts ensureSchema()
+    `CREATE TABLE IF NOT EXISTS commissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      referral_id INTEGER,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      source_type TEXT NOT NULL,
+      source_id TEXT,
+      status TEXT NOT NULL DEFAULT 'accrued',
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      paid_at TIMESTAMP
+    )`,
+    // referral_chains: canonical from networkfx.ts ensureSchema()
+    `CREATE TABLE IF NOT EXISTS referral_chains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      root_referrer_id INTEGER NOT NULL,
+      level INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      multiplier_bps INTEGER NOT NULL DEFAULT 10000,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    `DROP VIEW IF EXISTS partner_summary`,
+    `CREATE VIEW partner_summary AS
+      SELECT u.id, u.email, u.name, u.role, u.kyc_status,
+        u.partner_since, u.total_earnings, u.network_score, u.verified_badges, u.last_active,
+        (SELECT COALESCE(SUM(amount_cents), 0) FROM commissions WHERE user_id = u.id) AS lifetime_earnings_cents,
+        (SELECT COUNT(*) FROM partner_relationships WHERE (partner_a_id = u.id OR partner_b_id = u.id) AND status = 'accepted') AS active_relationships,
+        (SELECT COUNT(*) FROM referral_chains WHERE root_referrer_id = u.id) AS network_reach
+      FROM users u`,
+  ];
+  // The view reads `status` (368), so the request columns are added after the
+  // tables exist and BEFORE the view is (re)created: run the tables, then the
+  // columns, then the last two statements (DROP VIEW / CREATE VIEW) again.
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet schema:', e?.message); } }
+  try { await runSchemaBootstrap(env, COMMISSION_COLUMNS); } catch (e: any) { console.error('partnernet: commission columns unavailable —', e?.message); }
+  try { await runSchemaBootstrap(env, REL_REQUEST_COLUMNS); } catch (e: any) { console.error('partnernet: request columns unavailable —', e?.message); }
+  try { await runSchemaBootstrap(env, INTERACTION_COLUMNS); } catch (e: any) { console.error('partnernet: interaction columns unavailable —', e?.message); }
+  for (const s of stmts.slice(-2)) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet view:', e?.message); } }
+  MIGRATED.set(bindingKey(env), true);
+}
+
+function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
+
+/**
+ * Per-party notes live under metadata.private_notes[userId] — never returned whole. D4604: the note is stored as
+ * written (trimmed), never cut: one over NOTE_TOUCH_MAX is refused before this runs (`privateNoteOf`).
+ */
+function mergePrivateNote(existing: any, userId: number, text: string): Record<string, unknown> {
+  const meta = safeJson(existing, {} as Record<string, unknown>);
+  const raw = meta.private_notes;
+  const map: Record<string, string> = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? { ...(raw as Record<string, string>) }
+    : {};
+  if (text) map[String(userId)] = text;
+  else delete map[String(userId)];
+  if (Object.keys(map).length) meta.private_notes = map;
+  else delete meta.private_notes;
+  return meta;
+}
+
+/** D4604: a private note as given, or the refusal. Null and '' clear it; anything but text is refused. */
+function privateNoteOf(raw: unknown): { ok: true; text: string } | { ok: false; code: string; message: string } {
+  if (raw == null) return { ok: true, text: '' };
+  if (typeof raw !== 'string') return { ok: false, code: 'private_note_invalid', message: 'A private note must be text.' };
+  const text = raw.trim();
+  if (text.length > NOTE_TOUCH_MAX) {
+    return { ok: false, code: 'private_note_too_long', message: `Keep a private note to ${NOTE_TOUCH_MAX.toLocaleString('en-US')} characters. Nothing was saved.` };
+  }
+  return { ok: true, text };
+}
+
+/** D4604: the shared metadata a party may write, bounded as a whole. Private notes and the creator are never theirs to set. */
+const SHARED_META_MAX = 4000;
+function sharedMetaOf(raw: unknown): { ok: true; meta: Record<string, unknown> } | { ok: false; code: string; message: string } {
+  const meta = raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  delete meta.private_notes;
+  delete meta.created_by;
+  if (JSON.stringify(meta).length > SHARED_META_MAX) {
+    return { ok: false, code: 'metadata_too_large', message: `Keep the relationship's details under ${SHARED_META_MAX.toLocaleString('en-US')} characters. Nothing was saved.` };
+  }
+  return { ok: true, meta };
+}
+
+function relationshipForParty(row: any, userId: number) {
+  const meta = safeJson(row.metadata, {} as Record<string, unknown>);
+  const priv = meta.private_notes;
+  const myPrivateNote = priv && typeof priv === 'object' && !Array.isArray(priv)
+    ? (priv as Record<string, string>)[String(userId)] ?? null
+    : null;
+  const { private_notes: _drop, ...sharedMeta } = meta;
+  return { ...row, metadata: sharedMeta, my_private_note: myPrivateNote };
+}
+
+export type BookDate =
+  | { ok: true; value: string; dateOnly: boolean }
+  | { ok: false; code: 'date_unparseable' | 'date_absurd' | 'date_in_future' };
+
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * A book date is `YYYY-MM-DD` or a zoned ISO instant, and nothing else.
+ * Absurd years are refused. A touch may not be in the future; a reminder may,
+ * because that is what a reminder is.
+ */
+export function parseBookDate(raw: unknown, opts: { allowFuture: boolean; now?: Date }): BookDate {
+  if (raw == null || String(raw).trim() === '') return { ok: false, code: 'date_unparseable' };
+  const s = String(raw).trim();
+  const dateOnly = DATE_ONLY.exec(s);
+  const iso = ISO_INSTANT.exec(s);
+  if (!dateOnly && !iso) return { ok: false, code: 'date_unparseable' };
+  const year = Number((dateOnly || iso)![1]);
+  const month = Number((dateOnly || iso)![2]);
+  const day = Number((dateOnly || iso)![3]);
+  if (year < ABSURD_YEAR_MIN || year > ABSURD_YEAR_MAX) return { ok: false, code: 'date_absurd' };
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+    return { ok: false, code: 'date_unparseable' };
+  }
+  const now = opts.now ?? new Date();
+  if (dateOnly) {
+    if (!opts.allowFuture && s > now.toISOString().slice(0, 10)) return { ok: false, code: 'date_in_future' };
+    return { ok: true, value: s, dateOnly: true };
+  }
+  const instant = new Date(s);
+  if (Number.isNaN(instant.getTime())) return { ok: false, code: 'date_unparseable' };
+  if (instant.getUTCFullYear() < ABSURD_YEAR_MIN || instant.getUTCFullYear() > ABSURD_YEAR_MAX) {
+    return { ok: false, code: 'date_absurd' };
+  }
+  if (!opts.allowFuture && instant.getTime() > now.getTime() + 60_000) return { ok: false, code: 'date_in_future' };
+  return { ok: true, value: instant.toISOString(), dateOnly: false };
+}
+
+function dateError(code: 'date_unparseable' | 'date_absurd' | 'date_in_future') {
+  if (code === 'date_in_future') return 'A touch cannot be dated in the future.';
+  if (code === 'date_absurd') return 'That date is outside the years this book records.';
+  return 'Use a calendar date (YYYY-MM-DD) or an ISO timestamp.';
+}
+function pair(a: number, b: number): [number, number] { return a < b ? [a, b] : [b, a]; }
+
+export async function logActivity(env: Env, userId: number, actionType: string, opts: {
+  entityType?: string; entityId?: string | number; metadata?: any; ip?: string; ua?: string;
+} = {}) {
+  try {
+    await env.DB.prepare(`INSERT INTO activity_logs (user_id, action_type, entity_type, entity_id, ip_address, user_agent, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(userId, actionType, opts.entityType || null, opts.entityId != null ? String(opts.entityId) : null, opts.ip || null, opts.ua || null, JSON.stringify(opts.metadata || {})).run();
+    const today = new Date().toISOString().slice(0, 10);
+    await env.DB.prepare(`INSERT INTO activity_stats (user_id, stat_date, action_count) VALUES (?, ?, 1) ON CONFLICT(user_id, stat_date) DO UPDATE SET action_count = action_count + 1, updated_at = CURRENT_TIMESTAMP`)
+      .bind(userId, today).run();
+    await env.DB.prepare(`UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?`).bind(userId).run();
+  } catch (e: any) { console.error('logActivity:', e?.message); }
+}
+
+async function recomputeNetworkScore(env: Env, userId: number, force = false): Promise<number | null> {
+  // Cache: skip recompute if done within last 5 min (keeps /summary cheap on poll)
+  const next = scoreCache.get(userId) || 0;
+  if (!force && Date.now() < next) return null;
+  scoreCache.set(userId, Date.now() + SCORE_CACHE_TTL_MS);
+
+  try {
+    const stats: any = await env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM partner_relationships WHERE (partner_a_id = ? OR partner_b_id = ?) AND status = 'accepted') as rel_count,
+        (SELECT COALESCE(AVG(strength_score), 0) FROM partner_relationships WHERE (partner_a_id = ? OR partner_b_id = ?) AND status = 'accepted') as rel_avg,
+        (SELECT COUNT(*) FROM referral_chains WHERE root_referrer_id = ?) as reach,
+        (SELECT COUNT(*) FROM activity_logs WHERE user_id = ? AND created_at > datetime('now', '-30 days')) as activity_30d,
+        (SELECT COALESCE(SUM(amount_cents), 0) FROM commissions WHERE user_id = ?) as earnings_cents
+    `).bind(userId, userId, userId, userId, userId, userId, userId).first();
+    const relScore = Math.min(30, (stats.rel_count || 0) * 3) + Math.min(20, (stats.rel_avg || 0) * 0.2);
+    const reachScore = Math.min(20, Math.log10((stats.reach || 0) + 1) * 10);
+    const activityScore = Math.min(15, Math.log10((stats.activity_30d || 0) + 1) * 8);
+    const earningsScore = Math.min(15, Math.log10(((stats.earnings_cents || 0) / 100) + 1) * 5);
+    const score = Math.round((relScore + reachScore + activityScore + earningsScore) * 10) / 10;
+
+    const badges: string[] = [];
+    if ((stats.reach || 0) >= 10) badges.push('top_referrer');
+    if ((stats.rel_count || 0) >= 5) badges.push('connector');
+    if (((stats.earnings_cents || 0) / 100) >= 1000) badges.push('high_earner');
+    try {
+      const synLeads: any = await env.DB.prepare(`SELECT COUNT(*) as n FROM syndicates WHERE created_by = ?`).bind(userId).first();
+      if ((synLeads?.n || 0) >= 1) badges.push('syndicate_lead');
+    } catch {}
+
+    // Note: total_earnings here is a denormalized cache of SUM(commissions) — payout flow
+    // should NOT use this column for authoritative balances; query commissions/payouts directly.
+    await env.DB.prepare(`UPDATE users SET network_score = ?, verified_badges = ?, total_earnings = ? WHERE id = ?`)
+      .bind(score, JSON.stringify(badges), stats.earnings_cents || 0, userId).run();
+    return score;
+  } catch (e: any) { console.error('recomputeNetworkScore:', e?.message); return null; }
+}
+
+async function checkRelRateLimit(env: Env, userId: number): Promise<boolean> {
+  // Requests the caller SENT in the last hour. It used to count rows on either
+  // side, so other people's requests could rate-limit the person they named.
+  const since = new Date(Date.now() - 3600_000).toISOString();
+  const r: any = await env.DB.prepare(`SELECT COUNT(*) as n FROM partner_relationships WHERE requested_by = ? AND requested_at > ?`).bind(userId, since).first();
+  return (r?.n || 0) < REL_CREATE_RATE_LIMIT;
+}
+
+/**
+ * D572 part 3 — each user's own company, by user id: the company they are
+ * linked to on their account, the one they are primary admin of first, else
+ * the oldest link. Null when the read fails, so a caller can tell "not
+ * readable" from "no company".
+ */
+async function companiesOf(env: Env, ids: number[]): Promise<Map<number, string> | null> {
+  const unique = [...new Set(ids.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  const out = new Map<number, string>();
+  if (!unique.length) return out;
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT l.user_id, cp.company_name FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
+        WHERE l.user_id IN (SELECT value FROM json_each(?))
+        ORDER BY l.user_id, l.is_primary_admin DESC, l.id ASC`,
+    ).bind(JSON.stringify(unique)).all<{ user_id: number; company_name: string }>();
+    for (const r of results || []) {
+      const name = String(r.company_name ?? '').trim();
+      if (name && !out.has(Number(r.user_id))) out.set(Number(r.user_id), name);
+    }
+    return out;
+  } catch (e) {
+    console.warn('partnernet company read failed', (e as Error).message);
+    return null;
+  }
+}
+
+partnernet.get('/relationships', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  try {
+  const rows = await sql`
+    SELECT pr.*, ua.email as a_email, ua.name as a_name, ua.role as a_role, ub.email as b_email, ub.name as b_name, ub.role as b_role,
+      (SELECT MAX(i.interacted_at) FROM partner_interactions i
+        WHERE i.relationship_id = pr.id AND i.voided_at IS NULL
+          AND (i.recorded_by = pr.partner_a_id OR i.recorded_by = pr.partner_b_id)) as last_interaction_at
+    FROM partner_relationships pr
+    LEFT JOIN users ua ON ua.id = pr.partner_a_id
+    LEFT JOIN users ub ON ub.id = pr.partner_b_id
+    WHERE (pr.partner_a_id = ${user.id} OR pr.partner_b_id = ${user.id}) AND pr.status = 'accepted'
+    ORDER BY pr.strength_score DESC, pr.updated_at DESC
+  `;
+  await sql.end();
+  const companies = await companiesOf(c.env, [user.id, ...(rows as any[]).flatMap((r) => [r.partner_a_id, r.partner_b_id])]);
+  const companyOf = (id: number) => (companies ? companies.get(Number(id)) ?? null : null);
+  const enriched = (rows as any[]).map(r => {
+    // The counterpart's role travels with the row: the investor Network desk's
+    // Founders chip narrows on it, and a name and email alone cannot say who
+    // on the other side of the tie is a founder.
+    //
+    // D572 part 3 (the owner's Q2 = A): the company shown is each party's
+    // OWN, read from their account at query time — the company they are
+    // linked to (`user_company_links`, the account's "Your companies"), the
+    // one they are primary admin of first, else the oldest link. Nothing is
+    // stored on the relationship, so a renamed or changed company is never
+    // stale here; with no link it is null, said as not recorded.
+    // A company read that fails says so (`companies_unreadable`) rather than
+    // reading as "no company", and never takes the book down with it.
+    const other = r.partner_a_id === user.id
+      ? { id: r.partner_b_id, email: r.b_email, name: r.b_name, role: r.b_role, company: companyOf(r.partner_b_id) }
+      : { id: r.partner_a_id, email: r.a_email, name: r.a_name, role: r.a_role, company: companyOf(r.partner_a_id) };
+    return {
+      ...relationshipForParty(r, user.id), other, my_company: companyOf(user.id),
+      ...(companies ? {} : { companies_unreadable: true }),
+    };
+  });
+  return c.json(enriched);
+  } catch (e) {
+    console.error('partnernet relationships read failed', (e as Error).message);
+    return c.json({
+      error: 'relationships_unreadable',
+      message: 'The relationship book could not be read. This is not a claim that no ties exist.',
+    }, 503);
+  }
+});
+
+partnernet.post('/relationships', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const otherId = parseInt(data?.partner_id);
+  const relType = String(data?.relationship_type || '');
+  if (!otherId || !REL_TYPES.has(relType)) return c.json({ error: `partner_id and valid relationship_type required (${[...REL_TYPES].join('|')})` }, 400);
+  if (otherId === user.id) return c.json({ error: 'Cannot create a relationship with yourself' }, 400);
+
+  const other: any = await c.env.DB.prepare(`SELECT id FROM users WHERE id = ?`).bind(otherId).first();
+  if (!other) return c.json({ error: 'Other partner not found' }, 404);
+
+  if (!(await checkRelRateLimit(c.env, user.id))) return c.json({ error: 'Rate limit (20 relationships/hour)' }, 429);
+
+  const [a, b] = pair(user.id, otherId);
+  const initialStrength = Number(data?.strength_score);
+  const strength = Number.isFinite(initialStrength) && initialStrength >= 0 && initialStrength <= 100 ? initialStrength : 50;
+  const shared = sharedMetaOf(data?.metadata);
+  if (!shared.ok) return refuse(c, 400, { code: shared.code, message: shared.message });
+  const metaIn: Record<string, unknown> = { ...shared.meta, created_by: user.id };
+  const now = new Date().toISOString();
+
+  // U8 (D493): the row is a REQUEST. It stays the author's alone until the
+  // other person accepts; nothing about it reaches their book, network score or
+  // the leaderboards before then. One row per pair (uq_pr_pair): an earlier
+  // row that ended can be asked again — except that a decline stands against
+  // the person who was declined; only the decliner can reopen it.
+  const existing: any = await c.env.DB.prepare(
+    'SELECT id, status, requested_by, requested_at, metadata FROM partner_relationships WHERE partner_a_id = ? AND partner_b_id = ?',
+  ).bind(a, b).first();
+  if (existing) {
+    if (existing.status === 'accepted') return c.json({ error: 'Relationship already exists between these partners' }, 409);
+    if (existing.status === 'pending') return c.json({ error: 'A request between you is already waiting for an answer' }, 409);
+    if (existing.status === 'declined' && existing.requested_by === user.id) {
+      return c.json({ error: 'This request was declined' }, 409);
+    }
+  }
+
+  // D4604: asking again keeps each party's private note whole (they read it again once it is accepted), and the
+  // UPDATE is conditional on the ended state just read: a row another request reopened, or that was accepted, in
+  // between is not overwritten.
+  if (existing) {
+    const priv = safeJson(existing.metadata, {} as Record<string, unknown>).private_notes;
+    if (priv && typeof priv === 'object' && !Array.isArray(priv)) metaIn.private_notes = priv;
+  }
+  const metaStr = JSON.stringify(metaIn);
+  let rel: any;
+  try {
+    rel = existing
+      ? await c.env.DB.prepare(
+        `UPDATE partner_relationships
+            SET relationship_type = ?, strength_score = ?, metadata = ?, status = 'pending',
+                requested_by = ?, requested_at = ?, responded_at = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = ? AND requested_by IS ? AND requested_at IS ? RETURNING *`,
+      ).bind(relType, strength, metaStr, user.id, now, existing.id, existing.status, existing.requested_by ?? null, existing.requested_at ?? null).first()
+      : await c.env.DB.prepare(
+        `INSERT INTO partner_relationships
+           (partner_a_id, partner_b_id, relationship_type, strength_score, metadata, status, requested_by, requested_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?) RETURNING *`,
+      ).bind(a, b, relType, strength, metaStr, user.id, now).first();
+  } catch (e: any) {
+    if (/UNIQUE/i.test(e?.message || '')) return c.json({ error: 'Relationship already exists between these partners' }, 409);
+    return c.json({ error: 'Could not create relationship' }, 500);
+  }
+  if (!rel) return refuse(c, 409, { code: 'relationship_changed', message: 'This relationship changed while you were asking. Reload and try again.' });
+
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'requested', ?)`)
+    .bind(rel.id, JSON.stringify({ requested_by: user.id, type: relType })).run();
+  await logActivity(c.env, user.id, 'relationship_create', { entityType: 'relationship', entityId: rel.id, metadata: { other_id: otherId, type: relType, status: 'pending' } });
+  try {
+    const me: any = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(user.id).first();
+    const who = String(me?.name || '').trim() || 'Someone';
+    await notify(c.env, {
+      userId: otherId, type: REL_NOTICE_TYPE, category: 'network',
+      title: `${who} wants to record a relationship with you`,
+      body: `${who} asked to add you as ${REL_TYPE_LABEL[relType] || relType}. Nothing about it is shared with you or counts anywhere until you accept.`,
+      link: REL_LINK, payload: { kind: 'requested', relationship_id: rel.id },
+    });
+  } catch { /* the request stands; the requests list shows it */ }
+
+  return c.json(relationshipForParty(rel, user.id), 201);
+});
+
+/**
+ * U8 — the caller's requests: the ones waiting for THEIR answer, and the ones
+ * they sent. An incoming request shows who asked and the type they named, and
+ * nothing the author wrote (no score, no metadata).
+ */
+partnernet.get('/relationships/requests', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const incoming = await c.env.DB.prepare(
+    `SELECT pr.id, pr.relationship_type, pr.requested_at, pr.requested_by, u.name AS requester_name, u.role AS requester_role
+       FROM partner_relationships pr
+       LEFT JOIN users u ON u.id = pr.requested_by
+      WHERE pr.status = 'pending' AND (pr.partner_a_id = ? OR pr.partner_b_id = ?) AND pr.requested_by <> ?
+      ORDER BY pr.requested_at DESC LIMIT 200`,
+  ).bind(user.id, user.id, user.id).all();
+  const outgoing = await c.env.DB.prepare(
+    `SELECT pr.id, pr.relationship_type, pr.status, pr.requested_at, pr.responded_at,
+            CASE WHEN pr.partner_a_id = ? THEN pr.partner_b_id ELSE pr.partner_a_id END AS other_id
+       FROM partner_relationships pr
+      WHERE pr.requested_by = ? AND pr.status IN ('pending', 'declined')
+      ORDER BY pr.requested_at DESC LIMIT 200`,
+  ).bind(user.id, user.id).all();
+  const others = new Map<number, any>();
+  for (const r of (outgoing.results || []) as any[]) {
+    if (!others.has(r.other_id)) {
+      others.set(r.other_id, await c.env.DB.prepare('SELECT id, name, role FROM users WHERE id = ?').bind(r.other_id).first());
+    }
+  }
+  return c.json({
+    incoming: ((incoming.results || []) as any[]).map((r) => ({
+      id: r.id, relationship_type: r.relationship_type, requested_at: r.requested_at,
+      requester: { id: r.requested_by, name: r.requester_name ?? null, role: r.requester_role ?? null },
+    })),
+    outgoing: ((outgoing.results || []) as any[]).map((r) => {
+      const o = others.get(r.other_id);
+      return {
+        id: r.id, relationship_type: r.relationship_type, status: r.status,
+        requested_at: r.requested_at, responded_at: r.responded_at,
+        other: { id: r.other_id, name: o?.name ?? null, role: o?.role ?? null },
+      };
+    }),
+  });
+});
+
+/** The person a request names accepts or declines it. Only they can. */
+partnernet.post('/relationships/:id/respond', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const decision = data?.decision;
+  if (decision !== 'accept' && decision !== 'decline') return c.json({ error: 'decision must be accept or decline' }, 400);
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || (rel.partner_a_id !== user.id && rel.partner_b_id !== user.id)) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'pending') return c.json({ error: 'This request is not waiting for an answer' }, 409);
+  if (rel.requested_by === user.id) return c.json({ error: 'Only the person the request names can answer it' }, 403);
+  const status = decision === 'accept' ? 'accepted' : 'declined';
+  const now = new Date().toISOString();
+  // D4604: the answer is to the request just read — still pending, from the same requester, asked at the same time.
+  // A withdrawal, another answer or a new request in between leaves this one unwritten: 409, and no event or notice.
+  const answered = await c.env.DB.prepare(
+    `UPDATE partner_relationships SET status = ?, responded_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending' AND requested_by = ? AND requested_by <> ? AND requested_at IS ?`,
+  ).bind(status, now, id, rel.requested_by, user.id, rel.requested_at ?? null).run();
+  if ((answered.meta?.changes ?? 0) !== 1) return c.json({ error: 'This request is not waiting for an answer' }, 409);
+  await c.env.DB.prepare('INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, ?, ?)')
+    .bind(id, status, JSON.stringify({ by: user.id })).run();
+  if (status === 'accepted') {
+    await Promise.all([recomputeNetworkScore(c.env, user.id, true), recomputeNetworkScore(c.env, rel.requested_by, true)]);
+    try {
+      const me: any = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(user.id).first();
+      const who = String(me?.name || '').trim() || 'They';
+      await notify(c.env, {
+        userId: rel.requested_by, type: REL_NOTICE_TYPE, category: 'network',
+        title: `${who} accepted your relationship request`, link: REL_LINK,
+        payload: { kind: 'accepted', relationship_id: id },
+      });
+    } catch { /* the acceptance stands */ }
+  }
+  // A decline is not announced: the author sees it on their own requests list.
+  return c.json({ ok: true, id, status });
+});
+
+/** The author takes back a request that has not been answered. */
+partnernet.post('/relationships/:id/withdraw', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || rel.requested_by !== user.id) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'pending') return c.json({ error: 'Only a request still waiting can be withdrawn' }, 409);
+  // D4604: only the request just read, still pending and still this author's; an answer that landed first stands.
+  const taken = await c.env.DB.prepare(
+    `UPDATE partner_relationships SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending' AND requested_by = ? AND requested_at IS ?`,
+  ).bind(id, user.id, rel.requested_at ?? null).run();
+  if ((taken.meta?.changes ?? 0) !== 1) return c.json({ error: 'Only a request still waiting can be withdrawn' }, 409);
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'withdrawn', ?)`)
+    .bind(id, JSON.stringify({ by: user.id })).run();
+  return c.json({ ok: true, id, status: 'withdrawn' });
+});
+
+/**
+ * Either side ends an accepted relationship — including a pre-368 one its
+ * subject never asked for and does not recognise (the legacy notice links
+ * here). It leaves both books and both network scores.
+ */
+partnernet.post('/relationships/:id/remove', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel || (rel.partner_a_id !== user.id && rel.partner_b_id !== user.id)) return c.json({ error: 'Not found' }, 404);
+  if (rel.status !== 'accepted') return c.json({ error: 'Only an accepted relationship can be removed' }, 409);
+  // D4604: conditional on the accepted state just read, so two removals write one event.
+  const ended = await c.env.DB.prepare(`UPDATE partner_relationships SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'accepted'`).bind(id).run();
+  if ((ended.meta?.changes ?? 0) !== 1) return c.json({ error: 'Only an accepted relationship can be removed' }, 409);
+  await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'removed', ?)`)
+    .bind(id, JSON.stringify({ by: user.id })).run();
+  await Promise.all([recomputeNetworkScore(c.env, rel.partner_a_id, true), recomputeNetworkScore(c.env, rel.partner_b_id, true)]);
+  return c.json({ ok: true, id, status: 'removed' });
+});
+
+partnernet.patch('/relationships/:id', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  let rel: any = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
+  if (!rel) return c.json({ error: 'Not found' }, 404);
+  const party = rel.partner_a_id === user.id || rel.partner_b_id === user.id;
+  if (user.role !== 'admin' && !party) return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && !party) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: id, route: 'PATCH /relationships/:id',
+    });
+  }
+  // U8: an unanswered (or ended) request is nobody's to edit.
+  if (rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
+
+  // D4604: every input is checked before anything is written; a note over the limit is refused, never cut.
+  let note: string | null = null;
+  if (data?.private_note !== undefined) {
+    // A private note is a party's own: someone who is not on the relationship has none to write.
+    if (!party) return refuse(c, 403, { code: 'private_note_party_only', message: 'Only the two people on a relationship keep private notes on it.' });
+    const n = privateNoteOf(data.private_note);
+    if (!n.ok) return refuse(c, 400, { code: n.code, message: n.message });
+    note = n.text;
+  }
+  let shared: Record<string, unknown> | null = null;
+  if (data?.metadata && typeof data.metadata === 'object') {
+    const m = sharedMetaOf(data.metadata);
+    if (!m.ok) return refuse(c, 400, { code: m.code, message: m.message });
+    shared = m.meta;
+  }
+  const fixed: string[] = [];
+  const fixedValues: any[] = [];
+  if (Number.isFinite(Number(data?.strength_score))) {
+    fixed.push('strength_score = ?'); fixedValues.push(Math.max(0, Math.min(100, Number(data.strength_score))));
+  }
+  if (data?.relationship_type && REL_TYPES.has(data.relationship_type)) {
+    fixed.push('relationship_type = ?'); fixedValues.push(data.relationship_type);
+  }
+  if (!fixed.length && note === null && !shared) return c.json({ error: 'No valid fields' }, 400);
+
+  // D4604: the metadata is rewritten from the row just read, and only while it is still that row: the UPDATE names the
+  // metadata it was built from. A concurrent write (the other party's own note, say) makes it re-read and rebuild, so
+  // neither party's note is lost; a relationship that stopped being accepted is 409, with no event.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let meta: Record<string, unknown> | null = null;
+    if (note !== null) meta = mergePrivateNote(rel.metadata, user.id, note);
+    if (shared) meta = { ...(meta || safeJson(rel.metadata, {} as Record<string, unknown>)), ...shared };
+    // Fixed column fragments only; every value is bound.
+    const updates = [...fixed, ...(meta ? ['metadata = ?'] : []), 'updated_at = CURRENT_TIMESTAMP'];
+    const values = [...fixedValues, ...(meta ? [JSON.stringify(meta)] : [])];
+    const r = await c.env.DB.prepare(
+      `UPDATE partner_relationships SET ${updates.join(', ')} WHERE id = ? AND status = 'accepted' AND metadata IS ?`,
+    ).bind(...values, id, rel.metadata ?? null).run();
+    if ((r.meta?.changes ?? 0) === 1) {
+      await c.env.DB.prepare(`INSERT INTO relationship_events (relationship_id, event_type, details) VALUES (?, 'updated', ?)`)
+        .bind(id, JSON.stringify({ by: user.id, fields: Object.keys(data) })).run();
+      const saved = relationshipForParty({ metadata: meta ? JSON.stringify(meta) : rel.metadata }, user.id);
+      return c.json({ ok: true, note_limit: NOTE_TOUCH_MAX, my_private_note: saved.my_private_note });
+    }
+    rel = await c.env.DB.prepare(`SELECT * FROM partner_relationships WHERE id = ?`).bind(id).first();
+    if (!rel || rel.status !== 'accepted') return c.json({ error: 'Not an accepted relationship' }, 409);
+  }
+  return refuse(c, 409, { code: 'relationship_changed', message: 'This relationship kept changing while it was saved. Nothing was saved; try again.' });
+});
+
+partnernet.get('/relationships/:id/events', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const rel: any = await c.env.DB.prepare(`SELECT partner_a_id, partner_b_id, status FROM partner_relationships WHERE id = ?`).bind(id).first();
+  if (!rel) return c.json({ error: 'Not found' }, 404);
+  if (user.role !== 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && rel.partner_a_id !== user.id && rel.partner_b_id !== user.id) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: id, route: 'GET /relationships/:id/events',
+    });
+  }
+  // U8: before it is accepted the person named has agreed to nothing, so the
+  // history is not theirs to read either; the author sees it as a request.
+  if (rel.status !== 'accepted' && user.role !== 'admin') return c.json({ error: 'Not an accepted relationship' }, 409);
+  const sql = getSQL(c.env);
+  const events = await sql`SELECT * FROM relationship_events WHERE relationship_id = ${id} ORDER BY created_at DESC LIMIT 100`;
+  await sql.end();
+  return c.json((events as any[]).map(e => ({ ...e, details: safeJson(e.details, {}) })));
+});
+
+// ---------------------------------------------------------------------------
+// D465 — the interaction log and the reminders (migration 338). The book's
+// cold flag reads the log's MAX, never a field someone edits; a reminder
+// surfaces on the desk when it is due (no notification fan-out).
+// ---------------------------------------------------------------------------
+
+/** The relationship the caller is a party to, or the refusal. Auth already ran. */
+async function ownRelationship(c: any, user: { id: number; role?: string; email?: string }, id: number, route: string): Promise<any> {
+  const rel: any = await c.env.DB.prepare('SELECT * FROM partner_relationships WHERE id = ?').bind(id).first();
+  if (!rel) return { error: c.json({ error: 'Not found' }, 404) };
+  const party = rel.partner_a_id === user.id || rel.partner_b_id === user.id;
+  if (!party && user.role !== 'admin') return { error: c.json({ error: 'Forbidden' }, 403) };
+  if (!party && user.role === 'admin') {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      relationship_id: rel.id, route,
+    });
+  }
+  // U8: interactions and reminders hang off an ACCEPTED relationship only.
+  if (rel.status !== 'accepted') return { error: c.json({ error: 'Not an accepted relationship' }, 409) };
+  return { rel, user };
+}
+
+function clipNote(raw: unknown, max: number): { text: string | null; truncated: boolean } {
+  if (raw == null) return { text: null, truncated: false };
+  const full = String(raw).trim();
+  if (!full) return { text: null, truncated: false };
+  return { text: full.slice(0, max), truncated: full.length > max };
+}
+
+partnernet.post('/relationships/:id/interactions', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/interactions');
+  if (error) return error;
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const noted = clipNote(data?.note, NOTE_TOUCH_MAX);
+  const kind = data?.kind != null ? String(data.kind).trim().slice(0, KIND_MAX) || 'note' : 'note';
+  const hasExplicitDate = data?.interacted_at != null && String(data.interacted_at).trim() !== '';
+  let interactedAt = new Date().toISOString();
+  if (hasExplicitDate) {
+    const parsed = parseBookDate(data.interacted_at, { allowFuture: false });
+    if (!parsed.ok) return c.json({ error: parsed.code, message: dateError(parsed.code) }, 400);
+    interactedAt = parsed.dateOnly ? `${parsed.value}T00:00:00.000Z` : parsed.value;
+  } else if (!noted.text) {
+    return c.json({
+      error: 'touch_requires_substance',
+      message: 'Say what happened or set when it happened — an empty touch must not move the cold flag.',
+    }, 400);
+  }
+  // D572 — what came of it, optional. Refused rather than clipped when too
+  // long: an outcome cut mid-sentence can say the opposite of what happened.
+  let outcome: string | null = null;
+  if (data?.outcome != null) {
+    if (typeof data.outcome !== 'string') {
+      return refuse(c, 400, { code: 'invalid_outcome', message: 'An outcome is text.' });
+    }
+    outcome = data.outcome.trim() || null;
+    if (outcome && outcome.length > OUTCOME_MAX) {
+      return refuse(c, 400, { code: 'outcome_too_long', message: `An outcome is at most ${OUTCOME_MAX} characters.` });
+    }
+  }
+  const uid = newUid();
+  await c.env.DB.prepare(
+    'INSERT INTO partner_interactions (uid, relationship_id, kind, note, interacted_at, recorded_by, outcome) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(uid, rel.id, kind, noted.text, interactedAt, user.id, outcome).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE uid = ?').bind(uid).first();
+  return c.json({
+    item: row,
+    note_limit: NOTE_TOUCH_MAX,
+    note_truncated: noted.truncated,
+  }, 201);
+});
+
+partnernet.get('/relationships/:id/interactions', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, user, id, 'GET /relationships/:id/interactions');
+  if (error) return error;
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT i.*, u.name AS recorded_by_name FROM partner_interactions i
+        LEFT JOIN users u ON u.id = i.recorded_by
+       WHERE i.relationship_id = ? ORDER BY i.interacted_at DESC LIMIT 200`
+    ).bind(rel.id).all();
+    return c.json({ items: rows.results || [] });
+  } catch (e) {
+    console.error('partnernet interactions read failed', (e as Error).message);
+    return c.json({
+      error: 'interactions_unreadable',
+      message: 'The interaction log could not be read. This is not a claim that no touches exist.',
+    }, 503);
+  }
+});
+
+partnernet.post('/relationships/:id/interactions/:uid/void', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/interactions/:uid/void');
+  if (error) return error;
+  const uid = c.req.param('uid');
+  const row: any = await c.env.DB.prepare(
+    'SELECT * FROM partner_interactions WHERE uid = ? AND relationship_id = ?'
+  ).bind(uid, rel.id).first();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  if (row.recorded_by !== user.id) return c.json({ error: 'Only the person who recorded a touch can void it' }, 403);
+  if (row.voided_at) return c.json({ error: 'already_void', message: 'This touch is already void.' }, 409);
+  await c.env.DB.prepare(
+    'UPDATE partner_interactions SET voided_at = ?, voided_by = ? WHERE id = ?'
+  ).bind(new Date().toISOString(), user.id, row.id).run();
+  const fresh = await c.env.DB.prepare('SELECT * FROM partner_interactions WHERE id = ?').bind(row.id).first();
+  return c.json({ item: fresh });
+});
+
+partnernet.post('/relationships/:id/reminders', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const id = parseInt(c.req.param('id'));
+  const { rel, error } = await ownRelationship(c, user, id, 'POST /relationships/:id/reminders');
+  if (error) return error;
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const parsed = parseBookDate(data?.remind_at, { allowFuture: true });
+  if (!parsed.ok) {
+    const code = parsed.code === 'date_unparseable' && (data?.remind_at == null || String(data.remind_at).trim() === '')
+      ? 'reminder_date_required'
+      : parsed.code;
+    const message = code === 'reminder_date_required'
+      ? 'A reminder is a date — say when to re-surface the tie.'
+      : dateError(parsed.code);
+    return c.json({ error: code, message }, 400);
+  }
+  const noted = clipNote(data?.note, NOTE_REMINDER_MAX);
+  const uid = newUid();
+  const remindAt = parsed.dateOnly ? parsed.value : parsed.value;
+  await c.env.DB.prepare(
+    'INSERT INTO partner_reminders (uid, relationship_id, remind_at, note, done, created_by) VALUES (?, ?, ?, ?, 0, ?)'
+  ).bind(uid, rel.id, remindAt, noted.text, user.id).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(uid).first();
+  return c.json({ item: row, note_limit: NOTE_REMINDER_MAX, note_truncated: noted.truncated }, 201);
+});
+
+  // The caller's reminders, due first. `?all=` includes the done ones.
+partnernet.get('/reminders', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const includeDone = c.req.query('all') === '1';
+  // Two full literals, not an interpolated clause (this file's own rule, and
+  // check-sql-prepare's): every value reaching either is bound.
+  const rows = includeDone
+    ? await c.env.DB.prepare(
+      `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
+        JOIN partner_relationships pr ON pr.id = r.relationship_id AND pr.status = 'accepted'
+        LEFT JOIN users ua ON ua.id = pr.partner_a_id
+        LEFT JOIN users ub ON ub.id = pr.partner_b_id
+       WHERE r.created_by = ?
+       ORDER BY r.remind_at ASC LIMIT 200`
+    ).bind(user.id).all()
+    : await c.env.DB.prepare(
+      `SELECT r.*, ua.name AS a_name, ub.name AS b_name FROM partner_reminders r
+        JOIN partner_relationships pr ON pr.id = r.relationship_id AND pr.status = 'accepted'
+        LEFT JOIN users ua ON ua.id = pr.partner_a_id
+        LEFT JOIN users ub ON ub.id = pr.partner_b_id
+       WHERE r.created_by = ? AND r.done = 0
+       ORDER BY r.remind_at ASC LIMIT 200`
+    ).bind(user.id).all();
+  return c.json({ items: rows.results || [] });
+});
+
+partnernet.patch('/reminders/:uid', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const rem: any = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE uid = ?').bind(c.req.param('uid')).first();
+  if (!rem) return c.json({ error: 'Not found' }, 404);
+  if (rem.created_by !== user.id && user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  if (user.role === 'admin' && rem.created_by !== user.id) {
+    await logAdminAction(c.env, user.id, user.email || '', 'partnernet_admin_bypass', {
+      reminder_uid: rem.uid, route: 'PATCH /reminders/:uid',
+    });
+  }
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const done = data?.done === true ? 1 : 0;
+  await c.env.DB.prepare('UPDATE partner_reminders SET done = ?, done_at = ? WHERE id = ?')
+    .bind(done, done ? new Date().toISOString() : null, rem.id).run();
+  const row = await c.env.DB.prepare('SELECT * FROM partner_reminders WHERE id = ?').bind(rem.id).first();
+  return c.json({ item: row });
+});
+
+partnernet.post('/activity/log', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const action = String(data?.action_type || '');
+  if (!ACTION_TYPES.has(action)) return c.json({ error: `Unknown action_type. Allowed: ${[...ACTION_TYPES].join(', ')}` }, 400);
+  const ip = c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null;
+  const ua = c.req.header('user-agent') || null;
+  await logActivity(c.env, user.id, action, {
+    entityType: data?.entity_type, entityId: data?.entity_id, metadata: data?.metadata, ip: ip || undefined, ua: ua || undefined,
+  });
+  return c.json({ ok: true });
+});
+
+partnernet.get('/activity/logs', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const limit = Math.min(100, parseInt(c.req.query('limit') || '50'));
+  const offset = Math.max(0, parseInt(c.req.query('offset') || '0'));
+  const action = c.req.query('action_type');
+  const isAdmin = user.role === 'admin';
+  const targetUser = isAdmin && c.req.query('user_id') ? parseInt(c.req.query('user_id')!) : user.id;
+
+  const sql = getSQL(c.env);
+  const rows = action
+    ? await sql`SELECT * FROM activity_logs WHERE user_id = ${targetUser} AND action_type = ${action} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
+    : await sql`SELECT * FROM activity_logs WHERE user_id = ${targetUser} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+  const [{ n: total }] = await sql`SELECT COUNT(*) as n FROM activity_logs WHERE user_id = ${targetUser}`;
+  await sql.end();
+  return c.json({
+    items: (rows as any[]).map(r => ({ ...r, metadata: safeJson(r.metadata, {}) })),
+    total: parseInt(total) || 0, limit, offset,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The firm relationship book (migration 224)
+// ---------------------------------------------------------------------------
+//
+// A BOOK OF PEOPLE, NOT A GRAPH OF PARTNERS. `partner_relationships` above is a
+// partner-to-partner edge with a hand-set `strength_score`; the `pn1` artboard
+// is a firm's book of the people it knows at client companies, each owned by
+// someone at the firm or conspicuously not. See migration 224 for why they are
+// different tables rather than one widened one.
+//
+// STRENGTH IS NOT STORED. It is derived from the interactions below — how many,
+// how recently — and the row prints both numbers beside it, because "strength is
+// never a warmth number presented as fact" is the artboard's own rule and the
+// slider it replaces was exactly that number.
+
+// The three the `pn3` artboard's chips name, and the three the column's CHECK
+// accepts. One list, so a value the route lets through cannot be one the store
+// refuses.
+const RELATIONSHIPS = ['client', 'prospect', 'referral_source'];
+
+interface BookContactRow {
+  id: number; uid: string; owner_user_id: number; name: string; email: string | null;
+  role_title: string | null; organization: string | null; relationship: string | null;
+  firm_owner_user_id: number | null; source: string; source_label: string | null;
+  created_at: string; updated_at: string;
+  owner_name: string | null; owner_email: string | null;
+  interaction_count: number; last_interaction_at: string | null;
+}
+
+const bookDto = (r: BookContactRow) => ({
+  uid: r.uid,
+  name: r.name,
+  email: r.email,
+  role_title: r.role_title,
+  organization: r.organization,
+  // What that company is TO THE FIRM (migration 226). Null is "nobody has said"
+  // and is returned as null rather than coerced to a default — `pn3`'s three
+  // relationship chips narrow on this, and a defaulted value would make every
+  // legacy contact a prospect nobody chose.
+  relationship: r.relationship || null,
+  // The whole point of the page: a name, or nothing at all. Never a placeholder
+  // that reads as an assignment.
+  firm_owner: r.firm_owner_user_id
+    ? { name: r.owner_name || r.owner_email, id: r.firm_owner_user_id }
+    : null,
+  source: r.source || 'ours',
+  source_label: r.source_label,
+  // The two numbers strength is derived from, returned rather than a score.
+  // A page handed a number would print it; a page handed these has to show its
+  // working, which is what the artboard asks for.
+  interaction_count: r.interaction_count || 0,
+  last_interaction_at: r.last_interaction_at,
+  created_at: r.created_at,
+});
+
+partnernet.get('/book', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT b.*,
+            u.name AS owner_name, u.email AS owner_email,
+            (SELECT COUNT(*) FROM partner_book_interactions i WHERE i.contact_id = b.id) AS interaction_count,
+            (SELECT MAX(i.happened_at) FROM partner_book_interactions i WHERE i.contact_id = b.id) AS last_interaction_at
+       FROM partner_book_contacts b
+       LEFT JOIN users u ON u.id = b.firm_owner_user_id
+      WHERE b.owner_user_id = ?
+      ORDER BY b.id ASC LIMIT 500`
+  ).bind(user.id).all<BookContactRow>();
+  return c.json({ items: (rows.results || []).map(bookDto) });
+});
+
+partnernet.post('/book', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const name = String(body?.name || '').trim().slice(0, 200);
+  if (!name) return c.json({ error: 'name_required' }, 400);
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  await c.env.DB.prepare(
+    `INSERT INTO partner_book_contacts (uid, owner_user_id, name, email, role_title, organization, relationship)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    uid, user.id, name,
+    body?.email ? String(body.email).slice(0, 200) : null,
+    body?.role_title ? String(body.role_title).slice(0, 120) : null,
+    body?.organization ? String(body.organization).slice(0, 200) : null,
+    // Unset unless the form said so. The column's CHECK refuses anything else,
+    // and the page's Not recorded is the honest reading of "nobody has said".
+    RELATIONSHIPS.includes(String(body?.relationship || '')) ? String(body.relationship) : null,
+  ).run();
+  // NO OWNER ON CREATION, DELIBERATELY. A contact arrives unowned and sorts to
+  // the top in red until someone takes it — which is the failure mode this page
+  // exists to surface, and defaulting the creator into it would hide every one.
+  return c.json({ ok: true, uid }, 201);
+});
+
+/**
+ * What that company is to the firm — `Build records` on the `pn3` artboard.
+ *
+ * IT IS SET PER CONTACT AND THE ROLL-UP GROUPS BY TEXT, which is the whole
+ * point of that page: there is no organization record, so there is nowhere else
+ * to put this. Two contacts at one company may therefore disagree, and the page
+ * reads `Mixed` and names both rather than picking one — a silent tie-break
+ * would be the roll-up inventing a relationship the firm never stated.
+ *
+ * `null` CLEARS IT, for the same reason `Assign owner` accepts a clear: a
+ * prospect that became a client and then went quiet is not still either, and a
+ * value that can only ever be set is one nobody can correct.
+ */
+partnernet.patch('/book/:uid/relationship', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const value = body?.relationship == null ? null : String(body.relationship);
+  if (value !== null && !RELATIONSHIPS.includes(value)) {
+    return c.json({ error: 'relationship_invalid' }, 400);
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE partner_book_contacts SET relationship = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(value, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * WHO AT THE FIRM CAN OWN A ROW — the roster behind `Assign owner`.
+ *
+ * The artboard's owners are colleagues: "Nadia Okonkwo", "Tomás Ferreira",
+ * "Sena Adeyemi". This product already keeps that roster — `user_company_links`
+ * is the firm's membership, the same table `/company/:uid` reads its `members`
+ * from — so the candidates are the caller plus everyone linked to a company the
+ * caller is linked to. Nothing new is stored for this.
+ *
+ * IT IS ALSO THE VALIDATION, and that is the more important half. Without it
+ * `firm_owner_id` is any integer, so a partner could stamp an unrelated
+ * account's NAME onto their own row and the page would render it as the person
+ * responsible — a fact about a real user invented by someone who does not know
+ * them. The set that populates the picker is the set the PATCH accepts.
+ */
+async function firmOwnerCandidates(env: Env, userId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT u.id AS user_id, u.name, u.email
+       FROM user_company_links mine
+       JOIN user_company_links theirs ON theirs.company_id = mine.company_id
+       JOIN users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ?
+      ORDER BY u.id ASC LIMIT 200`
+  ).bind(userId).all<{ user_id: number; name: string | null; email: string }>();
+  const out = rows.results || [];
+  // The caller always owns their own book and can always take a row, whether or
+  // not they belong to a company record. A firm of one is the common case here
+  // and an empty picker would make the page's central act unreachable.
+  if (!out.some((r) => r.user_id === userId)) {
+    const me = await env.DB.prepare('SELECT id AS user_id, name, email FROM users WHERE id = ?')
+      .bind(userId).first<{ user_id: number; name: string | null; email: string }>();
+    if (me) out.unshift(me);
+  }
+  return out;
+}
+
+partnernet.get('/book/owners', async (c) => {
+  const user = await requireAuth(c);
+  const items = await firmOwnerCandidates(c.env, user.id);
+  return c.json({
+    items: items.map((r) => ({ user_id: r.user_id, name: r.name || r.email, is_me: r.user_id === user.id })),
+  });
+});
+
+/**
+ * Assign or unassign the firm owner — `Assign owner` in the ops row, which was
+ * `unbuilt: 'no owner field is stored on a relationship'`.
+ *
+ * `null` UNASSIGNS RATHER THAN BEING REJECTED. An owner who leaves, or a
+ * hand-off that has not landed, puts the row back at the top of the book where
+ * it belongs; refusing to clear it would make the page's own finding
+ * unreachable once anyone had ever claimed a row.
+ */
+partnernet.patch('/book/:uid/owner', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  let ownerId: number | null = null;
+  if (body?.firm_owner_id != null) {
+    ownerId = Number(body.firm_owner_id);
+    if (!Number.isInteger(ownerId)) return c.json({ error: 'firm_owner_id_invalid' }, 400);
+    const candidates = await firmOwnerCandidates(c.env, user.id);
+    if (!candidates.some((r) => r.user_id === ownerId)) {
+      return c.json({ error: 'not_a_firm_member' }, 403);
+    }
+  }
+  const res = await c.env.DB.prepare(
+    `UPDATE partner_book_contacts SET firm_owner_user_id = ?, updated_at = datetime('now')
+      WHERE uid = ? AND owner_user_id = ?`
+  ).bind(ownerId, c.req.param('uid'), user.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * Log an interaction — `Log interaction` in the ops row, which was
+ * `unbuilt: 'no interaction date is stored on a relationship'`.
+ *
+ * `happened_at` IS WHEN IT HAPPENED, NOT WHEN IT WAS TYPED. A call last month
+ * recorded today is a month-old touch, and stamping `created_at` would call it
+ * fresh — which would make `Going cold` report on data entry rather than on the
+ * relationship.
+ */
+partnernet.post('/book/:uid/interactions', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const happenedAt = String(body?.happened_at || '').trim().slice(0, 32);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(happenedAt)) return c.json({ error: 'happened_at_required' }, 400);
+  const contact = await c.env.DB.prepare(
+    `SELECT id FROM partner_book_contacts WHERE uid = ? AND owner_user_id = ?`
+  ).bind(c.req.param('uid'), user.id).first<{ id: number }>();
+  if (!contact) return c.json({ error: 'Not found' }, 404);
+  await c.env.DB.prepare(
+    `INSERT INTO partner_book_interactions (uid, contact_id, owner_user_id, happened_at, kind, note)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    crypto.randomUUID().replace(/-/g, ''), contact.id, user.id, happenedAt,
+    body?.kind ? String(body.kind).slice(0, 40) : 'note',
+    body?.note ? String(body.note).slice(0, 2000) : null,
+  ).run();
+  return c.json({ ok: true }, 201);
+});
+
+partnernet.get('/summary', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  try {
+    let summary: any = null;
+    try {
+      const rows = await sql`SELECT * FROM partner_summary WHERE id = ${user.id}`;
+      summary = (rows as any[])[0] || null;
+    } catch (e: any) {
+      console.error('partnernet /summary view query failed:', e?.message);
+    }
+    // Fallback: build a minimal summary directly from users when the view
+    // query 500s (legacy schema drift on D1) or returns no row.
+    if (!summary) {
+      try {
+        summary = await c.env.DB.prepare(
+          `SELECT id, email, name, role, kyc_status, partner_since, total_earnings, network_score, verified_badges, last_active FROM users WHERE id = ?`
+        ).bind(user.id).first();
+      } catch (e: any) {
+        console.error('partnernet /summary users fallback failed:', e?.message);
+      }
+    }
+    if (!summary) {
+      summary = {
+        id: user.id, email: (user as any).email, name: (user as any).name,
+        role: (user as any).role, network_score: 0, total_earnings: 0,
+        verified_badges: '[]', active_relationships: 0, network_reach: 0,
+        lifetime_earnings_cents: 0,
+      };
+    }
+
+    // Cached recompute (5-min TTL) — keeps hot read path cheap. Already
+    // swallows its own errors and returns null on failure.
+    const newScore = await recomputeNetworkScore(c.env, user.id);
+    if (newScore != null) summary.network_score = newScore;
+
+    let recentActivity: any[] = [];
+    try {
+      recentActivity = await sql`SELECT id, action_type, entity_type, entity_id, created_at FROM activity_logs WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 10` as any[];
+    } catch (e: any) {
+      console.error('partnernet /summary recent_activity failed:', e?.message);
+    }
+
+    let stats: any[] = [];
+    try {
+      stats = await sql`SELECT stat_date, action_count, earnings_cents FROM activity_stats WHERE user_id = ${user.id} AND stat_date >= date('now', '-7 days') ORDER BY stat_date` as any[];
+    } catch (e: any) {
+      console.error('partnernet /summary daily_stats failed:', e?.message);
+    }
+
+    await sql.end();
+    return c.json({
+      ...summary,
+      verified_badges: safeJson(summary.verified_badges, [] as string[]),
+      recent_activity: recentActivity,
+      daily_stats_7d: stats,
+    });
+  } catch (e: any) {
+    console.error('partnernet /summary fatal:', e?.message);
+    try { await sql.end(); } catch {}
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Leaderboard exposes emails + earnings → admin-only
+partnernet.get('/leaderboard', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') return c.json({ error: 'Admin only' }, 403);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id, name, email, role, network_score, total_earnings, active_relationships, network_reach, verified_badges FROM partner_summary WHERE network_score > 0 ORDER BY network_score DESC LIMIT 25`;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({ ...r, verified_badges: safeJson(r.verified_badges, [] as string[]) })));
+});
+
+// Public, redacted leaderboard — name + score + badges only (no email/earnings).
+// T20 — users who set show_in_directory=0 in user_settings are excluded from
+// the leaderboard (NOT NULL guard tolerates absence of the row, defaulting to
+// visible). The user_settings.user_id column matches partners.user_id, not
+// partner_summary.id, so we LEFT JOIN through partners.
+partnernet.get('/leaderboard/public', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT ps.id, ps.name, ps.role, ps.network_score, ps.active_relationships, ps.network_reach, ps.verified_badges
+      FROM partner_summary ps
+      LEFT JOIN partners p ON p.id = ps.id
+      -- partners has no user_id; the account link is users.partner_id.
+      -- Without this hop the join threw and the directory filter below never
+      -- ran, so this list was empty rather than filtered.
+      LEFT JOIN users pu ON pu.partner_id = p.id
+      LEFT JOIN user_settings us ON us.user_id = pu.id
+     WHERE ps.network_score > 0
+       AND (us.show_in_directory IS NULL OR us.show_in_directory = 1)
+     ORDER BY ps.network_score DESC
+     LIMIT 25
+  `;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({
+    ...r,
+    name: r.name ? r.name.split(' ').map((p: string) => p[0]).join('').toUpperCase().slice(0, 3) : `User #${r.id}`,
+    verified_badges: safeJson(r.verified_badges, [] as string[]),
+  })));
+});
+
+/**
+ * D572 part 3b (#1183) — the board by metric and period, with the change
+ * against a stored earlier standing (`services/partnerLeaderboard.ts` says
+ * what each metric counts and how the change is read).
+ *
+ *   GET /leaderboard/board?metric=score|referrals|commissions&period=all|quarter
+ *
+ * Any signed-in member. Other members appear by rank, role and value only:
+ * no id, name or email leaves this route. The viewer's own standing is given
+ * wherever it falls, not only inside the listed 25. A member hidden from the
+ * directory is not ranked, and is told so when they read it.
+ */
+partnernet.get('/leaderboard/board', async (c) => {
+  const user = await requireAuth(c);
+  const metric = String(c.req.query('metric') || 'score') as LeaderboardMetric;
+  const period = String(c.req.query('period') || 'all') as LeaderboardPeriod;
+  if (!(LEADERBOARD_METRICS as readonly string[]).includes(metric)) {
+    return refuse(c, 400, { code: 'bad_metric', message: `metric is one of ${LEADERBOARD_METRICS.join(', ')}.` });
+  }
+  if (!(LEADERBOARD_PERIODS as readonly string[]).includes(period)) {
+    return refuse(c, 400, { code: 'bad_period', message: `period is one of ${LEADERBOARD_PERIODS.join(', ')}.` });
+  }
+  if (!PERIODS_FOR[metric].includes(period)) {
+    return refuse(c, 400, {
+      code: 'period_not_for_metric',
+      message: 'The network score is a standing, not a tally, so it has no period: it is ranked as it stands now.',
+      extra: { periods: PERIODS_FOR[metric] },
+    });
+  }
+  const nowMs = Date.now();
+  let ranked;
+  try {
+    ranked = await liveRanking(c.env, metric, period, nowMs);
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'board_unreadable',
+      message: 'The leaderboard could not be read, so this is not a claim that nobody is ranked.',
+      raw: (e as Error)?.message,
+    });
+  }
+  const cmp = await comparisonFor(c.env, metric, period, nowMs);
+  const row = (r: (typeof ranked)[number]) => ({
+    rank: r.rank,
+    role: r.role,
+    value: r.value,
+    change: changeOf(r.user_id, r.rank, cmp),
+    is_viewer: r.user_id === user.id,
+  });
+  const mine = ranked.find((r) => r.user_id === user.id);
+  let viewer: Record<string, unknown>;
+  if (mine) {
+    viewer = { ranked: true, ...row(mine) };
+  } else {
+    let hidden = false;
+    try {
+      const s = await c.env.DB.prepare('SELECT show_in_directory FROM user_settings WHERE user_id = ?')
+        .bind(user.id).first<{ show_in_directory: number | null }>();
+      hidden = s?.show_in_directory === 0;
+    } catch { /* no settings table: visible, as everywhere else */ }
+    viewer = {
+      ranked: false,
+      reason: hidden
+        ? 'You chose not to appear in the directory, so you are not ranked.'
+        : 'You have nothing counted for this metric and period, so you are not ranked.',
+    };
+  }
+  return c.json({
+    metric,
+    period,
+    period_key: periodKey(period, nowMs),
+    as_of: new Date(nowMs).toISOString(),
+    total_ranked: ranked.length,
+    rows: ranked.slice(0, BOARD_LIMIT).map(row),
+    viewer,
+    compare: cmp.available
+      ? { available: true, date: cmp.date, days: CHANGE_DAYS }
+      : { available: false, reason: cmp.reason, ...(cmp.unreadable ? { unreadable: true } : {}) },
+  });
+});
+
+/**
+ * U8 (D493) — the one-time notice for relationships that existed before 368.
+ * The owner chose to keep them as accepted and tell their subjects. The
+ * subject is the party who did not create the row (`metadata.created_by`); a
+ * row with no recorded creator names both parties. One notice per person per
+ * run, listing who, with the page where each can be removed. Bounded and
+ * idempotent: a row is stamped `legacy_noticed_at` once its notices are sent.
+ */
+export async function noticeLegacyRelationships(env: Env, limit = 200): Promise<{ rows: number; notices: number }> {
+  await ensureSchema(env);
+  const rows = (await env.DB.prepare(
+    `SELECT pr.id, pr.partner_a_id, pr.partner_b_id, pr.metadata, ua.name AS a_name, ub.name AS b_name
+       FROM partner_relationships pr
+       LEFT JOIN users ua ON ua.id = pr.partner_a_id
+       LEFT JOIN users ub ON ub.id = pr.partner_b_id
+      WHERE pr.status = 'accepted' AND pr.requested_by IS NULL AND pr.legacy_noticed_at IS NULL
+      ORDER BY pr.id LIMIT ?`,
+  ).bind(Math.max(1, Math.min(1000, limit))).all()).results as any[] || [];
+  const bySubject = new Map<number, string[]>();
+  for (const r of rows) {
+    const creator = Number(safeJson(r.metadata, {} as any).created_by) || null;
+    const subjects: Array<[number, string | null]> = creator === r.partner_a_id ? [[r.partner_b_id, r.a_name]]
+      : creator === r.partner_b_id ? [[r.partner_a_id, r.b_name]]
+      : [[r.partner_a_id, r.b_name], [r.partner_b_id, r.a_name]];
+    for (const [subject, otherName] of subjects) {
+      if (!bySubject.has(subject)) bySubject.set(subject, []);
+      bySubject.get(subject)!.push(String(otherName || '').trim() || 'a member');
+    }
+  }
+  let notices = 0;
+  for (const [subject, names] of bySubject) {
+    const shown = names.slice(0, 3).join(', ') + (names.length > 3 ? ` and ${names.length - 3} more` : '');
+    const id = await notify(env, {
+      userId: subject, type: REL_NOTICE_TYPE, category: 'network',
+      title: names.length === 1 ? 'A relationship record names you' : `${names.length} relationship records name you`,
+      body: `Before relationships needed your acceptance, these were recorded with you: ${shown}. They stay in your book. Remove any you do not recognise on the Relationships page.`,
+      link: REL_LINK, payload: { kind: 'legacy', count: names.length },
+    });
+    if (id != null) notices += 1;
+  }
+  const now = new Date().toISOString();
+  for (const r of rows) {
+    await env.DB.prepare('UPDATE partner_relationships SET legacy_noticed_at = ? WHERE id = ?').bind(now, r.id).run();
+  }
+  return { rows: rows.length, notices };
+}
+
+export default partnernet;

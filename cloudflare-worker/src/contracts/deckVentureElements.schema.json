@@ -1,0 +1,272 @@
+{
+  "$id": "deckVentureElements",
+  "title": "GET /api/decks/:id/venture-elements and /venture-elements/:element (D1543, #3781)",
+  "description": "The reply the deck v2 adapter's `ventureElements` method passes through (`services/decks/ventureElements.ts`). With no element it is every element for the one-click run, each placed or refused by its gate; with an element it is that element, placed (a refused one is a 409/503 refusal, never this body). A placed element names no model: its blocks are the venture's own records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deck_id"
+  ],
+  "properties": {
+    "deck_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "elements": {
+      "$ref": "#/$defs/elements"
+    },
+    "element": {
+      "$ref": "#/$defs/elementName"
+    },
+    "available": {
+      "const": true
+    },
+    "blocks": {
+      "$ref": "#/$defs/blocks"
+    },
+    "bindings": {
+      "$ref": "#/$defs/bindings"
+    },
+    "model": {
+      "type": "null"
+    },
+    "label": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "proposed": {
+      "type": "boolean"
+    },
+    "totals_only": {
+      "const": true
+    },
+    "share": {
+      "$ref": "#/$defs/share"
+    },
+    "logos": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "quote": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "elementName": {
+      "enum": [
+        "team_grid",
+        "team_bios",
+        "use_of_funds",
+        "round_terms",
+        "cap_table",
+        "logo_wall",
+        "interview_quote"
+      ]
+    },
+    "elements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "team_grid",
+        "team_bios",
+        "use_of_funds",
+        "round_terms",
+        "cap_table",
+        "logo_wall",
+        "interview_quote"
+      ],
+      "properties": {
+        "team_grid": {
+          "$ref": "#/$defs/answer"
+        },
+        "team_bios": {
+          "$ref": "#/$defs/answer"
+        },
+        "use_of_funds": {
+          "$ref": "#/$defs/answer"
+        },
+        "round_terms": {
+          "$ref": "#/$defs/answer"
+        },
+        "cap_table": {
+          "$ref": "#/$defs/answer"
+        },
+        "logo_wall": {
+          "$ref": "#/$defs/answer"
+        },
+        "interview_quote": {
+          "$ref": "#/$defs/answer"
+        }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "element",
+        "available"
+      ],
+      "properties": {
+        "element": {
+          "$ref": "#/$defs/elementName"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "blocks": {
+          "$ref": "#/$defs/blocks"
+        },
+        "bindings": {
+          "$ref": "#/$defs/bindings"
+        },
+        "model": {
+          "type": "null"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposed": {
+          "type": "boolean"
+        },
+        "totals_only": {
+          "const": true
+        },
+        "share": {
+          "$ref": "#/$defs/share"
+        },
+        "logos": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "quote": {
+          "type": "object"
+        },
+        "code": {
+          "enum": [
+            "no_consent",
+            "no_permission",
+            "totals_only",
+            "not_included",
+            "subject_to_counsel",
+            "quotes_not_switched_on",
+            "pick_required",
+            "not_recorded",
+            "unreadable"
+          ]
+        },
+        "line": {
+          "type": "string"
+        },
+        "module": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "label",
+        "value",
+        "unit",
+        "source",
+        "grade",
+        "as_of",
+        "record_ref",
+        "snapshot_hash"
+      ],
+      "properties": {
+        "source_key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grade": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "record_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snapshot_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include",
+        "default"
+      ],
+      "properties": {
+        "include": {
+          "const": "cap_table"
+        },
+        "default": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

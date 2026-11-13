@@ -1,0 +1,241 @@
+/**
+ * Semantic search — Vectorize-backed search across projects, deals,
+ * founders, partners, legal documents, and academy lessons.
+ *
+ * GET  /api/search?q=...&type=...&limit=10[&grouped=1]
+ *      Any authenticated user. Returns hits ranked by cosine similarity.
+ *      `grouped=1` (or no `type`) returns `{ groups: { project: [...], ... } }`
+ *      so the cmd-K palette can render one section per entity type without
+ *      a second pass.
+ *
+ * POST /api/search/backfill
+ *      Admin only. Enqueues `embed_entity` jobs for every existing row so
+ *      the index reflects pre-Vectorize data. Idempotent — running it
+ *      twice just re-embeds.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAuth, requireAdmin } from '../auth';
+// ALL_ENTITY_TYPES is deliberately NOT imported here any more — see VALID_TYPES
+// below. Importing it again is how the two lists would quietly re-converge.
+import { searchSemantic, type EntityType, type SearchHit } from '../services/vectorize';
+import { keepFindable } from '../services/investorFindable';
+import { Jobs } from '../models/jobs';
+
+const search = new Hono<{ Bindings: Env }>();
+
+/**
+ * WHAT GLOBAL SEARCH MAY RETURN — an explicit list, and it is deliberately NOT
+ * `ALL_ENTITY_TYPES`.
+ *
+ * It used to be exactly that (`const VALID_TYPES = ALL_ENTITY_TYPES`), and the
+ * two lists genuinely were the same thing while every indexed entity was a
+ * directory row. `research_doc` broke the equivalence: it is one account's
+ * private documents, and its vector snippet is the document's own text, so a
+ * hit here is a disclosure before any link is followed. But the sweep in
+ * `index.ts` iterates `ALL_ENTITY_TYPES` to decide what to re-index — so a
+ * type has to be in that list to be indexed at all.
+ *
+ * Sharing one array meant those two needs could not be expressed separately,
+ * and the natural edit — add the type so it indexes — would have published
+ * every user's documents to every other user's search box. Keeping this list
+ * literal is what makes the difference visible: a new type does not appear
+ * here unless someone types it here.
+ *
+ * `cloudflare-worker/test/research_search_isolation.test.ts` fails if
+ * `research_doc` ever appears in this list, or disappears from the sweep's.
+ */
+const VALID_TYPES: EntityType[] = [
+  'project', 'deal', 'founder', 'partner', 'document', 'advisor', 'investor',
+];
+
+/**
+ * Bootstrap the academy_lessons table on demand (matches the lazy CREATE
+ * pattern used by other worker routes — no migration runner in dev).
+ * Safe to call repeatedly; CREATE TABLE IF NOT EXISTS is a no-op when
+ * the table already exists.
+ */
+export async function ensureAcademySchema(env: Env): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS academy_lessons (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         slug TEXT UNIQUE,
+         title TEXT NOT NULL,
+         summary TEXT,
+         body TEXT,
+         created_at TEXT DEFAULT (datetime('now')),
+         updated_at TEXT DEFAULT (datetime('now'))
+       )`
+    ).run();
+  } catch (e: any) {
+    console.error('academy_lessons schema:', e?.message);
+  }
+}
+
+/**
+ * Role-based scope:
+ *  - admin/partner/investor → every entity type
+ *  - founder/other          → their reachable project/document surfaces
+ *
+ * Founders requesting a restricted type get an empty result with a
+ * `warning`, not a 403 — keeps the UI simple and avoids leaking the
+ * existence of restricted indices.
+ */
+/**
+ * Role-scoped allow-list — must mirror the frontend route guards in
+ * App.jsx so every returned hit deep-links to a reachable page rather
+ * than a 403 / role-redirect.
+ */
+const ROLE_ALLOWED: Record<string, EntityType[]> = {
+  // 'founder' (entity) is admin-only — founder-role users must not be
+  // able to enumerate other founders via search, and no founder-role
+  // -accessible founder profile page exists yet.
+  admin:    VALID_TYPES,
+  founder:  ['project', 'document'],
+  partner:  ['project', 'deal', 'document'],
+  investor: ['project', 'deal', 'document'],
+};
+
+function allowedTypes(role: string, licences: readonly string[] = []): EntityType[] {
+  const allowed = new Set([role, ...licences].flatMap(key => ROLE_ALLOWED[key] || ['project']));
+  return VALID_TYPES.filter(type => allowed.has(type));
+}
+
+function scrubSnippet(h: SearchHit): SearchHit {
+  // Security #8 defense-in-depth: legacy document vectors may still
+  // carry contract body fragments in `snippet`. Always replace at the
+  // wire for `document` hits.
+  if (h.type === 'document') {
+    return { ...h, snippet: 'Legal document — open to view (download required)' };
+  }
+  return h;
+}
+
+search.get('/', async (c) => {
+  const user = await requireAuth(c);
+  const q = (c.req.query('q') || '').trim();
+  const grouped = c.req.query('grouped') === '1' || c.req.query('grouped') === 'true';
+  if (!q) return c.json({ query: '', hits: [], groups: {} });
+  if (q.length > 500) return c.json({ error: 'query too long (max 500 chars)' }, 400);
+
+  const typeParam = c.req.query('type');
+  const requestedType = typeParam && VALID_TYPES.includes(typeParam as EntityType) ? (typeParam as EntityType) : undefined;
+  const limit = Math.max(1, Math.min(25, parseInt(c.req.query('limit') || '10', 10) || 10));
+
+  if (!c.env.VECTORIZE) {
+    return c.json({ query: q, hits: [], groups: {}, warning: 'search index unavailable' });
+  }
+
+  await ensureAcademySchema(c.env);
+
+  const allowed = allowedTypes(user.role || 'founder', user.licences);
+
+  if (requestedType && !allowed.includes(requestedType)) {
+    return c.json({ query: q, type: requestedType, hits: [], groups: {}, warning: 'type not available for your role' });
+  }
+
+  let hits: SearchHit[];
+  if (requestedType) {
+    hits = await searchSemantic(c.env, q, { topK: limit, type: requestedType });
+  } else if (allowed.length === VALID_TYPES.length) {
+    // Pull a wider set when grouping so each group still has decent depth
+    // even if one type dominates the global ranking.
+    hits = await searchSemantic(c.env, q, { topK: grouped ? Math.min(50, limit * VALID_TYPES.length) : limit });
+  } else {
+    const wide = await searchSemantic(c.env, q, { topK: limit * 3 });
+    hits = wide.filter(h => allowed.includes(h.type));
+    if (!grouped) hits = hits.slice(0, limit);
+  }
+  // #3734: stale Academy vectors must not leak through the all-types admin path.
+  hits = hits.filter(h => allowed.includes(h.type)).map(scrubSnippet);
+  // D702 — an investor does not get a project hit for a venture whose founder
+  // chose "through introductions only" unless they have an introduction to it.
+  hits = await keepFindable(c.env, user, hits, (h) => (h.type === 'project' ? h.entity_id : null));
+
+  if (grouped || !requestedType) {
+    const groups: Record<string, SearchHit[]> = {};
+    for (const t of allowed) groups[t] = [];
+    for (const h of hits) {
+      if (!allowed.includes(h.type)) continue;
+      if (!groups[h.type]) groups[h.type] = [];
+      if (groups[h.type].length < limit) groups[h.type].push(h);
+    }
+    return c.json({ query: q, type: requestedType || 'all', allowed_types: allowed, groups, hits });
+  }
+  return c.json({ query: q, type: requestedType || 'all', allowed_types: allowed, hits });
+});
+
+/**
+ * Bounded backfill — chunked to avoid runaway D1+queue load.
+ *
+ * Body: { types?: EntityType[], since_id?: number, chunk?: number }
+ */
+const MAX_PER_CALL = 500;
+
+/**
+ * Partial on purpose: this map's domain is `VALID_TYPES`, not every
+ * `EntityType`. `research_doc` has no entry because backfill is reached from
+ * this search route and re-indexes what search can return — private documents
+ * are kept out of both. Their index health is the hourly sweep's job
+ * (`index.ts`), which walks `ALL_ENTITY_TYPES` and has its own table map.
+ *
+ * A total `Record<EntityType, string>` would demand an entry here for a type
+ * this route must never touch, and the entry would then be one `VALID_TYPES`
+ * edit away from being live.
+ */
+const TABLE_BY_TYPE: Partial<Record<EntityType, string>> = {
+  project: 'projects',
+  deal: 'deals',
+  founder: 'founders',
+  partner: 'users',
+  document: 'legal_documents',
+  advisor: 'advisors',
+  investor: 'users',
+};
+
+search.post('/backfill', async (c) => {
+  await requireAdmin(c);
+  await ensureAcademySchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  const requested: EntityType[] = Array.isArray(body.types) && body.types.length
+    ? body.types.filter((t: any) => VALID_TYPES.includes(t))
+    : VALID_TYPES;
+  const sinceIn: Record<string, number> = (body.since_id && typeof body.since_id === 'object') ? body.since_id : {};
+  const chunk = Math.max(50, Math.min(MAX_PER_CALL, Number(body.chunk) || MAX_PER_CALL));
+
+  const counts: Record<string, number> = {};
+  const nextSince: Record<string, number | null> = {};
+  let remaining = chunk;
+
+  for (const type of requested) {
+    if (remaining <= 0) { counts[type] = 0; nextSince[type] = sinceIn[type] ?? 0; continue; }
+    const table = TABLE_BY_TYPE[type];
+    // A type with no table is skipped rather than interpolated — `${table}`
+    // goes straight into the SQL below, so `undefined` would become a query
+    // against a table called "undefined". `index.ts`'s sweep guards the same
+    // way for the same reason.
+    if (!table) { counts[type] = 0; nextSince[type] = null; continue; }
+    const since = Number(sinceIn[type] ?? 0);
+    // Task #5 (AV) — `users` is shared by partner+investor; filter by
+    // role so each backfill type only enqueues the right rows instead
+    // of re-embedding the entire users table per type.
+    const where = type === 'investor' ? `id > ? AND role = 'investor'`
+      : type === 'partner' ? `id > ? AND role = 'partner'`
+      : `id > ?`;
+    const rows = await c.env.DB.prepare(
+      `SELECT id FROM ${table} WHERE ${where} ORDER BY id ASC LIMIT ?`
+    ).bind(since, remaining).all<{ id: number }>();
+    const ids = (rows.results || []).map(r => r.id);
+    for (const id of ids) {
+      await Jobs.enqueue(c.env, 'embed_entity', { type, id });
+    }
+    counts[type] = ids.length;
+    nextSince[type] = ids.length === remaining ? ids[ids.length - 1] : null;
+    remaining -= ids.length;
+  }
+  const done = Object.values(nextSince).every(v => v === null);
+  return c.json({ message: done ? 'backfill complete' : 'partial — call again with next_since', counts, next_since: nextSince, done });
+});
+
+export default search;

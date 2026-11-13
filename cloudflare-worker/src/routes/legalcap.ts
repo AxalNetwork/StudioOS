@@ -1,0 +1,964 @@
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAuth } from '../auth';
+import { logActivity } from './partnernet';
+import { ensureWorkflowSchema } from '../services/workflowSchema';
+import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
+import { bindingKey } from '../util/schemaBootstrap';
+import { run as runAI, type TaskClass } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
+import { proposeRail } from '../services/railProposals';
+
+const legalcap = new Hono<{ Bindings: Env }>();
+
+const DOC_TYPES = new Set(['SAFE', 'IP_license', 'equity_allocation', 'bylaws', '83b_election']);
+const CHECKLIST_TYPES = new Set(['legal', 'financial', 'tech', 'compliance']);
+// Phase 0.1: investors (migrated partners) keep advance privileges.
+const ADVANCE_ROLES = new Set(['admin', 'partner', 'investor']);
+const AI_RATE_LIMIT = 60; // shared
+
+const MIGRATED = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env) {
+  if (MIGRATED.get(bindingKey(env))) return;
+  // Idempotent ALTERs to extend subsidiaries with spin-out columns
+  const alters = [
+    `ALTER TABLE subsidiaries ADD COLUMN spinout_status TEXT DEFAULT 'pending'`,
+    `ALTER TABLE subsidiaries ADD COLUMN ip_license_doc_id INTEGER`,
+    `ALTER TABLE subsidiaries ADD COLUMN equity_allocation_json TEXT DEFAULT '{}'`,
+    `ALTER TABLE subsidiaries ADD COLUMN stripe_atlas_id TEXT`,
+    `ALTER TABLE subsidiaries ADD COLUMN independent_scaling_enabled INTEGER DEFAULT 0`,
+    `ALTER TABLE subsidiaries ADD COLUMN post_spinout_dashboard_url TEXT`,
+  ];
+  for (const a of alters) {
+    try { await env.DB.prepare(a).run(); }
+    catch (e: any) {
+      if (!/duplicate column|no such table/i.test(e?.message || '')) {
+        console.error('legalcap subsidiaries ALTER failed:', e?.message);
+      }
+    }
+  }
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS legal_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      content TEXT,
+      file_url TEXT,
+      generated_by INTEGER,
+      signed_by INTEGER,
+      version INTEGER DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_ld_deal ON legal_documents(deal_id, type)`,
+    `CREATE INDEX IF NOT EXISTS idx_ld_status ON legal_documents(status)`,
+
+    `CREATE TABLE IF NOT EXISTS subsidiaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL,
+      holding_company_id TEXT DEFAULT 'Axal_VC_Holdings_LLC_Delaware',
+      subsidiary_name TEXT NOT NULL,
+      jurisdiction TEXT NOT NULL DEFAULT 'Delaware_CCorp',
+      stripe_atlas_status TEXT DEFAULT 'pending',
+      stripe_atlas_ref TEXT,
+      ein TEXT,
+      incorporation_date TIMESTAMP,
+      ip_transfer_complete INTEGER DEFAULT 0,
+      equity_allocated TEXT DEFAULT '{}',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_deal ON subsidiaries(deal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sub_status ON subsidiaries(stripe_atlas_status)`,
+
+    `CREATE TABLE IF NOT EXISTS diligence_checklists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL,
+      checklist_type TEXT NOT NULL,
+      items TEXT NOT NULL DEFAULT '[]',
+      ai_score REAL,
+      ai_summary TEXT,
+      completed_by INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_dc_deal ON diligence_checklists(deal_id, checklist_type)`,
+
+    `CREATE TABLE IF NOT EXISTS compliance_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER,
+      subsidiary_id INTEGER,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      metadata TEXT DEFAULT '{}',
+      created_by INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CHECK (deal_id IS NOT NULL OR subsidiary_id IS NOT NULL)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_cr_deal ON compliance_records(deal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_cr_sub ON compliance_records(subsidiary_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_cr_type ON compliance_records(type, status)`,
+
+    `CREATE TABLE IF NOT EXISTS spinout_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subsidiary_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      details TEXT DEFAULT '{}',
+      performed_by INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_se_sub ON spinout_events(subsidiary_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_se_type ON spinout_events(event_type)`,
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('legalcap schema:', e?.message); } }
+  // Shared with pipeline, networkfx and dashboard — see migration 177.
+  await ensureWorkflowSchema(env);
+  MIGRATED.set(bindingKey(env), true);
+}
+
+function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
+const logAi = (env: Env, userId: number, kind: string, meta: any = {}) =>
+  recordSharedServiceAction(env, 'ai_call', userId, { kind, ...meta });
+/**
+ * D766 (#2094): a member's press through the router, so the member who pressed
+ * is held, guarded and charged, and the run is logged with its page, option and
+ * record (D765). `refused` is the answer to a run the router refused (the
+ * switch, the budget, the guard); `text` is null when the model could not be
+ * reached, and the press keeps its non-AI path.
+ */
+async function llm(c: any, userId: number, task: TaskClass, option: string, record: string, system: string, prompt: string, maxTokens = 400): Promise<{ text: string | null; model: string | null; refused: Response | null; page: string; usageLogId: number | null }> {
+  const r = await runAI(c.env, {
+    task, userId, maxTokens,
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    surface: AI_SURFACE.legalCapital,
+    rail: railFor(c, { page: 'legal-capital', option }, record),
+  });
+  // The page the run was recorded under, for what it leaves in `ai_rail_proposals` (D780).
+  const page = railFor(c, { page: 'legal-capital', option }, record).page;
+  if (r.ok) return { text: (r.output || '').trim() || null, model: r.usage.model, refused: null, page, usageLogId: r.usageLogId ?? null };
+  return { text: null, model: null, refused: refuseRun(c, r), page, usageLogId: null };
+}
+
+// ============================================================
+// LEGAL TEMPLATES (lightweight, embedded — ready for full Cooley/YC variants later)
+// ============================================================
+const TEMPLATES: Record<string, string> = {
+  SAFE: `SIMPLE AGREEMENT FOR FUTURE EQUITY (YC POST-MONEY)
+
+THIS CERTIFIES THAT in exchange for the payment by {{investor_name}} ("Investor") of \${{amount}} (the "Purchase Amount") on or about {{date}}, {{company_name}}, a Delaware C-corporation (the "Company"), issues to the Investor the right to certain shares of the Company's Capital Stock, subject to the terms set forth below.
+
+The "Post-Money Valuation Cap" is \${{valuation_cap}}.
+The "Discount Rate" is {{discount_rate}}%.
+
+1. Events
+(a) Equity Financing. If there is an Equity Financing before termination of this Safe, on the initial closing of such Equity Financing, this Safe will automatically convert into the number of shares of Standard Preferred Stock equal to the Purchase Amount divided by the Conversion Price.
+(b) Liquidity Event. If there is a Liquidity Event before the termination of this Safe, the Investor will, at its option, either: (i) receive a cash payment equal to the Purchase Amount, or (ii) automatically receive from the Company a number of shares of Common Stock equal to the Purchase Amount divided by the Liquidity Price.
+
+2. Definitions
+... (standard YC SAFE definitions abbreviated for brevity in MVP) ...
+
+Signed:
+Company: {{company_name}}    By: ____________________   Title: {{founder_title}}
+Investor: {{investor_name}}  By: ____________________   Date: {{date}}`,
+
+  IP_license: `INTELLECTUAL PROPERTY ASSIGNMENT & LICENSE AGREEMENT
+
+This IP Assignment and License Agreement ("Agreement") is entered into on {{date}} by and between Axal VC Holdings LLC, a Delaware limited liability company ("Holdings"), and {{company_name}} ("Subsidiary").
+
+1. Assignment. Holdings hereby irrevocably assigns to Subsidiary all right, title, and interest in and to the intellectual property described in Schedule A, including but not limited to: source code, trademarks, patents, trade secrets, and all related know-how (the "Assigned IP").
+
+2. License Back. Subsidiary grants to Holdings a non-exclusive, perpetual, worldwide, royalty-free license to use the Assigned IP solely for Holdings' portfolio operations and for sublicensing to Axal VC Management LLC for platform operation.
+
+3. Equity Allocation. In consideration, Holdings shall retain {{holding_equity_pct}}% of Subsidiary's fully-diluted equity, with the remaining {{founder_equity_pct}}% allocated to {{founder_names}} per the equity_allocation schedule.
+
+4. Representations. Each party represents that it has full corporate authority to enter into this Agreement.
+
+Signed:
+Holdings: Axal VC Holdings LLC          By: ____________________
+Subsidiary: {{company_name}}            By: {{founder_names}}
+Date: {{date}}`,
+
+  equity_allocation: `EQUITY ALLOCATION SCHEDULE
+
+Company: {{company_name}}
+Date: {{date}}
+Total Authorized Shares: 10,000,000 (Common Stock)
+
+| Shareholder              | Shares Allocated | Percentage | Vesting       |
+|--------------------------|------------------|------------|---------------|
+| Axal VC Holdings LLC     | {{holding_shares}}      | {{holding_equity_pct}}%    | Immediate     |
+| Founder Pool             | {{founder_shares}}      | {{founder_equity_pct}}%    | 4yr / 1yr cliff|
+| Employee Option Pool     | {{option_pool_shares}}  | {{option_pool_pct}}%       | Standard      |
+
+Founders:
+{{founder_breakdown}}
+
+Approved by board on {{date}}.`,
+
+  bylaws: `BYLAWS OF {{company_name}}, INC.
+A Delaware C-Corporation
+
+ARTICLE I — OFFICES
+The principal office of the Corporation shall be located in the State of Delaware.
+
+ARTICLE II — STOCKHOLDERS
+2.1 Annual Meeting. An annual meeting of the stockholders shall be held each year for the election of directors.
+2.2 Voting. Each share entitles the holder to one vote.
+
+ARTICLE III — BOARD OF DIRECTORS
+3.1 Number. The Board shall consist of not less than one (1) and not more than seven (7) directors.
+3.2 Initial Directors: {{initial_directors}}.
+
+ARTICLE IV — OFFICERS
+The officers of the Corporation shall include a President/CEO ({{ceo_name}}), Secretary, and Treasurer.
+
+ARTICLE V — STOCK CERTIFICATES
+Certificates representing shares of the Corporation shall be in such form as approved by the Board.
+
+Adopted: {{date}}`,
+
+  '83b_election': `IRC SECTION 83(b) ELECTION
+
+Pursuant to Section 83(b) of the Internal Revenue Code, the undersigned hereby makes an election with respect to the following property:
+
+Taxpayer: {{founder_name}}
+SSN/EIN: [REDACTED]
+Address: [ON FILE]
+
+Property: {{shares}} shares of common stock of {{company_name}} (the "Company"), a Delaware corporation.
+
+Date of Transfer: {{date}}
+Restrictions: Subject to a 4-year vesting schedule with a 1-year cliff.
+
+Fair Market Value at Transfer: \${{fmv_per_share}} per share (\${{total_fmv}} total)
+Amount Paid: \${{amount_paid}} per share
+
+The undersigned will report this transfer as compensation income on his/her tax return for the year of transfer.
+
+Signature: ____________________  Date: {{date}}
+{{founder_name}}
+
+A copy must be filed with the IRS within 30 days of the transfer date.`,
+};
+
+function fillTemplate(template: string, vars: Record<string, any>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => {
+    const v = vars[k];
+    if (v == null) return `[${k}]`;
+    return String(v);
+  });
+}
+
+function defaultDocVars(project: any, _user: any): Record<string, any> {
+  return { company_name: project?.name || null, date: new Date().toISOString().slice(0, 10) };
+}
+
+function missingDocFields(template: string, vars: Record<string, any>): string[] {
+  return [...new Set([...template.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))]
+    .filter(k => vars[k] == null || String(vars[k]).trim() === '');
+}
+// ============================================================
+// LEGAL ENGINE
+// ============================================================
+
+/** D780: Eadwyn's notes on a legal draft, the rail option they are stored under. */
+export const LEGAL_NOTES_OPTION = 'draft:legal/notes';
+
+legalcap.post('/legal/generate', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  const type = String(data?.type || '');
+  if (!dealId || !DOC_TYPES.has(type)) return c.json({ error: `deal_id and type required (${[...DOC_TYPES].join('|')})` }, 400);
+
+  const sql = getSQL(c.env);
+  const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
+  await sql.end();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+
+  const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
+  const vars = { ...defaultDocVars(project, user), ...userVars };
+  const missing = missingDocFields(TEMPLATES[type], vars);
+  if (missing.length) return c.json({
+    error: 'Required document terms are Not recorded.', status: 'Not recorded',
+    reason: 'Record the missing terms before generating this document.',
+    missing_fields: missing, terms: Object.fromEntries(missing.map(field => [field, null])),
+  }, 400);
+  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+  let body = fillTemplate(TEMPLATES[type], vars);
+
+  // Eadwyn's notes on the draft (D780, `draft:legal/notes`): a few points for
+  // the member to weigh, never a rewrite. No persona: Eadwyn is not counsel.
+  const ai = await llm(c, user.id, 'rail_legal', LEGAL_NOTES_OPTION, `deal:${dealId}`,
+    'You are Eadwyn, reading a startup legal draft built from a standard template. List 2-3 brief points the founder may want to check with their own counsel, as a markdown list. Do NOT rewrite the document.',
+    `Document type: ${type}\nCompany: ${project.name}\nSector: ${project.sector || 'n/a'}\nDraft preview:\n${body.slice(0, 1500)}`,
+    256);
+  if (ai.refused) return ai.refused;
+  await logAi(c.env, user.id, 'legal_doc_generate', { type, deal_id: dealId });
+
+  // Sensitive content stored as JSON (template + filled vars + body) — no raw PII in logs.
+  // D780 (D720 §9): the stored document is the template the member filled, and
+  // nothing else. Eadwyn's notes are a proposal in `ai_rail_proposals`, below.
+  const contentJson = JSON.stringify({ template: type, vars, body });
+
+  const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, deal_id, type, status, generated_by, created_at`)
+    .bind(dealId, type, contentJson, user.id).first();
+
+  // The notes, as the member's own `note` on this document. A note that could
+  // not be stored loses nothing: the document is whole without it.
+  let notes: { uid: string } | null = null;
+  if (ai.text && doc?.id) {
+    try {
+      const p = await proposeRail(c.env, {
+        userId: user.id, page: ai.page, option: LEGAL_NOTES_OPTION, record: `legal_doc:${doc.id}`,
+        kind: 'note', payload: { text: ai.text.slice(0, 4000), type }, model: ai.model, usageLogId: ai.usageLogId,
+      });
+      notes = { uid: p.uid };
+    } catch (e) {
+      console.error('[legalcap] legal notes:', (e as Error).message);
+    }
+  }
+
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'document', id: doc.id }); } catch {}
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'legal_doc', entityId: doc.id, metadata: { type, deal_id: dealId } });
+  // Security #8 — storage cleanup: never return the rendered `body` (or
+  // the substituted `vars`, which contain PII like investor name and
+  // amount) in the JSON response. Caller can re-fetch via
+  // GET /legal/docs/:dealId, which is also redacted; the body itself
+  // lives only in the legal_documents.content JSON column and will be
+  // surfaced via a signed download URL once the worker mints them.
+  return c.json({ ...doc, content_url: null, redacted: true, notes }, 201);
+});
+
+legalcap.get('/legal/docs/:dealId', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  // Full body (with substituted PII) only for admins/partners — others get metadata only
+  const fullAccess = ADVANCE_ROLES.has(user.role);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT id, deal_id, type, status, generated_by, signed_by, version, created_at, updated_at, content FROM legal_documents WHERE deal_id = ${dealId} ORDER BY type, version DESC`;
+  await sql.end();
+  const stripped = (rows as any[]).map(r => {
+    const parsed = safeJson<any>(r.content, {});
+    // Security #8 — storage cleanup: `body` is NEVER returned inline,
+    // even for admins/partners. They previously got the full rendered
+    // contract text in JSON; now they get the model used + a flag and
+    // must use the (forthcoming) signed download URL endpoint to fetch
+    // the body. `fullAccess` still controls whether non-body metadata
+    // (model, access label) is surfaced.
+    return {
+      ...r,
+      body: null,
+      model: parsed.model || null,
+      content: undefined,
+      content_url: null,
+      redacted: true,
+      access: fullAccess ? 'full' : 'metadata_only',
+    };
+  });
+  return c.json(stripped);
+});
+
+// D1214: legal signatures are recorded by the envelope flow only. A legacy
+// click cannot change a document, including one with a completed envelope.
+legalcap.patch('/legal/docs/:id/sign', async (c) => {
+  await requireAuth(c);
+  return c.json({ error: 'Sign this document through its signing envelope.' }, 410);
+});
+
+// D1214: the legacy syndicate ledger was incompatible with production's LP
+// ledger. Refuse before schema bootstrap, reads, AI or any money write.
+legalcap.all('/capital/*', async (c) => {
+  await requireAuth(c);
+  return c.json({ error: 'Capital calls are managed in Fund admin.' }, 410);
+});
+
+// ============================================================
+// DILIGENCE & COMPLIANCE
+// ============================================================
+
+const DEFAULT_CHECKLIST: Record<string, string[]> = {
+  legal: ['Cap table verified', 'Founder agreements signed', 'IP assignments complete', 'No pending litigation', 'Corporate structure clean'],
+  financial: ['Bank statements (12mo)', 'Revenue recognition reviewed', 'Burn rate validated', 'Cap table reconciled', 'Tax filings current'],
+  tech: ['Code repo access', 'Architecture review', 'Security audit', 'Scalability assessment', 'Tech stack documented'],
+  compliance: ['KYC/AML on founders', 'Delaware filings current', 'Required licenses identified', 'Privacy policy + ToS', 'Data residency reviewed'],
+};
+
+legalcap.post('/diligence/review', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  const type = String(data?.checklist_type || 'legal');
+  if (!dealId || !CHECKLIST_TYPES.has(type)) return c.json({ error: `deal_id and checklist_type required (${[...CHECKLIST_TYPES].join('|')})` }, 400);
+
+  const userItems: any[] = Array.isArray(data?.items) ? data.items.slice(0, 50) : [];
+  const items = userItems.length ? userItems : DEFAULT_CHECKLIST[type].map(item => ({ item, status: 'pending', notes: '' }));
+
+  // Heuristic score: % done
+  const total = items.length, done = items.filter((i: any) => i.status === 'done').length;
+  const blocked = items.filter((i: any) => i.status === 'blocked').length;
+  const heuristic = total ? Math.round((done / total) * 100 - blocked * 5) : 0;
+
+  // AI summary + score adjustment
+  const sql = getSQL(c.env);
+  // `projects` has no `score` — scores live in score_snapshots. Selecting it
+  // threw, so `project` was undefined and the prompt below named the deal by
+  // id instead of by name. Only `name` is read, so only `name` is selected.
+  const [project] = await sql`SELECT name FROM projects WHERE id = ${dealId}`;
+  await sql.end();
+  const ai = await llm(c, user.id, 'rail_reason', `review:diligence/${type}`, `deal:${dealId}`,
+    'You are a venture due-diligence analyst. Given a checklist with statuses, output a 2-3 sentence summary of risk + readiness.',
+    `Project: ${project?.name || dealId}\nChecklist type: ${type}\nItems:\n${items.map((i: any) => `- [${i.status}] ${i.item}${i.notes ? ' — ' + i.notes : ''}`).join('\n')}`,
+    256);
+  if (ai.refused) return ai.refused;
+  const score = Math.max(0, Math.min(100, heuristic));
+
+  const r: any = await c.env.DB.prepare(`INSERT INTO diligence_checklists (deal_id, checklist_type, items, ai_score, ai_summary, completed_by) VALUES (?, ?, ?, ?, ?, ?) RETURNING *`)
+    .bind(dealId, type, JSON.stringify(items), score, ai.text || `Heuristic only: ${done}/${total} complete, ${blocked} blocked.`, user.id).first();
+
+  await logAi(c.env, user.id, 'diligence_review', { deal_id: dealId, type });
+  await logActivity(c.env, user.id, 'ai_scoring', { entityType: 'diligence', entityId: r.id, metadata: { deal_id: dealId, type, score } });
+  return c.json({ ...r, items, ai_score: score });
+});
+
+legalcap.get('/diligence/:dealId', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM diligence_checklists WHERE deal_id = ${dealId} ORDER BY checklist_type, id DESC`;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({ ...r, items: safeJson(r.items, []) })));
+});
+
+legalcap.get('/compliance/:dealId', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM compliance_records WHERE deal_id = ${dealId} OR subsidiary_id IN (SELECT id FROM subsidiaries WHERE deal_id = ${dealId}) ORDER BY created_at DESC`;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({ ...r, metadata: safeJson(r.metadata, {}) })));
+});
+
+// ============================================================
+// SUBSIDIARY SPIN-OUT (orchestrates legal + capital + Stripe Atlas)
+// ============================================================
+
+legalcap.get('/subsidiaries/:dealId', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json(null);
+  return c.json({ ...sub, equity_allocated: safeJson(sub.equity_allocated, {}), ip_transfer_complete: !!sub.ip_transfer_complete });
+});
+
+legalcap.post('/subsidiary/spinout', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const sql = getSQL(c.env);
+  const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
+  if (!project) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  const suppliedVars = { ...defaultDocVars(project, user), ...(data.variables || {}) };
+  const missing = [...new Set(['SAFE', 'IP_license', 'equity_allocation'].flatMap(t => missingDocFields(TEMPLATES[t], suppliedVars)))];
+  if (missing.length) { await sql.end(); return c.json({ error: 'Missing document fields', missing_fields: missing }, 400); }
+  // Verify the deal has a passed decision_gate (spinout_ready) — soft check
+  const gateRow: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
+  await sql.end();
+  const override = gateRow ? null : gateOverride(user, data);
+  if (!gateRow && !override?.ok) return c.json({ error: NO_GATE_MESSAGE }, 412);
+
+  // Idempotency: if a subsidiary already exists, return it
+  const existing: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (existing) return c.json({ ...existing, equity_allocated: safeJson(existing.equity_allocated, {}), already_existed: true });
+
+  const subName = String(data?.subsidiary_name || `${project.name}, Inc.`).slice(0, 200);
+  const jurisdiction = data?.jurisdiction === 'global' ? 'global' : 'Delaware_CCorp';
+  const equityAlloc = { holding_pct: suppliedVars.holding_equity_pct, founders_pct: suppliedVars.founder_equity_pct, option_pool_pct: suppliedVars.option_pool_pct };
+
+  // === Stripe Atlas placeholder ===
+  // Real integration would call Atlas API with env.STRIPE_ATLAS_API_KEY here.
+  // For now we stamp a mock reference + 'pending' status, which a future cron/webhook can flip to 'incorporated'.
+  // D4677: no reference is invented. The Atlas id, EIN and date are recorded
+  // from the incorporation itself (POST /spinout/stripe-atlas with its evidence).
+  const stripeRef: string | null = null;
+  const stripeStatus = 'pending';
+
+  const sub: any = await c.env.DB.prepare(`INSERT INTO subsidiaries (deal_id, subsidiary_name, jurisdiction, stripe_atlas_status, stripe_atlas_ref, equity_allocated) VALUES (?, ?, ?, ?, ?, ?) RETURNING *`)
+    .bind(dealId, subName, jurisdiction, stripeStatus, stripeRef, JSON.stringify(equityAlloc)).first();
+
+  if (override?.ok) await logSpinoutEvent(c.env, sub.id, 'override_no_passed_gate', { reason: override.reason }, user.id);
+
+  // Auto-generate the 3 standard docs (template-only, no AI to keep this orchestration cheap)
+  const docVars = { ...suppliedVars, holding_equity_pct: equityAlloc.holding_pct, founder_equity_pct: equityAlloc.founders_pct, option_pool_pct: equityAlloc.option_pool_pct };
+  const docResults: any[] = [];
+  for (const docType of ['SAFE', 'IP_license', 'equity_allocation']) {
+    const body = fillTemplate(TEMPLATES[docType], docVars);
+    const content = JSON.stringify({ template: docType, vars: docVars, body, model: 'template-only' });
+    const d: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, type`)
+      .bind(dealId, docType, content, user.id).first();
+    docResults.push(d);
+  }
+
+  // Compliance records
+  await c.env.DB.prepare(`INSERT INTO compliance_records (deal_id, subsidiary_id, type, status, metadata, created_by) VALUES (?, ?, 'delaware_filing', 'pending', ?, ?)`)
+    .bind(dealId, sub.id, JSON.stringify({ subsidiary_name: subName }), user.id).run();
+  if (jurisdiction === 'global') {
+    await c.env.DB.prepare(`INSERT INTO compliance_records (deal_id, subsidiary_id, type, status, metadata, created_by) VALUES (?, ?, 'global_subsidiary', 'pending', ?, ?)`)
+      .bind(dealId, sub.id, JSON.stringify({ subsidiary_name: subName }), user.id).run();
+  }
+
+  // Capital calls require an explicit fund-scoped instruction, never a spin-out side effect.
+  // Workflow task for human follow-up.
+  try {
+    let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'spinout.coordination' AND project_id = ? LIMIT 1`).bind(dealId).first();
+    if (!wf) {
+      wf = await c.env.DB.prepare(`INSERT INTO workflows (type, title, description, status, project_id, template_key, owner_user_id) VALUES ('strategic', ?, 'Coordinate spin-out: Stripe Atlas, IP transfer, capital call, signatures.', 'active', ?, 'spinout.coordination', ?) RETURNING id`)
+        .bind(`Spin-Out: ${project.name}`, dealId, user.id).first();
+    }
+    const tasks = [
+      'Review and sign SAFE',
+      'Review and sign IP License + equity allocation',
+      'Confirm Stripe Atlas incorporation',
+      'File 83(b) elections within 30 days',
+    ];
+    for (const t of tasks) {
+      await c.env.DB.prepare(`INSERT INTO workflow_tasks (workflow_id, title, status, priority, ai_assisted, metadata) VALUES (?, ?, 'todo', 'high', 0, ?)`)
+        .bind(wf.id, t, JSON.stringify({ kind: 'spinout', deal_id: dealId, subsidiary_id: sub.id })).run();
+    }
+  } catch (e: any) { console.error('spinout workflow:', e?.message); }
+
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'subsidiary', entityId: sub.id, metadata: { deal_id: dealId, jurisdiction, atlas_ref: stripeRef } });
+  return c.json({
+    subsidiary: { ...sub, equity_allocated: safeJson(sub.equity_allocated, {}) },
+    legal_docs: docResults,
+    capital_call: null,
+    stripe_atlas: { status: stripeStatus, ref: stripeRef, real_api: false },
+    next_steps: ['Sign legal documents', 'Confirm Atlas incorporation', 'File 83(b) elections'],
+  }, 201);
+});
+
+// ============================================================
+// SPIN-OUT WIZARD (step-by-step orchestration with audit trail)
+// ============================================================
+
+/**
+ * D4677: the one override a spin-out allows, and it is narrow and recorded: HQ
+ * (role admin) starting a spin-out for a deal with no passed decision gate, with
+ * a written reason of at least ten characters. It replaces a bare `force: true`
+ * that any operator could send; it does not reach incorporation, which is never
+ * overridable (go-independent needs the evidence the step records).
+ */
+function gateOverride(user: { role: string }, data: any): { ok: true; reason: string } | { ok: false } {
+  const o = data?.override;
+  const reason = typeof o?.reason === 'string' ? o.reason.trim() : '';
+  if (o?.kind === 'no_passed_gate' && user.role === 'admin' && reason.length >= 10 && reason.length <= 500) return { ok: true, reason };
+  return { ok: false };
+}
+const NO_GATE_MESSAGE = 'Spin-out requires a passed decision gate. An admin can start one without it by sending override { kind: "no_passed_gate", reason } (at least ten characters, recorded).';
+
+async function logSpinoutEvent(env: Env, subId: number, type: string, details: any, userId: number) {
+  try {
+    await env.DB.prepare(`INSERT INTO spinout_events (subsidiary_id, event_type, details, performed_by) VALUES (?, ?, ?, ?)`)
+      .bind(subId, type, JSON.stringify(details || {}), userId).run();
+  } catch (e: any) { console.error('logSpinoutEvent:', e?.message); }
+}
+
+async function getOrCreateSubForDeal(env: Env, dealId: number, defaults: { name: string; jurisdiction?: string; userId: number }): Promise<{ sub: any; created: boolean }> {
+  const existing: any = await env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (existing) return { sub: existing, created: false };
+  const sub: any = await env.DB.prepare(`INSERT INTO subsidiaries (deal_id, subsidiary_name, jurisdiction, stripe_atlas_status, spinout_status) VALUES (?, ?, ?, 'pending', 'pending') RETURNING *`)
+    .bind(dealId, defaults.name, defaults.jurisdiction || 'Delaware_CCorp').first();
+  return { sub, created: true };
+}
+
+// One-click execute (orchestrates IP → Equity → Atlas in sequence; idempotent per step)
+legalcap.post('/spinout/execute', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+
+  const gate: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
+  const override = gate ? null : gateOverride(user, data);
+  if (!gate && !override?.ok) return c.json({ error: NO_GATE_MESSAGE }, 412);
+
+  const { sub, created } = await getOrCreateSubForDeal(c.env, dealId, { name: data?.subsidiary_name || `${project.name}, Inc.`, jurisdiction: data?.jurisdiction, userId: user.id });
+  if (override?.ok && created) await logSpinoutEvent(c.env, sub.id, 'override_no_passed_gate', { reason: override.reason }, user.id);
+
+  // Prevent duplicate completed spin-outs
+  if (sub.spinout_status === 'independent') {
+    return c.json({ error: 'Spin-out already complete. This subsidiary is independent.', subsidiary: sub }, 409);
+  }
+
+  return c.json({
+    subsidiary: { ...sub, equity_allocated: safeJson(sub.equity_allocated, {}), equity_allocation_json: safeJson(sub.equity_allocation_json, {}) },
+    created,
+    next_steps: [
+      { step: 'ip_transfer', endpoint: '/api/legalcap/spinout/ip-transfer', done: !!sub.ip_license_doc_id },
+      { step: 'equity_allocate', endpoint: '/api/legalcap/spinout/equity-allocate', done: sub.spinout_status === 'equity_allocated' || sub.spinout_status === 'incorporated' || sub.spinout_status === 'independent' },
+      { step: 'stripe_atlas', endpoint: '/api/legalcap/spinout/stripe-atlas', done: sub.spinout_status === 'incorporated' || sub.spinout_status === 'independent' },
+      { step: 'go_independent', endpoint: '/api/legalcap/spinout/go-independent', done: sub.spinout_status === 'independent' },
+    ],
+  }, 200);
+});
+
+legalcap.get('/spinout/status/:dealId', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  const dealId = parseInt(c.req.param('dealId'));
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ status: 'not_started', subsidiary: null, events: [] });
+  const events = await c.env.DB.prepare(`SELECT * FROM spinout_events WHERE subsidiary_id = ? ORDER BY created_at DESC LIMIT 50`).bind(sub.id).all().catch(() => ({ results: [] as any[] }));
+  return c.json({
+    status: sub.spinout_status || 'pending',
+    subsidiary: {
+      ...sub,
+      equity_allocated: safeJson(sub.equity_allocated, {}),
+      equity_allocation_json: safeJson(sub.equity_allocation_json, {}),
+      ip_transfer_complete: !!sub.ip_transfer_complete,
+      independent_scaling_enabled: !!sub.independent_scaling_enabled,
+    },
+    events: (events.results || []).map((e: any) => ({ ...e, details: safeJson(e.details, {}) })),
+  });
+});
+
+// Step 1: IP transfer — generates an IP_license doc, links to subsidiary, marks ip_transferred
+legalcap.post('/spinout/ip-transfer', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary. Call /spinout/execute first.' }, 412);
+  if (sub.ip_license_doc_id) return c.json({ error: 'IP transfer already complete', ip_license_doc_id: sub.ip_license_doc_id }, 409);
+  if (sub.spinout_status && !['pending', 'ip_transferred'].includes(sub.spinout_status)) {
+    return c.json({ error: `Invalid state for IP transfer: ${sub.spinout_status}` }, 412);
+  }
+
+  // D4677: this step used to write the licence as `signed` the moment it was
+  // generated, with nobody having signed it, and to mark the transfer complete
+  // before the document existed. Now it generates a DRAFT, and the transfer
+  // completes only when HQ records the signature (who signed, on what date),
+  // in one batch with the document turning `signed`.
+  const sig = data?.signed;
+  let signedBy = '';
+  let signedOn = '';
+  if (sig !== undefined) {
+    signedBy = typeof sig?.signed_by_name === 'string' ? sig.signed_by_name.trim() : '';
+    signedOn = typeof sig?.signed_on === 'string' ? sig.signed_on.trim() : '';
+    if (!signedBy || signedBy.length > 200 || !/^\d{4}-\d{2}-\d{2}$/.test(signedOn) || Number.isNaN(Date.parse(signedOn))) {
+      return c.json({ error: 'signed needs signed_by_name (who signed) and signed_on (YYYY-MM-DD).' }, 400);
+    }
+    if (signedOn > new Date().toISOString().slice(0, 10)) return c.json({ error: 'signed_on cannot be in the future.' }, 400);
+  }
+
+  let draft: any = await c.env.DB.prepare(`SELECT id, content FROM legal_documents WHERE deal_id = ? AND type = 'IP_license' AND status = 'generated' ORDER BY id DESC LIMIT 1`).bind(dealId).first();
+  if (!draft) {
+    const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
+    const vars = { ...defaultDocVars(project, user), ...userVars };
+    const body = fillTemplate(TEMPLATES.IP_license, vars);
+    const content = JSON.stringify({ template: 'IP_license', vars, body, model: 'template-only' });
+    draft = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, 'IP_license', 'generated', ?, ?) RETURNING id, content`)
+      .bind(dealId, content, user.id).first();
+    await logSpinoutEvent(c.env, sub.id, 'ip_license_drafted', { doc_id: draft.id, deal_id: dealId }, user.id);
+  }
+  if (sig === undefined) {
+    return c.json({ ok: true, ip_license_doc_id: null, draft_doc_id: draft.id, awaiting: 'signature', spinout_status: sub.spinout_status || 'pending' });
+  }
+
+  const stamped = JSON.stringify({ ...safeJson(draft.content, {}), signature: { signed_by_name: signedBy, signed_on: signedOn, recorded_by_user_id: user.id } });
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'ip_transferred', ip_transfer_complete = 1, ip_license_doc_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND ip_license_doc_id IS NULL`)
+      .bind(draft.id, sub.id),
+    c.env.DB.prepare(`UPDATE legal_documents SET status = 'signed', signed_by = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'generated' AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.ip_license_doc_id = ?)`)
+      .bind(user.id, stamped, draft.id, sub.id, draft.id),
+  ]);
+  if (!Number((results[0] as any)?.meta?.changes)) {
+    const fresh: any = await c.env.DB.prepare(`SELECT ip_license_doc_id FROM subsidiaries WHERE id = ?`).bind(sub.id).first();
+    return c.json({ error: 'IP transfer already complete', ip_license_doc_id: fresh?.ip_license_doc_id }, 409);
+  }
+  await logSpinoutEvent(c.env, sub.id, 'ip_transfer', { doc_id: draft.id, deal_id: dealId, signed_by_name: signedBy, signed_on: signedOn }, user.id);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'ip_transfer', doc_id: draft.id } });
+
+  return c.json({ ok: true, ip_license_doc_id: draft.id, spinout_status: 'ip_transferred' });
+});
+
+// Step 2: Equity allocation — Replit AI recommends fair split; user can override
+legalcap.post('/spinout/equity-allocate', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const project: any = await c.env.DB.prepare(`SELECT * FROM projects WHERE id = ?`).bind(dealId).first();
+  if (!project) return c.json({ error: 'Deal not found' }, 404);
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary. Call /spinout/execute first.' }, 412);
+  if (!['ip_transferred', 'equity_allocated'].includes(sub.spinout_status)) {
+    return c.json({ error: `Equity allocation requires ip_transferred state (current: ${sub.spinout_status})` }, 412);
+  }
+
+  // If client passed an explicit override allocation, use it. Else ask AI (gated on quota).
+  let allocation: any = data?.allocation && typeof data.allocation === 'object' ? data.allocation : null;
+  let aiRationale: string | null = null;
+
+  if (!allocation) {
+    const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT, note: 'Pass an explicit allocation to override.' });
+    if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+    const prompt = `Recommend an equity split for a venture-studio spin-out. Output a JSON object with keys: studio_pct, founders_pct, option_pool_pct, advisors_pct (sum to 100). Studio takes 10-20%, founders 60-80%, options 10-15%, advisors 0-5%.
+
+Project: ${project.name}
+Sector: ${project.sector || 'unknown'}
+Stage: ${project.stage || 'unknown'}
+Studio score: ${project.score || 'n/a'}
+
+Reply with ONLY the JSON object, no commentary.`;
+    const ai = await llm(c, user.id, 'rail_numbers', 'propose:spinout/equity', `deal:${dealId}`, 'You are a venture-studio equity allocation expert. Reply with valid JSON only.', prompt, 200);
+    if (ai.refused) return ai.refused;
+    const raw = ai.text;
+    await logAi(c.env, user.id, 'spinout_equity', { deal_id: dealId });
+
+    if (raw) {
+      try {
+        const m = raw.match(/\{[\s\S]*\}/);
+        const parsed = m ? JSON.parse(m[0]) : null;
+        if (parsed && typeof parsed === 'object') allocation = parsed;
+      } catch {}
+    }
+  }
+
+  // Sane fallback if AI missing/invalid
+  if (!allocation) allocation = { studio_pct: 15, founders_pct: 70, option_pool_pct: 13, advisors_pct: 2 };
+
+  // Validate + normalize
+  const cleaned: any = {};
+  for (const k of ['studio_pct', 'founders_pct', 'option_pool_pct', 'advisors_pct']) {
+    const v = Number(allocation[k]);
+    cleaned[k] = Number.isFinite(v) && v >= 0 && v <= 100 ? Math.round(v * 10) / 10 : 0;
+  }
+  const total = cleaned.studio_pct + cleaned.founders_pct + cleaned.option_pool_pct + cleaned.advisors_pct;
+  if (Math.abs(total - 100) > 0.5) {
+    // Auto-normalize
+    const factor = 100 / (total || 100);
+    for (const k of Object.keys(cleaned)) cleaned[k] = Math.round(cleaned[k] * factor * 10) / 10;
+  }
+  if (cleaned.studio_pct < 5 || cleaned.studio_pct > 30) return c.json({ error: 'studio_pct out of policy range (5-30%)', allocation: cleaned }, 422);
+  if (cleaned.founders_pct < 50 || cleaned.founders_pct > 85) return c.json({ error: 'founders_pct out of policy range (50-85%)', allocation: cleaned }, 422);
+
+  // D766 (D720 §9): asked without an allocation, the split is a proposal and
+  // nothing is written. The member's Save posts it back as `allocation`, which
+  // is the accept; `proposed` on that post says it began as the AI's.
+  if (!data?.allocation) return c.json({ ok: true, proposal: true, allocation: cleaned, ai_rationale: aiRationale, spinout_status: sub.spinout_status });
+
+  const eqUpd = await c.env.DB.prepare(`UPDATE subsidiaries SET equity_allocation_json = ?, equity_allocated = ?, spinout_status = 'equity_allocated', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status IN ('ip_transferred','equity_allocated')`)
+    .bind(JSON.stringify(cleaned), JSON.stringify(cleaned), sub.id).run();
+  if (!eqUpd.meta?.changes) return c.json({ error: 'Concurrent state change; refresh and retry' }, 409);
+  await logSpinoutEvent(c.env, sub.id, 'equity_allocation', { allocation: cleaned, ai_used: data?.proposed === true }, user.id);
+
+  return c.json({ ok: true, allocation: cleaned, ai_rationale: aiRationale, spinout_status: 'equity_allocated' });
+});
+
+// Step 3: Stripe Atlas — placeholder flow, mock incorporation
+legalcap.post('/spinout/stripe-atlas', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary' }, 412);
+  if (sub.stripe_atlas_status === 'incorporated') return c.json({ error: 'Already incorporated', stripe_atlas_id: sub.stripe_atlas_id }, 409);
+  if (sub.spinout_status !== 'equity_allocated') {
+    return c.json({ error: `Stripe Atlas requires equity_allocated state (current: ${sub.spinout_status})` }, 412);
+  }
+  // D4677: nothing here incorporates anyone. The old step minted a random EIN
+  // and marked the company incorporated, and its reservation guard could never
+  // match the 'pending' status every subsidiary is created with. Incorporation
+  // is recorded from its evidence: the Atlas company id, the EIN the IRS issued
+  // and the date it was incorporated, entered by the person who has them. Without
+  // them the step only notes that incorporation was requested and stays where it is.
+  const ev = data?.confirmation;
+  if (ev === undefined) {
+    await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_requested', { deal_id: dealId }, user.id);
+    return c.json({ ok: true, awaiting: 'incorporation_evidence', spinout_status: sub.spinout_status, message: 'Incorporation is not recorded until you enter the Atlas company id, the EIN and the incorporation date.' });
+  }
+  const atlasId = typeof ev?.atlas_id === 'string' ? ev.atlas_id.trim() : '';
+  const ein = typeof ev?.ein === 'string' ? ev.ein.trim() : '';
+  const on = typeof ev?.incorporation_date === 'string' ? ev.incorporation_date.trim() : '';
+  if (!atlasId || atlasId.length > 120 || !/^[A-Za-z0-9_.-]+$/.test(atlasId)) return c.json({ error: 'confirmation.atlas_id is required (letters, digits, - _ .).' }, 400);
+  if (!/^\d{2}-\d{7}$/.test(ein)) return c.json({ error: 'confirmation.ein must look like 12-3456789.' }, 400);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || Number.isNaN(Date.parse(on)) || on > new Date().toISOString().slice(0, 10)) {
+    return c.json({ error: 'confirmation.incorporation_date must be a past or present date (YYYY-MM-DD).' }, 400);
+  }
+  const inc = await c.env.DB.prepare(`UPDATE subsidiaries SET stripe_atlas_id = ?, stripe_atlas_ref = ?, stripe_atlas_status = 'incorporated', spinout_status = 'incorporated', incorporation_date = ?, ein = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status = 'equity_allocated'`)
+    .bind(atlasId, atlasId, on, ein, sub.id).run();
+  if (!inc.meta?.changes) return c.json({ error: 'Concurrent state change; refresh and retry' }, 409);
+  await logSpinoutEvent(c.env, sub.id, 'stripe_atlas_complete', { stripe_atlas_id: atlasId, ein, incorporation_date: on, recorded_by_user_id: user.id }, user.id);
+
+  return c.json({ ok: true, stripe_atlas_id: atlasId, ein, incorporation_date: on, spinout_status: 'incorporated' });
+});
+
+// Step 4: Go Independent — flips the switch, moves project out of pipeline
+legalcap.post('/spinout/go-independent', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+
+  const sub: any = await c.env.DB.prepare(`SELECT * FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (!sub) return c.json({ error: 'No subsidiary' }, 412);
+  if (sub.spinout_status === 'independent') return c.json({ error: 'Already independent' }, 409);
+  // D4677: no force. The company must be recorded as incorporated WITH its
+  // evidence (Atlas id, EIN, incorporation date) before it can go independent.
+  if (sub.spinout_status !== 'incorporated' || !sub.stripe_atlas_id || !sub.ein || !sub.incorporation_date) {
+    return c.json({ error: 'Subsidiary must be incorporated, with its Atlas id, EIN and incorporation date recorded, before going independent.', current_status: sub.spinout_status }, 412);
+  }
+
+  const dashUrl = data?.dashboard_url || `https://axal.vc/independent/${sub.id}`;
+  // One batch: the subsidiary goes independent, the venture leaves the active
+  // board (stage 'spun_out') and its active stage closes, or none of it happens.
+  // A failure is not swallowed: it fails the request.
+  const indRes = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE subsidiaries SET spinout_status = 'independent', independent_scaling_enabled = 1, post_spinout_dashboard_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status = 'incorporated'`)
+      .bind(dashUrl, sub.id),
+    c.env.DB.prepare(`UPDATE projects SET stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.spinout_status = 'independent')`)
+      .bind(dealId, sub.id),
+    c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active' AND EXISTS (SELECT 1 FROM subsidiaries s WHERE s.id = ? AND s.spinout_status = 'independent')`)
+      .bind(dealId, sub.id),
+  ]);
+  if (!Number((indRes[0] as any)?.meta?.changes)) return c.json({ error: 'Already independent' }, 409);
+
+  await logSpinoutEvent(c.env, sub.id, 'independent_scale', { dashboard_url: dashUrl }, user.id);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: sub.id, metadata: { step: 'independent', deal_id: dealId } });
+
+  // Event-driven: enqueue downstream work asynchronously so this endpoint stays fast.
+  try {
+    const { enqueueJob } = await import('../services/queue');
+    const { Listings, LiquidityEvents } = await import('../models/liquidity');
+    await enqueueJob(c.env, 'metrics_aggregation', { trigger: 'spinout_independent', subsidiary_id: sub.id });
+    await enqueueJob(c.env, 'traction_review', { project_id: dealId });
+
+    // Auto-create a 0-share placeholder listing so the AI can value the asset
+    // for marketing on the secondary marketplace. Founders/LPs will then create
+    // real listings via /api/liquidity/list when they want to sell.
+    await LiquidityEvents.create(c.env, {
+      subsidiary_id: sub.id,
+      deal_id: dealId,
+      event_type: 'ipo_prep',
+      status: 'listed',
+      valuation_cents: 0,
+      shares_offered: 0,
+    });
+    // Synthetic valuation listing under the operator's id so AI valuation runs.
+    const placeholder = await Listings.create(c.env, {
+      user_id: user.id,
+      subsidiary_id: sub.id,
+      shares: 0,
+      asking_price_cents: 0,
+      notes: 'Auto-generated valuation placeholder (spin-out went independent).',
+    });
+    if (placeholder) {
+      await enqueueJob(c.env, 'liquidity_valuation', { listing_id: placeholder.id, subsidiary_id: sub.id });
+    }
+  } catch (e) {
+    console.error('post-independent enqueue failed', e);
+  }
+
+  return c.json({ ok: true, spinout_status: 'independent', independent_scaling_enabled: true, dashboard_url: dashUrl });
+});
+
+// List independent subsidiaries (for scaling partners + dashboard widget)
+legalcap.get('/spinout/independent', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`
+    SELECT s.id, s.deal_id, s.subsidiary_name, s.jurisdiction, s.stripe_atlas_id, s.ein,
+           s.incorporation_date, s.equity_allocation_json, s.post_spinout_dashboard_url,
+           s.created_at, s.updated_at, p.name as project_name, p.sector
+    FROM subsidiaries s
+    LEFT JOIN projects p ON p.id = s.deal_id
+    WHERE s.independent_scaling_enabled = 1
+    ORDER BY s.updated_at DESC`;
+  await sql.end();
+  return c.json((rows as any[]).map(r => ({
+    ...r,
+    equity_allocation_json: safeJson(r.equity_allocation_json, {}),
+    scaling_metrics: { mrr_cents: 0, headcount: 0, runway_months: 0, last_synced: null }, // placeholder
+  })));
+});
+
+// Continue / iterate fallback — flip the deal back to active iteration without spinout
+legalcap.post('/spinout/iterate', async (c) => {
+  const user = await requireAuth(c);
+  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
+  await ensureSchema(c.env);
+  let data: any;
+  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+  const dealId = parseInt(data?.deal_id);
+  if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+  // D4677: "continue / iterate" is one batch that moves the project, its stage
+  // history and its status together, and its failure is a failure, not `ok`.
+  // A company that has been incorporated or gone independent cannot be sent back.
+  const subRow: any = await c.env.DB.prepare(`SELECT spinout_status FROM subsidiaries WHERE deal_id = ?`).bind(dealId).first();
+  if (subRow && ['incorporated', 'independent'].includes(subRow.spinout_status)) {
+    return c.json({ error: `This company is already ${subRow.spinout_status}; it cannot be sent back to MVP.` }, 409);
+  }
+  await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE projects SET stage = 'mvp', status = CASE WHEN status = 'spinout' THEN 'active' ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId),
+    c.env.DB.prepare(`UPDATE project_stages SET status = 'completed', end_date = CURRENT_TIMESTAMP WHERE deal_id = ? AND status = 'active'`).bind(dealId),
+    c.env.DB.prepare(`INSERT INTO project_stages (deal_id, stage_name, status, metadata) VALUES (?, 'mvp_dev', 'active', json_object('via', 'spinout_iterate', 'decided_by', ?))`).bind(dealId, user.id),
+  ]);
+  await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: dealId, metadata: { decision: 'iterate' } });
+  return c.json({ ok: true, decision: 'continue_iterate' });
+});
+
+export default legalcap;

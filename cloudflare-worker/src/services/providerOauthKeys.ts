@@ -1,0 +1,684 @@
+/**
+ * Task #7 (2026-05-10) — Per-provider OAuth client credential store.
+ *
+ * Lets an admin configure SLACK_CLIENT_ID/SECRET (and the equivalents
+ * for HubSpot, Salesforce, DocuSign) from the Admin UI without
+ * redeploying the worker or running `wrangler secret put`. Each
+ * provider's `ensureCreds()` calls `loadOauthCreds()` which checks
+ * env vars FIRST (so an explicit deploy-time secret always wins) and
+ * falls back to a row in `provider_oauth_keys`.
+ *
+ * Caching: per-isolate Map with a short TTL (60s). Invalidated on
+ * write/delete. Workers are short-lived so this is just first-call
+ * dedup within a request burst — not a long-lived cache.
+ */
+import type { Env } from '../types';
+import { encryptString, decryptString } from './cryptoBox';
+import { maskClientId } from './cloudflareSecrets';
+import { bindingKey } from '../util/schemaBootstrap';
+
+export type ManagedProviderKey =
+  | 'slack'
+  | 'hubspot'
+  | 'salesforce'
+  | 'docusign'
+  | 'linkedin'
+  | 'calendly'
+  | 'stripe'
+  | 'carta'
+  | 'github'
+  | 'vercel'
+  | 'crunchbase'
+  | 'affinity'
+  | 'telegram'
+  | 'gcip'
+  | 'tiktok';
+
+export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
+  'slack',
+  'hubspot',
+  'salesforce',
+  'docusign',
+  'linkedin',
+  'calendly',
+  'stripe',
+  'carta',
+  'github',
+  'vercel',
+  'crunchbase',
+  'affinity',
+  'telegram',
+  'gcip',
+  'tiktok',
+];
+
+export interface ProviderEnvVarPair {
+  id: string;
+  secret: string;
+}
+
+/**
+ * Map each managed provider to the env var names it has historically
+ * read at deploy time. Kept as the SOLE source of truth so the admin
+ * UI, the env-precedence check in `loadOauthCreds`, and the per-provider
+ * `ensureCreds` calls can never disagree on what env vars to consult.
+ */
+export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
+  tiktok:     { id: 'TIKTOK_CLIENT_KEY', secret: 'TIKTOK_CLIENT_SECRET' },
+  slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
+  hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
+  salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },
+  docusign:   { id: 'DOCUSIGN_CLIENT_ID',      secret: 'DOCUSIGN_CLIENT_SECRET' },
+  // OAuth providers (real client_id + client_secret pair).
+  linkedin:   { id: 'LINKEDIN_CLIENT_ID',      secret: 'LINKEDIN_CLIENT_SECRET' },
+  calendly:   { id: 'CALENDLY_CLIENT_ID',      secret: 'CALENDLY_CLIENT_SECRET' },
+  stripe:     { id: 'STRIPE_CONNECT_CLIENT_ID', secret: 'STRIPE_SECRET_KEY' },
+  carta:      { id: 'CARTA_CLIENT_ID',         secret: 'CARTA_CLIENT_SECRET' },
+  // D655 — the StudioOS GitHub App's user-authorization client (read-only permissions).
+  github:     { id: 'GITHUB_APP_CLIENT_ID',    secret: 'GITHUB_APP_CLIENT_SECRET' },
+  // D1096 — the read-only Vercel Integration's client; its secret also signs Vercel's webhooks.
+  vercel:     { id: 'VERCEL_CLIENT_ID',        secret: 'VERCEL_CLIENT_SECRET' },
+  // API-key providers (single secret + a non-secret account identifier).
+  // The "id" slot stores the public account label (user key id, team
+  // subdomain, bot username) so the UI can show "configured for
+  // <something>" and tests can target the right host.
+  crunchbase: { id: 'CRUNCHBASE_USER_KEY_ID',  secret: 'CRUNCHBASE_API_KEY' },
+  affinity:   { id: 'AFFINITY_TEAM_DOMAIN',    secret: 'AFFINITY_API_KEY' },
+  telegram:   { id: 'TELEGRAM_BOT_USERNAME',   secret: 'TELEGRAM_BOT_TOKEN' },
+  // SMS backup 2FA — Identity Platform web API key. Client ID slot is
+  // the GCP project id (used by the disable-flow admin API). Secret is
+  // the Firebase/Identity Platform Web API key that sends SMS codes.
+  gcip:       { id: 'GCIP_PROJECT_ID',         secret: 'GCIP_API_KEY' },
+};
+
+interface CacheEntry {
+  value: { id: string; secret: string; source: 'env' | 'db' } | null;
+  /** D751: false only when the `provider_oauth_keys` read threw, so "unset" and "unknown" stay apart (D227). */
+  readable: boolean;
+  exp: number;
+}
+const CACHE_TTL_MS = 60_000;
+const cache = new Map<ManagedProviderKey, CacheEntry>();
+
+const SCHEMA_ENSURED = new WeakMap<object, boolean>();
+async function ensureSchema(env: Env): Promise<void> {
+  if (SCHEMA_ENSURED.get(bindingKey(env))) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS provider_oauth_keys (
+         provider_key       TEXT PRIMARY KEY,
+         client_id          TEXT NOT NULL,
+         client_secret_enc  TEXT NOT NULL,
+         created_by_user_id INTEGER,
+         created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         updated_by_user_id INTEGER,
+         updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         expires_at         TIMESTAMP,
+         last_used_at       TIMESTAMP
+       )`,
+    ).run();
+    SCHEMA_ENSURED.set(bindingKey(env), true);
+  } catch (e) {
+    console.warn('[providerOauthKeys] ensureSchema failed', e);
+  }
+}
+
+function envCreds(env: Env, providerKey: ManagedProviderKey): ProviderEnvVarPair | null {
+  const e = env as unknown as Record<string, string | undefined>;
+  const map = PROVIDER_ENV_VARS[providerKey];
+  const id = e[map.id];
+  const secret = e[map.secret];
+  if (id && secret) return { id, secret };
+  return null;
+}
+
+/**
+ * Primary lookup used by every provider's `ensureCreds()`. Returns
+ * `null` if neither the env vars nor a DB row are configured — caller
+ * is expected to throw `<provider>_oauth_unconfigured` so the route
+ * layer can map to a 503 with an actionable error.
+ */
+export async function loadOauthCreds(
+  env: Env,
+  providerKey: ManagedProviderKey,
+): Promise<{ id: string; secret: string; source: 'env' | 'db' } | null> {
+  return (await credsEntry(env, providerKey)).value;
+}
+
+/**
+ * D751 — whether Axal holds this provider's OAuth client: `true` (the env
+ * pair, or a row that decrypts), `false` (neither, and the table answered),
+ * `null` (no env pair, and the table could not be read). It reads the same
+ * cache entry `loadOauthCreds` does, so readiness and `ensureCreds` agree.
+ */
+export async function oauthCredsReady(env: Env, providerKey: ManagedProviderKey): Promise<boolean | null> {
+  const { value, readable } = await credsEntry(env, providerKey);
+  return value ? true : readable ? false : null;
+}
+
+async function credsEntry(env: Env, providerKey: ManagedProviderKey): Promise<CacheEntry> {
+  const now = Date.now();
+  const hit = cache.get(providerKey);
+  if (hit && hit.exp > now) return hit;
+
+  // Env-first. Cache the env hit to skip the DB read on subsequent
+  // calls within the TTL — important because `ensureCreds` is called
+  // inside hot paths like `notify()` (Slack) and the OAuth refresh
+  // loop (HubSpot/Salesforce/DocuSign).
+  const env_ = envCreds(env, providerKey);
+  if (env_) {
+    const entry = { value: { id: env_.id, secret: env_.secret, source: 'env' as const }, readable: true, exp: now + CACHE_TTL_MS };
+    cache.set(providerKey, entry);
+    return entry;
+  }
+
+  await ensureSchema(env);
+  try {
+    const row: any = await env.DB.prepare(
+      `SELECT client_id, client_secret_enc FROM provider_oauth_keys WHERE provider_key = ?`,
+    ).bind(providerKey).first();
+    if (row?.client_id && row?.client_secret_enc) {
+      const secret = await decryptString(env, String(row.client_secret_enc));
+      if (secret) {
+        const entry = { value: { id: String(row.client_id), secret, source: 'db' as const }, readable: true, exp: now + CACHE_TTL_MS };
+        cache.set(providerKey, entry);
+        return entry;
+      }
+      // Decrypt failed (key rotation / tampered row). Treat as unconfigured.
+      console.warn(`[providerOauthKeys] decrypt failed for ${providerKey} — treating as unconfigured`);
+    }
+  } catch (e) {
+    console.warn('[providerOauthKeys] DB read failed', providerKey, e);
+    const unknown = { value: null, readable: false, exp: now + CACHE_TTL_MS };
+    cache.set(providerKey, unknown);
+    return unknown;
+  }
+
+  const unset = { value: null, readable: true, exp: now + CACHE_TTL_MS };
+  cache.set(providerKey, unset);
+  return unset;
+}
+
+/**
+ * Task #3 — Rotate the secret for an EXISTING provider row in place.
+ * Differs from setOauthCreds: client_id is left untouched (the
+ * provider issues new secrets against the same client app, so
+ * rotating doesn't change the public app identifier). Throws if no
+ * row exists yet — caller should setOauthCreds() first.
+ */
+export async function rotateOauthSecret(
+  env: Env,
+  providerKey: ManagedProviderKey,
+  newClientSecret: string,
+  adminUserId: number,
+  expiresAt: string | null = null,
+): Promise<{ rotated_at: string }> {
+  if (!newClientSecret.trim()) throw new Error('client_secret is required');
+  await ensureSchema(env);
+  const existing: any = await env.DB.prepare(
+    `SELECT 1 FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
+  ).bind(providerKey).first();
+  if (!existing) throw new Error('provider_not_configured');
+  const enc = await encryptString(env, newClientSecret);
+  await env.DB.prepare(
+    `UPDATE provider_oauth_keys
+        SET client_secret_enc  = ?,
+            updated_by_user_id = ?,
+            updated_at         = CURRENT_TIMESTAMP
+      WHERE provider_key = ?`,
+  ).bind(enc, adminUserId, providerKey).run();
+  await resetKeyStamps(env, providerKey, expiresAt);
+  cache.delete(providerKey);
+  return { rotated_at: new Date().toISOString() };
+}
+
+/** Admin upsert. Encrypts the secret before write. Invalidates cache. */
+export async function setOauthCreds(
+  env: Env,
+  providerKey: ManagedProviderKey,
+  clientId: string,
+  clientSecret: string,
+  adminUserId: number,
+): Promise<void> {
+  if (!clientId.trim() || !clientSecret.trim()) {
+    throw new Error('client_id and client_secret are both required');
+  }
+  await ensureSchema(env);
+  const enc = await encryptString(env, clientSecret);
+  // ON CONFLICT (provider_key) DO UPDATE — singleton row per provider.
+  await env.DB.prepare(
+    `INSERT INTO provider_oauth_keys
+       (provider_key, client_id, client_secret_enc, created_by_user_id, updated_by_user_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(provider_key) DO UPDATE SET
+       client_id          = excluded.client_id,
+       client_secret_enc  = excluded.client_secret_enc,
+       updated_by_user_id = excluded.updated_by_user_id,
+       updated_at         = CURRENT_TIMESTAMP`,
+  ).bind(providerKey, clientId.trim(), enc, adminUserId, adminUserId).run();
+  await resetKeyStamps(env, providerKey, null);
+  cache.delete(providerKey);
+}
+
+/**
+ * Admin delete. Returns the number of `integrations` rows that were
+ * forced into `status='disconnected'` as a side-effect — those users
+ * will need to re-authorize once new keys are set.
+ *
+ * NOTE: We do NOT hard-delete the per-user `integrations` rows here:
+ *  - The user picked their channel/preferences when they connected,
+ *    and re-deleting them would silently drop those.
+ *  - Marking `status='disconnected'` is what the marketplace UI
+ *    already keys off when deciding to render a "Reconnect" button.
+ *  - The user's encrypted token blob becomes useless against a new
+ *    OAuth app anyway, so leaving it in place is harmless.
+ */
+export async function deleteOauthCredsAndDisconnect(
+  env: Env,
+  providerKey: ManagedProviderKey,
+): Promise<{ removed_keys: boolean; disconnected_users: number }> {
+  await ensureSchema(env);
+  // D5304: a row that holds a key is "removed keys"; the stamps-only row of a
+  // Worker-secret key is deleted after it and is not.
+  const del = await env.DB.prepare(
+    `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
+  ).bind(providerKey).run();
+  const removed = ((del?.meta as any)?.changes ?? 0) > 0;
+  await dropStampsRow(env, providerKey);
+
+  let disconnected = 0;
+  try {
+    const upd = await env.DB.prepare(
+      `UPDATE integrations
+          SET status = 'disconnected',
+              last_error = 'oauth_keys_revoked_by_admin', last_error_at = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE provider_key = ? AND status = 'active'`,
+    ).bind(providerKey).run();
+    disconnected = Number((upd?.meta as any)?.changes ?? 0);
+  } catch (e) {
+    // `integrations` may not exist yet on a brand-new dev DB — non-fatal.
+    console.warn('[providerOauthKeys] disconnect-cascade failed', e);
+  }
+  cache.delete(providerKey);
+  return { removed_keys: removed, disconnected_users: disconnected };
+}
+
+/**
+ * Task #7 — Delete the encrypted DB row WITHOUT cascading
+ * `integrations.status='disconnected'`. Used after a successful
+ * Cloudflare-secret push (the credentials are now live as Worker
+ * secrets, so existing user OAuth tokens remain valid — we just want
+ * to drop the temporary admin-managed row). Returns whether a row
+ * was actually deleted. Invalidates the in-isolate cache so the next
+ * `loadOauthCreds` call re-reads from env.
+ */
+export async function deleteOauthCredsRowOnly(
+  env: Env,
+  providerKey: ManagedProviderKey,
+): Promise<{ removed_keys: boolean }> {
+  await ensureSchema(env);
+  let removed = false;
+  try {
+    const del = await env.DB.prepare(
+      `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
+    ).bind(providerKey).run();
+    removed = ((del?.meta as any)?.changes ?? 0) > 0;
+  } catch (e) {
+    console.warn('[providerOauthKeys] row-only delete failed', e);
+  }
+  await dropStampsRow(env, providerKey);
+  cache.delete(providerKey);
+  return { removed_keys: removed };
+}
+
+/** Admin list — never returns the secret. `client_id_preview` is the
+ *  client_id masked as `first4••••last4` (Task #7) — even though the
+ *  client_id is not itself a secret, surfacing the full value to the
+ *  admin UI was an unnecessary leak surface. The Edit modal does NOT
+ *  pre-fill it; admins must retype on rotate-with-id-change. */
+export interface ProviderKeyStatus {
+  provider_key: ManagedProviderKey;
+  source: 'env' | 'db' | 'unconfigured';
+  has_keys: boolean;
+  client_id_preview: string | null;
+  updated_at: string | null;
+  updated_by_user_id: number | null;
+  /**
+   * Active user integrations for the provider, or `null` when the
+   * `integrations` table could not be read (D227). It was `?? 0`, and the
+   * console's Remove confirmation quotes this number as how many users the
+   * removal will disconnect — an unread count must not promise "none".
+   */
+  active_integrations: number | null;
+  /**
+   * D5304 — when the provider says this key expires, as the Super Admin
+   * entered it from the provider's console, or `null`: nothing recorded.
+   */
+  expires_at: string | null;
+  /** D5304 — the last call that authenticated with this key and succeeded (stamped at most hourly), or `null`. */
+  last_used_at: string | null;
+}
+
+/**
+ * Whether a managed key is held as a Worker secret — the place that wins over
+ * any database row (`loadOauthCreds`). D227: the rotate route asks this before
+ * falling back to the database, because rotating the row under a key that a
+ * Worker secret overrides would report success and change nothing in use.
+ */
+export function keyHeldAsWorkerSecret(env: Env, providerKey: ManagedProviderKey): boolean {
+  return envCreds(env, providerKey) !== null;
+}
+
+/**
+ * The Integration keys console's list. It creates the table first, as it
+ * always has, and since D227 it carries D213's `db_readable` and each key's
+ * `state` (`keyStateOf`), so the console can say "unknown" rather than read a
+ * failed table as "unconfigured" and offer to configure over it.
+ */
+export async function listProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; stamps_readable: boolean; items: Array<ProviderKeyStatus & { state: ProviderKeyState }> }> {
+  await ensureSchema(env);
+  const status = await readProviderKeyStatus(env);
+  return {
+    db_readable: status.db_readable,
+    stamps_readable: status.stamps_readable,
+    items: status.items.map((item) => ({ ...item, state: keyStateOf(item, status.db_readable) })),
+  };
+}
+
+/**
+ * D213 — the same list, read without writing and without hiding a failed read.
+ *
+ * TWO DIFFERENCES FROM THE CONSOLE'S LIST, AND THEY ARE THE POINT.
+ *   1. No `ensureSchema`. That is a `CREATE TABLE`, a write, and HQ's Platform
+ *      summary only reads; a database without the table answers
+ *      `db_readable: false`, which is true, rather than being altered by
+ *      someone looking at it (D204's rule for GETs).
+ *   2. A failed read of `provider_oauth_keys` is REPORTED, not swallowed.
+ *      `db_readable` is what lets a reader tell a measured absence from an
+ *      unread table (`keyStateOf`). Since D227 the console's list carries it
+ *      too, so the console no longer reads a failed table as unconfigured.
+ */
+export async function readProviderKeyStatus(
+  env: Env,
+): Promise<{ db_readable: boolean; stamps_readable: boolean; items: ProviderKeyStatus[] }> {
+  let dbRows: Array<{ provider_key: string; client_id: string; updated_at: string; updated_by_user_id: number | null }> = [];
+  let dbReadable = true;
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT provider_key, client_id, updated_at, updated_by_user_id FROM provider_oauth_keys WHERE client_secret_enc <> ''`,
+    ).all();
+    dbRows = (r?.results || []) as typeof dbRows;
+  } catch (e) {
+    dbReadable = false;
+    console.warn('[providerOauthKeys] list failed', e);
+  }
+  // Per-provider integration counts. A failed read leaves every count null
+  // (D227): unknown, not zero, because Remove quotes it as the users it will
+  // disconnect. A table that answered with no row for a provider is a real 0.
+  const counts = new Map<string, number>();
+  let countsReadable = true;
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT provider_key, COUNT(*) AS n FROM integrations WHERE status = 'active' GROUP BY provider_key`,
+    ).all();
+    for (const row of (r?.results || []) as Array<{ provider_key: string; n: number }>) {
+      counts.set(String(row.provider_key), Number(row.n));
+    }
+  } catch { countsReadable = false; }
+  const dbMap = new Map(dbRows.map(r => [r.provider_key, r] as const));
+  const stamps = await readProviderKeyStamps(env);
+  const items = MANAGED_PROVIDERS.map((pk): ProviderKeyStatus => {
+    const env_ = envCreds(env, pk);
+    const db = dbMap.get(pk);
+    let source: 'env' | 'db' | 'unconfigured' = 'unconfigured';
+    let preview: string | null = null;
+    if (env_) {
+      source = 'env';
+      preview = maskClientId(env_.id);
+    } else if (db) {
+      source = 'db';
+      preview = maskClientId(db.client_id);
+    }
+    return {
+      provider_key: pk,
+      source,
+      has_keys: source !== 'unconfigured',
+      client_id_preview: preview,
+      updated_at: db?.updated_at ?? null,
+      updated_by_user_id: db?.updated_by_user_id ?? null,
+      // Absent from an answered GROUP BY means no active row: a measured zero.
+      active_integrations: !countsReadable ? null : counts.has(pk) ? counts.get(pk)! : 0,
+      expires_at: stamps.byProvider.get(pk)?.expires_at ?? null,
+      last_used_at: stamps.byProvider.get(pk)?.last_used_at ?? null,
+    };
+  });
+  return { db_readable: dbReadable, stamps_readable: stamps.readable, items };
+}
+
+/**
+ * Where a managed key lives, or that nobody can tell.
+ *
+ *   env         set as a Worker secret — it wins over any row (`loadOauthCreds`)
+ *   db          held encrypted in `provider_oauth_keys`
+ *   unset       neither, and the table answered, so this is a measured absence
+ *   unreadable  no Worker secret, and the table did not answer: it may hold a
+ *               key or not, and saying "unset" would be a claim nothing measured
+ */
+export type ProviderKeyState = 'env' | 'db' | 'unset' | 'unreadable';
+
+export function keyStateOf(item: Pick<ProviderKeyStatus, 'source'>, dbReadable: boolean): ProviderKeyState {
+  if (item.source === 'env') return 'env';
+  if (item.source === 'db') return 'db';
+  return dbReadable ? 'unset' : 'unreadable';
+}
+
+/**
+ * The audit actions `routes/admin_integration_keys.ts` writes when a key is
+ * saved or rotated from the console, and the one it writes when a key is
+ * removed. A test reads that file and holds these equal to what it writes, so a
+ * renamed action cannot silently empty the "last set" read.
+ */
+export const KEY_SET_AUDIT_ACTIONS = ['integration_key_cf_secret_push', 'integration_key_cf_secret_rotate'] as const;
+export const KEY_REMOVE_AUDIT_ACTION = 'integration_key_cf_secret_delete';
+
+/**
+ * When each key was last saved or rotated from the console, from the audit
+ * log, successful writes only.
+ *
+ * A FAILED WRITE IS NOT A SET. The console audits refusals too (`outcome:
+ * 'failed'`), and reading those would date a key to the moment Cloudflare
+ * refused it.
+ *
+ * A REMOVAL AFTER THE LAST SAVE CANCELS THE DATE. The console's Remove deletes
+ * the Worker secret; if a key is present today and the console's latest act on
+ * it was a removal, it was set again some other way (at deploy), and the save
+ * before the removal is not when the key in place was set. That provider gets
+ * no date rather than a wrong one. A key set at deploy, or before the console
+ * audited its saves, has no row at all, and likewise gets no date.
+ *
+ * Rides `idx_admin_audit_action_ts (action, exported_at DESC)`. `datetime()`
+ * puts every stamp in one format before MAX compares them.
+ */
+export async function readProviderKeyLastSet(
+  env: Env,
+): Promise<{ available: true; byProvider: Map<string, string> } | { available: false }> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT json_extract(filters_json, '$.provider') AS provider, action, MAX(datetime(exported_at)) AS at
+         FROM admin_audit_log
+        WHERE action IN (?, ?, ?)
+          AND json_extract(filters_json, '$.outcome') = 'ok'
+        GROUP BY json_extract(filters_json, '$.provider'), action`,
+    ).bind(...KEY_SET_AUDIT_ACTIONS, KEY_REMOVE_AUDIT_ACTION)
+      .all<{ provider: string | null; action: string; at: string | null }>();
+    const set = new Map<string, string>();
+    const removed = new Map<string, string>();
+    for (const row of res.results || []) {
+      if (!row.provider || !row.at) continue;
+      const provider = String(row.provider);
+      const at = String(row.at);
+      const into = row.action === KEY_REMOVE_AUDIT_ACTION ? removed : set;
+      const prior = into.get(provider);
+      if (!prior || at > prior) into.set(provider, at);
+    }
+    const byProvider = new Map<string, string>();
+    for (const [provider, at] of set) {
+      const gone = removed.get(provider);
+      if (!gone || at > gone) byProvider.set(provider, at);
+    }
+    return { available: true, byProvider };
+  } catch {
+    return { available: false };
+  }
+}
+
+/* ── D5304: expiry and last use (D4860 question D = b) ─────────────────── */
+
+/** A successful use is stamped at most this often per key, so a hot path does not write on every call. */
+export const LAST_USED_STAMP_INTERVAL_MS = 60 * 60 * 1000;
+
+/** How soon an isolate that found a stamp from within the hour asks again. */
+const LAST_USED_RECHECK_MS = 10 * 60 * 1000;
+
+/** SQLite's own timestamp format (`CURRENT_TIMESTAMP`), so stored stamps compare like the rest. */
+export function sqlStamp(d: Date): string {
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/**
+ * An expiry as the Super Admin typed it from the provider's console: a date
+ * (`2027-03-01`) or a date and time. Returns the stamp to store, `null` for
+ * blank (nothing reported), or `undefined` when it is not a date at all.
+ */
+export function parseKeyExpiry(v: unknown): string | null | undefined {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  if (!t) return null;
+  if (!/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(t)) return undefined;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t}T00:00:00Z` : t.replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? undefined : sqlStamp(d);
+}
+
+/** Per isolate: the last stamp this isolate wrote per key, so a second use within the hour issues no statement. */
+const LAST_STAMPED = new WeakMap<object, Map<string, number>>();
+
+/**
+ * Stamp a managed key's last successful use. Call it only after a call that
+ * authenticated with the key succeeded. At most once an hour per key: this
+ * isolate skips the statement inside the hour, and the statement itself
+ * changes nothing when another isolate stamped within the hour. A key held as
+ * a Worker secret has no row, so its stamp goes on a stamps-only row (no key
+ * material: `client_id` and `client_secret_enc` are ''). Best effort: it never
+ * throws, and logs no key, only the provider and the error.
+ *
+ * Returns whether it wrote.
+ */
+export async function markProviderKeyUsed(env: Env, providerKey: string, now: Date = new Date()): Promise<boolean> {
+  if (!(MANAGED_PROVIDERS as readonly string[]).includes(providerKey)) return false;
+  let seen: Map<string, number> | undefined;
+  try {
+    const k = bindingKey(env);
+    seen = LAST_STAMPED.get(k);
+    if (!seen) { seen = new Map(); LAST_STAMPED.set(k, seen); }
+    const prior = seen.get(providerKey);
+    if (prior !== undefined && now.getTime() - prior < LAST_USED_STAMP_INTERVAL_MS) return false;
+    const at = sqlStamp(now);
+    const cutoff = sqlStamp(new Date(now.getTime() - LAST_USED_STAMP_INTERVAL_MS));
+    const res: any = await env.DB.prepare(
+      `INSERT INTO provider_oauth_keys (provider_key, client_id, client_secret_enc, last_used_at)
+       VALUES (?, '', '', ?)
+       ON CONFLICT(provider_key) DO UPDATE SET last_used_at = excluded.last_used_at
+        WHERE provider_oauth_keys.last_used_at IS NULL
+           OR datetime(provider_oauth_keys.last_used_at) <= datetime(?)`,
+    ).bind(providerKey, at, cutoff).run();
+    const wrote = Number(res?.meta?.changes ?? 0) > 0;
+    // Wrote: nothing more for an hour. Found another isolate's stamp from within the hour, of unknown age: ask the
+    // database again in ten minutes rather than an hour, so the stored stamp never lags by up to two.
+    seen.set(providerKey, wrote ? now.getTime() : now.getTime() - LAST_USED_STAMP_INTERVAL_MS + LAST_USED_RECHECK_MS);
+    return wrote;
+  } catch (e) {
+    console.warn('[providerOauthKeys] last-use stamp failed', providerKey, (e as Error)?.message);
+    return false;
+  }
+}
+
+/**
+ * Record the expiry the provider reports for the key now in place. For a key
+ * held in the database it is set on its row; for a Worker-secret key it goes
+ * on a stamps-only row. `null` records nothing. Best effort, like the stamp.
+ */
+export async function recordProviderKeyExpiry(env: Env, providerKey: ManagedProviderKey, expiresAt: string | null): Promise<boolean> {
+  if (expiresAt === null) return false;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO provider_oauth_keys (provider_key, client_id, client_secret_enc, expires_at)
+       VALUES (?, '', '', ?)
+       ON CONFLICT(provider_key) DO UPDATE SET expires_at = excluded.expires_at`,
+    ).bind(providerKey, expiresAt).run();
+    return true;
+  } catch (e) {
+    console.warn('[providerOauthKeys] expiry write failed', providerKey, (e as Error)?.message);
+    return false;
+  }
+}
+
+/**
+ * A new secret on a database-held row: the old one's last use goes, and the
+ * expiry becomes the one reported for the new secret (or none). Its own
+ * statement, best effort, so the key write never depends on the D5304 columns.
+ */
+async function resetKeyStamps(env: Env, providerKey: ManagedProviderKey, expiresAt: string | null): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE provider_oauth_keys SET expires_at = ?, last_used_at = NULL WHERE provider_key = ?`,
+    ).bind(expiresAt, providerKey).run();
+  } catch (e) {
+    console.warn('[providerOauthKeys] stamps reset failed', providerKey, (e as Error)?.message);
+  }
+}
+
+/** Delete a key's stamps-only row (never a row holding a key). A new key starts with neither stamp. */
+async function dropStampsRow(env: Env, providerKey: ManagedProviderKey): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc = ''`,
+    ).bind(providerKey).run();
+  } catch (e) {
+    console.warn('[providerOauthKeys] stamps delete failed', providerKey, (e as Error)?.message);
+  }
+}
+
+/**
+ * Each key's two stamps. Its own read, so a database without the D5304
+ * columns leaves the stamps unreadable and every other field as it was.
+ */
+export async function readProviderKeyStamps(
+  env: Env,
+): Promise<{ readable: boolean; byProvider: Map<string, { expires_at: string | null; last_used_at: string | null }> }> {
+  const byProvider = new Map<string, { expires_at: string | null; last_used_at: string | null }>();
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT provider_key, expires_at, last_used_at FROM provider_oauth_keys`,
+    ).all();
+    for (const row of (r?.results || []) as Array<{ provider_key: string; expires_at: string | null; last_used_at: string | null }>) {
+      byProvider.set(String(row.provider_key), { expires_at: row.expires_at ?? null, last_used_at: row.last_used_at ?? null });
+    }
+    return { readable: true, byProvider };
+  } catch {
+    return { readable: false, byProvider };
+  }
+}
+
+/** Test hook — clears the in-isolate cache. Not exported via the route layer. */
+export function _clearOauthCredsCache(): void {
+  cache.clear();
+}
+
+/** Test hook — forgets this isolate's last-use stamps, so a test can drive the database's own throttle. */
+export function _clearLastUsedMemo(env: Env): void {
+  LAST_STAMPED.delete(bindingKey(env));
+}

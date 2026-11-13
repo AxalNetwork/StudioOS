@@ -1,0 +1,409 @@
+/**
+ * D1326 (#3487, #2431 part 3) — `POST /api/ai/rail/run`, D720 §7's one run
+ * path, with its first handler: `form`.
+ *
+ *   POST /api/ai/rail/run
+ *     { page, option: 'form:<form>', project, record?: { type, id }, model?,
+ *       input?: { values?: { <field>: … }, text?, rows? } }
+ *     → text/event-stream:
+ *         meta   { model, hold_microusd }                       before the run
+ *         guard  { input, output }                              after it
+ *         done   { proposals[{ uid, field?, value?, row? }], dropped[{ field, why, row? }],
+ *                  usage_log_id, charged_microusd|null, budget }  or { refusal: { code, status, message } }
+ *
+ * THE STEPS (D720 §7). The form is one FILL_FIELDS knows (D1325); the venture
+ * is one the member may write, in their own session; the record, when there
+ * is one, is on that venture. Then `run()` (`services/aiRouter.ts`) does the
+ * rest in its own order: it refuses a page the member switched off
+ * (`assist_off`, D765), reserves the hold (D762), guards the input and the
+ * output (D763), runs, and settles. A refusal from any of those is `done`'s
+ * `refusal`, in `refuseRun`'s words (`runRefusalView`).
+ *
+ * WHAT IT WRITES. Proposals only, one `ai_rail_proposals` row per kept field
+ * (or per row, for an Add form's `rows`), each naming the run's
+ * `usage_log_id`. Never the record: in a form nothing is written until Save
+ * (#2431; D1323 §4), and `POST /api/fills/record` keeps what was kept.
+ *
+ * A CHANGED FORM DROPS THE RESULT. The record's fields are read before the run
+ * and again after it; when any of the asked fields changed meanwhile, nothing
+ * is proposed (`dropped: [{ why: 'record_changed' }]`), so a value is never
+ * proposed over one someone just wrote.
+ *
+ * Logs carry codes and kinds only, never a value, a prompt or a model output.
+ */
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth, selectJwt } from '../auth';
+import { canAccessProject } from '../services/projectAccess';
+import { run as aiRun, quoteRun, type RunOptions, type RunResult } from '../services/aiRouter';
+import { loadAiBudget } from '../services/aiBudget';
+import { proposeRail } from '../services/railProposals';
+import { FORM_TEXT_JOBS, fieldsOf, type FillField } from '../services/fills/fields';
+import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
+import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
+import { runRefusalView } from '../util/railContext';
+import { HINT_DEPS, HintRefused } from '../services/ai/themeHints';
+import { SEGMENT_FORM, SEGMENT_JOB, segmentHints, segmentSection, type Interviewee } from '../services/ai/segmentHints';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
+import { ROW_READS, venturedRowId } from './fills';
+import { layoutView, savedRow } from './studio_layout';
+import { studioProfile } from '../services/studioModules';
+import {
+  STUDIO_RAIL_PAGES, founderContext, sourceSentence, studioLayoutMessages, validateOps, type FounderContext,
+} from '../services/studioLayoutRun';
+
+/** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
+export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  mvp_features: ['title'],
+  // D1328 (#3489), part one: each Add form's own required field.
+  pain_groups: ['title'],
+  customer_segments: ['name'],
+  hypotheses: ['claim'],
+  // D1329 (#3490): a session in an event's agenda, and an advisor's service, each need a title.
+  event_agenda_items: ['title'],
+  advisor_services: ['title'],
+});
+
+const SENTENCES: Record<string, string> = {
+  unknown_handler: 'That option has no run here yet.',
+  unknown_form: 'That form has nothing Eadwyn fills.',
+  invalid_project: 'Choose a venture.',
+  project_not_available: 'You cannot change this venture.',
+  support_session_refused: 'A support session cannot ask Eadwyn to fill a form.',
+  record_not_found: 'That record is not on this venture.',
+  nothing_to_fill: 'Every field Eadwyn can fill already holds a value.',
+  // D1329 (#3490).
+  no_profile: 'Ask opens once you hold a venture or a profile.', // #3740: matches EXPLORER_OFF (lib/fillScoped.js)
+  record_not_available: 'You cannot change this record.',
+  // D1595 (#3868).
+  rows_not_offered: 'This form adds one record at a time.',
+  // D1596 (#3869).
+  unknown_page: 'That option runs on Advisor · Practice · Sessions only.',
+};
+
+export type Runner = (env: Env, input: RunOptions) => Promise<RunResult>;
+export type Quoter = typeof quoteRun;
+
+const sse = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+/** The record's asked columns, for the before-and-after check. */
+const snapshot = (row: Record<string, unknown> | null, asked: readonly FillField[]) =>
+  JSON.stringify(asked.map((f) => (row ? row[f.column] ?? null : null)));
+
+/** D1596 (#3869): the one page `sessions:block` runs on. */
+export const SESSIONS_PAGE = 'Advisor · Practice · Sessions';
+
+/**
+ * `sessions:block`: Block proposals from the advisor's own Axal records, at no
+ * charge (`services/sessionsBlock.ts`). Refused before any read for another
+ * page, an Explorer, a support session, or a caller with no advisor profile.
+ * Never calls the runner or the quoter; writes `ai_rail_proposals` rows only.
+ */
+async function sessionsBlockRun(c: any, user: User, page: string, option: string, body: Record<string, any> | null) {
+  const refuse = (status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
+  if (page !== SESSIONS_PAGE) return refuse(404, 'unknown_page');
+  if (isExplorer(user)) return refuse(403, 'no_profile');
+  if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(403, 'support_session_refused');
+  // `requireMyAdvisor`'s rule: the advisor profile whose user is the caller.
+  const advisor = (await c.env.DB.prepare('SELECT id, timezone FROM advisors WHERE user_id = ?').bind(user.id).first()) as { id: number; timezone: string | null } | null;
+  if (!advisor) return refuse(403, 'no_profile');
+  await ensureAdvisorStoresSchema(c.env);
+  const days = windowDays(body?.input?.days);
+  const { proposals, dropped } = await sessionBlockProposals(c.env, { advisorId: Number(advisor.id), userId: Number(user.id), timezone: advisor.timezone, days });
+  const events = [sse('meta', { model: null, hold_microusd: 0 })];
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of proposals) {
+    const row = await proposeRail(c.env, { userId: Number(user.id), page, option, record: `advisor:${advisor.id}`, kind: 'proposal', payload: { ...p }, model: null, usageLogId: null });
+    out.push({ uid: row.uid, ...p });
+  }
+  events.push(sse('done', out.length
+    ? { proposals: out, dropped, usage_log_id: null, charged_microusd: null }
+    : { proposals: [], dropped, reason: 'nothing_to_propose', usage_log_id: null, charged_microusd: null }));
+  return new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+/** D1420 (#3864): the `studio:layout` refusals, in the panel's words. */
+const STUDIO_SENTENCES: Record<string, string> = {
+  no_profile: 'Ask opens once you hold a venture or a profile.',
+  support_session_refused: 'A support session cannot ask Eadwyn to arrange a Studio.',
+  read_only_preview: 'Eadwyn is off while you preview a member\u2019s Studio.',
+  unknown_page: 'That option runs on your Studio only.',
+  layout_unreadable: 'Your saved Studio layout could not be read. Reset it to start again.',
+};
+
+/** The routes, with the model runner injectable: the app passes `run()`; a test passes a stub. */
+export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
+  const runModel = deps.run ?? aiRun;
+  const quote = deps.quote ?? quoteRun;
+  const r = new Hono<{ Bindings: Env }>();
+  const refuse = (c: any, status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
+
+  /**
+   * D1420 (#3864): `studio:layout`. Every refusal comes before the quote, the
+   * hold and the run. The run reads the member's layout and catalogue (and a
+   * founder's Lab week and readiness), and writes `ai_rail_proposals` rows
+   * only: never `studio_layouts`, which Accept saves through `PUT /api/studio/layout`.
+   */
+  async function studioLayoutRun(c: any, user: User, page: string, option: string, body: Record<string, any> | null) {
+    const no = (status: number, code: string, message?: string) => c.json({ error: code, detail: message ?? STUDIO_SENTENCES[code] }, status);
+    // An Explorer with no Studio of their own; a Spin-Out Lab member keeps the founder Studio (studioProfile).
+    if (isExplorer(user) && Number(user.spinout_lab_active ?? 0) !== 1) return no(403, 'no_profile');
+    if ((await selectJwt(c))?.payload?.impersonated_by) return no(403, 'support_session_refused');
+    if (String(user.role) === 'admin') return no(403, 'read_only_preview');
+    const answer = studioProfile(user, null);
+    if ('refusal' in answer) return no(answer.refusal.status, answer.refusal.code, answer.refusal.message);
+    const profile = answer.profile;
+    if (STUDIO_RAIL_PAGES[profile] !== page) return no(404, 'unknown_page');
+
+    let view: ReturnType<typeof layoutView>;
+    try { view = layoutView(user, profile, await savedRow(c.env, user.id, profile)); }
+    catch { return no(500, 'layout_unreadable'); }
+    const ctx: FounderContext | null = profile === 'founder' ? await founderContext(c.env, user) : null;
+    const { messages, guardText } = studioLayoutMessages(profile, user, view.layout, ctx);
+    const runInput: RunOptions = {
+      task: 'studio_layout', userId: Number(user.id), messages, guardText, maxTokens: 500, temperature: 0.2,
+      model: typeof body?.model === 'string' && body.model ? body.model : undefined,
+      rail: { page, option, record: null },
+    };
+    const events: string[] = [];
+    const finish = () => new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+    const refusalDone = (res: { refusal?: string | null; error?: string }) => {
+      const v = runRefusalView(res) ?? { status: 503 as const, code: res.refusal || 'model_unavailable', message: 'Eadwyn could not be reached. Nothing was proposed.' };
+      events.push(sse('done', { refusal: v, proposals: [], dropped: [] }));
+      console.warn('[rail-run] refused', option, v.code);
+      return finish();
+    };
+    // The hold is said before the run: `meta` comes from the same arithmetic as the hold.
+    const q = await quote(c.env, runInput);
+    if (!q.ok) return refusalDone(q);
+    events.push(sse('meta', { model: q.model, hold_microusd: q.hold_microusd }));
+    const result = await runModel(c.env, runInput);
+    if (result.guard) events.push(sse('guard', { input: result.guard.input, output: result.guard.output }));
+    if (!result.ok) return refusalDone(result);
+
+    const usageLogId = result.usageLogId ?? null;
+    const model = result.usage?.model ?? null;
+    const { kept, dropped } = validateOps(result.output, profile, user, view.layout);
+    const source = sourceSentence(profile, ctx);
+    const proposals: Array<Record<string, unknown>> = [];
+    for (const k of kept) {
+      const payload = { ...k, source, base_revision: view.revision };
+      const p = await proposeRail(c.env, { userId: Number(user.id), page, option, record: null, kind: 'proposal', payload, model, usageLogId });
+      proposals.push({ uid: p.uid, ...payload });
+    }
+    let charged: number | null = null;
+    if (usageLogId) {
+      const env = c.env as Env;
+      const u = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?')
+        .bind(usageLogId, user.id).first<{ charged_microusd: number | null }>().catch(() => null);
+      charged = u?.charged_microusd ?? null;
+    }
+    let budget: unknown = null;
+    try { budget = await loadAiBudget(c.env, Number(user.id)); } catch { budget = null; }
+    events.push(sse('done', proposals.length
+      ? { proposals, dropped, usage_log_id: usageLogId, charged_microusd: charged, budget }
+      : { proposals: [], dropped, reason: 'nothing_to_change', usage_log_id: usageLogId, charged_microusd: charged, budget }));
+    return finish();
+  }
+
+  r.post('/run', async (c) => {
+    const user = await requireAuth(c) as User;
+    const body = (await c.req.json().catch(() => null)) as Record<string, any> | null;
+    const page = String(body?.page ?? '');
+    const option = String(body?.option ?? '');
+    // D1420 (#3864): `studio:layout` branches before the form path, with its own refusals before any quote.
+    if (/^studio:layout$/.test(option)) return studioLayoutRun(c, user, page, option, body);
+    // D1596 (#3869): `sessions:block` runs no model. It branches before the form path and never quotes or holds.
+    if (/^sessions:block$/.test(option)) return sessionsBlockRun(c, user, page, option, body);
+    const m = /^form:([a-z0-9_-]{1,60})$/.exec(option);
+    if (!m) return refuse(c, 400, 'unknown_handler');
+    const form = m[1];
+    const fields = fieldsOf(page, form);
+    if (!fields.length) return refuse(c, 404, 'unknown_form');
+    const table = fields[0].table;
+    const rec = body?.record;
+    // D1329 (#3490): a record that is not a venture's is checked by its own scope (`scopes.ts`).
+    const recordScope = scopeOf(table);
+    let projectId: number | null = null;
+    let recordId: number | null = null;
+    let row: Record<string, unknown> | null = null;
+    let scopeKey: string | null = null;
+    let scopedParent: number | null = null;
+    let reread: () => Promise<Record<string, unknown> | null>;
+    if (recordScope) {
+      if (isExplorer(user)) return refuse(c, 403, 'no_profile');
+      if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+      let parentId: number | null = null;
+      if (rec != null) {
+        recordId = Number(rec?.id);
+        if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0) return refuse(c, 404, 'record_not_found');
+        row = await c.env.DB.prepare(recordScope.read).bind(recordId).first<Record<string, unknown>>();
+        if (!row) return refuse(c, 404, 'record_not_found');
+      } else if (recordScope.parent?.own) {
+        parentId = await recordScope.parent.own(c.env, user);
+      } else if (recordScope.parent) {
+        parentId = Number(body?.parent);
+        if (!Number.isSafeInteger(parentId) || parentId <= 0) return refuse(c, 404, 'record_not_found');
+      } else {
+        return refuse(c, 404, 'record_not_found');
+      }
+      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') });
+      // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
+      if (!access.read && recordScope.concealed) return refuse(c, 404, 'record_not_found');
+      if (!access.write) return refuse(c, 403, 'record_not_available');
+      scopeKey = recordId ? `${table}:${recordId}` : parentKey(recordScope, parentId as number);
+      scopedParent = parentId;
+      const id = recordId;
+      reread = async () => (id ? await c.env.DB.prepare(recordScope.read).bind(id).first<Record<string, unknown>>() : null);
+    } else {
+      projectId = Number(body?.project);
+      if (!Number.isSafeInteger(projectId) || projectId <= 0) return refuse(c, 400, 'invalid_project');
+      if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+      const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+        .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+      if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_available');
+      if (rec != null) {
+        // #4046: a positive id, or a text key of a table `ROW_KEYS` lists.
+        recordId = rec?.type === table ? await venturedRowId(c.env, table, rec?.id, projectId) : null;
+        if (!recordId || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+        row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
+        if (!row) return refuse(c, 404, 'record_not_found');
+      }
+      const id = recordId, venture = projectId;
+      reread = async () => (id ? await c.env.DB.prepare(ROW_READS[table]).bind(id, venture).first<Record<string, unknown>>() : null);
+    }
+    const recordRef = recordId ? `${table}:${recordId}` : null;
+    // What the proposals are filed under: the venture, or (D1329) the record or parent of a scoped one.
+    const filed = scopeKey ? { project: null, scope: scopeKey } : { project: projectId };
+    const input = (body?.input && typeof body.input === 'object' ? body.input : {}) as { values?: Record<string, unknown>; text?: unknown; rows?: unknown };
+    const rowsWanted = !recordId && Number.isSafeInteger(Number(input.rows)) ? Math.max(0, Math.min(MAX_RUN_ROWS, Number(input.rows))) : 0;
+    // D1595 (#3868): an Add form that offers no "add several rows" (no ROW_REQUIRED entry) refuses them, before any quote.
+    if (rowsWanted && !Object.hasOwn(ROW_REQUIRED, table)) return refuse(c, 400, 'rows_not_offered');
+    let asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
+    if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
+
+    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') }) : await gatherForm(c.env, projectId as number, asked);
+    // #4046 (B2): a record that offers fewer fields than its form (a programme with two questions) asks only those, before any quote.
+    if (gather.only) { const only = new Set(gather.only); asked = asked.filter((f) => only.has(f.field)); }
+    if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
+    // #3938 part 7 (D1478): VA12 retrieves before it writes. The venture's interviewees are
+    // embedded with its segments, and the writer reads who sits near which segment as a hint.
+    let hintRefusal: RunResult | null = null;
+    if (form === SEGMENT_FORM && !recordScope && projectId) {
+      try {
+        const hint = segmentSection(await segmentHints(await intervieweesOf(c.env, projectId), await segmentsOf(c.env, projectId),
+          HINT_DEPS.make(c.env, { userId: Number(user.id), rail: { page, option, record: recordRef } }, SEGMENT_JOB)));
+        if (hint) gather.hint = hint;
+      } catch (e) {
+        if (!(e instanceof HintRefused)) throw e;
+        hintRefusal = e.result;
+      }
+    }
+    const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
+    const runInput: RunOptions = {
+      task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,
+      model: typeof body?.model === 'string' && body.model ? body.model : undefined,
+      // #3937 (§4.2 fix 7): the form's plan job decides the model, not the page row's kind.
+      ...(FORM_TEXT_JOBS[form] ? { textJob: FORM_TEXT_JOBS[form] } : {}),
+      rail: { page, option, record: recordRef },
+    };
+
+    const events: string[] = [];
+    const finish = () => new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+    const refusalDone = (res: { refusal?: string | null; error?: string }) => {
+      const v = runRefusalView(res) ?? { status: 503 as const, code: res.refusal || 'model_unavailable', message: 'Eadwyn could not be reached. Nothing was proposed.' };
+      events.push(sse('done', { refusal: v, proposals: [], dropped: [] }));
+      console.warn('[rail-run] refused', option, v.code);
+      return finish();
+    };
+
+    // A refusal the member must hear about from the retrieval step stops the press before any hold.
+    if (hintRefusal) return refusalDone(hintRefusal);
+
+    // meta: what the run will hold, from the same arithmetic as the hold. A refusal here (the switch, a stale pick) is the run's own.
+    const q = await quote(c.env, runInput);
+    if (!q.ok) return refusalDone(q);
+    events.push(sse('meta', { model: q.model, hold_microusd: q.hold_microusd }));
+
+    const result = await runModel(c.env, runInput);
+    if (result.guard) events.push(sse('guard', { input: result.guard.input, output: result.guard.output }));
+    if (!result.ok) return refusalDone(result);
+
+    // A changed form drops the result.
+    if (recordId) {
+      const after = await reread();
+      if (!after || snapshot(after, asked) !== snapshot(row, asked)) {
+        events.push(sse('done', { proposals: [], dropped: [{ field: '', why: 'record_changed' }], usage_log_id: result.usageLogId ?? null }));
+        return finish();
+      }
+    }
+
+    const proposals: Array<Record<string, unknown>> = [];
+    let dropped: Array<Dropped | { field: string; why: 'record_changed' }> = [];
+    const usageLogId = result.usageLogId ?? null;
+    const model = result.usage?.model ?? null;
+    const base = { userId: Number(user.id), page, option, record: recordRef, model, usageLogId };
+    if (rowsWanted) {
+      const parsed = parseRows(result.output, fields, asked, gather, rowsWanted, ROW_REQUIRED[table] ?? []);
+      dropped = parsed.dropped;
+      for (const one of parsed.rows) {
+        const p = await proposeRail(c.env, { ...base, kind: 'proposal', payload: { row: one, table, ...filed, source: 'eadwyn' } });
+        proposals.push({ uid: p.uid, row: one });
+      }
+    } else {
+      const parsed = parseFields(result.output, fields, asked, gather);
+      dropped = parsed.dropped;
+      for (const k of parsed.kept) {
+        const f = fields.find((x) => x.field === k.field)!;
+        // `prior` is what the field held when the run read it: what an undo puts back.
+        const prior = row ? row[f.column] ?? null : null;
+        const p = await proposeRail(c.env, { ...base, kind: 'proposal', payload: {
+          field: k.field, value: k.value, label: f.label, class: f.class, table, column: f.column,
+          ...filed, prior, ...(k.citation ? { citation: k.citation } : {}), source: 'eadwyn',
+        } });
+        proposals.push({ uid: p.uid, field: k.field, value: k.value });
+      }
+    }
+
+    let charged: number | null = null;
+    if (usageLogId) {
+      const u = await c.env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?')
+        .bind(usageLogId, user.id).first<{ charged_microusd: number | null }>().catch(() => null);
+      charged = u?.charged_microusd ?? null;
+    }
+    let budget: unknown = null;
+    try { budget = await loadAiBudget(c.env, Number(user.id)); } catch { budget = null; }
+    events.push(sse('done', { proposals, dropped, usage_log_id: usageLogId, charged_microusd: charged, budget }));
+    return finish();
+  });
+
+  return r;
+}
+
+export default railRunRoutes();
+
+/** VA12's interviewees: role, company, ICP fit and logged pains; never a name, note or recording (#3938 part 7). */
+export async function intervieweesOf(env: Env, projectId: number): Promise<Interviewee[]> {
+  const res = await env.DB.prepare(
+    'SELECT id, interviewee_role, interviewee_company, icp_fit, pains_json FROM discovery_interviews WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  ).bind(projectId).all<{ id: number; interviewee_role: string | null; interviewee_company: string | null; icp_fit: string | null; pains_json: string | null }>()
+    .catch(() => ({ results: [] as any[] }));
+  return (res.results || []).map((r) => {
+    let pains: string[] = [];
+    try {
+      const v = JSON.parse(r.pains_json || '[]');
+      if (Array.isArray(v)) pains = v.map((x: any) => (typeof x === 'string' ? x : String(x?.pain ?? x?.phrase ?? x?.text ?? ''))).filter(Boolean).slice(0, 8);
+    } catch { pains = []; }
+    return { id: Number(r.id), role: r.interviewee_role, company: r.interviewee_company, fit: r.icp_fit, pains };
+  });
+}
+
+/** VA12's segments: the venture's live ones, by name and who they are. */
+export async function segmentsOf(env: Env, projectId: number): Promise<Array<{ name: string; who: string | null }>> {
+  const res = await env.DB.prepare(
+    'SELECT name, who_they_are FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 20',
+  ).bind(projectId).all<{ name: string; who_they_are: string | null }>().catch(() => ({ results: [] as any[] }));
+  return (res.results || []).map((r) => ({ name: String(r.name ?? ''), who: r.who_they_are ?? null }));
+}

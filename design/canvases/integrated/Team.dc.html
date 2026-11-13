@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f8f8fa;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}
+    .tm-num{font-variant-numeric:tabular-nums}
+    .tm-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#615c6e}
+    .tm-row:hover{background:#fcfcfd}
+    .tm-link{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#7c3aed;white-space:nowrap;cursor:pointer}
+    .tm-link:hover{color:#6d28d9}
+    .tm-btn{font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #e2e1e8;background:#fff;color:#18181b;cursor:pointer;white-space:nowrap}
+    .tm-btn:hover{border-color:#d4d2dc;background:#fbfbfc}
+    .tm-btnp{font:inherit;font-size:12.5px;font-weight:700;padding:9px 15px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer;white-space:nowrap}
+    .tm-btnp:hover{background:#6d28d9;border-color:#6d28d9}
+    .tm-in{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px 11px;border:1px solid #e2e1e8;border-radius:8px;background:#fff}
+    .tm-in:focus{outline:none;border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    @media (max-width:980px){
+      .tm-head{flex-direction:column!important;align-items:flex-start!important;gap:16px!important}
+      .tm-strip{grid-template-columns:repeat(2,1fr)!important}
+      .tm-row{flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
+      .tm-rowr{width:100%!important;justify-content:flex-start!important;flex-wrap:wrap}
+      .tm-cols{grid-template-columns:1fr!important}
+      .tm-2{grid-template-columns:1fr!important}
+      .tm-tabs{overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+      .tm-drawer{width:100%!important}
+    }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;padding:0 0 80px">
+
+  <!-- ============ HEADER ============ -->
+  <div style="background:#fff;border-bottom:1px solid #ececf1;padding:26px 28px 0">
+    <div style="max-width:1320px;margin:0 auto">
+      <div class="tm-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+        <div style="display:flex;align-items:flex-start;gap:14px;min-width:0">
+          <div style="width:42px;height:42px;border-radius:11px;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex:none">NL</div>
+          <div style="min-width:0">
+            <h1 style="margin:0;font-size:27px;font-weight:800;letter-spacing:-.025em;line-height:1.1">Team</h1>
+            <div style="font-size:13.5px;color:#4a4553;margin-top:5px;line-height:1.5">Who builds {{ company }} — their equity, vesting, paperwork, and the roles still open.</div>
+            <div style="font-size:12px;color:#615c6e;margin-top:7px">{{ companyMeta }}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;flex:none">
+          <div onClick="{{ openInvite }}" class="tm-btnp">+ Invite teammate</div>
+          <div class="tm-btn">Export roster</div>
+        </div>
+      </div>
+
+      <!-- STAT STRIP -->
+      <div class="tm-strip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:22px">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+          <div style="{{ s.cardStyle }}">
+            <div class="tm-lbl">{{ s.label }}</div>
+            <div class="tm-num" style="font-size:23px;font-weight:800;letter-spacing:-.02em;color:{{ s.ink }};margin-top:7px;line-height:1">{{ s.value }}</div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- TABS -->
+      <div class="tm-tabs" style="display:flex;gap:6px;margin-top:20px">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <div onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.badge }}"><span style="{{ t.badgeStyle }}">{{ t.badge }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1320px;margin:0 auto;padding:22px 28px 0">
+
+    <!-- ============ ROSTER ============ -->
+    <sc-if value="{{ isRoster }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;gap:16px">
+        <sc-if value="{{ hasPaperworkGap }}">
+          <div style="display:flex;align-items:center;gap:12px;background:#fffdf5;border:1px solid #fde68a;border-radius:14px;padding:14px 18px;flex-wrap:wrap">
+            <span style="width:16px;height:16px;display:block;flex:none;color:#92400e" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+            <div style="font-size:13px;color:#78350f;line-height:1.5;flex:1;min-width:220px">{{ paperworkLine }}</div>
+            <a href="#trust-center" class="tm-link">Open Trust Center →</a>
+          </div>
+        </sc-if>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Roster</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Everyone with equity, a contract, or access. Click a row for their full record.</div>
+            </div>
+            <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+              <sc-for list="{{ rosterFilters }}" as="f" hint-placeholder-count="4">
+                <div onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <sc-for list="{{ roster }}" as="p" hint-placeholder-count="5">
+            <div onClick="{{ p.open }}" class="tm-row" style="{{ p.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0;flex:1">
+                <div style="width:36px;height:36px;border-radius:10px;background:{{ p.avBg }};color:{{ p.avInk }};display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;flex:none">{{ p.initials }}</div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">{{ p.name }}</span>
+                    <span style="{{ p.typeStyle }}">{{ p.type }}</span>
+                    <sc-if value="{{ p.flag }}"><span style="{{ p.flagStyle }}">{{ p.flag }}</span></sc-if>
+                  </div>
+                  <div style="font-size:12.5px;color:#4a4553;margin-top:4px">{{ p.role }}</div>
+                  <div class="tm-num" style="font-size:11.5px;color:#7d7889;margin-top:4px;line-height:1.5">{{ p.meta }}</div>
+                </div>
+              </div>
+              <div class="tm-rowr" style="display:flex;align-items:center;gap:22px;flex:none;justify-content:flex-end">
+                <div style="min-width:132px">
+                  <div class="tm-lbl" style="font-size:10px">Equity</div>
+                  <div class="tm-num" style="font-size:13.5px;font-weight:700;margin-top:3px">{{ p.equity }}</div>
+                  <div class="tm-num" style="font-size:11px;color:#7d7889;margin-top:2px">{{ p.shares }}</div>
+                </div>
+                <div style="min-width:150px">
+                  <div class="tm-lbl" style="font-size:10px">Vested</div>
+                  <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:6px;position:relative">
+                    <div style="position:absolute;inset:0;width:{{ p.vestGhostPct }}%;background:#e0d8f5;border-radius:999px"></div>
+                    <div style="position:absolute;inset:0;width:{{ p.vestPct }}%;background:{{ p.vestInk }};border-radius:999px"></div>
+                  </div>
+                  <div class="tm-num" style="font-size:11px;color:{{ p.vestInk }};margin-top:5px;font-weight:600">{{ p.vestNote }}</div>
+                </div>
+                <span style="{{ p.statusPill }}"><span style="{{ p.statusDot }}"></span>{{ p.status }}</span>
+              </div>
+            </div>
+          </sc-for>
+
+          <div style="padding:14px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div class="tm-num" style="font-size:12px;color:#615c6e">{{ rosterFootnote }}</div>
+            <a href="#cap-table" class="tm-link">Reconcile in Cap Table →</a>
+          </div>
+        </div>
+
+        <!-- OPTION POOL -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Option pool</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ poolLine }}</div>
+            </div>
+            <a href="#cap-table" class="tm-link">Model a top-up →</a>
+          </div>
+          <div style="height:9px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:16px;display:flex">
+            <div style="height:100%;width:{{ poolGrantedPct }}%;background:#7c3aed"></div>
+            <div style="height:100%;width:{{ poolCommittedPct }}%;background:#a78bfa"></div>
+            <div style="height:100%;width:{{ poolReservedPct }}%;background:#c4b5fd"></div>
+          </div>
+          <div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap">
+            <sc-for list="{{ poolLegend }}" as="l" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span>
+                <span class="tm-num" style="font-size:12px;color:#3f3a49"><strong>{{ l.value }}</strong> {{ l.label }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ ADVISORS ============ -->
+    <sc-if value="{{ isAdvisors }}">
+      <div style="display:grid;gap:16px">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Engaged advisors</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Advisors with an agreement in place. Equity here flows to the cap table.</div>
+            </div>
+            <a href="#advisors" class="tm-btn" style="text-decoration:none">Find an advisor</a>
+          </div>
+          <sc-for list="{{ advisors }}" as="a" hint-placeholder-count="2">
+            <div class="tm-row" style="{{ a.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0;flex:1">
+                <div style="width:36px;height:36px;border-radius:10px;background:#f0fdfa;color:#0f766e;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;flex:none">{{ a.initials }}</div>
+                <div style="min-width:0">
+                  <div style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">{{ a.name }}</div>
+                  <div style="font-size:12.5px;color:#4a4553;margin-top:4px">{{ a.focus }}</div>
+                  <div style="font-size:11.5px;color:#7d7889;margin-top:4px;line-height:1.5">{{ a.meta }}</div>
+                </div>
+              </div>
+              <div class="tm-rowr" style="display:flex;align-items:center;gap:22px;flex:none;justify-content:flex-end">
+                <div style="min-width:112px">
+                  <div class="tm-lbl" style="font-size:10px">Grant</div>
+                  <div class="tm-num" style="font-size:13.5px;font-weight:700;margin-top:3px">{{ a.grant }}</div>
+                  <div style="font-size:11px;color:#7d7889;margin-top:2px">{{ a.vest }}</div>
+                </div>
+                <div style="min-width:118px">
+                  <div class="tm-lbl" style="font-size:10px">Cadence</div>
+                  <div style="font-size:12.5px;font-weight:600;margin-top:4px">{{ a.cadence }}</div>
+                </div>
+                <span style="{{ a.pill }}"><span style="{{ a.dot }}"></span>{{ a.status }}</span>
+                <span class="tm-link">{{ a.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <div style="padding:14px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;font-size:12px;color:#615c6e">{{ advisorFootnote }}</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Upcoming office hours</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Booked sessions with your advisors and platform partners.</div>
+          <div style="display:grid;gap:10px;margin-top:16px">
+            <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:11px;padding:13px 15px;flex-wrap:wrap">
+                <div style="min-width:0">
+                  <div style="font-size:13px;font-weight:700">{{ s.title }}</div>
+                  <div class="tm-num" style="font-size:11.5px;color:#615c6e;margin-top:3px">{{ s.when }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="{{ s.pill }}">{{ s.ready }}</span>
+                  <span class="tm-link">Open brief</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ HIRING ============ -->
+    <sc-if value="{{ isHiring }}">
+      <div style="display:grid;gap:16px">
+        <div class="tm-cols" style="display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start">
+
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+            <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Open roles</div>
+                <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ hiringLine }}</div>
+              </div>
+              <div class="tm-btnp">+ New role</div>
+            </div>
+            <sc-for list="{{ roles }}" as="r" hint-placeholder-count="3">
+              <div class="tm-row" style="{{ r.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:14.5px;font-weight:700;letter-spacing:-.01em">{{ r.title }}</span>
+                    <span style="{{ r.statusPill }}">{{ r.status }}</span>
+                  </div>
+                  <div class="tm-num" style="font-size:12px;color:#615c6e;margin-top:5px;line-height:1.5">{{ r.meta }}</div>
+                  <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
+                    <sc-for list="{{ r.pipeline }}" as="s" hint-placeholder-count="4">
+                      <div style="{{ s.style }}"><span class="tm-num" style="font-weight:800">{{ s.n }}</span> {{ s.label }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div class="tm-rowr" style="display:flex;align-items:center;gap:14px;flex:none;justify-content:flex-end">
+                  <span class="tm-link">Review applicants</span>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noRoles }}">
+              <div style="padding:34px 22px;text-align:center">
+                <div style="font-size:13.5px;font-weight:700">No open roles</div>
+                <div style="font-size:12.5px;color:#615c6e;margin-top:6px">Coverage gaps below suggest what to open next.</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="display:grid;gap:16px">
+            <div style="background:#faf9fc;border:1px solid #e6dcff;border-radius:16px;padding:20px">
+              <div class="tm-lbl" style="color:#6d28d9">Inbound · Brand &amp; Pages</div>
+              <div style="font-size:14px;font-weight:800;margin-top:8px">{{ inboundTitle }}</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">{{ inboundLine }}</div>
+              <div style="display:grid;gap:8px;margin-top:14px">
+                <sc-for list="{{ inbound }}" as="i" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid #ececf1;border-radius:10px;padding:11px 13px">
+                    <div style="min-width:0">
+                      <div style="font-size:12.5px;font-weight:700">{{ i.name }}</div>
+                      <div style="font-size:11px;color:#7d7889;margin-top:2px">{{ i.meta }}</div>
+                    </div>
+                    <span style="{{ i.pill }}">{{ i.kind }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <a href="#contacts" class="tm-link" style="margin-top:14px">Manage in Contacts →</a>
+            </div>
+
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px">
+              <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Co-founder search</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">{{ cofounderLine }}</div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:14px;background:#fbfbfc;border:1px solid #f0eff4;border-radius:11px;padding:13px 15px;flex-wrap:wrap">
+                <div style="flex:1;min-width:150px">
+                  <div class="tm-lbl" style="font-size:10px">Decision</div>
+                  <div style="font-size:13px;font-weight:700;margin-top:3px">{{ cofounderDecision }}</div>
+                </div>
+                <span style="{{ cofounderPill }}">{{ cofounderStatus }}</span>
+              </div>
+              <a href="#cofounder-match" class="tm-link" style="margin-top:14px">Open Co-founder Match →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ COVERAGE ============ -->
+    <sc-if value="{{ isCoverage }}">
+      <div style="display:grid;gap:16px">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Function coverage</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ coverageLine }}</div>
+          </div>
+          <sc-for list="{{ coverage }}" as="c" hint-placeholder-count="7">
+            <div class="tm-row" style="{{ c.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ c.fn }}</span>
+                  <span style="{{ c.pill }}"><span style="{{ c.dot }}"></span>{{ c.state }}</span>
+                </div>
+                <div style="font-size:12px;color:#615c6e;margin-top:5px;line-height:1.5">{{ c.who }}</div>
+              </div>
+              <div class="tm-rowr" style="display:flex;align-items:center;gap:14px;flex:none;justify-content:flex-end">
+                <div style="font-size:12px;color:#4a4553;text-align:right;max-width:250px;line-height:1.5">{{ c.fix }}</div>
+                <sc-if value="{{ c.action }}"><span class="tm-link">{{ c.action }}</span></sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="tm-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+            <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Headcount plan</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ planLine }}</div>
+            <div style="display:grid;gap:11px;margin-top:16px">
+              <sc-for list="{{ plan }}" as="q" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                    <span style="font-size:12.5px;font-weight:600">{{ q.period }}</span>
+                    <span class="tm-num" style="font-size:12px;color:{{ q.ink }};font-weight:700">{{ q.label }}</span>
+                  </div>
+                  <div style="height:7px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:6px">
+                    <div style="height:100%;width:{{ q.pct }}%;background:{{ q.ink }};border-radius:999px"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+            <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">People cost</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Salaries, contractors and payroll load — the largest line in your burn.</div>
+            <div style="display:grid;gap:10px;margin-top:16px">
+              <sc-for list="{{ costRows }}" as="c" hint-placeholder-count="4">
+                <div style="{{ c.rowStyle }}">
+                  <span style="font-size:12.5px;color:#3f3a49;font-weight:{{ c.weight }}">{{ c.label }}</span>
+                  <span class="tm-num" style="font-size:13px;font-weight:{{ c.weight }}">{{ c.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#7d7889;margin-top:14px;line-height:1.5">{{ costNote }}</div>
+            <a href="#use-of-funds" class="tm-link" style="margin-top:12px">Open Use of Funds →</a>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="margin-top:26px;padding-top:18px;border-top:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:#7d7889">© Copyright 2026, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.</div>
+      <div style="display:flex;gap:18px;font-size:11.5px"><a href="#terms">Terms of service</a><a href="#privacy">Privacy policy</a></div>
+    </div>
+  </div>
+
+  <!-- ============ PERSON DRAWER ============ -->
+  <sc-if value="{{ drawerOpen }}">
+    <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(24,24,27,.34);z-index:60"></div>
+    <div class="tm-drawer" style="position:fixed;top:0;right:0;bottom:0;width:440px;background:#fff;border-left:1px solid #ececf1;box-shadow:-14px 0 40px rgba(24,24,27,.14);z-index:61;overflow-y:auto">
+      <div style="padding:22px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+        <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+          <div style="width:42px;height:42px;border-radius:11px;background:{{ dPerson.avBg }};color:{{ dPerson.avInk }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex:none">{{ dPerson.initials }}</div>
+          <div style="min-width:0">
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ dPerson.name }}</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:3px">{{ dPerson.role }}</div>
+          </div>
+        </div>
+        <div onClick="{{ closeDrawer }}" class="tm-link" style="font-size:16px;color:#a8a4b4">✕</div>
+      </div>
+
+      <div style="padding:20px 22px">
+        <div class="tm-lbl">Employment</div>
+        <div style="display:grid;gap:9px;margin-top:12px">
+          <sc-for list="{{ dPerson.facts }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding-bottom:9px;border-bottom:1px solid #f6f5f9">
+              <span style="font-size:12px;color:#615c6e">{{ f.k }}</span>
+              <span class="tm-num" style="font-size:12.5px;font-weight:700;text-align:right">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding:0 22px 20px">
+        <div class="tm-lbl">Equity &amp; vesting</div>
+        <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:12px;padding:15px 17px;margin-top:12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <span class="tm-num" style="font-size:21px;font-weight:800;letter-spacing:-.02em">{{ dPerson.equity }}</span>
+            <span class="tm-num" style="font-size:12px;color:#615c6e">{{ dPerson.shares }}</span>
+          </div>
+          <div style="height:8px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:13px;position:relative">
+            <div style="position:absolute;inset:0;width:{{ dPerson.vestGhostPct }}%;background:#e0d8f5;border-radius:999px"></div>
+            <div style="position:absolute;inset:0;width:{{ dPerson.vestPct }}%;background:{{ dPerson.vestInk }};border-radius:999px"></div>
+          </div>
+          <div class="tm-num" style="font-size:11.5px;color:#615c6e;margin-top:8px;line-height:1.5">{{ dPerson.vestDetail }}</div>
+        </div>
+      </div>
+
+      <div style="padding:0 22px 22px">
+        <div class="tm-lbl">Paperwork</div>
+        <div style="display:grid;gap:9px;margin-top:12px">
+          <sc-for list="{{ dPerson.docs }}" as="d" hint-placeholder-count="3">
+            <div style="{{ d.rowStyle }}">
+              <div style="min-width:0">
+                <div style="font-size:12.5px;font-weight:700">{{ d.label }}</div>
+                <div style="font-size:11px;color:#615c6e;margin-top:3px;line-height:1.5">{{ d.meta }}</div>
+              </div>
+              <span style="{{ d.pill }}"><span style="{{ d.dot }}"></span>{{ d.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding:0 22px 26px;display:flex;gap:9px;flex-wrap:wrap">
+        <div class="tm-btn">Edit record</div>
+        <div class="tm-btn">Send document</div>
+        <div class="tm-btn" style="color:#b91c1c;border-color:#fecaca">Offboard</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INVITE DRAWER ============ -->
+  <sc-if value="{{ inviteOpen }}">
+    <div onClick="{{ closeInvite }}" style="position:fixed;inset:0;background:rgba(24,24,27,.34);z-index:60"></div>
+    <div class="tm-drawer" style="position:fixed;top:0;right:0;bottom:0;width:440px;background:#fff;border-left:1px solid #ececf1;box-shadow:-14px 0 40px rgba(24,24,27,.14);z-index:61;overflow-y:auto">
+      <div style="padding:22px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+        <div>
+          <div style="font-size:17px;font-weight:800;letter-spacing:-.02em">Invite teammate</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:4px;line-height:1.5">Adds them to {{ company }} and issues the right paperwork for their type.</div>
+        </div>
+        <div onClick="{{ closeInvite }}" class="tm-link" style="font-size:16px;color:#a8a4b4">✕</div>
+      </div>
+      <div style="padding:20px 22px;display:grid;gap:14px">
+        <div>
+          <div class="tm-lbl" style="margin-bottom:6px">Full name</div>
+          <input class="tm-in" placeholder="Jordan Ellis" />
+        </div>
+        <div>
+          <div class="tm-lbl" style="margin-bottom:6px">Work email</div>
+          <input class="tm-in" placeholder="jordan@novacraft.ai" />
+        </div>
+        <div>
+          <div class="tm-lbl" style="margin-bottom:6px">Type</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <sc-for list="{{ inviteTypes }}" as="t" hint-placeholder-count="4">
+              <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div class="tm-lbl" style="margin-bottom:6px">Role title</div>
+          <input class="tm-in" placeholder="Senior backend engineer" />
+        </div>
+        <div class="tm-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="tm-lbl" style="margin-bottom:6px">Start date</div>
+            <input class="tm-in" placeholder="2026-09-15" />
+          </div>
+          <div>
+            <div class="tm-lbl" style="margin-bottom:6px">Access level</div>
+            <input class="tm-in" value="Member" />
+          </div>
+        </div>
+        <div class="tm-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="tm-lbl" style="margin-bottom:6px">Option grant (shares)</div>
+            <input class="tm-in" placeholder="120,000" />
+          </div>
+          <div>
+            <div class="tm-lbl" style="margin-bottom:6px">Base salary</div>
+            <input class="tm-in" placeholder="$150,000" />
+          </div>
+        </div>
+        <div style="background:#faf9fc;border:1px solid #e6dcff;border-radius:11px;padding:13px 15px">
+          <div style="font-size:12px;color:#4c1d95;line-height:1.55">{{ inviteNote }}</div>
+        </div>
+      </div>
+      <div style="padding:0 22px 26px;display:flex;gap:9px;flex-wrap:wrap">
+        <div class="tm-btnp">Send invite</div>
+        <div onClick="{{ closeInvite }}" class="tm-btn">Cancel</div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { tab:'roster', filter:'all', person:null, invite:false, inviteType:'Employee' };
+
+  ic(p, sw){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  today(){ return new Date('2026-08-25'); }
+  monthsSince(iso){ return (this.today() - new Date(iso)) / (86400000 * 30.4375); }
+  daysUntil(iso){ return Math.round((new Date(iso) - this.today()) / 86400000); }
+  fmtDate(iso){ return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); }
+  addYears(iso, n){ const d = new Date(iso); d.setFullYear(d.getFullYear() + n); return d.toISOString().slice(0,10); }
+  num(n){ return n.toLocaleString('en-US'); }
+  usd(n){ return '$' + n.toLocaleString('en-US'); }
+
+  tone(t){
+    const M = {
+      ok:      { bg:'#ecfdf5', ink:'#047857', edge:'#a7f3d0', bar:'#10b981' },
+      prog:    { bg:'#fffbeb', ink:'#92400e', edge:'#fde68a', bar:'#f59e0b' },
+      bad:     { bg:'#fef2f2', ink:'#b91c1c', edge:'#fecaca', bar:'#ef4444' },
+      neutral: { bg:'#f4f4f6', ink:'#615c6e', edge:'#e4e4e8', bar:'#d4d4d8' }
+    };
+    return M[t] || M.neutral;
+  }
+  toneOf(s){
+    const x = String(s).toLowerCase();
+    if (['active','signed','filed','verified','covered','published'].indexOf(x) >= 0) return 'ok';
+    if (['offer out','pending','in review','sent','thin','draft'].indexOf(x) >= 0) return 'prog';
+    if (['not filed','missing','gap','overdue','expired'].indexOf(x) >= 0) return 'bad';
+    return 'neutral';
+  }
+  pill(s){
+    const c = this.tone(this.toneOf(s));
+    return 'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:'+c.bg+';color:'+c.ink+';border:1px solid '+c.edge+';white-space:nowrap';
+  }
+  dot(s){
+    const c = this.tone(this.toneOf(s));
+    return 'width:5px;height:5px;border-radius:50%;background:'+c.ink+';flex:none';
+  }
+  rowStyle(s){
+    const c = this.tone(this.toneOf(s)), t = this.toneOf(s);
+    return 'display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:17px 22px;border-top:1px solid #f2f1f5;border-left:3px solid '+c.bar+';'
+      + (t === 'bad' ? 'background:#fffbfb;' : '');
+  }
+
+  renderVals() {
+    const S = this.state;
+    const I = {
+      users:   this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/><circle cx="17.5" cy="8.5" r="2.4"/>'),
+      badge:   this.ic('<circle cx="12" cy="9" r="5"/><path d="M8.5 13.5 7 22l5-2.5L17 22l-1.5-8.5"/>'),
+      case:    this.ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+      grid:    this.ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      alert:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>')
+    };
+
+    const company = 'Novacraft Labs, Inc.';
+    const POOL = 1000000;
+    const FOUNDER_SHARES = 9000000;
+    // Advisory grants sit OUTSIDE the option pool but INSIDE the cap table, so they belong in
+    // the fully-diluted denominator. Shares are the source of truth; percentages derive from FD.
+    const ADVISORS = [
+      { initials:'PR', name:'Priyanka Raghunathan', focus:'Product & pricing · fractional CPO',
+        meta:'Matched via Advisors · engaged Jun 4, 2026', shares:35000, vest:'2-year vest, no cliff',
+        cadence:'Monthly, 60 min', status:'Signed', action:'Log value-add' },
+      { initials:'MW', name:'Marcus Whitfield', focus:'GTM & enterprise sales',
+        meta:'Matched via Advisors · intro call Aug 18, 2026', shares:25000, vest:'2-year vest, no cliff',
+        cadence:'Biweekly, 30 min', status:'Pending', action:'Send agreement' }
+    ];
+    const advisorShares = ADVISORS.reduce((a,x) => a + x.shares, 0);
+    const advisorsPending = ADVISORS.filter(a => a.status !== 'Signed').length;
+    const FD = FOUNDER_SHARES + POOL + advisorShares;
+    const pctOf = (shares, dp) => ((shares / FD) * 100).toFixed(dp == null ? 1 : dp) + '%';
+
+    // ---- ONE roster; every count, percentage and cost below derives from it ----
+    const PEOPLE = [
+      { key:'gl', name:'Guillaume Lauzier', initials:'GL', role:'Founder & CEO', type:'Founder',
+        start:'2026-03-12', shares:5400000, kind:'Common', access:'Owner', status:'Active',
+        salary:0, note:'Deferred salary until first close',
+        ip:'Signed', el83b:'Filed', agreement:'Signed' },
+      { key:'ao', name:'Amara Osei', initials:'AO', role:'Co-founder & CTO', type:'Founder',
+        start:'2026-03-12', shares:3600000, kind:'Common', access:'Owner', status:'Active',
+        salary:0, note:'Deferred salary until first close',
+        ip:'Signed', el83b:'Not filed', agreement:'Signed' },
+      { key:'dv', name:'Dmitri Volkov', initials:'DV', role:'Founding engineer', type:'Employee',
+        start:'2026-05-04', shares:240000, kind:'Options', access:'Member', status:'Active',
+        salary:145000, note:'Full-time · San Francisco',
+        ip:'Signed', el83b:'n/a', agreement:'Signed' },
+      { key:'rt', name:'Rin Takahashi', initials:'RT', role:'Product designer', type:'Contractor',
+        start:'2026-06-15', shares:0, kind:'None', access:'Limited', status:'Active',
+        salary:96000, note:'0.6 FTE · rolling 3-month SOW',
+        ip:'Missing', el83b:'n/a', agreement:'Signed' },
+      { key:'yd', name:'Yusuf Demir', initials:'YD', role:'GTM lead', type:'Employee',
+        start:'2026-09-14', shares:180000, kind:'Options', access:'Pending', status:'Offer out',
+        salary:135000, note:'Offer sent Aug 20 · expires Aug 29',
+        ip:'Pending', el83b:'n/a', agreement:'Sent' }
+    ];
+
+    const active = PEOPLE.filter(p => p.status === 'Active');
+    // Granted = live grants only. An offer that hasn't been accepted is COMMITTED, not granted —
+    // counting it in both buckets is what double-counted the pool.
+    const grantedShares = PEOPLE.filter(p => p.kind === 'Options' && p.status === 'Active').reduce((a,p) => a + p.shares, 0);
+    const committedShares = PEOPLE.filter(p => p.kind === 'Options' && p.status !== 'Active').reduce((a,p) => a + p.shares, 0);
+    const paperGaps = PEOPLE.filter(p => p.ip === 'Missing' || p.el83b === 'Not filed');
+    // People cost: salaried employees and contractors are disjoint sets, each counted once.
+    const salaried = active.filter(p => p.type === 'Employee' && p.salary > 0);
+    const contractors = active.filter(p => p.type === 'Contractor' && p.salary > 0);
+    const monthlySalary = Math.round(salaried.reduce((a,p) => a + p.salary, 0) / 12);
+    const monthlyContract = Math.round(contractors.reduce((a,p) => a + p.salary, 0) / 12);
+    const monthlyPeople = monthlySalary + monthlyContract;
+    const payrollLoad = Math.round(monthlySalary * 0.11);
+
+    // ---- vesting: 4-year vest, 1-year cliff; nothing vests before the cliff ----
+    const vestOf = (p) => {
+      if (p.kind === 'None') return { pct:0, ghostPct:0, note:'No equity', ink:'#a8a4b4', detail:'Contractor — no grant on file.' };
+      const cliff = this.addYears(p.start, 1);
+      const dToCliff = this.daysUntil(cliff);
+      const elapsed = Math.max(0, this.monthsSince(p.start));
+      const pct = Math.max(0, Math.min(100, Math.round(elapsed / 48 * 100)));
+      if (p.status === 'Offer out') {
+        return { pct:0, ghostPct:0, note:'Starts ' + this.fmtDate(p.start), ink:'#92400e',
+          detail:'4-year vest, 1-year cliff — begins on start date ' + this.fmtDate(p.start) + '.' };
+      }
+      // Pre-cliff: nothing is vested, so the vested fill is 0. Elapsed time shows as a
+      // separate ghost track — never as vested equity.
+      if (dToCliff > 0) {
+        return { pct:0, ghostPct:pct, note:'Cliff in ' + dToCliff + ' days', ink:'#92400e',
+          detail:'0 of ' + this.num(p.shares) + ' vested. 1-year cliff lands ' + this.fmtDate(cliff)
+            + ' · ' + Math.round(elapsed) + ' of 48 months elapsed.' };
+      }
+      const vested = Math.round(p.shares * Math.min(1, elapsed / 48));
+      return { pct, ghostPct:0, note:pct + '% vested', ink:'#047857',
+        detail:this.num(vested) + ' of ' + this.num(p.shares) + ' vested · cliff cleared ' + this.fmtDate(cliff) + '.' };
+    };
+
+    const eqPct = (p) => p.shares ? pctOf(p.shares) : '—';
+
+    const filters = [
+      { k:'all', label:'All' }, { k:'Founder', label:'Founders' },
+      { k:'Employee', label:'Employees' }, { k:'Contractor', label:'Contractors' }
+    ];
+    const shown = S.filter === 'all' ? PEOPLE : PEOPLE.filter(p => p.type === S.filter);
+
+    const typeChip = (t) => {
+      const M = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Employee:['#eff6ff','#1d4ed8','#dbeafe'],
+                  Contractor:['#f4f4f6','#4a4553','#e4e4e8'] };
+      const c = M[t] || M.Contractor;
+      return 'font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:5px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2];
+    };
+
+    const dP = PEOPLE.filter(p => p.key === S.person)[0] || PEOPLE[0];
+    const dv = vestOf(dP);
+
+    const tabDefs = [
+      { k:'roster', label:'Roster', icon:I.users },
+      { k:'advisors', label:'Advisors', icon:I.badge },
+      { k:'hiring', label:'Hiring', icon:I.case },
+      { k:'coverage', label:'Coverage', icon:I.grid }
+    ];
+
+    // ---- coverage derived from who actually holds each function ----
+    const COVER = [
+      { fn:'Engineering', state:'Covered', who:'Amara Osei (CTO) · Dmitri Volkov', fix:'Second engineer opens after first close.' },
+      { fn:'Product', state:'Thin', who:'Guillaume Lauzier, alongside CEO duties', fix:'Advisor covers pricing; own it fully post-raise.', action:'Book advisor' },
+      { fn:'Design', state:'Thin', who:'Rin Takahashi (contractor, 0.6 FTE)', fix:'Convert to full-time or extend the SOW.', action:'Convert' },
+      { fn:'GTM / Sales', state:'Gap', who:'Nobody until Yusuf Demir starts Sep 14', fix:'Offer out — closes this gap on acceptance.', action:'Track offer' },
+      { fn:'Finance', state:'Gap', who:'No owner', fix:'Fractional CFO or advisor; not a hire at this stage.', action:'Find advisor' },
+      { fn:'Legal', state:'Covered', who:'External counsel (Priya Raghunathan)', fix:'Retainer active through incorporation.' },
+      { fn:'Data / ML', state:'Gap', who:'No owner', fix:'Deferred — not on the 12-month plan.', action:'Open role' }
+    ];
+    const gaps = COVER.filter(c => c.state === 'Gap').length;
+    const thin = COVER.filter(c => c.state === 'Thin').length;
+
+    // `reserve` = shares earmarked for a role with no offer out yet. Roles whose offer is
+    // already extended carry 0 here, because that grant is counted as committed above.
+    const ROLES = [
+      { title:'Senior backend engineer', status:'Published', reserve:70000,
+        meta:'Full-time · San Francisco or remote (US) · $150–180k · 0.7% (70,000 reserved) · posted Aug 12, 2026',
+        pipeline:[['Applied',14],['Screen',5],['Interview',2],['Offer',0]] },
+      { title:'Founding GTM lead', status:'Offer out', reserve:0,
+        meta:'Full-time · San Francisco · $135k · 180,000 options committed · Yusuf Demir, offer expires Aug 29',
+        pipeline:[['Applied',22],['Screen',7],['Interview',3],['Offer',1]] },
+      { title:'Product designer (contract → FTE)', status:'Draft', reserve:0,
+        meta:'Not yet submitted for review · converts Rin Takahashi\u2019s contract · no shares reserved until published',
+        pipeline:[['Applied',0],['Screen',0],['Interview',0],['Offer',0]] }
+    ];
+    // ---- ONE pool arithmetic: the four buckets always sum to POOL ----
+    const liveRoles = ROLES.filter(r => r.status !== 'Draft').length;
+    const reservedShares = ROLES.reduce((a,r) => a + r.reserve, 0);
+    const unallocated = POOL - grantedShares - committedShares - reservedShares;
+    // Divisor is the mean of the option grants this company has actually made — no literal.
+    const optionGrants = PEOPLE.filter(p => p.kind === 'Options').map(p => p.shares);
+    const avgGrant = Math.round(optionGrants.reduce((a,n) => a + n, 0) / optionGrants.length);
+    const moreHires = Math.floor(unallocated / avgGrant);
+    const reservingRoles = ROLES.filter(r => r.reserve > 0);
+
+    const stageChip = (n) => 'font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid '
+      + (n ? '#e6dcff;background:#faf9fc;color:#4c1d95' : '#ececf1;background:#fbfbfc;color:#a8a4b4');
+
+    const planRows = [
+      { period:'Q3 2026 · now', have: active.length, target:5 },
+      { period:'Q4 2026', have: active.length + 1, target:6 },
+      { period:'Q1 2027 · post-raise', have: active.length + 1, target:9 }
+    ].map(q => {
+      const pct = Math.round(q.have / q.target * 100);
+      const behind = q.target - q.have;
+      return { period:q.period, pct:String(Math.min(100, pct)),
+        ink: behind <= 0 ? '#10b981' : (behind <= 1 ? '#f59e0b' : '#c4b5fd'),
+        label: q.have + ' of ' + q.target + (behind > 0 ? ' · ' + behind + ' to hire' : ' · on plan') };
+    });
+
+    const costRows = [
+      { label:'Salaries (' + salaried.length + ' ' + (salaried.length === 1 ? 'employee' : 'employees') + ')', value:this.usd(monthlySalary) },
+      { label:'Contractors (' + contractors.length + ')', value:this.usd(monthlyContract) },
+      { label:'Payroll load & benefits', value:this.usd(payrollLoad) },
+      { label:'Total monthly people cost', value:this.usd(monthlyPeople + payrollLoad), total:true }
+    ].map(r => ({ label:r.label, value:r.value, weight: r.total ? '800' : '500',
+      rowStyle:'display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding-bottom:9px;'
+        + (r.total ? 'border-top:1px solid #ececf1;padding-top:11px' : 'border-bottom:1px solid #f6f5f9') }));
+
+    return {
+      company,
+      companyMeta: 'Delaware C-Corp · incorporated Mar 2026 · ' + active.length + ' active · ' + this.num(FD) + ' shares fully diluted',
+      alertIcon: I.alert,
+
+      stats: [
+        { label:'On the team', value:String(active.length), note:PEOPLE.length - active.length + ' offer out · ' + PEOPLE.filter(p => p.type === 'Contractor').length + ' contractor', tone:'plain' },
+        { label:'Open roles', value:String(liveRoles), note:ROLES.filter(r => r.status === 'Published').length + ' published · ' + ROLES.filter(r => r.status === 'Offer out').length + ' offer out', tone:'plain' },
+        { label:'Pool unallocated', value:this.num(unallocated), note:this.num(grantedShares) + ' granted · ' + this.num(committedShares) + ' offer out · ' + this.num(reservedShares) + ' reserved', tone:'plain' },
+        { label:'Coverage gaps', value:String(gaps), note:thin + ' thin · see Coverage', tone: gaps ? 'prog' : 'ok' }
+      ].map(s => {
+        const c = this.tone(s.tone === 'plain' ? 'neutral' : s.tone);
+        return { label:s.label, value:s.value, note:s.note,
+          ink: s.tone === 'plain' ? '#18181b' : c.ink,
+          cardStyle:'background:'+(s.tone === 'plain' ? '#fff' : c.bg)+';border:1px solid '+(s.tone === 'plain' ? '#ececf1' : c.edge)+';border-radius:14px;padding:16px 18px' };
+      }),
+
+      // Every badge derives from the data it counts — none are literals.
+      tabs: tabDefs.map(t => ({
+        label:t.label, icon:t.icon,
+        badge: t.k === 'roster' ? (paperGaps.length ? String(paperGaps.length) : null)
+             : t.k === 'advisors' ? (advisorsPending ? String(advisorsPending) : null)
+             : t.k === 'hiring' ? (liveRoles ? String(liveRoles) : null)
+             : (gaps ? String(gaps) : null),
+        badgeStyle:'font-size:10px;font-weight:800;color:#fff;background:#dc2626;border-radius:999px;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px',
+        go: () => this.setState({ tab:t.k }),
+        style:'display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:700;padding:11px 14px;border-radius:9px 9px 0 0;cursor:pointer;white-space:nowrap;'
+          + (S.tab === t.k ? 'color:#7c3aed;border-bottom:2px solid #7c3aed;background:#faf8ff' : 'color:#4a4553;border-bottom:2px solid transparent')
+      })),
+
+      isRoster: S.tab === 'roster', isAdvisors: S.tab === 'advisors',
+      isHiring: S.tab === 'hiring', isCoverage: S.tab === 'coverage',
+
+      hasPaperworkGap: paperGaps.length > 0,
+      paperworkLine: paperGaps.length + ' team ' + (paperGaps.length === 1 ? 'member has' : 'members have')
+        + ' missing paperwork — ' + paperGaps.map(p => p.name.split(' ')[0] + ' (' + (p.ip === 'Missing' ? 'IP assignment' : '83(b) election') + ')').join(', ')
+        + '. Both are diligence blockers.',
+
+      rosterFilters: filters.map(f => ({ label:f.label, go: () => this.setState({ filter:f.k }),
+        style:'font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;'
+          + (S.filter === f.k ? 'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(24,24,27,.07)' : 'color:#4a4553') })),
+
+      roster: shown.map(p => {
+        const v = vestOf(p);
+        const gap = p.ip === 'Missing' || p.el83b === 'Not filed';
+        return {
+          initials:p.initials, name:p.name, role:p.role, type:p.type, status:p.status,
+          meta:(p.status === 'Active' ? 'Started ' : 'Starts ') + this.fmtDate(p.start) + ' · ' + p.access + ' access · ' + p.note,
+          equity:eqPct(p), shares: p.shares ? this.num(p.shares) + ' ' + p.kind.toLowerCase() : 'No grant',
+          vestPct:String(v.pct), vestGhostPct:String(v.ghostPct), vestNote:v.note, vestInk:v.ink,
+          avBg: p.type === 'Founder' ? '#ede9fe' : '#f4f4f6', avInk: p.type === 'Founder' ? '#6d28d9' : '#615c6e',
+          typeStyle: typeChip(p.type),
+          flag: gap ? (p.ip === 'Missing' ? 'IP assignment missing' : '83(b) not filed') : null,
+          flagStyle:'font-size:10px;font-weight:800;letter-spacing:.05em;padding:3px 7px;border-radius:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca',
+          statusPill:this.pill(p.status), statusDot:this.dot(p.status),
+          rowStyle:this.rowStyle(gap ? 'missing' : p.status) + 'cursor:pointer;',
+          open: () => this.setState({ person:p.key })
+        };
+      }),
+      rosterFootnote: this.num(FOUNDER_SHARES) + ' founder shares + ' + this.num(POOL) + ' pool + '
+        + this.num(advisorShares) + ' advisory = ' + this.num(FD) + ' fully diluted · founders hold ' + pctOf(FOUNDER_SHARES),
+
+      poolLine: this.num(POOL) + ' shares authorised · ' + this.num(grantedShares) + ' granted, '
+        + this.num(committedShares) + ' committed to an open offer, ' + this.num(reservedShares) + ' reserved across '
+        + reservingRoles.length + ' open ' + (reservingRoles.length === 1 ? 'role' : 'roles') + ' · '
+        + this.num(unallocated) + ' unallocated — about ' + moreHires + ' more ' + (moreHires === 1 ? 'grant' : 'grants')
+        + ' at your average of ' + this.num(avgGrant) + ' shares.',
+      poolGrantedPct: String(Math.round(grantedShares / POOL * 100)),
+      poolCommittedPct: String(Math.round(committedShares / POOL * 100)),
+      poolReservedPct: String(Math.round(reservedShares / POOL * 100)),
+      poolLegend: [
+        { color:'#7c3aed', value:this.num(grantedShares), label:'granted' },
+        { color:'#a78bfa', value:this.num(committedShares), label:'committed (offer out)' },
+        { color:'#c4b5fd', value:this.num(reservedShares), label:'reserved for open roles' },
+        { color:'#eceaf2', value:this.num(unallocated), label:'unallocated' }
+      ],
+
+      advisors: ADVISORS.map(a => Object.assign({}, a, {
+        grant: pctOf(a.shares, 2),
+        vest: this.num(a.shares) + ' shares · ' + a.vest,
+        pill:this.pill(a.status), dot:this.dot(a.status), rowStyle:this.rowStyle(a.status) })),
+      advisorFootnote: 'Advisory grants total ' + this.num(advisorShares) + ' shares (' + pctOf(advisorShares, 2)
+        + ') — issued outside the option pool, inside the ' + this.num(FD) + '-share fully-diluted total.',
+
+      sessions: [
+        { title:'Priyanka Raghunathan · pricing model review', when:'Thu Aug 27, 2026 · 10:00 AM PT · 60 min', ready:'Brief ready' },
+        { title:'Axal VC partner office hours · fundraise narrative', when:'Tue Sep 1, 2026 · 2:00 PM PT · 30 min', ready:'Questions missing' }
+      ].map(s => Object.assign({}, s, {
+        pill:'font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;'
+          + (s.ready === 'Brief ready' ? 'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0'
+                                       : 'background:#fffbeb;color:#92400e;border:1px solid #fde68a') })),
+
+      hiringLine: liveRoles + ' live, ' + (ROLES.length - liveRoles) + ' draft · '
+        + ROLES.reduce((a,r) => a + r.pipeline[0][1], 0) + ' applicants total',
+      roles: ROLES.map(r => ({
+        title:r.title, status:r.status, meta:r.meta,
+        statusPill:this.pill(r.status), rowStyle:this.rowStyle(r.status),
+        pipeline: r.pipeline.map(([label,n]) => ({ label, n:String(n), style:stageChip(n) }))
+      })),
+      noRoles: ROLES.length === 0,
+
+      inboundTitle: 'Talent leads from your landing pages',
+      inboundLine: '3 people reached out through the careers and co-founder pages this month.',
+      inbound: [
+        { name:'Nadia Okonkwo', meta:'Backend engineer · via /careers · Aug 22', kind:'Talent' },
+        { name:'Tobias Lindqvist', meta:'Co-founder interest · via /cofounder · Aug 19', kind:'Co-founder' },
+        { name:'Aisha Farouk', meta:'Design contract · via /careers · Aug 14', kind:'Talent' }
+      ].map(i => Object.assign({}, i, {
+        pill:'font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;'
+          + (i.kind === 'Co-founder' ? 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'
+                                     : 'background:#f5f2ff;color:#6d28d9;border:1px solid #e6dcff') })),
+
+      cofounderLine: 'The founding team is settled at two — the commercial gap is being closed by a hire, not a third co-founder. Match is closed.',
+      cofounderDecision: 'Two co-founders · no third sought',
+      cofounderStatus: 'Documented',
+      cofounderPill:'font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0',
+
+      coverageLine: gaps + ' ' + (gaps === 1 ? 'function has' : 'functions have') + ' no owner and ' + thin
+        + ' ' + (thin === 1 ? 'is' : 'are') + ' thin. Gaps drive both the hiring plan and which advisors to recruit.',
+      coverage: COVER.map(c => ({
+        fn:c.fn, state:c.state, who:c.who, fix:c.fix, action:c.action || null,
+        pill:this.pill(c.state === 'Covered' ? 'covered' : (c.state === 'Thin' ? 'thin' : 'gap')),
+        dot:this.dot(c.state === 'Covered' ? 'covered' : (c.state === 'Thin' ? 'thin' : 'gap')),
+        rowStyle:this.rowStyle(c.state === 'Covered' ? 'covered' : (c.state === 'Thin' ? 'thin' : 'gap'))
+      })),
+
+      planLine: 'Plan is set in Use of Funds; actuals come from this roster.',
+      plan: planRows,
+      costRows,
+      costNote: 'At ' + this.usd(monthlyPeople + payrollLoad) + '/month, people are the majority of burn. '
+        + PEOPLE.filter(p => p.type === 'Founder').length + ' founders defer salary until first close — post-raise this line roughly triples.',
+
+      drawerOpen: !!S.person,
+      closeDrawer: () => this.setState({ person:null }),
+      dPerson: {
+        initials:dP.initials, name:dP.name, role:dP.role,
+        avBg: dP.type === 'Founder' ? '#ede9fe' : '#f4f4f6', avInk: dP.type === 'Founder' ? '#6d28d9' : '#615c6e',
+        facts: [
+          { k:'Type', v:dP.type },
+          { k:'Status', v:dP.status },
+          { k:'Start date', v:this.fmtDate(dP.start) },
+          { k:'Access level', v:dP.access },
+          { k:'Compensation', v: dP.salary ? this.usd(dP.salary) + '/yr' : 'Deferred' },
+          { k:'Note', v:dP.note }
+        ],
+        equity:eqPct(dP), shares: dP.shares ? this.num(dP.shares) + ' ' + dP.kind.toLowerCase() : 'No grant',
+        vestPct:String(dv.pct), vestGhostPct:String(dv.ghostPct), vestInk:dv.ink, vestDetail:dv.detail,
+        docs: [
+          { label:'Employment / founder agreement', status:dP.agreement,
+            meta: dP.agreement === 'Signed' ? 'Executed and stored in the data room' : 'Envelope sent — awaiting signature' },
+          { label:'IP assignment', status:dP.ip,
+            meta: dP.ip === 'Signed' ? 'All prior and future IP assigned to the company'
+                : (dP.ip === 'Missing' ? 'Contractor work product is not assigned — diligence blocker' : 'Included in the offer packet') },
+          { label:'83(b) election', status:dP.el83b === 'n/a' ? 'Not applicable' : dP.el83b,
+            meta: dP.el83b === 'Filed' ? 'Filed within the IRS 30-day window'
+                : (dP.el83b === 'Not filed' ? 'Window from grant date has closed — see Trust Center'
+                                            : 'Options, not restricted stock — no election needed') }
+        ].map(d => Object.assign({}, d, {
+          pill:this.pill(d.status), dot:this.dot(d.status),
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:14px;border:1px solid '
+            + (this.toneOf(d.status) === 'bad' ? '#fecaca' : '#f0eff4') + ';background:'
+            + (this.toneOf(d.status) === 'bad' ? '#fffbfb' : '#fbfbfc') + ';border-radius:11px;padding:13px 15px'
+        }))
+      },
+
+      inviteOpen: S.invite,
+      openInvite: () => this.setState({ invite:true }),
+      closeInvite: () => this.setState({ invite:false }),
+      inviteTypes: ['Employee','Contractor','Founder','Advisor'].map(t => ({
+        label:t, go: () => this.setState({ inviteType:t }),
+        style:'font-size:12px;font-weight:700;padding:7px 13px;border-radius:999px;cursor:pointer;'
+          + (S.inviteType === t ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed'
+                                : 'background:#fff;color:#3f3a49;border:1px solid #e2e1e8')
+      })),
+      inviteNote: S.inviteType === 'Employee'
+        ? 'Sends an offer letter, IP assignment and option grant paperwork. Grant is drawn from the option pool — ' + this.num(unallocated) + ' shares unallocated.'
+        : (S.inviteType === 'Contractor'
+            ? 'Sends a contractor agreement with a work-product assignment clause. No equity, no pool draw.'
+            : (S.inviteType === 'Founder'
+                ? 'Issues restricted stock, not options — triggers a Co-founder Agreement and an 83(b) election with a 30-day filing window.'
+                : 'Sends an advisory agreement (FAST or custom). Grant sits outside the option pool.'))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+{
+  "skill": "release-notes-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "merged": [
+          {
+            "title": "Add recall reminder emails",
+            "labels": [
+              "feature"
+            ]
+          },
+          {
+            "title": "Fix timezone on booking page",
+            "labels": [
+              "bug"
+            ]
+          }
+        ]
+      },
+      "vercel.deployments": [
+        {
+          "ref": "main",
+          "state": "ready",
+          "at": "2026-11-01"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "recall reminder",
+      "timezone"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "revolutionary"
+    ]
+  }
+}

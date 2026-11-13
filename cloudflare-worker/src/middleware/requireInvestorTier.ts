@@ -1,0 +1,300 @@
+/**
+ * Task #6 (W-1) — Investor paywall middleware.
+ *
+ * Tiers (rank order):
+ *   free          — read-only browse, hard caps on intros/dealrooms/exports
+ *   plus          — D1334: the research workspace (watchlists, AI-assisted
+ *                   research, notes, comparisons) at standard limits: 2
+ *                   dealrooms, 10 intros / quarter. No Professional gate opens.
+ *   professional  — pipeline browse, full deals/intros, calendar bookings,
+ *                   MI exports, up to 5 dealrooms, 25 intros / quarter
+ *   institutional — unlimited dealrooms, Carta sync write, co-invest,
+ *                   LP reporting, peer benchmarks, 100 intros / quarter,
+ *                   up to 4 seat colleagues
+ *
+ * D4729 (#4729): paid features follow each licence's own plan. Admin never hits
+ * the gate. A caller who HOLDS Investor is checked against the Investor plan only,
+ * whatever their primary licence is. Bypass when the licence is not held: a caller
+ * who does not hold Investor and whose primary is partner or advisor never hits it.
+ * Founders never see investor surfaces so they're not in the bypass list (they'll
+ * just 401 on /api/introductions etc).
+ *
+ * Mirrors the requireTier (founder) and requireMiPro (MI) shapes so the
+ * frontend can re-use the upsell modal pattern.
+ */
+import { holds, investorPlanTier } from '../services/licencePlans';
+import type { Context } from 'hono';
+import { planByKey } from '../services/planCatalogue';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
+
+import type { InvestorTier } from '../services/investorTiers';
+export type { InvestorTier } from '../services/investorTiers';
+export { paidInvestorTier } from '../services/investorTiers';
+
+/** D1334: Plus sits above free and below professional, so no Professional gate passes it. */
+const TIER_RANK: Record<InvestorTier, number> = {
+  free: 0,
+  plus: 1,
+  professional: 2,
+  institutional: 3,
+};
+
+const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
+
+const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
+  plus:
+    'This is an Investor Plus feature. Upgrade for the research workspace, watchlists, and AI-assisted research.',
+  professional:
+    'This is an Investor Professional feature. Upgrade for full deal flow, intros, and exports.',
+  institutional:
+    // #4376 (owner, 2026-11-04): Institutional is custom-priced; it is never bought, so the gate names sales, not an upgrade.
+    'This is an Investor Institutional feature: unlimited dealrooms, co-invest, and LP reporting. Institutional is priced by Axal VC for each firm: Contact Axal VC.',
+};
+
+/**
+ * D1050 (#2901): no price is typed here. The upsell names the plan by its
+ * catalogue key and name; the price is Stripe's, read from the D1 mirror on
+ * `GET /api/public/plans-and-packs`.
+ */
+export const PLAN_KEY: Record<Exclude<InvestorTier, 'free'>, string> = {
+  plus: 'investor:plus',
+  professional: 'investor:professional',
+  institutional: 'investor:institutional',
+};
+
+export const INVESTOR_QUOTAS: Record<InvestorTier, { intros_per_quarter: number; dealroom_max: number; seats: number }> = {
+  free:          { intros_per_quarter: 3,   dealroom_max: 1,        seats: 0 },
+  plus:          { intros_per_quarter: 10,  dealroom_max: 2,        seats: 0 },
+  professional:  { intros_per_quarter: 25,  dealroom_max: 5,        seats: 0 },
+  institutional: { intros_per_quarter: 100, dealroom_max: 1_000_000, seats: 4 },
+};
+
+export interface InvestorTierUserCols {
+  investor_tier?: string | null;
+  investor_subscription_status?: string | null;
+  investor_trial_ends_at?: string | null;
+  investor_subscription_renews_at?: string | null;
+  investor_stripe_customer_id?: string | null;
+  investor_stripe_subscription_id?: string | null;
+  investor_seat_count?: number | null;
+  investor_quota_intros_quarter?: string | null;
+  investor_quota_intros_used?: number | null;
+  investor_dealroom_max?: number | null;
+  investor_seat_primary_user_id?: number | null;
+}
+export type InvestorUser = User & InvestorTierUserCols;
+
+/**
+ * D1334: the next paid tier up from `tier`, the one an upsell names. Free
+ * goes to Plus, Plus to Professional, Professional to Institutional; null at
+ * the top.
+ */
+export function nextInvestorTier(tier: InvestorTier): Exclude<InvestorTier, 'free'> | null {
+  if (tier === 'free') return 'plus';
+  if (tier === 'plus') return 'professional';
+  if (tier === 'professional') return 'institutional';
+  return null;
+}
+
+/** True when `userTier` covers `required`. */
+export function investorTierCovers(userTier: string | null | undefined, required: InvestorTier): boolean {
+  const u = (userTier ?? 'free').toLowerCase() as InvestorTier;
+  const have = TIER_RANK[u] ?? 0;
+  return have >= TIER_RANK[required];
+}
+
+/**
+ * Returns the *effective* tier for a user, honoring trial windows (D4729: an expired
+ * `trialing` reads Free). Unpaid and cancelled downgrade to 'free'. D1052 (#2903):
+ * past_due — a renewal Stripe is still retrying — keeps the tier (#2451's owner
+ * question 4). The rule is `services/licencePlans.ts`'s.
+ */
+export function effectiveInvestorTier(user: InvestorUser | null | undefined): InvestorTier {
+  return investorPlanTier(user);
+}
+
+export function userMeetsInvestorTier(user: User | null | undefined, required: InvestorTier): boolean {
+  if (!user) return false;
+  if (String(user.role) === 'admin') return true;
+  if (required === 'free') return true;
+  // D4729: a caller who holds Investor is checked on the Investor plan only. No other held licence bypasses it.
+  if (holds(user, 'investor')) return investorTierCovers(effectiveInvestorTier(user as InvestorUser), required);
+  if (BYPASS_ROLES.has(String(user.role))) return true;
+  // Tier gate is investor-specific: only enforce when the caller holds Investor.
+  // Other roles (founder, etc.) are passed through so shared surfaces like
+  // /api/deals (founder writes own deals) keep working. Investor-only routes
+  // such as /api/introductions still gate with their own role check.
+  return true;
+}
+
+export function investorUpsell(required: Exclude<InvestorTier, 'free'>) {
+  return {
+    error: 'investor_tier_required',
+    required,
+    message: TIER_COPY[required],
+    plan: { tier: required, name: planByKey(PLAN_KEY[required])!.name, plan_key: PLAN_KEY[required] },
+    checkout_path: '/api/billing/investor/checkout',
+  };
+}
+
+/** Inline guard — call after requireAuth. Throws 402 Response. */
+export function ensureInvestorTier(user: User | null, required: Exclude<InvestorTier, 'free'>): void {
+  if (userMeetsInvestorTier(user, required)) return;
+  throw new Response(JSON.stringify(investorUpsell(required)), {
+    status: 402,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+/** Hono middleware factory — mount at the router level. */
+export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
+  return async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
+    const user = await requireAuth(c);
+    if (userMeetsInvestorTier(user, required)) return next();
+    return c.json(investorUpsell(required), 402);
+  };
+}
+
+/**
+ * D614/D1149/D1237 — Free investors may request/leave their one room, read its
+ * quota and read an authorized deal
+ * header/key strip. The detail handler returns a restricted projection; all
+ * other deal and diligence reads remain Professional.
+ * D1033 adds the my-events feed, and D1209 the whole-calendar feed: neither has
+ * a session for this gate to read, and each applies the plan rule itself.
+ */
+export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
+  // Signed report links validate their own short-lived, single-use token.
+  { method: 'GET', path: /^\/api\/dd\/reports\/download\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\/?$/ },
+  // D1149: the handler restricts Free investors to an authorized header/key strip.
+  { method: 'GET', path: /^\/api\/deals\/[1-9][0-9]*\/?$/ },
+  // D1237: Free's one room is a request, not access to the deal listing or contents.
+  { method: 'GET', path: /^\/api\/deals\/dealroom\/quota\/?$/ },
+  { method: 'POST', path: /^\/api\/deals\/[1-9][0-9]*\/dealroom\/join\/?$/ },
+  { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },
+  // D1033 (#2874): the my-events subscription feed. A calendar client fetches
+  // it with no session, so the session gate cannot run; the route applies the
+  // same Professional rule to the member its token names.
+  { method: 'GET', path: /^\/api\/calendar\/feed\/my-events\.ics$/ },
+  // D1209 (#3175): the whole-calendar feed, under the same rule.
+  { method: 'GET', path: /^\/api\/calendar\/feed\/calendar\.ics$/ },
+];
+
+/** `requireInvestorTier`, except for the requests `exempt` names. */
+export function requireInvestorTierExcept(
+  required: Exclude<InvestorTier, 'free'>,
+  exempt: ReadonlyArray<{ method: string; path: RegExp }> = INVESTOR_PRO_EXEMPT,
+) {
+  const gate = requireInvestorTier(required);
+  return async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
+    if (exempt.some((e) => e.method === c.req.method && e.path.test(c.req.path))) return next();
+    return gate(c, next);
+  };
+}
+
+const MIGRATED = new WeakMap<object, boolean>();
+/** Idempotent column bootstrap — mirrors ensureTierSchema. */
+export async function ensureInvestorPaywallSchema(env: Env): Promise<void> {
+  if (MIGRATED.get(bindingKey(env))) return;
+  const stmts: string[] = [
+    `ALTER TABLE users ADD COLUMN investor_tier TEXT NOT NULL DEFAULT 'free'`,
+    `ALTER TABLE users ADD COLUMN investor_subscription_status TEXT NOT NULL DEFAULT 'free'`,
+    `ALTER TABLE users ADD COLUMN investor_trial_ends_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN investor_subscription_renews_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT`,
+    `ALTER TABLE users ADD COLUMN investor_stripe_subscription_id TEXT`,
+    `ALTER TABLE users ADD COLUMN investor_seat_count INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN investor_quota_intros_quarter TEXT`,
+    `ALTER TABLE users ADD COLUMN investor_quota_intros_used INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN investor_dealroom_max INTEGER NOT NULL DEFAULT 5`,
+    `ALTER TABLE users ADD COLUMN investor_seat_primary_user_id INTEGER`,
+    `CREATE INDEX IF NOT EXISTS idx_users_investor_tier ON users(investor_tier)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_investor_trial ON users(investor_trial_ends_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_investor_seat_primary ON users(investor_seat_primary_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_investor_stripe_cust ON users(investor_stripe_customer_id)`,
+    `CREATE TABLE IF NOT EXISTS investor_seats (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       primary_user_id INTEGER NOT NULL,
+       seat_email TEXT NOT NULL,
+       seat_user_id INTEGER,
+       invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       accepted_at TIMESTAMP,
+       revoked_at TIMESTAMP,
+       invite_token TEXT,
+       UNIQUE(primary_user_id, seat_email)
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_investor_seats_primary ON investor_seats(primary_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_investor_seats_email ON investor_seats(seat_email)`,
+    `CREATE INDEX IF NOT EXISTS idx_investor_seats_token ON investor_seats(invite_token)`,
+    `CREATE TABLE IF NOT EXISTS investor_introductions (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       investor_user_id INTEGER NOT NULL,
+       founder_user_id INTEGER,
+       founder_id INTEGER,
+       project_id INTEGER,
+       message TEXT,
+       status TEXT NOT NULL DEFAULT 'pending',
+       quarter TEXT NOT NULL,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_intros_investor ON investor_introductions(investor_user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_intros_quarter ON investor_introductions(investor_user_id, quarter)`,
+    `CREATE TABLE IF NOT EXISTS investor_dealroom_members (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       investor_user_id INTEGER NOT NULL,
+       deal_id INTEGER NOT NULL,
+       joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       UNIQUE(investor_user_id, deal_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_dealroom_investor ON investor_dealroom_members(investor_user_id)`,
+  ];
+  // `users` is at D1's 100-column limit, so every ALTER here now raises "too
+  // many columns" — including the ones whose column already exists, because
+  // SQLite checks the limit before the duplicate-name test. This loop used to
+  // rethrow that and take the whole router down with it. See
+  // util/schemaBootstrap.ts.
+  await runSchemaBootstrap(env, stmts);
+  MIGRATED.set(bindingKey(env), true);
+}
+
+/** Returns the current quarter key, e.g. "2026Q2", in UTC. */
+export function currentQuarterKey(d: Date = new Date()): string {
+  const y = d.getUTCFullYear();
+  const q = Math.floor(d.getUTCMonth() / 3) + 1;
+  return `${y}Q${q}`;
+}
+
+/**
+ * Atomically reset the per-quarter intro counter when the stored quarter is
+ * stale, then return the post-reset row. Caller increments after success.
+ */
+export async function getIntroQuotaState(env: Env, userId: number): Promise<{
+  used: number; cap: number; quarter: string; tier: InvestorTier;
+}> {
+  await ensureInvestorPaywallSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT investor_tier, investor_subscription_status, investor_subscription_renews_at,
+            investor_quota_intros_quarter, investor_quota_intros_used
+     FROM users WHERE id = ?`
+  ).bind(userId).first<{
+    investor_tier: string | null;
+    investor_subscription_status: string | null;
+    investor_subscription_renews_at: string | null;
+    investor_quota_intros_quarter: string | null;
+    investor_quota_intros_used: number | null;
+  }>();
+  const tier = effectiveInvestorTier(row as InvestorUser);
+  const quarter = currentQuarterKey();
+  const cap = INVESTOR_QUOTAS[tier].intros_per_quarter;
+  let used = row?.investor_quota_intros_used ?? 0;
+  if ((row?.investor_quota_intros_quarter ?? '') !== quarter) {
+    await env.DB.prepare(
+      `UPDATE users SET investor_quota_intros_quarter = ?, investor_quota_intros_used = 0 WHERE id = ?`
+    ).bind(quarter, userId).run();
+    used = 0;
+  }
+  return { used, cap, quarter, tier };
+}
