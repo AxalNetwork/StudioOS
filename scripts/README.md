@@ -305,3 +305,6 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 
 | `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
 | `cloudflare-heartbeat-5671.mjs` | D5671: fixed-message read-only independent GitHub heartbeat check. |
+| `build-agent-compute-types.mjs` | D4557: generate ignored module-scoped host binding types. |
+| `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
+| `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |

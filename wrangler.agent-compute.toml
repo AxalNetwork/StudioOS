@@ -1,0 +1,57 @@
+# D4557: deployment is preview-only and separately gated. No production binding.
+name = "studioos-agent-compute-disabled"
+main = "agent-compute/worker.ts"
+compatibility_date = "2026-11-12"
+workers_dev = false
+preview_urls = false
+
+[vars]
+COMPUTE_ENABLED = "off"
+COMPUTE_SCHEDULING_POLICY = "default"
+
+[observability]
+enabled = true
+[observability.traces]
+enabled = true
+
+[env.preview]
+name = "studioos-agent-compute-preview"
+workers_dev = false
+preview_urls = false
+
+[env.preview.vars]
+COMPUTE_ENABLED = "off"
+COMPUTE_SCHEDULING_POLICY = "default"
+
+[[env.preview.services]]
+binding = "BROKER"
+service = "studioos-preview"
+
+[[env.preview.durable_objects.bindings]]
+name = "COMPUTE_PYTHON"
+class_name = "PythonComputeContainer"
+[[env.preview.durable_objects.bindings]]
+name = "COMPUTE_DOCUMENTS"
+class_name = "DocumentComputeContainer"
+
+[[env.preview.migrations]]
+tag = "v1-agent-compute"
+new_sqlite_classes = ["PythonComputeContainer", "DocumentComputeContainer"]
+
+# The owner's Q3=A is preserved. Creating either application requires the
+# separate D4554 scheduling-policy reaffirmation; dry-run creates nothing.
+[[env.preview.containers]]
+class_name = "PythonComputeContainer"
+scheduling_policy = "default"
+image = "./agent-compute/Dockerfile"
+image_build_context = "./agent-compute"
+instance_type = "basic"
+max_instances = 2
+
+[[env.preview.containers]]
+class_name = "DocumentComputeContainer"
+scheduling_policy = "default"
+image = "./agent-compute/Dockerfile"
+image_build_context = "./agent-compute"
+instance_type = "standard-1"
+max_instances = 2

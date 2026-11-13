@@ -275,6 +275,32 @@ function triggersOf(src: string): string[] {
   return out;
 }
 
+test('general compute deploys only the disabled preview through the reviewed owner gate', () => {
+  const preview = WORKFLOWS.find(workflow => workflow.file === 'agent-compute-preview.yml')!.src;
+  const image = WORKFLOWS.find(workflow => workflow.file === 'agent-compute-image.yml')!.src;
+  assert.doesNotMatch(image, /CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|packages:\s*write|docker login/);
+  for (const line of deployLines(image)) assert.match(line, /--dry-run --containers-rollout none/);
+
+  const config = read('wrangler.agent-compute.toml');
+  for (const name of ['vars', 'env.preview.vars']) {
+    const section = parseToml(config).sections.find(item => item.name === name);
+    assert.ok(section, name);
+    assert.equal(unq(section.kv.get('COMPUTE_ENABLED')), 'off', name);
+  }
+  assert.doesNotMatch(config, /\[env\.production(?:\.|\])/);
+
+  assert.match(preview, /^    if: github\.ref == 'refs\/heads\/main' && github\.actor == 'guillaumelauzier'$/m);
+  assert.match(preview, /^    environment: agent-compute-preview$/m);
+  assert.match(preview, /^    needs: gate$/m);
+  assert.match(preview, /--signer-workflow "\$IMAGE_SIGNER_WORKFLOW" --source-digest "\$GITHUB_SHA"/);
+  assert.match(preview, /COMPUTE_ENABLED = "off"/);
+  assert.match(preview, /prevent_self_review.*is True/);
+  for (const line of deployLines(preview)) {
+    assert.match(line, /--config wrangler\.agent-compute\.approved\.toml --env preview$/);
+    assert.doesNotMatch(line, /--env production|--config wrangler\.toml/);
+  }
+});
+
 test('exactly the listed workflows run wrangler deploy, and nothing deploys any other way', () => {
   const deploying = WORKFLOWS.filter((w) => deployLines(w.src).length > 0).map((w) => w.file);
   assert.deepEqual(deploying, DEPLOY_WORKFLOWS.map((w) => w.file).sort());
