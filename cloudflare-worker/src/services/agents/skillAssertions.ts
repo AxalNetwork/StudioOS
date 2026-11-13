@@ -44,12 +44,14 @@
  *   refusal        ask for a missing input, decline an unsupported conclusion,
  *                  say Not recorded, or (`none`) do not refuse
  *   claims         required and forbidden claims, each a subject and an
- *                  object in one statement, in that order, not negated
+ *                  object in one statement, in that order, not negated;
+ *                  version 4 (D4531 part 4) adds a claim's reason (`because`)
+ *                  and a claim that must stay conditional (`conditional`)
  *   output_schema  the output is one JSON value that meets a small, closed
  *                  subset of JSON Schema
  */
 
-export const JUDGE_VERSION = 3;
+export const JUDGE_VERSION = 4;
 /**
  * The optional assertion keys of a case's `expect`, in the order `judge()`
  * evaluates them. `skillCatalogue.ts` counts them as evaluated, and the HQ case
@@ -396,32 +398,77 @@ export function refusalMiss(a: RefusalAssertion, parts: readonly string[]): stri
 // statement affirms it, reported speech included; negating it is allowed. The
 // object before the subject ("The bottleneck is scheduling"), or the two in
 // different statements, does not state the claim.
+//
+// Judge version 4 (D4531 part 4) adds two optional fields to a claim; a claim
+// without them is judged exactly as under version 3.
+//   because: "burn"     the statement must also give the reason: a causal
+//                       marker (CAUSE_MARKS: "because", "since", "due to", …)
+//                       after the object and the reason after that marker
+//                       ("Runway: Not recorded, because monthly burn is not
+//                       recorded"), or the marker, then the reason, before the
+//                       subject ("Because burn is not recorded, runway is Not
+//                       recorded"); a negation inside that leading reason
+//                       clause does not negate the claim. A statement with
+//                       the subject and object but no such reason does not
+//                       state the claim, so a required claim then fails "did
+//                       not state"; the reason in another statement does not
+//                       count.
+//   conditional: true   required claims only: the claim must be affirmed in a
+//                       conditional statement (CONDITIONAL, the same list the
+//                       number and claim checks skip) and affirmed in no other
+//                       statement. A calculation on assumed inputs ("If a
+//                       3,000,000 USD round closed …, the SAFE would convert at
+//                       the cap") must stay conditional: stating it as fact
+//                       ("the SAFE will convert at the cap") fails, and so does
+//                       leaving it out or negating it.
 
 export const CLAIMS_MAX = 20;
-export type Claim = { subject: string; object: string };
+export const CAUSE_MARKS = ['because', 'since', 'due to', 'owing to', 'given that', 'as a result of', 'for lack of', 'for want of'] as const;
+export type Claim = { subject: string; object: string; because?: string; conditional?: true };
 export type ClaimsAssertion = { required: Claim[]; forbidden: Claim[] };
 const NEGATION = /(?:^|[^a-z'])(?:not|no|never|none|nor|neither|without|cannot|[a-z]+n't)(?=$|[^a-z'])/;
 
 export function checkClaims(raw: unknown): Checked<ClaimsAssertion> {
-  const msg = `Give claims as { required: [...], forbidden: [...] }, each claim { subject, object } in up to 80 characters each, at most ${CLAIMS_MAX} a list, at least one claim.`;
+  const msg = `Give claims as { required: [...], forbidden: [...] }, each claim { subject, object, because?, conditional? } (subject, object and because in up to 80 characters each, all different; conditional: true on a required claim only), at most ${CLAIMS_MAX} a list, at least one claim.`;
   const b = obj(raw);
   if (!b || !onlyKeys(b, ['required', 'forbidden'])) return wrong(msg);
-  const list = (v: unknown): Claim[] | null => {
+  const list = (v: unknown, mayBeConditional: boolean): Claim[] | null => {
     if (v == null) return [];
     if (!Array.isArray(v) || v.length > CLAIMS_MAX) return null;
     const out: Claim[] = [];
     for (const c of v) {
       const o = obj(c), subject = labelOf(o?.subject), object = labelOf(o?.object);
-      if (!o || !onlyKeys(o, ['subject', 'object']) || !subject || !object || norm(subject) === norm(object)) return null;
-      out.push({ subject, object });
+      if (!o || !onlyKeys(o, ['subject', 'object', 'because', 'conditional']) || !subject || !object || norm(subject) === norm(object)) return null;
+      const because = o.because == null ? null : labelOf(o.because);
+      if (o.because != null && (!because || norm(because) === norm(subject) || norm(because) === norm(object))) return null;
+      if (o.conditional != null && (typeof o.conditional !== 'boolean' || (o.conditional && !mayBeConditional))) return null;
+      out.push({ subject, object, ...(because ? { because } : {}), ...(o.conditional ? { conditional: true as const } : {}) });
     }
     return out;
   };
-  const required = list(b.required), forbidden = list(b.forbidden);
+  const required = list(b.required, true), forbidden = list(b.forbidden, false);
   if (!required || !forbidden || !(required.length + forbidden.length)) return wrong(msg);
-  const key = (c: Claim) => `${norm(c.subject)}|${norm(c.object)}`;
+  const key = (c: Claim) => `${norm(c.subject)}|${norm(c.object)}|${norm(c.because ?? '')}`;
   if (required.some((r) => forbidden.some((f) => key(f) === key(r)))) return wrong('A claim cannot be both required and forbidden.');
   return fine({ required, forbidden });
+}
+
+/**
+ * Where `p` gives `reason` for what it states: a cause marker then the reason
+ * after `after` ('after'), or wholly before `before` ('before'); null when it
+ * does not. 'after' wins when both hold.
+ */
+export function reasonIn(reason: string, p: string, after: number, before: number): 'after' | 'before' | null {
+  let found: 'before' | null = null;
+  for (const m of CAUSE_MARKS) {
+    for (let at = wordAt(m, p, 0); at; at = wordAt(m, p, at.start + 1)) {
+      const r = wordAt(reason, p, at.end);
+      if (!r) continue;
+      if (at.start >= after) return 'after';
+      if (r.end <= before) found = 'before';
+    }
+  }
+  return found;
 }
 
 /** How one statement stands on the claim: affirmed, negated, or null when it does not state it. */
@@ -429,14 +476,25 @@ export function claimIn(c: Claim, p: string): 'affirmed' | 'negated' | null {
   const s = wordAt(c.subject, p);
   const o = s ? wordAt(c.object, p, s.end) : null;
   if (!s || !o) return null;
-  return NEGATION.test(p.slice(0, o.start)) ? 'negated' : 'affirmed';
+  const why = c.because ? reasonIn(c.because, p, o.end, s.start) : null;
+  if (c.because && !why) return null;
+  // A reason clause before the subject ("Because burn is not recorded, …") is the reason's own; its negation is not the claim's.
+  return NEGATION.test(p.slice(why === 'before' ? s.start : 0, o.start)) ? 'negated' : 'affirmed';
 }
 
 /** Why the output misses a required claim or states a forbidden one, or null. */
 export function claimsMiss(a: ClaimsAssertion, parts: readonly string[]): string | null {
-  const ps = parts.map(plain).filter((p) => !CONDITIONAL.test(p));
-  const name = (c: Claim) => `"${c.subject} … ${c.object}"`;
+  const all = parts.map(plain);
+  const ps = all.filter((p) => !CONDITIONAL.test(p));
+  const name = (c: Claim) => `"${c.subject} … ${c.object}"${c.because ? ` because "${c.because}"` : ''}`;
   for (const c of a.required ?? []) {
+    if (c.conditional) {
+      if (ps.some((p) => claimIn(c, p) === 'affirmed')) return `It stated the claim ${name(c)} as fact; the case requires it to stay conditional.`;
+      const hyp = all.filter((p) => CONDITIONAL.test(p)).map((p) => claimIn(c, p));
+      if (hyp.includes('negated')) return `It contradicted the claim ${name(c)}.`;
+      if (!hyp.includes('affirmed')) return `It did not state the claim ${name(c)} as conditional.`;
+      continue;
+    }
     const seen = ps.map((p) => claimIn(c, p));
     if (seen.includes('negated')) return `It contradicted the claim ${name(c)}.`;
     if (!seen.includes('affirmed')) return `It did not state the claim ${name(c)}.`;

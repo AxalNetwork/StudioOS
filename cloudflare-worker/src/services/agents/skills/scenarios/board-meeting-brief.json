@@ -222,9 +222,9 @@
     },
     {
       "case_id": "board-meeting-brief-missing-burn",
-      "revision": 1,
+      "revision": 2,
       "name": "Board meeting brief: cash recorded, burn missing",
-      "covers": "missing required evidence; the demonstrated missing-field association regression (an unrelated Not recorded must not excuse a runway figure)",
+      "covers": "missing required evidence; the demonstrated missing-field association regression (an unrelated Not recorded must not excuse a runway figure); the runway statement gives missing burn as the reason runway is not recorded",
       "input": {
         "records": {
           "project.summary": {
@@ -301,6 +301,15 @@
             "Filings due"
           ],
           "ordered": true
+        },
+        "claims": {
+          "required": [
+            {
+              "subject": "runway",
+              "object": "not recorded",
+              "because": "burn"
+            }
+          ]
         }
       },
       "outputs": {
@@ -368,15 +377,36 @@
                 "600k USD"
               ]
             ]
+          },
+          {
+            "targets": "\"runway … not recorded\" because \"burn\"",
+            "edit": [
+              [
+                "- Runway: Not recorded, because monthly burn is not recorded.",
+                "- Runway: Not recorded."
+              ]
+            ]
+          },
+          {
+            "targets": "\"runway … not recorded\" because \"burn\"",
+            "edit": [
+              [
+                "- Runway: Not recorded, because monthly burn is not recorded.",
+                "- Runway: Not recorded, because churn is not recorded."
+              ]
+            ]
+          },
+          {
+            "targets": "\"runway … not recorded\" because \"burn\"",
+            "edit": [
+              [
+                "- Runway: Not recorded, because monthly burn is not recorded.",
+                "- Runway: Not recorded. Monthly burn is not recorded."
+              ]
+            ]
           }
         ]
-      },
-      "staged": [
-        {
-          "assertion": "the runway statement names the missing input (burn) as the reason",
-          "reason": "No assertion yet relates two fields in one statement (#4531)."
-        }
-      ]
+      }
     },
     {
       "case_id": "board-meeting-brief-stale-period",
