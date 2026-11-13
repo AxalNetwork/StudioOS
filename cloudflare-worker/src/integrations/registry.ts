@@ -652,7 +652,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   facebook: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [],
-    permissions: ['List the Pages you manage.', 'Read Page engagement and insights.'] },
+    permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },

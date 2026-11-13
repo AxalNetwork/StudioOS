@@ -209,8 +209,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     never_does: ['StudioOS does not publish or comment on Facebook.'],
     service: { name: 'Facebook', href: 'https://www.facebook.com' },
     sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },
-    endpoints: { sign_in: 'https://www.facebook.com/v26.0/dialog/oauth', api: 'https://graph.facebook.com' },
-    added: '2026-11', links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/docs/pages-api/' }, verified_on: null,
+    endpoints: { sign_in: 'https://www.facebook.com/v26.0/dialog/oauth', api: 'https://graph.facebook.com/v26.0' },
+    added: '2026-11', links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business' }, verified_on: null,
   },
   tiktok: {
     tagline: 'Connect your TikTok account with read-only access.',

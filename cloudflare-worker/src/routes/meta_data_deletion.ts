@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import type { Env } from '../types';
 import { constantTimeEqual } from '../rpc/secret';
 import { metaApp } from '../services/meta/app';
+import '../integrations/providers/facebook';
 
 const routes = new Hono<{ Bindings: Env }>();
 const encoder = new TextEncoder();
@@ -60,3 +61,4 @@ routes.get('/:code', async c => {
 });
 
 export default routes;
+export const mount = { path: '/api/meta/data-deletion', router: routes };

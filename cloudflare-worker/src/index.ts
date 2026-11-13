@@ -171,8 +171,6 @@ import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
-import './integrations/providers/facebook';
-import metaDataDeletion from './routes/meta_data_deletion';
 import { REGISTRY, getProviderImpl, readinessOf } from './integrations/registry';
 import eadwynRoutes from './routes/eadwyn';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
@@ -1588,7 +1586,6 @@ app.route('/api/connectors/webhook/vercel', vercelWebhook);
 // D1385 (#3731): "Your PostHog projects" (`/:uid/posthog-projects`), ahead of the generic routes.
 app.route('/api/connectors', posthogRoutes);
 app.route('/api/connectors', integrations);
-app.route('/api/meta/data-deletion', metaDataDeletion);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);

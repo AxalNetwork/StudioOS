@@ -10,6 +10,7 @@ import { activeCompanyFor } from '../../middleware/activeCompany';
 import { companyEnabled } from '../companyScope';
 
 const GRAPH = 'https://graph.facebook.com/v26.0';
+const AUTHORIZE = 'https://www.facebook.com/v26.0/dialog/oauth';
 const isId = (value: unknown): value is string => typeof value === 'string' && /^\d{1,32}$/.test(value);
 const unavailable = () => new ConnectRefusal(503, 'facebook_unavailable', 'Facebook is not available yet.');
 export const redirectUri = (env: Env) => oauthCallbackUrl(env, 'facebook');
@@ -95,7 +96,7 @@ registerProvider({
       client_id: metaApp(c.env).appId, config_id: c.env.FACEBOOK_LOGIN_CONFIG_ID!.trim(),
       redirect_uri: redirectUri(c.env), state, response_type: 'code', override_default_response_type: 'true',
     });
-    return `https://www.facebook.com/v26.0/dialog/oauth?${query}`;
+    return `${AUTHORIZE}?${query}`;
   },
   async connect(c, _user, input) {
     if ((await selectJwt(c))?.payload.impersonated_by) throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect Facebook.');
