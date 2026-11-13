@@ -128,6 +128,8 @@ test('Copy with citations writes the answer and its sources; Evidence scope star
     assert.match(written[0], /^C5 in Germany \[1\]\.\n\nSources\n\[1\] BSI C5 \(page 4, passage 1\)/);
     assert.match(textOf(byTid(m, 'button-ask-copy-a')), /Copied/);
     assert.equal(byTid(m, 'button-ask-copy-b'), null, 'an unanswered question has nothing to copy');
+    assert.ok(byTid(m, 'button-ask-save-project-a'));
+    assert.equal(byTid(m, 'button-ask-save-project-b'), null);
     const scope = byTid(m, 'ask-evidence-scope');
     assert.equal(scope?.tagName, 'DETAILS');
     assert.equal(m.props(scope).open, undefined, 'collapsed by default');
