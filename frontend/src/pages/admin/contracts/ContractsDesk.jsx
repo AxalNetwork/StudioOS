@@ -27,7 +27,10 @@ import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
-const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention', 'open'];
+// D5051: the D5050 licence-agreement filters are kept in the address too, so a licence's "Open in Contracts"
+// link lands on its agreements, and a filter chosen in the list survives the URL round trip.
+const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention', 'open',
+  'agreement_type', 'agreement_status', 'licence', 'program', 'package'];
 /**
  * `section="governance"` (D4563, #4563) draws Corporate Governance, the tab at its own
  * address `/admin/contracts/governance` (tabs are paths), after Templates. HQ only.
@@ -54,7 +57,8 @@ export default function ContractsDesk({ section = null }) {
   const [evidencing, setEvidencing] = useState(null);
   const [revision, setRevision] = useState(0);
   const stats = useRead(() => contractsApi.stats(), [revision]);
-  const filters = Object.fromEntries(filterKeys.filter(key => params.has(key)).map(key => [key, params.get(key)]));
+  // D5050 part 2 (CT-17): the territory and signed-date filters persist too (a separate line from D5051's list).
+  const filters = Object.fromEntries([...filterKeys, 'territory', 'signed_from', 'signed_to'].filter(key => params.has(key)).map(key => [key, params.get(key)]));
   function navigate(nextTab, nextFilters = {}) {
     const next = new URLSearchParams();
     if (nextTab !== 'agreements') next.set('tab', nextTab);

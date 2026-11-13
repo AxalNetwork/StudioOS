@@ -180,6 +180,40 @@ test('2. filters isolate package and program agreements', async () => {
   db.close();
 });
 
+test('2b. (part 2) several agreement types at once isolate the package and program agreements together; still admin only', async () => {
+  const { db, env1, env2, pkgUid } = await fixture();
+  // An envelope's row is named by its envelope; an unsent version by its own uid.
+  const uids = async (q: string) => (await list(db, q)).map((r) => (r.source === 'esign' ? r.uid : r.agreement?.agreement_uid ?? r.uid)).sort();
+  // Mutation checked: match only the first listed type → the schedules drop out of this list.
+  assert.deepEqual(await uids('&agreement_type=package,program_schedule_addendum'), [env1, env2, pkgUid].sort());
+  assert.deepEqual(await uids('&agreement_type=package,package'), [pkgUid], 'a repeated type is one type');
+  assert.deepEqual(await uids('&agreement_type=territory_licence,program_licence'), ['env-master']);
+  // Mutation checked: validate only the first entry → the second request answers 200.
+  for (const bad of ['agreement_type=package,lease', 'agreement_type=package,', 'agreement_type=,package']) {
+    const r = await call(db, 'GET', `/api/admin/contracts?${bad}`);
+    assert.deepEqual([r.status, r.body?.error, r.body?.field], [400, 'invalid_contract_query', 'agreement_type'], bad);
+  }
+  // The filter changes nothing about who may read: a member who is not an admin is refused, with the list or without.
+  // The production app maps requireAdmin's refusal to 403 in index.ts's onError; this app does the same.
+  const gated = new Hono<any>();
+  gated.route('/api/admin/contracts', contractsRoute);
+  gated.onError((err, c) => c.json({ error: err.message }, err.message === 'Admin required' ? 403 : 500));
+  db.prepare("INSERT INTO user_sessions (user_id, jti, factor, assurance_level, created_at) VALUES (4, 'member-4', 'totp', 'totp', datetime('now'))").run();
+  const token = await new SignJWT({ user_id: 4, role: 'investor', jti: 'member-4' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  for (const q of ['', '?agreement_type=package,program_licence']) {
+    const saved = [console.warn, console.error, console.log]; console.warn = () => {}; console.error = () => {}; console.log = () => {};
+    try {
+      const res = await withThrownResponses(() => gated.request(`/api/admin/contracts${q}`, { headers: { Authorization: `Bearer ${token}` } },
+        { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+      const body = await res.json() as any;
+      // Mutation checked: drop requireAdmin from GET / → 200 with items.
+      assert.deepEqual([res.status, body.error, body.items], [403, 'Admin required', undefined], `member refused ${q}`);
+    } finally { [console.warn, console.error, console.log] = saved; }
+  }
+  db.close();
+});
+
 test('3. the licence, territory, program and package context is on the row, with deep links', async () => {
   const { db, env2, pkgUid } = await fixture();
   const items = await list(db);
