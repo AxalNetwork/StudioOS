@@ -116,4 +116,5 @@ and citations by number keep working.
 | `D5680.md` | Restricted operational security triage without public disclosure. |
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
 | `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
+| `D5720.md` | Static notification test Worker, data bindings and scanner-clean policy locals. |
 | `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |
