@@ -52,8 +52,11 @@ export const WEBHOOK_FAILURE_STREAK = 3;
 export const WEBHOOK_FAILURE_CRITICAL = 10;
 /** How many recent deliveries are read to measure a streak. */
 export const WEBHOOK_STREAK_READ = 25;
-/** No delivery for this long, while Stripe is configured, is noted as silence. A quiet store can be legitimate. */
-export const WEBHOOK_SILENCE_HOURS = 72;
+/**
+ * No delivery for this long, while Stripe is configured, is noted as silence. A quiet store can be legitimate.
+ * 24 h, the same threshold the Platform overview reads as Stale (owner, #4860 Q4 = B, 2026-11-12; was 72 h).
+ */
+export const WEBHOOK_SILENCE_HOURS = 24;
 /** Dead letters waiting: medium from one, high from this many. */
 export const DLQ_HIGH = 100;
 /** Every metered API request writes a row, so an hour with none while the read answers is stale telemetry. */
