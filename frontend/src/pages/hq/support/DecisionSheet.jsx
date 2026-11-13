@@ -30,7 +30,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Sheet, Unrecorded } from '../../../ui';
 import { SupportBadge } from './SupportWorkspaces.jsx';
-import { BAND_WORD, clockOf, deadlineText, hoursText } from './supportWorkspaceModel.js';
+import { BAND_WORD, clockOf, deadlineText, deliveryState, hoursText } from './supportWorkspaceModel.js';
 import { escalationKindLabel } from '../../../lib/escalationKinds';
 
 /** The two outcomes HQ records here, as the radio group names them. */
@@ -73,7 +73,7 @@ function Fact({ term, children }) {
 function Facts({ item, branchLabel }) {
   return (
     <dl className="grid gap-2.5" data-testid="hq-support-sheet-facts">
-      <Fact term="Subsidiary">{branchLabel || item.branch_code}</Fact>
+      <Fact term={item.branch_code === 'hq' ? 'Workspace' : 'Subsidiary'}>{item.branch_code === 'hq' ? 'HQ' : branchLabel || item.branch_code}</Fact>
       <Fact term="Raised by">{item.raised_by_name || <Unrecorded reason="The branch did not record who raised it.">Not recorded</Unrecorded>}</Fact>
       {item.subject && <Fact term="Subject">{item.subject}</Fact>}
       <Fact term="About">
@@ -97,30 +97,33 @@ export function SheetResult({ record, branchLabel, onResend }) {
   const where = branchLabel || code;
   const at = clockOf(record.answered_at);
   const p = record.pushed;
+  const state = deliveryState(record);
   const sending = record.resend?.state === 'sending';
   let delivery;
   if (sending) {
     delivery = <SupportBadge tone="pending" data-testid="hq-support-sheet-delivery">Sending to {where}…</SupportBadge>;
-  } else if (!p || typeof p !== 'object' || typeof p.ok !== 'boolean') {
-    delivery = <SupportBadge tone="not_counted" data-testid="hq-support-sheet-delivery">Whether it reached {where} was not reported</SupportBadge>;
-  } else if (p.ok) {
+  } else if (state === 'hq') {
+    delivery = <SupportBadge tone="not_counted" data-testid="hq-support-sheet-delivery">HQ request · branch delivery does not apply</SupportBadge>;
+  } else if (state === 'unknown') {
+    delivery = <SupportBadge tone="not_counted" data-testid="hq-support-sheet-delivery">Whether it reached {where} was not reported{p?.ok == null && p?.reason ? ` · ${p.reason}` : ''}</SupportBadge>;
+  } else if (state === 'delivered') {
     const again = record.resend?.state === 'delivered' ? clockOf(record.resend.at) : null;
     delivery = <SupportBadge tone="delivered" data-testid="hq-support-sheet-delivery">{where} received it{again ? ` · sent again ${again} UTC` : ''}</SupportBadge>;
   } else {
     delivery = <SupportBadge tone="failed" data-testid="hq-support-sheet-delivery">Not delivered to {where}{p.reason ? ` · ${p.reason}` : ''}</SupportBadge>;
   }
-  const canResend = Boolean(onResend) && p && p.ok === false;
+  const canResend = Boolean(onResend) && (state === 'failed' || state === 'unknown');
   const failed = record.resend?.state === 'failed' || record.resend?.state === 'unknown';
   return (
-    <div className="grid gap-3" role="status" data-testid="hq-support-sheet-result" data-delivered={p?.ok === true ? 'yes' : (p?.ok === false ? 'no' : 'unreported')}>
-      <p className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Recorded at HQ and delivered to a subsidiary are two separate facts.</p>
+    <div className="grid gap-3" role="status" data-testid="hq-support-sheet-result" data-delivered={state === 'delivered' ? 'yes' : (state === 'failed' ? 'no' : 'unreported')}>
+      {state !== 'hq' && <p className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Recorded at HQ and delivered to a subsidiary are two separate facts.</p>}
       <div>
         <SupportBadge tone="ok" data-testid="hq-support-sheet-recorded">
           {record.status === 'declined' ? 'Declined' : 'Answered'} · Recorded at HQ{at ? ` · ${at} UTC` : ''}
         </SupportBadge>
       </div>
       <div>{delivery}</div>
-      {p && p.ok === false && !sending && (
+      {canResend && !sending && (
         <p className={META}>Nothing sends it again on its own. Send again re-sends the decision HQ holds, not a new one.</p>
       )}
       {failed && (
@@ -128,7 +131,7 @@ export function SheetResult({ record, branchLabel, onResend }) {
           {record.resend.state === 'unknown' ? 'Unknown: ' : 'Failed: '}{record.resend.text}
         </p>
       )}
-      {(canResend || failed) && (
+      {canResend && (
         <div>
           <button
             type="button"
@@ -236,7 +239,7 @@ export function DecisionSheetView({
           </div>
           {copy && <p className={`mt-3 ${META}`} data-testid="hq-support-sheet-copy">{copy}</p>}
           <label htmlFor={fieldId} className="mt-3 block text-[13px] font-semibold text-axal-ink dark:text-gray-100">
-            {FIELD[outcome]} <span className="font-normal text-axal-muted dark:text-gray-400">· required · stored at HQ and sent to {where}</span>
+            {FIELD[outcome]} <span className="font-normal text-axal-muted dark:text-gray-400">· required · stored at HQ{item.branch_code !== 'hq' && ` and sent to ${where}`}</span>
           </label>
           <textarea
             id={fieldId}
@@ -249,7 +252,7 @@ export function DecisionSheetView({
             className={`mt-1 w-full rounded-md border bg-white px-3 py-2 text-[14px] text-axal-ink dark:bg-gray-900 dark:text-gray-100 ${invalid ? 'border-red-600 dark:border-red-400' : 'border-axal-hairline dark:border-gray-700'}`}
             data-testid="hq-support-sheet-text"
           />
-          <p id={hintId} className={META}>Up to 4,000 characters. The branch reads these words as HQ’s decision.</p>
+          <p id={hintId} className={META}>Up to 4,000 characters. {item.branch_code === 'hq' ? 'The requester can read the decision at HQ.' : 'The branch reads these words as HQ’s decision.'}</p>
           {invalid && (
             <p id={errId} role="alert" className="mt-1 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="hq-support-sheet-invalid">✕ {invalid}</p>
           )}
