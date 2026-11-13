@@ -1,6 +1,15 @@
 // D5663: validate complete, attempt-bound future-clock artifacts before any recovery decision.
 import { createHash } from 'node:crypto';
 
+// These Worker integration suites already require explicit local Wrangler opt-in.
+// Match their bare TAP skip markers exactly. A runtime skip with a reason, a
+// duplicate marker, or any other skipped assertion is incomplete evidence.
+const OPTIONAL_WRANGLER_TESTS = new Set([
+  'runtime drift — every derived /api path is mounted (no 404)',
+  'Stripe webhook fulfilment invariants (MI Pro)',
+  'Stripe webhook fulfilment invariants (founder tier + investor)',
+]);
+
 export function inspectTap(tap) {
   if (typeof tap !== 'string' || !tap.trim()) return { state: 'unknown', code: 'tap_missing' };
   const lines = tap.split(/\r?\n/);
@@ -17,7 +26,12 @@ export function inspectTap(tap) {
       || tests < planned || passed + failed + cancelled + skipped + todo !== tests
       || failedRoots > failed + cancelled || failed > 0 && !failedRoots
       || !lines.some(s => /^# duration_ms [\d.]+$/.test(s)) || lines.some(s => /^\s*Bail out!/.test(s))) return { state: 'unknown', code: 'tap_incomplete' };
-  if (cancelled || skipped || todo) return { state: 'unknown', code: 'tests_not_executed', tests, failed };
+  const optionalSkips = lines.flatMap(line => {
+    const match = /^ok \d+ - (.+) # SKIP$/.exec(line);
+    return match && OPTIONAL_WRANGLER_TESTS.has(match[1]) ? [match[1]] : [];
+  });
+  const onlyOptionalSkips = skipped === optionalSkips.length && skipped === new Set(optionalSkips).size;
+  if (cancelled || todo || !onlyOptionalSkips || passed + failed === 0) return { state: 'unknown', code: 'tests_not_executed', tests, failed };
   return { state: failed ? 'failure' : 'green', code: failed ? 'assertion_failure' : 'complete_green', tests, failed };
 }
 
