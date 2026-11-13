@@ -152,7 +152,7 @@ export async function savedNotes(env: Env, user: User, ids: readonly number[]) {
   const items: Array<Pick<NotePayload, 'uid' | 'text' | 'deal_ids' | 'captured_at'>> = [];
   if (!rows.length) return { items, unreadable: 0 };
   const readable = await readableWorkspaceDealIds(env, user, ids);
-  if (ids.some((id) => !readable.has(id))) return { items, unreadable: 0 };
+  const key = scopeKey(ids);
   let unreadable = 0;
   for (const row of rows) {
     try {
@@ -160,6 +160,8 @@ export async function savedNotes(env: Env, user: User, ids: readonly number[]) {
       if (!same(kept.signature, await sign(env, kept.payload))) throw new Error('signature');
       const p = JSON.parse(kept.payload) as NotePayload;
       if (p.user !== user.id) throw new Error('owner');
+      if (!Array.isArray(p.deal_ids) || scopeKey(p.deal_ids) !== key) throw new Error('scope');
+      if (p.deal_ids.some((id) => !readable.has(id))) continue;
       items.push({ uid: p.uid, text: p.text, deal_ids: p.deal_ids, captured_at: p.captured_at });
     } catch { unreadable += 1; }
   }
