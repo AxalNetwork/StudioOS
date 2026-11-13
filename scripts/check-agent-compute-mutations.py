@@ -6,6 +6,15 @@ import subprocess
 import tempfile
 
 TS = [
+ ('.github/workflows/agent-compute-image.yml', 'contents: read', 'contents: read\n  packages: write', 'general compute deploys'),
+ ('.github/workflows/agent-compute-image.yml', '--dry-run --containers-rollout none', '--containers-rollout none', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', "github.ref == 'refs/heads/main'", 'true', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', 'environment: agent-compute-preview', 'environment: unprotected-compute-preview', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', 'needs: gate', 'needs: []', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', '--source-digest "$GITHUB_SHA"', '', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', '--signer-workflow "$IMAGE_SIGNER_WORKFLOW"', '', 'general compute deploys'),
+ ('.github/workflows/agent-compute-preview.yml', "get('prevent_self_review') is True", "get('prevent_self_review') is False", 'general compute deploys'),
+ ('wrangler.agent-compute.toml', 'COMPUTE_ENABLED = "off"', 'COMPUTE_ENABLED = "on"', 'general compute deploys'),
  ('cloudflare-worker/sql/migrations/202611122121_4557_compute_host.sql', 'request_uid TEXT REFERENCES agent_compute_requests(uid) ON DELETE SET NULL', 'request_uid TEXT REFERENCES agent_compute_requests(uid) ON DELETE CASCADE', 'request erasure preserves'),
  ('cloudflare-worker/src/routes/agent_compute.ts', 'AND o.owner_user_id = ?', 'AND ? IS NOT NULL', 'artifact delivery'),
  ('cloudflare-worker/src/routes/agent_compute.ts', "(scope.kind === 'company' ? scope.id : scope.company_id) !== spec.company_id", 'false', 'artifact delivery'),
@@ -73,23 +82,25 @@ def main():
     root = Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix='compute-mutations-4557-') as directory:
         copy = Path(directory); copy.chmod(0o755)
-        for name in ['cloudflare-worker/src', 'cloudflare-worker/test', 'cloudflare-worker/sql', 'agent-compute']:
+        for name in ['cloudflare-worker/src', 'cloudflare-worker/test', 'cloudflare-worker/sql', 'agent-compute', '.github/workflows']:
             shutil.copytree(root / name, copy / name, ignore=shutil.ignore_patterns('node_modules', '__pycache__'))
-        for name in ['scripts', 'frontend', 'meeting-bot', 'cloudflare-worker/node_modules', 'cloudflare-worker/ai-workers']:
+        for name in ['scripts', 'frontend', 'meeting-bot', 'cloudflare-worker/node_modules', 'cloudflare-worker/ai-workers', 'infra']:
             (copy / name).symlink_to((root / name).resolve(), target_is_directory=True)
+        for name in ['wrangler.toml', 'wrangler.agent-compute.toml', 'package.json', 'cloudflare-worker/package.json']:
+            shutil.copy2(root / name, copy / name)
         # Schema fixtures need an isolated cache: a killed mutant must not leave
         # a lock in another worktree's shared dependency cache.
         dependencies = copy / 'node_modules'; dependencies.mkdir()
         for dependency in (root / 'node_modules').iterdir():
             if dependency.name != '.cache':
                 (dependencies / dependency.name).symlink_to(dependency.resolve(), target_is_directory=dependency.is_dir())
-        tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts')) + ['cloudflare-worker/test/authz_sweep_d4570.test.ts']
+        tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts')) + ['cloudflare-worker/test/authz_sweep_d4570.test.ts', 'cloudflare-worker/test/topology_d209.test.ts']
         command = [args.node, '--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--test', '--test-concurrency=2']
         def run_ts(pattern=None):
             result = subprocess.run(command + (['--test-name-pattern', pattern] if pattern else []) + tests, cwd=copy, capture_output=True, text=True, timeout=180)
             return result.returncode, result.stdout + result.stderr
         code, log = run_ts()
-        if code: raise RuntimeError('Unmutated Worker controls failed:\n' + log[:5000])
+        if code: raise RuntimeError('Unmutated Worker controls failed:\n' + log[:2000] + '\n...\n' + log[-12000:])
         for path, old, new, pattern in TS:
             if args.match not in pattern: continue
             source = copy / path; original = source.read_text()
