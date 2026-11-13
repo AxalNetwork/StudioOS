@@ -288,11 +288,12 @@ export function valueAddSummaryOf(support) {
 /* -------------------------------------------------------- needs attention */
 
 const RUNWAY_KEYS = ['runway_months', 'runway'];
-const STALE_MARK_DAYS = 183; // two quarters
-const RUNWAY_FLOOR = 6;
+/** A mark older than this many days is stale: two quarters. */
+export const STALE_MARK_DAYS = 183;
+export const RUNWAY_FLOOR = 6;
 
 /** The founder's latest reported runway for a company, from `/api/portfolio-updates/latest`. */
-function runwayFor(position, updates) {
+export function runwayFor(position, updates) {
   if (updates.state !== 'ok') return null;
   const u = updates.value.items.find((x) => Number(x.project_id) === Number(position.project_id));
   if (!u || !u.kpis) return null;
@@ -327,8 +328,9 @@ export function evidenceFor(position, { health, compliance, updates }, reference
   }
 
   const name = 'Mark';
-  if (position.mark_unavailable) lines.push({ label: name, text: `${position.mark_unavailable} · carried at cost`, weight: 2 });
-  else if (position.unmarked) lines.push({ label: name, text: `No mark recorded · carried at cost ${money(position.total_invested) || ''}`.trim(), weight: 1 });
+  const mark = markOf(position);
+  if (mark.kind === 'unusable') lines.push({ label: name, text: `${mark.reason} · carried at cost`, weight: 2 });
+  else if (mark.kind === 'none') lines.push({ label: name, text: `No mark recorded · carried at cost ${money(position.total_invested) || ''}`.trim(), weight: 1 });
   else {
     if (position.marked_down || (isNum(position.multiple) && Number(position.multiple) < 1)) {
       lines.push({ label: name, text: `Latest mark below cost · ${multiple(position.multiple) || 'multiple not recorded'}${position.mark_as_of ? ` · ${day(position.mark_as_of)}` : ''}`, weight: 2 });
@@ -385,6 +387,7 @@ export function companyRowsOf(reads) {
     .map((p) => {
       const h = healthFor(p, health);
       const r = reportingFor(p, compliance);
+      const mark = markOf(p);
       return {
         key: String(p.project_id),
         uid: p.project?.uid || null,
@@ -393,13 +396,13 @@ export function companyRowsOf(reads) {
         stage: p.project?.stage || null,
         invested: money(p.total_invested),
         investedRaw: Number(p.total_invested) || 0,
-        fmv: p.unmarked || p.mark_unavailable ? null : money(p.fmv),
+        fmv: mark.kind === 'marked' ? money(p.fmv) : null,
         markDate: p.mark_as_of ? day(p.mark_as_of) : null,
-        atCost: p.unmarked || p.mark_unavailable ? money(p.total_invested) : null,
-        markReason: p.mark_unavailable || null,
+        atCost: mark.kind === 'marked' ? null : money(p.total_invested),
+        markReason: mark.kind === 'unusable' ? mark.reason : null,
         ownership: percent(p.latest_ownership_pct),
         moic: multiple(p.multiple),
-        moicAtCost: Boolean(p.unmarked || p.mark_unavailable),
+        moicAtCost: mark.kind !== 'marked',
         below: isNum(p.multiple) && Number(p.multiple) < 1,
         reporting: r,
         health: h,
@@ -414,4 +417,247 @@ export function filterRows(rows, { query = '', health = 'all' } = {}) {
   const q = query.trim().toLowerCase();
   return rows.filter((r) => (!q || r.name.toLowerCase().includes(q) || String(r.sector || '').toLowerCase().includes(q))
     && (health === 'all' || r.health.state === health));
+}
+
+/* ------------------------------------------------- positions register (PF-02) */
+
+/**
+ * D4817 part 2 (PF-02): one position's mark, in one of three kinds the
+ * register keeps apart.
+ *
+ *   { kind: 'marked', date, basis }   a recorded mark is the carrying value
+ *   { kind: 'none' }                  no mark is recorded: carried at cost
+ *   { kind: 'unusable', reason }      a mark is recorded and cannot be used
+ *                                     (two funds disagree, or it is negative):
+ *                                     carried at cost, and says why
+ *
+ * The Worker names the reason (`mark_unavailable_reason`); `no_mark` is the
+ * plain "nothing recorded" case and never reads as a mark that failed.
+ */
+export function markOf(position) {
+  const code = position.mark_unavailable_reason || null;
+  if (code && code !== 'no_mark') return { kind: 'unusable', reason: position.mark_unavailable || 'The recorded mark cannot be used as a value.' };
+  if (!code && position.mark_unavailable) return { kind: 'unusable', reason: position.mark_unavailable };
+  if (code === 'no_mark' || position.unmarked || !isNum(position.fmv)) return { kind: 'none' };
+  return { kind: 'marked', date: position.mark_as_of || null, basis: position.mark_basis || null };
+}
+
+/** `portfolio_marks.basis`, spelled one way everywhere (audit F-24). */
+export const MARK_BASIS = {
+  round_price: 'Priced round',
+  priced_round: 'Priced round',
+  secondary: 'Secondary',
+  gp_estimate: 'GP estimate',
+  write_down: 'Write-down',
+  cost: 'Cost',
+};
+
+/** A basis in words; null when none is recorded (never the column's default). */
+export function basisLabel(basis) {
+  if (basis == null || String(basis).trim() === '') return null;
+  const key = String(basis).trim().toLowerCase();
+  return MARK_BASIS[key] || key.replace(/[_-]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+/**
+ * The date a mark's age is measured against: the book's own as-of date when
+ * one is chosen, else the Worker's `as_of` on the reporting read. Never the
+ * browser clock. Null when neither is known, and the page says so.
+ */
+export function markReference(asOf, compliance) {
+  if (asOf) return { date: asOf, state: 'ok', source: 'as_of' };
+  if (compliance.state === 'loading') return { date: null, state: 'loading' };
+  if (compliance.state !== 'ok') return { date: null, state: 'unreadable' };
+  const d = compliance.value.as_of || null;
+  return d ? { date: d, state: 'ok', source: 'worker' } : { date: null, state: 'not_recorded' };
+}
+
+/** A mark older than two quarters at `reference`; null when either date is missing. */
+export function isStale(markDate, reference) {
+  const age = daysBetween(markDate, reference);
+  return age == null ? null : age > STALE_MARK_DAYS;
+}
+
+/**
+ * PF-02's register rows, largest cheque first. `attention` is the set of
+ * company keys the Overview's Needs attention queue holds, so the register's
+ * "Needs attention" filter and the Overview answer from one rule set
+ * (audit F-05).
+ */
+export function registerRowsOf(reads, reference, attention = new Set()) {
+  const { positions, health, compliance } = reads;
+  if (positions.state !== 'ok') return null;
+  return positions.value.items
+    .map((p) => {
+      const mark = markOf(p);
+      const invested = isNum(p.total_invested) ? Number(p.total_invested) : null;
+      const carrying = mark.kind === 'marked' ? Number(p.fmv) : invested;
+      return {
+        key: String(p.project_id),
+        uid: p.project?.uid || null,
+        name: nameOf(p),
+        stage: p.project?.stage || null,
+        sector: p.project?.sector || null,
+        invested: money(invested),
+        investedRaw: invested,
+        carryingRaw: carrying,
+        ownership: percent(p.latest_ownership_pct),
+        round: p.latest_round || null,
+        mark,
+        fmv: mark.kind === 'marked' ? money(p.fmv) : null,
+        atCost: mark.kind === 'marked' ? null : money(invested),
+        multiple: multiple(p.multiple),
+        below: mark.kind === 'marked' && (p.marked_down === true || (isNum(p.multiple) && Number(p.multiple) < 1)),
+        markDate: mark.kind === 'marked' && mark.date ? day(mark.date) : null,
+        stale: mark.kind === 'marked' && reference.date ? isStale(mark.date, reference.date) : null,
+        ageDays: mark.kind === 'marked' && reference.date ? daysBetween(mark.date, reference.date) : null,
+        basis: mark.kind === 'marked' ? basisLabel(mark.basis) : null,
+        reporting: reportingFor(p, compliance),
+        health: healthFor(p, health),
+        attention: attention.has(String(p.project_id)),
+      };
+    })
+    .sort((a, b) => (b.investedRaw ?? -1) - (a.investedRaw ?? -1) || a.name.localeCompare(b.name));
+}
+
+const NO_BOOK = 'No position is recorded in this book.';
+
+/**
+ * The three counts the canvas sets above the register, kept separate: mark
+ * coverage, stale marks, and marks recorded but unusable. Each is a count the
+ * platform measured, or it says why it is not.
+ */
+export function markCountsOf(rows, reference) {
+  if (!rows) return null;
+  const total = rows.length;
+  const marked = rows.filter((r) => r.mark.kind === 'marked');
+  const unmarked = rows.filter((r) => r.mark.kind !== 'marked');
+  const unusable = rows.filter((r) => r.mark.kind === 'unusable');
+  if (total === 0) {
+    const none = { state: 'not_recorded', reason: NO_BOOK };
+    return { coverage: none, stale: none, unusable: none };
+  }
+  const coverage = { state: 'ok', marked: marked.length, total, pct: Math.round((marked.length / total) * 100), unmarked: unmarked.map((r) => r.name) };
+  let stale;
+  if (reference.state === 'loading') stale = { state: 'loading' };
+  else if (!reference.date) {
+    stale = reference.state === 'unreadable'
+      ? { state: 'unreadable', reason: 'Mark age is measured against the reporting read’s date, which could not be read.' }
+      : { state: 'not_recorded', reason: 'No reference date was returned to measure mark age against.' };
+  } else {
+    const hits = marked.filter((r) => r.stale === true);
+    stale = { state: 'ok', count: hits.length, items: hits.map((r) => ({ name: r.name, date: r.markDate })), reference: day(reference.date) };
+  }
+  return { coverage, stale, unusable: { state: 'ok', count: unusable.length, items: unusable.map((r) => r.name) } };
+}
+
+/** The register's total row: positions, Σ invested and Σ carrying value, with the at-cost part named. */
+export function registerTotalOf(rows) {
+  if (!rows || rows.length === 0) return null;
+  const known = rows.filter((r) => r.investedRaw != null);
+  const invested = known.reduce((s, r) => s + r.investedRaw, 0);
+  const carrying = known.reduce((s, r) => s + (r.carryingRaw ?? 0), 0);
+  return {
+    count: rows.length,
+    invested: money(invested),
+    carrying: money(carrying),
+    multiple: invested > 0 ? multiple(carrying / invested) : null,
+    missingCost: rows.length - known.length,
+    atCost: rows.filter((r) => r.mark.kind !== 'marked').map((r) => ({ name: r.name, cost: r.atCost })),
+  };
+}
+
+/** Filter the register by a search string and the toolbar's predicate (the page owns each filter's rule). */
+export function filterRegister(rows, { query = '', keep = () => true } = {}) {
+  const q = query.trim().toLowerCase();
+  return rows.filter((r) => (!q || r.name.toLowerCase().includes(q) || String(r.sector || '').toLowerCase().includes(q)) && keep(r));
+}
+
+const byDateDesc = (a, b) => String(b.as_of_date || '').localeCompare(String(a.as_of_date || ''));
+
+/**
+ * One company's mark history (PF-02b) from `/api/positions/:uid`, newest
+ * first, with the latest mark's age at `reference`.
+ */
+export function markHistoryOf(detail, reference) {
+  const marks = (Array.isArray(detail?.marks) ? detail.marks : []).slice().sort(byDateDesc);
+  const rows = marks.map((m, i) => ({
+    key: m.uid || `${m.as_of_date}-${i}`,
+    date: day(m.as_of_date),
+    fmv: money(m.fmv),
+    postMoney: money(m.post_money),
+    event: m.event || null,
+    basis: basisLabel(m.basis),
+    source: m.source || m.note || null,
+  }));
+  const age = marks.length && reference.date ? daysBetween(marks[0].as_of_date, reference.date) : null;
+  return { rows, stale: age == null ? null : age > STALE_MARK_DAYS, ageDays: age };
+}
+
+/** A day count in words, for "Latest mark 7 months old". */
+export function ageWords(days) {
+  if (days == null) return null;
+  const m = Math.floor(days / 30.44);
+  return m < 1 ? `${days} day${days === 1 ? '' : 's'} old` : `${m} month${m === 1 ? '' : 's'} old`;
+}
+
+/**
+ * The attention rules the addendum maps for Positions (PFA06), each with its
+ * hits, or the state of the source it reads. `flips` is
+ * `{ [uid]: true | false | 'unreadable' }` from each Attention company's
+ * 90-day health history. `overview` says whether the rule also feeds the
+ * Overview's queue.
+ */
+export function attentionRulesOf(reads, rows, flips = {}) {
+  const { positions, health, compliance, updates } = reads;
+  const list = rows || [];
+  const byKey = new Map(list.map((r) => [r.key, r]));
+  const items = positions.state === 'ok' ? positions.value.items : [];
+  const runway = updates.state !== 'ok' ? { state: updates.state } : {
+    state: 'ok',
+    hits: items.map((p) => ({ r: byKey.get(String(p.project_id)), w: runwayFor(p, updates) }))
+      .filter(({ r, w }) => r && w && w.months < RUNWAY_FLOOR)
+      .map(({ r, w }) => ({ key: r.key, name: r.name, text: `${w.months} month${w.months === 1 ? '' : 's'} · founder-reported${w.period ? ` · ${w.period}` : ''}${w.date ? ` · ${day(w.date)}` : ''}` })),
+  };
+  const staleUpdate = compliance.state !== 'ok' ? { state: compliance.state } : {
+    state: 'ok',
+    hits: compliance.value.companies
+      .filter((c) => byKey.has(String(c.project_id)))
+      .filter((c) => !c.last_reported_at || (isNum(c.days_since_report) && Number(c.days_since_report) > 30))
+      .map((c) => ({
+        key: String(c.project_id),
+        name: byKey.get(String(c.project_id)).name,
+        text: c.last_reported_at
+          ? `Last update received ${day(c.last_reported_at)}${isNum(c.days_since_report) ? ` · ${Number(c.days_since_report)} days` : ''}`
+          : 'No update received',
+      })),
+  };
+  const red = list.filter((r) => r.health.state === 'Attention' && r.uid);
+  let healthFlip;
+  if (health.state !== 'ok') healthFlip = { state: health.state };
+  else if (red.some((r) => flips[r.uid] === undefined)) healthFlip = { state: 'loading' };
+  else {
+    healthFlip = {
+      state: 'ok',
+      partial: red.filter((r) => flips[r.uid] === 'unreadable').map((r) => r.name),
+      hits: red.filter((r) => flips[r.uid] === true)
+        .map((r) => ({ key: r.key, name: r.name, text: `Attention in the snapshot of ${day(r.health.date) || 'an undated day'}; an earlier snapshot inside 90 days was not` })),
+    };
+  }
+  const below = positions.state !== 'ok' ? { state: positions.state } : {
+    state: 'ok',
+    hits: list.filter((r) => r.below).map((r) => ({ key: r.key, name: r.name, text: `${r.multiple || 'Multiple not recorded'} · ${r.basis || 'basis not recorded'}${r.markDate ? ` · ${r.markDate}` : ''}` })),
+  };
+  const noEvidence = health.state !== 'ok' ? { state: health.state } : {
+    state: 'ok',
+    hits: list.filter((r) => r.health.state === 'Not recorded' || r.health.state === 'Not enough evidence')
+      .map((r) => ({ key: r.key, name: r.name, text: r.health.reason || r.health.state })),
+  };
+  return [
+    { key: 'runway', rule: 'Runway under 6 months', reason: 'Attention · short runway', source: 'Founder updates', retry: 'updates', overview: true, ...runway },
+    { key: 'stale-update', rule: 'Update older than 30 days', reason: 'Watch · stale update', source: 'Reporting', retry: 'compliance', overview: false, ...staleUpdate },
+    { key: 'health-red', rule: 'Health turned red within 90 days', reason: 'Attention · recent health change', source: 'Health', retry: 'health', overview: false, ...healthFlip },
+    { key: 'below-cost', rule: 'Latest mark below cost', reason: 'Watch · marked down', source: 'Positions', retry: 'positions', overview: true, ...below },
+    { key: 'no-evidence', rule: 'No positive scoring evidence', reason: 'Not enough evidence', source: 'Health', retry: 'health', overview: true, ...noEvidence },
+  ];
 }

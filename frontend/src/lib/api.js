@@ -5018,7 +5018,9 @@ export const api = {
   portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Cap Table / Ownership (Support) ----------
-  positionsList: () => request('/positions'),
+  // D4644: the list honours `as_of` as the analytics read does (PF-02's
+  // "Read the book as of"); without one it reads the latest marks.
+  positionsList: (asOf) => request(`/positions${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
   portfolioUpdatesLatest: () => request('/portfolio-updates/latest'),
   // Canvas IP1's `Mark history`. Every marking event across the accessible
   // book in one call — the per-project read already returned this history, but
