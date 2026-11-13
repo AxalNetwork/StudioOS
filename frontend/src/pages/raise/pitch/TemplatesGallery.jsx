@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -17,6 +17,7 @@ import {
   STORE_SENTENCE, USE_TEMPLATE, YOURS, YOURS_EMPTY, filterGroups, previewTitles, storeTiles, toggleFilter,
 } from './templatesModel';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
+import DeckPreview, { previewRead } from './DeckPreview';
 
 /**
  * D1604 (#3716, pd29), wired to the template store by #3876 (canvas pd29c,
@@ -143,23 +144,13 @@ function Filters({ read, filters, onToggle }) {
 }
 
 /** pd29c: the template's title card on its swatch, placeholders only; its accent and display face when the store gives them. */
-function Cover({ cover }) {
-  if (!cover) return <span className="flex aspect-video w-full rounded-[6px] border border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800" aria-hidden="true" />;
-  const face = cover.font ? `'${cover.font}', 'Space Grotesk', system-ui, sans-serif` : "'Space Grotesk', system-ui, sans-serif";
-  return (
-    <span className="relative flex aspect-video w-full flex-col justify-center gap-1 overflow-hidden rounded-[6px] px-[8%]" style={{ background: cover.ground, border: `1px solid ${cover.rule || 'rgba(0,0,0,.08)'}` }} aria-hidden="true">
-      {cover.accent ? <span className="block h-[4px] w-[14%]" style={{ background: cover.accent }} /> : null}
-      <span className="text-[15px] font-bold leading-tight" style={{ color: cover.ink, fontFamily: face }}>[Venture name]</span>
-      <span className="text-[10px] leading-snug" style={{ color: cover.muted }}>[One-line pitch]</span>
-    </span>
-  );
-}
-
 /** The covers and the preview for one list (the Gallery or Yours). */
 function Browse({ read, q, projectId, canUse, filtered = false, testId, label, empty }) {
   const navigate = useNavigate();
   const tiles = useMemo(() => (read.status === 'ok' ? storeTiles(read.data) : []), [read.status, read.data]);
   const [selected, setSelected] = useState(null);
+  const cache = useRef(new Map()).current;
+  const [all, setAll] = useState(false);
   const tile = tiles.find((t) => t.id === selected) || null;
   const [preview, setPreview] = useState({ status: 'idle', titles: [] });
   const [confirm, setConfirm] = useState(false);
@@ -170,8 +161,8 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
     if (!tile) { setPreview({ status: 'idle', titles: [] }); return undefined; }
     let live = true;
     setPreview({ status: 'loading', titles: [] });
-    deckTemplatesApi.template(tile.id).then(
-      (r) => { if (live) setPreview({ status: 'ok', titles: previewTitles(r) }); },
+    previewRead(cache, tile.id, () => deckTemplatesApi.template(tile.id)).then(
+      (r) => { if (live) setPreview({ status: 'ok', titles: previewTitles(r), deck: r }); },
       (e) => { if (live) setPreview({ status: 'error', titles: [] }); reportError('pitch-templates:preview', e); },
     );
     return () => { live = false; };
@@ -208,7 +199,8 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
             <button type="button" aria-pressed={selected === t.id} onClick={() => setSelected(t.id)}
               className={`${CARD} flex w-full flex-col gap-2 p-2.5 text-left ${selected === t.id ? 'outline outline-2 outline-axal-violet dark:outline-violet-400' : ''}`}
               data-testid={`pitch-templates-tile-${t.id}`}>
-              <Cover cover={t.cover} />
+              <DeckPreview cache={cache} cacheKey={t.id} load={() => deckTemplatesApi.template(t.id)} />
+              <span className={SMALL}>Template preview · placeholders</span>
               <span className={`text-[13px] font-bold ${INK}`}>{t.label}</span>
               <span className="flex flex-wrap items-center gap-1.5">
                 {t.count ? <span className={SMALL}>{t.count}</span> : null}
@@ -229,17 +221,24 @@ function Browse({ read, q, projectId, canUse, filtered = false, testId, label, e
             {preview.status === 'loading' ? <span className={SMALL}>Reading the cards…</span> : null}
             {preview.status === 'error' ? <span className={SMALL} role="alert" data-testid="pitch-templates-preview-error">{PREVIEW_FAILED}</span> : null}
             {preview.status === 'ok' ? (
+              <div className="flex flex-col gap-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">{preview.titles.slice(0, 3).map((title, i) => <DeckPreview key={i} deck={preview.deck} slideIndex={i} />)}</div>
+              <button type="button" className={GHOST} onClick={() => setAll(true)}>Preview all slides</button>
               <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-templates-strip">
                 {preview.titles.map((x, i) => (
                   <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
                 ))}
               </ol>
+              </div>
             ) : null}
             {canUse ? <button type="button" className={PRIMARY} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button> : null}
             <RefusalLine refusal={refusal} testId="pitch-templates-refusal" />
           </>
         ) : <span className={MUTED}>Select a template to see its cards.</span>}
       </aside>
+      {all && tile && preview.status === 'ok' ? <Lightbox label={`Preview · ${tile.label}`} title={`Preview · ${tile.label}`} width={960} onClose={() => setAll(false)}>
+        <div className="grid gap-3 sm:grid-cols-2">{preview.titles.map((title, i) => <figure key={i} className="m-0 min-w-0"><DeckPreview deck={preview.deck} slideIndex={i} /><figcaption className={SMALL}>{i + 1}. {title}</figcaption></figure>)}</div>
+      </Lightbox> : null}
       {confirm && tile ? (
         <Lightbox label={USE_TEMPLATE} title={USE_TEMPLATE} width={480} onClose={() => !busy && setConfirm(false)} testId="pitch-templates-dialog"
           footer={(

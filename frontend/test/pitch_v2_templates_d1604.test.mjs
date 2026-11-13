@@ -111,10 +111,10 @@ test('the Gallery is the store: covers, PREVIEW from the template read, and Use 
   const m = await mount();
   try {
     const gallery = m.by('pitch-templates-gallery');
-    assert.match(m.text(gallery), /\[Venture name\] \[One-line pitch\] Pencil Margins 12 cards Pre-seed Editorial Angel/);
+    assert.match(m.text(gallery), /Template preview · placeholders Pencil Margins 12 cards Pre-seed Editorial Angel/);
     assert.ok(!m.calls.some(([n]) => n === 'deckMethods'), 'v1 methods are not the Gallery (D1535 Q5)');
     await m.press(m.by('pitch-templates-tile-tpl_hq_pencil_margins'));
-    assert.match(m.text(m.by('pitch-templates-preview')), /Preview · Pencil Margins Hairlines and a serif\. For: Angel, Seed fund 01 Title 02 Problem Use this template/);
+    assert.match(m.text(m.by('pitch-templates-preview')), /Preview · Pencil Margins Hairlines and a serif\. For: Angel, Seed fund .*01 Title 02 Problem Use this template/);
     await m.press(m.by('pitch-templates-use'));
     assert.equal(m.text(m.by('pitch-templates-dialog-sentence')), STORE_SENTENCE, 'the store\'s apply runs no model, and says so');
     assert.match(STORE_SENTENCE, /No model runs\./);
@@ -211,5 +211,5 @@ test('New deck keeps v1\'s methods and their sentences (D1535 Q5)', () => {
   assert.equal(templateSentence('yc_seed'), USE_SENTENCE);
   const nd = codeOnly(read(`${PITCH}/NewDeck.jsx`));
   assert.match(nd, /sentence: templateSentence\(start\.id\)/);
-  assert.match(nd, /\{templateStartLine\(start\.id\)\}/);
+  assert.match(nd, /<TemplateChooser/);
 });
