@@ -48,6 +48,7 @@ import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJob
 import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, namedModelCheck, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
 import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
 import { runSchemaBootstrap } from '../util/schemaBootstrap';
+import { inferenceBinding } from './ai/inferenceStub';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1593,7 +1594,8 @@ function isGatewayRouted(env: Env, task: TaskClass): boolean {
 // onboarding chat — we lose only the separate advisor analytics namespace,
 // not the conversation itself.
 async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false, limitMs: number = shapes.TIMEOUT_MS.chat): Promise<ProviderResult> {
-  const ai = (env as unknown as { AI?: WorkersAIBinding }).AI;
+  // D4594 part 2: on a throwaway preview Worker with AGENT_INFERENCE_STUB = "deterministic" only, the stub answers.
+  const ai = inferenceBinding(env, (env as unknown as { AI?: WorkersAIBinding }).AI) as WorkersAIBinding | undefined;
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
