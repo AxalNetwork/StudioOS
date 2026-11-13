@@ -16,6 +16,8 @@ of `.github/workflows/deck-visual.yml`.
 | `deck_editor.visual.spec.js` | The screenshots (17 structures × themes × 2 aspects, and the one-click deck) and the axe checks (light, dark, the keyboard path, the Ask dialog, phone and tablet). |
 | `__screenshots__/` | The baselines. CI writes them in the pinned container and commits them; never add one made on a laptop. |
 
+| `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
+
 ### Rules
 
 - **A baseline comes from CI.** To redraw one on purpose, delete its PNG and

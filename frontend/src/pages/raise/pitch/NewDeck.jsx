@@ -18,7 +18,8 @@ import {
   buildSentence, canConfirm, chipsFor, editRow, estimateLine, fastBrief, moveRow, outlineSentence, priceNote, priceState, quoteUidOf, refusalOf, removeRow, roundLine, rowWarning, startOptions, withBase,
 } from './newDeckModel';
 import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel, buildingLine } from './oneClickModel';
-import { templateStartLine, templateSentence } from './templatesModel';
+import TemplateChooser from './TemplateChooser';
+import { templateSentence } from './templatesModel';
 import { availability } from './deckV2Adapter';
 import { HOLD, LATER } from './deckV2Model';
 import { markRecommended } from './studioActionsModel';
@@ -344,6 +345,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   }, 'build');
 
   const applyTemplate = () => run(async () => {
+    if (options.find((op) => op.kind === 'template' && op.id === start.id)?.locked) return;
     const r = await api.deckApplyMethod(projectId, start.id, railPressHeaders(RAIL.template));
     onLanded(r);
   }, 'template');
@@ -422,31 +424,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         </div>
         <div className="flex flex-col gap-2" aria-label="Start from">
           <span className={`text-[13px] font-bold ${INK}`}>Start from</span>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {options.map((op) => {
-              const on = op.kind === start.kind && String(op.id) === String(start.id);
-              return (
-                <button key={`${op.kind}:${op.id}`} type="button" disabled={op.locked} aria-pressed={on} onClick={() => setStart({ kind: op.kind, id: op.id })}
-                  className={`flex aspect-[16/10] flex-col justify-between gap-1 rounded-[8px] border p-2 text-left text-[11.5px] font-semibold ${on ? 'border-axal-violet dark:border-violet-400' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
-                  <span>{op.label}</span>
-                  {op.recommended ? <span className={PILL_VIO} data-testid="pitch-new-recommended">Recommended</span> : null}
-                  {op.locked ? <span className={PILL_MU}>Plan</span> : null}
-                </button>
-              );
-            })}
-          </div>
-          {options.filter((op) => op.recommended && op.reason).map((o) => (
-            <span key={o.id} className={MUTED} data-testid="pitch-new-recommended-reason">Recommended: {o.label}. {o.reason}</span>
-          ))}
-          {templateStart ? (
-            <span className="flex flex-wrap items-center gap-3">
-              <span className={MUTED} data-testid="pitch-new-template-line">{templateStartLine(start.id)}</span>
-              <button type="button" className={PRIMARY} data-testid="pitch-new-use-template"
-                onClick={() => setDialog({ title: 'Use this template', action: 'Use template', sentence: templateSentence(start.id), go: applyTemplate })}>
-                Use this template
-              </button>
-            </span>
-          ) : null}
+          <TemplateChooser options={options} start={start} onSelect={setStart}
+            onUse={() => setDialog({ title: 'Use this template', action: 'Use template', sentence: templateSentence(start.id), go: applyTemplate })} />
         </div>
       </section>
 
@@ -456,6 +435,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         <SourcesStep items={items} coverage={sources.data?.coverage} status={sources.status} onRetry={sources.retry} onChange={onChosen} />
       </section>
 
+      {templateStart ? null : (
       <section className={`${LAV} flex flex-col gap-3 p-4`} aria-labelledby="pitch-new-outline-title" data-testid="pitch-new-outline">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-2">
@@ -517,16 +497,18 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         </div>
       </section>
 
+      )}
+
       {dialog ? (() => {
         // The dialog reads the price as it is NOW, so a price that moved under it is never confirmed by an old sentence.
         const isBuild = dialog.which === 'build';
         const price = isBuild ? pBuild : pOutline;
-        const view = isBuild
+        const view = dialog.go ? dialog : isBuild
           ? { title: 'Build deck', action: 'Build deck', sentence: buildSentence(price, rows.length), go: buildDeck, build: true }
           : { title: 'Regenerate outline', action: price.kind === 'metered' ? `Regenerate · ${aiTokens(price.hold)}` : 'Regenerate', sentence: outlineSentence(price, proposedBy === 'Eadwyn'), go: proposeOutline };
         return (
-          <Confirm {...view} hold={price.kind === 'metered' ? HOLD(aiTokens(price.hold)) : null} ready={canConfirm(price)}
-            onReprice={priceNote(price) && price.kind !== 'loading' ? () => (isBuild ? refreshQuote('build', { outline: rows, exclude }) : refreshQuote('outline')) : null}
+          <Confirm {...view} hold={!dialog.go && price.kind === 'metered' ? HOLD(aiTokens(price.hold)) : null} ready={Boolean(dialog.go) || canConfirm(price)}
+            onReprice={!dialog.go && priceNote(price) && price.kind !== 'loading' ? () => (isBuild ? refreshQuote('build', { outline: rows, exclude }) : refreshQuote('outline')) : null}
             busy={busy} onConfirm={view.go} onClose={() => setDialog(null)}
             progress={view.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null}
             announce={view.build ? buildingLine(rows.length) : null} />

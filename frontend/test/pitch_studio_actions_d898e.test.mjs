@@ -28,6 +28,7 @@ import {
   SPINOUT_METHOD, WATERMARK_BAD, WATERMARK_PLAN, brandingView, draftRefusal, isSpinoutDeck, markRecommended,
   proposalHref, readinessView, recommendReason, watermarkInput, watermarkSentence,
 } from '../src/pages/raise/pitch/studioActionsModel.js';
+import TemplateChooser from '../src/pages/raise/pitch/TemplateChooser.jsx';
 import { startOptions } from '../src/pages/raise/pitch/newDeckModel.js';
 import { mountContracts } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -92,7 +93,11 @@ test('why a template is recommended; a stage nobody recorded is said so, never s
   const src = codeOnly(read('src/pages/raise/pitch/NewDeck.jsx'));
   assert.match(src, /useRead\(\(\) => api\.deckRecommend\(projectId\), \[projectId\]\)/);
   assert.match(src, /markRecommended\(startOptions\(/);
-  assert.match(src, /data-testid="pitch-new-recommended-reason">Recommended: \{o\.label\}\. \{o\.reason\}/);
+  const html = renderToStaticMarkup(h(TemplateChooser, {
+    start: { kind: 'blank', id: 'blank' }, onSelect() {}, onUse() {},
+    options: [{ kind: 'template', id: 'yc_seed', label: 'YC Seed', templateKey: 'yc_seed', recommended: true, reason: 'Fits this stage.' }],
+  }));
+  assert.match(html, /Recommended: YC Seed. Fits this stage\./);
 });
 
 /* ------------------------------------------------------------------ *
