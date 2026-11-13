@@ -61,3 +61,16 @@ export function noteOf(raw: unknown): string | null | false {
   if (!t) return null;
   return t.length > NOTE_MAX ? false : t;
 }
+
+/**
+ * D4811 part 21: the reason an unlink carries (CT-92 "High-risk actions": a
+ * reason, kept in the audit row). Whitespace folded, 10 to 500 characters;
+ * null when it is missing, too short, too long or not text.
+ */
+export const UNLINK_REASON_MIN = 10;
+export const UNLINK_REASON_MAX = 500;
+export function unlinkReasonOf(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim().replace(/\s+/g, ' ');
+  return t.length >= UNLINK_REASON_MIN && t.length <= UNLINK_REASON_MAX ? t : null;
+}
