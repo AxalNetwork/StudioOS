@@ -22,7 +22,7 @@ import {
   SUPPORT_WORKSPACES, workspaceFromSearch, workspaceHref, queueOverview, subsidiaryLine, sourcesText,
   escalationGroups, deadlineText, kindHoursOf, previewOf, queueKindChoices, hqTicketRows, hqTicketCount,
   tierOfPriority, branchCards, matrixCompares, mirrorLine, distributionState, workspaceMarks, figureText,
-  notDelivered, deliveryRows,
+  notDelivered, deliveryRows, recentDecisions, deliveryState,
 } from '../src/pages/hq/support/supportWorkspaceModel.js';
 import {
   SupportHeader, WorkspaceNav, ActionRequired, AllClear, QueueKindFilter, EscalationQueue, HqTicketsSection,
@@ -127,7 +127,7 @@ test('All clear only when every source answered with nothing open (SU01a)', () =
   const html = render(AllClear, { overview: o, readAt: '14:30' });
   const t = text(html);
   assert.match(t, /All clear/);
-  assert.match(t, /No support items currently require HQ attention\./);
+  assert.match(t, /No escalations or support tickets are open\./);
   assert.match(t, /Measured at 14:30 UTC · every source answered/);
   assert.match(t, /Escalations0 open/);
   assert.match(t, /HQ tickets0 open/);
@@ -309,21 +309,59 @@ test('Branches with no subsidiary draws the empty state, not a one-row matrix (S
 
 // ─────────────────────────────────────────────────────────── delivery ──
 
-test('Delivery leads with what was not delivered and says plainly that it lists this session only (#5035)', () => {
+test('Delivery counts only recorded failures; unreported outcomes and HQ-only decisions stay distinct', () => {
   const recorded = [
     { uid: 'a', pushed: { ok: true } },
-    { uid: 'b', pushed: { ok: false, reason: 'timed out' } },
+    { uid: 'b', pushed: { ok: false, reason: 'No binding' } },
     { uid: 'c', pushed: undefined },
+    { uid: 'hq', branch_code: 'hq', pushed: undefined },
   ];
-  assert.deepEqual(deliveryRows(recorded).map((r) => r.uid), ['b', 'c', 'a']);
-  assert.equal(notDelivered(recorded), 2);
-  const t = text(render(DeliveryWorkspace, { recorded, renderRecorded: (rows) => rows.map((r) => r.uid).join(','), sync: null, mirror: 'STRIP' }));
-  assert.match(t, /2 decisions not delivered/);
-  assert.match(t, /b,c,a/);
-  assert.match(t, /HQ does not yet keep a history of past deliveries to read back \(#5035\)/);
-  const none = text(render(DeliveryWorkspace, { recorded: [], renderRecorded: () => '', sync: null, mirror: 'STRIP' }));
-  assert.match(none, /No decision has been recorded in this session\./);
-  assert.doesNotMatch(none, /All decisions recorded here were delivered/, 'an empty list claims delivery');
+  assert.deepEqual(deliveryRows(recorded).map((r) => r.uid), ['b', 'c', 'a', 'hq']);
+  assert.equal(notDelivered(recorded), 1);
+  const props = { recorded, history: { available: true }, renderRecorded: (rows) => rows.map(r => r.uid).join(','), sync: null, mirror: 'STRIP' };
+  const t = text(render(DeliveryWorkspace, props));
+  assert.match(t, /1 decision not delivered/);
+  assert.match(t, /b,c,a,hq/);
+  assert.match(t, /Up to 25 recent decisions/);
+  const unknown = text(render(DeliveryWorkspace, { ...props, recorded: [recorded[0], recorded[2]] }));
+  assert.doesNotMatch(unknown, /not delivered|All recent decisions were delivered/);
+  assert.deepEqual(workspaceMarks(null, [recorded[2], recorded[3]], {}), {});
+  const none = text(render(DeliveryWorkspace, { ...props, recorded: [] }));
+  assert.match(none, /No decisions have been recorded at HQ/);
+  for (const history of [null, { available: false, reason: 'HQ timed out.' }]) {
+    const partial = text(render(DeliveryWorkspace, { ...props, recorded: [], history }));
+    assert.match(partial, /Loading recent decisions|Recent decisions could not be read/);
+    assert.doesNotMatch(partial, /No decisions have been recorded|All recent decisions were delivered/);
+    assert.match(partial, /STRIP/);
+  }
+});
+
+test('fresh views read stored outcomes strictly, and manual retries reconcile with newer HQ reads', () => {
+  const answered_at = '2026-11-10T10:00:00.000Z';
+  const push_at = '2026-11-10T11:00:00.000Z';
+  const retryAt = '2026-11-10T12:00:00.000Z';
+  const row = { uid: 'e1', branch_code: 'fr', status: 'answered', answered_at, push_at, push_ok: 0, push_reason: 'No binding' };
+  const read = { readOrder: 1, read_at: push_at, recent_decisions: { available: true, items: [row] } };
+  const [stored] = recentDecisions(read);
+  assert.equal(deliveryState(stored), 'failed');
+  assert.equal(stored.pushed.reason, 'No binding');
+  for (const push_ok of [null, undefined, '0', true]) {
+    const [legacy] = recentDecisions({ recent_decisions: { available: true, items: [{ ...row, push_ok }] } });
+    assert.equal(deliveryState(legacy), 'unknown');
+  }
+  const changed = { ...stored, changeOrder: 2, pushed: { ok: true, push_at: retryAt }, resend: { state: 'delivered' } };
+  assert.deepEqual(recentDecisions(read, [changed]).map(deliveryState), ['delivered'], 'an older read rolled back the retry');
+  const reread = { readOrder: 3, read_at: retryAt, recent_decisions: { available: true, items: [{ ...row, push_at: retryAt, push_ok: 1 }] } };
+  assert.deepEqual(recentDecisions(reread).map(deliveryState), ['delivered'], 'a fresh page lost the successful retry');
+  // A Worker response without a push stamp and a read in the same millisecond still have a known request order.
+  const unstamped = { ...changed, pushed: { ok: true } };
+  assert.equal(deliveryState(recentDecisions(read, [unstamped])[0]), 'delivered');
+  assert.equal(deliveryState(recentDecisions({ ...read, readOrder: 3 }, [unstamped])[0]), 'failed');
+  const newest = { ...row, status: 'declined', answered_at: '2026-11-11T09:00:00.000Z', push_at: null, push_ok: null };
+  const [replacement] = recentDecisions({ recent_decisions: { available: true, items: [newest] } }, [changed]);
+  assert.equal(replacement.status, 'declined');
+  assert.equal(deliveryState(replacement), 'unknown', 'a replacement decision inherited the old success');
+  assert.equal(recentDecisions({ readOrder: 3, read_at: newest.answered_at, recent_decisions: { available: true, items: [] } }, [changed]).length, 0);
 });
 
 test('a healthy or quiet mirror is one line; failures, no token or an unread mirror expand to the strip', () => {
@@ -348,6 +386,8 @@ test('Policy says whether the ticket SLA is on every subsidiary, and never calls
   assert.equal(distributionState({ branch_copy: { propagation: { total: 0, current: 0 } } }).state, 'none');
   assert.equal(distributionState({ branch_copy: {} }, 'loading').state, 'unknown');
   assert.equal(distributionState({ branch_copy: {} }, 'failed').state, 'unknown');
+  const mismatch = distributionState({ version: { value: 4 }, branch_copy: { propagation: null } }, 'ready');
+  assert.match(text(render(DistributionBanner, { distribution: mismatch })), /No branch coverage was reported for this policy version/);
   const warn = text(render(DistributionBanner, { distribution: { state: 'incomplete', current: 2, total: 3 } }));
   assert.match(warn, /SLA policy is not on every subsidiary — applied on 2 of 3/);
   const unknown = render(DistributionBanner, { distribution: { state: 'unknown', branchState: 'failed' } });

@@ -59,10 +59,13 @@ test('every anchor a step names is drawn by the shell or the Studio, and the che
     'studio-customise': 'pages/studio/StudioParts.jsx',
     'sidebar-nav': 'ui/SidebarNav.jsx',
     settings: 'ui/SidebarNav.jsx',
-    'account-menu': 'ui/phone/PhoneHeader.jsx',
+    // D4623 part 2: the phone band's initials and the desktop header's Account button (App.jsx).
+    'account-menu': ['ui/phone/PhoneHeader.jsx', 'App.jsx'],
   };
   assert.deepEqual(STEPS.map((s) => s.anchor).sort(), Object.keys(where).sort());
-  for (const [anchor, file] of Object.entries(where)) assert.match(src(file), new RegExp(`data-tour="${anchor}"`), `${file} draws ${anchor}`);
+  for (const [anchor, files] of Object.entries(where)) {
+    for (const file of [files].flat()) assert.match(src(file), new RegExp(`data-tour="${anchor}"`), `${file} draws ${anchor}`);
+  }
   assert.equal(STEPS.some((s) => /onboarding|checklist/.test(s.anchor)), false);
 });
 
@@ -75,8 +78,23 @@ test('a missing anchor drops its step; a missing page-level anchor explains from
   const band = el(box(320, 4, 44, 44));
   const anchored = resolveSteps('founder', { phone: true, find: finder({ ...allAnchors, 'account-menu': band }), viewportWidth: PHONE.width }).at(-1);
   assert.ok(anchored.el === band, 'the band anchor');
-  assert.match(anchored.body, /^Your initials open the Account menu: your licences, billing and account settings/);
+  assert.match(anchored.body, /^This button opens the Account menu: your licences, billing and account settings/);
   assert.deepEqual(ids(resolveSteps('partner', { find: finder({}), viewportWidth: DESKTOP.width })), ['account'], 'nothing drawn: only the page-level step');
+});
+
+test('D4623 part 2: on desktop the Account step points at the header\'s Account button, in words true of it', () => {
+  // The desktop header's Account button (UserDropdown in App.jsx) carries the anchor, on the button that opens the menu.
+  const app = src('App.jsx');
+  const dropdown = app.slice(app.indexOf('function UserDropdown('), app.indexOf('role="menu"', app.indexOf('function UserDropdown(')));
+  assert.match(dropdown, /<button\s[\s\S]*aria-haspopup="menu"\s+data-tour="account-menu"\s*>/, 'the Account button carries the anchor');
+  for (const role of ['founder', 'investor', 'advisor', 'partner', 'admin']) {
+    const account = resolveSteps(role, { find: finder(allAnchors), viewportWidth: DESKTOP.width }).at(-1);
+    assert.equal(account.id, 'account');
+    assert.ok(account.el === allAnchors['account-menu'], `${role}: anchored, not page-level`);
+    // The desktop button shows the member's name, not initials: the anchored copy names neither.
+    assert.match(account.body, /^This button opens the Account menu/, role);
+    assert.doesNotMatch(account.body, /initials/i, role);
+  }
 });
 
 test('the account copy follows the Account menu model: no licence switcher, no active-licence toggle', () => {
@@ -289,7 +307,7 @@ test('on a phone the card fits inside the gutters, and the sidebar steps are not
     await t.click('Next');
     assert.equal(t.step(), 'account');
     assert.ok(t.by('product-tour-ring'), 'the founder’s phone band draws the account anchor');
-    assert.match(textOf(t.dialog()), /Your initials open the Account menu/);
+    assert.match(textOf(t.dialog()), /This button opens the Account menu/);
   } finally { await t.close(); }
 });
 

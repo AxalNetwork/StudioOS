@@ -382,8 +382,8 @@ test('a BOUND branch that throws is reported, not raised — the other half of t
     method: 'PATCH', body: JSON.stringify({ answer: 'Take it locally.', status: 'declined' }),
   });
   assert.equal(r.status, 200, 'an unreachable branch turned HQ\'s recorded decision into an error');
-  assert.equal(r.body.pushed.ok, false);
-  assert.match(String(r.body.pushed.reason), /did not accept the decision/,
+  assert.equal(r.body.pushed.ok, null);
+  assert.match(String(r.body.pushed.reason), /did not confirm receipt/,
     'the failure is reported without saying what went wrong');
   assert.match(String(r.body.pushed.reason), /no such deployment/,
     'the branch\'s own reason is swallowed, so nobody can tell why');
