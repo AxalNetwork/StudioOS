@@ -117,7 +117,7 @@ export function RouteDialog({ closing, line, envelopes, onClose, onSaved }) {
             <label key={r} className={`flex cursor-pointer flex-col gap-1.5 rounded-xl border p-3 text-[12.5px] ${route === r ? 'border-violet-500 bg-violet-50 dark:border-violet-400 dark:bg-violet-950/30' : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900'}`} data-testid={`closing-route-${r}`}>
               <span className="flex items-center gap-2 font-bold"><input type="radio" name="route" checked={route === r} onChange={() => { setRoute(r); act.setError(''); if (r !== line.route) setVehicle(''); }} />{ROUTE_WORD[r]}</span>
               <span className="text-gray-600 dark:text-gray-400">{ROUTE_NEEDS[r].line}</span>
-              <span className="flex items-center justify-between gap-2">Signed paper <b data-testid={`closing-route-${r}-paper`}>{paper}</b></span>
+              <span className="flex items-center justify-between gap-2">Paper <b data-testid={`closing-route-${r}-paper`}>{paper}</b></span>
               {ROUTE_NEEDS[r].needs.map((n) => <span key={n} className="flex items-center justify-between gap-2">{n}<NotYet>{DESK_WAITS.needs}</NotYet></span>)}
             </label>
           ))}

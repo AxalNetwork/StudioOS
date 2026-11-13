@@ -73,7 +73,7 @@ export default function AgreementWorkspace({ uid }) {
           <Fact label="Recipient"><Recorded value={row.recipient_name || row.recipient_email} reason="No recipient is recorded in this store." /></Fact>
           <Fact label="Provider"><Recorded value={providerLabel(row.provider)} reason="No provider is recorded." /></Fact>
           <Fact label="Sent"><Recorded value={date(row.sent_at)} reason="No send is recorded." /></Fact>
-          <Fact label="Signed"><Recorded value={date(row.signed_at)} reason="No signature date is recorded." /></Fact>
+          <Fact label="Executed"><Recorded value={date(row.signed_at)} reason="No signature date is recorded." /></Fact>
           <Fact label="Last legal review"><Missing reason="An agreement is not reviewed on its own: counsel reviews the template it was issued from (its Legal Review tab)." /></Fact>
         </dl>
           {/* D4811 part 17 (CT-15): the cross-border checks; open ones hold Send for signature. */}

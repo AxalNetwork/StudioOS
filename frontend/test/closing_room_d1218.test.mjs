@@ -68,8 +68,9 @@ test('who acts next on each line, read from its route, paper, money and the cap-
   assert.deepEqual(nextOnLine(L1, SIGNED, proposed, 'founder', names), { text: 'Your turn: decide the cap table change', you: true });
   assert.equal(nextOnLine(L1, SIGNED, proposed, 'investor', names).text, 'Waiting on Acme Robotics to decide the cap table change');
   assert.equal(nextOnLine(L1, SIGNED, c, 'founder', names).text, 'Done');
-  assert.equal(paperPhrase(L3, [{ ...AXAL_WAIT[0], complete: true }]), 'Countersigned');
-  assert.equal(paperPhrase(L2, [{ ...SIGNED[0], voided: true }]), 'No paper sent', 'a void envelope is not the paper');
+  // D4811 part 22: the paper reads in the agreement lifecycle's words.
+  assert.equal(paperPhrase(L3, [{ ...AXAL_WAIT[0], complete: true }]), 'Executed · countersigned for Axal');
+  assert.equal(paperPhrase(L2, [{ ...SIGNED[0], voided: true }]), 'Voided', 'a void envelope is not the live paper; it reads Voided');
 });
 
 test('the strip and the tiles: Received sums received lines only, no amount is drawn as 0, and a failed paper read is never done', () => {
@@ -205,11 +206,11 @@ test('mounted CP1: the founder’s room from the store — strip, tiles, lines w
     assert.match(v.text('closing-head'), /Raise › Capital relationships › Closing.*Closing · Acme Robotics Seed.*Post-money SAFE/);
     assert.equal(v.props('closing-step-1')['data-state'], 'now');
     assert.match(v.text('closing-tile-committed'), /\$650,000\.00.*4 lines/);
-    assert.match(v.text('closing-tile-signed'), /1 of 4/);
+    assert.match(v.text('closing-tile-signed'), /^\s*Executed\s*1 of 4/, 'D4811 part 22: the tile counts executed paper, in that word');
     assert.match(v.text('closing-tile-received'), /\$250,000\.00.*1 of 4 lines/);
-    assert.match(v.text('closing-line-l1'), /Nora Angel.*Direct.*\$250,000\.00.*Signed.*Received.*Done/);
-    assert.match(v.text('closing-line-l2'), /Harbor Ventures.*Third-party fund.*\$300,000\.00.*Paper sent.*Waiting for money.*Your turn: sign/);
-    assert.match(v.text('closing-line-l3'), /Fund I.*Axal VC fund.*Not recorded.*Waiting for Axal’s countersign.*Super Admin/);
+    assert.match(v.text('closing-line-l1'), /Nora Angel.*Direct.*\$250,000\.00.*● Executed.*Received.*Done/);
+    assert.match(v.text('closing-line-l2'), /Harbor Ventures.*Third-party fund.*\$300,000\.00.*➤ Sent · awaiting signature.*0 of 2 signed.*Waiting for money.*Your turn: sign/);
+    assert.match(v.text('closing-line-l3'), /Fund I.*Axal VC fund.*Not recorded.*➤ Sent · awaiting signature.*waiting for Axal’s countersign.*Super Admin/);
     assert.doesNotMatch(v.text('closing-line-l3'), /\$0\.00/, 'a missing amount is never a zero');
     assert.match(v.text('closing-line-l4'), /A prospect.*No route set.*No paper for a prospect line/);
     assert.ok(!v.asked.some((a) => a.path.startsWith('/legal/esign/staged/line/null')), 'a prospect line reads no paper');
@@ -316,7 +317,7 @@ test('mounted CP2: an investor sees their own line and the round’s total, neve
     assert.match(v.text('closing-head'), /Deals › Acme Robotics › Closing/);
     assert.match(v.text('closing-your-line'), /Your line · Third-party fund/);
     assert.match(v.text('closing-your-amount'), /\$300,000\.00/);
-    assert.match(v.text('closing-your-paper'), /Signed/);
+    assert.match(v.text('closing-your-paper'), /● Executed/);
     assert.match(v.text('closing-your-money'), /Waiting for money/);
     assert.match(v.text('closing-round'), /Round: \$650,000\.00 committed.*Other investors in the round are not shown to you\./);
     for (const name of ['Nora Angel', 'Fund I', 'A prospect']) assert.ok(!v.text().includes(name), `${name} never shows to this investor`);
@@ -360,7 +361,7 @@ test('mounted CP18: one failed block never blanks the room', async () => {
     assert.match(paper.text('closing-line-l2'), /Could not be read.*The paper could not be read/);
     assert.match(paper.text('closing-tile-signed'), /Not recorded/);
     assert.ok(paper.has('closing-papers-failed'));
-    assert.match(paper.text('closing-line-l1'), /Signed.*Received/, 'the other lines still draw');
+    assert.match(paper.text('closing-line-l1'), /● Executed.*Received/, 'the other lines still draw');
   } finally { await paper.close(); }
   const merc = await mount({ role: 'investor', routes: INVESTOR_ROUTES({ '/mercury/investor/proposals': err(503) }) });
   try {

@@ -37,7 +37,7 @@ const INCOMPLETE = { ...clean, incomplete: true, incomplete_reason: 'The templat
 test('D4811 each object kind maps its stored values to its own lifecycle words', () => {
   // Mutation checked: map agreement 'generated' to 'sent' → the second entry reads "Sent".
   assert.deepEqual(['draft', 'generated', 'sent', 'signed', 'void'].map((status) => agreementLifecycle({ status }).label),
-    ['Prepared', 'Ready for signature', 'Sent', 'Executed', 'Voided']);
+    ['Prepared', 'Ready for signature', 'Sent · awaiting signature', 'Executed', 'Voided']); // D4811 part 22: the canvas's Sent pill
   // Mutation checked: leave review → "In review" in GOVERNANCE_KEYS → the second entry fails.
   assert.deepEqual(['draft', 'review', 'approved', 'executed', 'archived'].map((s) => governanceLifecycle(s).label),
     ['Draft', 'In review', 'Approved', 'Executed', 'Archived']);
@@ -217,7 +217,7 @@ test('D4811 warnings are reserved for contradictions: marked signed with no exec
   // Mutation checked: make hasExecutionEvidence always true → no warning for the bare signed row.
   const bare = { status: 'signed', source: 'pairwise_nda', signed_at: null, file_key: null, file_sha256: null, envelope_uuid: null, project_name: 'Synthetic Co' };
   const m = agreementRowSemantics(bare);
-  assert.equal(m.warning, 'Marked signed · no execution evidence');
+  assert.equal(m.warning, 'Marked executed · no execution evidence'); // D4811 part 22: Executed everywhere
   assert.equal(m.badge, null, 'a contradiction never wears the Executed seal');
   const html = cells(bare);
   assert.match(html, /data-testid="agreement-contradiction"/);
