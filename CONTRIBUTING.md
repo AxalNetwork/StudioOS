@@ -146,3 +146,18 @@ public point-in-time).
 - `#dev` on Slack for code questions.
 - `#ops` on Slack for the budget alert.
 - Open an issue with the `lfs` label for policy questions.
+
+## Fast local preflight
+
+With Node 22 and lockfile dependencies installed at root, `frontend/` and
+`cloudflare-worker/`, run `npm run test:preflight`. It generates the untracked
+modules first, then checks decision headings, migration identity, runtime DDL,
+auth inventory and undefined symbols. It needs no `docs/` build. Its ignored
+`preflight-results.json` records each status and any blocked prerequisite.
+
+Before proposing a change, run `npm run build`, then
+`npm run test:drift > drift.log 2>&1; echo EXIT=$?`. The full gate is authoritative;
+preflight is a quick local aid. `npm run test:guards` runs the complete ordered
+catalog in `scripts/guard-commands.json`, continues independent checks after
+ordinary failures, and writes `guard-results.json` for diagnostics. A failed
+prerequisite is shown as blocked, and interruption still fails the command.

@@ -144,3 +144,6 @@ frontend/public/skill-library/
 
 # #4591: written by scripts/schema-rehearsal.mjs for its throwaway databases, deleted when it ends.
 wrangler.rehearsal.*.toml
+# D5505: local diagnostic summaries, never committed.
+/guard-results.json
+/preflight-results.json

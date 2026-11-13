@@ -20,7 +20,7 @@ import { buildGenerated } from './build-generated.mjs';
 // so they skip it (the generators print to stdout).
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && !['--list', '--plan'].includes(process.argv[2])) {
   const generated = buildGenerated();
-  if (generated !== 0) process.exit(generated);
+  if (generated !== 0 && process.argv[2] !== 'rest') process.exit(generated);
 }
 
 /** How many shards each long test script is cut into. */
@@ -116,6 +116,21 @@ export function timingsOf(input) {
   return Object.fromEntries(Object.entries(input.tests).map(([file, row]) => [file, row.wallMs]));
 }
 
+/** D5505: independent rest stages all report; a signal still stops the run. */
+export function runCommands(commands, { root, env = process.env, run = spawnSync } = {}) {
+  let failed = 0;
+  for (const cmd of commands) {
+    console.log(`\n> ${cmd}\n`);
+    const r = run('sh', ['-c', cmd], { cwd: root, stdio: 'inherit', env });
+    if (r.status !== 0) {
+      console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
+      failed ||= r.status || 1;
+      if (r.signal || r.status === 130 || r.status === 143) return failed;
+    }
+  }
+  return failed;
+}
+
 function main(argv) {
   if (argv[0] === '--main-artifact') {
     const artifacts = JSON.parse(readFileSync(argv[1], 'utf8')).artifacts;
@@ -159,15 +174,7 @@ function main(argv) {
     env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${tracer}`].filter(Boolean).join(' ');
     env.TEST_TRACE_ROOT = root;
   }
-  for (const cmd of part.commands) {
-    console.log(`\n> ${cmd}\n`);
-    const r = spawnSync('sh', ['-c', cmd], { cwd: root, stdio: 'inherit', env });
-    if (r.status !== 0) {
-      console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
-      return r.status || 1;
-    }
-  }
-  return 0;
+  return runCommands(part.commands, { root, env });
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

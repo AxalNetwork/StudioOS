@@ -1,3 +1,4 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 /**
  * Task #156 — `check-unused-imports` covers destructured locals, and this file
  * is the only evidence it works.
@@ -457,7 +458,7 @@ test('the guard builds no regex from a name', () => {
 // Wiring
 
 test('the guard runs in test:guards and is documented', () => {
-  const pkg = read('package.json');
+  const pkg = guardCommands.join(' && ');
   assert.match(pkg, /node scripts\/check-unused-imports\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
   const readme = read('scripts/README.md');

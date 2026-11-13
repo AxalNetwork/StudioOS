@@ -54,6 +54,9 @@ can be read to find out what a rule actually is.
 | `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
 | `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
 
+| `guardRunner.mjs` | D5505: sequential argv execution, independent failure aggregation, prerequisite blocking and interrupt reporting. |
+| `guardRunner.test.mjs` | D5505: real child-process failure/signal fixtures, catalog membership, required flags and package wiring. |
+
 ## Tests
 
 `npm run test:retention` runs every `*.test.mjs` in this folder. Fourteen of the

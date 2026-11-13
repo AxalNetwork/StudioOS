@@ -1,0 +1,426 @@
+[
+  {
+    "id": "generated",
+    "command": [
+      "node",
+      "scripts/build-generated.mjs"
+    ],
+    "preflight": true
+  },
+  {
+    "id": "no-anthropic-in-prod",
+    "command": [
+      "node",
+      "scripts/ci/no-anthropic-in-prod.mjs"
+    ]
+  },
+  {
+    "id": "check-api-drift",
+    "command": [
+      "node",
+      "scripts/check-api-drift.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-sql-unsafe",
+    "command": [
+      "node",
+      "scripts/check-sql-unsafe.mjs"
+    ]
+  },
+  {
+    "id": "check-sql-prepare",
+    "command": [
+      "node",
+      "scripts/check-sql-prepare.mjs"
+    ]
+  },
+  {
+    "id": "check-refusal-bodies",
+    "command": [
+      "node",
+      "scripts/check-refusal-bodies.mjs"
+    ]
+  },
+  {
+    "id": "check-sql-migrations",
+    "command": [
+      "node",
+      "scripts/check-sql-migrations.mjs"
+    ],
+    "preflight": true
+  },
+  {
+    "id": "check-sqlite-dialect",
+    "command": [
+      "node",
+      "scripts/check-sqlite-dialect.mjs"
+    ]
+  },
+  {
+    "id": "check-sqlite-tables",
+    "command": [
+      "node",
+      "scripts/check-sqlite-tables.mjs"
+    ]
+  },
+  {
+    "id": "check-sqlite-columns",
+    "command": [
+      "node",
+      "scripts/check-sqlite-columns.mjs"
+    ]
+  },
+  {
+    "id": "check-write-router-columns",
+    "command": [
+      "node",
+      "scripts/check-write-router-columns.mjs"
+    ]
+  },
+  {
+    "id": "check-sqlite-table-collisions",
+    "command": [
+      "node",
+      "scripts/check-sqlite-table-collisions.mjs"
+    ]
+  },
+  {
+    "id": "check-schema-pair-drift",
+    "command": [
+      "node",
+      "--no-warnings",
+      "scripts/check-schema-pair-drift.mjs"
+    ]
+  },
+  {
+    "id": "check-migration-declarations",
+    "command": [
+      "node",
+      "--no-warnings",
+      "scripts/check-migration-declarations.mjs"
+    ]
+  },
+  {
+    "id": "check-runtime-schema-declared",
+    "command": [
+      "node",
+      "--no-warnings",
+      "scripts/check-runtime-schema-declared.mjs"
+    ]
+  },
+  {
+    "id": "check-runtime-ddl",
+    "command": [
+      "node",
+      "--no-warnings",
+      "scripts/check-runtime-ddl.mjs"
+    ],
+    "preflight": true
+  },
+  {
+    "id": "check-timestamp-comparisons",
+    "command": [
+      "node",
+      "scripts/check-timestamp-comparisons.mjs"
+    ]
+  },
+  {
+    "id": "check-migration-column-shapes",
+    "command": [
+      "node",
+      "scripts/check-migration-column-shapes.mjs"
+    ]
+  },
+  {
+    "id": "check-money-cents",
+    "command": [
+      "node",
+      "scripts/check-money-cents.mjs"
+    ]
+  },
+  {
+    "id": "check-regulated-wording",
+    "command": [
+      "node",
+      "scripts/check-regulated-wording.mjs"
+    ]
+  },
+  {
+    "id": "check-row-generics",
+    "command": [
+      "node",
+      "scripts/check-row-generics.mjs"
+    ]
+  },
+  {
+    "id": "check-schema-readiness",
+    "command": [
+      "node",
+      "scripts/check-schema-readiness.mjs"
+    ]
+  },
+  {
+    "id": "check-wrangler-binding-parity",
+    "command": [
+      "node",
+      "scripts/check-wrangler-binding-parity.mjs"
+    ]
+  },
+  {
+    "id": "check-preview-isolation",
+    "command": [
+      "node",
+      "scripts/check-preview-isolation.mjs",
+      "--static"
+    ]
+  },
+  {
+    "id": "check-scanner-ignore-parity",
+    "command": [
+      "node",
+      "scripts/check-scanner-ignore-parity.mjs"
+    ]
+  },
+  {
+    "id": "check-inline-project-pickers",
+    "command": [
+      "node",
+      "scripts/check-inline-project-pickers.mjs"
+    ]
+  },
+  {
+    "id": "check-folder-docs",
+    "command": [
+      "node",
+      "scripts/check-folder-docs.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "build-route-map",
+    "command": [
+      "node",
+      "scripts/build-route-map.mjs",
+      "--check"
+    ]
+  },
+  {
+    "id": "build-profile-routing",
+    "command": [
+      "node",
+      "scripts/build-profile-routing.mjs",
+      "--check"
+    ]
+  },
+  {
+    "id": "check-decision-ids",
+    "command": [
+      "node",
+      "scripts/check-decision-ids.mjs"
+    ],
+    "preflight": true
+  },
+  {
+    "id": "check-unused-imports",
+    "command": [
+      "node",
+      "scripts/check-unused-imports.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-react-hook-imports",
+    "command": [
+      "node",
+      "scripts/check-react-hook-imports.mjs"
+    ]
+  },
+  {
+    "id": "check-frontend-logging",
+    "command": [
+      "node",
+      "scripts/check-frontend-logging.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-secret-logging",
+    "command": [
+      "node",
+      "scripts/check-secret-logging.mjs"
+    ]
+  },
+  {
+    "id": "check-zone-handlers",
+    "command": [
+      "node",
+      "scripts/check-zone-handlers.mjs"
+    ]
+  },
+  {
+    "id": "check-zone-hover-copy",
+    "command": [
+      "node",
+      "scripts/check-zone-hover-copy.mjs"
+    ]
+  },
+  {
+    "id": "check-tail-consumer",
+    "command": [
+      "node",
+      "scripts/check-tail-consumer.mjs"
+    ]
+  },
+  {
+    "id": "check-advisor-bank-drift",
+    "command": [
+      "node",
+      "scripts/check-advisor-bank-drift.mjs"
+    ]
+  },
+  {
+    "id": "check-statemachine-coverage",
+    "command": [
+      "node",
+      "scripts/check-statemachine-coverage.mjs"
+    ]
+  },
+  {
+    "id": "check-deck-templates",
+    "command": [
+      "node",
+      "scripts/check-deck-templates.mjs"
+    ]
+  },
+  {
+    "id": "check-deck-payload-wiring",
+    "command": [
+      "node",
+      "scripts/check-deck-payload-wiring.mjs"
+    ]
+  },
+  {
+    "id": "check-branch-config",
+    "command": [
+      "node",
+      "scripts/check-branch-config.mjs"
+    ]
+  },
+  {
+    "id": "check-access-comments",
+    "command": [
+      "node",
+      "scripts/check-access-comments.mjs"
+    ]
+  },
+  {
+    "id": "build-auth-inventory",
+    "command": [
+      "node",
+      "scripts/build-auth-inventory.mjs",
+      "--check"
+    ],
+    "requires": [
+      "generated"
+    ],
+    "preflight": true
+  },
+  {
+    "id": "check-docs-assets-closure",
+    "command": [
+      "node",
+      "scripts/check-docs-assets-closure.mjs"
+    ]
+  },
+  {
+    "id": "check-bundle-budget",
+    "command": [
+      "node",
+      "scripts/check-bundle-budget.mjs"
+    ]
+  },
+  {
+    "id": "check-frontend-builds",
+    "command": [
+      "node",
+      "scripts/check-frontend-builds.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-mercury-member-surfaces",
+    "command": [
+      "node",
+      "scripts/check-mercury-member-surfaces.mjs"
+    ]
+  },
+  {
+    "id": "check-deck-retention",
+    "command": [
+      "node",
+      "scripts/check-deck-retention.mjs"
+    ]
+  },
+  {
+    "id": "check-model-coverage",
+    "command": [
+      "node",
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      "./cloudflare-worker/test/_ts-loader.mjs",
+      "scripts/check-model-coverage.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-skill-library",
+    "command": [
+      "node",
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      "./cloudflare-worker/test/_ts-loader.mjs",
+      "scripts/check-skill-library.mjs"
+    ],
+    "requires": [
+      "generated"
+    ]
+  },
+  {
+    "id": "check-test-clock",
+    "command": [
+      "node",
+      "--no-warnings",
+      "scripts/check-test-clock.mjs"
+    ]
+  },
+  {
+    "id": "undefined-symbols",
+    "command": [
+      "node",
+      "node_modules/eslint/bin/eslint.js",
+      "--no-warn-ignored",
+      "frontend/src/**/*.{js,jsx}"
+    ],
+    "requires": [
+      "generated"
+    ],
+    "preflight": true,
+    "full": false
+  }
+]

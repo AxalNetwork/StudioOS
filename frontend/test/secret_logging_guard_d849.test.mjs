@@ -1,9 +1,9 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 // D849 (#2472): `scripts/check-secret-logging.mjs` finds a credential in a log
 // line or an activity row, and passes prose, field names and comments. The
 // whole Worker tree passes it, and `test:guards` runs it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { scan } from '../../scripts/check-secret-logging.mjs';
 
@@ -30,6 +30,5 @@ test('D849 prose, a field name, a safe value and a comment pass', () => {
 
 test('D849 the Worker tree passes, and test:guards runs the guard', () => {
   execFileSync(process.execPath, [new URL('../../scripts/check-secret-logging.mjs', import.meta.url).pathname], { stdio: 'pipe' });
-  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-  assert.match(pkg.scripts['test:guards'], /node scripts\/check-secret-logging\.mjs/);
+  assert.match(guardCommands.join(' && '), /node scripts\/check-secret-logging\.mjs/);
 });

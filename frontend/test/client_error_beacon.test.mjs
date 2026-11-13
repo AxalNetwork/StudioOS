@@ -1,3 +1,4 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 /**
  * What `reportError` actually produces — the first test `lib/log.js` has had.
  *
@@ -196,7 +197,7 @@ test('reportWarn has callers, and the console-only catches are gone', () => {
 });
 
 test('the guard that keeps this true is wired, and named where guards are listed', () => {
-  const pkg = readFileSync(resolve(process.cwd(), 'package.json'), 'utf8');
+  const pkg = guardCommands.join(' && ');
   assert.match(pkg, /node scripts\/check-frontend-logging\.mjs/,
     'the guard is not in test:guards, so nothing runs it on a PR');
   const readme = readFileSync(resolve(process.cwd(), 'scripts/README.md'), 'utf8');

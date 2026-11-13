@@ -302,3 +302,10 @@ binding targets and branch isolation.
 
 | `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
 | `cloudflare-heartbeat-5671.mjs` | D5671: fixed-message read-only independent GitHub heartbeat check. |
+
+## Guard execution (D5505)
+
+| File | Role |
+| --- | --- |
+| `guard-commands.json` | Ordered full guard commands, exact flags, dependencies and preflight selection. |
+| `run-guards.mjs` | Runs every independent guard, reports blocked prerequisites and writes ignored guard/preflight result artifacts for #5502. |

@@ -1,3 +1,4 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 // #3939: scripts/check-model-coverage.mjs, one fixture per failure mode. The clean fixture
 // passes; each test breaks it in exactly one way and expects exactly that rule. The run against
 // the repository is the script itself, in test:guards.
@@ -174,6 +175,6 @@ test("jobsOf: a job's step rows become one job with its steps in order; a step d
 test('the repository run is wired into test:guards, with the TypeScript loader it needs', async () => {
   const { readFileSync } = await import('node:fs');
   const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
-  assert.match(pkg.scripts['test:guards'], /--import \.\/cloudflare-worker\/test\/_ts-loader\.mjs scripts\/check-model-coverage\.mjs/);
+  assert.match(guardCommands.join(' && '), /--import \.\/cloudflare-worker\/test\/_ts-loader\.mjs scripts\/check-model-coverage\.mjs/);
   assert.match(pkg.scripts['test:drift'], /npm run test:guards/, 'and test:guards runs in test:drift');
 });

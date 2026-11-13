@@ -1,3 +1,4 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 /**
  * #4591 — the schema-drift runbook (documentation/operations/SCHEMA_DRIFT.md)
  * stays true to the code it describes.
@@ -21,7 +22,7 @@ const raw = (p) => readFileSync(at(p), 'utf8');
 
 const RUNBOOK = raw('documentation/operations/SCHEMA_DRIFT.md');
 const DEPLOY = raw('.github/workflows/cloudflare-worker-deploy.yml');
-const GUARDS = JSON.parse(raw('package.json')).scripts['test:guards'];
+const GUARDS = guardCommands.join(' && ');
 
 /** One job's block of the deploy workflow: from `  <name>:` to the next top-level job. */
 function job(name) {

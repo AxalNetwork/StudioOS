@@ -1,3 +1,4 @@
+import { guardCommands } from '../../scripts/run-guards.mjs';
 /**
  * THE FRAME CONTRACT — one shell, four licences, and nothing drawn twice.
  *
@@ -350,7 +351,6 @@ test('the in-body startup picker ledger is empty, and the sweep that fills it is
     + 'uncounted while the ledger claimed to hold them all');
 
   // And it is in `test:guards`, or it is a script nobody runs.
-  const pkg = JSON.parse(read('package.json'));
-  assert.ok(pkg.scripts['test:guards'].includes('check-inline-project-pickers.mjs'),
+  assert.ok(guardCommands.join(' && ').includes('check-inline-project-pickers.mjs'),
     'the picker guard is not in test:guards, so nothing runs it');
 });
