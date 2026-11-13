@@ -475,13 +475,20 @@ export async function resolveReview(env: Env, a: { review: Review; action: 'keep
 
 // ── The read ─────────────────────────────────────────────────────────────────
 
-/** The next pricing review date: a postponement's date if later than the latest decision's, else the decision's. */
+/**
+ * The next pricing review date. An open review's due date wins. Otherwise the
+ * latest of: the latest decision's `pricing_review_on`, a postponement's date,
+ * and (D5020) a year after the day HQ last kept the terms, so a review closed
+ * with "keep" stops being due instead of staying due for ever.
+ */
 export function nextReviewOn(latestDecisionReviewOn: string | null, reviews: Review[]): string | null {
-  const postponed = reviews.filter((r) => r.state === 'postponed' && r.postponed_until).map((r) => r.postponed_until as string).sort().pop() ?? null;
   const open = reviews.find((r) => r.state === 'open');
   if (open) return open.due_on;
-  if (postponed && (!latestDecisionReviewOn || postponed > latestDecisionReviewOn)) return postponed;
-  return latestDecisionReviewOn;
+  const postponed = reviews.filter((r) => r.state === 'postponed' && r.postponed_until).map((r) => r.postponed_until as string);
+  const kept = reviews.filter((r) => r.state === 'kept' && isIsoDay(String(r.resolved_at ?? '').slice(0, 10)))
+    .map((r) => addYear(String(r.resolved_at).slice(0, 10)));
+  const dates = [latestDecisionReviewOn, ...postponed, ...kept].filter((d): d is string => typeof d === 'string' && d.length > 0);
+  return dates.length ? (dates.sort().pop() as string) : null;
 }
 
 /** The difference between a recommendation and the licence's current terms, for the two figures the terms hold. */

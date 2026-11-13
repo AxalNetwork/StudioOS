@@ -32,6 +32,7 @@ import { isIsoDay } from '../services/licenceTerms';
 import adminLicences from './admin_licences';
 import type { RouteMount } from '../util/routeRegistry';
 import { PricingError, activeModel, decisionsForLicence, getCountry } from '../services/licencePricingStore';
+import { STALE_CODES, pricingIncident } from '../services/pricingIncidents';
 import {
   addYear, applyStatements, createLicenceSnapshot, currentContract, driftOf, effectiveBasis, getLicenceSnapshot, getReview,
   latestLicenceSnapshot, nextReviewOn, openReview, planApply, policyOf, resolveReview, reviewsFor, territoryOf,
@@ -44,7 +45,12 @@ const actorOf = (u: { id: number }) => `user:${u.id}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
 function answer(c: C, e: unknown) {
-  if (e instanceof PricingError) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
+  if (e instanceof PricingError) {
+    // D5020: the logs tell a calculation failure and a lost race apart from any other refusal.
+    if (e.code === 'model_invalid') pricingIncident('recommendation_calculation_failed', { code: e.code, path: c.req.path });
+    else if (STALE_CODES.has(e.code)) pricingIncident('stale_revision_conflict', { code: e.code, path: c.req.path });
+    return refuse(c, e.status, { code: e.code, message: e.sentence, extra: e.extra });
+  }
   return mapError(c, e);
 }
 const reasonOf = (b: Record<string, unknown> | null, min = 3, max = 500) => {
@@ -169,6 +175,7 @@ r.put('/:uid/pricing/policy', async (c) => {
           WHERE licence_uid = ? AND revision = ?`,
       ).bind(v.value.basis, v.value.primary_country, weights, reason, at, actorOf(admin), licence.uid, expected).run();
     if (Number(res?.meta?.changes ?? 0) !== 1) {
+      pricingIncident('stale_revision_conflict', { code: 'basis_conflict', licence_uid: licence.uid, expected_revision: expected });
       return refuse(c, 409, { code: 'basis_conflict', message: 'The pricing basis changed since you opened it, so nothing was saved. Reload it.', extra: { current: before } });
     }
     const policy = await policyOf(c.env, licence.uid);
@@ -184,7 +191,10 @@ async function snapshotFor(c: C, licence: LicenceRow, actor: string, allowProvis
   const territory = await territoryOf(c.env, licence.id);
   const eff = effectiveBasis(await policyOf(c.env, licence.uid), territory);
   if (!eff.ok) throw new PricingError(409, eff.code, eff.sentence);
-  return createLicenceSnapshot(c.env, licence, eff.value, actor, { allowProvisional });
+  const snap = await createLicenceSnapshot(c.env, licence, eff.value, actor, { allowProvisional });
+  // D5020: an unavailable recommendation is recorded (D5015), and the logs say why it could not be priced.
+  if (!snap.available) pricingIncident('market_data_incomplete', { licence_uid: licence.uid, snapshot_uid: snap.uid, countries: snap.territory });
+  return snap;
 }
 
 r.post('/:uid/pricing/snapshot', async (c) => {
@@ -196,6 +206,8 @@ r.post('/:uid/pricing/snapshot', async (c) => {
     const snapshot = await snapshotFor(c, licence, actorOf(admin), body?.allow_provisional === true);
     await logAdminAction(c.env, admin.id, admin.email || '', 'licence_pricing_snapshot_taken', {
       licence_uid: licence.uid, snapshot_uid: snapshot.uid, basis: snapshot.basis, model_version: snapshot.pricing_model_version, available: snapshot.available,
+      // D5020: the country snapshots this one froze, so each snapshot created is on the audit record.
+      country_snapshots: snapshot.components.map((x) => ({ country_code: x.country_code, snapshot_uid: x.snapshot_uid, weight_bps: x.weight_bps })),
     });
     // A refresh is a recommendation only; it says so, so no screen reads it as a change of terms.
     return c.json({ snapshot, licence_changed: false }, 201);
@@ -222,6 +234,7 @@ r.post('/:uid/pricing/apply', async (c) => {
     const eff = effectiveBasis(await policyOf(c.env, licence.uid), territory);
     if (!eff.ok) return refuse(c, 409, { code: eff.code, message: eff.sentence });
     if (snap.territory.join(',') !== territory.join(',') || snap.basis !== eff.value.basis || snap.policy_revision !== eff.value.policy_revision) {
+      pricingIncident('stale_revision_conflict', { code: 'snapshot_stale', licence_uid: licence.uid, snapshot_uid: snap.uid });
       return refuse(c, 409, { code: 'snapshot_stale', message: 'The territory or pricing basis changed since this recommendation was made. Refresh the recommendation and apply again.' });
     }
     if (licence.currency && licence.currency !== snap.currency) {
@@ -253,6 +266,7 @@ r.post('/:uid/pricing/apply', async (c) => {
       licence, snap, input: full, plan: plan.plan, actor: actorOf(admin), decisionUid, now, contractUid: contract?.uid ?? null, reviewOn,
     }));
     if (commit.lost) {
+      pricingIncident('stale_revision_conflict', { code: 'terms_conflict', licence_uid: licence.uid, expected_terms_revision: input.expected_terms_revision });
       const fresh = await byUid(c.env, licence.uid);
       return refuse(c, 409, {
         code: 'terms_conflict',
@@ -264,6 +278,7 @@ r.post('/:uid/pricing/apply', async (c) => {
     // D272 — the branch's copy holds the core terms, so the apply pushes like every terms write.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     const outcome = pushOutcome(pushed);
+    if (outcome === 'partial') pricingIncident('branch_push_partial', { licence_uid: licence.uid, decision_uid: decisionUid, failure_code: (pushed as { failure_code?: string }).failure_code ?? null });
     const before = { annual_fee_cents: licence.annual_fee_cents ?? null, revenue_share_bps: licence.revenue_share_bps ?? null, currency: licence.currency };
     const afterTerms = { annual_fee_cents: after.annual_fee_cents ?? null, revenue_share_bps: after.revenue_share_bps ?? null, currency: after.currency };
     await logEvent(c.env, licence.id, 'terms_changed', admin.id, {
@@ -274,6 +289,8 @@ r.post('/:uid/pricing/apply', async (c) => {
     await logAdminAction(c.env, admin.id, admin.email || '', 'licence_pricing_applied', {
       licence_uid: licence.uid, decision_uid: decisionUid, decision: plan.plan.decision, snapshot_uid: snap.uid, differs: plan.plan.differs,
       changed: plan.plan.changed_terms, effective_from: input.effective_from, reason: input.reason, override_reason: input.override_reason, push: outcome,
+      // D5020: an apply that closes the annual review is that review's decision, so the audit row names it.
+      review_uid: input.review_uid ?? null, model_version: snap.pricing_model_version,
     });
     return c.json({
       ok: true, committed: true,
