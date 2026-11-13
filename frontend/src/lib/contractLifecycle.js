@@ -6,6 +6,7 @@
 //
 //   Templates   Draft → Under legal review → Approved for use → Superseded / Archived
 //   Agreements  Prepared → Ready for signature → Sent → Executed / Voided
+//               (a closing line's paper too, D4811 part 22)
 //   Governance  Draft → In review → Approved → Executed → Archived
 //
 // Only an executed instrument carries the filled "Executed" seal. "Approved
@@ -26,7 +27,8 @@ export const TEMPLATE_STATES = Object.freeze({
 export const AGREEMENT_STATES = Object.freeze({
   prepared: { label: 'Prepared', glyph: '○', treatment: 'plain' },
   ready: { label: 'Ready for signature', glyph: '◔', treatment: 'progress' },
-  sent: { label: 'Sent', glyph: '➤', treatment: 'progress' },
+  // D4811 part 22: the canvas's pill (`ST['agr:Sent']`) reads "Sent · awaiting signature".
+  sent: { label: 'Sent · awaiting signature', glyph: '➤', treatment: 'progress' },
   executed: { label: 'Executed', glyph: '●', treatment: 'seal' },
   voided: { label: 'Voided', glyph: '⊘', treatment: 'void' },
 });
@@ -148,6 +150,34 @@ export function agreementLifecycle(row) {
 }
 
 /**
+ * D4811 part 22 (owner, 2026-11-13: "Executed everywhere"). The stored and
+ * API value stays `signed`; only the words change. The metric strip already
+ * said Executed, and these are the words the agreements list's status chips
+ * and its sort read, so the chip, the filter and the strip say one thing.
+ * `AgreementList.jsx` is slot S23's file while #5050 is open: it takes these
+ * lists in place of its inline arrays (the hand-off is on #4811).
+ */
+export const AGREEMENT_STATUS_FILTERS = Object.freeze([
+  Object.freeze(['All', '']),
+  Object.freeze(['Awaiting signature', 'awaiting_signature']),
+  Object.freeze([AGREEMENT_STATES.executed.label, 'signed']),
+  Object.freeze([AGREEMENT_STATES.voided.label, 'void']),
+]);
+
+/** The agreements list's sort choices as `[value, label]`; `signed_at` is the API's field, read as the executed date. */
+export const AGREEMENT_SORT_OPTIONS = Object.freeze([
+  Object.freeze(['sent_at:desc', 'Sent, newest']),
+  Object.freeze(['sent_at:asc', 'Sent, oldest']),
+  Object.freeze(['title:asc', 'Title']),
+  Object.freeze(['recipient:asc', 'Recipient']),
+  Object.freeze(['signed_at:desc', 'Executed, newest']),
+  Object.freeze(['days_to_sign:asc', 'Days to sign']),
+]);
+
+/** The one contradiction an agreement row flags (board CT-02), in the owner's word. */
+export const NO_EVIDENCE_WARNING = 'Marked executed · no execution evidence';
+
+/**
  * Whether a signed row has evidence that it was executed: a signature date, a
  * signed file, a linked envelope, or (for an esign row) the completed envelope
  * the status was read from.
@@ -200,7 +230,7 @@ export function agreementRowSemantics(row) {
     if (sent) line = `Sent ${sent} · Awaiting signature`;
     else { line = 'Awaiting signature'; sentMissing = row?.status === 'sent'; }
   } else if (row?.status === 'signed') {
-    if (!hasExecutionEvidence(row)) { warning = 'Marked signed · no execution evidence'; line = null; }
+    if (!hasExecutionEvidence(row)) { warning = NO_EVIDENCE_WARNING; line = null; }
     else line = signed ? `Executed ${signed}` : 'Executed';
   } else if (row?.status === 'void') {
     const voided = dayOf(row?.voided_at);
@@ -211,6 +241,54 @@ export function agreementRowSemantics(row) {
       : { none: true, label: 'No company link in this store' };
   const days = row?.status === 'signed' && Number.isFinite(row?.days_to_sign) ? row.days_to_sign : null;
   return { badge: warning ? null : badge, line, sentMissing, company, warning, days };
+}
+
+// ---- Closings --------------------------------------------------------------
+
+/**
+ * D4811 part 22 (owner, 2026-11-13: question B, answer A). A closing line's
+ * paper takes the agreement lifecycle instead of its own words. The paper is
+ * D1216's staged envelope as `GET /api/legal/esign/staged/line/:id` returns it
+ * (`services/stagedSigning.ts` `readStaged`): `complete`, `voided`, `countersign`
+ * and each stage's `state`. Nothing stored changes; this only reads it.
+ *
+ * - every stage signed (`complete`) → Executed, "countersigned for Axal" when Axal signed last;
+ * - some stage sent or signed → Sent · awaiting signature, with who it waits on;
+ * - no stage sent yet → Ready for signature (the paper is generated: its text and digest are stored);
+ * - only voided papers → Voided;
+ * - no paper → no state, "No paper sent": nothing is drawn as Prepared, because
+ *   no closing store records a paper before it is generated.
+ *
+ * Two states have no lifecycle word and are not forced into one (D4811-p22,
+ * question D on #4811): a signer declined, and a signer's envelope was voided
+ * while the paper itself was not. Each keeps its words and draws no pill.
+ * The closing's own Open / Closed / Cancelled is the round's state, not a
+ * document's, and is not read here.
+ *
+ * Returns `{ key, badge, detail, text }`; `text` is the badge's words and the detail, as one line.
+ */
+export const CLOSING_PAPER_UNMAPPED = Object.freeze({
+  declined: 'Declined',
+  stage_void: 'A signer’s envelope was voided',
+});
+
+export function closingPaperLifecycle(envelopes) {
+  const list = Array.isArray(envelopes) ? envelopes.filter(Boolean) : [];
+  const out = (key, badge, detail = null) => ({ key, badge, detail, text: [badge?.label, detail].filter(Boolean).join(' · ') });
+  const live = list.find((e) => !e.voided);
+  if (!live) return list.length ? out('voided', lifecycleBadge('agreement', 'voided')) : out('none', null, 'No paper sent');
+  const stages = Array.isArray(live.stages) ? live.stages : [];
+  // `complete` is the Worker's own reading: every stage, Axal's countersign included, has a signature recorded.
+  if (live.complete === true) {
+    return out('executed', lifecycleBadge('agreement', 'executed'), live.countersign ? 'countersigned for Axal' : null);
+  }
+  if (stages.some((s) => s?.state === 'declined')) return out('declined', null, CLOSING_PAPER_UNMAPPED.declined);
+  if (stages.some((s) => s?.state === 'void')) return out('stage_void', null, CLOSING_PAPER_UNMAPPED.stage_void);
+  const signed = stages.filter((s) => s?.state === 'signed').length;
+  const moving = stages.some((s) => s?.state === 'sent' || s?.state === 'awaiting_release') || signed > 0;
+  if (!moving) return out('ready', lifecycleBadge('agreement', 'ready'), stages.length ? 'not sent yet' : null);
+  const detail = stages.some((s) => s?.state === 'awaiting_release') ? 'waiting for Axal’s countersign' : `${signed} of ${stages.length} signed`;
+  return out('sent', lifecycleBadge('agreement', 'sent'), detail);
 }
 
 // ---- Governance -----------------------------------------------------------

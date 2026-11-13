@@ -135,7 +135,7 @@ export function ThirdPartyDrawer({ closing, line, envelopes, onClose, onSaved })
           <input className={INPUT} maxLength={120} value={name} onChange={(e) => setName(e.target.value)} data-testid="closing-third-party-name" />
         </label>
         <p className="m-0 flex items-center justify-between gap-2">Amount <span><Money cents={line.amount_cents} currency={line.currency || closing.currency} reason="No amount is recorded on this line." /> · from the line</span></p>
-        <p className="m-0 flex items-center justify-between gap-2">Signed paper <b data-testid="closing-third-party-paper">{paperWord(envelopes)}</b></p>
+        <p className="m-0 flex items-center justify-between gap-2">Paper <b data-testid="closing-third-party-paper">{paperWord(envelopes)}</b></p>
         <p className="m-0 flex items-center justify-between gap-2">Business check <span className="flex items-center gap-2"><NotYet>{DESK_WAITS.thirdParty}</NotYet><Link to="/admin/kyc" className={BTN.link}>Open in KYC &amp; KYB</Link></span></p>
         <p className="m-0 text-[12px] text-gray-600 dark:text-gray-400" data-testid="closing-third-party-gap">{DESK_WAITS.thirdParty}</p>
         <span className={EYEBROW}>Evidence of transfer</span>

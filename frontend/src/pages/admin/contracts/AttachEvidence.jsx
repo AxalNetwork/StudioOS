@@ -32,7 +32,7 @@ export default function AttachEvidence({ row, onClose, onAttached }) {
         <p role="status">Attached. The signed copy (sha {String(done.file_sha256 || '').slice(0, 4)}…{String(done.file_sha256 || '').slice(-4)}) is this agreement's execution evidence, signed {done.signed_on} by {done.signatory}.</p>
         <div className="flex justify-end"><button type="button" className={button} onClick={close}>Close</button></div>
       </> : <>
-        <p>This agreement is marked signed but nothing shows it was. Attach the copy signed outside StudioOS. It is kept once and cannot be replaced.</p>
+        <p>This agreement is marked executed but nothing shows it was signed. Attach the copy signed outside StudioOS. It is kept once and cannot be replaced.</p>
         <label className="block font-semibold">Signed PDF<input type="file" accept=".pdf,application/pdf" className={input} onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })} /></label>
         <label className="block font-semibold">Signed on<input type="date" className={input} max={new Date().toISOString().slice(0, 10)} value={form.signed_on} onChange={(e) => setForm({ ...form, signed_on: e.target.value })} /></label>
         <label className="block font-semibold">Signatory (name, capacity)<input className={input} maxLength={200} value={form.signatory} onChange={(e) => setForm({ ...form, signatory: e.target.value })} /></label>
