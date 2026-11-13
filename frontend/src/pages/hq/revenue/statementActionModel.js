@@ -30,6 +30,8 @@ export const FLOW_STEPS = Object.freeze({
   record_payment: Object.freeze(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt']),
   issue: Object.freeze(['Prepare', 'Review', 'Confirm', 'Receipt']),
   void: Object.freeze(['Scope', 'Review', 'Authenticate', 'Result']),
+  record_dispute: Object.freeze(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt']),
+  set_due_date: Object.freeze(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt']),
 });
 
 /** The step a flow is on while its request is out: Authenticate where the step-up applies, else Confirm. */
@@ -42,6 +44,8 @@ export const ACTION_LABEL = Object.freeze({
   record_payment: 'Record a payment',
   issue: 'Mark issued',
   void: 'Void statement',
+  record_dispute: 'Record dispute',
+  set_due_date: 'Set due date',
 });
 
 /** A key the Worker accepts (`IDEMPOTENCY_KEY_RE`), minted once per prepared action. */
@@ -163,7 +167,7 @@ export function statusPreview(kind, s) {
 /** The body a governed action sends: its fields plus the reason, the revision it read and its key. */
 export function actionBody({ kind, statement, fields = {}, reason, key }) {
   return {
-    ...(kind === 'record_payment' ? fields : {}),
+    ...(['record_payment', 'record_dispute', 'set_due_date'].includes(kind) ? fields : {}),
     reason: String(reason ?? '').trim(),
     expected_revision: revisionOf(statement),
     idempotency_key: key,
@@ -186,7 +190,7 @@ export function classifyOutcome({ kind, result, error }) {
         ? { kind: 'settled', title: 'Payment recorded · statement paid', replayed }
         : { kind: 'partial', title: 'Payment recorded · part still outstanding', replayed };
     }
-    return { kind: 'applied', title: kind === 'void' ? 'Statement voided' : 'Statement marked issued', replayed };
+    return { kind: 'applied', title: ({ void: 'Statement voided', issue: 'Statement marked issued', record_dispute: 'Dispute recorded', set_due_date: 'Due date recorded' })[kind], replayed };
   }
   const status = Number(error?.status);
   const code = error?.code || error?.data?.error || error?.data?.code || null;
@@ -230,10 +234,41 @@ export function receiptRows(result) {
   const b = result?.before;
   const a = result?.after;
   if (b && a) {
+    if (result.action === 'set_due_date') rows.push(['Due date', `${b.due_on || 'Not recorded'} → ${a.due_on || 'Not recorded'}`]);
+    if (result.action === 'record_dispute') rows.push(['Disputed', `${show(b.disputed_cents)} → ${show(a.disputed_cents)}`]);
     rows.push(['Outstanding', `${show(b.outstanding_cents)} → ${show(a.outstanding_cents)}`]);
     rows.push(['Status', `${b.status || 'Not returned'} → ${a.status || 'Not returned'}`]);
   }
   return rows;
+}
+
+/** Preview explicit adjustments without substituting zero for unknown figures. */
+export function adjustmentPreview({ kind, statement: s, amountText, dueOn, reason }) {
+  const why = reasonError(reason);
+  if (why) return { error: why };
+  if (!['draft', 'issued'].includes(s?.status)) return { error: 'Only a draft or issued statement can be adjusted.' };
+  if (kind === 'set_due_date') {
+    const value = dueOn || null;
+    if (value) {
+      const d = new Date(`${value}T00:00:00Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(d.getTime()) || d.toISOString().slice(0, 10) !== value) return { error: 'Enter a real calendar date.' };
+    }
+    return { body: { due_on: value }, rows: [{ label: 'Due date · UTC', before: s.due_on || 'Not recorded', after: value || 'Not recorded · cleared' }] };
+  }
+  const cur = currencyCode(s?.currency);
+  const f = readFigures(s);
+  if (!cur || !f) return { error: 'The currency or statement figures cannot be read. Reload first.' };
+  if (!String(amountText ?? '').trim()) return { error: 'Enter a disputed amount, or 0 to clear it.' };
+  const p = parseMinor(amountText, cur);
+  if (!p.ok) return { error: p.message };
+  if (p.minor < 0 || f.paid + p.minor > f.owed) return { error: 'Paid and disputed together cannot exceed owed.' };
+  return {
+    body: { disputed_cents: p.minor },
+    rows: [
+      { label: 'Disputed', before: money(f.disputed, cur), after: money(p.minor, cur) },
+      { label: 'Outstanding', before: money(f.outstanding, cur), after: money(f.owed - f.paid - p.minor, cur) },
+    ],
+  };
 }
 
 /**

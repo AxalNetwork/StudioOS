@@ -3,7 +3,7 @@ import { BTN } from './RevenueStates.jsx';
 import { periodLabel } from './revenueModel.js';
 import {
   ACTION_LABEL, FLOW_STEPS, actionBody, createActionRunner, newIdempotencyKey, paymentPreview, pendingStep, reasonError,
-  receiptRows, revisionOf, statusPreview,
+  receiptRows, revisionOf, statusPreview, adjustmentPreview,
 } from './statementActionModel.js';
 
 /**
@@ -29,7 +29,7 @@ import {
 export function StatementActionFlow({ kind, statement, onSubmit, onChanged, onClose, onBusy }) {
   const steps = FLOW_STEPS[kind];
   const [step, setStep] = useState(steps[0]);
-  const [fields, setFields] = useState({ amount: '', reference: '', reason: '' });
+  const [fields, setFields] = useState({ amount: '', reference: '', reason: '', dueOn: statement.due_on || '' });
   const [error, setError] = useState(null);
   const [prepared, setPrepared] = useState(null); // { body, rows, key, label }
   const [busy, setBusy] = useState(false);
@@ -59,6 +59,12 @@ export function StatementActionFlow({ kind, statement, onSubmit, onChanged, onCl
       rows = p.rows;
       extra = { amount_cents: p.body.amount_cents, reference: p.body.reference };
       label = `Record ${p.amountLabel} payment`;
+    } else if (kind === 'record_dispute' || kind === 'set_due_date') {
+      const p = adjustmentPreview({ kind, statement, amountText: fields.amount, dueOn: fields.dueOn, reason: fields.reason });
+      if (p.error) { setError(p.error); return; }
+      rows = p.rows;
+      extra = p.body;
+      label = ACTION_LABEL[kind];
     } else {
       const why = reasonError(fields.reason);
       if (why) { setError(why); return; }
@@ -132,6 +138,16 @@ export function StatementActionFlow({ kind, statement, onSubmit, onChanged, onCl
               </div>
             </>
           )}
+          {kind === 'record_dispute' && <div>
+            <label className={label} htmlFor="rv-dispute-amount">Disputed amount · {statement.currency}</label>
+            <input id="rv-dispute-amount" className={input} inputMode="decimal" value={fields.amount} onChange={set('amount')} />
+            <p className="text-[13px]">This replaces the recorded dispute. Enter 0 to clear it; a reason is required.</p>
+          </div>}
+          {kind === 'set_due_date' && <div>
+            <label className={label} htmlFor="rv-due-date">Due date · UTC</label>
+            <input id="rv-due-date" type="date" className={input} value={fields.dueOn} onChange={set('dueOn')} />
+            <p className="text-[13px]">Leave blank to clear the date. No payment terms are inferred.</p>
+          </div>}
           <div>
             <label className={label} htmlFor="rv-flow-reason">Reason <span className="font-normal text-axal-muted dark:text-gray-400">· required, read by whoever audits it</span></label>
             <textarea id="rv-flow-reason" className={input} rows={2} value={fields.reason} onChange={set('reason')} />
@@ -184,10 +200,11 @@ export function StatementActionFlow({ kind, statement, onSubmit, onChanged, onCl
           <p className="text-[14px] text-axal-ink dark:text-gray-100">
             {kind === 'record_payment'
               ? `${prepared.label.replace(/^Record /, 'Record a ')} received from ${who} against ${periodLabel(statement.period) || statement.period}.`
-              : `Mark the ${periodLabel(statement.period) || statement.period} statement for ${who} as issued: it is then the claim the subsidiary was sent.`}
+              : kind === 'issue' ? `Mark the ${periodLabel(statement.period) || statement.period} statement for ${who} as issued: it is then the claim the subsidiary was sent.`
+                : `${ACTION_LABEL[kind]} for ${who}, using the before → after values you reviewed.`}
           </p>
           <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">
-            {kind === 'record_payment' ? 'You may be asked for your authenticator code. ' : ''}This is recorded with your name, the reason and the time, and cannot be undone here.
+            {kind !== 'issue' ? 'You may be asked for your authenticator code. ' : ''}This is recorded with your name, the reason and the time. Any correction requires another governed action.
           </p>
           <div className={actions}>
             <button type="button" className={secondary} disabled={busy} onClick={() => setStep('Review')}>Back</button>
