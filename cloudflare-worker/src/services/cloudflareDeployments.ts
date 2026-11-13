@@ -33,7 +33,6 @@ export async function reconcileCfScript(input:{script:CfScript;now:number;readAp
   const receipt=async (id:unknown,patch:Partial<CfReceipt>)=>parseCfReceipt({version:1,id:await cfHash([script,id]),script,audience:cfAudience(script),family:'deployment',component:'release',state:'observed',
     code:'not_verified',occurred_ms:now,observed_ms:now,count:1,denominator:null,window_start_ms:since,window_end_ms:now,versions:[],source:'unknown',github:null,revision:null,
     episode_key:await cfHash(['cf',cfAudience(script),script,'release',id]),owner:'release_engineering',...patch});
-  let activeId=cursor.active_id,activeVersions=cursor.active_versions;
   try {
     const deployments:Deployment[]=[],versions:Version[]=[];
     const current=await readApi(`/workers/scripts/${script}/deployments`,{page:1,per_page:1});
@@ -73,18 +72,18 @@ export async function reconcileCfScript(input:{script:CfScript;now:number;readAp
       const oldReturn=orderKnown&&serving.length===1&&seenVersions.has(serving[0])&&previousVersions.length>0&&!previousVersions.includes(serving[0]);
       const code=d.source==='rollback'||oldReturn?'rollback':github?'traffic_changed':'unattributed';
       out.push(await receipt(['deploy',d.id],{code,occurred_ms:time(d.created_on),source:source(d.source),github,versions:d.versions.map(v=>({id:v.version_id,weight:v.percentage}))}));
-      activeId=d.id;activeVersions=serving.sort();previousVersions=serving;for(const id of serving)seenVersions.add(id);
+      previousVersions=serving;for(const id of serving)seenVersions.add(id);
     }
     if(!orderKnown)out.push(await receipt(['ordering-gap',cursor.revision],{component:'coverage',state:'unknown',code:'history_gap'}));
     for(const v of versions)out.push(await receipt(['version',v.id],{code:'version_uploaded',occurred_ms:time(v.metadata.created_on),source:source(v.metadata.source),versions:[{id:v.id,weight:null}]}));
     const finalHead=await readApi(`/workers/scripts/${script}/deployments`,{page:1,per_page:1});
     if((finalHead.result as any)?.deployments?.[0]?.id!==head.id)throw Error('cf_snapshot_changed');
-    activeId=head.id;activeVersions=head.versions.filter(v=>v.percentage>0).map(v=>v.version_id).sort();
+    const activeVersions=head.versions.filter(v=>v.percentage>0).map(v=>v.version_id).sort();
     // No receipt claims probe, callback, Container readiness, archive success or exact intermediate traffic history.
-    const saved=await store.commit(key,cursor.revision,{through_ms:now,active_id:activeId,active_versions:activeVersions},out);
+    const saved=await store.commit(key,cursor.revision,{through_ms:now,active_id:head.id,active_versions:activeVersions},out);
     return {state:saved?'observed' as const:'raced' as const,receipts:saved?out.length:0};
   } catch(error) {
-    const code=error instanceof Error&&error.message==='cf_history_gap'?'history_gap':'provider_unavailable';
+    const code=(error instanceof Error && error.message === 'cf_history_gap') ? 'history_gap':'provider_unavailable';
     const gap=await receipt(['gap',cursor.revision,code],{component:'coverage',state:'unknown',code,episode_key:await cfHash(['cf',script,'release-observation'])});
     if(!await store.commit(key,cursor.revision,{through_ms:cursor.through_ms,active_id:cursor.active_id,active_versions:cursor.active_versions},[gap]))return {state:'raced' as const,receipts:0};
     return {state:'unknown' as const,receipts:1};

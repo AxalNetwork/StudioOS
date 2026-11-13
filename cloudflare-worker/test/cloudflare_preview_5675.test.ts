@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import test, { before, after, mock } from 'node:test';import assert from 'node:assert/strict';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync,existsSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
-import { preparePreviewCanary,previewIngress,previewKey,verifyPreviewRequest,validPreviewReceipt,previewPromotionEligible,reconcilePreviewCanaryAlarm,type CanaryJob } from '../../meeting-bot/worker/previewCanary.ts';
+import { preparePreviewCanary,previewIngress,previewKey,validPreviewReceipt,previewPromotionEligible,reconcilePreviewCanaryAlarm,type CanaryJob } from '../../meeting-bot/worker/previewCanary.ts';
 import { MeetingBotContainer } from '../../meeting-bot/worker/container.ts';
 import { signRequest } from '../../meeting-bot/src/callback.ts';import { runPreviewCallback } from '../../meeting-bot/src/previewCanary.ts';
 before(()=>mock.timers.enable({apis:['Date'],now:1900000000000}));

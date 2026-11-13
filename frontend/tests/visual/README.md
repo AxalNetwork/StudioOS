@@ -17,6 +17,8 @@ of `.github/workflows/deck-visual.yml`.
 | `__screenshots__/` | The baselines. CI writes them in the pinned container and commits them; never add one made on a laptop. |
 | `grow_overview_4862.spec.mjs` | #4862: sparse/active overview, Share lightbox, failed-read retry and read-only states at desktop and phone widths. |
 
+| `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
+
 ### Rules
 
 - **A baseline comes from CI.** To redraw one on purpose, delete its PNG and

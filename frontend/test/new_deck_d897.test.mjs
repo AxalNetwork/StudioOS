@@ -190,7 +190,9 @@ async function mount(url, over = {}) {
   const stub = (target, name, fn) => { target[name] = (...a) => { calls.push([name, ...a]); return fn(...a); }; };
   stub(api, 'listProjects', async () => [{ id: 1, name: 'Synthetic venture' }]);
   stub(api, 'deckListVersions', over.versions || (async () => ({ versions: [{ id: 9, version: 3, is_current: true, theme: null }], proposal: null })));
-  stub(api, 'deckMethods', async () => ({ methods: [{ id: 'yc_seed', label: 'YC seed' }, { id: 'sequoia', label: 'Sequoia', locked: true }] }));
+  stub(api, 'deckMethods', over.methods || (async () => ({ methods: [{ id: 'yc_seed', label: 'YC seed' }, { id: 'sequoia', label: 'Sequoia', locked: true }] })));
+  stub(api, 'deckGet', async () => ({ slides: [{ title: 'Saved cover', body: 'Actual saved content' }] }));
+  stub(api, 'deckApplyMethod', async () => ({}));
   stub(api, 'deckRecommend', async () => ({}));
   stub(api, 'deckUpdate', async (id, body) => ({ id: 13, version: 5, title: body.title, slides: body.slides, theme: body.theme }));
   stub(api, 'getMe', async () => null);
@@ -488,4 +490,37 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   }
   const api = read('frontend/src/lib/apiModules.generated.js');
   assert.match(api, /export \* from '\.\/api\/newDeck\.js';/);
+});
+
+
+test('#5218: template selection previews locks, replaces the unused outline, and confirms apply-method', async () => {
+  const slides = [{ id: 'cover', title: 'Cover' }, { id: 'market', title: 'Market' }];
+  const m = await mount(`${NEW_PATH}?project_id=1`, { methods: async () => ({ methods: [
+    { id: 'yc_seed', label: 'YC seed', slides },
+    { id: 'sequoia_classic', label: 'Sequoia Classic', locked: true, slides },
+  ] }) });
+  try {
+    const yc = m.by('pitch-new-option-template-yc_seed');
+    assert.match(m.text(yc), /Fictional sample/);
+    await m.press(yc);
+    assert.ok(m.by('pitch-new-template-structure'));
+    assert.match(m.text(m.by('pitch-new-template-structure')), /Cover.*Market/);
+    assert.equal(Boolean(m.by('pitch-new-outline')), false, 'an ignored outline cannot be edited');
+    assert.equal(Boolean(m.pr(m.by('pitch-new-use-template')).disabled), false);
+    await m.press(m.by('pitch-new-use-template'));
+    assert.match(m.text(m.by('pitch-new-dialog')), /Use this template/);
+    await m.press(m.by('pitch-new-confirm'));
+    assert.equal(m.calls.filter(([n]) => n === 'deckApplyMethod').length, 1);
+    assert.deepEqual(m.calls.find(([n]) => n === 'deckApplyMethod').slice(1, 3), [1, 'yc_seed']);
+    assert.equal(m.calls.some(([n]) => n === 'outline' || n === 'build'), false);
+    assert.equal(Boolean(m.by('pitch-new-dialog')), false);
+    const locked = m.by('pitch-new-option-template-sequoia_classic');
+    assert.equal(Boolean(m.pr(locked).disabled), false, 'the locked preview is selectable');
+    await m.press(locked);
+    assert.match(m.text(m.by('pitch-new-template-structure')), /Sequoia Classic/);
+    assert.equal(m.pr(m.by('pitch-new-use-template')).disabled, true);
+    await m.press(m.by('pitch-new-option-blank-blank'));
+    assert.ok(m.by('pitch-new-outline'), 'Blank restores the outline');
+    assert.equal(Boolean(m.by('pitch-new-template-structure')), false);
+  } finally { await m.unmount(); }
 });

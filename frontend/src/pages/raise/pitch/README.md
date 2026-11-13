@@ -132,6 +132,9 @@ on main read `deckV2Adapter.js`.
 | `DiagramNodes.jsx` | D1542 (#3780): the selected diagram's nodes as fields over the block on the Grid, one edit each through `onCard`, and `DiagramCheck`, the check's status line under the card. |
 | `RecordPanel.jsx`, `walkthroughModel.js` | D4599 part 2 (#4599; D1590 F11, #3837): Present › Record (pd36, "Record a pitch"), a take per card sent to `deckRecordingsApi.record` as each card ends, with playback and captions, Retake, Delete behind its confirm, Send again for an interrupted upload, and "Attach to [Fund]'s link"; the model holds the words, the Worker's card numbering (`slideNumbers`) and pd35's Walkthrough cell (`walkthroughCell`), which `InvestorLinksTable.jsx` draws. Reads `deckV2Adapter.walkthrough`; HQ's `deck:walkthrough` off reads "Not switched on yet." |
 
+| `DeckPreview.jsx` | #5218: visible-only method, stored-template and saved-version previews through the existing deck renderers; chooser-local read cache. |
+| `TemplateChooser.jsx` | #5218: visual Start from choices, previewable plan locks and the template's structure in place of the unused outline. |
+
 The old template builder retired with D898 group E: its four actions are
 `StudioActions.jsx` and New deck's Recommended mark, and `/raise/pitch/builder`
 opens the studio. The editor is at `/raise/pitch/edit` (D898). New deck (D897)
