@@ -108,6 +108,25 @@ test('only complete executed same-attempt TAP recovers; partial verified failure
   for (const incomplete of ['', 'not ok 1 - partial', tap(false).replace('1..1\n', ''), tap(false).replace('# fail 0\n', ''), tap(false) + tap(false), tap(false).replace('ok 1', 'ok 2'), tap(false).replace('# skipped 0', '# skipped 1'), tap(false).replace('ok 1', 'not ok 1'), tap(true).replace('not ok 1', 'ok 1'), tap(false).replace('# tests 1', '# tests 9007199254740992').replace('# pass 1', '# pass 9007199254740992')]) assert.equal(inspectTap(incomplete).state, 'unknown');
   assert.equal(inspectTap(tap(true)).state, 'failure');
 });
+test('future-clock evidence accepts only the existing opt-in Wrangler skip markers', () => {
+  const optional = [
+    'runtime drift — every derived /api path is mounted (no 404)',
+    'Stripe webhook fulfilment invariants (MI Pro)',
+    'Stripe webhook fulfilment invariants (founder tier + investor)',
+  ];
+  const withSkips = (names, fail = false) => tap(fail)
+    .replace('1..1\n', `${names.map((name, i) => `ok ${i + 2} - ${name} # SKIP\n`).join('')}1..${names.length + 1}\n`)
+    .replace('# tests 1', `# tests ${names.length + 1}`)
+    .replace('# skipped 0', `# skipped ${names.length}`);
+  assert.equal(inspectTap(withSkips(optional)).state, 'green');
+  assert.equal(inspectTap(withSkips(optional, true)).state, 'failure');
+  for (const report of [
+    withSkips([...optional, 'unexpected skip']),
+    withSkips([optional[0], optional[0]]),
+    withSkips([optional[0]]).replace('# SKIP', '# SKIP Wrangler unavailable'),
+    tap(false).replace('fixture', `${optional[0]} # SKIP`).replace('# pass 1', '# pass 0').replace('# skipped 0', '# skipped 1'),
+  ]) assert.equal(inspectTap(report).code, 'tests_not_executed');
+});
 test('producer records the actual child exit and digest atomically without swallowing clock verification', () => {
   const dir = mkdtempSync(join(tmpdir(), 's38-fc-'));
   try {

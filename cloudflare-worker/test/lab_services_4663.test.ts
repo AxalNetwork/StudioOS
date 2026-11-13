@@ -177,11 +177,42 @@ test('#4663 two requests at once: one step records and pays once; the last two s
     assert.equal(all(db, `SELECT 1 FROM spinout_lab_milestones WHERE user_id = ? AND milestone_key = 'okrs_created'`, F).length, 1);
     // Everything but the last two required steps, then both at once.
     for (const k of ORDERED.slice(0, -2)) { proveMilestone(db, F, k); assert.equal((await step(db, F, k)).status, 200, k); }
-    const [a, b] = ORDERED.slice(-2);
-    proveMilestone(db, F, a); proveMilestone(db, F, b);
-    const both = await Promise.all([step(db, F, a), step(db, F, b)]);
-    assert.deepEqual(both.map((r) => r.status), [200, 200]);
+    const [lastStep, incorporationKey] = ORDERED.slice(-2);
+    proveMilestone(db, F, lastStep);
+    proveMilestone(db, F, incorporationKey);
+    const creditReached = Promise.withResolvers<void>();
+    const releaseCredit = Promise.withResolvers<void>();
+    const real = d1Over(db);
+    const delayed = { ...real, prepare(sql: string) {
+      const stmt = real.prepare(sql);
+      if (!sql.startsWith('INSERT OR IGNORE INTO perk_credit_ledger')) return stmt;
+      return { ...stmt, bind(...args: unknown[]) {
+        const bound = stmt.bind(...args);
+        if (args[2] !== `lab:${F}:${incorporationKey}`) return bound;
+        return { ...bound, async run() {
+          creditReached.resolve();
+          await releaseCredit.promise;
+          return bound.run();
+        } };
+      } };
+    } };
+    const incorporation = step(db, F, incorporationKey, delayed);
+    try {
+      // The incorporation milestone is visible while its credit is in flight.
+      await Promise.race([creditReached.promise, incorporation.then(() => {
+        assert.fail('incorporation returned before reaching its credit write');
+      })]);
+      const finalStep = await step(db, F, lastStep);
+      assert.equal(finalStep.status, 200);
+      assert.equal(issued(db, F).length, 1);
+      assert.ok(!grants(db, F).includes(`lab:${F}:graduation`), 'incorporation credit has not landed');
+    } finally {
+      releaseCredit.resolve();
+      await incorporation;
+    }
+    assert.equal((await incorporation).status, 200);
     assert.equal(await agree(db, F, 'Lab Venture', 'Old Side Project'), true);
+    assert.equal(await issueIfGraduated(envOf(db), F), null, 'a retry returns no new bonus');
     assert.equal(grants(db, F).filter((g) => g.endsWith(':graduation')).length, 1);
   } finally { db.close(); }
 });
