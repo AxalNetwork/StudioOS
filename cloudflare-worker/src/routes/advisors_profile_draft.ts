@@ -1,3 +1,4 @@
+/** Private advisor profile drafts, with revision checks for edits and publishing. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';

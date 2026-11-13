@@ -1,3 +1,4 @@
+/** Shared advisor profile serialization and field validation. */
 import type { Env } from '../types';
 import { jload } from '../routes/_t13t14t15_helpers';
 import { AdvisorValidationError, PROFILE_LIMITS, boundedList, boundedText, hourlyRate } from './advisorLimits';
