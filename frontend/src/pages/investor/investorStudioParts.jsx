@@ -28,7 +28,9 @@ export function quickStats({ previewing, dashboard, dashboardUnavailable, lifecy
   const total = number(dealCount);
   const dealFlowRows = [
     ['Deals in flow', total === null ? null : (dealCountIsLowerBound ? `${total}+` : total), 'No deal-flow total is recorded.', dashboardFailed('deals') ? 'unreadable' : undefined],
-    ['Avg AI match', number(dashboard?.quick_stats?.ai_score_avg), 'No match average is recorded yet.', dashboardFailed('scoresMine') ? 'unreadable' : undefined],
+    // D4623 part 2: the average is of the same historical match scores the score module labels (D4623): it is
+    // marked Historical, and a member with none reads Not recorded, never 0 and never a promise of one to come.
+    ['Avg AI match', number(dashboard?.quick_stats?.ai_score_avg), 'No historical match score is recorded for you. The matching engine that wrote them is retired.', dashboardFailed('scoresMine') ? 'unreadable' : undefined, { historical: true }],
   ];
   const counts = lifecycle?.counts || {};
   const lifecycleRows = [
@@ -44,11 +46,14 @@ export function quickStats({ previewing, dashboard, dashboardUnavailable, lifecy
 
 export function Loading() { return <div className="is-loading" data-testid="status-investor-loading"><Loader2 size={15} className="animate-spin" />Loading live records…</div>; }
 // `state` 'unreadable' (D4620): this one figure's read failed. It says so, in the red the group's own Unreadable line uses; it is not Not recorded and not 0.
-export function Row({ label, value, reason, state }) {
+// `historical` (D4623 part 2): a recorded figure from a retired source says so, as the score rows do ("Historical · ").
+export function Row({ label, value, reason, state, historical = false }) {
+  const slug = label.toLowerCase().replaceAll(' ', '-');
   const body = state === 'unreadable'
-    ? <span className="text-red-700 dark:text-red-300" data-testid={`status-investor-stat-${label.toLowerCase().replaceAll(' ', '-')}-unreadable`}>Could not be read</span>
-    : value === null || value === undefined ? <Unrecorded reason={reason} /> : value;
-  return <div className="is-row" data-testid={`row-investor-stat-${label.toLowerCase().replaceAll(' ', '-')}`}><span>{label}</span><b>{body}</b></div>;
+    ? <span className="text-red-700 dark:text-red-300" data-testid={`status-investor-stat-${slug}-unreadable`}>Could not be read</span>
+    : value === null || value === undefined ? <Unrecorded reason={reason} />
+      : historical ? <><span className="font-normal" data-testid={`text-investor-stat-${slug}-historical`}>Historical · </span>{value}</> : value;
+  return <div className="is-row" data-testid={`row-investor-stat-${slug}`}><span>{label}</span><b>{body}</b></div>;
 }
 // One source's rows under one state. A group whose read failed draws a single
 // Unreadable line in place of its rows; it never draws them as not recorded.
@@ -56,7 +61,7 @@ export function StatGroup({ group, what, claim, onRetry }) {
   if (group.state === 'withheld') return group.rows.map(([label]) => <Row key={label} label={label} value="Withheld in preview" />);
   if (group.state === 'loading') return <Loading />;
   if (group.state === 'unreadable') return <Unreadable what={what} claim={claim} onRetry={onRetry} />;
-  const rows = group.rows.map(([label, value, reason, rowState]) => <Row key={label} label={label} value={value} reason={reason} state={rowState} />);
+  const rows = group.rows.map(([label, value, reason, rowState, flags]) => <Row key={label} label={label} value={value} reason={reason} state={rowState} historical={flags?.historical === true} />);
   // D4620: a figure whose read failed gets one Retry for the source, under the figures that did load.
   if (group.rows.some((row) => row[3] === 'unreadable')) return [...rows, <Unreadable key="unreadable" what="Some of these figures" claim="This is not a claim that they are zero." onRetry={onRetry} />];
   return rows;

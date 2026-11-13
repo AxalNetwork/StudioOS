@@ -99,6 +99,10 @@ custom_domain  = true
 # `/embed/*` is D1564's embed (#3811): the Worker answers a published deck
 # only to a frame from an origin its founder listed, with `frame-ancestors`
 # for those origins; everything else there is refused with frames denied.
+# `/skill-library/*` is D4574 H3's (#4574): the skill library's entries are a
+# static asset the Worker reads through its own binding for three Super Admin
+# routes. Listed here, a browser's request reaches the Worker, which has no
+# such route and answers 404, so the entries are never served to the public.
 #
 # Vite is configured (frontend/vite.config.js) to build into the
 # repo-root `./docs/` directory. The path dates from when GitHub Pages
@@ -127,7 +131,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*", "/skill-library/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -1006,7 +1010,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*", "/skill-library/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

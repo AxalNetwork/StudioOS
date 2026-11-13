@@ -15,7 +15,8 @@
  * It reads the repository only. It never writes the generated module (D5612:
  * it checks that the generator is deterministic, that git does not track the
  * module, and that the module it imports is the generator's own `render()`
- * of the files; `scripts/build-generated.mjs` builds it first), never seeds, never publishes,
+ * of the files — and, since D4574 H3, that the entries' static asset is its
+ * `renderAsset()` of them, and it reads the entries from that asset; `scripts/build-generated.mjs` builds it first), never seeds, never publishes,
  * and needs no credential. The rules are the runtime's own
  * (`services/agents/skillCatalogue.ts`); see SKILL_LIBRARY_AUDIT.md §10 and
  * SKILL_LIBRARY_CONTRACT.md.
@@ -28,9 +29,9 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SKILL_LIBRARY_REL, libraryEntries, render, skillLibraryProblems } from './build-skill-library.mjs';
+import { SKILL_LIBRARY_ASSET_DIR_REL, SKILL_LIBRARY_REL, libraryAssetPath, libraryEntries, render, renderAsset, skillLibraryProblems } from './build-skill-library.mjs';
 import { checkSourceCatalogue, persistedFromJson, reconcile, summary } from '../cloudflare-worker/src/services/agents/skillCatalogue.ts';
-import { SKILL_LIBRARY } from '../cloudflare-worker/src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY_ASSET } from '../cloudflare-worker/src/services/agents/skillLibrary.generated.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS_REL = 'cloudflare-worker/src/services/agents/skills';
@@ -58,7 +59,24 @@ export function readSources(dir = DIR) {
 export function generatedSound(root = ROOT, moduleText = null) {
   let text = moduleText;
   if (text === null) { try { text = readFileSync(join(root, SKILL_LIBRARY_REL), 'utf8'); } catch { return false; } }
-  return skillLibraryProblems(root).length === 0 && text === render(libraryEntries(join(root, SKILLS_REL)));
+  const entries = libraryEntries(join(root, SKILLS_REL));
+  // D4574 H3: the entries' asset is the generator's build of the same files, at the path the index names.
+  let asset;
+  try { asset = readFileSync(join(root, SKILL_LIBRARY_ASSET_DIR_REL, libraryAssetPath(entries).split('/').pop()), 'utf8'); } catch { return false; }
+  return skillLibraryProblems(root).length === 0 && text === render(entries) && asset === renderAsset(entries);
+}
+
+/**
+ * D4574 H3: the library's entries as the Worker reads them — the static asset
+ * the generated index names, read from disk (the assets binding serves the
+ * same file from `docs/`). Null when it is not there.
+ */
+export function generatedEntries(root = ROOT) {
+  try {
+    return JSON.parse(readFileSync(join(root, 'frontend/public', SKILL_LIBRARY_ASSET), 'utf8')).entries;
+  } catch {
+    return null;
+  }
 }
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
@@ -66,7 +84,7 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? pro
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { definitions, cases, scenarios } = readSources();
   const { findings, manifest, coverage } = await checkSourceCatalogue({
-    definitions, cases, scenarios, generated: SKILL_LIBRARY, generatedSound: generatedSound(), taxonomy: taxonomyFromSeed(readFileSync(TAXONOMY_SQL, 'utf8')),
+    definitions, cases, scenarios, generated: generatedEntries() ?? [], generatedSound: generatedSound(), taxonomy: taxonomyFromSeed(readFileSync(TAXONOMY_SQL, 'utf8')),
   });
   const persistedPath = arg('--persisted');
   let persisted = null;

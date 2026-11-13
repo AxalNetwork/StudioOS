@@ -438,9 +438,19 @@ r.get('/:projectUid', async (c) => {
     if (!proj) return c.json({ detail: 'Not found' }, 404);
     const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     if (projectIds != null && !projectIds.includes(Number(proj.id))) return c.json({ detail: 'Forbidden' }, 403);
-    const rounds = await c.env.DB.prepare(
-      'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'
-    ).bind(proj.id).all<PositionRow>();
+    // D4636 part 2: an admin, who records positions, reads the whole row. An
+    // investor reads the round as it bears on the company: not the internal
+    // row id, the account that recorded it, or the closing line it was
+    // reconciled against.
+    const rounds = user.role === 'admin'
+      ? await c.env.DB.prepare(
+        'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'
+      ).bind(proj.id).all<PositionRow>()
+      : await c.env.DB.prepare(
+        `SELECT uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct,
+                position_date, created_at, updated_at
+           FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC`
+      ).bind(proj.id).all<PositionRow>();
     const holders = await c.env.DB.prepare(
       'SELECT name, security_type, shares, ownership_pct, source FROM cap_table_holders WHERE project_id = ? ORDER BY ownership_pct DESC'
     ).bind(proj.id).all<any>().catch(() => ({ results: [] }));

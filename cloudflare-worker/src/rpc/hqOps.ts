@@ -759,24 +759,19 @@ export async function answerEscalation(
   const name = String(input?.answered_by_name ?? '').trim().slice(0, 200);
   const now = new Date().toISOString();
 
-  const existing = await env.DB.prepare('SELECT uid FROM hq_escalations WHERE uid = ?')
-    .bind(id).first<{ uid: string }>();
-  if (!existing) throw new Error(`answerEscalation: ${id} is not an escalation`);
-
-  await env.DB.prepare(
-    `UPDATE hq_escalations
-        SET answer = ?, answered_by_user_id = ?, answered_by_name = ?, answered_at = ?, status = ?, updated_at = ?
-      WHERE uid = ?`,
-  ).bind(answer, Number(input.answered_by_user_id) || null, name || null, now, status, now, id).run();
-
   const row = await env.DB.prepare(
-    `SELECT uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
-            status, due_at, created_at, answer, answered_at, relation
-       FROM hq_escalations WHERE uid = ?`,
-  ).bind(id).first<EscalationRow>();
+    `UPDATE hq_escalations
+        SET answer = ?, answered_by_user_id = ?, answered_by_name = ?, answered_at = ?, status = ?, updated_at = ?,
+            push_ok = NULL, push_reason = NULL, push_at = NULL
+      WHERE uid = ?
+      RETURNING uid, branch_code, kind, subject, subject_ref, detail, raised_by_name,
+                status, due_at, created_at, answer, answered_at, answered_by_name, relation`,
+  ).bind(answer, Number(input.answered_by_user_id) || null, name || null, now, status, now, id)
+    .first<EscalationRow & { answered_by_name: string | null }>();
+  if (!row) throw new Error(`answerEscalation: ${id} is not an escalation`);
 
   return {
-    row: row!,
+    row,
     answer: { hq_uid: id, answer, answered_by_name: name, answered_at: now, status },
   };
 }

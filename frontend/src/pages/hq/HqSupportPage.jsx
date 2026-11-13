@@ -9,7 +9,7 @@
  * licence it administers — so `GET /api/admin/hq-support` sorts each open
  * ticket by its requester's standing and the page renders what it measured.
  *
- * EVERY PART ANSWERS FOR ITSELF. The route makes six reads and each carries its
+ * EVERY PART ANSWERS FOR ITSELF. Each HQ read carries its
  * own state: an unreadable escalation board costs the escalation card and the
  * matrix's escalation cells, never the ticket queues beside it. A read that
  * failed renders `Unreadable`; a read that hit its ceiling renders its count as
@@ -28,9 +28,9 @@
  * caller, so an escalation sat on HQ's board until its SLA passed and D143's
  * sweep emailed HQ a link to a list with no control on it. Each open
  * escalation now opens a decision panel on the shape of the DSR close (now `security/PrivacyActions.jsx`). What comes back
- * is two facts, never one: the decision is recorded at HQ, and the branch did
- * or did not receive it. The second is shown only for this session, because the
- * board keeps the decision and not whether it arrived.
+ * is the decision recorded at HQ and, for a branch escalation, the result of
+ * its latest push. Both are read back from HQ's board. Send again retries the
+ * stored decision. Older decisions can have no recorded delivery outcome.
  *
  * THE HQ SUPPORT AUDIT (#5030–#5033).
  *   · D5030 — a filtered escalation count and its pills come from the server's
@@ -54,7 +54,7 @@
  * policy sit in their own workspaces. The pieces above stay exported and
  * tested; the workspaces compose them.
  *
- * Super Admin stays on axal.vc. This page configures nothing but the ticket SLA hours.
+ * Super Admin stays on axal.vc and can edit the HQ ticket SLA tiers here.
  */
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -67,11 +67,12 @@ import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escala
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import {
   workspaceFromSearch, queueOverview, distributionState, workspaceMarks, escalationGroups, kindHoursOf,
+  recentDecisions, deliveryState, decisionStamp,
   hqTicketRows, hqTicketCount, branchCards, sourcesText, branchLabelOf, branchFreshness, supportRailSteps, offlineText,
 } from './support/supportWorkspaceModel.js';
 import {
   SupportHeader, WorkspaceNav, ActionRequired, AllClear, QueueKindFilter, EscalationQueue, HqTicketsSection,
-  SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DistributionBanner, LoadingNote, OfflineBanner,
+  SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DecisionHistoryStatus, DistributionBanner, LoadingNote, OfflineBanner,
 } from './support/SupportWorkspaces.jsx';
 import { DecisionSheetView, EMPTY_TEXT } from './support/DecisionSheet.jsx';
 
@@ -412,6 +413,9 @@ const OUTCOME_COPY = {
   answered: (code) => `This records HQ’s answer with your reason and sends it to ${code}. Recording it again later replaces it.`,
   declined: (code) => `This records a refusal with your reason and sends it to ${code}. The branch has no separate declined state: it shows this as HQ’s decision, with your reason as its words.`,
 };
+const decisionCopy = (outcome, code, label = code) => code === 'hq'
+  ? 'HQ records your decision and reason. The requester’s notification uses the HQ bell.'
+  : OUTCOME_COPY[outcome](label);
 const OUTCOME_SUBMIT = { answered: 'Record the answer', declined: 'Record the refusal' };
 const OUTCOME_PLACEHOLDER = {
   answered: 'What HQ decided, in the words the branch will read.',
@@ -498,7 +502,7 @@ export function EscalationDecisionView({
         </div>
       ) : (
         <form onSubmit={onSubmit} className="mt-2 space-y-1.5" data-testid="hq-support-decision-form" data-outcome={outcome}>
-          <p className="text-[11px] leading-relaxed text-axal-muted">{OUTCOME_COPY[outcome](code)}</p>
+          <p className="text-[11px] leading-relaxed text-axal-muted">{decisionCopy(outcome, code)}</p>
           <label className="block text-[11px] font-semibold text-axal-muted">
             Reason · required, stored with the decision and sent to {code}
             <textarea
@@ -507,7 +511,7 @@ export function EscalationDecisionView({
               maxLength={4000}
               rows={3}
               disabled={busy}
-              placeholder={OUTCOME_PLACEHOLDER[outcome]}
+              placeholder={code === 'hq' ? 'What HQ decided and why.' : OUTCOME_PLACEHOLDER[outcome]}
               className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             />
           </label>
@@ -612,7 +616,7 @@ export function EscalationDecision({ item, onRecorded, onReload, variant = 'pane
         invalid={sheet.invalid}
         refusal={sheet.refusal}
         record={record}
-        copy={OUTCOME_COPY[outcome](branchLabel || item.branch_code)}
+        copy={decisionCopy(outcome, item.branch_code, branchLabel || item.branch_code)}
         onChoose={(o) => { setOutcome(o); setSheet((s) => ({ ...s, invalid: null, refusal: null })); }}
         onReason={(v) => { setReason(v); if (sheet.invalid && v.trim()) setSheet((s) => ({ ...s, invalid: null })); }}
         onSubmit={submitSheet}
@@ -646,19 +650,19 @@ export function EscalationDecision({ item, onRecorded, onReload, variant = 'pane
   );
 }
 
-/** One session record, from the PATCH's answer and the item it answered. */
+/** Show the committed decision while HQ’s board is being read again. */
 export function recordOf(item, outcome, res) {
   return {
     uid: item.uid,
     branch_code: res?.branch_code || item.branch_code,
     subject: res?.subject || item.subject,
     status: res?.status || outcome,
+    answer: res?.answer,
+    answered_by_name: res?.answered_by_name,
     answered_at: res?.answered_at || null,
     pushed: res?.pushed,
   };
 }
-
-const hhmm = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : null);
 
 /**
  * D5033 (#5033) — a failed "Send again" in words. The resend re-pushes a
@@ -696,37 +700,28 @@ export function resendError(err, code) {
  */
 export function RecordedOutcome({ rec, onResend }) {
   const code = rec.branch_code;
-  const at = hhmm(rec.answered_at);
+  const at = decisionStamp(rec.answered_at);
+  const pushAt = decisionStamp(rec.pushed?.push_at);
+  const state = deliveryState(rec);
   const p = rec.pushed;
   const sending = rec.resend?.state === 'sending';
   const resendFailed = rec.resend?.state === 'failed' || rec.resend?.state === 'unknown';
   let delivery;
-  if (!p || typeof p !== 'object' || typeof p.ok !== 'boolean') {
-    delivery = <span data-delivery="unreported">Whether it reached {code} was not reported.</span>;
-  } else if (p.ok) {
+  if (state === 'hq') {
+    delivery = <span data-delivery="hq">HQ request · branch delivery does not apply.</span>;
+  } else if (state === 'unknown') {
+    delivery = <span data-delivery="unreported">Whether it reached {code} was not reported.{p?.ok == null && p?.reason && ` ${p.reason}`}</span>;
+  } else if (state === 'delivered') {
     delivery = (
       <span data-delivery="received">
         {code} received it.
-        {rec.resend?.state === 'delivered' && <span data-testid="hq-support-resend-delivered"> Sent again{hhmm(rec.resend.at) ? ` at ${hhmm(rec.resend.at)} UTC` : ''}.</span>}
+        {rec.resend?.state === 'delivered' && <span data-testid="hq-support-resend-delivered"> Sent again.</span>}
       </span>
     );
   } else {
     delivery = (
       <span data-delivery="not_sent" className="text-amber-800 dark:text-amber-300">
         Not on {code}: {p.reason || 'no reason was given.'} Nothing sends it again on its own.
-        {onResend && (
-          <button
-            type="button"
-            className="ml-2 inline-flex items-center gap-1 underline font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={() => onResend(rec.uid)}
-            disabled={sending}
-            aria-busy={sending || undefined}
-            data-testid="hq-support-resend"
-          >
-            {sending ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : null}
-            {sending ? 'Sending…' : 'Send again'}
-          </button>
-        )}
       </span>
     );
   }
@@ -734,9 +729,28 @@ export function RecordedOutcome({ rec, onResend }) {
     <li className="rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[11px] leading-relaxed" data-testid="hq-support-recorded-item">
       <span className="font-semibold text-axal-ink dark:text-gray-100">{code} · {rec.subject}</span>
       <span className="block text-axal-muted">
-        Recorded at HQ{at ? ` at ${at} UTC` : ''} as {rec.status === 'declined' ? 'declined' : 'answered'}.
+        Recorded at HQ{at ? ` at ${at} UTC` : ''} as {rec.status}.{rec.answered_by_name && ` Decided by ${rec.answered_by_name}.`}
       </span>
-      <span className="block text-axal-muted">{delivery}</span>
+      {rec.answer && (
+        <details>
+          <summary className="cursor-pointer font-semibold">Decision reason</summary>
+          <p className="whitespace-pre-wrap break-words">{rec.answer}</p>
+        </details>
+      )}
+      <span className="block text-axal-muted" role="status">{delivery}{state !== 'hq' && pushAt && ` Last attempt at ${pushAt} UTC.`}</span>
+      {onResend && (state === 'failed' || state === 'unknown') && (
+        <button
+          type="button"
+          className="inline-flex min-h-[44px] items-center gap-1 underline font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => onResend(rec.uid)}
+          disabled={sending}
+          aria-busy={sending || undefined}
+          data-testid="hq-support-resend"
+        >
+          {sending && <Loader2 size={11} className="animate-spin" aria-hidden="true" />}
+          {sending ? 'Sending…' : 'Send again'}
+        </button>
+      )}
       {resendFailed && (
         <span role="alert" className="block font-semibold text-red-700 dark:text-red-300" data-testid="hq-support-resend-error" data-state={rec.resend.state}>
           {rec.resend.state === 'unknown' ? 'Unknown: ' : 'Failed: '}{rec.resend.text}
@@ -746,17 +760,17 @@ export function RecordedOutcome({ rec, onResend }) {
   );
 }
 
-/** This session's decisions. Nothing here is read back from a store. */
-export function RecordedList({ recorded, onResend }) {
-  if (!recorded?.length) return null;
+/** Queue and Delivery use the same bounded history from HQ. */
+export function RecordedList({ recorded, onResend, history, onRetry }) {
+  if (!recorded.length && history?.available) return null;
   return (
     <div className="mt-3" data-testid="hq-support-recorded">
       <Card>
-        <h2 className="text-[13.5px] font-extrabold tracking-tight">Recorded this session</h2>
+        <h2 className="text-[13.5px] font-extrabold tracking-tight">Recent decisions</h2>
         <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
-          Shown until you leave this page. The board keeps each decision, and whether the last push reached the
-          branch is stored on that row. Send again sends that stored decision, not a new one.
+          Up to 25 recent decisions, newest first. Send again retries the decision stored at HQ.
         </p>
+        <DecisionHistoryStatus history={history} onRetry={onRetry} />
         <ul className="mt-2 grid gap-1.5">
           {recorded.map((r) => (
             <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} onResend={onResend} />
@@ -778,8 +792,9 @@ export function resendStep(rec, step, payload) {
     const pushed = payload?.pushed;
     return {
       ...rec,
+      ...payload,
       pushed,
-      resend: pushed && pushed.ok === true ? { state: 'delivered', at: new Date().toISOString() } : { state: 'idle' },
+      resend: pushed && pushed.ok === true ? { state: 'delivered', at: pushed.push_at || null } : { state: 'idle' },
     };
   }
   return { ...rec, resend: resendError(payload, rec.branch_code) };
@@ -1070,7 +1085,7 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
     );
   }
   return (
-    <Card>
+    <Card className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-[16px] font-extrabold tracking-tight">Queues by subsidiary</h2>
         <span className="text-[10.5px] text-axal-faint">Open items · oldest in hours</span>
@@ -1208,7 +1223,7 @@ export function supportCoverage(data) {
 export const SUPPORT_UNAVAILABLE = [
   ['The filing context of older tickets', 'A ticket keeps the queue it was filed in from #5030 on. One filed before that has no filing record, so it is queued from its requester’s standing now and says so on its row. Nothing fills the record in afterwards.'],
   ['The SLA version of a branch on an older deploy', 'A branch reports which version of HQ’s P1/P2/P3 hours it bands with only from the deploy that carries #5032. An older one is shown as unreported, never as current.'],
-  ['A push that has not been tried', 'A decision recorded before the push was stored has no outcome on its row. Send again is offered where this page still shows that decision.'],
+  ['An unreported branch delivery', 'An older decision or an attempt without a branch acknowledgement may have no recorded outcome. Send again retries the stored decision.'],
   ['Support under the overlay', 'Out of scope. Viewing as a branch scopes Home and Team; this page reads HQ’s escalation board and HQ’s own tickets, not one branch’s database.'],
 ];
 
@@ -1593,15 +1608,19 @@ export function mergeSupport(local, full) {
   const branchReadAt = f ? (f.read_at || null) : null;
   if (!l && !f) return { data: null, branchState, branchReadAt };
   if (!f) return { data: { ...l, branch_tickets: undefined, matrix: undefined }, branchState, branchReadAt };
-  if (!l || String(l.read_at || '') <= String(f.read_at || '')) return { data: f, branchState, branchReadAt };
+  const localNewer = l && (l.read_at > f.read_at ||
+    (l.read_at === f.read_at && l.readOrder > f.readOrder));
+  if (!localNewer) return { data: f, branchState, branchReadAt };
   const sameVersion = l.sla_policy?.version?.value !== undefined
     && l.sla_policy?.version?.value === f.sla_policy?.version?.value;
   return {
     data: {
       ...f,
       read_at: l.read_at,
+      readOrder: l.readOrder,
       total: l.total,
       escalations: l.escalations,
+      recent_decisions: l.recent_decisions,
       tickets: l.tickets,
       sync: l.sync,
       taxonomy: l.taxonomy,
@@ -1624,8 +1643,20 @@ export default function HqSupportPage() {
   const [open, setOpen] = useState(null);
   const reviewButtons = useRef(new Map());
   const opener = useRef(null);
+  const queueLink = useRef(null);
   const [focusAfter, setFocusAfter] = useState(null);
-  const [recorded, setRecorded] = useState([]);
+  const [changes, setChanges] = useState([]);
+  const resending = useRef(new Set());
+  // Order overlapping reads and mutations without depending on the browser's clock.
+  const order = useRef(0);
+  const requests = useRef({ local: 0, full: 0 });
+  const { data: ready, branchState, branchReadAt } = mergeSupport(local, full);
+  const recorded = recentDecisions(ready, changes);
+  const history = ready ? (ready.recent_decisions || { available: false, reason: 'The HQ response omitted decision history.' }) : null;
+  const updateDecision = useCallback((record) => {
+    const change = { ...record, changeOrder: ++order.current };
+    setChanges((prev) => [change, ...prev.filter((r) => r.uid !== record.uid)].slice(0, 25));
+  }, []);
   // D801 — the escalation queue's kind filter; '' is every kind.
   const [kindFilter, setKindFilter] = useState('');
   // D5031 — two reads at once. `clear` shows the loading state first (a retry
@@ -1633,7 +1664,12 @@ export default function HqSupportPage() {
   // queue stays on screen and changes when the new read lands.
   const fetchLocal = useCallback((clear) => {
     if (clear) setLocal(null);
-    return api.hqSupportLocal().then(setLocal, (e) => {
+    const readOrder = ++order.current;
+    requests.current.local = readOrder;
+    return api.hqSupportLocal().then((data) => {
+      if (requests.current.local === readOrder) setLocal({ ...data, readOrder });
+    }, (e) => {
+      if (requests.current.local !== readOrder) return;
       reportError('hq-support:local', e);
       setLocal(UNAVAILABLE);
     });
@@ -1643,10 +1679,15 @@ export default function HqSupportPage() {
   const fetchFull = useCallback((clear) => {
     if (clear) setFull(null);
     setBranchBusy(true);
-    return api.hqSupport().then(setFull, (e) => {
+    const readOrder = ++order.current;
+    requests.current.full = readOrder;
+    return api.hqSupport().then((data) => {
+      if (requests.current.full === readOrder) setFull({ ...data, readOrder });
+    }, (e) => {
+      if (requests.current.full !== readOrder) return;
       reportError('hq-support', e);
       setFull((prev) => (isRead(prev) && !clear ? prev : UNAVAILABLE));
-    }).finally(() => setBranchBusy(false));
+    }).finally(() => { if (requests.current.full === readOrder) setBranchBusy(false); });
   }, []);
   const fetchSupport = useCallback((clear) => Promise.allSettled([fetchLocal(clear), fetchFull(clear)]), [fetchLocal, fetchFull]);
   const load = useCallback(() => fetchSupport(true), [fetchSupport]);
@@ -1666,25 +1707,25 @@ export default function HqSupportPage() {
   // The sheet stays open on its outcome (recorded, delivered or not); the queue
   // re-reads quietly behind it.
   const onRecorded = useCallback((item, outcome, res) => {
-    setRecorded((prev) => [recordOf(item, outcome, res), ...prev]);
+    updateDecision(recordOf(item, outcome, res));
     fetchSupport(false);
-  }, [fetchSupport]);
-  // D5033 — Send again, with its state on the record it resends.
-  const onResend = useCallback((uid) => {
-    let busy = false;
-    setRecorded((prev) => prev.map((r) => {
-      if (r.uid !== uid) return r;
-      if (r.resend?.state === 'sending') { busy = true; return r; }
-      return resendStep(r, 'start');
-    }));
-    if (busy) return;
-    api.escalationResend(uid).then((res) => {
-      setRecorded((prev) => prev.map((r) => (r.uid === uid ? resendStep(r, 'answer', res) : r)));
-    }, (e) => {
+  }, [fetchSupport, updateDecision]);
+  // Queue, Delivery and the sheet can all resend the same stored decision.
+  const onResend = useCallback(async (uid) => {
+    const record = recorded.find((r) => r.uid === uid) || changes.find((r) => r.uid === uid);
+    if (!record || resending.current.has(uid)) return;
+    resending.current.add(uid);
+    updateDecision(resendStep(record, 'start'));
+    try {
+      const res = await api.escalationResend(uid);
+      updateDecision(resendStep(record, 'answer', res));
+    } catch (e) {
       reportError('hq-support:resend', e);
-      setRecorded((prev) => prev.map((r) => (r.uid === uid ? resendStep(r, 'error', e) : r)));
-    });
-  }, []);
+      updateDecision(resendStep(record, 'error', e));
+    } finally {
+      resending.current.delete(uid);
+    }
+  }, [recorded, changes, updateDecision]);
   // Review opens the sheet; closing it returns focus to that row's Review,
   // or, after a decision, to the next row's (the canvas's "focus returns to the
   // next row in the queue").
@@ -1695,16 +1736,17 @@ export default function HqSupportPage() {
     refFor: (uid) => (el) => { if (el) reviewButtons.current.set(uid, el); else reviewButtons.current.delete(uid); },
   };
   const closeSheet = useCallback((decided) => {
-    if (decided && open?.next) setFocusAfter(open.next);
+    if (open) setFocusAfter({ uid: decided ? open.next : open.item.uid });
     setOpen(null);
   }, [open]);
   useEffect(() => {
     if (open || !focusAfter) return;
-    reviewButtons.current.get(focusAfter)?.focus();
+    // The last escalation, or a row removed by a concurrent refresh, has no Review to return to.
+    const target = reviewButtons.current.get(focusAfter.uid) || queueLink.current;
+    target?.focus();
     setFocusAfter(null);
   }, [open, focusAfter]);
 
-  const { data: ready, branchState, branchReadAt } = mergeSupport(local, full);
   const online = useOnline();
   // The page as a whole failed only when neither read answered.
   const failed = local === UNAVAILABLE && full === UNAVAILABLE;
@@ -1727,7 +1769,7 @@ export default function HqSupportPage() {
   const escCount = kindFilter
     ? (escalationKindChoices(ready?.escalations).find((f) => f.kind === kindFilter)?.count ?? null)
     : ready?.escalations?.count;
-  const recordedList = <RecordedList recorded={recorded} onResend={onResend} />;
+  const recordedList = <RecordedList recorded={recorded} onResend={onResend} history={history} onRetry={refresh} />;
 
   let body;
   if (failed) {
@@ -1749,6 +1791,8 @@ export default function HqSupportPage() {
     body = (
       <DeliveryWorkspace
         recorded={recorded}
+        history={history}
+        onRetry={refresh}
         renderRecorded={(rows) => (
           <ul className="mt-3 grid gap-1.5">
             {rows.map((r) => <RecordedOutcome key={`${r.uid}-${r.answered_at || 'unstamped'}`} rec={r} onResend={onResend} />)}
@@ -1848,14 +1892,14 @@ export default function HqSupportPage() {
           )}
         />
         {!online && <OfflineBanner text={offlineText(readAt)} />}
-        <WorkspaceNav current={workspace} marks={marks} />
+        <WorkspaceNav current={workspace} marks={marks} queueRef={queueLink} />
         <div className="mt-4" data-testid="hq-support-workspace" data-workspace={workspace}>{body}</div>
         {open && (
           <EscalationDecision
             key={open.item.uid}
             variant="sheet"
             item={open.item}
-            record={recorded.find((r) => r.uid === open.item.uid) || null}
+            record={recorded.find((r) => r.uid === open.item.uid) || changes.find((r) => r.uid === open.item.uid) || null}
             onRecorded={onRecorded}
             onResend={onResend}
             onClose={closeSheet}
