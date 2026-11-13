@@ -31,6 +31,12 @@ studio's side is the Programs tab of its licence page,
   reads `GET /api/admin/program-grants/history` and writes nothing. The
   header's More menu downloads the whole grid as CSV
   (`GET /api/admin/program-grants/export.csv`), on the tabs and on History.
+- `EntitlementViews.jsx` and `entitlementsModel.js` — D5059 (#5059): program
+  entitlements from held user licences. Program access › User licences at
+  `/admin/licences/programs/holders` (licence type chips and a holder search)
+  and one user licence at `/admin/licences/programs/licence/:uid` (Program, Eligible,
+  Granted, In force, Source licence and blockers). Both read
+  `/api/admin/program-entitlements`; neither writes.
 
 The programs, their groups and the words both sides read live in
 `../../../lib/programGrants.js`.
