@@ -105,8 +105,13 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, owner_user_id INTEGER NOT NULL,
       project_id INTEGER, converted_deal_id INTEGER, company_id INTEGER
     );
+    -- D4636 part 3: the positions reads add the GP of record's fund arm, so they read
+    -- vc_funds (no fund here is the investor's) and portfolio_positions.fund_id.
+    CREATE TABLE vc_funds (
+      id INTEGER PRIMARY KEY, name TEXT, gp_user_id INTEGER, company_id INTEGER
+    );
     CREATE TABLE portfolio_positions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, fund_id INTEGER,
       invested_amount REAL, position_date TEXT, ownership_pct REAL,
       round_name TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

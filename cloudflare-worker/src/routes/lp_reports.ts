@@ -24,7 +24,7 @@ import { requireAuth, canViewLpData } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
-import { requireFundGp, fundManageScope } from '../services/fundGpAccess';
+import { requireFundGp, managedFundIds } from '../services/fundGpAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -70,19 +70,6 @@ async function visibleFundIds(env: Env, user: User): Promise<number[] | 'all'> {
     `SELECT DISTINCT lp.fund_id AS fund_id FROM limited_partners lp WHERE ${scope.sql}`,
   ).bind(...scope.binds).all<{ fund_id: number }>();
   return (rows.results || []).map((row) => Number(row.fund_id));
-}
-
-/**
- * D4636 part 2: the funds whose reports this caller reads as their manager —
- * every fund for an admin, else the operating gate's scope. Evaluated on every
- * request, so a GP who no longer runs the fund (reassigned, below the tier, or
- * under another active company) reads it as an LP or not at all.
- */
-async function managedFundIds(c: any, user: User): Promise<number[]> {
-  const scope = await fundManageScope(c, user);
-  const rows = await c.env.DB.prepare(`SELECT f.id FROM vc_funds f WHERE ${scope.sql}`)
-    .bind(...scope.binds).all();
-  return ((rows.results || []) as Array<{ id: number }>).map((row) => Number(row.id));
 }
 
 /** The LP projection: the published report, without who on the GP side drafted it. */

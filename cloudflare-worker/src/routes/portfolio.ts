@@ -3,7 +3,10 @@
  * Mounted at /api/portfolio.
  *
  * Visibility:
- *   admin/partner            -> every project
+ *   admin                    -> every project
+ *   partner                  -> ventures where they hold an accepted seat
+ *                               (D4636 part 3; the seat rule of D889/D4636's
+ *                               update reads, `getMemberProjectIds`)
  *   investor                 -> explicitly related projects only
  *   founder                  -> only projects they own
  *   advisor                   -> 403
@@ -24,6 +27,7 @@ import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { requireFundGp } from '../services/fundGpAccess';
+import { getMemberProjectIds } from '../services/projectAccess';
 import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -50,12 +54,23 @@ function canViewDashboard(u: User): boolean {
  * beneath it. Filtered with `projectInActiveCompany`, the same predicate the
  * five loaders use, so it cannot drift from them.
  *
- * Admin and partner still return null ("portfolio-wide"), untouched.
+ * An admin returns null ("portfolio-wide"). D4636 part 3: a partner licence
+ * reads the ventures where the caller holds an accepted seat — the rule the
+ * update reads use for a partner (`getMemberProjectIds`) — together with what
+ * any other licence they hold already shows them. A partner with no seat reads
+ * an empty portfolio, as their update list is empty.
  */
 async function visibleProjectIds(c: any, user: User): Promise<number[] | null> {
+  if (isAdmin(user)) return null;
+  const other = await licenceProjectIds(c, user);
+  if (!isPartner(user)) return other;
+  return [...new Set([...(await getMemberProjectIds(c.env, user.id)), ...other])];
+}
+
+/** The investor and founder arms, unchanged by D4636 part 3. */
+async function licenceProjectIds(c: any, user: User): Promise<number[]> {
   const env: Env = c.env;
-  if (isAdmin(user) || isPartner(user)) return null;
-  if (isInvestor(user)) return investorProjectIds(env, user, await investorActiveCompany(c, user));
+  if (isInvestor(user)) return (await investorProjectIds(env, user, await investorActiveCompany(c, user))) || [];
   if (isFounder(user)) {
     if (!user.founder_id) return [];
     const companyId = await investorActiveCompany(c, user);
@@ -296,7 +311,8 @@ r.post('/health/recompute/:uid', async (c) => {
 // Task #18 — Partner Coverage Analytics.
 //
 // GET /coverage[?fund_id=N]
-//   Admin/partner-only portfolio-wide skill-gap dashboard; `fund_id` narrows
+//   Admin/partner-only skill-gap dashboard: an admin reads every venture, a
+//   partner the ventures where they hold an accepted seat (D4636 part 3); `fund_id` narrows
 //   to one fund only through the fund operating gate (D4636 part 2). Composes a per-
 //   company 8-axis radar (from the radar service, built on each company's
 //   founding team) plus a portfolio-level aggregate.
@@ -528,6 +544,13 @@ r.get('/coverage', async (c) => {
          FROM projects WHERE deleted_at IS NULL ORDER BY name`
       ).all<any>();
       projects = (rows.results || []) as any[];
+    }
+    // D4636 part 3: a partner reads the ventures where they hold an accepted
+    // seat (`getMemberProjectIds`, the update reads' partner rule), with or
+    // without a fund filter. No seat, no companies.
+    if (!isAdmin(user)) {
+      const seats = new Set(await getMemberProjectIds(c.env, user.id));
+      projects = projects.filter((p) => seats.has(Number(p.id)));
     }
 
     const axisMeta = RADAR_AXES.map((a) => ({ slug: a.slug, label: a.label }));

@@ -25,8 +25,10 @@ test('every investor portfolio read applies the shared project scope', () => {
   assert.match(positions, /investorHeldProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
   assert.doesNotMatch(positions, /[^d]investorProjectIds\(/, 'no positions read falls back to the relationship scope alone');
   assert.match(scope, /const related = await investorProjectIds\(env, user, companyId\);[\s\S]*t\.status = 'confirmed'/);
-  assert.match(positions, /projectIds != null && !projectIds\.includes/);
-  assert.match(health, /isInvestor\(user\)\) return investorProjectIds\(env, user, await investorActiveCompany\(c, user\)\)/);
+  // D4636 part 3: the detail reads the held scope, then the GP of record's fund arm (`managedFundIds`).
+  assert.match(positions, /const asHolder = scope\.held == null \|\| scope\.held\.includes\(pid\)/);
+  assert.match(positions, /if \(!asHolder && !scope\.gpOnly\.includes\(pid\)\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/);
+  assert.match(health, /isInvestor\(user\)\) return \(await investorProjectIds\(env, user, await investorActiveCompany\(c, user\)\)\) \|\| \[\]/);
   assert.match(health, /visible != null && !visible\.includes\(Number\(project\.id\)\)/);
   // D889 (#2438): the investor's scope now sits in `readerProjectIds`, which the inbox and the detail both read.
   assert.match(updates, /if \(isInvestor\(user\)\) return \(await investorProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)\) \|\| \[\]/);

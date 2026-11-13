@@ -8,6 +8,16 @@
  *
  * Mounted at /api/positions. Added to STUDIO_PREFIXES so founders get a 402;
  * admin/investor bypass the studio gate and are narrowed here via canViewLpData.
+ *
+ * Who reads which rows (D1057, D4636 parts 2 and 3), evaluated per request:
+ *   admin       every recorded position
+ *   holder      every round recorded in a company they hold through a
+ *               confirmed commitment (`investorHeldProjectIds`), company-scoped
+ *   GP of record  the rounds attributed to the funds they run
+ *               (`managedFundIds`: institutional tier, GP of record, active
+ *               company), with those funds' marks and distributions and the
+ *               firm-level marks of the same companies
+ * A company the caller both holds and reaches as GP reads as held.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -21,6 +31,7 @@ import {
 } from '../services/portfolioMetrics';
 import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
 import { HELD_SCOPE, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { managedFundIds } from '../services/fundGpAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -64,13 +75,97 @@ async function latestMarksByProject(env: Env, projectIds: number[] | null = null
   return latestProjectMarks(env, { projectIds, asOf, scope: { kind: 'firm' } });
 }
 
+/**
+ * D4636 part 3: what a caller of these reads may see.
+ *
+ * `held` is D1057's company scope, unchanged: null for an admin (every
+ * position), else the companies the caller holds. `funds` is the GP arm: the
+ * funds the fund operating gate lets this caller run, so a GP who is
+ * reassigned, drops below the institutional tier or switches active company
+ * loses the arm on the next read. `gpOnly` is the companies reached through
+ * that arm alone, where the caller reads their funds' rows and not the whole
+ * company. The CSVs feed the bound `instr` predicates below.
+ */
+type PositionScope = {
+  held: number[] | null;
+  funds: number[];
+  gpOnly: number[];
+  heldCsv: string | null;
+  fundCsv: string;
+  gpOnlyCsv: string;
+  /** Every company the caller sees, or null for every company. */
+  visibleCsv: string | null;
+};
+
+async function positionScope(c: any, user: any): Promise<PositionScope> {
+  const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+  if (held == null) {
+    return { held: null, funds: [], gpOnly: [], heldCsv: null, fundCsv: '', gpOnlyCsv: '', visibleCsv: null };
+  }
+  const funds = await managedFundIds(c, user);
+  let gpOnly: number[] = [];
+  if (funds.length > 0) {
+    const fundCsv = funds.join(',');
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT project_id FROM portfolio_positions
+        WHERE instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0`,
+    ).bind(fundCsv).all();
+    const heldSet = new Set(held);
+    gpOnly = ((rows.results || []) as Array<{ project_id: number }>)
+      .map((r) => Number(r.project_id)).filter((id) => Number.isFinite(id) && !heldSet.has(id));
+  }
+  return {
+    held, funds, gpOnly,
+    heldCsv: held.join(','),
+    fundCsv: funds.join(','),
+    gpOnlyCsv: gpOnly.join(','),
+    visibleCsv: [...held, ...gpOnly].join(','),
+  };
+}
+
+/**
+ * The carrying-value mark per company under a position scope. A held company
+ * (or every company, for an admin) keeps the firm scope these reads always
+ * used. A company reached only as GP reads the marks of the funds the caller
+ * runs and the firm-level ones (`latestProjectMarks`' fund scope, per fund),
+ * merged by the same precedence: the newer effective date wins; on one date a
+ * fund's own mark beats a firm-level one; two of the caller's funds with
+ * marks on one date are a conflict, as in the firm scope.
+ */
+async function scopedLatestMarks(env: Env, scope: PositionScope, asOf: string | null) {
+  const out = await latestMarksByProject(env, scope.held, asOf);
+  if (scope.gpOnly.length === 0) return out;
+  const gp = new Map<number, any>();
+  for (const fundId of scope.funds) {
+    const marks = await latestProjectMarks(env, { projectIds: scope.gpOnly, asOf, scope: { kind: 'fund', fundId } });
+    for (const [pid, mark] of marks) {
+      const held = gp.get(pid);
+      if (!held || mark.as_of_date > held.as_of_date) { gp.set(pid, mark); continue; }
+      if (mark.as_of_date < held.as_of_date || mark.fund_id == null) continue;
+      if (held.fund_id == null) { gp.set(pid, mark); continue; }
+      if (mark.fund_id !== held.fund_id) gp.set(pid, { ...held, conflict: 'fund_marks_conflict' });
+    }
+  }
+  for (const [pid, mark] of gp) out.set(pid, mark);
+  return out;
+}
+
+/** The fund-scope statement a list carries when the GP arm contributed rows. */
+function gpScopeStatement(scope: PositionScope) {
+  if (scope.funds.length === 0) return null;
+  return {
+    rule: 'gp_of_record',
+    fund_ids: scope.funds,
+    text: 'Positions attributed to the funds you run as general partner of record.',
+  };
+}
+
 // GET /api/positions — portfolio ownership summary (one row per project)
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
-    const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    const scope = await positionScope(c, user);
     // D4644: this list honours `as_of` the way the metrics read below already
     // did. Before, the list always used the latest mark ever recorded while the
     // metrics beside it used the mark as of the requested date, so one page
@@ -89,22 +184,28 @@ r.get('/', async (c) => {
               pr.sector AS proj_sector, pr.stage AS proj_stage, pr.status AS proj_status
          FROM portfolio_positions p
          LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
-        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
+               OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
         GROUP BY p.project_id`
-    ).bind(scopeCsv, scopeCsv).all<any>();
-    // Latest ownership/round per project, also in one pass.
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    // Latest ownership/round per project, also in one pass, over the same rows:
+    // for a company read as GP, the latest of their funds' rounds.
     const latestRows = await c.env.DB.prepare(
       `SELECT p.project_id, p.ownership_pct, p.round_name
          FROM portfolio_positions p
-         JOIN (SELECT project_id, MAX(COALESCE(position_date, created_at)) AS d
-                 FROM portfolio_positions GROUP BY project_id) l
+         JOIN (SELECT q.project_id, MAX(COALESCE(q.position_date, q.created_at)) AS d
+                 FROM portfolio_positions q
+                WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(q.project_id AS TEXT) || ',') > 0
+                       OR instr(',' || ? || ',', ',' || CAST(q.fund_id AS TEXT) || ',') > 0)
+                GROUP BY q.project_id) l
            ON l.project_id = p.project_id AND l.d = COALESCE(p.position_date, p.created_at)
-         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)
+         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
+                OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
          GROUP BY p.project_id`
-    ).bind(scopeCsv, scopeCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
-    const marks = await latestMarksByProject(c.env, projectIds, listAsOf);
+    const marks = await scopedLatestMarks(c.env, scope, listAsOf);
 
     const items = (rows.results || []).map((row: any) => {
       const pid = Number(row.project_id);
@@ -147,8 +248,13 @@ r.get('/', async (c) => {
       };
     });
     // D1057: the read says which companies it lists. An investor sees the ones they hold a confirmed
-    // commitment in (finding 8); an admin, every recorded position.
-    return c.json({ items, scope: projectIds == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE });
+    // commitment in (finding 8); an admin, every recorded position. D4636 part 3: a GP of record
+    // is also told which funds' positions were added.
+    return c.json({
+      items,
+      scope: scope.held == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE,
+      fund_scope: gpScopeStatement(scope),
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -195,11 +301,10 @@ r.get('/marks', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
-    const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    const scope = await positionScope(c, user);
     // A book with no accessible projects reads as empty rather than as
     // unscoped: `investorProjectIds` returning [] must not become "all rows".
-    if (projectIds != null && projectIds.length === 0) {
+    if (scope.held != null && scope.held.length === 0 && scope.gpOnly.length === 0) {
       return c.json({ items: [], projects: 0, basis_counts: {} });
     }
     const rows = await c.env.DB.prepare(
@@ -208,10 +313,12 @@ r.get('/marks', async (c) => {
               p.name AS project_name, p.uid AS project_uid
          FROM portfolio_marks m
          JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL
-        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0
+               OR (instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0
+                   AND (m.fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(m.fund_id AS TEXT) || ',') > 0)))
         ORDER BY m.as_of_date DESC, m.created_at DESC
         LIMIT 500`,
-    ).bind(scopeCsv, scopeCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.gpOnlyCsv, scope.fundCsv).all<any>();
     const items = (rows.results || []).map((m: any) => ({
       uid: m.uid,
       project_id: Number(m.project_id),
@@ -246,22 +353,23 @@ r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
-    const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    const scope = await positionScope(c, user);
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
 
     const [positions, distributions, marks] = await Promise.all([
       c.env.DB.prepare(
         `SELECT project_id, invested_amount, position_date, created_at
            FROM portfolio_positions
-          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)`,
-      ).bind(scopeCsv, scopeCsv).all<any>(),
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
+                 OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
+      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>(),
       c.env.DB.prepare(
         `SELECT project_id, amount, distribution_date
            FROM portfolio_distributions
-          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)`,
-      ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] })),
-      latestMarksByProject(c.env, projectIds, c.req.query('as_of') ? today : null),
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0
+                 OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)`,
+      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      scopedLatestMarks(c.env, scope, c.req.query('as_of') ? today : null),
     ]);
 
     // The quarter-end read (D463): with an explicit `as_of`, only flows ON OR
@@ -331,8 +439,7 @@ r.get('/kpi-compliance', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
-    const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    const scope = await positionScope(c, user);
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
     // #4647 (D4647): THE DEFAULT IS THE LAST COMPLETED PERIOD.
@@ -365,15 +472,16 @@ r.get('/kpi-compliance', async (c) => {
         `SELECT DISTINCT p.project_id, pr.uid, pr.name
            FROM portfolio_positions p
            LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
-          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)`,
-      ).bind(scopeCsv, scopeCsv).all<any>(),
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
+                 OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)`,
+      ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>(),
       c.env.DB.prepare(
         `SELECT project_id, period, MAX(COALESCE(submitted_at, updated_at)) AS last_at
            FROM portfolio_updates
           WHERE status = 'submitted'
             AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)
           GROUP BY project_id, period`,
-      ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => ({ results: [] as any[] })),
     ]);
 
     const thisPeriod = new Set<number>();
@@ -436,12 +544,18 @@ r.get('/:projectUid', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const proj = await c.env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('projectUid')).first<any>();
     if (!proj) return c.json({ detail: 'Not found' }, 404);
-    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
-    if (projectIds != null && !projectIds.includes(Number(proj.id))) return c.json({ detail: 'Forbidden' }, 403);
+    const scope = await positionScope(c, user);
+    const pid = Number(proj.id);
+    const asHolder = scope.held == null || scope.held.includes(pid);
+    if (!asHolder && !scope.gpOnly.includes(pid)) return c.json({ detail: 'Forbidden' }, 403);
+    // D4636 part 3: a company reached only as GP of record reads the rounds,
+    // marks and distributions of the funds the caller runs (and the firm-level
+    // marks); a holder or an admin reads the company's (`fundOnly` null).
+    const fundOnly = asHolder ? null : scope.fundCsv;
     // D4636 part 2: an admin, who records positions, reads the whole row. An
-    // investor reads the round as it bears on the company: not the internal
-    // row id, the account that recorded it, or the closing line it was
-    // reconciled against.
+    // investor, and a GP of record (part 3), read the round as it bears on the
+    // company: not the internal row id, the account that recorded it, or the
+    // closing line it was reconciled against.
     const rounds = user.role === 'admin'
       ? await c.env.DB.prepare(
         'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'
@@ -449,8 +563,11 @@ r.get('/:projectUid', async (c) => {
       : await c.env.DB.prepare(
         `SELECT uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct,
                 position_date, created_at, updated_at
-           FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC`
-      ).bind(proj.id).all<PositionRow>();
+           FROM portfolio_positions
+          WHERE project_id = ?
+            AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
+          ORDER BY COALESCE(position_date, created_at) ASC`
+      ).bind(proj.id, fundOnly, fundOnly).all<PositionRow>();
     const holders = await c.env.DB.prepare(
       'SELECT name, security_type, shares, ownership_pct, source FROM cap_table_holders WHERE project_id = ? ORDER BY ownership_pct DESC'
     ).bind(proj.id).all<any>().catch(() => ({ results: [] }));
@@ -458,12 +575,18 @@ r.get('/:projectUid', async (c) => {
     const [markRows, distRows] = await Promise.all([
       c.env.DB.prepare(
         `SELECT uid, as_of_date, fmv, post_money, event, basis, source, note
-           FROM portfolio_marks WHERE project_id = ? ORDER BY as_of_date DESC`,
-      ).bind(proj.id).all<any>().catch(() => ({ results: [] as any[] })),
+           FROM portfolio_marks
+          WHERE project_id = ?
+            AND (? IS NULL OR fund_id IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
+          ORDER BY as_of_date DESC`,
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
       c.env.DB.prepare(
         `SELECT uid, distribution_date, amount, kind, note
-           FROM portfolio_distributions WHERE project_id = ? ORDER BY distribution_date DESC`,
-      ).bind(proj.id).all<any>().catch(() => ({ results: [] as any[] })),
+           FROM portfolio_distributions
+          WHERE project_id = ?
+            AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(fund_id AS TEXT) || ',') > 0)
+          ORDER BY distribution_date DESC`,
+      ).bind(proj.id, fundOnly, fundOnly).all<any>().catch(() => ({ results: [] as any[] })),
     ]);
     const marks = markRows.results || [];
     const invested = (rounds.results || []).reduce((a: number, x: any) => a + (Number(x.invested_amount) || 0), 0);
