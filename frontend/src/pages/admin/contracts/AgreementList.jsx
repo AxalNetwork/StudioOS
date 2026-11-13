@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { Recorded, Missing, button, input, card, Pagination } from './parts';
-import { agreementRowSemantics } from '../../../lib/contractLifecycle';
+import { AGREEMENT_SORT_OPTIONS, AGREEMENT_STATUS_FILTERS, agreementRowSemantics } from '../../../lib/contractLifecycle';
 import { attentionLabel } from './contractMetrics';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Link } from 'react-router-dom';
@@ -162,13 +162,15 @@ export default function AgreementList({ filters, onFilters, onOpen, revision, on
   const read = useAgreements(() => contractsApi.agreements({ ...filters, limit: 25, offset }), `${JSON.stringify(filters)}|${revision}`);
   const set = (key, value) => onFilters({ ...filters, [key]: value, offset: 0 });
   const chips = activeAgreementChips(filters);
+  // D4811 part 23: the status chips and the sort read the shared lists, so the chip says Executed as the strip does;
+  // the value sent stays `signed` (and `signed_at`), so an existing ?status=signed link still opens the same rows.
   return <section className={card}>
-    <div className="flex flex-wrap gap-2 border-b border-axal-hairline p-3">{[['All', ''], ['Awaiting signature', 'awaiting_signature'], ['Signed', 'signed'], ['Voided', 'void']].map(([label, value]) => <button key={label} type="button" className={`${button} ${filters.status === value || (!filters.status && !value) ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`} aria-pressed={(filters.status || '') === value} onClick={() => set('status', value)}>{label}</button>)}</div>
+    <div className="flex flex-wrap gap-2 border-b border-axal-hairline p-3">{AGREEMENT_STATUS_FILTERS.map(([label, value]) => <button key={label} type="button" className={`${button} ${filters.status === value || (!filters.status && !value) ? 'bg-violet-50 dark:bg-violet-950/30' : ''}`} aria-pressed={(filters.status || '') === value} onClick={() => set('status', value)}>{label}</button>)}</div>
     <div className="flex flex-wrap gap-2 p-3"><label className="min-w-48 flex-1">Search<input className={input} placeholder="Title, recipient, company, template…" maxLength={200} value={filters.q || ''} onChange={e => set('q', e.target.value)} /></label>
       <label>Document type<input className={input} value={filters.doc_type || ''} onChange={e => set('doc_type', e.target.value)} placeholder="Any type" /></label>
       <label>Party<select className={input} value={filters.party_role || ''} onChange={e => set('party_role', e.target.value)}>{[['', 'Any party'], ['founder', 'Founder'], ['investor', 'Investor'], ['advisor', 'Advisor'], ['partner', 'Partner'], ['axal', 'Axal']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Provider<select className={input} value={filters.provider || ''} onChange={e => set('provider', e.target.value)}><option value="">Any provider</option><option value="native">Native</option><option value="docusign">DocuSign</option></select></label>
-      <label>Sort<select className={input} value={`${filters.sort || 'sent_at'}:${filters.direction || 'desc'}`} onChange={e => { const [sort, direction] = e.target.value.split(':'); onFilters({ ...filters, sort, direction, offset: 0 }); }}>{[['sent_at:desc', 'Sent, newest'], ['sent_at:asc', 'Sent, oldest'], ['title:asc', 'Title'], ['recipient:asc', 'Recipient'], ['signed_at:desc', 'Signed, newest'], ['days_to_sign:asc', 'Days to sign']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Sort<select className={input} value={`${filters.sort || 'sent_at'}:${filters.direction || 'desc'}`} onChange={e => { const [sort, direction] = e.target.value.split(':'); onFilters({ ...filters, sort, direction, offset: 0 }); }}>{AGREEMENT_SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <button type="button" className={button} onClick={() => onFilters({})}>Clear filters</button></div>
     {/* D5050 part 2 (CT-17): the licence, package and program agreement filters, and the active ones as chips. */}
     <div className="px-3 pb-3"><AgreementFilterRow filters={filters} onFilters={onFilters} total={read.data ? read.data.total : null} /></div>

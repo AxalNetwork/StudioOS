@@ -6,7 +6,7 @@ import {
 
 /**
  * D5050 part 2 (#5050, board CT-17): the Agreements filter row. One button per filter, in the canvas's order
- * (agreement type, legal state, licence / territory, program, Axal VC package, template, signed date); a set
+ * (agreement type, legal state, licence / territory, program, Axal VC package, template, executed date); a set
  * filter reads its value, or its count when several types are chosen, and is drawn "on". One panel opens under
  * the row (a disclosure, not an ARIA menu, as the Library is), so it is never clipped by the row's scroll on a
  * phone. Under it, the active filters as removable chips with Clear all and the count the Worker answered.
@@ -69,8 +69,8 @@ function Panel({ id, filters, set, close }) {
       note="Agreements made from this template. The template itself lives in Templates, never in this list." />;
   } else if (id === 'signed') {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[
-      ['signed_from', 'Signed on or after', { type: 'date' }], ['signed_to', 'Signed on or before', { type: 'date' }]]}
-      note="By signature date. Effective date is not a filter: no master licence agreement records one, so it would hide them." />;
+      ['signed_from', 'Executed on or after', { type: 'date' }], ['signed_to', 'Executed on or before', { type: 'date' }]]}
+      note="By execution date. Effective date is not a filter: no master licence agreement records one, so it would hide them." />;
   }
   return <div id="agreement-filter-panel" role="group" aria-label={name} data-testid={`agreement-filter-panel-${id}`}
     className="max-w-[420px] rounded-lg border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900">

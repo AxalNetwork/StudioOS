@@ -98,7 +98,7 @@ test('CT-17 rules: chips per value, a removed type keeps the others, Clear all k
   const f = { agreement_type: 'package,program_licence', licence: 'AXL-001', territory: 'fr', signed_from: '2026-01-01', q: 'north', status: 'signed' };
   // Mutation checked: one chip for the whole type list → the first two labels read "Type: package,program_licence".
   assert.deepEqual(activeAgreementChips(f).map((c) => c.label),
-    ['Type: Package agreement', 'Type: Program licence', 'Licence: AXL-001', 'Territory: FR', 'Signed from 2026-01-01']);
+    ['Type: Package agreement', 'Type: Program licence', 'Licence: AXL-001', 'Territory: FR', 'Executed from 2026-01-01']);
   assert.equal(withoutChip(f, activeAgreementChips(f)[0]).agreement_type, 'program_licence', 'removing one type keeps the other');
   assert.equal(withoutChip(f, { key: 'licence' }).licence, '');
   const cleared = withoutAgreementFilters(f);
@@ -176,7 +176,7 @@ test('CT-17 mounted: licence and territory, signed dates; a value the Worker wou
     assert.deepEqual(paramsOf(urls.at(-1)), { q: 'north', licence: 'AXL-001', territory: 'FR' });
     await press(view, 'agreement-filter-signed');
     assert.match(view.text(), /Effective date is not a filter/);
-    await view.fill('Signed on or after', '2026-09-01');
+    await view.fill('Executed on or after', '2026-09-01');
     await view.click('Apply'); await settle(view);
     assert.deepEqual(paramsOf(urls.at(-1)), { q: 'north', licence: 'AXL-001', territory: 'FR', signed_from: '2026-09-01' });
     await view.click('Clear all'); await settle(view);
