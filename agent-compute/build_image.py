@@ -6,10 +6,8 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import tempfile
-import ssl
 import subprocess
 import tarfile
-import urllib.request
 
 source = Path(__file__).parent
 lock = json.loads((source / "source-lock.json").read_text())
@@ -18,11 +16,14 @@ environment = dict(os.environ)
 if certificate.exists():
     environment["PIP_CERT"] = str(certificate)
 subprocess.run(["python", "-m", "pip", "install", "--no-cache-dir", "--only-binary=:all:", "--require-hashes", "-r", str(source / "requirements.txt")], env=environment, check=True)
-context = ssl.create_default_context(cafile=str(certificate) if certificate.exists() else None)
 if lock["zlib"]["url"] != "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz" or lock["zlib"]["version"] != "1.4":
     raise RuntimeError("zlib source URL is not the reviewed immutable release")
-with urllib.request.urlopen("https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz", context=context) as response:
-    compressed = response.read(5 * 1024 * 1024)
+download = ["curl", "--fail", "--silent", "--show-error", "--location", "--max-redirs", "5",
+            "--proto", "=https", "--proto-redir", "=https", "--max-time", "120", "--max-filesize", "5242880"]
+if certificate.exists():
+    download.extend(["--cacert", str(certificate)])
+download.append("https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz")
+compressed = subprocess.run(download, check=True, stdout=subprocess.PIPE, timeout=125).stdout
 if hashlib.sha256(compressed).hexdigest() != lock["zlib"]["sha256"]:
     raise RuntimeError("zlib source digest mismatch")
 destination = Path(tempfile.mkdtemp(prefix="agent-compute-zlib-", dir="/tmp"))
