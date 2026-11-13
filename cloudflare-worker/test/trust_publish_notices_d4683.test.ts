@@ -71,7 +71,7 @@ function harness() {
     }
     return new Response('unexpected', { status: 599 });
   }) as unknown as typeof fetch;
-  async function call(method: string, path: string, body?: unknown, who: number | null = SUPER) {
+  async function call(method: string, path: string, body?: unknown, who: number | null = SUPER, dbBinding = env.DB) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
     if (who !== null) {
       headers.Authorization = `Bearer ${await new SignJWT({ user_id: who, jti: `s-${who}` }).setProtectedHeader({ alg: 'HS256' })
@@ -79,7 +79,7 @@ function harness() {
     }
     const saved = [console.warn, console.error, console.info]; console.warn = () => {}; console.error = () => {}; console.info = () => {};
     try {
-      const res = await withThrownResponses(() => app.request(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env));
+      const res = await withThrownResponses(() => app.request(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, { ...env, DB: dbBinding }));
       return { status: res.status, body: await res.json().catch(() => null) };
     } finally { [console.warn, console.error, console.info] = saved; }
   }
@@ -166,6 +166,63 @@ test('the same Publish sent twice at once is one act: one record, and the second
     assert.equal(changes(h), 1);
   } finally { h.restore(); }
 });
+
+// D5495: pause only scheduling; every query and write still runs on real SQLite.
+for (const phase of ['after-key-read', 'before-draft-read'] as const) {
+  test(`D5495: identical Publish replays after ${phase}`, { timeout: 30000 }, async (t) => {
+    const h = harness();
+    const entered = Promise.withResolvers<void>();
+    const resumed = Promise.withResolvers<void>();
+    t.signal.addEventListener('abort', () => { entered.resolve(); resumed.resolve(); }, { once: true });
+    let replay: ReturnType<H['call']> | undefined;
+    try {
+      await h.call('PUT', `${TC}/blocks/security`, { body: lines('Passkeys.') });
+      const body = { note: NOTE, pending_token: await tokenNow(h), publish_key: key() };
+      const base = h.env.DB as ReturnType<typeof d1Over>;
+      let paused = false;
+      const scheduled = {
+        ...base,
+        prepare(sql: string) {
+          const statement = base.prepare(sql);
+          const isGate = phase === 'after-key-read'
+            ? sql.includes('FROM trust_content_changes WHERE request_key = ?')
+            : sql === "SELECT key FROM trust_content_blocks WHERE state = 'draft'";
+          const gate = async (read: () => Promise<unknown>) => {
+            if (!isGate || paused) return read();
+            paused = true;
+            const before = phase === 'after-key-read' ? await read() : undefined;
+            entered.resolve();
+            await resumed.promise;
+            return phase === 'after-key-read' ? before : read();
+          };
+          const wrapped = {
+            ...statement,
+            bind(...args: unknown[]) { statement.bind(...args); return wrapped; },
+            first: (column?: string) => gate(() => statement.first(column)),
+            all: () => gate(() => statement.all()),
+          };
+          return wrapped;
+        },
+      };
+      replay = h.call('POST', `${TC}/publish`, body, SUPER, scheduled);
+      await Promise.race([entered.promise, replay.then(() => { throw new Error(`Publish did not reach ${phase}`); })]);
+      const original = await h.call('POST', `${TC}/publish`, body);
+      resumed.resolve();
+      const duplicate = await replay;
+      assert.equal(original.status, 200, JSON.stringify(original.body));
+      assert.equal(duplicate.status, 200, JSON.stringify(duplicate.body));
+      assert.equal(original.body.replayed, false);
+      assert.equal(duplicate.body.replayed, true);
+      assert.equal(duplicate.body.uid, original.body.uid);
+      assert.equal(changes(h), 1);
+    } finally {
+      resumed.resolve();
+      await replay?.catch(() => {});
+      h.restore();
+      h.db.close();
+    }
+  });
+}
 
 test('a stale preview publishes nothing, and the change log says nothing happened', async () => {
   const h = harness();
