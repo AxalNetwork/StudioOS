@@ -31,8 +31,9 @@ import { CASES_MAX, caseSha, checkCase } from '../src/services/agents/skillLifec
 import { checkSourceCatalogue, persistedManifest, reconcile, summary, type Finding } from '../src/services/agents/skillCatalogue.ts';
 import { checkLibrary, seedLibrary } from '../src/services/agents/skillLibrarySeed.ts';
 import { scenarioCase as tsScenarioCase, type Pack } from '../src/services/agents/skillScenarios.ts';
-import { SKILL_LIBRARY, type LibraryEntry } from '../src/services/agents/skillLibrary.generated.ts';
-import { SKILL_LIBRARY_REL, libraryEntries, render, scenarioCase as mjsScenarioCase, skillLibraryProblems } from '../../scripts/build-skill-library.mjs';
+import type { LibraryEntry } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
+import { SKILL_LIBRARY_REL, libraryEntries, render, scenarioCase as mjsScenarioCase, skillLibraryProblems, writeAsset } from '../../scripts/build-skill-library.mjs';
 import { generatedSound, readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
@@ -159,7 +160,7 @@ test('seed: a store seeded before this change gains only the missing cases; no e
   const tables = ['agent_skills', 'agent_skill_tags', 'agent_skill_roles', 'agent_skill_cases'];
   const snapshot = Object.fromEntries(tables.map((t) => [t, rows(w, `SELECT * FROM ${t} ORDER BY rowid`)]));
   const maxCase = Math.max(...snapshot.agent_skill_cases.map((r: any) => r.id));
-  const lines = await seedLibrary(w.env, 1, REASON);
+  const lines = await seedLibrary(w.env, 1, REASON, SKILL_LIBRARY);
   const scenarioCount = PACKS.reduce((n, p) => n + p.scenarios.length, 0);
   for (const l of lines) {
     const p = PACKS.find((x) => x.skill === l.slug);
@@ -181,7 +182,7 @@ test('seed: a store seeded before this change gains only the missing cases; no e
   const rec = reconcile(manifest, await persistedManifest(w.env));
   assert.deepEqual([...new Set(rec.map((l) => l.class))], ['exact']);
   const again = sha(caseRows(w));
-  assert.ok((await seedLibrary(w.env, 1, REASON)).every((l) => l.outcome === 'present'));
+  assert.ok((await seedLibrary(w.env, 1, REASON, SKILL_LIBRARY)).every((l) => l.outcome === 'present'));
   assert.equal(sha(caseRows(w)), again);
 });
 
@@ -189,7 +190,7 @@ test('seed: a store seeded before this change gains only the missing cases; no e
 
 test('coverage: one scenario followed from its file to the module to a row with its own identity; every scenario at each stage', async () => {
   const w = world();
-  await seedLibrary(w.env, 1, REASON);
+  await seedLibrary(w.env, 1, REASON, SKILL_LIBRARY);
   // One scenario, end to end.
   const file = JSON.parse(readFileSync(join(SKILLS, 'scenarios', 'board-meeting-brief.json'), 'utf8')) as Pack;
   const s = file.scenarios.find((x) => x.case_id === 'board-meeting-brief-missing-burn')!;
@@ -276,6 +277,7 @@ test('gate: two cases with one identity fail; an unsound generated module fails'
   cpSync(SKILLS, skills, { recursive: true });
   const built = render(libraryEntries(skills));
   writeFileSync(join(root, SKILL_LIBRARY_REL), built);
+  writeAsset(libraryEntries(skills), root); // D4574 H3: the entries' static asset is part of a sound build
   assert.equal(generatedSound(root, built), true, 'built and untracked');
   execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
   assert.equal(generatedSound(root, built), true, 'in a work tree, still untracked');
