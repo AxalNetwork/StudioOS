@@ -239,6 +239,16 @@ export function blockedWords(blocked) {
 }
 
 /** The Worker's skill refusals in words (A1, A2). */
+/** D4533 B1: the longest release note a version keeps (`RELEASE_NOTE_MAX` in the Worker's `skillPublish.ts`). */
+export const RELEASE_NOTE_MAX = 2000;
+
+/** A publish's release note: blank is no note (null), never an empty string; too long is told before sending. */
+export function releaseNoteBody(text) {
+  const note = String(text ?? '').replace(/\r\n?/g, '\n').trim();
+  if (note.length > RELEASE_NOTE_MAX) return { ok: false, problem: skillRefusalWords('release_note_too_long') };
+  return { ok: true, note: note || null };
+}
+
 export function skillRefusalWords(code, detail) {
   switch (code) {
     case 'not_manager': case 'not_member': return 'Only this team’s editors can do this.';
@@ -266,6 +276,8 @@ export function skillRefusalWords(code, detail) {
     case 'role_mismatch': return 'This agent could not take it yet: the skill is still held to the agents it was written for.';
     case 'tool_not_approved': return detail ? `Needs the ${detail} read tool, which its sponsor hasn’t approved.` : 'That tool is not one its sponsor approved for read-only use.';
     case 'version_not_published': return 'Only a published version can be pinned.';
+    case 'release_note_too_long': return `Keep the release note to ${RELEASE_NOTE_MAX} characters.`;
+    case 'release_note_invalid': return 'The release note must be text.';
     default: return 'It could not be saved. Try again.';
   }
 }
@@ -471,6 +483,7 @@ export function fromWorkerLibrary(r) {
 export function fromWorkerSkillPage(r) {
   const skill = fromWorkerSkill(r?.skill);
   if (!skill) return { skill: null, can_edit: false };
-  const versions = (Array.isArray(r?.versions) ? r.versions : []).map((v) => ({ version: v.version, published_at: v.published_at, note: v.note || null }));
+  // D4533 B1: the Worker answers each version's note as `release_note` (null: none was written, every version before it).
+  const versions = (Array.isArray(r?.versions) ? r.versions : []).map((v) => ({ version: v.version, published_at: v.published_at, note: v.release_note || v.note || null }));
   return { skill: { ...skill, markdown: r.skill.skill_md ?? r.skill.markdown ?? null, versions }, can_edit: skill.can_write };
 }

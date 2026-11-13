@@ -10,6 +10,7 @@ import GridView from './GridView';
 import StudioView from './StudioView';
 import RequestsView from './RequestsView';
 import DefaultsView from './DefaultsView';
+import { HolderAccessView } from './EntitlementViews';
 import { viewOf } from './grantsModel';
 
 /**
@@ -70,6 +71,8 @@ export function GrantsTabs({ requests = null }) {
       <HeaderTab to="/admin/licences/programs" data-testid="grants-tab-grid">Grid</HeaderTab>
       <HeaderTab to="/admin/licences/programs/requests" count={requests ? requestsCount(requests) : null} data-testid="grants-tab-requests">Requests</HeaderTab>
       <HeaderTab to="/admin/licences/programs/defaults" data-testid="grants-tab-defaults">Default terms</HeaderTab>
+      {/* D5059 (#5059): the programs each user licence holder is eligible for, granted and has in force. */}
+      <HeaderTab to="/admin/licences/programs/holders" data-testid="grants-tab-holders">User licences</HeaderTab>
       <HeaderTab to="/admin/licences/programs/history" data-testid="grants-tab-history">History</HeaderTab>
     </>
   );
@@ -132,6 +135,7 @@ function ProgramGrantsPage() {
       {view === 'grid' && <GridView grid={grid} requests={requests} reload={reload} reloadGrid={reloadGrid} reloadRequests={reloadRequests} />}
       {view === 'requests' && <RequestsView grid={grid} requests={requests} reload={reload} />}
       {view === 'defaults' && <DefaultsView grid={grid} reload={reloadGrid} />}
+      {view === 'holders' && <HolderAccessView />}
     </div>
   );
 }

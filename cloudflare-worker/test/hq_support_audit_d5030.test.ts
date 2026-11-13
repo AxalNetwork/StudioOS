@@ -1,5 +1,5 @@
 /**
- * The HQ Support audit, work packages 1 to 4 of 6 (#5030–#5033):
+ * The HQ Support audit (#5030–#5035):
  *
  *   D5030 — per-kind escalation counts from the whole board, never the 25 rows
  *           listed; a ticket keeps the support context it was FILED in.
@@ -9,6 +9,7 @@
  *           copy, and each branch's applied version is reported.
  *   D5033 — the save's answer says branch by branch what was applied (the
  *           page's own feedback is in frontend/test/hq_support_audit_d5030.test.mjs).
+ *   D5035 — durable recent decisions and the last recorded branch push.
  *
  * REAL SQLITE ON THE REAL SCHEMA (`loadSchema`: the baseline and every
  * migration, these two included), at both tiers. HQ's binding to a branch runs
@@ -28,6 +29,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import supportRoute, {
   escalationKinds, BRANCHES_READ_SEPARATELY, slaPropagation, ALWAYS_OFFERED_KINDS,
 } from '../src/routes/admin_hq_support.ts';
+import adminEscalations from '../src/routes/admin_escalations.ts';
 import tickets from '../src/routes/tickets.ts';
 import { applyLicenceCopy, branchOpenTickets } from '../src/rpc/branchOps.ts';
 import { readBranchAdminTickets, filingSnapshot, SUPPORT_LIST_LIMIT, queuePersonaOf } from '../src/services/supportQueues.ts';
@@ -123,6 +125,7 @@ function binding(bdb: DB, opts: { applyThrows?: boolean; applyHangs?: boolean; h
 
 const app = new Hono<any>();
 app.route('/api/admin/hq-support', supportRoute);
+app.route('/api/admin', adminEscalations);
 app.route('/api/tickets', tickets);
 app.onError((err: any, c) => {
   const s = ({ Unauthorized: 401, 'Admin required': 403, 'Super admin required': 403 } as any)[err?.message];
@@ -150,6 +153,111 @@ const TIERS = (p1: number, p2: number, p3: number) => ({
     P2: { hours: p2, description: 'A workflow is blocked, a workaround exists' },
     P3: { hours: p3, description: 'Wrong, but nobody is stopped' },
   },
+});
+
+test('D5035: both Support reads return the latest 25 stored decisions, including legacy outcomes, in stable decision order', async () => {
+  const db = hqDb();
+  const insert = db.prepare(
+    `INSERT INTO hq_escalations (uid, branch_code, kind, subject, status, answer, answered_at, push_at)
+     VALUES (?, 'fr', 'other', 'A question', ?, ?, ?, ?)`,
+  );
+  const stamp = '2026-10-01T12:00:00.000Z';
+  for (let i = 0; i < 26; i++) {
+    insert.run(`esc_${String(i).padStart(2, '0')}`, 'answered', 'Keep it open locally.', stamp, null);
+  }
+  insert.run('esc_declined', 'declined', 'Keep the current terms.', '2026-11-01T12:00:00.000Z', null);
+  // Resending an older decision is not a new decision.
+  insert.run('esc_old', 'answered', 'Older answer', '2026-09-01T12:00:00.000Z', '2026-11-11T12:00:00.000Z');
+  insert.run('esc_open', 'open', null, null, null);
+  insert.run('esc_withdrawn', 'withdrawn', 'Taken back.', '2026-11-11T12:00:00.000Z', null);
+  insert.run('esc_empty', 'answered', '', '2026-11-11T12:00:00.000Z', null);
+  for (const path of ['/api/admin/hq-support/local', '/api/admin/hq-support']) {
+    const { status, body } = await call(hqEnv(db), 'GET', path);
+    assert.equal(status, 200);
+    const history = body.recent_decisions;
+    assert.equal(history.available, true);
+    const expected = ['esc_declined', ...Array.from({ length: 24 }, (_, i) => `esc_${String(25 - i).padStart(2, '0')}`)];
+    assert.deepEqual(history.items.map((row: any) => row.uid), expected);
+    assert.deepEqual(history.items[0], {
+      uid: 'esc_declined', branch_code: 'fr', kind: 'other', subject: 'A question', status: 'declined',
+      answer: 'Keep the current terms.', answered_at: '2026-11-01T12:00:00.000Z', answered_by_name: null,
+      push_ok: null, push_reason: null, push_at: null,
+    });
+  }
+});
+
+test('D5035: a missing delivery column leaves only history unreadable', async () => {
+  const db = hqDb();
+  db.exec('ALTER TABLE hq_escalations DROP COLUMN push_ok');
+  const { body } = await call(hqEnv(db), 'GET', '/api/admin/hq-support/local');
+  assert.equal(body.recent_decisions.available, false);
+  assert.ok(body.recent_decisions.reason);
+  assert.equal(body.escalations.available, true);
+  assert.equal(body.tickets.available, true);
+});
+
+test('D5035: a refused, unconfirmed and then successful resend is visible on fresh reads of the same decision', async () => {
+  const db = hqDb();
+  db.exec("INSERT INTO hq_escalations (uid, branch_code, kind, subject) VALUES ('esc_retry', 'fr', 'other', 'An appeal')");
+  const acknowledgements = [{ ok: false, reason: 'Branch refused' }, { ok: 'true' }, { ok: true }];
+  const env = hqEnv(db, { BRANCH_FR: { applyEscalationAnswer: () => acknowledgements.shift() } });
+  const path = '/api/admin/escalations/esc_retry';
+  const recorded = await call(hqEnv(db), 'PATCH', path, { answer: 'Allow the appeal.', status: 'answered' });
+  assert.equal(recorded.status, 200);
+  const decision = {
+    uid: 'esc_retry', branch_code: 'fr', kind: 'other', subject: 'An appeal', status: 'answered',
+    answer: 'Allow the appeal.', answered_by_name: 'The Holder', answered_at: recorded.body.answered_at,
+  };
+  const readHistory = async () => (await call(hqEnv(db), 'GET', '/api/admin/hq-support/local')).body.recent_decisions.items;
+  assert.match(recorded.body.pushed.reason, /No branch Worker is bound/);
+  assert.deepEqual(await readHistory(), [{ ...decision, push_ok: 0, push_reason: recorded.body.pushed.reason, push_at: recorded.body.pushed.push_at }]);
+  const refused = await call(env, 'POST', `${path}/resend`);
+  assert.equal(refused.body.pushed.ok, false);
+  assert.deepEqual(await readHistory(), [{ ...decision, push_ok: 0, push_reason: 'Branch refused', push_at: refused.body.pushed.push_at }]);
+  const unconfirmed = await call(env, 'POST', `${path}/resend`);
+  assert.equal(unconfirmed.body.pushed.ok, null);
+  assert.match(unconfirmed.body.pushed.reason, /no delivery acknowledgement/);
+  assert.deepEqual(await readHistory(), [{
+    ...decision, push_ok: null, push_reason: unconfirmed.body.pushed.reason, push_at: unconfirmed.body.pushed.push_at,
+  }]);
+  const received = await call(env, 'POST', `${path}/resend`);
+  assert.equal(received.body.pushed.ok, true);
+  assert.ok(Date.parse(received.body.pushed.push_at));
+  assert.deepEqual(await readHistory(), [{ ...decision, push_ok: 1, push_reason: null, push_at: received.body.pushed.push_at }]);
+});
+
+test('D5035: a late reply to an earlier decision cannot confirm its replacement', async () => {
+  const db = hqDb();
+  db.exec(`INSERT INTO hq_escalations (uid, branch_code, kind, subject, answer, status, answered_at, push_ok, push_at)
+    VALUES ('esc_overlap', 'fr', 'other', 'An appeal', 'First answer', 'answered', '2026-10-01', 1, '2026-10-01')`);
+  const first = Promise.withResolvers<{ ok: boolean }>();
+  const firstStarted = Promise.withResolvers<void>();
+  const next = Promise.withResolvers<{ ok: boolean; reason: string }>();
+  const nextStarted = Promise.withResolvers<void>();
+  const env = hqEnv(db, {
+    BRANCH_FR: { applyEscalationAnswer: ({ answer }: { answer: string }) => {
+      if (answer === 'First answer') { firstStarted.resolve(); return first.promise; }
+      nextStarted.resolve();
+      return next.promise;
+    } },
+  });
+  const path = '/api/admin/escalations/esc_overlap';
+  const oldResend = call(env, 'POST', `${path}/resend`);
+  await firstStarted.promise;
+  const replacement = call(env, 'PATCH', path, { answer: 'Second answer', status: 'declined' });
+  await nextStarted.promise;
+  const read = async () => (await call(hqEnv(db), 'GET', '/api/admin/hq-support/local')).body.recent_decisions.items[0];
+  const before = await read();
+  assert.equal(before.answer, 'Second answer');
+  assert.equal(before.push_ok, null);
+  assert.equal(before.push_at, null);
+  next.resolve({ ok: false, reason: 'Refused this answer' });
+  assert.equal((await replacement).body.pushed.ok, false);
+  first.resolve({ ok: true });
+  assert.equal((await oldResend).body.pushed.ok, true);
+  const after = await read();
+  assert.equal(after.push_ok, 0);
+  assert.equal(after.push_reason, 'Refused this answer');
 });
 
 // ═══════════════════════════════════════════════════════════ D5030 · counts ══

@@ -32,7 +32,7 @@ export function SubsidiariesSection({ summary, periodStatements, period, current
       )}
       {rows && rows.length === 0 && <p className="text-[13px] text-axal-muted dark:text-gray-400">No territory licence to report on.</p>}
       {rows && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className={TABLE}>
             <caption className="sr-only">Subsidiary reporting and statements for the period</caption>
             <thead>

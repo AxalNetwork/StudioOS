@@ -360,8 +360,38 @@ export type ReleaseDecision = {
    * and a new review is needed; null when none did.
    */
   review: { approved: boolean; changes: Record<EvidencePart, boolean | null> | null; released_version: number | null };
-  evaluation: { pass: number; total: number; not_evaluated: number; meets_bar: boolean; pass_bar: typeof PASS_BAR };
+  /**
+   * `reused` (D4533 A3): when results this decision counts are the very rows a published version's manifest counted,
+   * the latest such version and how many of the counted cells it named (`results` of `total`); null when none are.
+   * A restore of vK's definition onto vK's evidence reads `{ version: K }`: the results still count (A3), only the
+   * approval is spent (§10.1), and the reviewer is told the runs were not made again.
+   */
+  evaluation: { pass: number; total: number; not_evaluated: number; meets_bar: boolean; pass_bar: typeof PASS_BAR; reused: { version: number; results: number } | null };
 };
+
+/**
+ * D4533 A3: the latest version on this same evidence whose manifest counted any of these result rows, and how many of
+ * them it counted. A manifest names each cell's eval result by row id (`manifestOf`), and a result row is immutable, so
+ * the same id is the same run. Only versions published on this evidence can name these rows; one released before D4533
+ * has no manifest and names none.
+ */
+export async function reusedFrom(env: Env, skillId: number, evidenceHash: string, resultIds: readonly (number | null)[]): Promise<{ version: number; results: number } | null> {
+  const counted = resultIds.filter((id): id is number => id != null);
+  if (!counted.length) return null;
+  const versions = (await env.DB.prepare(`SELECT version, evidence_json FROM agent_skill_versions
+      WHERE skill_id = ? AND evidence_json IS NOT NULL AND json_extract(evidence_json, '$.evidence_hash') = ? ORDER BY version DESC`)
+    .bind(skillId, evidenceHash).all<{ version: number; evidence_json: string }>()).results ?? [];
+  for (const v of versions) {
+    let named: Set<number>;
+    try {
+      const m = JSON.parse(v.evidence_json) as { results?: { result_id?: unknown }[] };
+      named = new Set((Array.isArray(m?.results) ? m.results : []).map((r) => r?.result_id).filter((id): id is number => typeof id === 'number'));
+    } catch { continue; }
+    const results = counted.filter((id) => named.has(id)).length;
+    if (results > 0) return { version: v.version, results };
+  }
+  return null;
+}
 
 /** The decision and what the manifest is made from: the approval and the results it counted. */
 export async function releaseEvidence(env: Env, s: { id: number; required_models_json?: string | null }, p: DraftParts) {
@@ -369,6 +399,7 @@ export async function releaseEvidence(env: Env, s: { id: number; required_models
   const approval = await approvalFor(env, s.id, evidence.evidence_hash);
   const last = approval ?? await env.DB.prepare("SELECT * FROM agent_skill_reviews WHERE skill_id = ? AND status = 'approved' ORDER BY id DESC LIMIT 1").bind(s.id).first<ReviewRow>();
   const sum = summarise(evidence, await latestResults(env, s.id, evidence.evidence_hash));
+  const reused = await reusedFrom(env, s.id, evidence.evidence_hash, sum.rows.flatMap((c) => c.results.map((x) => x.result_id)));
   const blocking: Blocking[] = [];
   if (!approval) blocking.push('needs_approval');
   if (sum.not_evaluated > 0) blocking.push('evaluation_incomplete');
@@ -379,7 +410,7 @@ export async function releaseEvidence(env: Env, s: { id: number; required_models
       approved: !!approval, changes: last ? evidenceChanges(last.draft_hash, parseEvidence(last.evidence_json), evidence) : null,
       released_version: approval ? null : await releasedOn(env, s.id, evidence.evidence_hash),
     },
-    evaluation: { pass: sum.pass, total: sum.total, not_evaluated: sum.not_evaluated, meets_bar: sum.meets_bar, pass_bar: PASS_BAR },
+    evaluation: { pass: sum.pass, total: sum.total, not_evaluated: sum.not_evaluated, meets_bar: sum.meets_bar, pass_bar: PASS_BAR, reused },
   };
   return { decision, approval, cells: sum.rows };
 }

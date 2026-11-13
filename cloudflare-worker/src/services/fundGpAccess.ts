@@ -37,8 +37,8 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ensureInvestorTier } from '../middleware/requireInvestorTier';
-import { fundGpScope } from './tenancyScope';
+import { ensureInvestorTier, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
+import { fundGpScope, NO_ROWS } from './tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureFundGpColumns } from './fundGpSchema';
 
@@ -94,6 +94,26 @@ export async function requireFundGp(
 
   if (!fund) throw notFound();
   return { user, fund, viaAdmin, companyId };
+}
+
+/**
+ * The funds `requireFundGp` would let this caller operate, as a SQL clause on
+ * `vc_funds f` — the operating gate's own scope, for reads that list
+ * (D371's `can_manage`, D4636). An admin: every fund. Anyone else: nothing
+ * below the institutional tier, else the funds they are GP of record for under
+ * their verified active company. Evaluated per request from the stored rows,
+ * so a changed relationship applies to the next read.
+ */
+export async function fundManageScope(
+  c: Context<{ Bindings: Env }>,
+  user: any,
+): Promise<{ sql: string; binds: Array<string | number> }> {
+  // The alias is a literal: lp_membership_consolidated's guard requires every scope call site to pass one.
+  if (user?.role === 'admin') return fundGpScope(user, null, 'f');
+  if (!userMeetsInvestorTier(user as any, 'institutional')) return NO_ROWS;
+  const companyId = await activeCompany(c, user);
+  if (companyId !== null) await ensureFundGpColumns(c.env);
+  return fundGpScope(user as any, companyId, 'f');
 }
 
 /**

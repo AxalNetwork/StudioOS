@@ -2,9 +2,8 @@
  * D5034 (#5034) part 2 — the escalation decision sheet (canvas SU02, SU03,
  * SU09). Every phase is rendered from props; what the page wires is read from
  * its source, because the page's reads and writes run in effects and handlers
- * that `renderToStaticMarkup` never runs. The interaction (focus in, the
- * refused empty submit, each outcome, Send again, focus to the next row,
- * Escape back to the opener) was driven in a browser; D5034 records it.
+ * that `renderToStaticMarkup` never runs. The mounted keyboard workflow and
+ * focus after closing a sheet run in tests/visual/hq_support_5035.spec.mjs.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -119,7 +118,7 @@ test('recorded: two facts that stay two — recorded at HQ, and delivered or not
   assert.match(sending, /disabled=""[^>]*aria-busy="true"[^>]*data-testid="hq-support-sheet-resend"/);
   const lost = render(SheetResult, { record: { ...REC, pushed: { ok: false }, resend: { state: 'unknown', text: 'Whether fr received it is not known.' } }, branchLabel: 'Axal VC France', onResend() {} });
   assert.match(lost, /role="alert"[^>]*data-state="unknown"[^>]*>Unknown: Whether fr received it is not known\.</);
-  // Between the write's answer and the session record landing, the sheet shows no
+  // Between the write's answer and its result landing, the sheet shows no
   // result it cannot read (the page holds it at "recording" until the record exists).
   const early = view({ phase: 'recorded', record: null });
   assert.doesNotMatch(early, /hq-support-sheet-result/);
@@ -181,9 +180,8 @@ test('the page: one write path, the sheet stays on its outcome, and focus return
   assert.ok(sheetPart.indexOf('if (!reason.trim())') < sheetPart.indexOf('writeDecision('), 'the empty check runs after the write');
   assert.ok(sheetPart.includes('...sheetFailure(err)'), 'a failed write is not read by its status');
   assert.ok(sheetPart.includes("if (ok) setSheet({ phase: 'recorded'"), 'a failed write reaches the recorded phase');
-  assert.ok(PAGE.includes('record={recorded.find((r) => r.uid === open.item.uid) || null}'), 'the sheet does not read its delivery from the session record');
+  assert.ok(PAGE.includes('record={recorded.find((r) => r.uid === open.item.uid) || changes.find((r) => r.uid === open.item.uid) || null}'), 'the sheet lost the just-recorded decision when it left the history window');
   assert.ok(PAGE.includes('returnFocusTo={opener}'), 'focus does not return to the row on close');
-  assert.ok(PAGE.includes('reviewButtons.current.get(focusAfter)?.focus();'), 'focus does not move to the next row after a decision');
   // The licence page keeps the inline panel: the sheet is the Support queue's alone.
   const licence = codeOnly(readFileSync(resolve(root, 'frontend/src/pages/admin/LicenceRequestsPanel.jsx'), 'utf8'));
   assert.match(licence, /<EscalationDecision item=\{it\} onRecorded=\{onRecorded\} onReload=\{onReload\} \/>/);

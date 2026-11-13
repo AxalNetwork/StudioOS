@@ -112,6 +112,7 @@ test('D5030: a ticket row says where its queue came from, and the card counts th
 // ═══════════════════════════════════════════════════════════════ D5031 ══
 
 const LOCAL = {
+  recent_decisions: { available: true, items: [{ uid: 'latest' }] },
   scope: 'hq_local', read_at: '2026-11-08T10:00:01Z',
   total: { value: null, reason: 'Branch hosts are read separately' },
   escalations: { available: true, complete: true, count: 1, items: [esc('a', 'other')], kinds: [] },
@@ -119,6 +120,7 @@ const LOCAL = {
   sla_policy: { version: { available: true, value: 3 }, branch_copy: { held: false, propagation: null } },
 };
 const FULL = {
+  recent_decisions: { available: true, items: [{ uid: 'earlier' }] },
   scope: 'all', read_at: '2026-11-08T10:00:00Z',
   total: { value: 4, oldest: null },
   escalations: { available: true, complete: true, count: 2, items: [esc('a', 'other'), esc('b', 'other')], kinds: [] },
@@ -133,6 +135,7 @@ test('D5031: HQ’s desk is drawn as soon as the local read lands; the branch pa
   assert.equal(branchState, 'loading');
   assert.equal(d.escalations.count, 1, 'HQ’s queues waited for the branches');
   assert.equal(d.branch_tickets, undefined);
+  assert.equal(d.recent_decisions.items[0].uid, 'latest');
   const section = render(BranchTicketsSection, { state: 'loading' });
   assert.match(text(section), /Asking each branch host… HQ’s own queues above do not wait for it/);
   assert.match(section, /role="status"/);
@@ -159,6 +162,10 @@ test('D5031: the newer read wins for HQ’s parts, and a stale total or a propag
   const m = mergeSupport(LOCAL, FULL).data;
   assert.equal(m.escalations.count, 1, 'an older read’s queue replaced a newer one');
   assert.equal(m.branch_tickets.lines.length, 1);
+  assert.equal(m.recent_decisions.items[0].uid, 'latest');
+  const sameTimeFull = { ...FULL, read_at: LOCAL.read_at, readOrder: 7 };
+  assert.equal(mergeSupport({ ...LOCAL, readOrder: 8 }, sameTimeFull).data.recent_decisions.items[0].uid, 'latest');
+  assert.equal(mergeSupport({ ...LOCAL, readOrder: 6 }, sameTimeFull).data.recent_decisions.items[0].uid, 'earlier');
   assert.equal(m.total.value, null, 'the older full total was shown beside newer queues');
   assert.equal(m.sla_policy.branch_copy.propagation.current, 1, 'same version: coverage kept');
   const bumped = mergeSupport({ ...LOCAL, sla_policy: { ...LOCAL.sla_policy, version: { available: true, value: 4 } } }, FULL).data;
@@ -204,7 +211,7 @@ test('D5033: Send again is disabled and says so while its request is in flight',
   // The page ignores a second click while one is in flight.
   const at = CODE.indexOf('const onResend = useCallback(');
   const fn = CODE.slice(at, CODE.indexOf('}, []);', at));
-  assert.ok(fn.includes("r.resend?.state === 'sending'"), 'a second click sends a second resend');
+  assert.ok(fn.includes('resending.current.has(uid)'), 'the in-flight guard is missing');
 });
 
 test('D5033: a resend that reached the branch updates the delivery line in place, without a reload', () => {
