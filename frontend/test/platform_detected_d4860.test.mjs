@@ -136,7 +136,9 @@ async function mountPage(data) {
 test('the page uses the Worker\'s thresholds', () => {
   // Mutation checked: WEBHOOK_CRITICAL_RUN back to 3 → the first equality fails.
   const ts = read('cloudflare-worker/src/services/platformHealth.ts');
-  const worker = (name) => Number(ts.match(new RegExp(`export const ${name} = (\\d+);`))?.[1]);
+  const thresholds = new Map([...ts.matchAll(/^export const ([A-Z_]+) = (\d+);$/gm)]
+    .map(([, name, value]) => [name, Number(value)]));
+  const worker = (name) => thresholds.get(name);
   assert.equal(WEBHOOK_CRITICAL_RUN, worker('WEBHOOK_FAILURE_CRITICAL'));
   assert.equal(WEBHOOK_REFUSED_RUN, worker('WEBHOOK_FAILURE_STREAK'));
   assert.equal(DLQ_HIGH, worker('DLQ_HIGH'));
