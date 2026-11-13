@@ -41,11 +41,12 @@ test('primary action follows the current read and is suppressed while loading, r
 });
 
 test('sparse overview leads with focus and attention, keeps Share available and places Reporting in utilities', () => {
-  const html = render();
+  const html = render(sparse, { more: h('button', { 'data-testid': 'existing-publish-entry' }, 'Publish to…') });
   assert.match(html, /No primary growth metric selected/);
   assert.match(html, /Needs your attention/);
   assert.match(html, /Growth setup/);
   assert.match(html, /Share an update/);
+  assert.match(html, /data-testid="existing-publish-entry"/);
   assert.match(html, /aria-label="Reporting utility"/);
   assert.match(html, /data-testid="cycle-action"[^>]*href="\/grow\/focus\?project_id=7"/);
   assert.doesNotMatch(html, /data-testid="cycle-action"[^>]*>Share an update/);
@@ -75,8 +76,8 @@ test('unknown focus and failed overview never pretend that setup is empty', () =
 });
 
 test('read-only viewers can inspect evidence and navigation without operating or sharing actions', () => {
-  const html = render(active, { readOnly: true });
+  const html = render(active, { readOnly: true, more: h('button', {}, 'Publish to…') });
   assert.match(html, /Read only/);
   assert.match(html, /\$0/);
-  assert.doesNotMatch(html, /Share an update|data-testid="cycle-action"|data-testid="grow-attention-set_focus"/);
+  assert.doesNotMatch(html, /Share an update|Publish to…|data-testid="cycle-action"|data-testid="grow-attention-set_focus"/);
 });

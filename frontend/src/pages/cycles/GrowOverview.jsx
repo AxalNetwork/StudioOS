@@ -67,7 +67,7 @@ function Setup({ attention, search }) {
     <p className={`mb-0 mt-2 ${MUTED}`}>Each step is a fact from the venture’s records. Manage connected sources in <Link className="underline" to="/account/connectors">Connections</Link>.</p></section>;
 }
 
-export default function GrowOverview({ raw, data, status, search, action, onRetry, readOnly = false, message = '' }) {
+export default function GrowOverview({ raw, data, status, search, action, onRetry, readOnly = false, message = '', more = null }) {
   const attention = status === 'ready' ? raw?.attention : null;
   const locked = readOnly || data?.read_only === true || attention?.writable === false;
   const primary = growPrimary(attention, status, locked);
@@ -75,7 +75,7 @@ export default function GrowOverview({ raw, data, status, search, action, onRetr
   const figures = data?.figures || [];
   const cards = data?.cards || [];
   const secondary = <div className="flex flex-wrap items-center gap-2">{growPeriod(attention?.period) ? <span className={MUTED}>Period: {growPeriod(attention.period)}</span> : null}
-    {!locked ? <Link to={action.href} className={BUTTON} aria-haspopup={action.onOpen ? 'dialog' : undefined} onClick={action.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>Share an update</Link> : null}{!locked ? <HeaderAsk /> : null}</div>;
+    {!locked ? <Link to={action.href} className={BUTTON} aria-haspopup={action.onOpen ? 'dialog' : undefined} onClick={action.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>Share an update</Link> : null}{!locked ? more : null}{!locked ? <HeaderAsk /> : null}</div>;
   const snapshot = <section aria-labelledby="grow-snapshot-title" data-testid="grow-snapshot"><h2 id="grow-snapshot-title" className={`${H2} mb-3`}>Growth snapshot</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{figures.map((f) => <FigureTile key={f.key} fig={f} details={<span className="mt-1 font-mono text-[10px] leading-relaxed text-axal-muted dark:text-gray-400">Source: {f.source || 'Not recorded'} · as of {f.as_of || 'Not recorded'}</span>} />)}</div></section>;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="grow-overview-v2">
