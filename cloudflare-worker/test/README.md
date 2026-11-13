@@ -360,3 +360,4 @@ catalogue version only in the fixture.
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `cached_route_fixtures_5503.test.ts` | D5503: exact-once migration application, overlap/missing-object failures, parallel row isolation and cached-handle cleanup. |

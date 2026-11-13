@@ -3,9 +3,9 @@
  * (drafts, Send to HQ, Your proposals), HQ's queue, the Super Admin's
  * decision, New program, and studio-only programs in part 1's reads.
  *
- * Run on a database built from the baseline and every migration through 561,
- * as production builds it; 560 and 561 are applied whole and must apply, and
- * so is 562 (D956), whose store an approval for one studio writes.
+ * Run on isolated copies of the complete cached baseline plus migrations
+ * (D5503), as the current deploy builds it. Historical upgrade/backfill tests
+ * remain in program_proposal_revisions_4873.test.ts.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/program_proposals_d955.test.ts
@@ -13,8 +13,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
@@ -24,49 +22,15 @@ import adminProgramProposals from '../src/routes/admin_program_proposals.ts';
 import { PROPOSALS_CLOSED, likeOf, sendProposal } from '../src/services/programProposals.ts';
 import { PROGRAM_KEYS, keyFromName } from '../src/services/programRegistry.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { loadSchema } from './_schema_once.mjs';
+import { openSchema } from './_schema_once.mjs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../..');
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const SUPER = 1, LIS1 = 2, LIS2 = 3, NAI = 4, LONE = 5, FOUNDER = 6;
 const ROLE: Record<number, string> = { [SUPER]: 'admin', [LIS1]: 'admin', [LIS2]: 'admin', [NAI]: 'admin', [LONE]: 'admin', [FOUNDER]: 'founder' };
 
-function built(): DatabaseSync {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  loadSchema(db, { below: 560 });
-  // Whole, as the deploy applies them: a failure here fails the file.
-  db.exec(readFileSync(resolve(MIGRATIONS, '560_program_registry.sql'), 'utf8'));
-  db.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
-  // D956: an approval for one studio opens a draft grant, which 562's store holds.
-  db.exec(readFileSync(resolve(MIGRATIONS, '562_program_grants_draft.sql'), 'utf8'));
-  // D4289 P1 (#4290): the deploy applies the Influencers row after these (it rebuilds 563's tables, so 563 first).
-  db.exec(readFileSync(resolve(MIGRATIONS, '563_referral_partner_terms.sql'), 'utf8'));
-  db.exec(readFileSync(resolve(MIGRATIONS, '202611031502_influencer_program.sql'), 'utf8'));
-  // D4808: the frozen record of what an approval was made from.
-  db.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8'));
-  // D4873: a new program's row names member_access, which this migration adds.
-  db.exec(readFileSync(resolve(MIGRATIONS, '202611082300_programs_member_access_modules_4873.sql'), 'utf8'));
-  // D4873 part 3: a send is a revision, and a decision names it.
-  db.exec(readFileSync(resolve(MIGRATIONS, '202611090830_program_proposal_revisions_4873.sql'), 'utf8'));
-  return db;
-}
-const BUILT = built();
-
 function fresh(): DatabaseSync {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  const objs = BUILT.prepare(`SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
-                               ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END`).all() as any[];
-  for (const o of objs) { try { db.exec(o.sql); } catch { /* views and triggers naming absent objects */ } }
-  db.exec('PRAGMA foreign_keys = OFF');
-  for (const o of objs.filter((x) => x.type === 'table')) {
-    for (const r of BUILT.prepare(`SELECT * FROM "${o.name}"`).all() as any[]) {
-      const cols = Object.keys(r);
-      db.prepare(`INSERT INTO "${o.name}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => r[c]));
-    }
-  }
+  const db = openSchema(); // D5503: current-schema isolated cached file copy.
   for (const [id, name] of [[SUPER, 'Sam Super'], [LIS1, 'Lia Lisbon'], [LIS2, 'Leo Lisbon'], [NAI, 'Nia Nairobi'], [LONE, 'Lou Lone'], [FOUNDER, 'Fay Founder']] as const) {
     db.prepare('INSERT INTO users (id, uid, email, name, role, is_active) VALUES (?, ?, ?, ?, ?, 1)').run(id, `u-${id}`, `person${id}@example.test`, name, ROLE[id]);
   }
@@ -366,7 +330,7 @@ test('the mount: /proposals is its own router, never a program key', async () =>
   const r = await call(db, SUPER, 'GET', '/proposals');
   assert.equal(r.status, 200);
   assert.ok(Array.isArray(r.body.rows) && r.body.counts, 'the queue, not unknown_program');
-  const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
+  const index = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") < index.indexOf("app.route('/api/admin/programs', adminPrograms);"));
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") > 0);
 });
