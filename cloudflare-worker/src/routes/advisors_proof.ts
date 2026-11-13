@@ -26,7 +26,7 @@ const advisors = new Hono<{ Bindings: Env }>();
 type ProofRow = {
   id: number; uid: string; advisor_id: number; kind: string; title: string;
   detail: string | null; organization: string | null; period_note: string | null;
-  is_public: number; created_at: string; updated_at: string;
+  is_public: number; published_consent_id: number | null; created_at: string; updated_at: string;
 };
 type ConsentRow = {
   id: number; uid: string; proof_item_id: number;
@@ -34,7 +34,7 @@ type ConsentRow = {
   relationship: string | null; requested_at: string | null; requested_by: number | null;
   request_token: string | null; consent_given: number; consent_given_at: string | null;
   consent_text: string | null; consent_captured_by: number | null;
-  statement: string | null; withdrawn_at: string | null;
+  statement: string | null; withdrawn_at: string | null; cancelled_at?: string | null;
   claim_sha256: string | null; claim_json: string | null;
   created_at: string; updated_at: string;
 };
@@ -59,6 +59,7 @@ function consentDto(r: ConsentRow, currentClaimSha: string): any {
     consent_given_at: r.consent_given_at,
     statement: r.statement,
     withdrawn_at: r.withdrawn_at,
+    cancelled_at: r.cancelled_at ?? null,
     invite_token: state === 'pending' ? r.request_token : null,
     created_at: r.created_at,
   };
@@ -78,6 +79,7 @@ function proofDto(r: ProofRow, consents: ConsentRow[], currentClaimSha: string):
     kind: r.kind, title: r.title, detail: r.detail,
     organization: r.organization, period_note: r.period_note,
     is_public: !!r.is_public,
+    published: live.some((consent) => consent.id === r.published_consent_id),
     attested: live.length > 0,
     // "Self-stated" is a claim with no confirmation behind it. Saying so is the
     // point of the zone: the advisor's own word and someone else's word are
@@ -101,8 +103,9 @@ async function loadProofConsents(env: Env, advisorId: number, itemIds: number[])
   if (!itemIds.length) return out;
   for (const id of itemIds) out.set(id, []);
   const rows = await env.DB.prepare(
-    `SELECT c.* FROM advisor_proof_consents c
+    `SELECT c.*, a.cancelled_at FROM advisor_proof_consents c
        JOIN advisor_proof_items p ON p.id = c.proof_item_id
+       LEFT JOIN advisor_proof_consent_cancellations a ON a.consent_id = c.id
       WHERE p.advisor_id = ? AND c.proof_item_id IN (SELECT value FROM json_each(?))
       ORDER BY c.proof_item_id, c.created_at ASC, c.id ASC`
   ).bind(advisorId, JSON.stringify(itemIds)).all<ConsentRow>();
@@ -146,6 +149,7 @@ advisors.get('/me/proof', async (c) => {
                 SELECT 1 FROM advisor_proof_consents x
                  WHERE x.proof_item_id = p.id AND COALESCE(x.consent_given, 0) <> 1
                    AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+                   AND NOT EXISTS (SELECT 1 FROM advisor_proof_consent_cancellations a WHERE a.consent_id = x.id)
               ) THEN 1 ELSE 0 END), 0) AS awaiting
          FROM advisor_proof_items p WHERE p.advisor_id = ?`
     ).bind(m.id).first<{ total: number; attested: number; awaiting: number }>();
@@ -185,6 +189,59 @@ advisors.post('/me/proof', async (c) => {
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ProofRow>();
     return c.json(proofDto(fresh!, [], await claimSha256(fresh!)));
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Public proof exposes the explicitly published claim, never the consent record. */
+export async function publishedAdvisorProof(env: Env, advisorId: number) {
+  const { results = [] } = await env.DB.prepare(
+    `SELECT p.uid, p.kind, p.title, p.detail, p.organization, p.period_note, x.claim_sha256
+       FROM advisor_proof_items p
+       JOIN advisor_proof_consents x ON x.id = p.published_consent_id AND x.proof_item_id = p.id
+      WHERE p.advisor_id = ? AND x.consent_given = 1
+        AND COALESCE(x.withdrawn_at, '') = '' AND x.claim_sha256 IS NOT NULL
+      ORDER BY p.created_at DESC, p.id DESC`
+  ).bind(advisorId).all<Pick<ProofRow, 'uid' | 'kind' | 'title' | 'detail' | 'organization' | 'period_note'> & { claim_sha256: string }>();
+  const checked = await Promise.all(results.map(async ({ claim_sha256, ...proof }) =>
+    await claimSha256(proof) === claim_sha256 ? proof : null));
+  return checked.filter((proof) => proof !== null);
+}
+
+advisors.patch('/me/proof/:id/publication', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const id = Number(c.req.param('id'));
+    const body = await c.req.json().catch(() => null);
+    if (typeof body?.published !== 'boolean') {
+      return refuse(c, 400, { code: 'published_required', message: 'Choose whether to publish this proof.' });
+    }
+    const item = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ? AND advisor_id = ?')
+      .bind(id, m.id).first<ProofRow>();
+    if (!item) return refuse(c, 404, { code: 'proof_not_found', message: 'This proof item does not exist.' });
+    if (!body.published) {
+      await c.env.DB.prepare('UPDATE advisor_proof_items SET published_consent_id = NULL WHERE id = ? AND advisor_id = ?')
+        .bind(id, m.id).run();
+      return c.json({ id, published: false });
+    }
+    const sha = await claimSha256(item);
+    // Select a live confirmation in the same write that publishes the claim.
+    // Withdrawal and publication therefore observe each other in write order.
+    const updated = await c.env.DB.prepare(
+      `UPDATE advisor_proof_items SET published_consent_id = (
+         SELECT x.id FROM advisor_proof_consents x
+          WHERE x.proof_item_id = advisor_proof_items.id AND x.consent_given = 1
+            AND COALESCE(x.withdrawn_at, '') = '' AND x.claim_sha256 = ?
+          ORDER BY x.consent_given_at DESC, x.id DESC LIMIT 1
+       ) WHERE id = ? AND advisor_id = ? AND kind IS ? AND title IS ?
+           AND detail IS ? AND organization IS ? AND period_note IS ?
+       RETURNING published_consent_id`
+    ).bind(sha, id, m.id, item.kind, item.title, item.detail, item.organization, item.period_note)
+      .first<{ published_consent_id: number | null }>();
+    if (!updated?.published_consent_id) {
+      return refuse(c, 409, { code: 'proof_confirmation_required', message: 'Only proof with a current confirmation can be published.' });
+    }
+    return c.json({ id, published: true });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -268,6 +325,37 @@ advisors.post('/me/proof/:id/consent-request', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+advisors.post('/me/proof/:id/consents/:consentId/cancel', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const itemId = Number(c.req.param('id'));
+    const consentId = Number(c.req.param('consentId'));
+    const now = nowIso();
+    // The insert and its revocation trigger commit together. The same write
+    // checks ownership and the pending state against concurrent answers.
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_proof_consent_cancellations (consent_id, cancelled_by, cancelled_at)
+       SELECT x.id, ?, ? FROM advisor_proof_consents x
+       JOIN advisor_proof_items p ON p.id = x.proof_item_id
+       WHERE p.advisor_id = ? AND p.id = ? AND x.id = ?
+         AND x.request_token IS NOT NULL AND x.requested_at IS NOT NULL
+         AND COALESCE(x.consent_given, 0) = 0
+         AND (x.withdrawn_at IS NULL OR x.withdrawn_at = '')
+       ON CONFLICT(consent_id) DO NOTHING`
+    ).bind(user.id, now, m.id, itemId, consentId).run();
+    const row = await c.env.DB.prepare(
+      `SELECT x.id, a.cancelled_at FROM advisor_proof_consents x
+       JOIN advisor_proof_items p ON p.id = x.proof_item_id
+       LEFT JOIN advisor_proof_consent_cancellations a ON a.consent_id = x.id
+       WHERE p.advisor_id = ? AND p.id = ? AND x.id = ?`
+    ).bind(m.id, itemId, consentId).first<{ id: number; cancelled_at: string | null }>();
+    if (!row) return refuse(c, 404, { code: 'consent_not_found', message: 'This proof request does not exist.' });
+    if (!row.cancelled_at) return refuse(c, 409, { code: 'consent_not_pending', message: 'Only a pending proof request can be cancelled.' });
+    return c.json({ id: row.id, state: 'cancelled', cancelled_at: row.cancelled_at });
+  } catch (e) { return mapError(c, e); }
+});
+
 /** The consent a link names, its claim, and whether the claim still reads as pinned. */
 async function consentByToken(env: Env, token: string) {
   if (!token || token.length > 100) return null;
@@ -335,9 +423,11 @@ advisors.post('/proof-consents/:token/code', async (c) => {
       return refuse(c, 429, { code: 'code_rate_limited', message: 'Several codes were sent in the last hour. Use the latest one, or try again later.' });
     }
     const code = newCode();
-    await c.env.DB.prepare(
-      'INSERT INTO advisor_proof_consent_codes (consent_id, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)'
-    ).bind(row.id, await codeHash(row.id, code), new Date(now + CODE_TTL_MS).toISOString(), new Date(now).toISOString()).run();
+    const issued = await c.env.DB.prepare(
+      `INSERT INTO advisor_proof_consent_codes (consent_id, code_hash, expires_at, attempts, created_at)
+       SELECT id, ?, ?, 0, ? FROM advisor_proof_consents WHERE id = ? AND request_token = ?`
+    ).bind(await codeHash(row.id, code), new Date(now + CODE_TTL_MS).toISOString(), new Date(now).toISOString(), row.id, row.request_token).run();
+    if (!issued.meta.changes) return refuse(c, 404, NO_REQUEST);
     const sent = await attestationMailer.send(c.env, to, advisor?.display_name || 'An advisor', code);
     if (!sent) return refuse(c, 503, { code: 'code_unsent', message: 'The code could not be emailed just now. Try again in a few minutes.' });
     return c.json({ sent: true, email_hint: maskEmail(to), expires_in_seconds: CODE_TTL_MS / 1000 });
@@ -387,10 +477,11 @@ advisors.post('/proof-consents/:token/respond', async (c) => {
       // Declining and withdrawing are the same shape: the row stays, and says
       // so, and the history keeps which it was.
       const wasGiven = Number(row.consent_given) === 1 && !row.withdrawn_at;
-      await c.env.DB.prepare(
+      const declined = await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
-            SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ?`
-      ).bind(now, now, row.id).run();
+            SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ? AND request_token = ?`
+      ).bind(now, now, row.id, row.request_token).run();
+      if (!declined.meta.changes) return refuse(c, 404, NO_REQUEST);
       await proofEvent(c.env, row.id, wasGiven || row.consent_given_at ? 'withdrawn' : 'declined', row.claim_sha256, now);
     } else {
       const consent_text = String(body.consent_text || '').trim();
@@ -400,13 +491,14 @@ advisors.post('/proof-consents/:token/respond', async (c) => {
         return refuse(c, 409, { code: 'claim_changed', message: 'The claim has changed since you were asked. Nothing was recorded; the advisor needs to ask again.' });
       }
       const again = !!row.consent_given_at;
-      await c.env.DB.prepare(
+      const confirmed = await c.env.DB.prepare(
         `UPDATE advisor_proof_consents
             SET consent_given = 1, consent_given_at = ?, consent_text = ?,
                 statement = ?, withdrawn_at = NULL, claim_sha256 = ?, claim_json = ?, updated_at = ?
-          WHERE id = ?`
+          WHERE id = ? AND request_token = ?`
       ).bind(now, consent_text.slice(0, 2000), trimOrNull(body.statement, 2000),
-             currentSha, row.claim_json || claimJson(item), now, row.id).run();
+             currentSha, row.claim_json || claimJson(item), now, row.id, row.request_token).run();
+      if (!confirmed.meta.changes) return refuse(c, 404, NO_REQUEST);
       await proofEvent(c.env, row.id, again ? 'reconfirmed' : 'confirmed', currentSha, now);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_consents WHERE id = ?')

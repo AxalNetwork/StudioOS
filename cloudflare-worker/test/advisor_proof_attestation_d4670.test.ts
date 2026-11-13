@@ -47,7 +47,7 @@ function fixture() {
     CREATE TABLE advisor_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, slot_id INTEGER NOT NULL,
       advisor_id INTEGER NOT NULL, founder_user_id INTEGER NOT NULL, topic TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'pending',
       cancel_reason TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
-  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611041822_account_licences']) db.exec(migration(m));
+  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication', '202611041822_account_licences']) db.exec(migration(m));
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADA, 'advisor', 1, 'Ada', 'ada@example.com');
   u.run(FOUNDER, 'founder', null, 'Fran', 'fran@example.com');
@@ -248,4 +248,152 @@ test('a code is six independent digits, each nibble 10 to 15 is redrawn, and no 
     assert.equal(out, v < 10 ? `${v}77777` : '777777', `nibble ${v}`);
   }
   for (let i = 0; i < 200; i += 1) assert.match(newCode(), /^\d{6}$/);
+});
+
+test('only the proof owner can cancel a pending request, once, while retaining history', async () => {
+  const { env, db } = fixture();
+  db.prepare('INSERT INTO advisors (id, uid, user_id, display_name, email) VALUES (?,?,?,?,?)')
+    .run(2, 'adv-2', DUAL, 'Dee', 'dee@example.com');
+  const { item, req } = await asked(env);
+  const token = req.body.invite_token;
+  const code = await codeFor(env, token);
+  const cancel = `/me/proof/${item.id}/consents/${req.body.id}/cancel`;
+  assert.equal((await call(env, 'POST', cancel, null)).status, 401);
+  assert.equal((await call(env, 'POST', cancel, [DUAL, 'founder'])).status, 404);
+  assert.equal((await call(env, 'POST', cancel.replace(`/proof/${item.id}/`, '/proof/999/'), ada)).status, 404);
+  const first = await call(env, 'POST', cancel, ada);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.state, 'cancelled');
+  assert.ok(first.body.cancelled_at);
+  assert.deepEqual((await call(env, 'POST', cancel, ada)).body, first.body);
+  const audit = db.prepare('SELECT * FROM advisor_proof_consent_cancellations').all();
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].cancelled_by, ADA);
+  assert.equal(audit[0].cancelled_at, first.body.cancelled_at);
+  assert.throws(() => db.prepare('DELETE FROM advisor_proof_consent_cancellations').run(), /append-only/);
+  assert.equal(db.prepare('SELECT request_token FROM advisor_proof_consents WHERE id = ?').get(req.body.id)?.request_token, null);
+  assert.equal(db.prepare('SELECT used_at FROM advisor_proof_consent_codes WHERE consent_id = ?').get(req.body.id)?.used_at, first.body.cancelled_at);
+  assert.equal((await call(env, 'GET', `/proof-consents/${token}/claim`, null)).status, 404);
+  assert.equal((await call(env, 'POST', `/proof-consents/${token}/code`, null)).status, 404);
+  assert.equal((await call(env, 'POST', `/proof-consents/${token}/respond`, null, { code, consent_text: 'Yes' })).status, 404);
+  const list = await call(env, 'GET', '/me/proof', ada);
+  assert.equal(list.body.counts.awaiting, 0);
+  const [consent] = list.body.items[0].consents;
+  assert.deepEqual([consent.state, consent.cancelled_at, consent.invite_token], ['cancelled', first.body.cancelled_at, null]);
+  assert.deepEqual(db.prepare('SELECT kind FROM advisor_proof_consent_events').all().map(row => row.kind), ['asked']);
+});
+
+test('a confirmation that won the write cannot be cancelled by the owner', async () => {
+  const { env } = fixture();
+  const { item, req } = await asked(env);
+  const token = req.body.invite_token;
+  const answer = await call(env, 'POST', `/proof-consents/${token}/respond`, null, {
+    code: await codeFor(env, token), consent_text: 'Yes',
+  });
+  assert.equal(answer.status, 200);
+  const cancel = await call(env, 'POST', `/me/proof/${item.id}/consents/${req.body.id}/cancel`, ada);
+  assert.deepEqual([cancel.status, cancel.body.error], [409, 'consent_not_pending']);
+});
+
+test('an attester write already in flight cannot confirm after cancellation wins', async () => {
+  const { env } = fixture();
+  const { item, req } = await asked(env);
+  const token = req.body.invite_token;
+  const code = await codeFor(env, token);
+  const prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.includes('SET consent_given = 1, consent_given_at')) {
+      const run = statement.run.bind(statement);
+      statement.run = async () => {
+        const cancel = await call(env, 'POST', `/me/proof/${item.id}/consents/${req.body.id}/cancel`, ada);
+        assert.equal(cancel.status, 200);
+        return run();
+      };
+    }
+    return statement;
+  };
+  const response = await call(env, 'POST', `/proof-consents/${token}/respond`, null, { code, consent_text: 'Yes' });
+  assert.deepEqual([response.status, response.body.error], [404, 'consent_not_found']);
+  const list = await call(env, 'GET', '/me/proof', ada);
+  assert.equal(list.body.items[0].attested, false);
+  assert.equal(list.body.items[0].consents[0].state, 'cancelled');
+});
+
+test('public profiles show only deliberately published claims with current confirmations', async () => {
+  const { env, db } = fixture();
+  const { item, req } = await asked(env);
+  const publication = `/me/proof/${item.id}/publication`;
+  const token = req.body.invite_token;
+  const publicProof = async () => {
+    const result = await call(env, 'GET', '/adv-1', null);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body.proof;
+  };
+  db.prepare('UPDATE advisor_proof_items SET is_public = 1 WHERE id = ?').run(item.id);
+  assert.deepEqual(await publicProof(), []);
+  const refused = await call(env, 'PATCH', publication, ada, { published: true });
+  assert.deepEqual([refused.status, refused.body.error], [409, 'proof_confirmation_required']);
+  const respond = async (consent_given: boolean) => {
+    const response = await call(env, 'POST', `/proof-consents/${token}/respond`, null, {
+      code: await codeFor(env, token), consent_given, consent_text: 'Agreed', statement: 'Private statement',
+    });
+    assert.equal(response.status, 200);
+  };
+  await respond(true);
+  assert.deepEqual(await publicProof(), []);
+  assert.deepEqual((await call(env, 'PATCH', publication, ada, { published: true })).body, { id: item.id, published: true });
+  assert.deepEqual(await publicProof(), [{
+    uid: item.uid, kind: 'engagement', title: item.title, detail: 'Rebuilt it.',
+    organization: 'Acme', period_note: '2024',
+  }]);
+  db.prepare('UPDATE advisor_proof_items SET title = ? WHERE id = ?').run('Changed text', item.id);
+  assert.deepEqual(await publicProof(), []);
+  db.prepare('UPDATE advisor_proof_items SET title = ? WHERE id = ?').run(item.title, item.id);
+
+  await respond(false);
+  assert.equal(db.prepare('SELECT published_consent_id FROM advisor_proof_items WHERE id = ?').get(item.id)?.published_consent_id, null);
+  assert.deepEqual(await publicProof(), []);
+  await respond(true);
+  assert.deepEqual(await publicProof(), []);
+  const owner = await call(env, 'GET', '/me/proof', ada);
+  assert.equal(owner.body.items[0].published, false);
+  await call(env, 'PATCH', publication, ada, { published: true });
+  assert.equal((await publicProof()).length, 1);
+  assert.deepEqual((await call(env, 'PATCH', publication, ada, { published: false })).body, { id: item.id, published: false });
+  assert.deepEqual(await publicProof(), []);
+});
+
+test('only published services appear publicly and hiding is reversible', async () => {
+  const { env, db } = fixture();
+  const create = await call(env, 'POST', '/me/services', ada, {
+    title: 'Portfolio workshop', currency: 'EUR', price_cents: 2150,
+  });
+  assert.equal(create.status, 200);
+  assert.deepEqual([create.body.is_active, create.body.publication_state], [true, 'draft']);
+  const path = `/me/services/${create.body.id}`;
+  const publicServices = async () => {
+    const result = await call(env, 'GET', '/adv-1', null);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body.services;
+  };
+  const setState = (publication_state: string) => call(env, 'PATCH', path, ada, { publication_state });
+  assert.deepEqual(await publicServices(), []);
+  assert.equal((await setState('bookable')).body.error, 'invalid_publication_state');
+  assert.equal((await setState('published')).body.publication_state, 'published');
+  const [published] = await publicServices();
+  assert.deepEqual(published, {
+    uid: create.body.uid, title: 'Portfolio workshop', kind: 'fixed', duration_note: null,
+    price_cents: 2150, currency: 'EUR', scope: null,
+  });
+  assert.equal((await setState('hidden')).body.publication_state, 'hidden');
+  assert.deepEqual(await publicServices(), []);
+  const list = await call(env, 'GET', '/me/services', ada);
+  assert.deepEqual(list.body.publication_counts, { draft: 0, published: 0, hidden: 1 });
+  assert.deepEqual([list.body.items[0].publication_state, list.body.items[0].is_active], ['hidden', false]);
+  assert.equal((await setState('published')).body.uid, create.body.uid);
+  assert.deepEqual(await publicServices(), [published]);
+  await call(env, 'PATCH', path, ada, { is_active: false });
+  assert.deepEqual(await publicServices(), []);
+  assert.equal(db.prepare('SELECT publication_state FROM advisor_services WHERE id = ?').get(create.body.id)?.publication_state, 'hidden');
 });
