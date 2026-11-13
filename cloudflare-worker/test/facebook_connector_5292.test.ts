@@ -35,6 +35,8 @@ test('Page listing follows Graph pagination and exposes only Page IDs and names'
 });
 
 test('Meta deletion requires a signed request and deletes only matching Facebook data', async t => {
+  const now = 1794571200000;
+  t.mock.timers.enable({ apis: ['Date'], now });
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   db.exec(`CREATE TABLE integrations (id INTEGER, provider_key TEXT, external_account_id TEXT);
@@ -52,7 +54,7 @@ test('Meta deletion requires a signed request and deletes only matching Facebook
   const post = (value: string) => app.request('/api/meta/data-deletion', { method: 'POST', body: new URLSearchParams({ signed_request: value }) }, bindings);
   assert.equal((await post('bad')).status, 400);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM integrations').get()?.n, 3);
-  const data = Buffer.from(JSON.stringify({ algorithm: 'HMAC-SHA256', issued_at: Math.floor(Date.now() / 1000), user_id: '123' })).toString('base64url');
+  const data = Buffer.from(JSON.stringify({ algorithm: 'HMAC-SHA256', issued_at: now / 1000, user_id: '123' })).toString('base64url');
   const signature = createHmac('sha256', 'fixture').update(data).digest('base64url');
   const result = await post(`${signature}.${data}`);
   assert.equal(result.status, 200);
