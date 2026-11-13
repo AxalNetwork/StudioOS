@@ -1,7 +1,7 @@
 import type { Env } from '../../types';
 import { selectJwt } from '../../auth';
 import { oauthCallbackUrl } from '../../util/url';
-import { metaApp } from '../../services/meta/app';
+import { metaApp, metaHmac } from '../../services/meta/app';
 import { providerJson } from '../../services/channels/providerHttp';
 import { ConnectRefusal, registerProvider, type IntegrationRow } from '../registry';
 import { decryptCredentials } from '../secrets';
@@ -11,6 +11,11 @@ import { companyEnabled } from '../companyScope';
 
 const GRAPH = 'https://graph.facebook.com/v26.0';
 const AUTHORIZE = 'https://www.facebook.com/v26.0/dialog/oauth';
+// These grants may already exist on the app shared with WhatsApp Embedded Signup.
+const allowedAppGrants = new Set<string>([
+  ...FACEBOOK_READ_SCOPES, 'public_profile', 'business_management',
+  'whatsapp_business_management', 'whatsapp_business_messaging',
+]);
 const isId = (value: unknown): value is string => typeof value === 'string' && /^\d{1,32}$/.test(value);
 const unavailable = () => new ConnectRefusal(503, 'facebook_unavailable', 'Facebook is not available yet.');
 export const redirectUri = (env: Env) => oauthCallbackUrl(env, 'facebook');
@@ -20,8 +25,10 @@ export function facebookReady(env: Env): boolean {
   return env.FACEBOOK_APP_APPROVED === '1' && isId(env.FACEBOOK_LOGIN_CONFIG_ID?.trim()) && !!appId && !!appSecret;
 }
 
-async function graph(path: string, token?: string, method = 'GET') {
-  const { res, data } = await providerJson(GRAPH + path, { method, redirect: 'error', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+async function graph(path: string, grant?: { token: string; proof: string }, method = 'GET') {
+  const url = new URL(GRAPH + path);
+  if (grant) url.searchParams.set('appsecret_proof', grant.proof);
+  const { res, data } = await providerJson(url.toString(), { method, redirect: 'error', headers: grant ? { Authorization: `Bearer ${grant.token}` } : undefined });
   if (!res.ok || !data || data.error) {
     if (data?.error?.code === 190) throw new ConnectRefusal(401, 'facebook_reconnect', 'Reconnect with Facebook to continue.');
     if (res.status === 429 || [4, 17, 32, 613].includes(data?.error?.code)) {
@@ -32,11 +39,18 @@ async function graph(path: string, token?: string, method = 'GET') {
   return data;
 }
 
-async function collection(path: string, token: string): Promise<unknown[]> {
+async function graphGrant(env: Env, token: string) {
+  return { token, proof: await metaHmac(metaApp(env).appSecret, token) };
+}
+
+async function collection(path: string, grant: Awaited<ReturnType<typeof graphGrant>>): Promise<unknown[]> {
+  const [pathname, query] = path.split('?', 2);
+  const params = new URLSearchParams(query);
   const rows: unknown[] = [];
   let after: string | undefined;
   for (let page = 0; page < 20; page++) {
-    const data = await graph(path + (after ? `&after=${encodeURIComponent(after)}` : ''), token);
+    if (after) params.set('after', after);
+    const data = await graph(`${pathname}?${params}`, grant);
     if (!Array.isArray(data.data)) break;
     rows.push(...data.data);
     if (!data.paging?.next) return rows;
@@ -47,8 +61,8 @@ async function collection(path: string, token: string): Promise<unknown[]> {
   throw new ConnectRefusal(502, 'facebook_directory_incomplete', 'Facebook did not return the complete directory.');
 }
 
-async function permissions(token: string): Promise<string[]> {
-  const rows = await collection('/me/permissions?limit=100', token);
+async function permissions(grant: Awaited<ReturnType<typeof graphGrant>>): Promise<string[]> {
+  const rows = await collection('/me/permissions?limit=100', grant);
   return rows.flatMap(value => {
     const r = value as { status?: unknown; permission?: unknown } | null;
     return r?.status === 'granted' && typeof r.permission === 'string' ? [r.permission] : [];
@@ -56,21 +70,23 @@ async function permissions(token: string): Promise<string[]> {
 }
 
 function requireReadGrant(granted: string[]) {
-  const allowed = new Set<string>([...FACEBOOK_READ_SCOPES, 'public_profile']);
-  if (granted.some(scope => !allowed.has(scope))) throw new ConnectRefusal(403, 'scope_overreach', 'Facebook granted permissions beyond read access.');
+  if (granted.some(scope => !allowedAppGrants.has(scope))) throw new ConnectRefusal(403, 'scope_overreach', 'Facebook granted permissions beyond read access.');
   if (FACEBOOK_READ_SCOPES.some(scope => !granted.includes(scope))) {
     throw new ConnectRefusal(403, 'facebook_permissions_missing', 'Facebook did not grant all the required read permissions.');
   }
 }
 
-async function revoke(token: string, account = 'me') {
+async function revoke(env: Env, token: string, account = 'me') {
+  const grant = await graphGrant(env, token);
+  let failure: unknown;
   for (const scope of FACEBOOK_READ_SCOPES) {
-    try { await graph(`/${account}/permissions/${scope}`, token, 'DELETE'); }
+    try { await graph(`/${account}/permissions/${scope}`, grant, 'DELETE'); }
     catch (e) {
       if (e instanceof ConnectRefusal && e.code === 'facebook_reconnect') return;
-      throw e;
+      failure ??= e;
     }
   }
+  if (failure) throw failure;
 }
 
 export async function listFacebookPages(env: Env, row: IntegrationRow) {
@@ -78,8 +94,9 @@ export async function listFacebookPages(env: Env, row: IntegrationRow) {
   const credentials = await decryptCredentials(env, row.uid, row.credentials_enc);
   const token = credentials?.access_token;
   if (typeof token !== 'string' || !token) throw new ConnectRefusal(401, 'facebook_reconnect', 'Reconnect with Facebook to continue.');
-  requireReadGrant(await permissions(token));
-  const pages = await collection('/me/accounts?fields=id,name&limit=100', token);
+  const grant = await graphGrant(env, token);
+  requireReadGrant(await permissions(grant));
+  const pages = await collection('/me/accounts?fields=id,name&limit=100', grant);
   return pages.flatMap(value => {
     const page = value as { id?: unknown; name?: unknown } | null;
     return isId(page?.id) && typeof page?.name === 'string' ? [{ id: page.id, name: page.name.slice(0, 200) }] : [];
@@ -111,22 +128,22 @@ registerProvider({
       const long = await graph(`/oauth/access_token?${new URLSearchParams({ ...app, grant_type: 'fb_exchange_token', fb_exchange_token: token })}`);
       if (typeof long.access_token !== 'string' || !long.access_token) throw unavailable();
       token = long.access_token;
-      const scopes = await permissions(token);
-      requireReadGrant(scopes);
-      const account = await graph('/me?fields=id', token);
+      const grant = await graphGrant(c.env, token);
+      requireReadGrant(await permissions(grant));
+      const account = await graph('/me?fields=id', grant);
       if (!isId(account.id)) throw unavailable();
-      return { credentials: { access_token: token }, scopes: scopes.filter(s => s !== 'public_profile'), external_account_id: account.id, config: { pages_by_company: {} } };
+      return { credentials: { access_token: token }, scopes: [...FACEBOOK_READ_SCOPES], external_account_id: account.id, config: { pages_by_company: {} } };
     } catch (error) {
-      try { await revoke(token); } catch { /* The failed grant remains unpersisted. */ }
+      try { await revoke(c.env, token); } catch { /* The failed grant remains unpersisted. */ }
       throw error;
     }
   },
-  async revokeGranted(_env, result) {
-    if (typeof result.credentials.access_token === 'string') await revoke(result.credentials.access_token);
+  async revokeGranted(env, result) {
+    if (typeof result.credentials.access_token === 'string') await revoke(env, result.credentials.access_token);
   },
   async disconnect(c, _user, row) {
     const credentials = await decryptCredentials(c.env, row.uid, row.credentials_enc);
-    if (typeof credentials?.access_token === 'string') await revoke(credentials.access_token, isId(row.external_account_id) ? row.external_account_id : 'me');
+    if (typeof credentials?.access_token === 'string') await revoke(c.env, credentials.access_token, isId(row.external_account_id) ? row.external_account_id : 'me');
   },
   async action(c, user, row, name, body) {
     if ((await selectJwt(c))?.payload.impersonated_by) throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot manage Facebook Pages.');

@@ -10,3 +10,11 @@ export function metaApp(env: Pick<Env, 'WHATSAPP_APP_ID' | 'WHATSAPP_APP_SECRET'
     webhookSecret: rawSecret,
   };
 }
+
+/** Meta Graph app secret proof and signed-request verification use HMAC-SHA256. */
+export async function metaHmac(secret: string, value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(value));
+  return [...new Uint8Array(signature)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
