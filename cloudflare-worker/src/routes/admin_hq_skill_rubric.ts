@@ -71,9 +71,11 @@ async function judgedScores(env: Env): Promise<Map<string, { score: number; run_
     .bind(RUBRIC.version, JUDGE.model).all<{ item_key: string; score: number; run_at: string }>()).results ?? [];
   return new Map(rows.map((r) => [r.item_key, { score: r.score, run_at: r.run_at }]));
 }
+/** Agreement over the labels whose item still exists: a scenario's new revision is a new item, and its old label stays out. */
 async function agreement(env: Env) {
   const [l, j] = await Promise.all([labels(env), judgedScores(env)]);
-  return agreementOf(l, new Map([...j].map(([k, v]) => [k, v.score])));
+  const items = calibrationItems();
+  return agreementOf(l.filter((x) => items.has(x.item_key)), new Map([...j].map(([k, v]) => [k, v.score])));
 }
 
 rubric.get('/', async (c) => {

@@ -164,6 +164,8 @@ test('calibration run: pinned judge at temperature 0 on the rubric surface; scor
   stubJudge((u) => (u.includes(ten[0].text) ? '{"score": 5}' : '{"score": 2}'));
   assert.equal((await call(w, SUPER, 'POST', `${R}/calibration/run`, {})).body.judged.length, 1);
   assert.equal((await call(w, SUPER, 'POST', `${R}/calibration/run`, {})).body.error, 'nothing_to_judge');
+  // A label on an item that no longer exists (its scenario moved to a new revision) neither counts nor blocks.
+  w.db.prepare('INSERT INTO agent_skill_rubric_labels (item_key, rubric_version, score, labelled_by) VALUES (?, ?, 5, ?)').run('board-meeting-brief-gone:r1#correct', RUBRIC.version, SUPER);
   const sum = await call(w, SUPER, 'GET', R);
   assert.equal(sum.body.calibration.labelled, 12);
   assert.equal(sum.body.calibration.judged, 12);
