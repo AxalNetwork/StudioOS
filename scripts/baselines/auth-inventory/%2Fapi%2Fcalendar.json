@@ -23,12 +23,16 @@
   "GET /api/calendar/feed/calendar.ics": {
     "review": "no_gate_found",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The address's token is the credential, for its own scope only. The my-events token, an unknown token and any session with no token get the same 404, and no last-used stamp moves."
   },
   "GET /api/calendar/feed/my-events.ics": {
     "review": "no_gate_found",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The address's token is the credential, for its own scope only. A replaced, wrong-scope or unknown token, a disabled owner's, one made before \"sign out everywhere\", and any session with no token get the same 404, and no last-used stamp moves."
   },
   "GET /api/calendar/google/callback": {
     "review": "no_gate_found",
