@@ -142,3 +142,4 @@ and citations by number keep working.
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
 | `D5531.md` | Verified scanner archive acquisition, offline recovery, release retries and trusted-base rollout order. |
+| `D5531-p2.md` | Trusted-base scanner workflow wiring with verified exact-key caches and unchanged scan gates. |
