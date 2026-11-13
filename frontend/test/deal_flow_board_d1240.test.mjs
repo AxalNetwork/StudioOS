@@ -7,6 +7,8 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deal_flow_board_d1240.test.mjs
  */
 import test from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { waitUntil } from './_waitUntil.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
@@ -187,7 +189,9 @@ function harness({ phone = false } = {}) {
   const props = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   const all = (re) => walk(container).filter((n) => re.test(props(n)['data-testid'] || ''));
-  const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  const settle = async (ready = () => Boolean(byId('dealflow-toolbar')) && !all(/-loading$/).length && !walk(container).some(node => props(node)['aria-busy'] === true)) => {
+    await waitUntil(ready, { label: 'Deal flow observable state', advance: () => act(async () => { await nextTurn(); }), describe: () => text(container) });
+  };
   const ev = { preventDefault() {}, stopPropagation() {} };
   const click = async (id) => { const n = typeof id === 'string' ? byId(id) : id; assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick?.(ev); }); await settle(); };
   const change = async (id, value, key = 'value') => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { [key]: value } }); }); await settle(); };
@@ -231,7 +235,7 @@ test('mounted board (DLS1): stages with counts and asks, cards with bands, fit a
   const s = stubs();
   try {
     await act(async () => t.root.render(page('/deals')));
-    await t.settle();
+    await t.settle(() => t.text(t.byId('dealflow-card-1-fit')) === '86 · High');
     assert.deepEqual(s.calls.find((c) => c[0] === 'batch'), ['batch', [1, 2, 3, 4]], 'the batch takes the rows’ deal ids');
     assert.match(t.text(t.byId('dealflow-col-diligence')), /^Diligence 1€1.5M in asks/);
     assert.equal(t.text(t.byId('dealflow-col-screening-asks')), '1 with none recorded');
@@ -392,7 +396,7 @@ test('mounted states (DLS13–DLS16): loading, unreadable, empty with its doors,
   const s = stubs({ 'dealFlowApi.flow': async () => flow() });
   try {
     await act(async () => t.root.render(page('/deals')));
-    await t.settle();
+    await t.settle(() => Boolean(t.byId('dealflow-board-loading')));
     assert.match(t.text(t.byId('dealflow-board-loading')), /Sourced.*Reading….*Closing.*Reading…/s);
     assert.ok(t.byId('dealflow-toolbar'), 'the toolbar renders at once');
     flow = async () => { throw Object.assign(new Error('down'), { status: 503 }); };

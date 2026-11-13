@@ -23,7 +23,9 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/platform_overview_d4860.test.mjs
  */
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { waitUntil } from './_waitUntil.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -34,8 +36,9 @@ import {
 } from '../src/pages/hq/platformOverviewModel.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-// The page reads the clock itself, so every stamp here is relative to now.
-const NOW = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+// D5504: only the business Date clock is scoped; scheduling remains real.
+const NOW = new Date('2026-11-07T14:20:00Z');
+beforeEach(t => t.mock.timers.enable({ apis: ['Date'], now: NOW }));
 const ago = (minutes) => new Date(NOW.getTime() - minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ');
 const H = 60;
 const D = 24 * H;
@@ -151,7 +154,16 @@ async function mountPage({ data = summary(), traffic = TELEMETRY_DOWN, deps = DE
     await act(async () => {
       root.render(React.createElement(MemoryRouter, { initialEntries: ['/admin/platform'] }, React.createElement(PlatformPage)));
     });
-    for (let i = 0; i < 20; i += 1) await act(() => new Promise((r) => setImmediate(r)));
+    await waitUntil(() => {
+      const attention = select(host, '[data-testid="hq-needs-attention"]')[0];
+      return asked.some(url => url.includes('/api/admin/platform-build'))
+        && attention && !String(attention.textContent || '').includes('Reading every signal');
+    }, { label: 'Platform overview source reads', advance: () => act(async () => { await nextTurn(); }),
+      describe: () => host.textContent });
+  } catch (error) {
+    try { await act(async () => root.unmount()); }
+    finally { dom.timers.clear(); dom.restore(); }
+    throw error;
   } finally {
     console.error = error;
     console.warn = warn;
@@ -165,6 +177,22 @@ async function mountPage({ data = summary(), traffic = TELEMETRY_DOWN, deps = DE
     async close() { await act(async () => root.unmount()); dom.timers.clear(); dom.restore(); },
   };
 }
+
+test('D5504: silence crosses the exact UTC threshold across calendar and offset transitions', () => {
+  for (const stamp of ['2026-01-31T23:59:59Z', '2028-02-29T23:59:59Z', '2026-12-31T23:59:59Z', '2026-03-08T01:59:59-05:00', '2026-11-01T01:59:59-04:00']) {
+    const last = new Date(stamp);
+    const payments = { publishable: { configured: true }, webhook: { available: true, deliveries: 1, not_2xx: 0, window_hours: 24, consecutive_failures: 0,
+      last: { at: last.toISOString(), status_code: 200 } } };
+    const states = [-1, 0, 1].map(delta => webhookHealth(payments, new Date(last.getTime() + 24 * 60 * 60 * 1000 + delta)).state);
+    assert.deepEqual(states, ['Healthy', 'Stale', 'Stale'], stamp);
+  }
+});
+
+test('D5504: the mounted page observes the scoped business clock', async () => {
+  const page = await mountPage();
+  try { assert.match(page.text(page.byTestId('hq-platform-version')[0]), /Observed 14:20 UTC/); }
+  finally { await page.close(); }
+});
 
 /** Document order of the first element carrying each test id. */
 function order(page, ids) {

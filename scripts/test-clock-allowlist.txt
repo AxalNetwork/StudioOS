@@ -451,7 +451,6 @@ date frontend/test/pipeline_board_live_4701.test.mjs
 date frontend/test/pitch_canonical_routes_4853.test.mjs
 date frontend/test/pitch_editing_ops_d1515.test.mjs
 date frontend/test/pitch_v2_lightbox_d1604.test.mjs
-date frontend/test/platform_overview_d4860.test.mjs
 date frontend/test/practice_delivery_4833.test.mjs
 date frontend/test/practice_earnings_4834.test.mjs
 date frontend/test/practice_financial_4713.test.mjs
@@ -645,7 +644,6 @@ sleep frontend/test/data_room_tool_d1101.test.mjs
 sleep frontend/test/dd_case_tabs_d1251.test.mjs
 sleep frontend/test/dd_reviewer_views_d1252.test.mjs
 sleep frontend/test/deal_commitment_context_4633.test.mjs
-sleep frontend/test/deal_flow_board_d1240.test.mjs
 sleep frontend/test/deal_flow_part5_d1241.test.mjs
 sleep frontend/test/deal_frame_d1152.test.mjs
 sleep frontend/test/deal_insights_tabs_d1154.test.mjs

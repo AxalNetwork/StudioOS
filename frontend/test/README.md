@@ -198,3 +198,15 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+
+## Observable readiness (D5504)
+
+| File | Guarantee |
+| --- | --- |
+| `_waitUntil.mjs` | Waits for an observable predicate using a monotonic deadline and caller-supplied React/event flush; reports the bounded observed state on timeout. |
+| `deterministic_wait_5504.test.mjs` | A delayed result is awaited, and missing/wrong results still fail while the business Date clock is frozen. |
+
+Prefer scoped business clocks and explicit observable outcomes to a fixed count
+of event-loop turns. The migration inventory and first changed-test command are
+in `documentation/architecture/decisions/D5504.md`; the coordinated future-clock
+run remains the integration signal for JavaScript, SQLite and child processes.
