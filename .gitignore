@@ -144,3 +144,5 @@ frontend/public/skill-library/
 
 # #4591: written by scripts/schema-rehearsal.mjs for its throwaway databases, deleted when it ends.
 wrangler.rehearsal.*.toml
+# D4594 part 3: hosted Stage A's throwaway Worker config, written and deleted by scripts/agent-stage-a.mjs.
+wrangler.s4594.*.toml
