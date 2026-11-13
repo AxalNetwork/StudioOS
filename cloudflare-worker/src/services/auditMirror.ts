@@ -1,14 +1,10 @@
 /**
  * D163 — HQ's own branch-targeting acts, in a store that is not the branch.
  *
- * THE DEFECT THIS CLOSES. Every HQ→branch push reports whether it LANDED as
- * its own field and never throws — the D111 rule `licencePush.ts:13-19` states
- * outright, and it is right. But that report is per-call and ephemeral: it
- * reaches the operator who made the call, in that one response, and NOTHING
- * KEEPS IT. HQ's D1 records the transition; it does not record that the branch
- * refused the copy, or that no Worker answered. So the question an outage
- * post-mortem actually asks — which branch was unreachable, and which of HQ's
- * own acts against it failed while it was — has no store to answer it.
+ * D111 reports the branch push beside the HQ write. This mirror keeps
+ * per-attempt observations across HQ operations for incident review. For an
+ * escalation, HQ's D1 row also carries the latest push outcome, reason and
+ * time for its current decision (D243, D5035).
  *
  * WHY ANALYTICS ENGINE, AND WHY THE WRITE IS HERE RATHER THAN IN THE RPC
  * HANDLER. `HqEntrypoint` is the class HQ calls, and it is EXPORTED BY THE
@@ -25,8 +21,8 @@
  * the actor authoritatively (`admin_audit_log.admin_user_id`,
  * `licence_events.actor_user_id`) and is always readable, because it is HQ's
  * own database — the mirror is not a second copy of the audit trail and must
- * not become one. It exists for the one dimension D1 cannot give: which branch,
- * and whether it answered. Identity in a shared analytics store would add
+ * not become one. It groups observed attempts by branch and outcome across
+ * operations. Identity in a shared analytics store would add
  * exposure and no information. `logAdminAction` hashes the actor email before
  * it reaches even `activity_logs` (`adminAudit.ts:96`); this carries none at
  * all.
@@ -43,10 +39,8 @@ import { BRANCH_CODE_RE } from '../util/branch';
 /**
  * What HQ observed when it reached for the branch.
  *
- * `failed` DELIBERATELY COLLAPSES "the branch refused" and "the branch did not
- * answer", because every call site collapses them too: `licencePush.ts:180-182`
- * catches both in one block, and so do the four others. Splitting them here
- * would be this file claiming a distinction its own inputs cannot make.
+ * `failed` groups refusals and calls with no acknowledgement for incident
+ * counts. An escalation's stored delivery result distinguishes those cases.
  */
 export type MirrorOutcome = 'ok' | 'failed' | 'not_deployed';
 
