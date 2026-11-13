@@ -167,6 +167,29 @@ export function publishingBlock(read) {
   };
 }
 
+/**
+ * D4683 (#5328) — the Worker's own word for a notice, as the vocabulary
+ * draws it. A stuck notice (an interrupted send, the attempt limit, or its
+ * date passed with deliveries owed) is Recovery required, never In progress;
+ * a notice that started with subscribers untold is Missed.
+ */
+const NOTICE_STATES = Object.freeze({
+  delivered: { state: 'healthy', word: 'Sent' },
+  in_progress: { state: 'pending', word: 'In progress' },
+  needs_attention: { state: 'action_required', word: 'Recovery required' },
+  missed: { state: 'failed', word: 'Missed' },
+});
+
+/** What the operator is told under a notice's counts, from D4683's own fields. */
+function noticeNotes(r) {
+  const notes = [];
+  if (Number(r.unknown) > 0) notes.push(`${r.unknown} interrupted: whether they left is unknown. The sweep sends them again, so a subscriber may get the notice twice.`);
+  if (Number(r.exhausted) > 0) notes.push(`${r.exhausted} reached the attempt limit and will not be retried.`);
+  if (Number(r.late) > 0) notes.push(`${r.late} went out after the notice date${r.notice_due_by ? ` (${dayWords(r.notice_due_by) || r.notice_due_by})` : ''}.`);
+  if (Number(r.resent_after_interruption) > 0) notes.push(`${r.resent_after_interruption} sent after an interruption, so may have arrived twice.`);
+  return notes;
+}
+
 /** The notices block: subscribers, whether mail is configured, and one row per notice. */
 export function noticesBlock(read) {
   if (!read) return { state: 'pending', rows: [] };
@@ -180,19 +203,31 @@ export function noticesBlock(read) {
   const rows = n.rows.map((r) => {
     const queued = r.started ? 0 : r.not_sent;
     const missed = r.started ? r.not_sent : 0;
-    const state = r.failed > 0 || missed > 0 ? 'action_required' : r.sending > 0 || queued > 0 ? 'pending' : 'healthy';
+    // A Worker from before D4683 sends no `state`: derive the word as #4803 slice 4 did.
+    const own = NOTICE_STATES[r.state];
+    const state = own ? own.state : (r.failed > 0 || missed > 0 ? 'action_required' : r.sending > 0 || queued > 0 ? 'pending' : 'healthy');
+    const word = own ? own.word : (r.failed > 0 ? 'Some failed' : missed > 0 ? 'Not all sent before start' : r.sending > 0 || queued > 0 ? 'In progress' : 'Sent');
     return {
       uid: r.uid,
       name: r.name,
       starts: dayWords(r.starts_at) || r.starts_at,
       started: r.started,
       state,
-      word: r.failed > 0 ? 'Some failed' : missed > 0 ? 'Not all sent before start' : r.sending > 0 || queued > 0 ? 'In progress' : 'Sent',
-      counts: [['Queued', queued], ['Sending', r.sending], ['Sent', r.sent], ['Failed', r.failed], ...(missed ? [['Not sent before start', missed]] : [])],
+      word,
+      counts: [
+        ['Queued', queued], ['Sending', r.sending],
+        ...(Number(r.unknown) > 0 ? [['Outcome unknown', r.unknown]] : []),
+        ['Sent', r.sent], ['Failed', r.failed],
+        ...(missed ? [['Not sent before start', missed]] : []),
+      ],
+      notes: noticeNotes(r),
     };
   });
   return {
-    state: !n.mail_configured && rows.some((r) => r.state !== 'healthy') ? 'action_required' : rows.length ? 'healthy' : 'measured_zero',
+    state: !n.mail_configured && rows.some((r) => r.state !== 'healthy') ? 'action_required'
+      : rows.some((r) => r.state === 'failed') ? 'failed'
+        : rows.some((r) => r.state === 'action_required') ? 'action_required'
+          : rows.length ? 'healthy' : 'measured_zero',
     subscribers,
     mailConfigured: n.mail_configured,
     rows,

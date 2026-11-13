@@ -77,7 +77,7 @@ export function DrillCard({ drill }) {
               className={`rounded-md border px-2 py-1 text-[12px] font-semibold ${
                 s.mark === 'failed' ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
                   : s.mark === 'done' ? 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100'
-                    : 'border-dashed border-axal-hairline text-axal-faint dark:border-gray-700 dark:text-gray-400'
+                    : 'border-dashed border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'
               }`}
             >
               <span aria-hidden="true">{MARK[s.mark]} </span>{s.label}<span className="sr-only">: {MARK_TEXT[s.mark]}</span>
@@ -122,7 +122,7 @@ export function BackupCard({ hb }) {
       </div>
       {s.line && <p className="text-[12px] text-axal-muted dark:text-gray-300">{s.line}</p>}
       {rows.length > 0 && <Facts rows={rows} />}
-      <p className="text-[12px] text-axal-faint dark:text-gray-400">A present export is evidence of a <b>backup</b>, not of a <b>restore</b>.</p>
+      <p className="text-[12px] text-axal-muted dark:text-gray-400">A present export is evidence of a <b>backup</b>, not of a <b>restore</b>.</p>
       <a href={BACKUP_RUNS_HREF} target="_blank" rel="noreferrer" className={`${BTN} self-start`} data-testid="res-backup-runs">Open export job runs →</a>
     </section>
   );

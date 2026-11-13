@@ -54,7 +54,7 @@ function Lifecycle({ row }) {
         <li
           key={s.k}
           aria-current={s.on ? 'step' : undefined}
-          className={`rounded-md border px-2 py-1 text-[12px] font-semibold ${s.on ? 'border-violet-700 text-axal-ink dark:border-violet-500 dark:text-white' : s.done ? 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100' : 'border-dashed border-axal-hairline text-axal-faint dark:border-gray-700 dark:text-gray-400'}`}
+          className={`rounded-md border px-2 py-1 text-[12px] font-semibold ${s.on ? 'border-violet-700 text-axal-ink dark:border-violet-500 dark:text-white' : s.done ? 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100' : 'border-dashed border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}
         >
           <span aria-hidden="true">{s.done ? '✓ ' : ''}</span>{s.text}
         </li>
@@ -124,7 +124,7 @@ export function DsrDetail({ row, onRecord, onBack, opener }) {
             </li>
           ))}
         </ul>
-        <p className="text-[11.5px] text-axal-faint dark:text-gray-400">Who has opened a request is not recorded, so views are not listed.</p>
+        <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Who has opened a request is not recorded, so views are not listed.</p>
       </div>
     </section>
   );
@@ -162,7 +162,7 @@ export default function PrivacyWorkspace({ dsr, unreadable, onReread, send, chil
       {unreadable ? (
         <Unreadable what="The data subject requests" claim="This is not a claim that none are open or overdue." onRetry={onReread} />
       ) : !dsr ? (
-        <p className="text-[12px] text-axal-faint dark:text-gray-400" data-testid="privacy-reading">Reading…</p>
+        <p className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="privacy-reading">Reading…</p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="dsr-summary">
@@ -243,14 +243,14 @@ export default function PrivacyWorkspace({ dsr, unreadable, onReread, send, chil
                     <StatusBadge state="unavailable" /> Closed requests are not listed: {dsr.recent.reason}
                   </p>
                 )}
-                <p className="text-[11.5px] text-axal-faint dark:text-gray-400">
+                <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
                   Due date: {dsr.clock?.label ? dsr.clock.label.charAt(0).toLowerCase() + dsr.clock.label.slice(1) : 'the statutory clock from receipt'}, as the product counts it. A request is overdue from the moment that day ends. Shown as a date so no one has to do the arithmetic.
                 </p>
               </section>
               {row ? (
                 <DsrDetail row={row} onRecord={(r) => setActing(r)} onBack={() => setSelected(null)} opener={opener} />
               ) : (
-                <p className="hidden text-[12px] text-axal-faint xl:block dark:text-gray-400">Choose a request to see its due date, next action and history.</p>
+                <p className="hidden text-[12px] text-axal-muted xl:block dark:text-gray-400">Choose a request to see its due date, next action and history.</p>
               )}
             </div>
           )}

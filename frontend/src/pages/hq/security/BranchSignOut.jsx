@@ -98,7 +98,7 @@ export default function BranchSignOut({ scope, readOnly, send = api.hqBranchSign
       <p className="text-[12.5px] text-axal-ink dark:text-gray-100">
         Asks {bound === null ? 'every bound branch' : `each of the ${bound} bound branch${bound === 1 ? '' : 'es'}`} to sign accounts out on its own deployment. The acts above do not reach branches; this one does, and only when you send it.
       </p>
-      <p className="text-[11.5px] text-axal-faint dark:text-gray-400">
+      <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
         Each branch answers for itself: done, failed (nothing changed there), or unreachable (not known whether it acted). A branch that does not answer is never counted as done, and trying again is safe: each branch recognises the same request.
       </p>
       <fieldset className="flex flex-wrap gap-3 text-[12.5px]" disabled={readOnly || busy}>
@@ -109,14 +109,14 @@ export default function BranchSignOut({ scope, readOnly, send = api.hqBranchSign
       {kind === 'account' ? (
         <label className="text-[12px] font-bold text-axal-ink dark:text-white">Email
           <input type="email" value={email} onChange={change(setEmail)} disabled={readOnly || busy} className="mt-1 block w-full rounded-lg border border-axal-hairline px-2 py-1.5 text-[12.5px] font-normal dark:border-gray-700 dark:bg-gray-950" data-testid="hq-branch-email" />
-          <span className="block text-[11px] font-normal text-axal-faint dark:text-gray-400">An account on a branch is a different record from one here, so the person is named by email. A branch where nobody holds it says so.</span>
+          <span className="block text-[11px] font-normal text-axal-muted dark:text-gray-400">An account on a branch is a different record from one here, so the person is named by email. A branch where nobody holds it says so.</span>
         </label>
       ) : (
         <label className="text-[12px] font-bold text-axal-ink dark:text-white">Type {BRANCH_ALL_PHRASE} to confirm
           <input value={phrase} onChange={(e) => setPhrase(e.target.value)} disabled={readOnly || busy} className="mt-1 block w-full rounded-lg border border-axal-hairline px-2 py-1.5 font-mono text-[12.5px] font-normal dark:border-gray-700 dark:bg-gray-950" data-testid="hq-branch-phrase" />
         </label>
       )}
-      <label className="text-[12px] font-bold text-axal-ink dark:text-white">Reason <span className="font-normal text-axal-faint">(at least {BRANCH_REASON_MIN} characters; recorded here and on every branch)</span>
+      <label className="text-[12px] font-bold text-axal-ink dark:text-white">Reason <span className="font-normal text-axal-muted">(at least {BRANCH_REASON_MIN} characters; recorded here and on every branch)</span>
         <textarea value={reason} onChange={change(setReason)} disabled={readOnly || busy} rows={2} className="mt-1 block w-full rounded-lg border border-axal-hairline px-2 py-1.5 text-[12.5px] font-normal dark:border-gray-700 dark:bg-gray-950" data-testid="hq-branch-reason" />
       </label>
       <div className="flex flex-wrap gap-2">

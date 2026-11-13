@@ -46,9 +46,14 @@ export async function manifest(request) {
   return cached;
 }
 
-/** Everything a spec does before its first navigation. */
-export async function prepare(page, request) {
+/**
+ * Everything a spec does before its first navigation. `as: 'security'` signs
+ * in as the Super Admin of HQ Security's scenario (`_security_seed.ts`, D4803)
+ * instead of the deck matrix's founder.
+ */
+export async function prepare(page, request, { as } = {}) {
   const m = await manifest(request);
+  const who = as === 'security' ? m.security : m;
   await page.clock.setFixedTime(NOW);
   await page.addInitScript(({ token, user, consentVersion }) => {
     try {
@@ -57,7 +62,7 @@ export async function prepare(page, request) {
       // The cookie banner, decided (essential only), so it never covers the editor (lib/cookieConsent.js).
       localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the spec fails on sign-in, loudly */ }
-  }, { token: m.token, user: m.user, consentVersion: CONSENT_VERSION });
+  }, { token: who.token, user: who.user, consentVersion: CONSENT_VERSION });
   await page.route((url) => url.hostname !== '127.0.0.1', async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ status: 200, contentType: 'text/css', body: FONT_CSS });

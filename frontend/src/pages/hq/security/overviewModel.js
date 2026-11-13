@@ -593,10 +593,13 @@ function buildAreas({ ov, fd, overview, feed, readOv, readFeed }) {
     });
   }
 
-  // D4803: per-notice subprocessor delivery is not recorded by anything.
+  // D4803: per-notice delivery IS recorded (the notice sweep's rows, drawn on Trust since slice 4,
+  // with D4683's per-notice state). This cell said "Not instrumented · Nothing records it yet", a refusal
+  // that stopped being true. The Overview does not read the Trust Center, so it cannot say which way
+  // delivery stands: Unknown here, and the Trust workspace has the answer.
   areas.push({
     id: 'subprocessors', title: 'Subprocessor notices', tab: 'trust',
-    state: 'not_instrumented', fact: 'Per-notice delivery is not recorded', freshness: 'Nothing records it yet',
+    state: 'unknown', fact: 'Recorded per notice; open Trust for delivery', freshness: 'Not read on Overview',
   });
   return areas;
 }

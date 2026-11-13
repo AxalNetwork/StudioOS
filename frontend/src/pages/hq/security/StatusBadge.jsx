@@ -96,7 +96,7 @@ export function ReadValue({ value, readable = true, what, onRetry, className = '
     return (
       <span className={`inline-flex flex-wrap items-center gap-1.5 ${className}`} data-testid="security-read-unavailable">
         <StatusBadge state="unavailable" />
-        {what && <span className="text-[11px] text-axal-faint">{what} could not be read</span>}
+        {what && <span className="text-[11px] text-axal-muted">{what} could not be read</span>}
         {onRetry && (
           <button
             type="button"
