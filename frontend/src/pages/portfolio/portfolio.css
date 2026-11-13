@@ -136,3 +136,50 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-table td[colspan]{display:block}
   .pf-table td[colspan]::before{content:none}
 }
+/* D4817 part 2 (PF-02): the positions register, its as-of read, counts, rules and mark history */
+.pf-h2{margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pf-mono{font:500 11.5px var(--font-mono)}
+.pf-asof{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;border:1px solid var(--pf-hair);border-radius:12px;background:var(--pf-card)}
+.pf-asof label{font-size:12.5px;font-weight:700}
+.pf-asof input{min-height:32px;border:1px solid var(--pf-hair2);border-radius:8px;background:var(--pf-card);color:var(--pf-ink);font:inherit;font-size:12.5px;padding:0 8px;color-scheme:light}
+.dark .pf-asof input{color-scheme:dark}
+.pf-asof .pf-btn:disabled{opacity:.55;cursor:not-allowed}
+.pf-asof .pf-sm{flex-basis:100%}
+.pf-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--pf-hair);border-radius:12px;background:var(--pf-card);overflow:hidden}
+.pf-counts>.pf-metric{border-bottom:0}
+.pf-counts>.pf-metric:last-child{border-right:0}
+.pf-toolbar{padding:0 14px}
+.pf-mark-open{font:600 11.5px var(--font-mono)}
+.pf-table tr.pf-total th,.pf-table tr.pf-total td{background:var(--pf-raised);font-weight:800;border-bottom:0}
+.pf-table tr.pf-total td.pf-total-note{font-weight:500;font-size:11.5px;color:var(--pf-mu);white-space:normal}
+.pf-register thead th,.pf-register tbody th,.pf-register td{padding-left:6px;padding-right:6px}
+.pf-register td.n{font-family:var(--font-app);font-size:12.5px}
+.pf-register td .pf-mark-open,.pf-register td[data-label="Basis"]{white-space:nowrap}
+.pf-register td .pf-stale-chip{display:flex;width:max-content;margin:3px 0 0}
+.pf-th-sub{text-transform:none;letter-spacing:0}
+.pf-register tbody th{min-width:110px}
+.pf-register td.n small{white-space:nowrap}
+.pf-register td[data-label="Health"]{min-width:104px}
+.pf-register td[data-label="Health"] .pf-health{white-space:normal;flex-wrap:wrap}
+.pf-register td .pf-reason{max-width:220px;white-space:normal}
+.pf-table tbody th small{display:block;color:var(--pf-mu);font-size:11px;font-weight:500}
+.pf-rules tbody th{font-weight:700;width:30%}
+.pf-rule-hits{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:12px}
+.pf-rule-hits b{font-weight:800;margin-right:4px}
+.pf-sheet{display:flex;flex-direction:column;gap:16px;padding:16px 20px;color:var(--pf-ink)}
+.pf-sheet h3{margin:0 0 8px;font-size:13px;font-weight:800}
+.pf-sheet-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pf-sheet .pf-table caption{padding-left:0}
+.pf-sheet .pf-mono{white-space:nowrap}
+.pf-sheet-foot{padding:10px 20px}
+@media(max-width:850px){.pf-counts{grid-template-columns:1fr}.pf-counts>.pf-metric{border-right:0;border-bottom:1px solid var(--pf-hair)}.pf-counts>.pf-metric:last-child{border-bottom:0}}
+@media(max-width:600px){
+  .pf-asof input,.pf-asof .pf-btn{min-height:44px}
+  .pf-asof input{flex:1 1 auto}
+  .pf-toolbar{overflow-x:auto}
+  .pf-hide-phone{display:none!important}
+  .pf-table tbody th small{flex-basis:100%}
+  .pf-table tr.pf-total td.pf-total-note{padding-top:6px}
+  .pf-mark-open{min-height:44px;display:inline-flex;align-items:center}
+  .pf-rules tbody th{width:100%}
+}

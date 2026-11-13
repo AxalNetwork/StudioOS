@@ -25,6 +25,15 @@ draw in the same frame with the same parts. Decision notes:
 - `portfolio.css` — the frame's tokens (redefined under `.dark`) and its
   tablet (1100px, 850px) and phone (600px) layouts.
 
+D4817 part 2 (canvas PF-02) draws Positions
+(`../investor/InvestorPortfolioPositions.jsx` at `/portfolio/positions`) in
+the same frame (`tab="positions"`). It adds to the model, not a second one: a
+position's mark kind (`markOf`: marked, none, unusable), one basis vocabulary
+(`basisLabel`), the date mark age is measured at (`markReference`, never the
+browser clock), the register's rows, counts and total, one company's mark
+history, and the attention rules with their evidence (`attentionRulesOf`).
+Decision notes: `documentation/architecture/decisions/D4817-p2.md`.
+
 ## Rules
 
 - A failed read reads **Unreadable** with a Retry for that source alone; a

@@ -41,11 +41,15 @@ const OBLIGATION_LOOK = {
   Unreadable: ['is-unreadable', SquareSlash],
 };
 
-/** A reporting obligation for one period: Received, Due, Not received, Not recorded or Unreadable. */
-export function ObligationStatus({ reporting }) {
+/**
+ * A reporting obligation for one period: Received, Due, Not received, Not
+ * recorded or Unreadable. `compact` leaves the period out of the word, for a
+ * table whose column header already names it (PF-02).
+ */
+export function ObligationStatus({ reporting, compact = false }) {
   if (!reporting || reporting.state === 'loading') return <span className="pf-muted">Reading…</span>;
   const [cls, Icon] = OBLIGATION_LOOK[reporting.state] || OBLIGATION_LOOK['Not recorded'];
-  const label = reporting.period && ['Received', 'Due', 'Not received'].includes(reporting.state)
+  const label = !compact && reporting.period && ['Received', 'Due', 'Not received'].includes(reporting.state)
     ? `${reporting.period} ${reporting.state.toLowerCase()}` : reporting.state;
   return (
     <span className={`pf-chip ${cls}`} title={reporting.reason || undefined} data-state={reporting.state}>

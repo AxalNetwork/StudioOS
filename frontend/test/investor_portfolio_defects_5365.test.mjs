@@ -9,7 +9,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import InvestorPortfolioCanvas from '../src/pages/investor/InvestorPortfolioCanvas.jsx';
 import InvestorPortfolioUpdates, { kpiText } from '../src/pages/investor/InvestorPortfolioUpdates.jsx';
-import { reportedLine } from '../src/pages/investor/InvestorPortfolioPositions.jsx';
+import { attentionRulesOf, registerRowsOf } from '../src/pages/portfolio/portfolioModel.js';
 
 const h = React.createElement;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -106,8 +106,20 @@ test('KPI kinds and alert dates keep their member-facing units and separators', 
     { kpi_key: 'runway_months', unit: 'months' }, { kpi_key: 'headcount', unit: 'count' },
   ];
   assert.equal(kpiText(update, rules), 'Arr $12,000 · Gross Margin 54.5% · Runway Months 1 month · Headcount 9');
-  assert.equal(reportedLine('Last reported', '2026-07-20T09:00:00Z', 112), 'Last reported Jul 20, 2026 · 112d ago');
-  assert.doesNotMatch(reportedLine('Reported', '2026-07-02T09:00:00Z', 131), /T09:00:00Z/);
+  // F-19: D4817 part 2 (#5311, PF-02) replaced Positions' alerts with the
+  // attention rules; their dates are words with a separator, never a timestamp.
+  const positions = { state: 'ok', value: { items: [{ project_id: 7, project: { uid: 'nw', name: 'Northwind' }, total_invested: 100 }] } };
+  const reads = {
+    positions,
+    health: { state: 'ok', value: { items: [] } },
+    compliance: { state: 'ok', value: { as_of: '2026-11-09', companies: [{ project_id: 7, last_reported_at: '2026-07-20T09:00:00Z', days_since_report: 112 }] } },
+    updates: { state: 'ok', value: { items: [{ project_id: 7, period: '2026-Q2', submitted_at: '2026-07-02T09:00:00Z', kpis: { runway_months: 5 } }] } },
+  };
+  const alerts = attentionRulesOf(reads, registerRowsOf(reads, { date: '2026-11-09', state: 'ok' }));
+  const line = (key) => alerts.find((r) => r.key === key).hits[0].text;
+  assert.equal(line('stale-update'), 'Last update received 20 Jul 2026 · 112 days');
+  assert.equal(line('runway'), '5 months · founder-reported · 2026-Q2 · 2 Jul 2026');
+  assert.doesNotMatch(alerts.flatMap((r) => r.hits || []).map((x) => x.text).join(' '), /T09:00:00Z|\d{4}-\d{2}-\d{2}T/);
 });
 
 test('investor-visible copy carries no issue, decision or canvas identifiers', () => {

@@ -46,7 +46,8 @@ const RESEARCH = read('cloudflare-worker/src/routes/research.ts');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const ACTIONS = read('frontend/src/workspaces/investorZoneActions.js');
 const API = read('frontend/src/lib/api.js');
-const CANVAS = read('design/canvases/integrated/Pages · Investor Portfolio.dc.html');
+const V2 = read('design/incoming/Portfolio v2 Page.dc.html');
+const MODEL = codeOnly(read('frontend/src/pages/portfolio/portfolioModel.js'));
 
 /**
  * The page with its JSX comments removed — what a reader actually sees.
@@ -67,15 +68,6 @@ function panel() {
   assert.ok(a > 0, 'the mark-history panel is gone');
   const b = P.indexOf('\nfunction ', a + 20);
   return P.slice(a, b > a ? b : P.length);
-}
-
-/** The IP1 fixture object alone, bounded at both ends. */
-function ip1() {
-  const a = CANVAS.indexOf("id:'ip1'");
-  assert.ok(a >= 0, 'the IP1 artboard is gone from the canvas');
-  const b = CANVAS.indexOf("id:'ip2'", a);
-  assert.ok(b > a, 'IP2 no longer follows IP1 — this slice would run past the artboard');
-  return CANVAS.slice(a, b);
 }
 
 test('portfolio_marks is a history table, which is the premise of everything below', () => {
@@ -270,8 +262,12 @@ test('a mark with no basis is unrecorded, never the column’s default', () => {
   assert.match(handler, /basis: m\.basis \?\? null,/, 'the route defaults an absent basis');
   assert.ok(!/basis:\s*m\.basis\s*\|\|\s*'gp_estimate'/.test(handler),
     'an absent basis is reported as a GP estimate, which invents the provenance');
-  assert.match(P, /m\.basis \? title\(m\.basis\) : 'Not recorded'/,
+  // D4817 part 2 (#5311, PF-02): one basis vocabulary (audit F-24), and the
+  // model's word for a missing basis is null, so the call site's fallback runs.
+  assert.match(P, /basisLabel\(m\.basis\) \|\| NOT_RECORDED/,
     'the panel renders an absent basis as something other than unrecorded');
+  assert.match(MODEL, /if \(basis == null \|\| String\(basis\)\.trim\(\) === ''\) return null;/,
+    'basisLabel invents a word for a missing basis');
   // And the AI instruction refuses the same substitution.
   const surface = RESEARCH.slice(RESEARCH.indexOf("'portfolio/positions': {"),
     RESEARCH.indexOf('\n  },', RESEARCH.indexOf("'portfolio/positions': {")));
@@ -305,28 +301,26 @@ test('the false card is gone and the eyebrow with it', () => {
   assert.match(P, /Every valuation and ownership change keeps its source\./);
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Positions eyebrow is back');
-  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
-  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Positions book"/, 'the heading went with the eyebrow');
+  // D4817 part 2 (#5311, PF-02): the heading and local navigation are the Portfolio frame's.
+  assert.match(P, /<PortfolioFrame\s+tab="positions"/, 'the heading went with the eyebrow');
 });
 
-test('the strip and the instrument still match the artboard, column for column', () => {
-  const board = ip1();
-  const head = /head:\[([^\]]*)\]/.exec(board);
-  assert.ok(head, 'the IP1 artboard no longer declares an instrument head');
-  const columns = head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(columns, ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Health', 'Last update']);
-  for (const col of columns) {
-    assert.ok(P.includes(`<th>${col}</th>`), `the positions table lost its ${col} column`);
+test('the counts and the register match the PF-02 board, column for column', () => {
+  // D4817 part 2 (#5311): IP1's artboard gave way to the Portfolio v2 board
+  // PF-02 (`positions()` in the canvas). Its register's columns, in its order.
+  const at = V2.indexOf('const positions = (drawer) =>');
+  assert.ok(at > 0, 'the PF-02 board is gone from the canvas');
+  const board = V2.slice(at, V2.indexOf('const markDrawer', at));
+  const columns = [...board.slice(board.indexOf('<thead>'), board.indexOf('</thead>')).matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(columns, ['Company', 'Invested', 'Ownership', 'Latest FMV', 'Multiple', 'Mark date', 'Basis', 'Reporting', 'Health']);
+  const start = P.indexOf('<table className="pf-table pf-register">');
+  assert.ok(start > 0, 'the register table is gone');
+  const drawn = [...P.slice(start, P.indexOf('</thead>', start)).matchAll(/<th scope="col"[^>]*>([^<{]*)/g)].map((m) => m[1]);
+  assert.deepEqual(drawn, columns, 'the register does not draw the board\'s columns in its order');
+  // The board's counts, kept separate: coverage, stale marks, and the marks the book cannot use.
+  for (const label of ['Mark coverage', 'Stale marks (older than two quarters)', 'Marks that cannot be used']) {
+    assert.ok(P.includes(`label="${label}"`), `the counts lost ${label}`);
   }
-  // The artboard's own four tiles.
-  for (const label of ['Invested', 'Current FMV', 'TVPI', 'Needs attention']) {
-    assert.ok(P.includes(`label="${label}`), `the strip lost its ${label} tile`);
-  }
-  // TVPI and DPI are reported separately — the artboard's note is explicit that
-  // an unrealised multiple is a mark and a realised one is cash.
-  assert.match(board, /reported separately rather than blended/);
-  assert.match(P, /DPI \$\{ratio\(state\.analytics\?\.dpi\)\}/,
-    'DPI is no longer reported beside TVPI');
   const surface = RESEARCH.slice(RESEARCH.indexOf("'portfolio/positions': {"),
     RESEARCH.indexOf('\n  },', RESEARCH.indexOf("'portfolio/positions': {")));
   assert.match(surface, /Never blend an unrealised multiple with a realised one/);

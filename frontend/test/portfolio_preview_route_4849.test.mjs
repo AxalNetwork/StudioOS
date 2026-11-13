@@ -43,7 +43,8 @@ const PORTFOLIO_ROUTES = {
   // D4817 part 1 (#5311): the Overview is the Portfolio v2 frame's, headed "Portfolio".
   '/portfolio': 'Portfolio',
   '/portfolio/health': 'Portfolio',
-  '/portfolio/positions': 'Positions book',
+  // D4817 part 2 (#5311): Positions draws in the same frame, headed "Portfolio" (its tab is the title).
+  '/portfolio/positions': 'Portfolio',
   '/portfolio/updates': 'Updates & KPI collection',
   '/portfolio/performance': 'Portfolio',
   '/portfolio/value-add': 'Value-add desk',

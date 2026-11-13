@@ -156,15 +156,20 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.match(home, /\{!previewing && <InvestorThesisBand \/>\}/, 'an admin preview withholds investor records');
 });
 
-test('the seven bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots carry its tools', () => {
-  for (const f of ['InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
+test('the six bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots and Positions carry its tools', () => {
+  // D4817 part 2 (#5311, PF-02): Positions draws in the Portfolio frame, whose
+  // heading and local navigation replace ZoneHeader's; it keeps the header tools.
+  for (const f of ['InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
     const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
     assert.match(src, /return <ZonePrimaryScope>/, `${f} is not a primary scope`);
     assert.match(src, /<\/ZonePrimaryScope>;/, `${f} does not close its scope`);
     assert.match(src, /<ZoneHeader /, `${f} lost its ZoneHeader`);
     assert.doesNotMatch(src, /<ZoneNav /, `${f} draws a second pill row`);
   }
-  for (const f of ['InvestorPortfolioCanvas', 'InvestorFundLanding']) {
+  const positions = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioPositions.jsx'));
+  assert.match(positions, /<PortfolioFrame\s+tab="positions"/, 'Positions left the Portfolio frame');
+  assert.doesNotMatch(positions, /<ZoneNav |<ZoneHeader /, 'Positions draws a second heading or pill row');
+  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorFundLanding']) {
     assert.match(codeOnly(read(`frontend/src/pages/investor/${f}.jsx`)), /<ZoneHeaderTools role="investor"/, `${f} lost its header tools`);
   }
 });
