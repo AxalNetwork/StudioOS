@@ -152,8 +152,11 @@ function observe(r) {
   };
   const info = tryJson(['d1', 'info', n.d1.name, '--json', '--config', rehearsalConfigPath(n.d1.id)], 'd1:read');
   const kvList = tryJson(['kv', 'namespace', 'list'], 'kv:read');
-  const mine = new RegExp(`studioos-[a-z-]+-s4594-${n.run}(?:-dlq)?`, 'g');
-  const names = (out) => (typeof out === 'string' ? [...new Set(out.match(mine) || [])] : undefined);
+  // A fixed pattern, then a plain suffix test for this run: no expression is built from input.
+  const suffix = `-s4594-${n.run}`;
+  const names = (out) => (typeof out === 'string'
+    ? [...new Set((out.match(/studioos-[a-z0-9-]+/g) || []).filter((x) => x.endsWith(suffix) || x.endsWith(`${suffix}-dlq`)))]
+    : undefined);
   const queues = names(tryJson(['queues', 'list'], 'queues:read'));
   const workflows = names(tryJson(['workflows', 'list'], 'workflows:read'));
   const r2 = names(tryJson(['r2', 'bucket', 'list'], 'r2:read'));
@@ -236,7 +239,7 @@ try {
     if (gen.status !== 0) throw new Error('could not write the generated modules');
     const out = wrangler(['deploy', '--config', FLAT_PATH]);
     created.worker = true;
-    BASE = (`${out.stdout}\n${out.stderr}`.match(new RegExp(`https://${n.worker}\\.[a-z0-9-]+\\.workers\\.dev`)) || [])[0] || null;
+    BASE = (`${out.stdout}\n${out.stderr}`.match(/https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev/g) || []).find((u) => u.startsWith(`https://${n.worker}.`)) || null;
     if (!BASE) throw new Error('the deploy printed no workers.dev address');
     wrangler(['secret', 'put', 'JWT_SECRET', '--name', n.worker], { input: secret });
     return { dropped: rendered.dropped };
