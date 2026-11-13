@@ -90,6 +90,11 @@ test('exclusivity is its own versioned term; the operating fee does not change a
   assert.equal(read.body.exclusivity, null);
   assert.match(read.body.exclusivity_reason, /non-exclusive/);
   assert.equal(read.body.operating.annual_fee_cents, 5_000_000);
+  // D5019 part 2: the operating minimum is the schedule's Minimum Guarantee, null (not 0) until the schedule records one.
+  assert.equal(read.body.operating.minimum_guarantee_cents, null, 'no schedule: the minimum is not recorded, never 0');
+  db.prepare('INSERT INTO licence_terms (licence_uid, minimum_guarantee_cents) VALUES (?, ?)').run(A, 1_200_000);
+  assert.equal((await call(SUPER, 'GET', P(A))).body.operating.minimum_guarantee_cents, 1_200_000);
+  db.prepare('DELETE FROM licence_terms WHERE licence_uid = ?').run(A);
   assert.equal((await call(ADMIN, 'GET', P(A))).status, 403);
   const v1 = await set(call, A, { scope_type: 'country_exclusive', territory: { countries: ['FR'] }, targets: TARGETS, cure_period_days: 90 });
   assert.equal(v1.status, 201, JSON.stringify(v1.body));
@@ -108,6 +113,8 @@ test('exclusivity is its own versioned term; the operating fee does not change a
   assert.throws(() => db.exec(`UPDATE licence_exclusivity_terms SET cure_period_days = 1 WHERE licence_uid = '${A}' AND revision = 1`), /frozen/);
   assert.throws(() => db.exec('DELETE FROM licence_exclusivity_terms'), /frozen/);
   assert.equal(all("SELECT * FROM admin_audit_log WHERE action = 'licence_exclusivity_set'").length, 2);
+  assert.deepEqual(all("SELECT detail_json FROM licence_events WHERE licence_id = 1 AND event = 'terms_changed' ORDER BY id").map((r) => JSON.parse(r.detail_json).revision), [1, 2],
+    'each version is a licence event too (D5019 part 2)');
 });
 
 test('a missed target opens an HQ review and marks the exclusivity at risk; it is never revoked by itself', async () => {
@@ -163,6 +170,14 @@ test('a review action needs its preview acknowledged and a reason; each writes t
   assert.equal(end.body.exclusivity.state, 'ended');
   assert.equal(all('SELECT * FROM licence_exclusivity_terms WHERE licence_uid = ?', A).length, 4, 'one version per change, none rewritten');
   assert.equal(all('SELECT * FROM licence_territories WHERE licence_id = 1').length, 1, 'the operating territory is untouched');
+  // D5019 part 2: every change is audited, not only the direct set — the miss, the review opened by hand, each resolution.
+  const audit = (action: string) => all('SELECT filters_json FROM admin_audit_log WHERE action = ? ORDER BY id', action).map((r) => JSON.parse(r.filters_json));
+  assert.deepEqual(audit('licence_exclusivity_review_opened').map((d) => d.trigger), ['target_missed', 'hq'], 'a review opened without an audit row');
+  assert.deepEqual(audit('licence_exclusivity_review_resolved').map((d) => [d.action, d.reason]), [['cure_period', REASON], ['end_exclusivity', REASON]], 'a resolution written without an audit row');
+  const events = all("SELECT detail_json, before_json, after_json FROM licence_events WHERE licence_id = 1 AND event = 'terms_changed' ORDER BY id")
+    .map((r) => ({ ...JSON.parse(r.detail_json), before: JSON.parse(r.before_json), after: JSON.parse(r.after_json) }));
+  assert.deepEqual(events.map((e) => [e.source, e.action ?? null]), [['exclusivity', null], ['exclusivity_review', 'cure_period'], ['exclusivity_review', 'end_exclusivity']], 'an exclusivity change left no licence event');
+  assert.deepEqual([events[2].before.state, events[2].after.state], ['at_risk', 'ended'], 'the event carries the state before and after');
 });
 
 test('regional and master structures: a master lists its children; competing rights are refused', async () => {

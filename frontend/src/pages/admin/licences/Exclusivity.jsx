@@ -14,7 +14,7 @@ import { bpsPercent } from '../../../lib/bps';
 import { reportError } from '../../../lib/log';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError } from '../../../lib/mutationOutcome';
-import { ACTION_LABELS, NOT_RECORDED, SCOPE_LABELS, STATE_LABELS, buildSave, yearLine } from './exclusivityModel';
+import { ACTION_LABELS, NOT_RECORDED, SCOPE_LABELS, STATE_LABELS, buildSave, minimumText, yearLine } from './exclusivityModel';
 import { codeAmount, parseMinor, toMajorString } from '../../../lib/money.js';
 
 const input = 'mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900';
@@ -235,7 +235,7 @@ export function Exclusivity({ licence, api = licenceExclusivityApi }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800" data-testid="exclusivity-operating">
           <p className={EYE}>Operating licence</p>
-          <p className="mt-1 text-sm">Annual fee {money(view.operating.annual_fee_cents, cur)} · royalty {bpsPercent(view.operating.revenue_share_bps) ?? NOT_RECORDED}</p>
+          <p className="mt-1 text-sm">Annual fee {money(view.operating.annual_fee_cents, cur)} · royalty {bpsPercent(view.operating.revenue_share_bps) ?? NOT_RECORDED} · minimum guarantee {minimumText(view.operating)}</p>
           <p className="text-[12px] text-gray-600 dark:text-gray-400">Operates in {view.operating.territory.join(', ') || NOT_RECORDED}. Paying this fee grants no exclusivity.</p>
         </div>
         <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800" data-testid="exclusivity-scope-card">
