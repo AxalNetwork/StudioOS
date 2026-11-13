@@ -78,7 +78,24 @@ import {
 } from '../services/programGrants';
 import { exportCsv, readAllHistory } from '../services/programGrantsHistory';
 import { csvResponse, stamp } from '../services/csv';
-import { decisionStatement, planProgramPricing, validatePricingBody } from '../services/programPricing';
+import { decisionStatement, planProgramPricing, validatePricingBody, type ProgramPricingPlan } from '../services/programPricing';
+
+/**
+ * D5020 (#5020) — a program pricing decision reaches the admin audit log too, not only the licence history, so
+ * HQ's governance feed lists who priced which program, from which recommendation, and why. Written after the
+ * grant's batch committed, so a lost write records nothing.
+ */
+async function auditProgramPricing(env: Env, admin: { id: number; email?: string | null }, a: {
+  licenceUid: string; programKey: string; grantUid: string; decisionUid: string; plan: ProgramPricingPlan; reason: string; write: 'grant' | 'terms_changed';
+}) {
+  const p = a.plan;
+  await logAdminAction(env, admin.id, admin.email || '', 'program_pricing_decided', {
+    licence_uid: a.licenceUid, program_key: a.programKey, grant_uid: a.grantUid, decision_uid: a.decisionUid, write: a.write,
+    decision: p.decision, accepted_annual_fee_cents: p.fee_cents, accepted_initial_fee_cents: p.initial_fee_cents, currency: p.currency,
+    recommended_annual_fee_cents: p.recommendation.recommended_annual_fee_cents, licence_snapshot_uid: p.licence_snapshot_uid,
+    model_version: p.model_version, override_reason: p.override_reason, effective_from: p.effective_from, reason: a.reason,
+  });
+}
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -450,6 +467,7 @@ r.post('/licences/:uid/:program', async (c) => {
       }
     }
     const saved = await grantRow(c.env, licence.id, programKey);
+    if (priced.plan) await auditProgramPricing(c.env, admin, { licenceUid: licence.uid, programKey, grantUid, decisionUid: pricingUid, plan: priced.plan, reason, write: 'grant' });
     if (policy.ready) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pricing_decision: priced.plan ? { uid: pricingUid, decision: priced.plan.decision } : null, pushed }, existing ? 200 : 201);
@@ -521,6 +539,7 @@ r.patch('/licences/:uid/:program', async (c) => {
     ]);
     if (run.lost) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
     const saved = await grantRow(c.env, licence.id, programKey);
+    if (priced.plan) await auditProgramPricing(c.env, admin, { licenceUid: licence.uid, programKey, grantUid: String(existing.uid), decisionUid: pricingUid, plan: priced.plan, reason, write: 'terms_changed' });
     if (policyReady) await syncLegalGate(c.env, licence.uid, { actorId: admin.id, reason });
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pricing_decision: priced.plan ? { uid: pricingUid, decision: priced.plan.decision } : null, pushed });
