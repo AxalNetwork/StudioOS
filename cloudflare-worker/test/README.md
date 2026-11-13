@@ -323,3 +323,11 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+
+`package_offers_5024.test.ts` exercises real commercial package acceptance over
+the complete SQLite schema and authenticated routers: frozen prices and
+composition, grant conflicts, atomic rollback and competing decisions, policy
+versions and offer-bound agreements, normal branch delivery failure, and
+read-only historical contract values. Seeded HQ-only/unready items are refused
+without weakening Program Grants; successful cases publish a compatible test
+catalogue version only in the fixture.

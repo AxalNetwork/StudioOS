@@ -21,6 +21,8 @@ import { programOf, termsOf } from './programGrants';
 import { termLine } from './programSchedule';
 import { COUNSEL_REVIEW_SLUGS } from './templateFormat';
 import type { AgreementKind } from './programAgreements';
+import type { PackageOffer } from './packageOffers';
+import { codeAmount } from '../../../frontend/src/lib/money.js';
 
 export const MERGE_NAMESPACES = ['licence', 'package', 'program', 'grant', 'terms', 'signer', 'entity', 'agreement'] as const;
 export type MergeNamespace = typeof MERGE_NAMESPACES[number];
@@ -92,6 +94,7 @@ export type MergeInput = {
   package_key: string | null;
   package_name: string | null;
   package_version: number | null;
+  packageOffer?: PackageOffer | null;
   signer: { name: string | null; email: string | null } | null;
   agreement: { kind: AgreementKind; prepared_on: string };
 };
@@ -129,6 +132,22 @@ export function agreementMergeValues(i: MergeInput): Record<string, string | nul
     out['package.key'] = i.package_key;
     out['package.name'] = i.package_name;
     out['package.version'] = i.package_version == null ? null : String(i.package_version);
+    const offer = i.packageOffer;
+    if (offer?.state === 'accepted') {
+      out['package.offer_uid'] = offer.uid;
+      out['package.key'] = offer.package_key;
+      out['package.name'] = offer.package_name;
+      out['package.version'] = String(offer.package_version);
+      out['package.currency'] = offer.currency;
+      out['package.annual_fee'] = offer.accepted_annual_fee_cents == null ? null : codeAmount(offer.accepted_annual_fee_cents, offer.currency);
+      out['package.accepted_annual_fee_cents'] = offer.accepted_annual_fee_cents == null ? null : String(offer.accepted_annual_fee_cents);
+      out['package.recommended_annual_fee_cents'] = String(offer.recommended_annual_fee_cents);
+      out['package.starts_on'] = offer.starts_on;
+      out['package.ends_on'] = offer.ends_on;
+      out['package.pricing_snapshot_uid'] = offer.country_pricing_snapshot_uid;
+      out['package.programs'] = (JSON.parse(offer.composition_json) as Array<{ program_key: string }>).map((p) => p.program_key).join(', ');
+      out['package.pricing_model_version'] = JSON.parse(offer.recommendation_json).pricing_model_version ?? null;
+    }
   }
   out['agreement.kind'] = i.agreement.kind;
   out['agreement.prepared_on'] = i.agreement.prepared_on;

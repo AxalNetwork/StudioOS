@@ -123,3 +123,4 @@ and citations by number keep working.
 
 | `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
 | `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
+| `D5024-p2.md` | Immutable package offers, atomic Program Grants/legal-policy acceptance, source-bound contracts and normal branch-copy delivery. |
