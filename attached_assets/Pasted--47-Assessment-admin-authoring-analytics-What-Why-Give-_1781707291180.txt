@@ -1,0 +1,29 @@
+#47 - Assessment admin authoring + analytics
+What & Why
+Give admins an authoring + analytics surface over the routes/admin_assessment.ts endpoints from A1, per design/GAMIFIED_ASSESSMENT_SYSTEM.md. Lets admins build and publish games and watch how players move through them.
+Done looks like
+* /admin/assessment → AdminAssessmentPage (admin-guarded): manage games/chapters/items/archetypes/badges (create, edit, version, publish/archive). The item editor exposes mechanic, options_json (with a loads picker over value_dimensions + skill_categories), measures_json, and display_order.
+* Preview a game — plays it through without writing results.
+* Analytics with recharts: completion %, per-chapter drop-off, archetype distribution per track, 8-axis coverage, median latency.
+* An admin can author a new dilemma, publish it, preview it, and see it appear in a fresh session.
+* All new components carry dark: variants. npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* New backend routes — consume the A1 admin endpoints only (add api.js methods only if an A1 endpoint was missed, and only with a matching route).
+* Player UI (A2) and matching/content (A4).
+Steps
+1. Authoring UI — build AdminAssessmentPage CRUD for games/chapters/items/archetypes/badges with version + publish/archive and the item editor (mechanic, loads picker, measures, order).
+2. Preview mode — wire the preview play-through that does not persist results.
+3. Analytics — render the recharts analytics (completion, drop-off, archetype distribution, axis coverage, median latency).
+4. Guarded routing + green gates — admin-guarded lazy route in App.jsx, admin nav entry, dark: variants; run drift + tsc; update both changelogs.
+Relevant files
+* frontend/src/App.jsx
+* frontend/src/sidebarConfig.js
+* frontend/src/lib/api.js
+* frontend/src/components/useToast.js
+* frontend/src/components/useEscapeClose.js
+* frontend/src/components/PageExplainer.jsx
+* scripts/check-dark-mode.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#46 - Assessment player UI

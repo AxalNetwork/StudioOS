@@ -1,0 +1,347 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Card } from '../../../ui';
+import { api } from '../../../lib/api';
+import {
+  NothingYet, Pill, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
+  buttonClass, ghostButtonClass, inputClass, money, zoneError,
+} from '../expertise/kit';
+import { bookingView, formatDateTime, offerLine } from '../advisory/kit';
+import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
+import { partialLine, readEveryPage } from './everyPage';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
+
+/**
+ * Practice · Opportunities — canvas PR1, `/practice/opportunities`.
+ *
+ * WHAT REPLACED WHAT. This route rendered the legacy five-tab Advisory
+ * workspace `embedded`: a pending-request queue plus a slot editor. Both were
+ * honest and neither was the artboard, which asks for "every request that has
+ * ever arrived, what you did about it, and the terms you sent when you said
+ * yes" — a decision LOG, not an inbox.
+ *
+ * NO NEW ENDPOINT. `GET /advisors/me/bookings` already returns every booking
+ * this advisor has ever received with its status, its `cancel_reason`, the
+ * counterparty and the slot window; `GET /advisors/me/services` already returns
+ * the service definitions. The log, the queue, the rates and the expiry
+ * derivation are all compositions of two reads that were already being made.
+ *
+ * EXPIRY IS DERIVED, AND IT IS THE POINT OF THE ARTBOARD. Nothing stores an
+ * "expired" status. A booking still `pending` after its slot has STARTED is one
+ * the advisor never answered, and the artboard's sharpest line is about exactly
+ * that — "a decline preserves the referral, silence spends it". So the state is
+ * computed from two stored facts rather than invented or omitted.
+ *
+ * TWO CANCELLATIONS ARE NOT DECLINES, and counting them as such would make the
+ * accept rate wrong. `routes/advisors.ts` writes `cancel_reason` itself in two
+ * places — `'slot_cancelled'` when the advisor withdraws a whole slot, and
+ * `'capacity_race'` when two people book the last seat. Neither is an answer to
+ * a request. They are shown as withdrawn and excluded from every rate.
+ */
+
+const VIEW_LABEL = {
+  awaiting: 'Awaiting a decision',
+  accepted: 'Accepted',
+  declined: 'Declined',
+  expired: 'Expired unanswered',
+  withdrawn: 'Withdrawn',
+  unrecorded: 'Decision not recorded',
+};
+const VIEW_TONE = {
+  awaiting: 'warn', accepted: 'ok', declined: 'neutral', expired: 'danger', withdrawn: 'neutral', unrecorded: 'neutral',
+};
+const KIND_LABEL = { fixed: 'Fixed', package: 'Package', retainer: 'Retainer' };
+
+export default function OpportunitiesZone() {
+  // 'all', NOT the first chip. The chips narrow the decision LOG below, and
+  // `history` is by definition everything past the point of decision — so
+  // opening on 'awaiting' renders the artboard's headline instrument
+  // ("Decision history · Only here") as an empty table with an explanation
+  // under a queue that already says the same thing. The log is what this zone
+  // is for; the queue above it is unfiltered either way.
+  const [filter, setFilter] = useState('all');
+  const [state, setState] = useState({ loading: true, error: '', bookings: [], services: [], servicesUnavailable: false });
+  const [declining, setDeclining] = useState(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState('');
+
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      // #4714 (D4714): every page, so the rate and counts cover every request.
+      const bookings = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page));
+      // The templates are a SECOND source and must not take the page down with
+      // them: an advisor with no service definitions still has a decision log.
+      const services = await api.listMyAdvisorServices().catch(() => null);
+      setState({
+        loading: false, error: '',
+        bookings: bookings?.items || [],
+        partial: partialLine(bookings),
+        services: services?.items || [],
+        servicesUnavailable: services === null,
+      });
+    } catch (error) {
+      setState({
+        loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'),
+        bookings: [], services: [], servicesUnavailable: true,
+      });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  // `Date.now()` once per render rather than per row, so every row on one paint
+  // is classified against the same instant.
+  const now = Date.now();
+  const rows = useMemo(() => state.bookings.map((b) => {
+    // One adapt per row, then classify from the ADAPTED view — `startsAt`
+    // comes from the shared slot/booking adapter, never re-read here.
+    const view = bookingView(b);
+    return { ...view, raw: b, bucket: classifyBooking(view, now) };
+  }), [state.bookings, now]);
+
+  const counts = useMemo(() => {
+    const out = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0, unrecorded: 0 };
+    for (const r of rows) out[r.bucket] += 1;
+    return out;
+  }, [rows]);
+  // DECIDED EXCLUDES the withdrawn, the never-answered and the unrecorded. An
+  // accept rate over requests the advisor never answered would report silence as
+  // a refusal; and (#4702) a client cancelling a session the advisor had accepted
+  // is still an accept, and a cancelled row from before the answer was recorded
+  // is neither, so it is counted apart rather than as a decline.
+  const decided = counts.accepted + counts.declined;
+  const acceptRate = acceptanceRate(counts);
+  const median = useMemo(() => medianDecision(state.bookings), [state.bookings]);
+
+  // The queue the artboard asks for: "sorted by what expires first, not what
+  // arrived first". A row whose slot is gone cannot expire, so it sorts last.
+  const queue = useMemo(() => rows.filter((r) => r.bucket === 'awaiting').sort((a, b) => {
+    const x = a.startsAt ? Date.parse(a.startsAt) : Infinity;
+    const y = b.startsAt ? Date.parse(b.startsAt) : Infinity;
+    return x - y;
+  }), [rows]);
+  const soon = queue.filter((r) => r.startsAt && Date.parse(r.startsAt) - now < 36e5 * 24).length;
+
+  const history = useMemo(
+    () => rows.filter((r) => r.bucket !== 'awaiting')
+      .sort((a, b) => String(decisionMoment(b.raw)?.at || '').localeCompare(String(decisionMoment(a.raw)?.at || ''))),
+    [rows],
+  );
+  const visible = filter === 'all' ? history : history.filter((r) => r.bucket === filter);
+
+  const decide = async (row, action) => {
+    setBusy(row.raw.id);
+    try {
+      if (action === 'accept') await api.confirmAdvisorBooking(row.raw.id);
+      else await api.cancelAdvisorBooking(row.raw.id, reason.trim() || 'Declined by advisor');
+      setDeclining(null); setReason('');
+      await load();
+    } catch (error) {
+      setState((current) => ({ ...current, error: error?.message || 'That decision could not be recorded.' }));
+    } finally { setBusy(''); }
+  };
+
+  const exportRows = filter === 'awaiting' ? queue : visible;
+  return (
+    <ZoneBody
+      loading={state.loading}
+      error={state.error}
+      isEmpty={!state.loading && !state.error && rows.length === 0}
+      onRetry={load}
+      empty={<NothingYet
+        title="No request has ever arrived"
+        body="This log fills as founders book your published office-hour slots. It is empty because nothing has been requested, not because anything was lost — and with no availability published there is nothing to request."
+        action={<Link to="/practice/sessions#publish-availability" className="text-emerald-700 underline dark:text-emerald-300">Publish availability →</Link>}
+      />}
+    >
+      <ZoneToolbar
+        className="mb-3"
+        role="advisor"
+        filters={advisorZoneFilters('practice/opportunities', { value: filter, onChange: setFilter })}
+        actions={advisorZoneActions('practice/opportunities', {
+          view: {
+            header: ['Requester', 'Decision', 'Decided at', 'Last changed', 'Reason', 'Asked for'],
+            rows: exportRows,
+            cells: (r) => [
+              r.counterpartyName, VIEW_LABEL[r.bucket], r.raw.advisor_decided_at || '', r.raw.updated_at || '',
+              r.raw.cancel_reason, r.raw.topic || r.note,
+            ],
+          },
+        })}
+      />
+
+      {state.partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="opportunities-partial">{state.partial}</p>}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Awaiting you" value={counts.awaiting}
+          note={counts.awaiting === 0 ? 'Nothing is waiting on an answer'
+            : soon === 0 ? 'None reaches its slot within a day'
+              : `${soon} ${soon === 1 ? 'reaches its slot' : 'reach their slots'} within a day`} />
+        <Stat label="Accept rate" value={acceptRate == null ? <Unrecorded>Not recorded</Unrecorded> : `${acceptRate}%`}
+          note={decided === 0 ? 'No request has been answered yet' : `${counts.accepted} of ${decided} answered`} />
+        {/* #4714 (D4714): FROM `advisor_decided_at` (D4702), NEVER FROM
+            `updated_at`, which Sessions moves again on every billing edit.
+            Answers given before that column existed carry no time, so the
+            tile says how many of the answers it covers. */}
+        <Stat label="Median decision" value={median.ms == null ? <Unrecorded>Not recorded</Unrecorded> : spanText(median.ms)}
+          note={median.answered === 0 ? 'No request has been answered yet'
+            : median.counted === 0 ? 'No answer here has its time recorded'
+              : `Over ${median.counted} of ${median.answered} answers with a recorded time`} />
+        <Stat label="Expired unanswered" value={counts.expired}
+          note={counts.expired === 0 ? 'Every request got an answer' : 'Slot passed with no answer given'} />
+      </div>
+
+      <Card padding="md" className="mt-3">
+        <ZoneHeading
+          title="Awaiting a decision"
+          blurb="Sorted by what reaches its slot first, not by what arrived first."
+        />
+        {queue.length === 0
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Nothing is waiting on you. Requests appear here while they are still answerable — once a slot has started, an unanswered request moves to the log below as expired.</p>
+          : <ul className="space-y-2">{queue.map((r) => (
+            <li key={r.raw.id} data-testid={`row-pr1-awaiting-${r.raw.id}`}
+              className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-[13px] font-extrabold tracking-tight">{r.counterpartyName || 'Requester not recorded'}</strong>
+                    <Pill tone="neutral">Founder</Pill>
+                  </div>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">{r.raw.topic || r.note || 'No question was written with the request.'}</p>
+                  {/* D4715: the offer the founder asked for, as recorded on the booking. */}
+                  {r.raw.offer && <p data-testid={`request-offer-${r.raw.id}`} className="mt-1 text-[12px] font-medium">{offerLine(r.raw.offer)}</p>}
+                  <p className="mt-1 text-[11px] text-axal-faint">
+                    Arrived {formatDateTime(r.raw.created_at)} · slot {r.startsAt ? formatDateTime(r.startsAt) : 'not recorded'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" className={buttonClass} disabled={busy === r.raw.id}
+                    onClick={() => decide(r, 'accept')}>Accept</button>
+                  <button type="button" className={ghostButtonClass} disabled={busy === r.raw.id}
+                    onClick={() => { setDeclining(declining === r.raw.id ? null : r.raw.id); setReason(''); }}>Decline</button>
+                </div>
+              </div>
+              {declining === r.raw.id && (
+                <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+                  <label className="block text-[11px] font-extrabold uppercase tracking-[.05em] text-axal-faint">
+                    Why, in your words
+                    <input className={`${inputClass} mt-1`} value={reason} onChange={(e) => setReason(e.target.value)}
+                      placeholder="Wanted implementation, not advice" />
+                  </label>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
+                    The reason is stored on the request and shown in the log below. A decline with a
+                    reason keeps the relationship; saying nothing does not.
+                  </p>
+                  <button type="button" className={`${buttonClass} mt-2`} disabled={busy === r.raw.id}
+                    onClick={() => decide(r, 'decline')}>Record the decline</button>
+                </div>
+              )}
+            </li>
+          ))}</ul>}
+      </Card>
+
+      <Card padding="md" className="mt-3">
+        <ZoneHeading
+          title="Decision history"
+          blurb={`${history.length} request${history.length === 1 ? '' : 's'} past the point of decision${filter === 'all' || filter === 'awaiting' ? '' : ` · showing ${visible.length}`}`}
+        />
+        {visible.length === 0
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">{filter === 'awaiting'
+            ? 'Requests still awaiting a decision are in the queue above. This log holds only what is past the point of decision, which is why selecting that view empties it.'
+            : 'No request sits under this view.'}</p>
+          : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[12px]">
+            <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+              <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">Decided / last changed</th><th className="pb-2">Reason</th>
+            </tr></thead>
+            <tbody>{visible.map((r) => (
+              <tr key={r.raw.id} data-testid={`row-pr1-history-${r.raw.id}`} className="border-t border-axal-hairline dark:border-gray-700">
+                <td className="py-2 pr-3 font-semibold">{r.counterpartyName || 'Requester not recorded'}</td>
+                <td className="py-2 pr-3"><Pill tone={VIEW_TONE[r.bucket]}>{VIEW_LABEL[r.bucket]}</Pill>
+                  {r.raw.status === 'no_show' && <span className="mt-1 block text-[10.5px] text-axal-faint">Accepted, then recorded a no-show</span>}
+                </td>
+                <td className="py-2 pr-3 text-axal-muted">{(() => {
+                  // #4714: "Decided" only from the decision's own time.
+                  const m = decisionMoment(r.raw);
+                  if (!m) return <Unrecorded />;
+                  return <span data-testid={`when-${r.raw.id}`}>{m.kind === 'decided' ? 'Decided ' : 'Last changed '}{formatDateTime(m.at)}</span>;
+                })()}</td>
+                <td className="py-2 text-axal-muted">{
+                  r.bucket === 'expired' ? 'Never answered. The slot passed.'
+                    : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : r.raw.cancelled_by === 'client' ? 'The client withdrew the request.' : 'You withdrew the whole slot.')
+                      : r.bucket === 'unrecorded' ? 'Cancelled before the answer was recorded, so it is not counted as accepted or declined.'
+                        : r.raw.status === 'cancelled' && r.bucket === 'accepted' ? (r.raw.cancelled_by === 'client' ? 'Accepted, then the client cancelled.' : 'Accepted, then cancelled.')
+                          : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
+                }</td>
+              </tr>
+            ))}</tbody>
+          </table></div>}
+      </Card>
+
+      <Card padding="md" className="mt-3">
+        <ZoneHeading
+          title="Terms templates"
+          blurb="Your stored service definitions — what you offer, and on what terms."
+        />
+        {state.servicesUnavailable
+          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Your service definitions could not be read. That is not a claim that you have none.</p>
+          : state.services.length === 0
+            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No service is defined yet. Expertise &rsaquo; Services is where they are written, and they appear here once they are.</p>
+            : <ul className="space-y-2">{state.services.map((s) => (
+              <li key={s.uid || s.id} data-testid={`row-pr1-template-${s.uid || s.id}`}
+                className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-[12.5px] font-extrabold tracking-tight">{s.title}</strong>
+                  <Pill tone="neutral">{KIND_LABEL[s.kind] || s.kind}</Pill>
+                  <span className="ml-auto text-[12px] font-semibold tabular-nums">{s.price_cents == null ? <Unrecorded>Price not recorded</Unrecorded> : money(s.price_cents, s.currency)}</span>
+                </div>
+                <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">{s.scope || 'No scope is written for this service.'}</p>
+                {s.duration_note && <p className="mt-1 text-[11px] text-axal-faint">{s.duration_note}</p>}
+              </li>
+            ))}</ul>}
+      </Card>
+
+      {/* The artboard's band, "Proposal · engagement". It drafts the terms; it
+          does not send them — see the limits below. */}
+      <ZoneDraft
+        surface="practice/opportunities"
+        railOption="draft:terms"
+        label="Proposal · engagement"
+        accept="Accept draft"
+        run="Draft the terms"
+        foot="Drafted from the request and your own stored services. Nothing is sent."
+        empty="A set of terms for a waiting request, written against one of your stored services — the scope you already wrote, the price you already set, and what the request actually asked for."
+        nothingToDraft="No request is waiting on a decision, so there are no terms to draft."
+      />
+
+      <StatedLimit title="What this log cannot say">
+        <p>
+          <strong>Every requester is a founder.</strong> Only founders can book you today; an investor
+          buying an expert call is not a booking Axal takes yet. The kind is shown rather than hidden,
+          because it is the only kind there is.
+        </p>
+        <p className="mt-2">
+          <strong>Nothing records where a request came from.</strong> A request does not carry a
+          referral or a cohort, so this log cannot say who sent it. Accepting also attaches no terms: <em>Accept</em> confirms the booking, and the
+          template you would have sent stays a template.
+        </p>
+        <p className="mt-2">
+          <strong>A template carries no usage count.</strong> No booking records which service it was
+          answered with, so there is nothing to count. Times are the slot&rsquo;s, not the
+          request&rsquo;s: a request has no deadline of its own, so it expires when its slot starts.
+        </p>
+      </StatedLimit>
+    </ZoneBody>
+  );
+}
+
+function Stat({ label, value, note }) {
+  return (
+    <Card padding="md">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
+      <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">{value}</div>
+      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
+    </Card>
+  );
+}

@@ -1,0 +1,517 @@
+# frontend/src/lib/api — one file per new API domain
+
+D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articles/:id/assist…`, `/images…`): a quote and a run per option, each leaving a proposal; the image quote, generate and discard; and the cover from one of the article's images. Only `coverFromImage` writes the article (its cover).
+
+D1503: `deckElementModels.js` is the client for a model per grid element (`GET`/`PUT /api/decks/:id/element-models`). `read` returns each element's suggested models, its `more` list and its pick. `pick` stores a pick for the deck or for the caller. It keeps no copy of the routes; the Worker answers every model and default.
+
+D1549: `deckModelPresets.js` reads and sets a deck's preset (`GET`/`PUT /api/decks/:id/model-presets`) and answers the groups HQ locked; `adminDeckModels.js` reads and sets HQ's org default and lock per element group (`GET`/`PUT /api/admin/ai/deck-models`). Neither keeps a model list.
+
+D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
+
+D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
+
+
+D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
+`sendProgramReport()` action, with no caller-supplied counts.
+
+`../api.js` is the SPA's client for the Worker. It is also the file most likely
+to conflict: on `main` from 2 August to 3 October 2026 it changed in 113 of
+624 commits, because every new client method landed at the bottom of it. From
+D527 on, a **new** API domain gets its own module here instead.
+
+Existing methods stay in `api.js`. 147 tests and scripts read that file by
+path, so moving code out of it is a separate decision, not a side effect of
+adding a domain.
+
+## Files
+
+Every client module in this folder, one row each. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
+
+## Adding a domain
+
+1. Create one module here for the domain, named in camelCase, as
+   `communityTasks.js` is. Export the client object the way `api.js` does
+   today, and call the Worker through `request` from `api.js`:
+
+   ```js
+   import { request } from '../api.js';
+
+   export const communityTasksApi = {
+     list: () => request('/community-tasks'),
+   };
+   ```
+
+   Call `request` only inside method bodies, never at the top level of the
+   module: `api.js` re-exports this file (through the generated index), so
+   the two import each other, and a top-level call would run before `request`
+   is defined.
+
+2. Nothing else. `node scripts/build-api-index.mjs` writes
+   `../apiModules.generated.js`, one `export * from './api/<name>.js';` line
+   per file in this folder, alphabetical, between `// api-modules:begin` and
+   `// api-modules:end`. `api.js` re-exports that file with one line that
+   never changes, so **you do not edit `api.js`** (#4105). The index is
+   gitignored and never committed (D5612): `scripts/build-generated.mjs`
+   writes it before every build, typecheck and test, so a module added next
+   to yours on another branch never conflicts with it.
+
+   It is a generated file and not a Vite `import.meta.glob` because the
+   modules are re-exported by name (`import { verdictApi } from
+   '../lib/api'`) and ES named exports must be static; a plain file also runs
+   unchanged in the node tests.
+
+3. Pick export names that `api.js` does not already use. With `export *`, a
+   name `api.js` declares itself wins and the module's export is silently
+   hidden.
+
+## What checks it
+
+`scripts/check-api-drift.mjs` (run by `npm run test:drift`) reads `api.js` and
+every module here. A `request()` in a module must match a mounted Worker
+route exactly as one in `api.js` must, and the check fails if the generated
+index does not name exactly the files in this folder, one well-formed line
+each, in alphabetical order, or is not byte-for-byte what
+`build-api-index.mjs` writes, or if `api.js` stops re-exporting it (or lists
+a module by hand again). The rules themselves live in
+`scripts/lib/apiModules.mjs` and are tested by
+`scripts/lib/apiModules.test.mjs`. The Worker's own drift tests
+(`cloudflare-worker/test/api_drift.test.*`) read this folder too.
+
+D647: `contracts.js` calls the mounted admin_contracts publication, guided
+preview/send, provider, counted picker, recorded agreement/stat, history and
+signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
+through the shared request client; callers create and revoke temporary blob URLs.
+D711 (#1776) adds `files` (an envelope's recorded files), `renderPaper` (the
+template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
+`paper_sha256`).
+D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
+publication), `push()` (the recorded publications to every branch, publishing
+nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
+`thumbnailBlob(slug, version)` and `outsideThumbnailBlob(key)`: page 1 as a PNG,
+`{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
+`preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
+privately for a day.
+D758 (#1864) adds `generated()` (the documents the platform builds in code, each
+with the library rows it reads and its `thumbnail_version`) and
+`generatedThumbnailBlob(key, version)`, its page 1 as a specimen PNG, binary like
+`thumbnailBlob`, with `?v=<thumbnail_version>` so a new library body draws a new image.
+D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
+`POST /templates/render.pdf` as `{ blob, renderer }`: a body over
+`RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
+sends `request()`'s auth, CSRF and company headers through `rawRequestHeaders`.
+
+D752 (#1891): `mercuryAttestations.js` calls `/api/mercury/attestations`, an
+investor's own proof-of-funds statements: `list`, `targets` (no bank read),
+`accounts` (account ids for this request only, never stored), `share` and
+`revoke`. No call returns a balance.
+
+D840 (#2349): `mercuryInvestor.js` calls `/api/mercury/investor`, an
+investor's own Mercury feeding their sections: `capacity` (theirs alone),
+`sync` per section, `proposals`, `accept` and `dismiss`, `reporting` (a fund
+they are GP of) and `ledgerMap`. A proposal writes nothing until `accept`.
+`statementPdfBlob(uid)` reads an attached statement's PDF as a Blob, outside the
+typed drift surface; only its owner can read it.
+
+D752 (#1890): `adminCapitalAttestations.js` reads an investor's shared proof of
+funds for Axal's admins on HQ: `forTarget(purpose, targetId)`, `forDeal(dealId)`
+and `forFund(fundId)`. Each read is audited before it answers and counts as a
+view on the investor's own list.
+
+D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
+and the connectors in them. D701 (#1663) adds `conversationsMine`
+(`GET /api/eadwyn/conversations/mine`): the caller's rail conversations and
+their one profiling conversation, for the Conversations list on Studio's phone
+page.
+
+D699: `companySheet.js` records the signed-in member's last opened company cycle through `PUT /api/company/visits`.
+
+D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,
+one module's card and records, the Lab market page's three stored checks, and
+the manual writes for migration 440's records. Every call names the project
+with `?project=`.
+
+D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
+and `/modules/:slug`). `cycleWrites.js` also exposes D1144’s venture-scoped `raise.pmfHistory` read and passes the explicit `pmf: true` Re-score flag. It is the write table behind their Add and Edit forms,
+a factory over `request` so the contract test can run it against the real Worker
+routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
+`formOptions(cycle, projectId, slug, query?)` reads a module's form choices from
+D690's `GET /api/cycles/:cycle/modules/:slug/form-options?project=N` for every
+cycle, `query` (a search's `{ q }`) after `project` (D695 decision 16); it sends
+only a known cycle and a module slug's charset.
+Its `validate` group (D695, #1656 PR 2b) holds Validate's five Adds and their
+PATCHes, `/api/cycles/validate/{themes,segments,competitors,demand-signals,hypotheses}`
+with `?project=N`. The forms write through it, not through `cycleValidate.js`,
+whose segment, demand-signal and competitor-mention adds now have no caller.
+Its `build` group (PR 3b) adds Build's canvas Adds and Edits over #1792's routes
+(`features`, `must-haves`, `roadmap`, `founders`, each with `?project=N`;
+`founder` and `founderUpdate` pass `inlinePaywall`, so the dialog shows the
+cap table's plan refusal itself), and `recordAction` is the one write of a
+record's own action, which `cyclesApi.recordAction` calls and Add filing's
+Proof sends as `FormData`.
+
+D696 (#1658): `cyclesApi.record`, `recordActivity` and `recordAction` call
+D690’s mounted `/api/cycles/:cycle/modules/:slug/records/:id`, its `/activity`
+read and `/actions/:key` POST. All carry `?project=`, activity carries `page`,
+path segments are encoded, and an unwired cycle is refused before a request.
+JSON action bodies are serialized; multipart `FormData` is passed unchanged.
+
+D693 (#1704): `verdict.js` holds `verdictApi.record`, Record a decision's
+`POST /api/cycles/validate/decisions?project=N`. The Decisions table is the
+module read and commitments go through the record's action route, so it holds
+nothing else.
+
+D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.
+
+D684 (#1578): `channels.js` calls `/api/channels` (a member's business
+Telegram and WhatsApp: availability, link, connect, disconnect, test, and the
+conversation threads with assign, ignore and reply) and the interview meeting
+routes under `/api/founder/validate/interviews/:id/meetings` (Zoom and Google
+Meet). Since D757 (#1926) it also reads the Calendar status
+(`GET /api/calendar/google/status`, for `meet_transcripts`) and asks Google for
+the Meet transcript permission (`allowMeetTranscripts`, `POST
+/api/calendar/google/meet-transcripts/connect`), going only to Google's consent
+URL. Every path is written out in full so the drift check reads each one.
+D756 (#1895): its `channelsAdminApi` also calls `/api/admin/channels/telegram/webhook`
+(the interview bot's health, and registering its webhook), for Super Admins.
+
+D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
+router's model table as the public Intelligence page shows it: one row per job,
+`{ feature, model, name, provider }`, with no session.
+
+D698 (#1660): `railPrefs.js` reads and writes the Eadwyn AI rail's preferences
+on the Worker (`/api/ai/rail-preferences`, migration 465): the assist mode per
+rail section and the model picked per section and router task, for the caller
+only. A null clears a row. localStorage stays the cache, so a mode or a pick
+set on a laptop is in place on a phone after a reload.
+D764 (#2089) adds `page`, `setPagePick` and `setPageMode` to `railPrefs.js`:
+`GET /api/ai/rail` reads a page's models from the Worker's matrix, with the
+member's pick and switch for that page, and the two `PUT`s write them. The
+page key is the canvas's, in the query or the body.
+
+D1080 (#2945): `mcpOauth.js` starts Sign in with <Provider> for a connector
+whose MCP server signs members in (`GET /api/integrations/mcp/<key>/start`,
+`cloudflare-worker/src/routes/connector_mcp_oauth.ts`); Mercury keeps
+`mercuryPersonal.js`'s own start.
+
+D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
+(`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
+Mercury connection and the uses their role holds, each with `available` and a
+`reason`. The member's sheet draws its "What StudioOS uses it for" group from
+it. #1778's PR C adds the match and import calls to the same file.
+
+D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
+the four entity connections (each with its accounts by ending), the Super
+Admin's connect with `confirm_read_only: true` and disconnect with a reason,
+sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
+`markNotOurs` and `withdrawNotOurs`. D717 (#1856): `transactions` takes
+`direction` (`credit` or `debit`). D1183 adds `balances({ account, range })`
+(default 90d) and `monthly({ entity })` for the stored cash charts, each a
+mounted GET audited before figures are read. Every read is audited by the Worker;
+nothing here moves money. #1779's console imports it.
+
+D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
+`GET /api/revenue/projects/:id/mercury-credits` and `POST
+/api/revenue/projects/:id/entries/import-mercury` (a founder's picked credits,
+imported as `supported` revenue with Mercury's amount and date), and
+`/api/mercury/personal/matches` (a partner's invoice, payout and settlement
+matches: list, confirm, withdraw with a reason). A candidate's counterparty name
+is shown to its owner only and never stored. `partnerSettlements.js` calls
+`GET /api/partner-settlements` (the member's own issued, matched and void rows)
+and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
+the Super Admin's issue and void). Nothing here moves money.
+
+D928 (#2724): `partnerDealReads.js` calls the four reads in
+`cloudflare-worker/src/routes/admin_partner_deal_reads.ts`: `GET
+/api/admin/partners/deals/:id` (one deal, in full), `GET
+/api/admin/partners/deals/:id/terminate-preview`, `GET
+/api/admin/partners/redemptions` (every redemption across deals, filtered,
+sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
+nothing here writes.
+
+D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
+(HQ's list, one licence with its history, and the write, which takes the money
+bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
+own read). A licence HQ has not set reads "Not recorded", never "every type".
+
+D1052 (#2903): `billingAlerts.js` calls `GET /api/billing/alerts` (the
+member's open billing alerts: a failed renewal, a bank's confirmation, a
+disputed plan payment; no card data) and `POST /api/billing/alerts/:id/confirm`,
+which fetches the client secret from Stripe only when Confirm is pressed.
+
+D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
+(`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
+Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
+
+D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
+Admin's list, add, label and purposes, retire, and a recorded reveal of one
+number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
+D1184 adds per-account `mercury`, `notice_preview` and `notice_preview_reason`
+to the list, and `addFromMercury(uid, body)` on the existing POST, where the
+Worker checks the source entity, ending and kind. No new endpoint.
+A reveal's answer is held in the caller's component state only, never stored.
+D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
+`/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
+page, per and the returned snapshot token. No history screen is added in part 1.
+
+D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
+and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
+existing `/api/settings/privacy` with `?project=` for the venture's investor
+toggle. Every read is the caller's own, or a venture the caller can write.
+
+D712 (#1777): `fundReporting.js` calls `/api/fund-reporting`, the fund
+reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
+corrects and exports, and a Super Admin issues. A draft's figures come only
+from `read` and `exportCsv`, which the Worker records before it answers; the
+list carries none.
+
+D716 (#1860): `fundNotices.js` calls the LP's own `GET /api/fund-notices/mine`
+(the list, with `call_number`, `due_date`, `superseded` and
+`instructions_changed`) and `GET /api/fund-notices/mine/:uid` (one notice's
+frozen, masked figures). `minePdfBlob` reads `GET /api/fund-notices/mine/:uid/pdf`
+as a Blob, outside the typed drift surface, only when the LP taps PDF. Nothing
+here returns a full account number.
+
+D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
+map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on
+the Contracts desk. HQ admins only. The Super Admin's answer lists each entity's
+accounts masked to the last four; a plain Admin's carries no account at all.
+
+D714 (#1779): `fundAdmin.js` reads the act table (`/api/fund-admin/access`) and
+a distribution's preview (`POST /api/funds/:id/distributions/preview`), which
+writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
+fee state, terms and their confirmation, admissions, net invested, offsets, a
+period's preview, issue and funding call, and one LP's statement. The Worker
+decides each act: confirm and issue are the Super Admin's.
+
+D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
+at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
+(`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
+the last view's digest). Every field id comes from the Worker's last view; the
+page builds none, and stores nothing in the browser. D759 (#1858) adds `sign`
+(`POST /mine/sign`), which sends the submitted booklet for the applicant's
+signature and answers the signing token; the page opens `/esign/<token>` with it
+at once and keeps it nowhere else.
+
+D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
+deployment opens Google's own window on /login, and the client to open it for;
+`{ canary: true }` adds `?canary=1`, which /login sends from `?google_window=1`)
+and `POST /api/auth/google/popup` (the code that window returned, with the
+attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
+`X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
+other origin can send. The redirect fallback stays `api.googleStartUrl`.
+
+D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, its panel's and Build's 'Connect a tool' reads and writes. D753 (#1878) adds `page(key)` (`GET /api/connectors/directory/:key`), one connector's page.
+
+D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and-packs`, which needs no session: every plan with its price from the catalog mirror and its AI allowance, and the token packs on sale. `/plans-and-pricing` renders it through `../plansPricing.js`.
+
+D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
+notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
+one: accept, edit or discard. Deciding writes no record; the page's own Save does.
+
+D1301 (#3397): `adminAccounts.js` reads Admin › Accounts' overview
+(`GET /admin/accounts/overview`), counted as Insights counts through the
+Worker's shared `cloudflare-worker/src/services/accountCounts.ts`.
+
+D893 (#2660): `insights.js` reads Admin › Insights' one read,
+`insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every
+block of the canvas as counts, filtered by range, profile and country, with the
+period before (`compare`) and one profile's lightbox (`group`). For #2661,
+`insightsApi.insightsExport(body)` (`POST /api/admin/insights/export`) asks for
+the same figures as a logged, counts-only CSV or PDF, and answers with a signed
+24-hour link.
+
+D931 (#2715): `community.js` reads Admin › Community's counts read,
+`communityApi.overview({ weeks })` (`GET /api/admin/community/overview`, any
+admin, `weeks` 4, 12 or 52): the queue's ages, the job board, who takes part,
+circles, the roster and wellbeing, each block answering alone. Its events parts
+come from the Events desk's overview (D918).
+
+D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
+interview channels' Worker secrets from HQ › Integration keys › Channels
+(`/api/admin/integration-keys/channels/:channel`, Super Admin behind the write
+bar). The list comes with `GET /admin/integration-keys`; a value is never read
+back, and a generated one is returned once.
+
+D1215 (#3212): `closings.js` reads and writes closings as a record
+(`/api/closings`, and the admin desk at `/api/admin/closings`): open a closing
+for a deal, its lines and their capital route, the evidence that money moved,
+the founder's cap-table decision and the close. An investor reads their own
+lines and the round's total. Nothing in it moves money.
+
+D1217 (#3214): `companyReceivingAccounts.js` reads the company's receiving
+account (always masked), saves it (the venture's founder), and reveals it once
+for an investor with a signed line, logged without the number
+(`/api/closings/company-receiving-accounts/:projectId`). No page calls it yet.
+
+D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
+`api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
+key, provider, connector, tool or model, or by day and a second way) and `events`
+(`GET /api/developer/usage/events`, the request history, 100 a page), and
+`keys` (`GET /api/developer/usage/keys`, each key's cap, this month's charge
+and the 80% / 100% flag). A NULL charge means not metered.
+
+D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
+(`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
+reason and a recent step-up). The Administrator reads the same terms on
+`/api/licence/mine`. D800 and D801 draw them.
+
+D984 (#2775): `licencePrograms.js` is the Administrator's own programs
+(`GET /api/licence/mine/programs`): the nine programs with HQ's grant and its
+terms, read from HQ's store on HQ and from HQ's dated copy on a branch. An
+account no licence binds reads "On HQ-held accounts, HQ runs every program."
+D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
+`/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
+the caller's own signing link), the statements (with each period's usage
+report and the masked payment instructions), the "Needs you" list, a branch's
+"Send now" usage push, and a statement dispute. `contractPdfBlob` reads
+`GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
+surface. Nothing here returns a full account number.
+
+D802 (#2238): `licenceFeeInvoices.js` is HQ's annual licence-fee invoices on
+`/api/admin/licences/:uid/fee-invoices`: list, issue this licence year's,
+record the total received or void, and the PDF (`pdfBlob`, and the
+Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
+drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
+as `fee_invoices`.
+
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
+D976 (#2762): `network.js` is the advisor and partner network's admin side on
+`/api/admin/network/people/:userId`: one person's standing (stage, pause,
+directory, ratings, sessions, engagement counts per lane, payout readiness, a
+studio agreement on file and Lab host status), Pause and Resume, each with a
+required reason, and the advisor directory switch. No client name and no rating
+comment is on the wire.
+D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
+CSV (with a reason) and the webhook's deliveries by hour. D1129 adds the
+submitted `q` filter on the log/CSV and `changeLogAdmins()` for every admin's
+id/name, independent of the log page. Super Admin only.
+
+D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
+`/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
+totals over the filtered set and the filters' options), the counts for the tiles
+and the weekly series, and one profile by its reference (`pp_…`), never by
+email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
+that read them.
+
+D1150: `dealContext.js` reads the investor’s `/deals/:id/stage`, `/whats-new`
+and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
+the author edits and deletes, firm colleagues read, and staff have no bypass.
+Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
+
+D1242 (#3255): `dealFlow.js` reads Deal flow's Studio lens, `/deals/studio`:
+every round for an admin or an Operating Partner, with its lead, its
+investors (invited, interested, committed), its source, who set a Not raising
+round so, and whether the caller may move it.
+
+D1249 (#3264): `ddDesk.js` is Due Diligence's desk on `/api/dd`: the list
+with its server-side search, filters, sort and pages, the overview's figures,
+My reviews, the subject and people searches (an email for an Admin only), the
+team's observer, conflicts and remove, widen, and HQ's versioned templates. No
+page reads it yet; parts 6–8 (#3265–#3267) draw it.
+
+D1246 (#3261): `ddLifecycle.js` is a Due Diligence case's lifecycle on
+`/api/dd/cases/:uid`: the deal context and archive (`PATCH`), the decision, the
+deal team's memo, the reports list and a report's re-download behind step-up,
+and Send to IC. No page reads it yet; the case tabs are part 7 (#3266).
+
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
+
+D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
+(`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
+text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
+with a recent step-up and a reason). Each list row and profile carries its
+agreement's envelope state on `envelope`.
+
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
+
+D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
+`/api/personas/segments`: every profile, one with its history, the needs read
+(members, needs met and gaps, offers by kind, links' reach), and the Super
+Admin's write, which names the version it read. Counts leave admins out and
+come back suppressed from 1 to 4.
+
+`googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
+
+D1325 (#3486): `fills.js` (`fillsApi.sheet`) reads `GET /api/fills/sheet`: a form's fields with their values, marks, waiting values and triggers, its sources and Eadwyn's quote. No model runs.
+
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build. D1071 (#2941): `word` (one metered run, with the press's rail headers), `wording`, `keepWording` and `discardWording`; `edit(uid, payload, wording)` keeps an item's wording as its Save.
+
+D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
+published blocks, the change log, the matrix and the subprocessor subscribe, no session),
+`trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
+auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
+private Security reports, and HQ's read of them).
+
+D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, every
+licence's program decisions a page at a time) and downloads the grid's CSV
+(`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.
+
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
+
+D1135's `companyActions.js` holds self-service company leave and venture restore.
+
+D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1168 (#3081): `adminStorage.js` exposes `adminStorageApi.backfillSizes(limit, rescan)`
+to the mounted HQ Super Admin POST `/api/admin/platform/storage/backfill-sizes`.
+The operator sends a bounded batch size and optional rescan flag; discovery cursors stay server-side. A rescan restarts completed discovery and resumes an active scan.
+
+D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
+
+D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
+
+D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
+
+D1512 (#3764): `deckAreas.js` holds Generate into areas: `deckAreasApi.quote(deckId, body)`, `start(deckId, body, key)` (with an Idempotency-Key, so a retried press is the same run), `proposals(deckId, batchUid)`, `accept(deckId, cardUid, areaId, proposalUid, variant)`, `discard(deckId, proposalUid)`, and `generate(deckId, body, { onProgress })`, which starts the run and reads its proposals until every area has settled. The client never sends a model. `deckV2Adapter.js` reads it through `areasQuote` and `areasGenerate`.
+
+D1521 (#3773): `deckInstruct.js` holds an instruction on the grid selection: `deckInstructApi.quote(deckId, body)` and `run(deckId, body, key)` (with an Idempotency-Key, so a retried press is the same run). The proposals it makes are read, accepted and discarded through `deckAreasApi`. `deckV2Adapter.js` reads it through `instruct`.
+D1516 (#3768): `deckNarrative.js` holds New deck from the narrative: `deckNarrativeApi.outline(body)` and `build(body, key)`, with an Idempotency-Key so a retried press is the same build. The build's run is followed through `deckBatchesApi`, and its proposals through `deckAreasApi` with the build's `deck_id`. `deckV2Adapter.js` reads it through `narrativeOutline`.
+
+D1502 part 2 (#3753): `deckBatches.js` holds a deck generation run: `deckBatchesApi.batch(uid)` (`GET /decks/areas/batches/:uid`), `cancel(uid)` (`POST …/cancel`) and `events(uid, onEvent, { signal })`, which reads the run's Server-Sent Events with `fetch` (EventSource cannot send the Authorization header); `parseSse` splits the stream. `deckV2Adapter.js` reads it through `batch` and `cancelBatch`.
+D1577 (#3824): `deckCoedit.js` holds co-editing: `deckCoeditApi.saveArea(deckId, uid, area, base, next)` (`PATCH /decks/:id/cards/:uid/areas/:area`, 409 `area_conflict` with the server's copy), `restoreCard(versionId, cardUid)` (`POST /decks/:id/restore-card`, called by `VersionCompare.jsx`) and `presence(deckId)` (`GET /decks/:id/presence`, read through `deckV2Adapter.presence`; 503 `presence_off` on a Worker without the room's binding).
+
+D1552 (#3799): `deckCritique.js` holds Fix with critique: `deckCritiqueApi.quote(deckId)` (`POST /decks/:id/critique/quote`, the hold before anything runs) and `run(deckId, { vision })` (`POST /decks/:id/critique`), both read through `deckV2Adapter.critique`.
+
+D1581 (#3828): `deckRemote.js` holds the phone remote for Present: `deckRemoteApi.pair(deckId)`, `state(deckId)`, `unpair(deckId)`, `join(code)` and `step(deckId, remoteId, step)`. Present listens on `/api/decks/:id/remote/ws` through `useWebSocket`. Nothing calls `pair` or `join` yet: the pairing screen and the phone remote wait on design (#3828).
+
+D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
+
+D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
+
+D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.
+
+D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `.status(ref)`. Keep one 8–64-character nonce per open sheet and reuse it on retries; the client secret belongs only in the in-page Stripe form.
+| File | Purpose |
+|---|---|
+| `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |
+| --- | --- |
+| `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
+| `mail.js` | Email (#3547): the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send (D1340); Eadwyn's drafts — the context pack, live update blocks, the estimate, drafts and revisions (D1341). |
+| `relationships.js` | D1356: who on my teams knows a person — sharing per team, who-knows, and introduction requests. |
+| `deckCardStatus.js` | D1579: a deck version's card status and assignees, filtered by status and assignee, with the cards not Done and who can be assigned, under `/api/decks/:id/card-status`. Reads only: status and assignee are saved with the version. |
+| `deckRehearsals.js` | D1580 F1: rehearse a deck version — quote, run (the recording as a form), list, read and keep-audio under `/api/decks/:id/rehearsals`. |
+| `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
+| `adminFeatureFlags.js` | D4155 K2 (#4189): D1509's feature flags under `/api/admin/feature-flags`: `list`, and `set` (`PUT`), which takes a reason of 10 to 500 characters and refuses a missing one before anything is sent. |
+| `hqDeckStageNorms.js` | D4155 K5 (#4192): HQ's stage norms under `/api/admin/deck-stage-norms` (list, add, edit, retire, each write with a reason) and a venture's own norms read-only (`projectNorms`). |
+| `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
+| `deckBrandKit.js` | D1562 (#3809): the deck brand kit's writer — `save` (`PUT /api/decks/brand-kit`, the whole kit: fonts `{ display, body }`, palette roles, image style, reference uids and a logo uid) and `applyBrand` (`POST /api/decks/:id/apply-brand`, one new version). The read stays `deckEditorApi.brandKit`. |
+| `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |
+| `deckPublish.js` | D1564: a share link published as a web page — read and save its publish state under `/api/decks/:id/investor-links/:shareId/publish` (ShareDialog's `PublishPanel` only), and the reader's email gate, `POST /api/decks/share/:token/email`. |
+| `deckUpdateReuse.js` | D1584 (#3831): investor-update reuse — `deriveUpdate` (`GET /api/decks/:id/derive-update`, the latest sent update's figures as a proposal for the version's bound tiles) and `changesSince` (`GET /api/decks/:id/changes-since`, pd35's "Changes since vN"). |
+| `deckVentureElements.js` | D1543: the venture-record elements (team grid and bios, use of funds, round terms, cap-table totals, logo wall, interview quote) under `/api/decks/:id/venture-elements[/:element]`, each from records with its gate refusal, and the logos store with its permission flag under `/api/decks/:id/logos`. |
+| `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
+| `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |
+
+`growAds.js` (D4490) reads the mounted Ads endpoint; campaign budget and creative writes remain in `cycleWrites.js`.

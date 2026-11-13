@@ -1,0 +1,460 @@
+/** D571/D573: pure derivations for Ops A1–A5. Nullable migration-394 facts stay unknown; receipts, manual work status and included pricing are distinct. */
+
+import { parseMinor } from '../../../lib/money.js';
+import { centsToInput } from '../../../lib/moneyInput.js';
+
+// ───────────────────────────── A1 · Deliverables ─────────────────────────────
+
+/** Planned/in-progress are manual facts; delivery and acceptance come from version receipts. */
+export const DELIVERABLE_FLOW = Object.freeze([
+  { key: 'planned', label: 'Planned', canvas: ['Planned'] },
+  { key: 'in_progress', label: 'In progress', canvas: ['In progress'] },
+  { key: 'sent', label: 'Sent', canvas: ['Delivered'] },
+  { key: 'opened', label: 'Opened', canvas: [] },
+  { key: 'accepted', label: 'Accepted', canvas: ['Accepted'] },
+]);
+
+/** Where one work product sits on that flow, or null for a state the route never sends. */
+export function deliverableStep(item) {
+  // The latest version's sign-off, not any version's: a newer version sent
+  // after an old one was signed off has not itself been accepted.
+  if (item?.latest_version?.signed_off_at) return 'accepted';
+  if (item?.latest_version?.opened_at) return 'opened';
+  if (item?.latest_version?.sent_at) return 'sent';
+  if (['planned', 'in_progress'].includes(item?.manual_status)) return item.manual_status;
+  return item?.latest_version ? null : ['sent', 'opened'].includes(item?.state) ? item.state : null;
+}
+
+/**
+ * Work products grouped by client, client names in order, rows in the order
+ * the route sent them (newest first).
+ *
+ * Grouped on the exact name, as the route's own `clients` total counts them,
+ * so the group count and the tile beside it cannot disagree. A blank name is
+ * its own group, last.
+ */
+export function groupByClient(items) {
+  const groups = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!item) continue;
+    const client = String(item.client_name ?? '').trim();
+    if (!groups.has(client)) groups.set(client, []);
+    groups.get(client).push(item);
+  }
+  return [...groups.entries()]
+    .map(([client, rows]) => ({ client, rows }))
+    .sort((a, b) => (a.client === '') - (b.client === '') || a.client.localeCompare(b.client));
+}
+
+/** A web address, or null. Anything else typed into a link field is never an href. */
+export function safeHref(url) {
+  const s = String(url ?? '').trim();
+  return /^https?:\/\/\S+$/i.test(s) ? s : null;
+}
+
+/** An https web address, or null: the one shape a version's content link may take (the worker refuses anything else). */
+export function httpsHref(url) {
+  const s = safeHref(url);
+  return s && /^https:\/\//i.test(s) ? s : null;
+}
+
+/** A link's host, for a cell too narrow for the whole address. */
+export function linkHost(url) {
+  try { return new URL(url).host || null; } catch { return null; }
+}
+
+/**
+ * The attachment the canvas draws: the newest version that carries a link.
+ *
+ * A link travels with a version (migration 239), and a version is never
+ * edited after it is recorded, so the attachment of a work product is the
+ * newest version's link where it has one, and an older version's otherwise.
+ */
+export function attachmentOf(item) {
+  const versions = (Array.isArray(item?.versions) ? item.versions : [])
+    .filter(Boolean)
+    .slice()
+    .sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+  const v = versions.find((x) => typeof x.link_url === 'string' && x.link_url.trim());
+  return v ? { url: v.link_url.trim(), version: v } : null;
+}
+
+/**
+ * The PATCH body for an edit, or the reason it cannot be sent.
+ *
+ * TWO THINGS THE ROUTE DOES QUIETLY, said here instead. A blank title is
+ * swapped back for the stored one without a word (`|| row.title`), so a blank
+ * title is refused before it is sent. And a client name typed beside an
+ * engagement is dropped, because the engagement names the client.
+ *
+ * `confirm` is true when a SENT work product would change engagement. The
+ * client's received list is read through the engagement, so moving one takes
+ * it off one client's list and puts it on another's.
+ */
+export function deliverableEdit(item, draft) {
+  const title = String(draft?.title ?? '').trim();
+  if (!title) return { error: 'A work product needs a title.' };
+  if (title.length > 200) return { error: 'A title is at most 200 characters.' };
+  const raw = draft?.engagement_id;
+  const engagement = raw === '' || raw == null ? null : Number(raw);
+  if (engagement != null && !Number.isInteger(engagement)) return { error: 'Pick an engagement from the list.' };
+  const current = item?.engagement_id ?? null;
+  const body = { title };
+  if (draft?.due_date !== undefined) body.due_date = draft.due_date || null;
+  if (draft?.manual_status !== undefined) body.manual_status = draft.manual_status || null;
+  if (engagement !== current) body.engagement_id = engagement;
+  if (engagement == null) {
+    const client = String(draft?.client_name ?? '').trim();
+    if (!client) return { error: 'Name the client, or pick the engagement it belongs to.' };
+    if (client.length > 200) return { error: 'A client name is at most 200 characters.' };
+    if (client !== item?.client_name) body.client_name = client;
+  }
+  const sent = item?.state === 'sent' || item?.state === 'opened';
+  return { body, confirm: sent && engagement !== current };
+}
+
+/**
+ * The body for the next version of a work product, or the reason it cannot be
+ * recorded. #4712 (D4712): a revision is never empty — it carries the content
+ * (a web link) AND a line saying what changed, the same two things the worker
+ * requires (422 `empty_version`). Older versions are never edited; this only
+ * ever records the next one.
+ */
+export function attachmentBody(draft) {
+  const summary = String(draft?.summary ?? '').trim();
+  if (!summary) return { error: 'Say what changed in this version.' };
+  if (summary.length > 2000) return { error: 'The note is at most 2,000 characters.' };
+  const link = String(draft?.link_url ?? '').trim();
+  if (!httpsHref(link)) return { error: 'Enter a web address that starts with https://' };
+  if (link.length > 2000) return { error: 'A link is at most 2,000 characters.' };
+  return { body: { link_url: link, summary } };
+}
+
+/**
+ * What sending a work product's latest version would send, said before it
+ * goes: the version, its change note and where the content lives. `sendable`
+ * is false when there is nothing to send (no link), which the worker also
+ * refuses (422 `empty_version`).
+ */
+export function sendPreview(item) {
+  const v = item?.latest_version;
+  if (!v) return { sendable: false, line: 'There is no version to send.' };
+  const tag = `v${v.version}`;
+  const link = typeof v.link_url === 'string' ? v.link_url.trim() : '';
+  let host = '';
+  if (link && httpsHref(link)) { try { host = new URL(link).hostname; } catch { host = ''; } }
+  if (!host) return { sendable: false, line: `${tag} has no content to send. Add a version with a link, then send that one.` };
+  const note = String(v.summary ?? '').trim();
+  return { sendable: true, line: `Sends ${tag}${note ? ` — “${note}”` : ''} · opens ${host}` };
+}
+
+// ───────────────────────────── A2 · Session types ─────────────────────────────
+
+/** Four recorded outcomes. Included needs its flag; a legacy zero is still a price. */
+export function priceMode(type) {
+  if (type?.is_free_intro) return 'free';
+  if (type?.is_included) return 'included';
+  const c = type?.price_cents;
+  if (c == null || c === '') return 'unset';
+  const n = Number(c);
+  if (!Number.isFinite(n)) return 'unset';
+  return 'price';
+}
+
+/** The canvas's rule: a type cannot be bookable until a price or "included" is set. */
+export const canBeBookable = (type) => priceMode(type) !== 'unset';
+
+/**
+ * `bookable` | `off` | `unpriced_on`. The third is a stored contradiction: a
+ * type the create route switched on (it always does) before anyone priced it.
+ * It is shown as one rather than hidden, and the only move offered is off.
+ */
+export function bookableState(type) {
+  if (!type?.is_active) return 'off';
+  return canBeBookable(type) ? 'bookable' : 'unpriced_on';
+}
+
+export const PRICE_MODES = Object.freeze([
+  { key: 'price', label: 'A price' },
+  { key: 'included', label: 'Included', hint: 'No separate charge' },
+  { key: 'free', label: 'Free intro' },
+  { key: 'unset', label: 'Not set yet' },
+]);
+
+/** Typed dollars into whole cents: the same rule as `dollarsToCents` in `../expertise/kit`. */
+export function parseAmount(input) {
+  const raw = String(input ?? '').trim().replace(/[$,\s]/g, '');
+  if (!raw) return { cents: null };
+  if (!/^\d+(\.\d{1,2})?$/.test(raw)) return { error: 'Enter an amount like 150 or 150.50' };
+  const amount = parseMinor(raw, 'USD');
+  return amount.ok ? { cents: amount.minor } : { error: amount.message };
+}
+
+/** The editor's starting values for a stored type, or for a new one. */
+export function sessionTypeForm(type) {
+  const mode = type ? priceMode(type) : 'unset';
+  return {
+    name: type?.name || '',
+    duration: type?.duration_minutes == null ? '' : String(type.duration_minutes),
+    mode,
+    amount: mode === 'price' ? centsToInput(type.price_cents) : '',
+    bookable: Boolean(type?.is_active),
+    note: type?.cadence_note || '',
+  };
+}
+
+/** The server honors the requested bookable state on both create and update. */
+export function sessionTypeBody(form) {
+  const name = String(form?.name ?? '').trim();
+  if (!name) return { error: 'A session type needs a name.' };
+  if (name.length > 200) return { error: 'A name is at most 200 characters.' };
+  const length = String(form?.duration ?? '').trim();
+  let duration = null;
+  if (length) {
+    if (!/^\d+$/.test(length) || Number(length) < 1 || Number(length) > 1440) {
+      return { error: 'Length is whole minutes, from 1 to 1440.' };
+    }
+    duration = Number(length);
+  }
+  const mode = form?.mode;
+  let price = null;
+  let free = false;
+  if (mode === 'price') {
+    const parsed = parseAmount(form?.amount);
+    if (parsed.error) return { error: parsed.error };
+    if (parsed.cents == null || parsed.cents < 0) return { error: 'Enter the price, or choose Included.' };
+    price = parsed.cents;
+  } else if (mode === 'included') {
+    price = 0;
+  } else if (mode === 'free') {
+    free = true;
+  } else if (mode !== 'unset') {
+    return { error: 'Choose how this type is priced.' };
+  }
+  const bookable = Boolean(form?.bookable);
+  if (bookable && mode === 'unset') {
+    return { error: 'A type with no price cannot be bookable. Set a price or mark it included first.' };
+  }
+  const note = String(form?.note ?? '').trim();
+  if (note.length > 200) return { error: 'The line under the name is at most 200 characters.' };
+  return {
+    body: {
+      name, duration_minutes: duration, cadence_note: note || null,
+      price_cents: price, is_free_intro: free, is_included: mode === 'included', is_active: bookable,
+    },
+  };
+}
+
+// ───────────────────────────── A3 · Booking links ─────────────────────────────
+
+/** The Worker's own slug rule (`routes/advisors.ts`), checked before the round trip. */
+export const LINK_SLUG = /^[a-z0-9][a-z0-9/-]{1,98}[a-z0-9]$/;
+export const LINK_AUDIENCES = Object.freeze(['public', 'cohort', 'private']);
+export const AUDIENCE_LABEL = Object.freeze({
+  public: 'Public, on your profile',
+  cohort: 'One cohort only',
+  private: 'Unlisted: the link is the only way in',
+});
+
+/** The address as it is shown. Migration 240: "the path segment after /b/". */
+export const bookingLinkAddress = (slug) => `axal.vc/b/${slug}`;
+/** The address as it is copied. */
+export const bookingLinkUrl = (slug) => `https://axal.vc/b/${slug}`;
+
+/** A slug offered from a type's name, which the advisor edits before saving. */
+export function suggestSlug(name) {
+  return String(name ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+}
+
+/** The create body, or the reason it cannot be sent. */
+export function linkBody(form) {
+  const slug = String(form?.slug ?? '').trim();
+  if (!LINK_SLUG.test(slug)) {
+    return { error: 'Use lowercase letters, digits, hyphens and slashes: three characters or more, starting and ending with a letter or digit.' };
+  }
+  const audience = form?.audience || 'public';
+  if (!LINK_AUDIENCES.includes(audience)) return { error: 'Choose who the link is for.' };
+  const cohort = String(form?.cohort_ref ?? '').trim();
+  if (audience === 'cohort' && !cohort) return { error: 'A cohort link needs the cohort it admits.' };
+  if (cohort.length > 100) return { error: 'A cohort name is at most 100 characters.' };
+  const raw = form?.session_type_id;
+  const note = String(form?.note ?? '').trim();
+  if (note.length > 300) return { error: 'A note is at most 300 characters.' };
+  return {
+    body: {
+      slug,
+      session_type_id: raw === '' || raw == null ? null : Number(raw),
+      audience,
+      cohort_ref: audience === 'cohort' ? cohort : null,
+      requires_payout_account: Boolean(form?.requires_payout_account),
+      note: note || null,
+    },
+  };
+}
+
+/**
+ * Each session type with the links that sell it, in the types' order, then
+ * the links whose type is unset or unknown under `type: null`.
+ *
+ * One link per type is the canvas's shape and not a rule the store keeps:
+ * two links may name one type, and both are listed rather than one dropped.
+ */
+export function linksByType(types, links) {
+  const list = Array.isArray(links) ? links.filter(Boolean) : [];
+  const known = new Set();
+  const out = (Array.isArray(types) ? types : []).filter(Boolean).map((type) => {
+    known.add(type.id);
+    return { type, links: list.filter((l) => l.session_type_id === type.id) };
+  });
+  const loose = list.filter((l) => l.session_type_id == null || !known.has(l.session_type_id));
+  if (loose.length) out.push({ type: null, links: loose });
+  return out;
+}
+
+// ───────────────────────────── A4 · Client data access log ─────────────────────────────
+
+/** What the log's `action` column holds (migration 218): two opens, and no other verb. */
+export const ACCESS_ACTION_LABEL = Object.freeze({ open_brief: 'Opened', open_document: 'Opened' });
+
+/**
+ * A SQLite stamp as an instant. `CURRENT_TIMESTAMP` writes `2026-10-06 09:41:00`
+ * in UTC with no zone marker, and `Date.parse` reads that shape as LOCAL time,
+ * which would move every row by the reader's offset.
+ */
+export function stampMs(value) {
+  if (!value) return null;
+  let s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s = `${s.replace(' ', 'T')}Z`;
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** "Oct 6 · 09:41", in the reader's own time, or null. */
+export function stampLabel(value) {
+  const t = stampMs(value);
+  if (t == null) return null;
+  const d = new Date(t);
+  const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
+/** The record a row names, or null with the reason the name is missing. */
+export function accessRecord(row) {
+  if (row?.action === 'open_brief') return { label: 'Client brief', missing: null };
+  if (row?.action === 'open_document') {
+    return row.document_title
+      ? { label: row.document_title, missing: null }
+      : { label: null, missing: row?.document_uid ? 'the title was not stored with this access receipt' : 'the document was deleted after it was opened' };
+  }
+  return { label: null, missing: 'the log names no record for this action' };
+}
+
+/** Who opened it: the advisor's name, else their address. */
+export const accessWho = (row) => row?.advisor_name || row?.advisor_email || null;
+
+/** A `YYYY-MM-DD` day as the reader's own midnight, or null. */
+function dayStartMs(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}
+
+/**
+ * The rows a filter keeps: by client, by who, and between two days inclusive.
+ *
+ * A row whose stamp cannot be read is kept while no day is set and dropped
+ * once one is, because it cannot be placed inside a window.
+ */
+export function filterAccessRows(rows, { client = '', who = '', from = '', to = '' } = {}) {
+  const fromMs = dayStartMs(from);
+  const toStart = dayStartMs(to);
+  const toMs = toStart == null ? null : toStart + 86_400_000 - 1;
+  return (Array.isArray(rows) ? rows : []).filter((r) => {
+    if (!r) return false;
+    if (client && r.client !== client) return false;
+    if (who && accessWho(r) !== who) return false;
+    if (fromMs == null && toMs == null) return true;
+    const t = stampMs(r.created_at);
+    if (t == null) return false;
+    return (fromMs == null || t >= fromMs) && (toMs == null || t <= toMs);
+  });
+}
+
+/** The distinct values a filter offers, in order. */
+export function distinctOf(rows, pick) {
+  return [...new Set((Array.isArray(rows) ? rows : []).map(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+// ───────────────────────────── A5 · The profile a client sees ─────────────────────────────
+
+/** "[positioning] · [sector], [sector] · [country]", from what the advisor wrote. */
+export function profileSub(advisor) {
+  const sectors = Array.isArray(advisor?.sectors) ? advisor.sectors.filter(Boolean) : [];
+  return [advisor?.headline, sectors.join(', '), advisor?.country]
+    .map((s) => String(s || '').trim()).filter(Boolean).join(' · ');
+}
+
+/** Two letters for the avatar circle. */
+export function initialsOf(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+/** The year the profile was created here, or null. */
+export function sinceYear(advisor) {
+  const t = stampMs(advisor?.created_at);
+  return t == null ? null : new Date(t).getUTCFullYear();
+}
+
+// ───────────────────── #4712 · Publishing a slot, running a session ─────────────────────
+
+/**
+ * The body for a published slot, or the reason it cannot be.
+ *
+ * The same four fields the legacy Opportunities form collected (start, end,
+ * seats, optional meeting link), checked here BEFORE the request so a refusal is
+ * a sentence next to the field rather than a 400. `datetime-local` values are
+ * the advisor's own clock; they are sent as instants (`toISOString`), which is
+ * what the worker stores.
+ */
+export function slotBody(draft, now = new Date()) {
+  const startRaw = String(draft?.starts_at ?? '').trim();
+  const endRaw = String(draft?.ends_at ?? '').trim();
+  if (!startRaw || !endRaw) return { error: 'Choose when the slot starts and when it ends.' };
+  const start = new Date(startRaw);
+  const end = new Date(endRaw);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return { error: 'Those times are not dates.' };
+  if (end.getTime() <= start.getTime()) return { error: 'The slot must end after it starts.' };
+  if (start.getTime() <= now.getTime()) return { error: 'A slot starts in the future.' };
+  const seatsRaw = String(draft?.capacity ?? '1').trim();
+  const seats = seatsRaw === '' ? 1 : Number(seatsRaw);
+  if (!Number.isInteger(seats) || seats < 1 || seats > 20) return { error: 'Seats is a whole number from 1 to 20.' };
+  const url = String(draft?.meeting_url ?? '').trim();
+  if (url && !safeHref(url)) return { error: 'The meeting link must start with https://' };
+  return {
+    body: { starts_at: start.toISOString(), ends_at: end.toISOString(), capacity: seats, meeting_url: url || null },
+  };
+}
+
+/** The three ways a confirmed session ends, with what each says to the client and whether it takes a reason. */
+export const SESSION_OUTCOMES = Object.freeze({
+  complete: { label: 'Session held', done: 'marked held', reason: false },
+  no_show: { label: 'No-show', done: 'marked a no-show', reason: true },
+  cancel: { label: 'Cancel', done: 'cancelled', reason: true },
+});
+
+/**
+ * The note a session outcome sends, or the reason it cannot go. A cancel needs a
+ * reason the client will read; a no-show may carry one; "held" never takes one.
+ */
+export function outcomeBody(outcome, note) {
+  const spec = SESSION_OUTCOMES[outcome];
+  if (!spec) return { error: 'Choose what happened to the session.' };
+  const text = String(note ?? '').trim();
+  if (text.length > 1000) return { error: 'A note is at most 1,000 characters.' };
+  if (outcome === 'cancel' && !text) return { error: 'Say why you are cancelling: the client is told.' };
+  return { note: spec.reason ? (text || null) : null };
+}

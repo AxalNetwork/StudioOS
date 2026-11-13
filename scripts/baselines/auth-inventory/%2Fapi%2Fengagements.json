@@ -1,0 +1,16 @@
+{
+  "GET /api/engagements/:id/invoice": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "The engagement's founder side (founder_id) and partner side (partner_id) read the invoice. Another founder, another partner, an investor, a revoked advisor, an admin and the Super Admin get the same 404 a missing engagement gets; no credentials or a disabled partner get 401."
+  },
+  "POST /api/engagements/:id/invoice/paid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Only the engagement's partner (partner_id) marks the invoice paid. The founder side, another partner, every non-party, an admin and the Super Admin get 403 and the invoice stays issued; no credentials or a disabled partner get 401. See D4570-p6, hardening item 1, on the 403."
+  }
+}

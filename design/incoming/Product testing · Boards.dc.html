@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Platform · Product testing</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Product testing</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One HQ page for product testing: approve partners’ programs, run Axal VC’s own, watch how full each program is, and keep the tester pool healthy. Drawn for the Super Admin; an Admin gets the notice on TST15. Sample today is 21 Oct 2026, so [Product Delta] has waited 2 days. No email address is drawn anywhere. NEW marks what the platform does not send or store yet. The drawer is drawn as a centred lightbox.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Product Testing Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['TST1', 'Overview · desktop 1440 · light', 'Four tiles, applications and picks per week, places filled on each open program, who applies by profile, whether Mail can reach the picked testers, programs by status, and what needs HQ. The moved notice shows once after the old address. Eadwyn’s rail is open on this board only.', [D('TST1')]],
+      ['TST2', 'Review', 'Partners’ programs waiting for HQ as full cards, one approved and not yet open, and one sent back with HQ’s note.', [D('TST2')]],
+      ['TST3', 'Dialogs', 'Each change says what it changes, who is told and what is recorded. NEW marks a notice the platform does not send today.', [D('TST3a', 'A · Approve · B · Send back', 1240), D('TST3c', 'C · Open, and the same dialog while intake is paused', 1240), D('TST3d', 'D · Close · E · Move to testing (NEW)', 1240), D('TST3f', 'F · Pick · G · Decline', 1240), D('TST3h', 'H · Withdraw for the member (NEW) · I · Refused', 1240)]],
+      ['TST4', 'Programs', 'All 14 programs with status chips, search, filters and sort, newest change first. The second frame shows the ⋯ menu for each kind of program.', [D('TST4'), D('TST4m', '⋯ menus', 1240)]],
+      ['TST5', 'One program · Axal VC’s own', '[Product Alpha]: its lifecycle, four figures and details, then the Applicants sub-tab with one row expanded, and Activity.', [D('TST5', 'Overview'), D('TST5a', 'Applicants'), D('TST5c', 'Activity')]],
+      ['TST6', 'One program · a partner’s', '[Product Beta] from [Partner Firm A]. HQ reads its applicants and cannot pick, decline or edit. The second frame is a program still waiting for HQ.', [D('TST6'), D('TST6w', 'Waiting for HQ', 1440, 760)]],
+      ['TST7', 'New program · lightbox over Programs', 'A centred lightbox, as on the other canvases. The Product testers only switch shows only under intake option B or C.', [D('TST7')]],
+      ['TST8', 'Applicants', 'Every applicant on every program, one row per application. Withdrawn applications are counted apart from All.', [D('TST8')]],
+      ['TST9', 'Tester pool', 'Active and paused testers, and those who left. Tester applications are decided in Approvals.', [D('TST9')]],
+      ['TST10', 'Member intake · three variants', 'The owner keeps one answer to #2318.', [D('TST10a', 'A · Paused', 1440, 720), D('TST10b', 'B · Pool first', 1440, 1300), D('TST10c', 'C · Pool, then programs', 1440, 720)]],
+      ['TST11', 'Overview · dark', 'TST1 in the dark colours; violet becomes #a78bfa.', [D('TST11')]],
+      ['TST12', 'Empty', 'Tiles show measured zeros.', [D('TST12a', 'Overview, no programs', 1440, 760), D('TST12b', 'Tester pool, no testers', 1440, 640)]],
+      ['TST13', 'Loading', 'Header, strip and tabs render at once; every tile and chart reads.', [D('TST13')]],
+      ['TST14', 'Error and partial', 'One failed block never blanks the page, and a failed read is never an empty table.', [D('TST14a', 'Overview, partial'), D('TST14b', 'Programs failed, and a refused action', 1440, 760)]],
+      ['TST15', 'No permission', 'An Admin, and a member who is not an admin.', [D('TST15a', 'An Admin', 1440, 640), D('TST15b', 'A member who is not an admin', 1440, 640)]],
+      ['TST16', 'Phone · 390 wide', 'Tiles 2 by 2 and charts full width; review cards with full-width buttons; applicants as cards; the ⋯ menu as a bottom sheet; answers and the New program form as full-screen pages.', [P('TST16a', 'Overview'), P('TST16b', 'Review'), P('TST16c', 'One program'), P('TST16f', '⋯ as a bottom sheet'), P('TST16d', 'Answers'), P('TST16e', 'New program')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

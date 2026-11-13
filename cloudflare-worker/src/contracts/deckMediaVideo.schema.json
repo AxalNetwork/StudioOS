@@ -1,0 +1,18 @@
+{
+  "$id": "deckMediaVideo",
+  "title": "POST /api/decks/:id/videos/upload (D1545, #3788)",
+  "description": "The reply the deck v2 adapter's `media` method passes through: the uploaded MP4, as a video block names it (`routes/deck_media.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["video"],
+  "properties": {
+    "video": {
+      "type": "object", "additionalProperties": false, "required": ["provider", "video_id", "url"],
+      "properties": {
+        "provider": { "enum": ["mp4"] },
+        "video_id": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    }
+  }
+}

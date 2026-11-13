@@ -1,0 +1,42 @@
+{
+  "skill": "budget-vs-actual",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "budget": [
+          {
+            "line": "Software",
+            "usd": 4000
+          },
+          {
+            "line": "Travel",
+            "usd": 2000
+          }
+        ]
+      },
+      "mercury.balances": {
+        "spend": [
+          {
+            "category": "Software",
+            "usd": 4900
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Software",
+      "4900"
+    ],
+    "must_say_not_recorded": [
+      "Travel"
+    ],
+    "must_not_include": [
+      "on budget"
+    ]
+  }
+}

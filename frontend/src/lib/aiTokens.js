@@ -1,0 +1,237 @@
+// D755 (#1916, CR4 PR 1) — the AI top-up as every screen reads it: one state
+// model, one sentence for "nothing is on sale", one path for Add tokens, and
+// the money formatters the rail, the Assist card and the Usage page share.
+//
+// It reads both answers of `GET /api/ai-budget/top-up`: D750's
+// `{configured, state, product}` and CR2's `{state, packs, on_hold, latest}`
+// (#1919). A failed read is `unreadable`; a configuration HQ must fix is
+// `not_ready`, which a retry cannot change.
+
+import { toUtcInstant } from './notices.js';
+
+/** "Nothing is on sale" (D750 decision 3), in one place. */
+export const TOPUP_UNAVAILABLE = "Top-up isn't available yet.";
+/** The same sentence where the page also says what runs do instead. */
+export const TOPUP_UNAVAILABLE_RUNS = `${TOPUP_UNAVAILABLE} Runs use your included allowance only.`;
+/** AMP's tokens line (account_phone_d700 pins it to the canvas). */
+export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.';
+/**
+ * D781 (#2106) — how AI is priced, in D762's words, on `/pricing/products` (D786; `/plans-and-pricing` until then):
+ * D762 §1's draw order, D629's hold. The owner's price sentence ("Model
+ * prices are Cloudflare's published rates plus 25%.", D720's owner step 4)
+ * joins it when the Worker charges it: `billingMode` reads `AI_BILLING` only
+ * once D762's billing PR (#2019) lands.
+ */
+export const AI_DRAW_LINE = 'Each run is paid from your AI allowance first, then from your tokens.';
+/**
+ * Every Add tokens link, and every old address for buying tokens, share this
+ * destination. D1288 (#3371): Pricing's Models tab, where `#add-tokens` opens
+ * D1287's sheet in pack mode. Inside the app a signed-in member's click never
+ * goes there: `AddTokensHost` opens the same sheet over the page they are on.
+ * The address is for links from outside the app, and for a visitor.
+ */
+export const ADD_TOKENS_PATH = '/pricing?for=models#add-tokens';
+/** The packs on Models (D1285). Kept as a name for the old storefront's callers. */
+export const TOKEN_PACKS_PATH = ADD_TOKENS_PATH;
+/** Pricing's Models tab, where the old storefront's back links go (D1288). */
+export const MODELS_PATH = '/pricing?for=models';
+/** The hash Pricing opens the sheet on. */
+export const ADD_TOKENS_HASH = '#add-tokens';
+
+/** `ADD_TOKENS_PATH` on one pack (`?pack=<uid>`), for the redirects that keep it. */
+export function addTokensHref(packUid = null) {
+  const uid = typeof packUid === 'string' ? packUid.trim() : '';
+  return uid ? `/pricing?for=models&pack=${encodeURIComponent(uid)}${ADD_TOKENS_HASH}` : ADD_TOKENS_PATH;
+}
+
+/** True for an address that is Add tokens: Pricing with `#add-tokens`, with or without a pack. */
+export function isAddTokensHref(href) {
+  if (typeof href !== 'string' || !href.startsWith('/pricing?')) return false;
+  const hash = href.indexOf('#');
+  if (hash < 0 || href.slice(hash) !== ADD_TOKENS_HASH) return false;
+  const q = new URLSearchParams(href.slice('/pricing?'.length, hash));
+  return q.get('for') === 'models';
+}
+
+/** The pack an Add tokens address names (`?pack=<uid>`), or null. */
+export function packOfHref(href) {
+  if (!isAddTokensHref(href)) return null;
+  const uid = new URLSearchParams(href.slice('/pricing?'.length, href.indexOf('#'))).get('pack');
+  return uid && uid.trim() ? uid.trim() : null;
+}
+
+export const ADD_TOKENS_EVENT = 'studioos:add_tokens_open';
+
+/**
+ * D1288 (CRP9): opens D1287's sheet in pack mode over the current page, with
+ * no route change, for the one `AddTokensHost` (App.jsx). `from` names the
+ * page for the landing's "Back to [from]"; `pack_uid` picks a pack. False
+ * when there is no window.
+ */
+export function openAddTokens({ from = null, pack_uid = null } = {}) {
+  if (typeof window === 'undefined') return false;
+  const detail = {
+    from: typeof from === 'string' && from.trim() ? from.trim() : null,
+    pack_uid: typeof pack_uid === 'string' && pack_uid.trim() ? pack_uid.trim() : null,
+  };
+  window.dispatchEvent(new CustomEvent(ADD_TOKENS_EVENT, { detail }));
+  return true;
+}
+
+/**
+ * D1363: the tokens a member bought have reached their balance. The Add tokens
+ * sheet says so once, at its "credited" landing, so the run that was refused
+ * for tokens continues where the member is, with no second press.
+ */
+export const TOKENS_ADDED_EVENT = 'studioos:tokens_added';
+export function notifyTokensAdded() {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return false;
+  window.dispatchEvent(new CustomEvent(TOKENS_ADDED_EVENT));
+  return true;
+}
+/** Calls `fn` once when tokens are added; returns the unsubscribe. */
+export function onTokensAdded(fn) {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function' || typeof fn !== 'function') return () => {};
+  const once = () => { window.removeEventListener(TOKENS_ADDED_EVENT, once); fn(); };
+  window.addEventListener(TOKENS_ADDED_EVENT, once);
+  return () => window.removeEventListener(TOKENS_ADDED_EVENT, once);
+}
+/**
+ * D1363: a refusal that buying tokens fixes: the allowance and balance cannot
+ * cover the run. A pause, a run held for review and the member's own spend
+ * limit are not: tokens would not lift them.
+ */
+export const TOKEN_REFUSALS = Object.freeze(['budget_user_day', 'budget_user_month', 'tokens']);
+export function tokenRefusal(error) {
+  const code = error?.code || error?.data?.code || (typeof error?.data?.error === 'string' ? error.data.error : null);
+  return TOKEN_REFUSALS.includes(code);
+}
+
+const integer = (n) => Number.isSafeInteger(n) && n >= 0;
+/** A price the checkout can sell: a Stripe price ID, USD, a whole positive amount in cents. */
+export function sellableLine(line) {
+  return !!line && typeof line === 'object' && /^price_[A-Za-z0-9]+$/.test(String(line.price_id))
+    && line.currency === 'usd' && integer(line.unit_amount) && line.unit_amount > 0;
+}
+
+/**
+ * The line Add tokens puts in the cart: D750's single product, else the first
+ * pack on sale. Null when there is none.
+ */
+export function topUpLine(data) {
+  if (Array.isArray(data?.packs)) return data.packs.find(sellableLine) || null;
+  return sellableLine(data?.product) ? data.product : null;
+}
+
+/**
+ * `loading`, `unreadable`, `not_ready` or `ready`.
+ * `reading` is `{ loading, error, data }`: `data` is the route's answer.
+ */
+/**
+ * D1366 / D1434: the custom amount the top-up read sends beside the packs
+ * (`custom`: $N of tokens as N of one $1 USD price, from `min_cents` to
+ * `max_cents`). The same test as the checkout sheet's `customOffer`.
+ */
+export function sellableCustom(c) {
+  if (!c || typeof c !== 'object' || !/^price_[A-Za-z0-9]+$/.test(String(c.price_id ?? '')) || c.unit_amount !== 100 || c.currency !== 'usd') return false;
+  const whole = (n) => Number.isSafeInteger(n) && n > 0 && n % 100 === 0;
+  return whole(c.min_cents) && whole(c.max_cents) && c.min_cents <= c.max_cents;
+}
+
+/** D1434: the key that opens the Add tokens sheet on the custom amount (`openAddTokens({ pack_uid: CUSTOM_PACK })`). */
+export const CUSTOM_PACK = 'custom';
+/** D1434: "Any amount from $5 to $500" for a sellable custom offer, else null. */
+export function customRangeLine(c) {
+  return sellableCustom(c) ? `Any amount from $${c.min_cents / 100} to $${c.max_cents / 100}` : null;
+}
+
+export function aiTokenState(reading) {
+  const { loading = false, error = false, data } = reading || {};
+  if (loading) return 'loading';
+  if (error || !data || typeof data !== 'object') return 'unreadable';
+  // D1434: with no pack on sale, the custom amount alone is a top-up the member
+  // can buy, so Add tokens (the AIRail, Usage) opens the sheet on it.
+  if (sellableCustom(data.custom) && !topUpLine(data)) return 'ready';
+  // CR2 answers `unset`; D750 answers `{configured:false}`. Both: nothing is on sale.
+  if (data.state === 'unset' || (!Array.isArray(data.packs) && data.configured === false) || data.state === 'not_ready') return 'not_ready';
+  if (data.state !== 'ready') return 'unreadable';
+  return topUpLine(data) ? 'ready' : 'unreadable';
+}
+
+const PURCHASE_STATES = new Set(['waiting', 'credited', 'overdue', 'refunded', 'disputed']);
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * A purchase in the last 24 hours (CR2's `latest`): `waiting`, `credited`,
+ * `overdue` (paid more than an hour ago and not credited), `refunded`,
+ * `disputed`, or null. Null until CR2 sends `latest`.
+ */
+export function purchaseState(latest, now = Date.now()) {
+  if (!latest || typeof latest !== 'object' || !PURCHASE_STATES.has(latest.state)) return null;
+  if (latest.state === 'waiting') {
+    const at = Date.parse(toUtcInstant(latest.at) ?? '');
+    if (Number.isFinite(at) && now - at > HOUR_MS) return 'overdue';
+  }
+  return latest.state;
+}
+
+/** "$25 of tokens" from a pack's face value in cents; null for anything else. */
+export function packLabel(faceCents) {
+  if (!integer(faceCents) || faceCents === 0) return null;
+  const dollars = faceCents / 100;
+  const face = Number.isInteger(dollars) ? dollars.toLocaleString('en-US') : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${face} of tokens`;
+}
+
+/** Every micro-dollar the figure has: "$0.029536". */
+export function microMoney(n) {
+  const micro = BigInt(n);
+  const fraction = (micro % 1000000n).toString().padStart(6, '0').replace(/0+$/, '').padEnd(2, '0');
+  return `$${(micro / 1000000n).toLocaleString('en-US')}.${fraction}`;
+}
+
+/**
+ * D750 (#1841) — a spend to the cent, for the rail and the Assist card: rounded
+ * half up, and "<$0.01" for a spend above zero that rounds to nothing. The
+ * exact figure stays on `/account/usage` and in the element's `title`.
+ */
+export function usageMoney(n) {
+  const micro = BigInt(n);
+  if (micro > 0n && micro < 5000n) return '<$0.01';
+  const cents = (micro + 5000n) / 10000n;
+  return `$${(cents / 100n).toLocaleString('en-US')}.${(cents % 100n).toString().padStart(2, '0')}`;
+}
+
+/**
+ * What runs do past the allowance (#1916 step 5): with nothing on sale
+ * (`aiTokenState` is `not_ready`) they wait for the reset rather than "use
+ * your top-up balance". A failed read is not knowledge that nothing is on sale,
+ * so only `nothingOnSale` changes the line.
+ */
+export function pastAllowanceLine(nothingOnSale, { untilThen = false } = {}) {
+  return nothingOnSale ? 'Runs wait until your allowance resets.'
+    : `Runs use your top-up balance${untilThen ? ' until then' : ''}.`;
+}
+
+/** "27 Oct, 10:00": an offer's end, in the reader's own zone. */
+function offerEnd(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * D790 (#2215): what a pack on sale offers, as the pack list and the checkout
+ * say it, from the pack read (`packsOnSale`): its bonus (the Worker sends 0
+ * outside the offer window), when that bonus ends, and whether it is for a
+ * first purchase only. Nothing here decides a price.
+ */
+export function packOfferLines(pack, when = offerEnd) {
+  const lines = [];
+  if (integer(pack?.bonus_microusd) && pack.bonus_microusd > 0) {
+    lines.push(`Includes ${microMoney(pack.bonus_microusd)} of bonus tokens.`);
+    const end = pack.offer_ends_at ? when(pack.offer_ends_at) : null;
+    if (end) lines.push(`Bonus offered until ${end}.`);
+  }
+  if (pack?.first_purchase_only === true) lines.push('For your first token purchase only.');
+  return lines;
+}

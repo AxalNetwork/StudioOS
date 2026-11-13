@@ -1,0 +1,2264 @@
+import { Hono } from 'hono';
+import { clampLimit, parseOffset } from '../util/pagination';
+import { hashEmail } from '../util/hashEmail';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAdmin, requireBranchNotSuspended, createJWT, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { notify } from '../services/notify';
+import {
+  serializeTranscriptCsv,
+  classifyOnboardingEmpty,
+  type TranscriptRow,
+  type WriteMap,
+} from './admin.conversations.helpers';
+import { runTotpRemediation } from '../services/totpRemediation';
+import { resendVerification } from '../services/verificationResend';
+import { noteSaveStatement, notesSavedOf } from '../services/accountNotes';
+import { hasTotpConfigured } from '../services/authTotp';
+import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
+// Task #9 follow-up — lets the generic role-change endpoint move a user
+// INTO the 'exploring' holding state (e.g. demoting a partner back for
+// re-review). ensureExploringSchema guarantees the CHECK admits the value.
+import { ensureExploringSchema } from '../services/exploringSchema';
+// Task #102 — admin Spin-Out Lab participants endpoint derives week/tool
+// unlocks from the shared milestone catalog (single source of truth).
+import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
+import { bindingKey } from '../util/schemaBootstrap';
+import { refuse } from '../util/refusal';
+import { branchOf } from '../util/branch';
+import { HQ_ONLY_MESSAGE } from '../services/insightsScope';
+import { AccountsReadError, listAccounts, narrowed, parseAccountsQuery } from '../services/accountsList';
+
+const admin = new Hono<{ Bindings: Env }>();
+
+// Lazy schema migration — adds the columns the admin profile UI relies on
+// without breaking older databases. Idempotent and cheap (CF wraps the
+// PRAGMA-style ALTER in IF NOT EXISTS semantics for column adds via try/catch).
+const PROFILE_SCHEMA_MIGRATED = new WeakMap<object, boolean>();
+async function ensureProfileColumns(env: Env): Promise<void> {
+  if (PROFILE_SCHEMA_MIGRATED.get(bindingKey(env))) return;
+  const stmts = [
+    `ALTER TABLE users ADD COLUMN admin_notes TEXT`,
+    `ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`,
+    // 'limited' lets a user past the KYC gate to browse the platform but
+    // does NOT permit signing legal/financial agreements (server-enforced
+    // in /api/legal/esign/sign/:token). Null/missing = normal flow.
+    `ALTER TABLE users ADD COLUMN access_level TEXT`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); } catch {} // duplicate-column errors are expected
+  }
+  PROFILE_SCHEMA_MIGRATED.set(bindingKey(env), true);
+}
+
+admin.get('/users', async (c) => {
+  const user = await requireAdmin(c);
+  // Make sure access_level (and other admin-only columns) exist on the row
+  // shape before we SELECT them — older databases predate these adds.
+  await ensureProfileColumns(c.env);
+
+  // D1300 — ANOTHER STUDIO'S ACCOUNTS ARE NEVER READ HERE. A branch is its own
+  // Worker over its own D1, so this table holds this deployment's accounts
+  // only. A `scope` naming another studio is refused before any read, as
+  // Insights refuses it (D893): a plain Admin, or any admin on a branch, gets
+  // 403 `hq_only`; HQ's Super Admin gets 400 `scope_unavailable`, because HQ
+  // does not fan a list of names and emails out of a subsidiary.
+  const scope = c.req.query('scope');
+  if (scope && scope !== (branchOf(c.env) ?? 'hq')) {
+    if (!isSuperAdmin(user as any)) return c.json({ code: 'hq_only', detail: HQ_ONLY_MESSAGE }, 403);
+    return c.json({ code: 'scope_unavailable', detail: 'A subsidiary\'s accounts are listed on its own console. HQ does not copy them here.' }, 400);
+  }
+
+  // D128's search, and D1300's filters, sort, columns and paging
+  // (`services/accountsList.ts`, which states what each one reads). A value
+  // outside a filter's set is a 400, never ignored. The one-character search
+  // is still refused server-side: a search that silently becomes "everyone"
+  // is the failure `likeNeedle` exists for.
+  const p = parseAccountsQuery((k) => c.req.query(k));
+  if (!p.ok) {
+    if (p.code === 'query_too_short') return c.json({ error: 'query_too_short', message: p.detail }, 400);
+    return c.json({ code: p.code, detail: p.detail }, 400);
+  }
+  let page;
+  try {
+    page = await listAccounts(c.env, p.query);
+  } catch (e) {
+    if (e instanceof AccountsReadError) return c.json({ code: e.code, detail: e.detail }, e.status as 503);
+    // Counts and outcomes only: never a name, an email or a row.
+    console.error('[admin:users] list read failed', (e as Error)?.name || 'error');
+    return c.json({ code: 'accounts_unreadable', detail: 'The accounts could not be read. That is not the same as no accounts. Try again.' }, 500);
+  }
+
+  // BACK-COMPAT. With no `envelope`, the answer is the page as a flat array,
+  // as it always was: pickers across the SPA read it that way.
+  const rows = page.results;
+  const envelope = c.req.query('envelope') === '1' || c.req.query('envelope') === 'true';
+  if (!envelope) return c.json(rows);
+
+  // THE ENVELOPE (D128). `total` and `by_role` are counts over the whole
+  // table, never over `results`: the console's tiles read them. D1300 adds
+  // the totals over the filtered set (`matched`, "1–25 of 61"), which a
+  // filter or search changes and the whole-table counts do not.
+  const roleRows = (await c.env.DB.prepare('SELECT role, COUNT(*) AS n FROM users GROUP BY role').all<{ role: string; n: number }>()).results || [];
+  const byRole: Record<string, number> = {};
+  let total = 0;
+  for (const r of roleRows) {
+    const n = Number(r.n) || 0;
+    byRole[String(r.role)] = n;
+    total += n;
+  }
+  return c.json({
+    ...page,
+    total,
+    by_role: byRole,
+    searched: Boolean(p.query.q),
+    narrowed: narrowed(p.query),
+  });
+});
+
+// GET /api/admin/users/:user_id/profile — comprehensive admin view of a user.
+// Returns: user record, registration timeline, KYC status, agreements
+// (eSign envelopes), recent activity logs (with full detail), tickets,
+// integrations, founder/partner profile snippets. Single endpoint to keep
+// the modal load to one round-trip.
+admin.get('/users/:user_id/profile', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureProfileColumns(c.env);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId) || userId <= 0) return c.json({ error: 'Invalid user_id' }, 400);
+
+  // Task #1 (DB) — guarantee the new columns exist BEFORE the SELECT
+  // references them; otherwise a partially-migrated D1 raises
+  // "no such column" and the whole profile call 500s. Idempotent +
+  // sentinel-cached after the first call per isolate.
+  await ensurePublicIdColumns(c.env);
+  const userRow: any = await c.env.DB.prepare(
+    `SELECT id, uid, email, name, role, is_active, email_verified, founder_id, partner_id,
+            kyc_status, kyc_provider, kyc_submitted_at, kyc_reviewed_at, kyc_rejection_reason,
+            COALESCE(admin_notes, '') AS admin_notes,
+            founder_public_id, partner_public_id, last_active_at, created_at
+       FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!userRow) return c.json({ error: 'User not found' }, 404);
+
+  // D133 — AN ADMIN'S DRAWER IS THE SUPER ADMIN'S TO OPEN, and this is the
+  // heaviest of the reads D132 left behind. The payload below is not a summary:
+  // it carries the target's last 100 `activity_logs` rows, matched on
+  // `user_id OR actor`, so pointed at a peer it returns that admin's own
+  // ACTOR-side feed — every `user_toggled`, `role_changed` and
+  // `admin_impersonate` they wrote. D132's own header states the rule this
+  // applies: a route that reads another admin's activity is a cross-admin read
+  // whatever it renders, and gating some of them is gating none of them.
+  //
+  // READING YOUR OWN DRAWER IS NOT A CROSS-ADMIN READ, so the self case passes
+  // ahead of the check rather than being carved out of it.
+  if (
+    userRow.id !== adminUser.id
+    && String(userRow.role).toLowerCase() === 'admin'
+    && !isSuperAdmin(adminUser as any)
+  ) {
+    return c.json({
+      error: "Only a super admin can open another admin's record.",
+      code: 'super_admin_required',
+    }, 403);
+  }
+
+  // ----- Activity logs (D1, last 100) -----
+  const activityRes: any = await c.env.DB.prepare(
+    `SELECT id, action, details, actor, created_at
+       FROM activity_logs
+      WHERE user_id = ? OR LOWER(actor) = LOWER(?)
+      ORDER BY datetime(created_at) DESC
+      LIMIT 100`
+  ).bind(userId, userRow.email).all();
+  const activity = activityRes?.results || [];
+
+  // ----- Registration / lifecycle timeline -----
+  // Build from the user row + selected activity_log events. Includes account
+  // creation, email verification, KYC milestones, role changes, eSign sent,
+  // eSign signed.
+  const REG_ACTIONS = new Set([
+    'user_registered', 'email_verified', 'email_verified_admin',
+    'profile_captured', 'profile_reviewed_by_admin', 'profile_verified',
+    'kyc_submitted', 'kyc_approved', 'kyc_approved_by_admin',
+    'kyc_rejected', 'kyc_rejected_by_admin',
+    'role_changed', 'your_role_changed',
+    'account_status_changed', 'user_toggled',
+    'esign_envelope_created', 'esign_envelope_sent', 'esign_signed',
+    'esign_document_downloaded_by_recipient', 'esign_envelope_completed',
+  ]);
+  const timeline = [
+    {
+      ts: userRow.created_at,
+      kind: 'account_created',
+      label: 'Account created',
+      detail: `Registered as ${userRow.role}`,
+    },
+    ...activity
+      .filter((a: any) => REG_ACTIONS.has(a.action))
+      .map((a: any) => ({
+        ts: a.created_at,
+        kind: a.action,
+        label: a.action.replace(/_/g, ' '),
+        detail: a.details || null,
+      })),
+  ].sort((x, y) => String(y.ts).localeCompare(String(x.ts)));
+
+  // ----- Agreements (eSign) — both as recipient and as creator -----
+  // Lazy schema dependency: if esign tables don't exist yet, swallow.
+  let agreements: any[] = [];
+  try {
+    // Schema reference (esign.ts): esign_envelopes has `completed_at` (not
+    // `signed_at`); per-recipient signing timestamps live on
+    // esign_recipients.signed_at.
+    const recRes: any = await c.env.DB.prepare(
+      `SELECT e.id            AS envelope_id,
+              e.envelope_uuid,
+              e.document_type,
+              e.document_title,
+              e.status        AS envelope_status,
+              e.created_at,
+              e.completed_at,
+              r.id            AS recipient_id,
+              r.recipient_email,
+              r.recipient_name,
+              r.status        AS recipient_status,
+              r.signed_at     AS recipient_signed_at,
+              r.token_expires_at,
+              CASE WHEN e.created_by = ? THEN 'creator' ELSE 'recipient' END AS role_in_envelope
+         FROM esign_envelopes e
+         LEFT JOIN esign_recipients r ON r.envelope_id = e.id
+        WHERE e.user_id = ?
+           OR LOWER(r.recipient_email) = LOWER(?)
+           OR e.created_by = ?
+        ORDER BY datetime(e.created_at) DESC
+        LIMIT 50`
+    ).bind(userId, userId, userRow.email, userId).all();
+    agreements = recRes?.results || [];
+  } catch (e: any) {
+    // Surface schema mismatches loudly — empty agreements is misleading if
+    // the cause is a query bug rather than missing data.
+    console.error('[admin/profile] esign agreements query failed:', e?.message, e?.stack);
+  }
+
+  // ----- Tickets (best-effort) -----
+  let tickets: any[] = [];
+  try {
+    const tres: any = await c.env.DB.prepare(
+      `SELECT id, title, status, priority, created_at
+         FROM tickets WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT 20`
+    ).bind(userId).all();
+    tickets = tres?.results || [];
+  } catch {}
+
+  // ----- Integrations (best-effort) -----
+  let integrations: any[] = [];
+  try {
+    const ires: any = await c.env.DB.prepare(
+      // `provider_key` (migration 016). `provider_name` matched nothing, so
+      // the catch below left this list empty on every admin profile.
+      `SELECT uid, provider_key, display_name, status, last_synced_at
+         FROM integrations WHERE user_id = ? ORDER BY datetime(created_at) DESC`
+    ).bind(userId).all();
+    integrations = ires?.results || [];
+  } catch {}
+
+  // ----- Personal Advisor transcripts (Task #11) -----
+  // Surfaces TWO advisor sessions for the admin user-profile drawer:
+  //   • onboarding_conversation: the FIRST advisor session created for the
+  //     user (week-1 / sign-up flow). Powers the "Onboarding Conversation"
+  //     tab which previously always rendered "0 messages".
+  //   • ongoing_conversation:    the MOST RECENT advisor session by
+  //     updated_at. Powers the new "Ongoing Conversation" tab.
+  // When the user has only one session both keys point at the same row.
+  // Defensive try/catch — advisor_* tables may be missing in older D1
+  // envs (migration 029 not yet applied), in which case we degrade to
+  // empty objects rather than 500-ing the whole profile load.
+  let onboardingConversation: any = null;
+  let ongoingConversation: any = null;
+  try {
+    // Architect-flagged: order in SQL with `datetime(...)`, not JS string
+    // sort, so timezone-suffixed / mixed-precision timestamps still order
+    // deterministically. Two cheap point-lookups beat fetching all rows
+    // and sorting client-side; both share idx_advisor_conv_user.
+    const CONV_COLS = `id, uid, persona, state, current_question_id,
+              total_questions, answered_count, skipped_count,
+              created_at, updated_at`;
+    const first: any = await c.env.DB.prepare(
+      `SELECT ${CONV_COLS}
+         FROM advisor_conversations
+        WHERE user_id = ?
+        ORDER BY datetime(created_at) ASC, id ASC
+        LIMIT 1`
+    ).bind(userId).first();
+    if (first) {
+      const last: any = await c.env.DB.prepare(
+        `SELECT ${CONV_COLS}
+           FROM advisor_conversations
+          WHERE user_id = ?
+          ORDER BY datetime(updated_at) DESC, id DESC
+          LIMIT 1`
+      ).bind(userId).first();
+      // Helper — pull up to 500 messages for a conversation in chronological
+      // order. We deliberately omit meta_json from the response to keep the
+      // payload small; admins only need the visible transcript here.
+      const fetchMessages = async (convId: number) => {
+        const r: any = await c.env.DB.prepare(
+          `SELECT role, question_id, content, created_at
+             FROM advisor_messages
+            WHERE conversation_id = ?
+            ORDER BY id ASC
+            LIMIT 500`
+        ).bind(convId).all();
+        return (r?.results || []).map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          ts: m.created_at,
+          question_id: m.question_id || null,
+        }));
+      };
+      onboardingConversation = {
+        conversation: first,
+        messages: await fetchMessages(first.id),
+      };
+      // Avoid an extra round-trip when first === last (single conversation).
+      ongoingConversation = !last || first.id === last.id
+        ? onboardingConversation
+        : { conversation: last, messages: await fetchMessages(last.id) };
+    }
+  } catch (e: any) {
+    // Silent degrade — log for ops visibility but never break the profile load.
+    console.error('[admin/profile] advisor transcripts query failed:', e?.message);
+  }
+
+  // ----- Linked founder / partner row -----
+  let founder: any = null;
+  if (userRow.founder_id) {
+    try {
+      founder = await c.env.DB.prepare(`SELECT * FROM founders WHERE id = ?`).bind(userRow.founder_id).first();
+    } catch {}
+  }
+  let partner: any = null;
+  if (userRow.partner_id) {
+    try {
+      partner = await c.env.DB.prepare(`SELECT * FROM partners WHERE id = ?`).bind(userRow.partner_id).first();
+    } catch {}
+  }
+
+  // Task #1 (DB) — lazy-assign public AXF-/AXP- identifiers when the
+  // user has the corresponding role but no id yet. Idempotent: returns
+  // the existing value when one is already set. Mirrored back onto
+  // userRow so the response includes the freshly-minted id.
+  await ensurePublicIdColumns(c.env);
+  if ((userRow.role === 'founder' || userRow.founder_id) && !userRow.founder_public_id) {
+    const fid = await assignFounderPublicId(c.env, userRow.id);
+    if (fid) userRow.founder_public_id = fid;
+  }
+  if ((userRow.role === 'partner' || userRow.partner_id) && !userRow.partner_public_id) {
+    const pid = await assignPartnerPublicId(c.env, userRow.id);
+    if (pid) userRow.partner_public_id = pid;
+  }
+
+  // D236 — THE AUTHENTICATOR LINE IS READ FROM THE DEFINITION SIGN-IN USES.
+  // `totp_enabled` was a hard-coded `false` under the comment "placeholder —
+  // wire to actual TOTP table when added", so the drawer told HQ that every
+  // account had no second factor: a false claim about a security property, on
+  // the screen HQ supervises accounts from. The table was added long ago, and
+  // `hasTotpConfigured` is what `/login` asks (an `auth_totp` row, or a legacy
+  // base32 secret still waiting to migrate), so the drawer and sign-in cannot
+  // disagree about the same account.
+  //
+  // A FAILED READ IS NOT "NO". The helper throws when either of its reads
+  // fails, and it is caught here on its own so the rest of the record still
+  // loads: `totp_enabled` is then null with the reason beside it, and the
+  // drawer says the answer is unknown instead of printing a verdict that
+  // nothing measured.
+  let totpEnabled: boolean | null = null;
+  let totpReason: string | null = null;
+  try {
+    totpEnabled = await hasTotpConfigured(c.env, userId);
+  } catch (e: any) {
+    console.error('[admin/profile] authenticator enrolment read failed:', e?.message);
+    totpReason = 'Whether an authenticator is enrolled is unknown, which is not the same as "No".';
+  }
+
+  // D1306 (#3403, ACC4) — the onboarding-profile line under the firm card: the
+  // account's partner profile (D989), its verdict and when (D991, migration
+  // 557), and its reference for the Partner profiles link. The profile's own
+  // `user_id` names its member; the address is only a fallback for a profile
+  // written before an account existed. Null when there is none; its own
+  // `available: false` when the store cannot be read, never the drawer's 500.
+  let onboardingProfile: any = null;
+  try {
+    const p: any = await c.env.DB.prepare(
+      `SELECT ref, admin_status, reviewed_at FROM partner_profiles
+        WHERE user_id = ? OR (user_id IS NULL AND lower(email) = lower(?))
+        ORDER BY (user_id = ?) DESC, datetime(updated_at) DESC LIMIT 1`
+    ).bind(userId, userRow.email, userId).first();
+    onboardingProfile = p
+      ? { available: true, ref: p.ref ?? null, status: p.admin_status ?? null, reviewed_at: p.reviewed_at ?? null }
+      : null;
+  } catch (e) {
+    console.warn('[admin/profile] onboarding profile unreadable', (e as Error)?.name);
+    onboardingProfile = { available: false, reason: 'unreadable' };
+  }
+
+  // Audit trail — admin viewed this profile. Epic 11 — actor stores
+  // hashEmail(adminUser.email), never the plaintext, to keep PII out of
+  // activity_logs. user_id is the join key for support workflows.
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind('admin_viewed_profile',
+      `Admin ${adminUser.name} viewed full profile for ${userRow.name} (user_id=${userRow.id})`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({
+    ok: true,
+    user: userRow,
+    // D1303: who saved the notes and when, never their text twice.
+    notes_saved: await notesSavedOf(c.env, Number(userRow.id), String(userRow.admin_notes || '').length > 0),
+    kyc: {
+      status: userRow.kyc_status || 'not_started',
+      provider: userRow.kyc_provider || null,
+      submitted_at: userRow.kyc_submitted_at || null,
+      reviewed_at: userRow.kyc_reviewed_at || null,
+      rejection_reason: userRow.kyc_rejection_reason || null,
+      totp_enabled: totpEnabled,
+      totp_reason: totpReason,
+      id_uploaded: userRow.kyc_status && userRow.kyc_status !== 'not_started',
+    },
+    timeline,
+    agreements,
+    activity,
+    tickets,
+    integrations,
+    founder,
+    partner,
+    onboarding_profile: onboardingProfile,
+    // Task #11 — Personal Advisor transcripts for the admin user-profile drawer.
+    // See the fetch block above for shape; either may be null when the user
+    // has never started an advisor session.
+    onboarding_conversation: onboardingConversation,
+    ongoing_conversation: ongoingConversation,
+    stats: {
+      activity_count: activity.length,
+      ticket_count: tickets.length,
+      integration_count: integrations.length,
+      agreement_count: agreements.length,
+      signed_agreement_count: agreements.filter((a: any) => a.recipient_status === 'signed').length,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task #1 (DB) — Dedicated transcript endpoints. The /profile endpoint above
+// returns the first + most-recent advisor conversation inline; these endpoints
+// give the admin UI per-conversation pagination and a discoverable list of
+// every advisor session a user has owned. Each call also writes a row to
+// admin_audit_log + activity_logs so we have a per-conversation view trail.
+// ---------------------------------------------------------------------------
+
+// Generic admin_audit_log (export / publication actions PLUS, per
+// Task #1 (DB), per-conversation profile-view rows with first-class
+// columns viewed_user_id / conversation_id / viewed_at).
+//
+// The lazy bootstrap below is PRAGMA-guarded so it stays idempotent:
+// CREATE TABLE / INDEX use IF NOT EXISTS, and each ADD COLUMN is only
+// emitted when the column is genuinely missing from PRAGMA
+// table_info(). Safe to call on every request, on a fresh DB, and on
+// a DB that already has the canonical schema.
+const ADMIN_AUDIT_LOG_TABLE_READY = new WeakMap<object, boolean>();
+export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
+  if (ADMIN_AUDIT_LOG_TABLE_READY.get(bindingKey(env))) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS admin_audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL REFERENCES users(id), action TEXT NOT NULL, report_type TEXT, format TEXT, filters_json TEXT, storage_key TEXT, download_url TEXT, exported_at TEXT NOT NULL DEFAULT (datetime('now')), viewed_user_id INTEGER, conversation_id INTEGER, viewed_at TEXT)",
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_user_ts ON admin_audit_log(admin_user_id, exported_at DESC)',
+    );
+    // Migrations 003 and 036 and the baseline all declare this one; it came
+    // here from `routes/monitoring_analytics.ts` in D192, when that router's
+    // own narrow CREATE for this table was deleted. It backs the `action`
+    // filter on the governance and analytics audit reads.
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_audit_action_ts ON admin_audit_log(action, exported_at DESC)',
+    );
+    // PRAGMA-guarded ADD COLUMN for the three Task #1 (DB) columns —
+    // needed when the table already existed from an earlier migration
+    // without these columns.
+    let cols = new Set<string>();
+    try {
+      const info: any = await env.DB.prepare(`PRAGMA table_info(admin_audit_log)`).all();
+      for (const r of (info?.results || []) as Array<{ name: string }>) cols.add(r.name);
+    } catch {}
+    const adds: Array<[string, string]> = [
+      ['viewed_user_id', `ALTER TABLE admin_audit_log ADD COLUMN viewed_user_id INTEGER`],
+      ['conversation_id', `ALTER TABLE admin_audit_log ADD COLUMN conversation_id INTEGER`],
+      ['viewed_at', `ALTER TABLE admin_audit_log ADD COLUMN viewed_at TEXT`],
+      // Migration 178. Seven admin routers probe for this column with
+      // auditHasActor() and write a hashed admin email when it is present;
+      // until 178 it existed nowhere, so that branch never ran.
+      ['actor', `ALTER TABLE admin_audit_log ADD COLUMN actor TEXT`],
+    ];
+    for (const [name, sql] of adds) {
+      if (!cols.has(name)) { try { await env.DB.exec(sql); } catch {} }
+    }
+    try {
+      await env.DB.exec(
+        'CREATE INDEX IF NOT EXISTS idx_admin_audit_viewed_user ON admin_audit_log(viewed_user_id, viewed_at DESC)',
+      );
+    } catch {}
+  } catch {}
+  ADMIN_AUDIT_LOG_TABLE_READY.set(bindingKey(env), true);
+}
+
+// Task #1 (DB) — dedicated profile-view audit trail with first-class
+// columns (admin_user_id, viewed_user_id, conversation_id, viewed_at)
+// for SQL-friendly investigator queries. Bridged into admin_audit_log
+// above so existing oversight reports keep working unchanged.
+const ADMIN_PROFILE_AUDIT_READY = new WeakMap<object, boolean>();
+async function ensureAdminProfileAuditTable(env: Env): Promise<void> {
+  if (ADMIN_PROFILE_AUDIT_READY.get(bindingKey(env))) return;
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS admin_profile_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, viewed_user_id INTEGER NOT NULL, conversation_id INTEGER, action TEXT NOT NULL, viewed_at TEXT NOT NULL DEFAULT (datetime('now')))",
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_viewed ON admin_profile_audit(viewed_user_id, viewed_at DESC)',
+    );
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_admin_profile_audit_admin ON admin_profile_audit(admin_user_id, viewed_at DESC)',
+    );
+  } catch {}
+  ADMIN_PROFILE_AUDIT_READY.set(bindingKey(env), true);
+}
+
+async function auditConversationView(
+  env: Env,
+  adminUser: { id: number; name?: string | null; email: string },
+  targetUserId: number,
+  action: string,
+  conversationId: number | null,
+): Promise<void> {
+  try {
+    await ensureAdminProfileAuditTable(env);
+    await env.DB.prepare(
+      `INSERT INTO admin_profile_audit (admin_user_id, viewed_user_id, conversation_id, action) VALUES (?, ?, ?, ?)`,
+    ).bind(adminUser.id, targetUserId, conversationId, action).run();
+  } catch (e) {
+    console.error('[admin/audit] admin_profile_audit insert failed', (e as Error).message);
+  }
+  // Task #1 (DB) — also write the canonical row into admin_audit_log
+  // with first-class viewed_user_id / conversation_id / viewed_at
+  // columns so existing Trust-Center oversight + admin export reports
+  // pick these up without a parallel ingestion path or JSON unwrapping.
+  // Mirrors the same pair of values into filters_json for legacy
+  // readers that haven't been updated to consume the dedicated cols.
+  try {
+    await ensureAdminAuditLogTable(env);
+    const nowIso = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, conversation_id, viewed_at, filters_json) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      adminUser.id,
+      action,
+      targetUserId,
+      conversationId,
+      nowIso,
+      JSON.stringify({ target_user_id: targetUserId, conversation_id: conversationId, viewed_at: nowIso }),
+    ).run();
+  } catch (e) {
+    console.error('[admin/audit] admin_audit_log insert failed', (e as Error).message);
+  }
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    )
+      .bind(
+        action,
+        `Admin ${adminUser.name || adminUser.email} viewed ${action} (target_user=${targetUserId}${conversationId ? `, conv=${conversationId}` : ''})`,
+        adminHash,
+        adminUser.id,
+      )
+      .run();
+  } catch {}
+}
+
+// Task #34 — viewed-user notification on admin transcript view. Suppressed
+// when an active investigation flag is set on the user row
+// (`users.admin_view_suppressed = 1`). Best-effort: any failure here is
+// logged and the request continues — the audit row is the authoritative
+// trail; the inbox row is courtesy.
+const ADMIN_SUPPRESS_COL_READY = new WeakMap<object, boolean>();
+async function ensureAdminViewSuppressColumn(env: Env): Promise<void> {
+  if (ADMIN_SUPPRESS_COL_READY.get(bindingKey(env))) return;
+  try {
+    const info: any = await env.DB.prepare(`PRAGMA table_info(users)`).all();
+    const have = new Set((info?.results || []).map((r: any) => r.name));
+    if (!have.has('admin_view_suppressed')) {
+      try { await env.DB.exec(`ALTER TABLE users ADD COLUMN admin_view_suppressed INTEGER DEFAULT 0`); }
+      catch { /* duplicate-column race */ }
+    }
+    ADMIN_SUPPRESS_COL_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.warn('[admin/notify] ensureAdminViewSuppressColumn failed', (e as Error).message);
+  }
+}
+
+async function notifyTranscriptViewed(
+  env: Env,
+  viewedUserId: number,
+  kind: 'onboarding' | 'advisor_list' | 'advisor_transcript',
+): Promise<void> {
+  try {
+    await ensureAdminViewSuppressColumn(env);
+    const row: any = await env.DB.prepare(
+      `SELECT admin_view_suppressed FROM users WHERE id = ?`,
+    ).bind(viewedUserId).first();
+    if (Number(row?.admin_view_suppressed || 0) === 1) return;
+    const { notify } = await import('../services/notify');
+    const titles: Record<typeof kind, string> = {
+      onboarding: 'An admin viewed your onboarding transcript',
+      advisor_list: 'An admin viewed your advisor conversations',
+      advisor_transcript: 'An admin viewed your advisor transcript',
+    };
+    await notify(env, {
+      userId: viewedUserId,
+      type: 'admin_transcript_view',
+      title: titles[kind],
+      body: 'A platform admin reviewed your Personal Advisor conversation history as part of standard support / compliance activity.',
+      category: 'security',
+      channels: ['in_app'],
+    });
+  } catch (e) {
+    console.warn('[admin/notify] notifyTranscriptViewed failed', (e as Error).message);
+  }
+}
+
+// Best-effort summary extractor: pulls the last assistant message
+// (or first user prompt as a fallback) and trims to 200 chars.
+function summariseConversation(messages: Array<{ role: string; content: string }>): string | null {
+  if (!messages.length) return null;
+  const lastAsst = [...messages].reverse().find(m => m.role === 'assistant' && m.content);
+  const seed = lastAsst?.content || messages[0]?.content || '';
+  const oneLine = seed.replace(/\s+/g, ' ').trim();
+  if (!oneLine) return null;
+  return oneLine.length > 200 ? `${oneLine.slice(0, 197)}…` : oneLine;
+}
+
+// GET /api/admin/users/:user_id/conversations/onboarding
+// Returns the user's FIRST advisor session (week-1 / sign-up flow) with full
+// message transcript. Mirrors the embedded `onboarding_conversation` block on
+// /profile but is the discoverable, audited entry-point for the dedicated
+// admin "Onboarding" tab.
+admin.get('/users/:user_id/conversations/onboarding', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+
+  const conv: any = await c.env.DB.prepare(
+    `SELECT id, uid, persona, state, current_question_id, total_questions,
+            answered_count, skipped_count, created_at, updated_at
+       FROM advisor_conversations
+      WHERE user_id = ?
+      ORDER BY datetime(created_at) ASC, id ASC
+      LIMIT 1`,
+  ).bind(userId).first();
+  if (!conv) {
+    await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', null);
+    await notifyTranscriptViewed(c.env, userId, 'onboarding');
+    return c.json({
+      ok: true,
+      conversation: null,
+      messages: [],
+      summary: null,
+      completion_pct: 0,
+      empty: true,
+      empty_reason: 'never_completed',
+    });
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT role, question_id, content, meta_json, created_at
+       FROM advisor_messages
+      WHERE conversation_id = ?
+      ORDER BY id ASC
+      LIMIT 1000`,
+  ).bind(conv.id).all();
+  const messages = (r?.results || []).map((m: any) => {
+    const meta = m.meta_json ? safeParse(m.meta_json) : null;
+    return {
+      role: m.role,
+      content: m.content,
+      ts: m.created_at,
+      question_id: m.question_id || null,
+      model: meta?.model || meta?.provider_model || null,
+      latency_ms: meta?.latency_ms ?? meta?.latency ?? null,
+      tokens: meta?.tokens ?? meta?.tokens_used ?? null,
+      written_to: meta?.written_to || null,
+    };
+  });
+  const total = Number(conv.total_questions) || 0;
+  const answered = Number(conv.answered_count) || 0;
+  const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const summary = summariseConversation(messages);
+  // Task #34 — empty_reason distinguishes "user never started the
+  // onboarding chatbot" (never_completed) from "user has an active
+  // session with no assistant turns yet" (in_progress). The conv-
+  // not-found branch above already returns empty_reason='never_completed';
+  // here we only fall into in_progress when the conversation is active
+  // with no logged messages.
+  const { empty, empty_reason } = classifyOnboardingEmpty(conv as any, messages.length);
+  await auditConversationView(c.env, adminUser, userId, 'admin_viewed_onboarding_transcript', conv.id);
+  await notifyTranscriptViewed(c.env, userId, 'onboarding');
+  return c.json({
+    ok: true,
+    conversation: conv,
+    messages,
+    summary,
+    completion_pct,
+    empty,
+    empty_reason,
+  });
+});
+
+// Local helper — mirrors safeReadJSON without the frontend dependency.
+function safeParse(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+// GET /api/admin/users/:user_id/conversations/advisor
+// Returns the LIST of every advisor conversation the user has owned, newest
+// first. No messages — just the per-row metadata so the admin UI can render
+// a dropdown / sidebar of sessions to drill into.
+admin.get('/users/:user_id/conversations/advisor', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+
+  const limit = clampLimit(c.req.query('limit'), 50, 200);
+  const offset = parseOffset(c.req.query('offset'));
+  const search = (c.req.query('q') || '').trim().toLowerCase();
+  const since = (c.req.query('since') || '').trim();
+  const until = (c.req.query('until') || '').trim();
+  const where: string[] = ['c.user_id = ?'];
+  const args: any[] = [userId];
+  if (since) { where.push('datetime(c.updated_at) >= datetime(?)'); args.push(since); }
+  if (until) { where.push('datetime(c.updated_at) <= datetime(?)'); args.push(until); }
+  args.push(limit, offset);
+  const r: any = await c.env.DB.prepare(
+    `SELECT c.id, c.uid, c.persona, c.state, c.current_question_id,
+            c.total_questions, c.answered_count, c.skipped_count,
+            c.created_at, c.updated_at,
+            (SELECT COUNT(*) FROM advisor_messages WHERE conversation_id = c.id) AS message_count,
+            (SELECT COUNT(*) FROM advisor_answers
+              WHERE conversation_id = c.id AND saved_to_table IS NOT NULL) AS write_count
+       FROM advisor_conversations c
+      WHERE ${where.join(' AND ')}
+      ORDER BY datetime(c.updated_at) DESC, c.id DESC
+      LIMIT ? OFFSET ?`,
+  ).bind(...args).all();
+  let conversations: any[] = r?.results || [];
+
+  // Annotate per-conversation latency / token / model rollups by
+  // scanning the most recent assistant meta_json. Cheap because we
+  // limit to 1 row per conversation.
+  for (const conv of conversations) {
+    try {
+      const last: any = await c.env.DB.prepare(
+        `SELECT meta_json FROM advisor_messages
+          WHERE conversation_id = ? AND role = 'assistant' AND meta_json IS NOT NULL
+          ORDER BY id DESC LIMIT 1`,
+      ).bind(conv.id).first();
+      const meta = last?.meta_json ? safeParse(last.meta_json) : null;
+      conv.last_model = meta?.model || meta?.provider_model || null;
+      conv.last_latency_ms = meta?.latency_ms ?? meta?.latency ?? null;
+      conv.last_tokens = meta?.tokens ?? meta?.tokens_used ?? null;
+      const total = Number(conv.total_questions) || 0;
+      const answered = Number(conv.answered_count) || 0;
+      conv.completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+    } catch {}
+  }
+
+  // In-memory text search across persona + state + uid (D1 LIKE on
+  // text columns is cheap; we keep it client-side here so the same
+  // payload powers the CSV export). Bounded by the LIMIT clause.
+  if (search) {
+    conversations = conversations.filter(c =>
+      [c.persona, c.state, c.uid, c.last_model].some(v =>
+        typeof v === 'string' && v.toLowerCase().includes(search),
+      ),
+    );
+  }
+
+  await auditConversationView(c.env, adminUser, userId, 'admin_listed_advisor_conversations', null);
+  await notifyTranscriptViewed(c.env, userId, 'advisor_list');
+
+  // CSV export branch — `?format=csv` returns a flat per-conversation
+  // table suitable for spreadsheet review. PII-light: no message
+  // content, only metadata.
+  if ((c.req.query('format') || '').toLowerCase() === 'csv') {
+    const header = ['id','uid','persona','state','created_at','updated_at','total_questions','answered_count','skipped_count','completion_pct','message_count','write_count','last_model','last_latency_ms','last_tokens'];
+    const esc = (v: any) => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = conversations.map(c => header.map(h => esc((c as any)[h])).join(','));
+    const csv = [header.join(','), ...rows].join('\n');
+    return new Response(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="advisor-conversations-${userId}.csv"`,
+      },
+    });
+  }
+
+  // Task #34 — surface a `total` count alongside the (already capped)
+  // conversations array. Required by the admin user-detail modal so the
+  // left-rail badge can show "12 conversations" without re-fetching.
+  // Total counts ALL conversations matching the WHERE clause (modulo the
+  // in-memory `search` filter, which is reflected in conversations.length
+  // since the search is page-local by design).
+  let total = conversations.length;
+  try {
+    const countArgs = args.slice(0, -2); // drop LIMIT + OFFSET
+    const countRow: any = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM advisor_conversations c WHERE ${where.join(' AND ')}`,
+    ).bind(...countArgs).first();
+    if (countRow && Number.isFinite(Number(countRow.n))) total = Number(countRow.n);
+  } catch (e) {
+    console.warn('[admin/advisor-list] count query failed', (e as Error).message);
+  }
+  return c.json({ ok: true, conversations, total });
+});
+
+// GET /api/admin/users/:user_id/conversations/advisor/:conversation_id
+// Returns the message transcript of one specific advisor conversation. The
+// conversation_id is verified to belong to user_id before any messages are
+// returned, preventing cross-user leakage via id guessing.
+admin.get('/users/:user_id/conversations/advisor/:conversation_id', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  const convId = parseInt(c.req.param('conversation_id'));
+  if (!Number.isFinite(userId) || !Number.isFinite(convId)) {
+    return c.json({ error: 'Invalid id' }, 400);
+  }
+  const conv: any = await c.env.DB.prepare(
+    `SELECT id, uid, persona, state, current_question_id, total_questions,
+            answered_count, skipped_count, created_at, updated_at, user_id
+       FROM advisor_conversations
+      WHERE id = ?`,
+  ).bind(convId).first();
+  if (!conv || conv.user_id !== userId) {
+    return c.json({ error: 'Conversation not found' }, 404);
+  }
+  const r: any = await c.env.DB.prepare(
+    `SELECT role, question_id, content, meta_json, created_at
+       FROM advisor_messages
+      WHERE conversation_id = ?
+      ORDER BY id ASC
+      LIMIT 2000`,
+  ).bind(convId).all();
+  // Pull saved_to_* per question_id so the UI can render a "sparkle"
+  // write indicator on each assistant message that landed a value.
+  const ans: any = await c.env.DB.prepare(
+    `SELECT question_id, saved_to_table, saved_to_column, saved_to_id, saved_status
+       FROM advisor_answers WHERE conversation_id = ?`,
+  ).bind(convId).all();
+  const writeMap = new Map<string, any>();
+  for (const a of (ans?.results || []) as any[]) {
+    if (a.question_id) writeMap.set(a.question_id, {
+      table: a.saved_to_table, column: a.saved_to_column,
+      id: a.saved_to_id, status: a.saved_status,
+    });
+  }
+  const messages = (r?.results || []).map((m: any) => {
+    const meta = m.meta_json ? safeParse(m.meta_json) : null;
+    const wrote = m.question_id ? (writeMap.get(m.question_id) || null) : null;
+    return {
+      role: m.role,
+      content: m.content,
+      ts: m.created_at,
+      question_id: m.question_id || null,
+      model: meta?.model || meta?.provider_model || null,
+      latency_ms: meta?.latency_ms ?? meta?.latency ?? null,
+      tokens: meta?.tokens ?? meta?.tokens_used ?? null,
+      written_to: wrote,
+    };
+  });
+  const total = Number(conv.total_questions) || 0;
+  const answered = Number(conv.answered_count) || 0;
+  const completion_pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+  const summary = summariseConversation(messages);
+  await auditConversationView(c.env, adminUser, userId, 'admin_viewed_advisor_transcript', convId);
+  await notifyTranscriptViewed(c.env, userId, 'advisor_transcript');
+  return c.json({ ok: true, conversation: conv, messages, summary, completion_pct });
+});
+
+// Task #34 — POST /api/admin/users/:user_id/conversations/advisor/export
+// Message-level CSV export across one or all advisor conversations for a
+// user, optionally filtered by date window / persona / model. Body shape:
+//   { from?: ISO, to?: ISO, persona?, model?, conversation_id?: number }
+// CSV columns (per spec): ts, role, content, question_id, written_to,
+// model, latency_ms. Bounded to 5000 messages to keep the worker memory
+// envelope sane.
+admin.post('/users/:user_id/conversations/advisor/export', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const from = typeof body?.from === 'string' ? body.from : '';
+  const to = typeof body?.to === 'string' ? body.to : '';
+  const persona = typeof body?.persona === 'string' ? body.persona.toLowerCase() : '';
+  const model = typeof body?.model === 'string' ? body.model.toLowerCase() : '';
+  const convFilter = Number.isFinite(Number(body?.conversation_id))
+    ? Number(body.conversation_id)
+    : null;
+
+  const where: string[] = ['c.user_id = ?'];
+  const args: any[] = [userId];
+  if (convFilter != null) { where.push('c.id = ?'); args.push(convFilter); }
+  if (persona) { where.push('LOWER(c.persona) = ?'); args.push(persona); }
+  if (from) { where.push('datetime(m.created_at) >= datetime(?)'); args.push(from); }
+  if (to) { where.push('datetime(m.created_at) <= datetime(?)'); args.push(to); }
+
+  const r: any = await c.env.DB.prepare(
+    `SELECT m.conversation_id, m.role, m.question_id, m.content, m.meta_json, m.created_at AS ts,
+            c.persona
+       FROM advisor_messages m
+       JOIN advisor_conversations c ON c.id = m.conversation_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY m.conversation_id ASC, m.id ASC
+      LIMIT 5000`,
+  ).bind(...args).all();
+  const rows = (r?.results || []) as any[];
+
+  // Build a writeMap so we can fill the `written_to` column. Single query
+  // scoped to the conversations the message rows came from.
+  const convIds = Array.from(new Set(rows.map((m) => m.conversation_id))).filter(Boolean);
+  const writeMap = new Map<string, string>();
+  if (convIds.length) {
+    const placeholders = convIds.map(() => '?').join(',');
+    const ans: any = await c.env.DB.prepare(
+      `SELECT conversation_id, question_id, saved_to_table, saved_to_column
+         FROM advisor_answers
+        WHERE conversation_id IN (${placeholders}) AND saved_to_table IS NOT NULL`,
+    ).bind(...convIds).all();
+    for (const a of (ans?.results || []) as any[]) {
+      if (!a.question_id) continue;
+      const key = `${a.conversation_id}:${a.question_id}`;
+      writeMap.set(key, `${a.saved_to_table}${a.saved_to_column ? '.' + a.saved_to_column : ''}`);
+    }
+  }
+
+  const { csv, skippedByModel, rowCount } = serializeTranscriptCsv(
+    rows as TranscriptRow[],
+    writeMap as WriteMap,
+    model,
+  );
+
+  await auditConversationView(
+    c.env, adminUser, userId,
+    'admin_exported_advisor_transcript',
+    convFilter,
+  );
+  await notifyTranscriptViewed(c.env, userId, 'advisor_transcript');
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="advisor-transcript-${userId}-${stamp}.csv"`,
+      'X-Export-Rows': String(rowCount),
+      'X-Export-Skipped-Model': String(skippedByModel),
+    },
+  });
+});
+
+// POST /api/admin/maintenance/public-ids/backfill
+// One-shot operator endpoint. Walks users in created_at order and
+// assigns AXF-/AXP- ids to every founder/partner that doesn't yet
+// have one. Idempotent — safe to re-run until counts return zero.
+admin.post('/maintenance/public-ids/backfill', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const limitParam = parseInt(String(c.req.query('limit') || '1000'));
+  const limit = Number.isFinite(limitParam) ? Math.max(1, Math.min(5000, limitParam)) : 1000;
+  const { backfillPublicIds } = await import('../services/publicIds');
+  const result = await backfillPublicIds(c.env, limit);
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind(
+      'admin_public_ids_backfill',
+      `Backfill: assigned ${result.founders_assigned} founder + ${result.partners_assigned} partner public ids in ${result.cursor_ms}ms`,
+      adminHash, adminUser.id,
+    ).run();
+  } catch {}
+  return c.json({ ok: true, ...result });
+});
+
+// PATCH /api/admin/users/:user_id/access-level — admin grants or revokes
+// "limited" access. Limited users can browse the platform without completing
+// KYC but the worker rejects any signing attempts (esign /sign/:token).
+// Body: { level: 'limited' | null }
+admin.patch('/users/:user_id/access-level', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureProfileColumns(c.env);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const raw = body?.level;
+  // Only `'limited'` and `null` (revoke) are accepted. We deliberately do
+  // not expose a 'full' value here — full access is granted via the KYC
+  // approve endpoint, which keeps a single source of truth.
+  if (raw !== null && raw !== 'limited' && raw !== '') {
+    return c.json({ error: "level must be 'limited' or null" }, 400);
+  }
+  const newLevel: string | null = raw === 'limited' ? 'limited' : null;
+  // D260 — ONLY THE GRANT FREEZES. Granting limited access lets an account in
+  // without KYC, which is admitting someone new under the brand; a suspended
+  // branch may not (423, after the admin gate). Revoking it (`level: null`)
+  // takes access away, and taking something down still works while suspended
+  // (`FREEZE_RULE`, lib/branchFreeze.js) — freezing it would trap a branch
+  // with an account it had let in and could no longer shut out.
+  if (newLevel === 'limited') await requireBranchNotSuspended(c);
+
+  const target: any = await c.env.DB.prepare(
+    `SELECT id, email, name, role, access_level, kyc_status FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.role === 'admin') return c.json({ error: "Admins already have full access; access_level is a no-op for them" }, 400);
+  if (target.access_level === newLevel) return c.json({ error: 'No change' }, 409);
+
+  await c.env.DB.prepare(`UPDATE users SET access_level = ? WHERE id = ?`).bind(newLevel, userId).run();
+
+  const action = newLevel === 'limited' ? 'access_limited_granted' : 'access_limited_revoked';
+  const details = newLevel === 'limited'
+    ? `Admin ${adminUser.name} granted limited access (browse-only, no signing) to ${target.name} (user_id=${target.id})`
+    : `Admin ${adminUser.name} revoked limited access from ${target.name} (user_id=${target.id})`;
+  try {
+    // Epic 11 — actors are email_hash, never the plaintext email.
+    const adminHash = await hashEmail(adminUser.email);
+    const targetHash = await hashEmail(target.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(action, details, adminHash, adminUser.id).run();
+    // Also log on the target so it appears in their own activity timeline.
+    const userMsg = newLevel === 'limited'
+      ? 'You were granted limited platform access by Axal compliance. You can browse but cannot sign legal agreements until KYC is complete.'
+      : 'Your limited platform access was revoked by Axal compliance.';
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind(action, userMsg, targetHash, target.id).run();
+  } catch {}
+
+  return c.json({ access_level: newLevel, user_id: userId });
+});
+
+// POST /api/admin/users/:user_id/notes — admin updates internal notes.
+// D1303: the save records who saved them and when (`account_note_saves`), in
+// one batch with the notes, and another administrator's notes are the Super
+// Admin's, as their record is (D133).
+admin.post('/users/:user_id/notes', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await ensureProfileColumns(c.env);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const notes = String(body?.admin_notes ?? '').slice(0, 8000);
+
+  const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string }>();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.id !== adminUser.id && String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    return c.json({ error: "Only a super admin can open another admin's record.", code: 'super_admin_required' }, 403);
+  }
+
+  const [r] = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE users SET admin_notes = ? WHERE id = ?`).bind(notes, userId),
+    noteSaveStatement(c.env, userId, Number(adminUser.id), notes.length),
+  ]);
+  if ((r?.meta?.changes || 0) < 1) return c.json({ error: 'User not found' }, 404);
+
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
+    ).bind('admin_notes_updated',
+      `Admin ${adminUser.name} updated internal notes (${notes.length} chars)`,
+      adminHash, adminUser.id).run();
+  } catch {}
+
+  return c.json({ ok: true, notes_saved: await notesSavedOf(c.env, userId, notes.length > 0) });
+});
+
+// POST /api/admin/users/:user_id/resend-verification — re-send the email
+// verification link for users who haven't completed verification.
+// Task #7 — Spin-Out Lab cohort admission. Uses a sidecar table because
+// users hit D1's 100-column ALTER TABLE limit (migration 154).
+const SPINOUT_ADMISSION_SCHEMA_MIGRATED = new WeakMap<object, boolean>();
+async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
+  if (SPINOUT_ADMISSION_SCHEMA_MIGRATED.get(bindingKey(env))) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS user_spinout_flags (
+        user_id INTEGER PRIMARY KEY,
+        spinout_lab_admitted INTEGER NOT NULL DEFAULT 0,
+        spinout_lab_cohort TEXT,
+        registration_product TEXT
+      )`
+    ).run();
+  } catch {}
+  SPINOUT_ADMISSION_SCHEMA_MIGRATED.set(bindingKey(env), true);
+}
+
+// POST /api/admin/users/:user_id/spinout-admit — Users' door to D945's admit
+// without an application (routes/admin_lab_writes.ts): { cycle_id, reason,
+// company_name?, confirm_over_places? }. It creates the application and its
+// approved place in an OPEN cohort, so the queue and the calendar agree, and the
+// scheduler starts the founder on the cohort's 1st. The free-text cohort label
+// it used to write, with no application and no cycle row, is refused.
+admin.post('/users/:user_id/spinout-admit', async (c) => {
+  const adminUser = await requireAdmin(c);
+  // D260 — a suspended branch admits no one to the Lab: 423, after the admin gate.
+  await requireBranchNotSuspended(c);
+  // D985 — nor does a branch whose licence does not hold the Lab, or holds it paused.
+  const { programRefusal } = await import('../services/programEnforcement');
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const { admitRoute } = await import('./admin_lab_writes');
+  return admitRoute(c, adminUser, c.req.param('user_id'), body);
+});
+
+// Spin-Out Lab cohort applications — review queue + accept/refuse.
+// GET  /spinout-applications           → pending first, newest first
+// POST /spinout-applications/:id/decide {decision:'accepted'|'refused', reason,
+//                                      confirm_over_places?: true}
+// D943: both decisions use the assigned cycle; approval schedules admission
+// for the cohort's 1st rather than activating the workspace here.
+admin.get('/spinout-applications', async (c) => {
+  await requireAdmin(c);
+  // D960 (#2793) — a failed read is a failure, not an empty queue. It used to
+  // answer `{ applications: [] }` on any error, which the Lab drew as nobody
+  // applying. `counts` is by status over every application, uncapped, as
+  // `GET /api/admin/lab-hosts` answers, so a figure stays exact while the list
+  // stops at 200.
+  try {
+    const [rs, counts] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+                a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+                a.created_at, a.decided_at
+         FROM spinout_applications a
+         JOIN users u ON u.id = a.user_id
+         ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                  a.created_at DESC
+         LIMIT 200`,
+      ).all(),
+      c.env.DB.prepare(
+        'SELECT status, COUNT(*) AS n FROM spinout_applications GROUP BY status',
+      ).all<{ status: string; n: number }>(),
+    ]);
+    const byStatus: Record<string, number> = {};
+    for (const r of counts.results ?? []) byStatus[String(r.status)] = Number(r.n) || 0;
+    return c.json({ applications: rs.results ?? [], counts: byStatus });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_applications_unreadable',
+      message: 'Lab applications could not be read. That is not the same as none.',
+      raw: e,
+    });
+  }
+});
+
+// D943: both doors use the cycle decision, including its reason, places and
+// freeze checks. Only the cohort scheduler activates a founder on the 1st.
+admin.post('/spinout-applications/:app_id/decide', async (c) => {
+  const { decideCohortApplication } = await import('./admin_cohort');
+  return decideCohortApplication(c, true);
+});
+
+// Task #102 — Spin-Out Lab participants for the admin dashboard
+// (/admin/spinout-lab): every admitted, active, or graduated founder with
+// their full program data — week/day, milestone rows, derived unlocked
+// tools, and the joined company/project. Dev parity:
+// backend/app/api/routes/admin.py GET /admin/spinout-participants.
+admin.get('/spinout-participants', async (c) => {
+  await requireAdmin(c);
+
+  const catalog = SPINOUT_MILESTONES.map((w) => ({
+    week: w.week,
+    required_all: w.requiredAll,
+    required_any: w.requiredAny ?? [],
+    unlocked_features: w.unlockedFeatures,
+  }));
+
+  const SPRINT_DAYS = 28;
+  const parseTs = (s: string | null | undefined): number | null => {
+    if (!s) return null;
+    const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const daysSince = (startedAt: string | null | undefined): number => {
+    const startMs = parseTs(startedAt);
+    if (startMs == null) return 0;
+    return Math.max(0, Math.floor((Date.now() - startMs) / 86_400_000));
+  };
+
+  await ensureSpinoutAdmissionColumns(c.env);
+  // D960 (#2793) — each read here says when it failed, instead of reading as
+  // none: the list answers 503, and the two inner reads set a flag.
+  const PARTICIPANT_ROWS = 400;
+  let rows: any[] = [];
+  try {
+    const rs = await c.env.DB.prepare(
+      `SELECT u.id, u.uid, u.name, u.email,
+              usf.spinout_lab_admitted, usf.spinout_lab_cohort,
+              u.spinout_lab_active, u.spinout_lab_week,
+              u.spinout_lab_started_at, u.is_incorporated,
+              p.name AS project_name, p.sector AS project_sector
+       FROM users u
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id
+       WHERE usf.spinout_lab_admitted = 1
+          OR u.spinout_lab_active = 1
+          OR u.id IN (SELECT user_id FROM spinout_lab_graduates)
+       ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
+       LIMIT ?`,
+    ).bind(PARTICIPANT_ROWS).all();
+    rows = (rs.results ?? []) as any[];
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_participants_unreadable',
+      message: 'Lab participants could not be read. That is not the same as none.',
+      raw: e,
+    });
+  }
+  // The limit counts user-and-project rows before the de-dup below, so a full
+  // page means some participants may be missing, not that there are exactly
+  // this many.
+  const truncated = rows.length >= PARTICIPANT_ROWS;
+
+  // Several projects per founder: keep the first row per user (same rule
+  // as the public cohort tracker).
+  const deduped: any[] = [];
+  const seen = new Set<number>();
+  for (const r of rows) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    deduped.push(r);
+  }
+
+  const msMap = new Map<number, { key: string; week: number; completed_at: string }[]>();
+  let milestonesUnreadable = false;
+  let applicationsUnreadable = false;
+  if (deduped.length > 0) {
+    try {
+      const placeholders = deduped.map(() => '?').join(',');
+      const ms = await c.env.DB.prepare(
+        `SELECT user_id, milestone_key, week, completed_at
+         FROM spinout_lab_milestones
+         WHERE user_id IN (${placeholders})
+         ORDER BY week ASC, completed_at ASC`,
+      ).bind(...deduped.map((r) => r.id)).all();
+      for (const m of (ms.results ?? []) as any[]) {
+        const list = msMap.get(m.user_id) ?? [];
+        list.push({ key: m.milestone_key, week: Number(m.week), completed_at: m.completed_at });
+        msMap.set(m.user_id, list);
+      }
+    } catch (e) {
+      // A failed read is not "no milestones": it would make a graduate read as
+      // admitted. Say so, and leave a status it cannot know unset.
+      milestonesUnreadable = true;
+      console.error('[admin] spinout participants: milestones unreadable', (e as Error)?.message);
+    }
+  }
+
+  // Latest application per participant, fetched in ONE query (rows come
+  // back newest-first per user; keep the first seen) — a per-row LIMIT 1
+  // lookup here would be an N+1 against up to 400 participants. Mirrors
+  // the dev backend's _latest_application shape.
+  const appMap = new Map<number, any>();
+  if (deduped.length > 0) {
+    try {
+      const placeholders = deduped.map(() => '?').join(',');
+      const apps = await c.env.DB.prepare(
+        `SELECT user_id, id, company_name, incorporated, stage, jurisdiction,
+                cohort, status, created_at, decided_at
+         FROM spinout_applications
+         WHERE user_id IN (${placeholders})
+         ORDER BY user_id ASC, created_at DESC, id DESC`,
+      ).bind(...deduped.map((r) => r.id)).all();
+      for (const a of (apps.results ?? []) as any[]) {
+        if (!appMap.has(a.user_id)) {
+          const { user_id: _uid, ...rest } = a;
+          appMap.set(a.user_id, rest);
+        }
+      }
+    } catch (e) {
+      applicationsUnreadable = true;
+      console.error('[admin] spinout participants: applications unreadable', (e as Error)?.message);
+    }
+  }
+
+  const participants = [];
+  for (const r of deduped) {
+    const milestones = msMap.get(r.id) ?? [];
+    const completedKeys = new Set(milestones.map((m) => m.key));
+    const active = Number(r.spinout_lab_active ?? 0) === 1;
+    const graduated = completedKeys.has('incorporation_completed');
+    // Graduated and admitted differ only by a milestone; with the milestones
+    // unread, a participant who is not active has a status nobody knows.
+    const status = active ? 'active' : milestonesUnreadable ? null : graduated ? 'graduated' : 'admitted';
+    const week = status === 'graduated' ? 4 : Math.max(0, Math.min(4, Number(r.spinout_lab_week ?? 0)));
+    let day: number | null = null;
+    let daysRemaining: number | null = null;
+    if (status === 'active' && r.spinout_lab_started_at) {
+      day = Math.min(SPRINT_DAYS, daysSince(r.spinout_lab_started_at) + 1);
+      daysRemaining = Math.max(0, SPRINT_DAYS - daysSince(r.spinout_lab_started_at));
+    } else if (status === 'graduated' && r.spinout_lab_started_at) {
+      const done = milestones.find((m) => m.key === 'incorporation_completed');
+      const startMs = parseTs(r.spinout_lab_started_at);
+      const doneMs = parseTs(done?.completed_at);
+      if (startMs != null && doneMs != null) {
+        day = Math.max(1, Math.floor((doneMs - startMs) / 86_400_000) + 1);
+      }
+    }
+    const application: any = appMap.get(r.id) ?? null;
+    participants.push({
+      user_id: r.id,
+      uid: r.uid ?? null,
+      name: r.name ?? null,
+      email: r.email,
+      admitted: Number(r.spinout_lab_admitted ?? 0) === 1,
+      cohort: r.spinout_lab_cohort ?? null,
+      status,
+      week,
+      day,
+      days_remaining: daysRemaining,
+      started_at: r.spinout_lab_started_at ?? null,
+      is_incorporated: Number(r.is_incorporated ?? 0) === 1,
+      company_name: r.project_name ?? application?.company_name ?? null,
+      sector: r.project_sector ?? null,
+      milestones: milestonesUnreadable ? null : milestones,
+      unlocked_features: status && status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
+      application: application ?? null,
+    });
+  }
+  return c.json({
+    participants, catalog, truncated,
+    ...(milestonesUnreadable ? { milestones_unreadable: true } : {}),
+    ...(applicationsUnreadable ? { applications_unreadable: true } : {}),
+  });
+});
+
+admin.post('/users/:user_id/resend-verification', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('user_id'));
+  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
+
+  const target: any = await c.env.DB.prepare(
+    `SELECT id, email, name, email_verified FROM users WHERE id = ?`
+  ).bind(userId).first();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.email_verified) return c.json({ ok: true, already_verified: true });
+
+  // The token, the email and the activity row are `services/verificationResend.ts`'s,
+  // shared with the bulk resend (D1303).
+  const { emailed } = await resendVerification(c.env, adminUser as any, target);
+
+  return c.json({ ok: true, already_verified: false, emailed });
+});
+
+// Task #6 — deploy-time TOTP remediation. Operators run this immediately
+// after a deploy that ships the new auth_totp/auth_sms schema; it migrates
+// every legacy base32 secret out of users.password_hash, sets
+// password_reset_required, and emails each affected user a forced-reset
+// link. Idempotent — repeated invocations over a clean DB are no-ops.
+// Also wired into the daily 04:20 UTC cron as a backup.
+admin.post('/maintenance/totp-remediation', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  await requireAdmin(c);
+  const result = await runTotpRemediation(c.env);
+  return c.json({ ok: true, ...result });
+});
+
+/**
+ * D248 — tell the person whose account a support session opens on.
+ *
+ * Until D248 the target was never told. None of the three impersonation
+ * handlers called `notify()`, and they wrote no row the target's own feed can
+ * see: `routes/activity.ts` reads `user_id = me OR actor = my email`, and the
+ * `admin_impersonate` row is on the admin. So someone could act as you for
+ * thirty minutes, extendable, and nothing on your side said so.
+ *
+ * A `security` notice, which is in `CRITICAL_CATEGORIES`, so quiet hours and
+ * the digest cannot hold it back. `in_app` and `email`, because the person
+ * most worth reaching is not signed in while it happens. It says who, why (the
+ * typed reason) and for how long, and links to their Security settings, where
+ * "sign out everywhere" ends the session's token.
+ *
+ * `true` means the notice reached the person's inbox. It is reported as its
+ * own response field and never thrown: the session has already been granted,
+ * and D111's rule is that a side effect after a recorded act never turns that
+ * act into a failed request. `tellOfTransfer` in admin_super_admins.ts is the
+ * same shape.
+ */
+async function tellOfSupportSession(
+  env: Env, targetId: number, adminName: string, reason: string, sessionId: number | null,
+): Promise<boolean> {
+  try {
+    const hours = IMPERSONATION_CEILING_MINUTES / 60;
+    const rowId = await notify(env, {
+      userId: targetId,
+      type: 'support_session_opened',
+      title: 'An Axal admin opened a support session on your account',
+      body: `${adminName} opened a support session on your account. For the next ${IMPERSONATION_EXPIRY_MINUTES} minutes they can see and act in it as you; they can extend it, up to ${hours} hours in all. The reason they gave: "${reason}". If you did not expect this, sign out everywhere from your Security settings, which ends the session, and contact Axal.`,
+      link: '/account/security',
+      payload: {
+        impersonation_session_id: sessionId,
+        admin_name: adminName,
+        reason,
+        minutes: IMPERSONATION_EXPIRY_MINUTES,
+        ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+      },
+      channels: ['in_app', 'email'],
+      category: 'security',
+    });
+    return rowId !== null;
+  } catch (e) {
+    console.warn('[admin/impersonate] target notice failed', (e as Error).message);
+    return false;
+  }
+}
+
+admin.post('/impersonate/:userId', async (c) => {
+  // Task #6 — impersonation is a high-risk step-up. The admin's current
+  // session must have authenticated with TOTP (not SMS, not a recovery
+  // code). requireFactor throws 'TOTP required' (→403) otherwise.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('userId'));
+
+  // THE REASON IS REQUIRED, and required HERE rather than only in the dialog.
+  // `context` has existed since the cohort-timing work but was an optional
+  // query param no SPA caller ever sent, so every support session in the
+  // audit read "someone impersonated someone" with no why. The canvas draws
+  // it as "Reason · required, free text"; a UI-only rule would be a
+  // convention, not a control, and this is the one field that makes the
+  // audit trail answer the question it exists to answer.
+  const reason = String(c.req.query('context') || '').trim().slice(0, 200);
+  if (reason.length < 10) {
+    return c.json({
+      error: 'A reason of at least 10 characters is required to open a support session.',
+      code: 'impersonation_reason_required',
+    }, 400);
+  }
+
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  const target = rows[0];
+  // Migrations 199/207 — impersonating the Super Admin IS the Super Admin:
+  // the minted token carries the target's identity, so every gate downstream,
+  // requireSuperAdmin included, would pass. A plain admin borrowing the one
+  // account that can franchise the platform is an escalation, not support.
+  // Only a holder may impersonate a holder. The target row comes from
+  // SELECT *, so its elevation is read from the super_admins side table
+  // first (auth.ts) — never from a column the row may still carry.
+  await hydrateSuperAdmin(c.env, target as any);
+  if (isSuperAdmin(target as any) && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a Super Admin can impersonate a Super Admin.',
+      code: 'cannot_impersonate_super_admin',
+    }, 403);
+  }
+  // D133 — AND AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE, for the same reason
+  // one line up, one tier down. The guard above refuses a HOLDER target because
+  // the minted token carries the target's identity; every word of that argument
+  // applies to a plain admin too, and taking over a peer's session is strictly
+  // worse than reading their record — which D132 had already closed on three
+  // audit routes while this one stayed open.
+  //
+  // THE TWO GUARDS ARE KEPT APART RATHER THAN MERGED. A holder is also
+  // `role === 'admin'`, so this check alone would refuse both; what it would
+  // lose is the sentence above, which tells an operator exactly which line they
+  // crossed. Specific first, general second — the shape `toggle-active` uses
+  // for its self-check.
+  if (String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can open a support session as another admin.',
+      code: 'super_admin_required',
+    }, 403);
+  }
+  // D4669 — THE RECORD FIRST, THEN THE TOKEN. The token names this row (`sid`)
+  // and every request re-reads it (auth.ts `sessionStanding`), so ending the
+  // record ends the access. A session whose record could not be written is
+  // therefore not opened at all: a token with no record would be one nobody
+  // could end, and one the audit could not show.
+  // Cohort Timing task — `context` records WHY the session was opened; the
+  // session id is returned so the client can close it via
+  // POST /impersonate-sessions/:id/end when exiting the founder view.
+  let impersonationSessionId: number | null = null;
+  try {
+    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
+    await ensureCohortTimingSchema(c.env);
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
+    ).bind(adminUser.id, target.id, reason).run();
+    impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
+  } catch (e) { console.warn('[admin/impersonate] session record failed', e); }
+  if (impersonationSessionId === null) {
+    await sql.end();
+    return c.json({
+      error: 'The support session could not be recorded, so it was not opened. Nothing was granted; try again.',
+      code: 'support_session_unrecorded',
+    }, 503);
+  }
+  // Thirty minutes, not the ordinary 24 hours. See IMPERSONATION_EXPIRY_MINUTES.
+  const token = await createJWT(
+    c.env, target.id, target.email, target.role, adminUser.id, undefined,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`, impersonationSessionId,
+  );
+  const expiresAt = new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString();
+  // Epic 11 — actor is email_hash, details references user_id only.
+  const impAdminHash = await hashEmail(adminUser.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
+  await sql.end();
+  // D248 — only here, after every refusal above has had its chance, so a
+  // refused open tells nobody.
+  const targetNotified = await tellOfSupportSession(
+    c.env, target.id, String(adminUser.name || 'An Axal admin'), reason, impersonationSessionId,
+  );
+  return c.json({
+    token,
+    user: { id: target.id, email: target.email, name: target.name, role: target.role },
+    impersonation_session_id: impersonationSessionId,
+    // D290 — the reason as STORED, for the operator's bar (H25's Why). Null
+    // when the best-effort write above failed, so the bar reads "Not
+    // recorded" rather than a reason the audit does not hold.
+    reason: impersonationSessionId === null ? null : reason,
+    // D248 — whether the person was told. Reported, never assumed.
+    target_notified: targetNotified,
+    // The client shows the remaining time and hands the session back at zero.
+    // Without this it would discover the expiry as a 401, and api.request
+    // treats a 401 as "session expired" and bounces to /login — which would
+    // end the ADMIN's real session, not just the support session.
+    expires_at: expiresAt,
+    expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
+  });
+});
+
+// Extend a live support session by another thirty minutes.
+//
+// The alternative to this route is an admin being dropped mid-task and
+// re-authenticating with TOTP to get back in, which trains people to open
+// long sessions "just in case" — the habit the short expiry exists to break.
+// Extending is deliberate, costs a fresh token, and is recorded, so the
+// audit shows how long support actually held the account.
+//
+// It re-checks everything the original grant checked: a recent TOTP, that
+// the caller is the admin who opened THIS session, and that the session is
+// still open. An ended session cannot be revived; that is a new session with
+// its own reason.
+//
+// D248 — AND IT NOW ASKS WHAT THE GRANT ASKS, PLUS A LIMIT THE GRANT DID NOT
+// NEED. A typed reason of at least 10 characters, because thirty more minutes
+// as someone else is a decision the audit should be able to explain; and a
+// ceiling of IMPERSONATION_CEILING_MINUTES measured from `started_at`, because
+// nothing read that column and an HQ session whose tab was closed stays open
+// for ever. Both are checked after the refusals above and before the token is
+// minted, so a refused extension writes nothing. The extension is recorded
+// through `logAdminAction` with the target and the reason, so Security shows
+// it: the old `admin_impersonate_extend` activity row alone was excluded from
+// Security's feed on purpose (admin_security.ts), and carried no reason.
+//
+// Covered by the recovery cool-off (index.ts COOL_OFF_ROUTES); End is not.
+admin.post('/impersonate-sessions/:id/extend', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id')) || 0;
+
+  const row = await c.env.DB.prepare(
+    `SELECT * FROM impersonation_sessions WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
+  ).bind(id, adminUser.id).first<any>();
+  if (!row) return c.json({ error: 'No open support session with that id', code: 'session_not_open' }, 404);
+
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM users WHERE id = ${row.target_user_id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  const target = rows[0];
+  // The same escalation guard as the grant. A holder's elevation could have
+  // been granted since the session opened.
+  await hydrateSuperAdmin(c.env, target as any);
+  if (isSuperAdmin(target as any) && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a Super Admin can impersonate a Super Admin.',
+      code: 'cannot_impersonate_super_admin',
+    }, 403);
+  }
+  // D221 — AND D133's ADMIN-TARGET GUARD, which this route did not re-run. The
+  // comment above this handler says it "re-checks everything the original grant
+  // checked"; it re-checked the holder guard alone. So a session opened on an
+  // administrator by the holder, who has since handed the elevation on, could
+  // be extended thirty minutes at a time by an account that could no longer
+  // open it — the line D133 drew would hold at the door and not in the room.
+  // The same test, the same code, the same words as the grant.
+  if (String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can extend a support session as another admin.',
+      code: 'super_admin_required',
+    }, 403);
+  }
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason ?? '').trim().slice(0, 200);
+  if (reason.length < 10) {
+    await sql.end();
+    return c.json({
+      error: 'A reason of at least 10 characters is required to extend a support session — the extra time is recorded with it.',
+      code: 'extend_reason_required',
+    }, 400);
+  }
+  // Measured from when the session OPENED. An unreadable start is refused:
+  // the safe answer to "how long has this been open?" is not "no time".
+  const startedMs = sqlTimestampMs(row.started_at);
+  const ceilingMs = startedMs + IMPERSONATION_CEILING_MINUTES * 60_000;
+  if (!Number.isFinite(startedMs) || Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000 > ceilingMs) {
+    await sql.end();
+    return c.json({
+      error: `A support session lasts at most ${IMPERSONATION_CEILING_MINUTES / 60} hours from when it opened, and another ${IMPERSONATION_EXPIRY_MINUTES} minutes would run past that. End it and open a new session, with its own reason.`,
+      code: 'support_session_ceiling',
+      started_at: row.started_at ?? null,
+      ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
+    }, 409);
+  }
+  // D4669 — the extension carries the same record id, so ending the session
+  // ends this token too.
+  const token = await createJWT(
+    c.env, target.id, target.email, target.role, adminUser.id, undefined,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`, id,
+  );
+  await sql.end();
+  // Imported here, not at the top: services/adminAudit.ts imports from this
+  // file, so a static import is a cycle.
+  const { logAdminAction } = await import('../services/adminAudit');
+  await logAdminAction(c.env, adminUser.id, adminUser.email, 'admin_impersonate_extend', {
+    target_user_id: target.id,
+    reason,
+    impersonation_session_id: id,
+    minutes: IMPERSONATION_EXPIRY_MINUTES,
+    started_at: row.started_at ?? null,
+  });
+  return c.json({
+    token,
+    expires_at: new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString(),
+    expires_in_minutes: IMPERSONATION_EXPIRY_MINUTES,
+  });
+});
+
+/** A D1 timestamp ('YYYY-MM-DD HH:MM:SS', UTC, or ISO) as epoch ms; NaN when unreadable. */
+function sqlTimestampMs(v: unknown): number {
+  if (typeof v !== 'string' || !v) return Number.NaN;
+  return Date.parse(v.includes('T') ? v : `${v.replace(' ', 'T')}Z`);
+}
+
+// Close an impersonation session. Fired by the client when the admin exits the
+// founder view. D4669 — the token names this record, so closing it ends the
+// support token on its next request; the answer says whether that happened
+// rather than `ok: true` whatever the database did.
+admin.post('/impersonate-sessions/:id/end', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id')) || 0;
+  let changes = 0;
+  try {
+    const res = await c.env.DB.prepare(
+      `UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
+    ).bind(id, adminUser.id).run();
+    changes = Number(res.meta?.changes ?? 0);
+  } catch (e) {
+    console.warn('[admin/impersonate-sessions] end failed', e);
+    return c.json({
+      error: 'The support session could not be closed. It stays open until its token expires; try again, or sign the account out.',
+      code: 'support_session_end_failed',
+    }, 503);
+  }
+  if (changes === 0) {
+    return c.json({ ok: true, ended: false, message: 'No open support session of yours holds that id; nothing was changed.' });
+  }
+  return c.json({ ok: true, ended: true, message: 'Support session ended. Its token is refused from its next request.' });
+});
+
+/**
+ * Moving an account INTO the `exploring` holding state clears any assignment
+ * left from a prior review cycle, so it reappears in the Exploring Users queue
+ * needing fresh review rather than reading as already assigned. Suggested-role
+ * and binding-envelope history are left intact — resending the agreement
+ * overwrites them anyway.
+ *
+ * SHARED BY TWO CALLERS SINCE D134: the role route below and the admin demote
+ * beside it, which parks a former administrator in exactly this state. One copy
+ * rather than two, because the two would drift on which columns they clear and
+ * the difference would show up as a queue that silently skips one of them.
+ *
+ * Best-effort on purpose: the role has already changed when this runs, and a
+ * failure here means a stale queue row, not a wrong role. `tag` names the
+ * caller in the log line so a failure says which path produced it.
+ */
+async function resetExploringReview(env: Env, userId: number, tag: string): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO user_role_review (user_id, updated_at) VALUES (?, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         role_confirmed = 0,
+         assigned_role = NULL,
+         assigned_by_user_id = NULL,
+         assigned_at = NULL,
+         updated_at = datetime('now')`
+    ).bind(userId).run();
+  // The tag is an ARGUMENT, not part of the format string (Semgrep 6114,
+  // `unsafe-formatstring`). The query was right that a template literal in a
+  // format-string position is the wrong shape, and wrong that this one is
+  // reachable: `tag` is one of exactly two call-site literals and never touches
+  // user input. Fixing it properly is still worth it — a CONSTANT prefix is
+  // greppable across both callers, which the interpolated one was not.
+  } catch (e) { console.error('[admin/exploring-review] reset failed', tag, (e as Error).message); }
+}
+
+/**
+ * D134 — DEMOTE AN ADMINISTRATOR. The second half of "the super admin has the
+ * capacity to open, ban, close and supervise admin accounts", and until this
+ * route there was no half at all: `PATCH /users/:userId/role` refuses an admin
+ * target with `admin_demotion_disabled` and refuses one for EVERYONE, holder
+ * included, so closing an admin account meant SQL against production.
+ *
+ * WHY IT IS A ROUTE OF ITS OWN AND NOT A HOLE IN THE ROLE ROUTE. That route's
+ * override is validated deliberately ABOVE its promotion and demotion guards so
+ * that an override can never reach them, and a test pins the ordering. Opening
+ * the demotion guard from inside would loosen the one mechanism whose whole
+ * value is that it is narrow, and it would do it on a route gated by plain
+ * `requireAdmin`. Here the gate is the write bar — a TOTP-minted session, a
+ * recent step-up, then the elevation — which is a strictly higher bar than the
+ * override ever had, and it is the bar the rest of this power already carries
+ * (impersonation, granting the elevation, minting an admin through the
+ * licence).
+ *
+ * THE DESTINATION IS `exploring`, NOT A ROLE THE CALLER PICKS. Nobody has
+ * decided what a former administrator is, and inventing an answer — founder?
+ * investor? — would put that decision in a dropdown nobody thought about.
+ * `exploring` is the platform's own "we do not know yet" state, it is where
+ * every new signup lands, and it routes the account back through
+ * `/admin/exploring` where assigning a real role needs a signed binding
+ * agreement. Parking them there is the honest answer AND the one with a gate
+ * behind it.
+ *
+ * THE THREE REFUSALS, each of which would otherwise be a way to lock the
+ * platform out of itself:
+ *  - yourself, because the elevation is an elevation on `admin` and demoting
+ *    yourself would leave a `super_admins` row pointing at a non-admin, which
+ *    `holders()` filters out — the platform would read as having no super admin;
+ *  - the elevation holder, for the same reason from the other side, and it
+ *    names the revoke step rather than stating a rule;
+ *
+ * THERE IS NO "LAST ADMIN" REFUSAL, AND THAT IS NOT AN OMISSION. A first draft
+ * carried one — `COUNT(*) WHERE role='admin' AND is_active=1 AND id != target`,
+ * refusing at zero, mirroring `admin_super_admins.ts`'s `last_super_admin`
+ * floor. A test written to drive it could not: the count can never be zero,
+ * because the caller has just passed `requireSuperAdmin` (role `admin`) through
+ * `getCurrentUser` (which refuses an inactive account with 401) and cannot be
+ * the target (refused above). So at least one active admin — the caller —
+ * always survives, by construction. The floor holds; the check that claimed to
+ * hold it was dead, and a conjunct that cannot be false is not a guard. The
+ * test that would have owned it now pins the property this rests on instead:
+ * a deactivated super admin is refused at authentication, not here.
+ *
+ * It does NOT unbind the licence. Demote and detach are two acts on purpose
+ * (`routes/admin_licences.ts` DELETE /:uid/admins/:userId refuses while the role
+ * is still held), and between them the account is a non-admin still holding a
+ * binding — a state `GET /:uid/admins` renders rather than hides.
+ */
+admin.post('/users/:userId/demote-admin', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const userId = parseInt(c.req.param('userId'));
+  if (!Number.isFinite(userId) || userId <= 0) return c.json({ error: 'Invalid user id' }, 400);
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason ?? '').trim().slice(0, 500);
+  if (reason.length < 10) {
+    return c.json({
+      error: 'A reason of at least 10 characters is required — closing an administrator account is the line someone reads in the audit later.',
+      code: 'reason_too_short',
+    }, 400);
+  }
+  if (userId === actor.id) {
+    return c.json({
+      error: 'You cannot demote yourself; the Super Admin elevation sits on the admin role and would be left pointing at a non-admin.',
+      code: 'cannot_demote_self',
+    }, 409);
+  }
+  const target = await c.env.DB.prepare('SELECT id, email, name, role, is_active FROM users WHERE id = ?')
+    .bind(userId).first<{ id: number; email: string; name: string; role: string; is_active: number }>();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  // Already done is not an error: demote → detach is a two-step flow and a
+  // retried first step must not block the second.
+  if (String(target.role).toLowerCase() !== 'admin') {
+    return c.json({ ok: true, already: true, user_id: target.id, role: target.role });
+  }
+  await hydrateSuperAdmin(c.env, target as any);
+  if (isSuperAdmin(target as any)) {
+    return c.json({
+      error: 'That account holds the Super Admin elevation. Revoke it first (DELETE /api/admin/super-admins/:userId), or transfer it — demoting the holder would leave the platform with no franchisor.',
+      code: 'super_admin_holder',
+    }, 409);
+  }
+  const oldRole = String(target.role);
+  await ensureExploringSchema(c.env);
+  await c.env.DB.prepare("UPDATE users SET role = 'exploring' WHERE id = ?").bind(userId).run();
+  await resetExploringReview(c.env, userId, 'demote-admin');
+  // Trust obligations follow the role, exactly as the role route does — an
+  // admin-only obligation is waived rather than deleted so the audit survives.
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, userId, 'exploring', { pruneStaleForRole: true });
+  } catch (e) { console.error('[admin/demote-admin] trust re-seed failed', (e as Error).message); }
+  // `role_changed` / `your_role_changed`, not a new action name: both are
+  // already in admin_security.ts's audit allowlist and ActivityPage.jsx's label
+  // map, and a distinct action would be invisible in every reader until three
+  // sweeps had been done — the argument the role route below already makes.
+  try {
+    const actorHash = await hashEmail(actor.email);
+    const targetHash = await hashEmail(target.email);
+    await c.env.DB.batch([
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+        .bind('role_changed',
+          `Super admin ${actor.name} demoted ${target.name || target.email} from ${oldRole} to exploring. Reason: ${reason}`,
+          actorHash, actor.id),
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+        .bind('your_role_changed',
+          `Your administrator role was removed by ${actor.name}. Reason: ${reason}`,
+          targetHash, target.id),
+    ]);
+  } catch (e) { console.error('[admin/demote-admin] activity log failed', (e as Error).message); }
+  return c.json({ ok: true, user_id: target.id, role: 'exploring', demoted_from: oldRole });
+});
+
+admin.patch('/users/:userId/role', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('userId'));
+  // Frontend sends `?role=...` as a query parameter (matches the FastAPI
+  // signature `def update_user_role(user_id, role: str, ...)`). Older clients
+  // posted it in the JSON body; accept either so we don't break them.
+  //
+  // THE BODY IS READ ONCE, HERE, FOR CLARITY AND NOT FOR CORRECTNESS. It used
+  // to be read lazily inside an `if (!role)` fallback; the override reason below
+  // lives in the same body, and the first version of this comment claimed a
+  // second read would come back empty because a Request body can only be
+  // consumed once. That is true of a raw `Request` and NOT of Hono, which
+  // memoises the parsed body in `HonoRequest.bodyCache` — a mutation that read
+  // it twice was written specifically to prove the claim and every test stayed
+  // green (hono 4.13.3, `dist/request.js`). What one read actually buys is that
+  // the role and the reason provably come from the same payload.
+  const body: any = await c.req.json().catch(() => ({}));
+  const role = c.req.query('role') || body.role;
+
+  // D249 — the reason, whatever change it rides on. It arrives as
+  // `override_reason`, the key the SPA has always sent. It is an OVERRIDE only
+  // when the change is out of `exploring` (decided below, once the target is
+  // read); on any other change it is simply that change's reason.
+  const reason = String(body.override_reason ?? '').trim().slice(0, 500);
+  // Task #9 follow-up — 'exploring' is a valid destination role so admins
+  // can move a user (e.g. a partner) back into the holding state for
+  // re-review, from the same dropdown used for founder/partner/investor.
+  if (!role || !['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'].includes(role)) {
+    return c.json({ error: `Invalid role: ${role}` }, 400);
+  }
+
+  // Security policy: admin promotion is NOT allowed via this endpoint, so a
+  // compromised admin session cannot mint peers to entrench access.
+  //
+  // D134 GAVE IT A DOOR AND THE SENTENCE HAD TO FOLLOW. It used to read "only
+  // via direct database SQL", which was true when it was written and stopped
+  // being true the moment `POST /api/admin/licences/:uid/admins` began setting
+  // the role. That door is narrow by construction — the write bar, a reason,
+  // and a licence binding written in the same batch — which is exactly why this
+  // one stays shut: an admin minted here would be bound to nothing.
+  if (role === 'admin') {
+    return c.json({
+      error: 'Admin is granted by appointing someone to a territory licence (POST /api/admin/licences/:uid/admins), so every administrator is licence-bound. This endpoint cannot grant it.',
+      code: 'admin_promotion_disabled',
+    }, 403);
+  }
+
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  if (rows[0].id === adminUser.id) { await sql.end(); return c.json({ error: 'Cannot change your own role' }, 400); }
+  // Same policy on the other side, and for the stronger of the two reasons: it
+  // stops one admin quietly silencing another. Accidental lockout of the last
+  // admin is now guarded where the demote actually happens rather than by the
+  // absence of any demote at all.
+  //
+  // D134 — `POST /users/:userId/demote-admin` above is the route, super admin
+  // only behind the write bar, and this sentence names it. It read "only via
+  // direct database SQL" until then, which would have sent whoever hit it to a
+  // production console for something a route now does with a reason attached.
+  if (rows[0].role === 'admin') {
+    await sql.end();
+    return c.json({
+      error: 'Removing an administrator is its own act, not a role edit: POST /api/admin/users/:userId/demote-admin, super admin only, with a reason. This endpoint cannot do it.',
+      code: 'admin_demotion_disabled',
+    }, 403);
+  }
+  // Task #9 follow-up — a user already in 'exploring' is moved to
+  // founder/partner/investor/advisor through the binding-agreement-gated
+  // /api/admin/exploring/users/:id/assign-role flow. Without this guard an
+  // admin could bypass the signed binding agreement requirement simply by
+  // using the Users table dropdown instead of the Exploring Users queue.
+  //
+  // THAT BYPASS EXISTS, DELIBERATELY: THE BINDING-AGREEMENT OVERRIDE (#549,
+  // first described by D249). A super admin may pass a reason to assign the
+  // role anyway — because an admin with no way to correct a role at all is its
+  // own failure mode, and every new signup lands in `exploring`
+  // (routes/auth.ts), so this gate covers most of the user table.
+  //
+  // D249 — WHAT AN OVERRIDE IS, AND WHAT IT NOW TAKES.
+  //  · It is a change OUT OF `exploring` with a reason, and nothing else. Until
+  //    D249 it was keyed on a reason being present, so a reason sent with
+  //    founder→partner stamped "BINDING-AGREEMENT OVERRIDE" on an ordinary
+  //    change. A reason on any other change is carried as that change's reason.
+  //  · It is decided HERE, below the admin promotion and demotion guards, and
+  //    that cannot turn it into escalation: `role === 'admin'` is refused above
+  //    for every request, and an `exploring` target is by definition not an
+  //    admin, so an override can neither mint nor demote one. (It was validated
+  //    above those guards when a reason alone made one.)
+  //  · It takes demote's bar — the Super Admin, a TOTP-minted session and a
+  //    fresh step-up — and a reason of at least 10 characters. It is the same
+  //    class of act: a role change the normal path would refuse.
+  //  · NO EXPLICIT HYDRATE on the caller: `getCurrentUser` writes the
+  //    `super_admins` side table's answer over whatever `SELECT *` returned, so
+  //    a database still carrying the first version of migration 199's
+  //    `users.is_super_admin` column cannot elevate every admin
+  //    (`admin_role_override.test.ts` drives exactly that database).
+  const oldRole = rows[0].role;
+  const fromExploring = String(oldRole).toLowerCase() === 'exploring' && role !== 'exploring';
+  if (fromExploring && !reason) {
+    await sql.end();
+    return c.json({
+      error: 'This user is in the exploring holding state. Assign their final role from the Exploring Users queue (requires a signed binding agreement).',
+      code: 'use_exploring_assign_role',
+    }, 409);
+  }
+  const isOverride = fromExploring && reason.length > 0;
+  if (isOverride) {
+    if (!isSuperAdmin(adminUser as any)) {
+      await sql.end();
+      return c.json({
+        error: 'Only a super admin can override the binding-agreement requirement.',
+        code: 'super_admin_required',
+      }, 403);
+    }
+    try {
+      await requireFactor(c, 'totp');
+      await requireStepUp(c);
+    } catch (e) {
+      await sql.end();
+      throw e;
+    }
+    if (reason.length < 10) {
+      await sql.end();
+      return c.json({
+        error: 'An override reason of at least 10 characters is required — it is the line someone reads in the audit later.',
+        code: 'override_reason_too_short',
+      }, 400);
+    }
+  }
+
+  if (role === 'exploring') await ensureExploringSchema(c.env);
+  await sql`UPDATE users SET role = ${role} WHERE id = ${userId}`;
+
+  // Task #9 follow-up — moving a user INTO 'exploring' resets any stale
+  // assignment state from a prior review cycle so they reappear in the
+  // Exploring Users queue needing fresh review (not shown as already
+  // assigned). Suggested-role / binding-envelope history is left intact —
+  // an admin resending the binding agreement overwrites it anyway.
+  if (role === 'exploring') await resetExploringReview(c.env, userId, 'role-change');
+
+  // Task #1 (DB) — when an admin promotes someone to founder/partner,
+  // immediately allocate their public AXF-/AXP- id so it is visible
+  // in the profile pane and ready for any contract send. Idempotent.
+  try {
+    if (role === 'founder') {
+      const { assignFounderPublicId } = await import('../services/publicIds');
+      await assignFounderPublicId(c.env, userId);
+    } else if (role === 'partner') {
+      const { assignPartnerPublicId } = await import('../services/publicIds');
+      await assignPartnerPublicId(c.env, userId);
+    }
+  } catch (e) {
+    console.error('[admin/role-change] public-id assign failed', (e as Error).message);
+  }
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: userId }); } catch {}
+  // Task #3 (Y-1) — re-seed Trust Center obligations for the new role.
+  // pruneStaleForRole=true marks obligations no longer required (e.g.
+  // investor-only KYC after demotion to partner) as `waived` instead of
+  // deleting them, preserving the audit trail.
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, userId, role, { pruneStaleForRole: true });
+  } catch (e) { console.error('[admin] trust re-seed failed', e); }
+  // D249 — AN OVERRIDE DOES WHAT assign-role DOES THAT THE ACCOUNT NEEDS.
+  //  · `user_role_review` is stamped as assign-role stamps it — role_confirmed,
+  //    assigned_role, by, at — so the Exploring queue reads the account as
+  //    assigned rather than still waiting. An upsert, because an account can be
+  //    overridden before any review row exists; assign-role's UPDATE cannot
+  //    meet that case, since it requires an envelope.
+  //  · A founder or investor gets their onboarding wizard, the SQL assign-role
+  //    runs. Moved into either role without it, the account lands on a shell
+  //    with nothing behind it.
+  //  · The Spin-Out Lab auto-start is LEFT to assign-role: it enrols a company
+  //    in a programme, and an override reason does not establish that the
+  //    company belongs there.
+  // Each write is best-effort: the role has changed, and a stamp that fails
+  // must not turn a recorded change into a failed request (D111).
+  if (isOverride) {
+    try {
+      await ensureExploringSchema(c.env);
+      await c.env.DB.prepare(
+        `INSERT INTO user_role_review (user_id, role_confirmed, assigned_role, assigned_by_user_id, assigned_at, updated_at)
+         VALUES (?, 1, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           role_confirmed = 1,
+           assigned_role = excluded.assigned_role,
+           assigned_by_user_id = excluded.assigned_by_user_id,
+           assigned_at = excluded.assigned_at,
+           updated_at = excluded.updated_at`,
+      ).bind(userId, role, adminUser.id).run();
+    } catch (e) { console.error('[admin/role-override] review stamp failed', (e as Error).message); }
+    if (role === 'founder' || role === 'investor') {
+      try {
+        await c.env.DB.prepare(
+          `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at, updated_at)
+           VALUES (?, ?, 0, 0, NULL, datetime('now'))
+           ON CONFLICT(user_id) DO UPDATE SET
+             flow = excluded.flow,
+             step = 0,
+             completed_at = NULL,
+             updated_at = datetime('now')`,
+        ).bind(userId, role).run();
+      } catch (e) { console.error('[admin/role-override] onboarding reset failed', (e as Error).message); }
+    }
+  }
+  // Epic 11 — actor on both rows is email_hash, never the plaintext.
+  const roleAdminHash = await hashEmail(adminUser.email);
+  const roleTargetHash = await hashEmail(rows[0].email);
+  // The override rides the EXISTING `role_changed` action rather than a new one.
+  // A distinct action would be neater to filter on, but it would have to be
+  // registered in admin_security.ts's audit allowlist and ActivityPage.jsx's
+  // label map, and a reader missed in that sweep would show role changes while
+  // hiding precisely the overrides — the opposite of the point. Marking the
+  // details keeps it visible in every view that already renders a role change.
+  // D249 — and the audit log gets its own row (below), which names the target.
+  const because = isOverride
+    ? ` — BINDING-AGREEMENT OVERRIDE by super admin. Reason: ${reason}`
+    : (reason ? `. Reason: ${reason}` : '');
+  // D249 — THE PERSON IS TOLD WHAT HAPPENED. Their row said only "Your role was
+  // changed from X to Y by <name>", so an override read as a routine change on
+  // the one feed they can see.
+  const theirs = isOverride
+    ? `Your role was changed from ${oldRole} to ${role} by ${adminUser.name} without a completed binding agreement: a Super Admin override. Reason: ${reason}`
+    : `Your role was changed from ${oldRole} to ${role} by ${adminUser.name}${reason ? `. Reason: ${reason}` : ''}`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('role_changed', ${`Admin ${adminUser.name} changed ${rows[0].name}'s role from ${oldRole} to ${role}${because}`}, ${roleAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('your_role_changed', ${theirs}, ${roleTargetHash}, ${rows[0].id})`;
+  await sql.end();
+  // D249 — one audit row per override, naming the account. Imported here, not
+  // at the top: services/adminAudit.ts imports from this file.
+  if (isOverride) {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, adminUser.id, adminUser.email, 'role_override', {
+      target_user_id: rows[0].id, from: oldRole, to: role, reason,
+    });
+  }
+  return c.json({ message: `Role updated to ${role}`, user_id: userId, role, override: isOverride });
+});
+
+admin.patch('/users/:userId/toggle-active', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const userId = parseInt(c.req.param('userId'));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
+  if (rows[0].id === adminUser.id) { await sql.end(); return c.json({ error: 'Cannot deactivate yourself' }, 400); }
+  // D132 — AN ADMIN TARGET IS THE SUPER ADMIN'S ALONE (and, since D247, on
+  // demote's bar: see below), and this closes a door
+  // the role route already shut. `/users/:userId/role` refuses to demote an
+  // existing admin with its own reason: *"prevents one admin from quietly
+  // silencing another."* Deactivating an admin silences them exactly as
+  // effectively, and this handler carried no admin-target guard at all — so
+  // the stated policy held on one route and was reachable on the next.
+  //
+  // The super admin keeps the power, because supervising and closing admin
+  // accounts is what the tier is for; a peer does not. `isSuperAdmin` reads the
+  // elevation `getCurrentUser` hydrates from the `super_admins` side table,
+  // which is the same check the role route's override uses.
+  //
+  // THE TARGET BEING AN ADMIN IS THE WHOLE TEST, AND ON A BRANCH THAT IS
+  // CURRENTLY A SET OF ONE. A subsidiary admin manages their own territory's
+  // MEMBERS — every account in that deployment's D1 — and this does not touch
+  // that: it refuses only an `admin`-role target. Provisioning seeds exactly one
+  // admin per branch (the licence principal, D.3) and there is no route that
+  // mints another — `/users/:userId/role` refuses `role === 'admin'` outright,
+  // SQL is the only path — so today this can refuse nothing a subsidiary
+  // legitimately needs. If per-branch admin STAFF ever ships (S6 draws
+  // "Staff & roles [Yours]"), this guard is the line to revisit: co-staff of one
+  // subsidiary are not the "another admin" the policy is about.
+  const adminTarget = rows[0].role === 'admin';
+  if (adminTarget && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a super admin can deactivate an admin account.',
+      code: 'super_admin_required',
+    }, 403);
+  }
+
+  // D247 — AN ADMIN TARGET TAKES DEMOTE'S BAR. Closing an administrator's
+  // account silences them as surely as demoting them, and demote asks for a
+  // TOTP-minted session, a fresh step-up and a typed reason. This asked for
+  // none of the three. They are checked here — after the two refusals above,
+  // which answer without them, and before the write, so a refused toggle
+  // changes nothing. `requireAdmin` stays the first line: it is D135's freeze
+  // gate, and the compliance ladder's write probe is this route.
+  //
+  // A NON-ADMIN TARGET IS UNCHANGED, on purpose. Any admin may disable and
+  // re-enable a founder in their own territory with one click; that is the
+  // everyday act D132 kept, and a reason prompt on it would be friction on
+  // the common case to guard the rare one. Both directions are covered for an
+  // admin target, because the route toggles: re-opening an account HQ closed
+  // is the same power as closing it.
+  let reason = '';
+  if (adminTarget) {
+    try {
+      await requireFactor(c, 'totp');
+      await requireStepUp(c);
+    } catch (e) {
+      await sql.end();
+      throw e;
+    }
+    const body: any = await c.req.json().catch(() => ({}));
+    reason = String(body?.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 10) {
+      await sql.end();
+      return c.json({
+        error: 'A reason of at least 10 characters is required — closing or re-opening an administrator account is the line someone reads in the audit later.',
+        code: 'reason_too_short',
+      }, 400);
+    }
+  }
+
+  const newActive = !rows[0].is_active;
+  const verb = newActive ? 'activated' : 'deactivated';
+  const because = reason ? `. Reason: ${reason}` : '';
+  await sql`UPDATE users SET is_active = ${newActive} WHERE id = ${userId}`;
+  // Epic 11 — actor on both rows is email_hash, never the plaintext.
+  const tgAdminHash = await hashEmail(adminUser.email);
+  const tgTargetHash = await hashEmail(rows[0].email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_toggled', ${`Admin ${adminUser.name} ${verb} user ${rows[0].name}${because}`}, ${tgAdminHash}, ${adminUser.id})`;
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('account_status_changed', ${`Your account was ${verb} by an Axal admin${because}`}, ${tgTargetHash}, ${rows[0].id})`;
+  await sql.end();
+  // D247 — Security's feed names who and why. `user_toggled` above already
+  // reaches its Suspensions filter, but as a sentence with no subject column
+  // and, until now, no reason. The audit row carries `viewed_user_id`, so the
+  // Target column names the account and `reasonFrom` lifts the reason.
+  // Imported here, not at the top: services/adminAudit.ts imports
+  // `ensureAdminAuditLogTable` from this file, so a static import is a cycle.
+  if (adminTarget) {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, adminUser.id, adminUser.email,
+      newActive ? 'admin_account_reactivated' : 'admin_account_deactivated',
+      { target_user_id: rows[0].id, reason, is_active: newActive });
+  }
+  return c.json({ message: `User ${verb}`, is_active: newActive });
+});
+
+// ---------------------------------------------------------------------------
+// Task #7 (AM) — Project trash management. Founder DELETE soft-deletes the
+// project (sets deleted_at); these admin-only endpoints surface the trash
+// list and allow Restore / hard-delete actions. The 30-day cron sweep that
+// physically purges old rows lives in services/projectTrash.ts.
+// ---------------------------------------------------------------------------
+
+admin.get('/projects/trash', async (c) => {
+  await requireAdmin(c);
+  const limit = clampLimit(c.req.query('limit'), 100, 200);
+  const offset = parseOffset(c.req.query('offset'));
+  const res: any = await c.env.DB.prepare(
+    `SELECT p.id, p.uid, p.name, p.sector, p.stage, p.status, p.founder_id, p.deleted_at, p.created_at,
+            f.name AS founder_name, f.email AS founder_email
+       FROM projects p
+       LEFT JOIN founders f ON f.id = p.founder_id
+      WHERE p.deleted_at IS NOT NULL
+      ORDER BY datetime(p.deleted_at) DESC
+      LIMIT ? OFFSET ?`,
+  ).bind(limit, offset).all();
+  return c.json({ projects: res?.results || [] });
+});
+
+admin.post('/projects/:id/restore', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  const proj: any = await c.env.DB.prepare(
+    `SELECT id, name, deleted_at FROM projects WHERE id = ?`,
+  ).bind(id).first();
+  if (!proj) return c.json({ error: 'Project not found' }, 404);
+  if (!proj.deleted_at) return c.json({ ok: true, already_active: true });
+  await c.env.DB.prepare(`UPDATE projects SET deleted_at = NULL WHERE id = ?`).bind(id).run();
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+    ).bind('project_restored',
+      `Admin ${adminUser.name} restored project ${proj.name} (id=${id})`,
+      adminHash, adminUser.id, id).run();
+  } catch {}
+  return c.json({ ok: true, restored: true });
+});
+
+admin.delete('/projects/:id/hard-delete', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
+  const proj: any = await c.env.DB.prepare(
+    `SELECT id, name FROM projects WHERE id = ?`,
+  ).bind(id).first();
+  if (!proj) return c.json({ error: 'Project not found' }, 404);
+  const { hardDeleteProject } = await import('../services/projectTrash');
+  try {
+    await hardDeleteProject(c.env, id);
+  } catch (e) {
+    console.error('[admin/hard-delete] failed', id, (e as Error).message);
+    return refuse(c, 409, { code: 'hard_delete_failed', message: 'The project could not be deleted permanently: other records still point at it. Nothing was removed.', raw: e });
+  }
+  try {
+    const adminHash = await hashEmail(adminUser.email);
+    await c.env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
+    ).bind('project_hard_deleted',
+      `Admin ${adminUser.name} hard-deleted project ${proj.name} (id=${id})`,
+      adminHash, adminUser.id).run();
+  } catch {}
+  try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_delete', { type: 'project', id }); } catch {}
+  return c.json({ ok: true, hard: true });
+});
+
+export default admin;

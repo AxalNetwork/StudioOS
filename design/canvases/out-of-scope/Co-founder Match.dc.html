@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+    .cf-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .cf-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .cf-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .cf-qa:hover{border-color:#ececf1;background:#fff}
+    .cf-cand{transition:border-color .12s,box-shadow .12s}
+    .cf-root.cf-embedded .cf-topbar{display:none!important}
+    .cf-cand:hover{border-color:#99f6e4;box-shadow:0 4px 14px rgba(13,148,136,.1)}
+    @media (max-width:1080px){.cf-split{grid-template-columns:1fr!important}.cf-drawer{width:100%!important}.cf-2{grid-template-columns:1fr!important}}
+  
+    .cf-root.cf-embedded .cf-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="cf-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="cf-topline" style="height:3px;background:#0d9488;border-radius:0 0 3px 3px"></div>
+
+  <!-- TOP BAR -->
+  <div class="cf-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#ecfdf5;color:#0d9488;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icPair }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Co-founder Match</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Translate your assessment into a search brief, rank candidates by complementary fit, and reach a documented decision.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="text-align:right"><div class="cf-mono" style="font-size:12px;font-weight:600;color:#0d9488">3 of 6 modules</div><div style="width:120px;height:5px;background:#f0f0f3;border-radius:999px;overflow:hidden;margin-top:4px"><div style="height:100%;width:50%;background:#0d9488;border-radius:999px"></div></div></div>
+      <span style="font-size:11px;font-weight:600;color:#0f766e;background:#ecfdf5;border:1px solid #99f6e4;padding:5px 11px;border-radius:999px">Unlocked · Wk 3</span>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 18px;flex-wrap:wrap;align-items:center">
+    <button class="cf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <button class="cf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export</button>
+    <button class="cf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button class="cf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#0d9488;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+  </div>
+
+  <!-- DECISION SUMMARY BANNER -->
+  <div class="cf-card" style="padding:20px 22px;margin-bottom:20px;border-color:{{ decBorder }};background:{{ decBg }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px;min-width:0">
+        <span style="width:42px;height:42px;flex:none;border-radius:11px;background:{{ decIconBg }};color:#fff;display:flex;align-items:center;justify-content:center;padding:10px" dangerouslySetInnerHTML="{{ decIcon }}"></span>
+        <div style="min-width:0">
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:{{ decAccent }}">Decision state · {{ decState }}</div>
+          <div style="font-size:15.5px;font-weight:700;color:#1A202C;margin-top:3px;line-height:1.35">{{ decHeadline }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:22px">
+        <div style="text-align:center"><div class="cf-mono" style="font-size:22px;font-weight:600;color:{{ decAccent }}">{{ decReadiness }}%</div><div style="font-size:10px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em">Decision readiness</div></div>
+        <button onClick="{{ scrollConsole }}" style="font-size:12.5px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:10px 16px;cursor:pointer;white-space:nowrap">Open decision console</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOUNDER MATCH BRIEF -->
+  <div class="cf-card" style="padding:24px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Founder match brief</div>
+        <div style="font-size:13px;color:#71717a;margin-top:4px">Derived from your Startups profile and Scoring Engine assessment · <span style="color:#0d9488;font-weight:600">source of truth</span></div>
+      </div>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:{{ urgencyColor }};background:{{ urgencyBg }};border:1px solid {{ urgencyBorder }};padding:5px 12px;border-radius:999px"><span style="width:7px;height:7px;border-radius:999px;background:{{ urgencyColor }}"></span>{{ urgencyLabel }}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px" class="cf-2">
+      <!-- archetype + role -->
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Your archetype</div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:16px"><span style="font-size:15px;font-weight:700;color:#4f46e5">Visionary · Builder</span></div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Recommended co-founder role</div>
+        <div style="font-size:15px;font-weight:700;color:#0d9488;line-height:1.35">Product / GTM co-founder</div>
+        <div style="font-size:12px;color:#71717a;margin-top:5px;line-height:1.45">A commercial counterpart who owns customers, positioning, and revenue while you own product and technology.</div>
+      </div>
+      <!-- capabilities -->
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Strongest capabilities</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          <sc-for list="{{ strengths }}" as="s" hint-placeholder-count="3"><span style="font-size:11.5px;font-weight:600;color:#3730a3;background:#eef2ff;padding:4px 10px;border-radius:7px">{{ s }}</span></sc-for>
+        </div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Critical missing capabilities</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ missing }}" as="m" hint-placeholder-count="3"><span style="font-size:11.5px;font-weight:600;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:4px 10px;border-radius:7px">{{ m }}</span></sc-for>
+        </div>
+      </div>
+      <!-- values + cautions -->
+      <div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Must-have values</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+          <sc-for list="{{ mustValues }}" as="v" hint-placeholder-count="3"><span style="font-size:11.5px;font-weight:600;color:#0f766e;background:#ecfdf5;padding:4px 10px;border-radius:7px">{{ v }}</span></sc-for>
+        </div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Caution areas</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ cautions }}" as="c" hint-placeholder-count="2"><div style="display:flex;align-items:flex-start;gap:7px;font-size:12px;color:#52525b;line-height:1.4"><span style="width:13px;height:13px;flex:none;margin-top:2px;color:#d97706;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span>{{ c }}</div></sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SKILLS GAP → SEARCH CRITERIA -->
+  <div class="cf-card" style="padding:24px;margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:4px">Skills gap → search criteria</div>
+    <div style="font-size:13px;color:#71717a;margin-bottom:18px">Each critical gap becomes a weighted matching criterion. This is what ranks the candidates below.</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:640px">
+        <thead><tr style="border-bottom:1px solid #f0f0f3">
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:left">Capability</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:center">You</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:center">Company needs</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:left">Severity</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 12px;text-align:right">Search weight</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ gapRows }}" as="g" hint-placeholder-count="5">
+            <tr style="border-bottom:1px solid #f8f8fa">
+              <td style="padding:11px 12px;font-size:13px;font-weight:500;color:#1A202C">{{ g.name }}</td>
+              <td style="padding:11px 12px;text-align:center"><span class="cf-mono" style="font-size:12px;color:{{ g.youColor }}">{{ g.you }}/5</span></td>
+              <td style="padding:11px 12px;text-align:center"><span class="cf-mono" style="font-size:12px;color:#3f3f46">{{ g.need }}/5</span></td>
+              <td style="padding:11px 12px"><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;{{ g.sevStyle }}">{{ g.severity }}</span></td>
+              <td style="padding:11px 12px;text-align:right"><div style="display:flex;align-items:center;justify-content:flex-end;gap:9px"><div style="width:70px;height:6px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ g.weightPct }};background:#0d9488;border-radius:999px"></div></div><span class="cf-mono" style="font-size:11.5px;font-weight:600;color:#0d9488;width:34px;text-align:right">{{ g.weightPct }}</span></div></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SPLIT: candidates / right rail -->
+  <div class="cf-split" style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start">
+    <!-- RANKED CANDIDATES -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Ranked candidates · {{ candCount }} · best complementary fit first</div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ sorts }}" as="s" hint-placeholder-count="3"><button onClick="{{ s.onClick }}" style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:999px;cursor:pointer;{{ s.style }}">{{ s.label }}</button></sc-for>
+        </div>
+      </div>
+
+      <sc-for list="{{ candidates }}" as="c" hint-placeholder-count="3">
+        <div class="cf-cand cf-card" onClick="{{ c.open }}" style="padding:18px 20px;cursor:pointer;border-color:{{ c.cardBorder }}">
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+              <span style="width:46px;height:46px;flex:none;border-radius:12px;background:{{ c.avatarBg }};color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ c.initials }}</span>
+              <span class="cf-mono" style="font-size:10px;color:#a1a1aa">#{{ c.rank }}</span>
+            </div>
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-size:15px;font-weight:700;letter-spacing:-.01em">{{ c.name }}</span>
+                <span style="font-size:11px;color:#71717a">· {{ c.title }}</span>
+                <sc-if value="{{ c.hasRedFlag }}"><span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:2px 8px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icFlag }}"></span>{{ c.redFlagCount }} red flag</span></sc-if>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:9px">
+                <sc-for list="{{ c.tags }}" as="t" hint-placeholder-count="3"><span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;{{ t.style }}">{{ t.label }}</span></sc-for>
+              </div>
+              <div style="font-size:12.5px;color:#52525b;margin-top:11px;line-height:1.5">{{ c.rationale }}</div>
+              <!-- dimension mini-bars -->
+              <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:12px">
+                <sc-for list="{{ c.dims }}" as="d" hint-placeholder-count="5">
+                  <div style="min-width:96px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><span style="font-size:10px;color:#a1a1aa">{{ d.label }}</span><span class="cf-mono" style="font-size:10px;font-weight:600;color:{{ d.color }}">{{ d.score }}</span></div><div style="height:4px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ d.pct }};background:{{ d.color }};border-radius:999px"></div></div></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none">
+              <div style="text-align:center"><div class="cf-mono" style="font-size:32px;font-weight:600;line-height:1;color:{{ c.scoreColor }}">{{ c.total }}</div><div style="font-size:9px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.05em">Total fit</div></div>
+              <span style="font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;text-align:center;{{ c.recStyle }}">{{ c.recShort }}</span>
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#a1a1aa"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icShield }}"></span>{{ c.confidence }}% evidence</div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+
+      <!-- solo path option -->
+      <div class="cf-card" style="padding:16px 20px;border-style:dashed;border-color:#d4d4d8;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="width:40px;height:40px;flex:none;border-radius:11px;background:#f4f4f5;color:#71717a;display:flex;align-items:center;justify-content:center;padding:9px" dangerouslySetInnerHTML="{{ icSolo }}"></span>
+          <div><div style="font-size:13.5px;font-weight:700">Solo path is a valid outcome</div><div style="font-size:12px;color:#71717a;margin-top:2px">If no candidate clears your must-haves, document a solo path with a capability-mitigation plan.</div></div>
+        </div>
+        <button onClick="{{ openSolo }}" style="font-size:12px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:9px 15px;cursor:pointer;white-space:nowrap">Consider solo path</button>
+      </div>
+    </div>
+
+    <!-- RIGHT RAIL: evidence + next actions -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="cf-card" style="padding:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Evidence modules</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <sc-for list="{{ evidenceModules }}" as="e" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:11px">
+              <span style="width:32px;height:32px;flex:none;border-radius:8px;background:{{ e.iconBg }};color:{{ e.iconColor }};display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ e.icon }}"></span>
+              <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600">{{ e.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ e.status }}</div></div>
+              <span style="width:14px;height:14px;color:#c4c4cc;display:flex" dangerouslySetInnerHTML="{{ icChevR }}"></span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="cf-card" style="padding:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Recommended next steps</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ nextSteps }}" as="n" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 12px;background:#faf9fc;border:1px solid #f0eefb;border-radius:10px">
+              <span style="width:22px;height:22px;flex:none;border-radius:6px;background:#ecfdf5;color:#0d9488;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ n.num }}</span>
+              <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;color:#1A202C">{{ n.title }}</div><div style="font-size:11.5px;color:#71717a;margin-top:2px;line-height:1.4">{{ n.desc }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISION CONSOLE -->
+  <div class="cf-card" style="padding:24px;margin-top:20px" id="cf-console">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Decision console · Track decision</div>
+        <div style="font-size:13px;color:#71717a;margin-top:4px">Week 4 unlocks once a decision artifact exists — a chosen candidate or a documented solo path.</div>
+      </div>
+      <span style="font-size:11.5px;font-weight:600;color:{{ decReadyColor }};background:{{ decReadyBg }};border:1px solid {{ decReadyBorder }};padding:5px 12px;border-radius:999px">{{ decReadyLabel }}</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px" class="cf-2">
+      <sc-for list="{{ finalists }}" as="f" hint-placeholder-count="2">
+        <div style="border:1.5px solid {{ f.border }};background:{{ f.bg }};border-radius:13px;padding:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:32px;height:32px;border-radius:8px;background:{{ f.avatarBg }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ f.initials }}</span><div><div style="font-size:13px;font-weight:700">{{ f.name }}</div><div style="font-size:11px;color:#a1a1aa">{{ f.title }}</div></div></div>
+            <span class="cf-mono" style="font-size:20px;font-weight:600;color:{{ f.scoreColor }}">{{ f.total }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="font-size:11px;font-weight:600;color:#166534">Top strengths</div>
+            <sc-for list="{{ f.strengths }}" as="s" hint-placeholder-count="2"><div style="font-size:11.5px;color:#52525b;display:flex;gap:6px"><span style="color:#16a34a">+</span>{{ s }}</div></sc-for>
+            <div style="font-size:11px;font-weight:600;color:#b45309;margin-top:6px">Top concerns</div>
+            <sc-for list="{{ f.concerns }}" as="c" hint-placeholder-count="2"><div style="font-size:11.5px;color:#52525b;display:flex;gap:6px"><span style="color:#d97706">!</span>{{ c }}</div></sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:10px">Choose an outcome</div>
+    <div style="display:flex;flex-wrap:wrap;gap:9px">
+      <sc-for list="{{ outcomes }}" as="o" hint-placeholder-count="6">
+        <button onClick="{{ o.onClick }}" style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;padding:11px 16px;border-radius:10px;cursor:pointer;{{ o.style }}">
+          <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ o.icon }}"></span>{{ o.label }}
+        </button>
+      </sc-for>
+    </div>
+
+    <!-- decision record -->
+    <sc-if value="{{ recordOpen }}">
+      <div style="margin-top:20px;border-top:1px solid #f0f0f3;padding-top:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <span style="width:32px;height:32px;border-radius:8px;background:{{ recordIconBg }};color:#fff;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ recordIcon }}"></span>
+          <div><div style="font-size:14px;font-weight:800">{{ recordTitle }}</div><div class="cf-mono" style="font-size:11px;color:#a1a1aa">Decision record · {{ recordStamp }}</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" class="cf-2">
+          <div>
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:7px">Rationale</div>
+            <div style="font-size:12.5px;color:#3f3f46;line-height:1.55">{{ recordRationale }}</div>
+          </div>
+          <div>
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:7px">Required follow-ups</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ recordFollowups }}" as="f" hint-placeholder-count="3"><div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#52525b"><span style="width:14px;height:14px;flex:none;margin-top:1px;color:#0d9488;display:flex" dangerouslySetInnerHTML="{{ icDot }}"></span>{{ f }}</div></sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button style="font-size:12.5px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:11px 16px;cursor:pointer">Confirm &amp; unlock Week 4</button>
+          <sc-for list="{{ recordLinks }}" as="l" hint-placeholder-count="2"><a href="#" onClick="{{ stop }}" style="font-size:12px;font-weight:600;color:#0d9488;display:inline-flex;align-items:center;gap:5px">{{ l }} →</a></sc-for>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+<!-- CANDIDATE DETAIL DRAWER -->
+<sc-if value="{{ drawerOpen }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(24,24,27,.34);z-index:60;backdrop-filter:blur(2px)"></div>
+  <div class="cf-drawer" style="position:fixed;top:0;right:0;bottom:0;width:560px;background:#fff;z-index:61;box-shadow:-8px 0 40px rgba(24,24,27,.14);overflow-y:auto">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #f0f0f3;padding:20px 24px;z-index:2">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="display:flex;align-items:center;gap:13px">
+          <span style="width:50px;height:50px;flex:none;border-radius:12px;background:{{ sel.avatarBg }};color:#fff;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ sel.initials }}</span>
+          <div><div style="font-size:17px;font-weight:800;letter-spacing:-.01em">{{ sel.name }}</div><div style="font-size:12.5px;color:#71717a">{{ sel.title }} · {{ sel.location }}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="text-align:center"><div class="cf-mono" style="font-size:26px;font-weight:600;color:{{ sel.scoreColor }};line-height:1">{{ sel.total }}</div><div style="font-size:9px;color:#a1a1aa;text-transform:uppercase">Total fit</div></div>
+          <button onClick="{{ closeDrawer }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12.5px;font-weight:600;color:{{ sel.recColor }}">{{ sel.recommendation }}</div>
+    </div>
+
+    <div style="padding:22px 24px">
+      <!-- dimension breakdown -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Fit breakdown · weighted</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:22px">
+        <sc-for list="{{ sel.breakdown }}" as="b" hint-placeholder-count="7">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:12px;color:#52525b;width:150px;flex:none">{{ b.label }}<span style="font-size:10px;color:#c4c4cc;margin-left:5px">×{{ b.weight }}</span></span>
+            <div style="flex:1;height:7px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ b.pct }};background:{{ b.color }};border-radius:999px"></div></div>
+            <span class="cf-mono" style="font-size:11.5px;font-weight:600;color:{{ b.color }};width:30px;text-align:right">{{ b.score }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- gaps filled vs redundant -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px" class="cf-2">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px">
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#166534;margin-bottom:9px">Gaps they fill</div>
+          <sc-for list="{{ sel.fills }}" as="f" hint-placeholder-count="3"><div style="display:flex;align-items:flex-start;gap:7px;font-size:12px;color:#3f3f46;margin-bottom:6px"><span style="color:#16a34a;font-weight:700">+</span>{{ f }}</div></sc-for>
+        </div>
+        <div style="background:#faf9fc;border:1px solid #ececf1;border-radius:12px;padding:14px">
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#71717a;margin-bottom:9px">Redundant overlap</div>
+          <sc-for list="{{ sel.overlaps }}" as="o" hint-placeholder-count="2"><div style="display:flex;align-items:flex-start;gap:7px;font-size:12px;color:#71717a;margin-bottom:6px"><span style="color:#a1a1aa;font-weight:700">=</span>{{ o }}</div></sc-for>
+        </div>
+      </div>
+
+      <!-- values alignment map -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Values alignment</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:22px">
+        <sc-for list="{{ sel.values }}" as="v" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:12px;color:#52525b;width:130px;flex:none">{{ v.label }}</span>
+            <div style="flex:1;display:flex;align-items:center;gap:8px">
+              <div style="flex:1;height:6px;background:#f0f0f3;border-radius:999px;overflow:hidden;position:relative"><div style="height:100%;width:{{ v.pct }};background:{{ v.color }};border-radius:999px"></div></div>
+              <span style="font-size:11px;font-weight:600;color:{{ v.color }};width:74px">{{ v.tag }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- working style -->
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Working style compatibility</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px">
+        <sc-for list="{{ sel.workStyle }}" as="w" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 13px;background:#faf9fc;border:1px solid #f0f0f3;border-radius:10px">
+            <div><span style="font-size:12.5px;font-weight:600;color:#1A202C">{{ w.dim }}</span><span style="font-size:11.5px;color:#71717a;margin-left:8px">{{ w.detail }}</span></div>
+            <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;{{ w.style }}">{{ w.verdict }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- risk flags -->
+      <sc-if value="{{ sel.hasRisks }}">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:11px">Risk flags</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px">
+          <sc-for list="{{ sel.risks }}" as="r" hint-placeholder-count="2">
+            <div style="display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 13px;line-height:1.45"><span style="width:14px;height:14px;flex:none;margin-top:1px;display:flex" dangerouslySetInnerHTML="{{ icFlag }}"></span>{{ r }}</div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#71717a;margin-bottom:18px"><span style="width:14px;height:14px;color:#0d9488;display:flex" dangerouslySetInnerHTML="{{ icShield }}"></span>Confidence {{ sel.confidence }}% · {{ sel.confidenceNote }}</div>
+
+      <div style="display:flex;gap:10px;position:sticky;bottom:0;background:linear-gradient(transparent,#fff 30%);padding-top:12px">
+        <button onClick="{{ sel.intro }}" style="flex:1;font-size:13px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:9px;padding:12px;cursor:pointer">{{ sel.suggestedAction }}</button>
+        <button onClick="{{ sel.pick }}" style="flex:1;font-size:13px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:12px;cursor:pointer">Advance to decision</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- SOLO PATH MODAL -->
+<sc-if value="{{ soloOpen }}">
+  <div onClick="{{ closeSolo }}" style="position:fixed;inset:0;background:rgba(24,24,27,.42);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:620px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.28);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0f0f3">
+        <div style="display:flex;align-items:center;gap:11px"><span style="width:34px;height:34px;border-radius:9px;background:#f4f4f5;color:#52525b;display:flex;align-items:center;justify-content:center;padding:8px" dangerouslySetInnerHTML="{{ icSolo }}"></span><div><div style="font-size:15px;font-weight:800">Document a solo path</div><div style="font-size:12px;color:#a1a1aa">A first-class Week 3 outcome — not a failure state</div></div></div>
+        <button onClick="{{ closeSolo }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <div style="padding:22px">
+        <div style="font-size:13px;color:#3f3f46;line-height:1.6;margin-bottom:18px">Your assessment supports a credible solo path for now: strong builder-visionary coverage, and no current candidate clears your must-have values bar. Document the decision with a capability-mitigation plan so Week 4 can proceed.</div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#a1a1aa;margin-bottom:9px">Capability gaps to mitigate without a co-founder</div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px">
+          <sc-for list="{{ soloMitigation }}" as="m" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#faf9fc;border:1px solid #f0f0f3;border-radius:10px">
+              <div><span style="font-size:12.5px;font-weight:600;color:#1A202C">{{ m.gap }}</span><span style="font-size:11.5px;color:#71717a;margin-left:8px">{{ m.plan }}</span></div>
+              <span style="font-size:11px;font-weight:600;color:#0f766e;background:#ecfdf5;padding:3px 9px;border-radius:999px">{{ m.via }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button onClick="{{ closeSolo }}" style="flex:1;font-size:13px;font-weight:600;color:#52525b;background:#f4f4f5;border:none;border-radius:9px;padding:12px;cursor:pointer">Cancel</button>
+          <button onClick="{{ confirmSolo }}" style="flex:2;font-size:13px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:9px;padding:12px;cursor:pointer">Document solo path &amp; satisfy Week 3</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { drawerOpen:false, selKey:null, sort:'total', soloOpen:false, recordOpen:false, recordType:null, recordKey:null };
+
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+  scoreColor(s){ return s>=80?'#0d9488':s>=65?'#d97706':'#dc2626'; }
+  dimColor(s){ return s>=80?'#0d9488':s>=60?'#d97706':'#dc2626'; }
+
+  candidates(){
+    return [
+      { key:'nadia', name:'Nadia Okonkwo', initials:'NO', avatarBg:'#0d9488', title:'Product / GTM', location:'London', archetype:'Operator · Dealmaker',
+        total:89, complementarity:94, values:88, archetype_s:90, workingStyle:78, commitment:92, equity:85,
+        confidence:72, redFlags:[], rec:'Strong match — advance to trial', recShort:'Advance to trial',
+        rationale:'High complementarity: owns the exact commercial surface you lack. Strong value alignment on mission and ownership; moderate pace conflict to validate in a trial.',
+        tags:[['Fills GTM gap','fill'],['Operator','arch'],['Full-time ready','commit']],
+        fills:['Enterprise GTM and pricing','Commercial hiring','Customer discovery at scale'],
+        overlaps:['Some product-sense overlap with you'],
+        valuesAlign:[['Mission orientation',92,'Aligned'],['Ownership mindset',90,'Aligned'],['Pace',70,'Slightly faster'],['Transparency',88,'Aligned']],
+        work:[['Decision-making','Data-led, decisive','Compatible','ok'],['Conflict style','Direct, low-ego','Compatible','ok'],['Cadence','Prefers daily sync','Verify','warn']],
+        risks:[], suggestedAction:'Run 2-week trial project' },
+
+      { key:'daniel', name:'Daniel Reyes', initials:'DR', avatarBg:'#4f46e5', title:'Commercial / Sales', location:'Austin', archetype:'Dealmaker',
+        total:74, complementarity:86, values:60, archetype_s:82, workingStyle:70, commitment:80, equity:66,
+        confidence:45, redFlags:['Values gap'], rec:'Strong skills fit, weak values alignment', recShort:'Verify values',
+        rationale:'Strong commercial complement and clear GTM track record, but assessment shows a values gap on mission orientation and a shorter time horizon than yours.',
+        tags:[['Fills GTM gap','fill'],['Dealmaker','arch'],['Values gap','risk']],
+        fills:['Outbound sales motion','Revenue operations'],
+        overlaps:['Network overlaps your existing advisor'],
+        valuesAlign:[['Mission orientation',52,'Divergent'],['Ownership mindset',72,'Partial'],['Pace',80,'Faster'],['Transparency',66,'Partial']],
+        work:[['Decision-making','Gut-led, fast','Verify','warn'],['Conflict style','Competitive','Watch','warn'],['Cadence','Async-friendly','Compatible','ok']],
+        risks:['Mission orientation 40 points below your must-have threshold','Short-term financial optimization signals in assessment'], suggestedAction:'Request references' },
+
+      { key:'priya', name:'Priya Anand', initials:'PA', avatarBg:'#7c3aed', title:'Operator / BizOps', location:'Toronto', archetype:'Operator',
+        total:68, complementarity:64, values:82, archetype_s:74, workingStyle:80, commitment:58, equity:72,
+        confidence:38, redFlags:['Commitment'], rec:'Promising but verify commitment', recShort:'Verify commitment',
+        rationale:'Excellent values alignment and working-style fit, but partial skills overlap with your co-founder and part-time availability for the next two quarters.',
+        tags:[['Values aligned','fill'],['Operator','arch'],['Part-time now','risk']],
+        fills:['Operating cadence and BizOps','Hiring systems'],
+        overlaps:['Operations overlaps Maya','Limited GTM depth'],
+        valuesAlign:[['Mission orientation',86,'Aligned'],['Ownership mindset',84,'Aligned'],['Pace',72,'Aligned'],['Transparency',88,'Aligned']],
+        work:[['Decision-making','Consensus-led','Compatible','ok'],['Conflict style','Collaborative','Compatible','ok'],['Cadence','Weekly rhythm','Compatible','ok']],
+        risks:['Only part-time available for 6 months — commitment fit below threshold'], suggestedAction:'Request intro' },
+    ];
+  }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const weights={ complementarity:'1.0', values:'0.9', archetype_s:'0.8', workingStyle:'0.6', commitment:'0.9', equity:'0.6' };
+
+    // ---- founder brief ----
+    const strengths=['Product & technical depth','Systems architecture','Domain (async workflows)'];
+    const missing=['Enterprise GTM','Commercial hiring','Fundraising narrative'];
+    const mustValues=['Mission orientation','Ownership mindset','Transparency'];
+    const cautions=['You skew fast — a rigor-oriented partner balances execution risk','Avoid a second builder; complementarity beats similarity'];
+
+    const gapRowsRaw=[
+      ['Enterprise GTM',1,5,'Critical',95],['Commercial hiring',2,4,'Critical',82],['Fundraising',2,4,'High',70],['Operations',2,4,'Optional',40],['Product',5,5,'Covered',12],
+    ];
+    const sevStyle=(s)=> s==='Critical'?'color:#b91c1c;background:#fef2f2':s==='High'?'color:#b45309;background:#fffbeb':s==='Covered'?'color:#166534;background:#dcfce7':'color:#71717a;background:#f4f4f5';
+    const gapRows=gapRowsRaw.map(([name,you,need,severity,w])=>({ name, you, youColor: you<need?'#dc2626':'#16a34a', need, severity, sevStyle:sevStyle(severity), weightPct:w+'%' }));
+
+    // ---- candidates ----
+    const all=this.candidates(); const byKey={}; all.forEach(c=>byKey[c.key]=c);
+    const tagStyle={ fill:'color:#0f766e;background:#ecfdf5', arch:'color:#5b21b6;background:#f5f3ff', commit:'color:#155e75;background:#ecfeff', risk:'color:#b91c1c;background:#fef2f2' };
+    let list=all.slice();
+    if(st.sort==='complementarity') list.sort((a,b)=>b.complementarity-a.complementarity);
+    else if(st.sort==='confidence') list.sort((a,b)=>b.confidence-a.confidence);
+    else list.sort((a,b)=>b.total-a.total);
+
+    const recStyleFor=(c)=> c.total>=80?'color:#166534;background:#dcfce7': c.redFlags.length?'color:#b91c1c;background:#fef2f2':'color:#b45309;background:#fffbeb';
+    const candidates=list.map((c,i)=>({
+      key:c.key, rank:i+1, name:c.name, initials:c.initials, avatarBg:c.avatarBg, title:c.title,
+      total:c.total, scoreColor:this.scoreColor(c.total), confidence:c.confidence,
+      hasRedFlag:c.redFlags.length>0, redFlagCount:c.redFlags.length,
+      tags:c.tags.map(([label,k])=>({label,style:tagStyle[k]})),
+      rationale:c.rationale, recShort:c.recShort, recStyle:recStyleFor(c),
+      cardBorder: c.total>=80?'#99f6e4':'#ececf1',
+      dims:[['Compl.',c.complementarity],['Values',c.values],['Arch.',c.archetype_s],['Commit',c.commitment],['Equity',c.equity]].map(([label,score])=>({label,score:typeof score==='number'?score:0,pct:(typeof score==='number'?score:0)+'%',color:this.dimColor(typeof score==='number'?score:0)})),
+      open:()=>this.setState({drawerOpen:true,selKey:c.key}),
+    }));
+
+    // ---- selected drawer ----
+    const s0=byKey[st.selKey]||all[0];
+    const bd=[['Complementarity',s0.complementarity,weights.complementarity],['Values alignment',s0.values,weights.values],['Archetype compat.',s0.archetype_s,weights.archetype_s],['Working style',s0.workingStyle,weights.workingStyle],['Commitment',s0.commitment,weights.commitment],['Equity / motivation',s0.equity,weights.equity]];
+    const valColor=(t)=> t.includes('Aligned')?'#0d9488':t.includes('Divergent')?'#dc2626':'#d97706';
+    const workStyleStyle={ ok:'color:#166534;background:#dcfce7', warn:'color:#b45309;background:#fffbeb' };
+    const sel={ ...s0, scoreColor:this.scoreColor(s0.total), recommendation:s0.rec, recColor:this.scoreColor(s0.total),
+      breakdown:bd.map(([label,score,weight])=>({label,score,weight,pct:score+'%',color:this.dimColor(score)})),
+      values:s0.valuesAlign.map(([label,pct,tag])=>({label,pct:pct+'%',tag,color:valColor(tag)})),
+      workStyle:s0.work.map(([dim,detail,verdict,k])=>({dim,detail,verdict,style:workStyleStyle[k]})),
+      hasRisks:s0.risks.length>0, risks:s0.risks,
+      confidenceNote: s0.confidence<50?'more evidence needed — run references or a trial':'evidence sufficient for a decision',
+      intro:()=>this.setState({soloOpen:false}), pick:()=>this.setState({drawerOpen:false,recordOpen:true,recordType:'candidate',recordKey:s0.key}),
+    };
+
+    // ---- evidence + next steps ----
+    const evidenceModules=[
+      { name:'Reference check', status:'2 of 5 questions · Nadia O.', icon:ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/>'), iconBg:'#ecfdf5', iconColor:'#0d9488' },
+      { name:'Trial project', status:'Not started · define 2-week scope', icon:ic('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'), iconBg:'#f5f3ff', iconColor:'#7c3aed' },
+      { name:'Intro request', status:'1 sent · via advisor network', icon:ic('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2Z"/><polyline points="22,6 12,13 2,6"/>'), iconBg:'#ecfeff', iconColor:'#0891b2' },
+    ];
+    const nextSteps=[
+      { num:1, title:'Run a trial project with Nadia', desc:'Validate the pace-conflict flag before advancing to a decision.' },
+      { num:2, title:'Request references for Daniel', desc:'His values gap needs third-party evidence before you rule in or out.' },
+      { num:3, title:'Confirm Priya\u2019s availability', desc:'Commitment fit is the single blocker on an otherwise aligned profile.' },
+    ];
+
+    // ---- decision console ----
+    const finalistsRaw=[all[0], all[1]];
+    const finalists=finalistsRaw.map(f=>({ name:f.name, initials:f.initials, avatarBg:f.avatarBg, title:f.title, total:f.total, scoreColor:this.scoreColor(f.total),
+      border: f.total>=80?'#99f6e4':'#ececf1', bg: f.total>=80?'#f0fdfa':'#fff',
+      strengths: f.key==='nadia'?['Owns the GTM gap end to end','High mission + ownership alignment']:['Proven outbound sales motion','Fast, decisive operator'],
+      concerns: f.key==='nadia'?['Pace slightly faster than yours','Evidence still light (72%)']:['Values gap on mission','Short time horizon'] }));
+
+    const outcomeStyle=(primary)=> primary?'color:#fff;background:#0d9488;border:1px solid #0d9488':'color:#52525b;background:#fff;border:1px solid #ececf1';
+    const outcomes=[
+      { label:'Proceed with candidate', icon:ic('<polyline points="20 6 9 17 4 12"/>',2.2), style:outcomeStyle(true), onClick:()=>this.setState({recordOpen:true,recordType:'candidate',recordKey:'nadia'}) },
+      { label:'Run trial project', icon:ic('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'), style:outcomeStyle(false), onClick:()=>this.setState({recordOpen:true,recordType:'trial',recordKey:'nadia'}) },
+      { label:'Request references', icon:ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'), style:outcomeStyle(false), onClick:()=>this.setState({recordOpen:true,recordType:'reference',recordKey:'daniel'}) },
+      { label:'Continue search', icon:ic('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'), style:outcomeStyle(false), onClick:()=>this.setState({recordOpen:false}) },
+      { label:'Document solo path', icon:ic('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'), style:outcomeStyle(false), onClick:()=>this.setState({soloOpen:true}) },
+    ];
+
+    // decision record content
+    const rt=st.recordType; const rk=st.recordKey; const rc=byKey[rk];
+    let recordTitle='',recordRationale='',recordFollowups=[],recordLinks=[],recordIcon,recordIconBg;
+    if(rt==='candidate'&&rc){ recordTitle='Proceed with '+rc.name; recordIcon=ic('<polyline points="20 6 9 17 4 12"/>',2.2); recordIconBg='#0d9488';
+      recordRationale='Highest complementary fit ('+rc.total+'). Fills the critical GTM gap with strong mission and ownership alignment. Advancing subject to trial-project validation of pace.';
+      recordFollowups=['Define 2-week trial project scope','Draft advisory-to-cofounder equity range in Cap Table','Prepare Co-founder Agreement with 4-yr vest / 1-yr cliff']; recordLinks=['Open Co-founder Agreement','Open Cap Table']; }
+    else if(rt==='trial'&&rc){ recordTitle='Trial project with '+rc.name; recordIcon=ic('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'); recordIconBg='#7c3aed';
+      recordRationale='Strong on paper but evidence is light ('+rc.confidence+'%). A 2-week paid trial validates responsiveness, ownership, and pace before a binding decision.';
+      recordFollowups=['Scope deliverable + deadline','Track ownership, speed, judgment','Reconvene decision after outcome summary']; recordLinks=['Open Trial tracker']; }
+    else if(rt==='reference'&&rc){ recordTitle='Reference check · '+rc.name; recordIcon=ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'); recordIconBg='#0891b2';
+      recordRationale='Skills fit is strong ('+rc.complementarity+') but a values gap needs third-party evidence. Structured references will confirm or clear the flag before ruling in.';
+      recordFollowups=['Send 5-question reference template','Capture sentiment + flags','Update confidence and re-rank']; recordLinks=['Open Reference check']; }
+
+    // solo mitigation
+    const soloMitigation=[
+      { gap:'Enterprise GTM', plan:'Fractional GTM lead + Sofia M. advisor', via:'Advisors' },
+      { gap:'Fundraising', plan:'Raj P. advisor + Axal VC partner intros', via:'Advisors' },
+      { gap:'Commercial hiring', plan:'First AE hire in Week 6 plan', via:'Roadmap' },
+    ];
+
+    const decCandidate = candidates[0];
+    return {
+      embeddedClass: this.props.embedded ? 'cf-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icPair:ic('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+      icCheck:ic('<polyline points="20 6 9 17 4 12"/>',2.4), icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      icFlag:ic('<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',2),
+      icShield:ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>'),
+      icChevR:ic('<polyline points="9 18 15 12 9 6"/>',2.2), icDot:ic('<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>'),
+      icSolo:ic('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+
+      // decision banner
+      decState:'In progress', decHeadline:'Top match Nadia O. (89) — validate pace in a trial before committing.',
+      decReadiness:64, decAccent:'#0d9488', decBorder:'#99f6e4', decBg:'#f0fdfa', decIconBg:'#0d9488',
+      decIcon:ic('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
+
+      strengths, missing, mustValues, cautions,
+      urgencyLabel:'Need now · commercial gap is critical', urgencyColor:'#b45309', urgencyBg:'#fffbeb', urgencyBorder:'#fde68a',
+      gapRows,
+      candCount:candidates.length, candidates,
+      sorts:[['total','Total fit'],['complementarity','Complementarity'],['confidence','Evidence']].map(([k,l])=>({label:l,onClick:()=>this.setState({sort:k}),style: st.sort===k?'color:#fff;background:#0d9488':'color:#71717a;background:#fff;border:1px solid #ececf1'})),
+      evidenceModules, nextSteps,
+      finalists,
+      decReadyLabel:'Decision artifact required to unlock Week 4', decReadyColor:'#b45309', decReadyBg:'#fffbeb', decReadyBorder:'#fde68a',
+      outcomes,
+      drawerOpen:st.drawerOpen, sel, closeDrawer:()=>this.setState({drawerOpen:false}),
+      soloOpen:st.soloOpen, openSolo:()=>this.setState({soloOpen:true}), closeSolo:()=>this.setState({soloOpen:false}),
+      confirmSolo:()=>this.setState({soloOpen:false,recordOpen:true,recordType:'solo',recordKey:null}),
+      soloMitigation,
+      recordOpen:st.recordOpen,
+      recordTitle: rt==='solo'?'Solo path documented':recordTitle,
+      recordIcon: rt==='solo'?ic('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'):recordIcon,
+      recordIconBg: rt==='solo'?'#52525b':recordIconBg,
+      recordStamp:'Jul 21, 2026 · '+ (rt||'candidate'),
+      recordRationale: rt==='solo'?'No current candidate clears the must-have values bar. Assessment supports a credible solo path with advisor and hire-based mitigation of the commercial gap.':recordRationale,
+      recordFollowups: rt==='solo'?['Confirm fractional GTM + advisor plan','Schedule first AE hire in Week 6','Revisit co-founder search after seed']:recordFollowups,
+      recordLinks: rt==='solo'?['Open Advisors','Open Roadmap']:recordLinks,
+      scrollConsole:()=>{ const el=document.getElementById('cf-console'); if(el) window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-20,behavior:'smooth'}); },
+      stop:(e)=>{e.preventDefault&&e.preventDefault();e.stopPropagation();},
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'cf-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

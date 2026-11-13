@@ -1,0 +1,1 @@
+| Studio · Persona hubs | shared (all five licences) | the five Studio homes | live (the five `*StudioHome` pages) | `assessment.ts` | UPGRADE | Arrived 2026-09-26 (D305) as artifact `69dc42f3`. Five hubs, S1–S5; S5 draws the File-ticket form (`/help/tickets`). Session 3 builds it. `backlog/Founder Studio` (DEFERRED) stays where it is |

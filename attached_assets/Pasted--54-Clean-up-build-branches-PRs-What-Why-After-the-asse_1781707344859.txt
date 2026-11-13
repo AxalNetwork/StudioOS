@@ -1,0 +1,22 @@
+#54 - Clean up build branches + PRs
+What & Why
+After the assessment + event build lands on main, close out the work branches and their PRs so the remote stays tidy. The build prompts named branch claude/affectionate-keller-67zuhb and its draft PR, but that branch is not on this remote — the feature was rebuilt here from scratch. This task closes the branch(es)/PR(s) actually produced by this build, and surfaces (without deleting) any other stale branches for the user to confirm.
+Done looks like
+* The feature branch(es) and draft PR(s) created while implementing the assessment + event tasks are merged to main and then closed/deleted on the remote.
+* Any other lingering claude/* branches that are fully merged into main are listed in the task summary with their last-commit subject and merge status, so the user can confirm before anything unrelated is removed.
+* Branches that contain unmerged, unrelated work (e.g. claude/adoring-edison-qde1d4, claude/eager-lovelace-pf7lZ, which carry separate Legal-overhaul / article-layout work) are NOT deleted — they are only reported, with a recommendation, awaiting explicit user confirmation.
+* main still builds: npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen after cleanup.
+Out of scope
+* Deleting any branch with unmerged work without explicit user confirmation.
+* Any further feature changes.
+Steps
+1. Confirm merges — verify the assessment + event build is merged into main.
+2. Close this build's PR(s)/branch(es) — close the draft PR(s) and delete the remote feature branch(es) produced by this build (use the GitHub integration / git per the repo sync scripts).
+3. Report other stale branches — list remaining claude/*branches with merge status and last-commit subject; delete only those fully merged AND clearly part of this effort. Leave unrelated/unmerged branches for the user to confirm.
+4. Verify green — run drift + tsc on main to confirm nothing broke.
+Relevant files
+* scripts/git-sync.sh
+* scripts/git-push.sh
+* replit.md
+Dependencies
+#53 - Cross-system wiring + content + polish

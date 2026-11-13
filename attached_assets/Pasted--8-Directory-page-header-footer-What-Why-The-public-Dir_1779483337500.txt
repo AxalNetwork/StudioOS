@@ -1,0 +1,49 @@
+#8 - Directory page header + footer
+What & Why
+The public Directory page (/directory) and Partner Profile page (/directory/:slug) currently render a tiny inline header (just "Back" + Sign in / Get Started) and no footer. Make them use the same full site header and footer as the front page so visitors get consistent navigation, branding, and site links.
+Done looks like
+* Visiting /directory shows the same top navigation as the front page (Axal logo, Network / Platform / Lanes / Spin-Out Lab / Directory, Sign In, Get Started) and the same footer at the bottom.
+* Visiting any partner detail page under /directory/:slug shows the same top nav and footer.
+* The "Directory" link in the top nav still takes visitors to /directory.
+* Page content is not hidden underneath the fixed top nav on first load.
+* A "Back to directory" link remains somewhere on the partner profile page so visitors can return easily.
+* Existing search, filters, partner cards, and profile content keep working unchanged.
+Out of scope
+* Restyling the header or footer themselves.
+* Changing nav link destinations or footer content.
+* Active-state highlighting for the current nav item.
+* Any changes to authenticated pages.
+Steps
+1. Directory listing page — Replace the inline mini-header with the shared public nav, add the shared public footer at the bottom, and add top padding so content clears the fixed nav.
+2. Partner profile page — Same swap: shared public nav at top, shared public footer at bottom, top padding for the fixed nav, and keep a small "Back to directory" link inside the page body.
+Relevant files
+* frontend/src/pages/PublicDirectoryPage.jsx
+* frontend/src/pages/PublicPartnerProfilePage.jsx
+* frontend/src/components/PublicNav.jsx
+* frontend/src/components/PublicFooter.jsx
+* frontend/src/pages/LandingPage.jsx
+
+#8 - Directory page header + footer
+What & Why
+The public Directory page (/directory) and Partner Profile page (/directory/:slug) currently render a tiny inline header (just "Back" + Sign in / Get Started) and no footer. Make them use the same full site header and footer as the front page so visitors get consistent navigation, branding, and site links.
+Done looks like
+* Visiting /directory shows the same top navigation as the front page (Axal logo, Network / Platform / Lanes / Spin-Out Lab / Directory, Sign In, Get Started) and the same footer at the bottom.
+* Visiting any partner detail page under /directory/:slug shows the same top nav and footer.
+* The "Directory" link in the top nav still takes visitors to /directory.
+* Page content is not hidden underneath the fixed top nav on first load.
+* A "Back to directory" link remains somewhere on the partner profile page so visitors can return easily.
+* Existing search, filters, partner cards, and profile content keep working unchanged.
+Out of scope
+* Restyling the header or footer themselves.
+* Changing nav link destinations or footer content.
+* Active-state highlighting for the current nav item.
+* Any changes to authenticated pages.
+Steps
+1. Directory listing page — Replace the inline mini-header with the shared public nav, add the shared public footer at the bottom, and add top padding so content clears the fixed nav.
+2. Partner profile page — Same swap: shared public nav at top, shared public footer at bottom, top padding for the fixed nav, and keep a small "Back to directory" link inside the page body.
+Relevant files
+* frontend/src/pages/PublicDirectoryPage.jsx
+* frontend/src/pages/PublicPartnerProfilePage.jsx
+* frontend/src/components/PublicNav.jsx
+* frontend/src/components/PublicFooter.jsx
+* frontend/src/pages/LandingPage.jsx

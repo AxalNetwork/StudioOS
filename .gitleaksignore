@@ -1,0 +1,297 @@
+# D334 — one finding, not one commit. gitleaks' generic-api-key rule
+# correctly flagged a hardcoded VAPID_PRIVATE_KEY literal in
+# cloudflare-worker/test/webpush_d335.test.ts as introduced in commit
+# 9080925048. That key pair was generated solely for this test (Node's
+# crypto.generateKeyPairSync, run locally, never used anywhere else) and
+# never matched any real VAPID key — nothing to rotate. The test now
+# generates its key pair at run time via crypto.subtle instead, so no
+# commit after this one carries the literal. This entry is scoped to the
+# exact finding fingerprint rather than the whole commit, because that
+# commit also introduces webpush.ts, notifications.ts, types.ts and
+# migration 302 — a whole-commit allowlist entry would hide a real finding
+# in any of those too.
+9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33
+# Synthetic test secret used only by the ticket creation/recovery fixture.
+4335b06fcf2231342ebe76e853398142586fdc03:cloudflare-worker/test/ticket_creation_recovery.test.ts:generic-api-key:12
+# D482 (#1022): the synthetic JWT signing string in the D482 route test's first
+# commit. It signs test tokens for an in-memory database only, and was never a
+# credential. The next commit uses the shared unit-test literal instead, so no
+# later commit carries this one. Scoped to the one finding, as D334's entry is.
+89a2c0c4e2688dfa936957274df2c715232accb0:cloudflare-worker/test/support_category_sla_store_d482.test.ts:generic-api-key:35
+# D657 (#1470): not a secret. Line 128 returned the R2 object path of an
+# uploaded audio chunk under a field the generic-api-key rule matches by name.
+# The field is now `objectPath`, so no later commit carries it. Scoped to the
+# one finding. The second entry is this comment's own first wording, which
+# quoted that line.
+e68e99682469eac1afc768ef22f41e99614845be:cloudflare-worker/src/services/interviewSessions.ts:generic-api-key:128
+5160c63c48d3aa374f4ce1a3b173b987efc52753:.gitleaksignore:generic-api-key:21
+# D684 (#1577): Zoom's published example `plainToken` for an endpoint
+# url_validation challenge, used as a fixture in the meetings test's first
+# commit. It is documentation sample text, never a credential; the next commit
+# uses a synthetic `test-challenge-0001` instead, so no later commit carries it.
+# Scoped to the two findings, as D334's entry is.
+49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:233
+49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:236
+# Claude review error detail (#1729): not a credential. The test's first commit
+# held a JWT-shaped literal standing in for GitHub's identity token, to prove
+# the reviewer removes it from the log; it decodes to {"sub":"repo"} with a
+# fake signature. The next commit joins the value at runtime, so no later
+# commit carries the literal. Scoped to the one finding, as D334's entry is.
+7cdc301644060182d0d2435dd6906a5b9e76d9aa:scripts/claude-review/review.test.mjs:jwt:269
+# D690 (#1690): synthetic signing values used only in in-memory route tests.
+# Later commits construct the fixture values at run time. These entries are
+# scoped to the four findings in already-pushed commits, not whole files.
+937837d05366e0c909f3eca44ec81283969ab064:cloudflare-worker/test/cycle_activity_d690.test.ts:generic-api-key:108
+937837d05366e0c909f3eca44ec81283969ab064:cloudflare-worker/test/cycle_activity_d690.test.ts:generic-api-key:149
+ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/validate_export_gate_d690.test.ts:generic-api-key:15
+ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/cycle_records_validate_d690.test.ts:generic-api-key:17
+
+# D750 (#1841) — commit 3c4069358 put a Stripe PaymentIntent client_secret
+# fixture ('pi_topupE2E_secret_fixture') in the stubbed Stripe answer of
+# ai_topup_ready_d750.test.ts. It is made-up test data that never reached
+# Stripe. The next commit splits the literal, as the file's header asks for
+# key-shaped fixtures; this entry covers only that one finding in the pushed
+# commit.
+3c4069358e16313a0a163b0275eb0d2d9c7e4919:cloudflare-worker/test/ai_topup_ready_d750.test.ts:generic-api-key:192
+# D751 (#1880): three synthetic fixture strings in the readiness test's first
+# commit: the GitHub fixture secret, a base64 blob that decrypts to nothing,
+# and the Zoom fixture triple. They configure an in-memory database only and
+# were never credentials. Scoped to the three findings, as D334's entry is.
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:28
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:154
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:239
+# D757 (#1922): a synthetic WhatsApp webhook verify token among the placeholder
+# values of the Validate sources audience test's environment, in that test's
+# first commit. It was never a credential. The next commit uses a lower-entropy
+# placeholder, so no later commit carries it. Scoped to the one finding, as
+# D334's entry is.
+fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources_audience_d757.test.ts:generic-api-key:41
+# D813 (#2259): a made-up preferences token in the newsletter pages test's
+# default URL, handed to a stubbed API and never to any server. It was never a
+# credential. The next commit uses a lower-entropy placeholder, so no later
+# commit carries it. Scoped to the one finding, as D334's entry is.
+96ce08bedd1d010c3a33accd3786343872b7df40:frontend/test/newsletter_pages_d813.test.mjs:generic-api-key:226
+
+# D849 (#2472): synthetic in-memory signing value in the support-session order
+# fixture's first commit; no provider or deployed environment used it. The
+# fixture now uses the low-entropy test value. Only this historical finding
+# is ignored; the file and all secret-scanning rules remain covered.
+774e90f7030ec634e23591e8e33d1d70b134423f:cloudflare-worker/test/orders_support_session_d849.test.ts:generic-api-key:31
+
+# #2391 / PR #2624: synthetic JWT signing value for an in-memory DD regression
+# fixture. It was never a provider or deployed credential; the following
+# commit replaces the literal. Ignore only this already-pushed historical
+# finding, retaining coverage for every other commit, file and secret rule.
+86bb4cb3819f07a4555f31f8850b3011e7dff3cd:cloudflare-worker/test/dd_external_evidence.test.ts:generic-api-key:13
+
+# #2634: synthetic signing value used only by the in-memory Carta fixture.
+# The next commit replaces it with a generated test value; pin the already
+# pushed finding only, retaining all other file/commit/rule coverage.
+57b1626b52f079eb204c8a296c6085daa1b1e49d:cloudflare-worker/test/carta_oauth_2634.test.ts:generic-api-key:17
+
+# D888 (#2392): synthetic JWT signing literal in the original SQLite-only DD
+# fixture commit, never a production credential. Current fixture derives a
+# low-entropy test-only key. Scope this exception to that one historical finding.
+689cc8c3a3d5143334510e1dcfe41734bc201ded:cloudflare-worker/test/dd_advisor_subject_2392.test.ts:generic-api-key:20
+
+# D916 (#2699): synthetic signing value in the in-memory event fixture only.
+# The next commit uses a generated low-entropy test value. Pin this already
+# pushed finding; keep every other commit, file and secret rule covered.
+65b2ef75d7337fe242f14526403d6781752ac0a7:cloudflare-worker/test/events_d916.test.ts:generic-api-key:15
+
+# D923 / PR #2706: redemptions90 is a UI tile key for the 90-day referral
+# count, not a credential. Ignore only this historical generic-api-key finding.
+beecd4b9f67fda255e419c41b8a54c85566acced:frontend/src/pages/admin/partners/partnersDeskModel.js:generic-api-key:937
+# D1039 (#2887): the synthetic JWT signing string in the D1039 route test's first
+# commit. It signs test tokens for an in-memory database only, and was never a
+# credential. The next commit builds a low-entropy key at run time instead, so no
+# later commit carries the literal. Scoped to the one finding, as D334's entry is.
+a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_d1039.test.ts:generic-api-key:34
+# D1013 (#2832): not a secret. The Payments dialogs test typed an example
+# publishable key (`pk_live_` and six letters) into Replace key and asserted the
+# body the page sends; generic-api-key matched it by the `publishable_key`
+# field name. It was never a Stripe key. The next commit builds its example
+# keys at run time, so no later commit carries the literal. Scoped to the one
+# finding, as D334's entry is.
+7c6b24553752f7ca9b115e6acaf37eaf404ff676:frontend/test/payments_dialogs_d1013.test.mjs:generic-api-key:392
+
+# D1003 (#2818): the synthetic JWT signing string in the D1003 segment
+# suggestions test's first commit. It signs test tokens for an in-memory database
+# only, and was never a credential. The next commit builds a low-entropy key at
+# run time instead, so no later commit carries the literal. Scoped to the one
+# finding, as D1039's entry is.
+d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggestions_d1003.test.ts:generic-api-key:37
+
+# D1156 (#3061): the first commit's clearly synthetic signing seed was used
+# only for this in-memory SQLite test's JWTs, never a deployed credential.
+# Current tests build a low-entropy seed at runtime. Keep the exception to
+# this exact historical finding, preserving published branch history.
+636df5d62dccfcf597f295674b03afd8bc196cbd:cloudflare-worker/test/program_usage_d1156.test.ts:generic-api-key:28
+
+# D1190 (#3124): the synthetic JWT signing string in the Capital relationships
+# test's first commit. It signs test tokens for an in-memory database only, and
+# was never a credential. The next commit uses the shared unit-test literal
+# instead, so no later commit carries this one. Scoped to the one finding, as
+# D482's entry is.
+805f80f743df531c959d5aa40bc86b53b1bf8177:cloudflare-worker/test/capital_relationships_d1190.test.ts:generic-api-key:26
+
+# D1174 (#3101): synthetic verification string used only to invalidate a JWT
+# after authentication in the in-memory record test. It was never a deployed
+# credential. The next commit derives it from the existing synthetic test seed.
+# Scope this exception to the exact historical finding, not a file or commit.
+88a88f746796d656a861c219943e03ec917061b5:cloudflare-worker/test/cycle_records_raise_d691.test.ts:generic-api-key:164
+
+# D913 (#2697): a sample objection key, '0123456789abcdef', in the D909 home
+# test's fixture, flagged by generic-api-key on the commit that added it. It is
+# the 16-hex shape of an objection's hash key, keys nothing and was never a
+# credential. The next commit writes it as 'a'.repeat(16), so no later commit
+# carries the literal. Scoped to the one finding, as D482's entry is.
+703c1b81192f64c2472bc39101c6106e766a0d9a:frontend/test/narrative_home_d909.test.mjs:generic-api-key:43
+
+# D1131 (#3011): the synthetic JWT signing string in the comp-source and
+# promotion test's first commit. It signs test tokens for an in-memory database
+# only, and was never a credential. The next commit uses the shared unit-test
+# literal instead, so no later commit carries this one. Scoped to the one
+# finding, as D1190's entry is.
+42af98cec222959cd510469e93884223e346d267:cloudflare-worker/test/event_comp_promoted_d1131.test.ts:generic-api-key:20
+
+# D1231 (#3239): synthetic signing seed for in-memory KYB tests, never a
+# deployed credential. Current fixture builds a low-entropy runtime seed.
+# Pin only the already-published finding; retain every other check.
+b86a6d6d4eac96a90f29bc3f4714d364d2f6b4a0:cloudflare-worker/test/kyb_d1231.test.ts:generic-api-key:17
+
+# D1263 (#3286): synthetic signing seed for an in-memory evidence test, never
+# a deployed credential. Current fixture builds a low-entropy runtime seed.
+# Pin only the already-published finding; retain every other check.
+12459279aa7c16030a24ba971ed05bbe2d1f3e76:cloudflare-worker/test/raise_evidence_d1263.test.ts:generic-api-key:18
+# D1320 (#2481): synthetic API key ids (`key_id`, the public half shown as
+# `axk_<id>_••••`, never a secret) in the API usage test's fixtures. The next
+# commit uses low-entropy ids instead. Pin only the two published findings.
+54ddf32c30d05b661dfc959575975fa1869fdc14:frontend/test/api_usage_d1320.test.mjs:generic-api-key:30
+54ddf32c30d05b661dfc959575975fa1869fdc14:frontend/test/api_usage_d1320.test.mjs:generic-api-key:31
+
+# D1094 (#2959): the synthetic JWT signing string in google_workspace_gw5's
+# first commit. It signs nothing outside an in-memory test database and was
+# never a credential. The next commit (0652605bb4) builds the value at run
+# time, so no later commit carries a literal. Scoped to the one finding.
+214ec54f83bafee02779afe679acfd8ee7496de6:cloudflare-worker/test/google_workspace_gw5.test.ts:generic-api-key:75
+
+
+# D1319 (#3480): a synthetic signing seed and a JWT-shaped sample in the
+# publish lint test, never deployed credentials. The fixture now builds a
+# low-entropy runtime seed and assembles the sample from its parts.
+# Pin only the two already-published findings; retain every other check.
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:generic-api-key:38
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:jwt:293
+# D1361: a fixture signing string in a test, removed in the next commit; the published commit is pinned.
+987c80ec092a8a971073fac8bc57017348041ca2:cloudflare-worker/test/connector_api_d1361.test.ts:generic-api-key:198
+# D1384 (#3692): the synthetic JWT signing string in the Compliance layer
+# route test's first commit. It signs test tokens for an in-memory database
+# only and was never a credential. The next commit uses the D1206 test's
+# literal shape instead, so no later commit carries it. Scoped to the one finding.
+f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_compliance_d1384.test.ts:generic-api-key:34
+# #3708: the synthetic JWT signing string in the meeting-bot diagnostic test's
+# first commit. It signs test tokens for an in-memory database only, and was
+# never a credential. The next commit (daba115f) generates it at run time, so no
+# later commit carries it. Scoped to the one finding, as D334's entry is.
+9cb2388051552c6512b718c43b516fb7acbf767b:cloudflare-worker/test/meeting_bot_diagnose_3708.test.ts:generic-api-key:21
+# D1445 (#3707): deterministic signing seed for an in-memory test database,
+# never a deployed credential. The follow-up expands a short fixture seed at
+# runtime. Pin only the already-published finding, as in D334.
+122a14aa2bb671ea2df0794f79fa0db42e30677f:cloudflare-worker/test/sms_enrolment_3707.test.ts:generic-api-key:12
+# D1597 (#3870): a synthetic signing seed used only for this test's own JWTs
+# and in-memory database, never a deployed credential. The follow-up uses a
+# low-entropy runtime seed. Pin only the already-published finding, not its
+# whole file, commit, or the generic-api-key rule.
+46ae241fbd882aa6dc15a89fa67ff963eb6ea9ff:cloudflare-worker/test/advisor_visibility_d1597.test.ts:generic-api-key:22
+# #3939: a doc comment in the model-coverage check's first commit named two
+# model ids after the word "token"; gitleaks' generic-api-key rule read it as a
+# key. It is no credential. The next commit rewords the comment, so no later
+# commit carries it. Pin only the published finding, as D334's entry does.
+74a99469d1cf0398d9052b74175b5925bb026e30:scripts/check-model-coverage.mjs:generic-api-key:78
+# D1506 (#3757): the image-metadata test's first commit named its synthetic
+# EXIF marker string `SECRET`; gitleaks' generic-api-key rule read it as a key.
+# It is a fixture string written into a fake JPEG, never a credential. The next
+# commit renames it, so no later commit carries it. Pin only the published
+# finding, as D334's entry does.
+7ca0659e7a6d0260d3f9fec882ffcc3f6c173413:cloudflare-worker/test/untrusted_framing_d1506.test.ts:generic-api-key:195
+# #3740 part 2a: the fill test's first commit named its synthetic JWT signing
+# string `SECRET`; gitleaks' generic-api-key rule read it as a key. It signs the
+# test's own tokens against an in-memory database and was never a credential.
+# The next commit renames it, so no later commit carries it. Pin only the
+# published finding, as D334's entry does.
+61035d4540e13c69f5357e00bf8375a69fe2f1e7:cloudflare-worker/test/fill_founder_part2a_3740.test.ts:generic-api-key:23
+
+# #4190 (D4190) — two findings, one fixture. gitleaks' generic-api-key rule
+# read the made-up logo key `logo_` + 24 hex characters in
+# cloudflare-worker/test/admin_deck_beta_4190.test.ts as a key. It names a row
+# in the test's in-memory deck_logos table and was never a credential. The
+# next commit replaces it with `logo_` and 23 zeros and a 1 (the schema's shape, no entropy), so no later commit carries
+# it. Pin only the published findings, as D334's entry does.
+d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:143
+d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:155
+# #3938 part 7 (D1478): `segment_hints_3938.test.ts` first set its in-memory test
+# JWT key to a synthetic phrase repeated three times; it signs only the test's
+# own tokens and was never a credential. The next commit replaces it with 48
+# x's (no entropy), so no later commit carries it. Pin only the published finding.
+07050caffc38bcb858fa119db6faf9276d1e04fe:cloudflare-worker/test/segment_hints_3938.test.ts:generic-api-key:30
+# D4292 (#4292): four findings, one per line, in commit 2691f4fecc. The
+# generic rule read the four milestone-bonus trigger names in the terms
+# editor's FIRING_TRIGGERS list as secrets. They are the same enum names as the
+# Worker's FIRING_RULES, not credentials, and there is nothing to rotate.
+# Scoped to the exact fingerprints so nothing else in that commit is hidden.
+# The fifth entry is this comment's first wording, in commit b3d19c7c66, which
+# quoted one of those names and was read the same way.
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:299
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:300
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:301
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:302
+b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234
+# D4269 (#4269): line 41 of the teleprompter model named the browser localStorage
+# entry for the teleprompter's size and speed (pitch.teleprompter.v1), not a
+# credential; generic-api-key matched it on the `_KEY` name. The next commit
+# renames it `PREFS_STORE_NAME`, so no later commit carries the match. Scoped to
+# the one finding, as D334's entry is.
+a519fc5743a2b719b6f8f8f0ff709bbf25670bec:frontend/src/pages/raise/pitch/teleprompterModel.js:generic-api-key:41
+# #4046: the synthetic JWT signing seed in publish_ask_4046's first commit. It signs
+# test tokens for an in-memory database only, never a credential. The next commit uses the
+# shared 'test'.repeat(16) literal. Scoped to the one finding.
+a2a4570bbd160b4c77668945f50122dda4e8c9bc:cloudflare-worker/test/publish_ask_4046.test.ts:generic-api-key:35
+
+# D3678 (#3678) — one finding, not one commit. gitleaks' generic-api-key rule
+# flagged `RFC_KEY_B32` in cloudflare-worker/test/meet_bot_signin_3678.test.ts,
+# introduced in commit de797bc2c5. It is RFC 6238 Appendix B's own published
+# test seed ("12345678901234567890") written in base32: public, in the RFC,
+# and no account's key. Nothing to rotate. The test now writes the base32 at
+# run time, so no later commit carries the literal; this entry is scoped to
+# that exact fingerprint.
+de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_3678.test.ts:generic-api-key:28
+
+# D4681 (#4681) — two findings, not one commit. gitleaks' generic-api-key rule
+# read the test's stub assignment of its `lib/api` replacement in
+# frontend/test/expertise_workflows_4681.test.mjs (commit 2f1320f365) as a key
+# assignment. It is a variable name in a test that replaces `lib/api` with a
+# stub, not a credential; nothing to rotate. Commit 3515e5b6e2 rewrites it as
+# `const { api } = …`, so no later commit carries it. Scoped to the two
+# fingerprints, as D334's entry is.
+2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:94
+2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:127
+# The first copy of this entry, in commit 93be6c5e10, quoted that line, so its
+# comment can match the same rule (5160c63c's did, above). Listed so it cannot.
+93be6c5e10c1823bf247eda03d0c49d4106117e7:.gitleaksignore:generic-api-key:271
+# #4595 (#4720): generic-api-key reads deck-field fixtures (an object whose key
+# names a deck field, kind paragraph) in two test files as key/value secrets.
+# They are field names, never credentials; 2df5404eff reworded the fixtures, and
+# the three findings left in commit 92ce9678 are listed here, one per finding.
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_share_d902.test.ts:generic-api-key:284
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:28
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:29
+# af4b56516d's first wording of this comment quoted that fixture and so matched
+# the same rule; its one finding is listed too.
+af4b56516d9a4bdbd3751b585de0c943cd275ab2:.gitleaksignore:generic-api-key:283
+# #5524: the old D5352 signing fixture was used by the signer and Worker
+# verifier in the in-memory test. The test now generates its key at runtime.
+e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_accept_idempotent_d5352.test.ts:generic-api-key:17
+# #4662: an in-memory mail test used a synthetic replay identifier. The fixture
+# now generates its identifier at runtime. Scope this to the original finding.
+25221cd018338be7d3de1fc71696bd28c1b5debc:cloudflare-worker/test/mail_conversation_history_4662.test.ts:generic-api-key:94

@@ -1,0 +1,122 @@
+Objective
+  Several failures trace back to missing Cloudflare configuration.
+  Land a clean wrangler.toml, preview environment, additional bindings,
+  cron triggers, and a Tail Worker.
+
+Tasks
+  1. cloudflare-worker/wrangler.toml — extend with:
+       [[analytics_engine_datasets]]
+       binding = "ANALYTICS"
+       dataset = "studioos_metrics"
+
+       [browser]
+       binding = "BROWSER"           # for PDF rendering (Prompt AJ + DD)
+
+       [[queues.producers]]          # already
+       [[queues.consumers]]          # already
+       (verify DLQ configured: max_retries=3, dead_letter_queue =
+        "studioos-job-queue-dlq")
+
+       [observability]
+       enabled = true
+       head_sampling_rate = 1
+
+       [triggers]
+       crons = [
+         "* * * * *",        # queue drain (existing)
+         "0 3 * * *",        # daily cleanup (existing)
+         "0 */6 * * *",      # market-intel connectors
+         "0 4 * * *",        # market-intel indexes
+         "0 9 * * *",        # daily digest emails
+         "0 9 * * 1",        # weekly digest emails (Monday)
+       ]
+
+       [env.preview]
+       name = "studioos-preview"
+       routes = [...]
+       (preview D1, KV, R2 IDs — ask the user; provision if needed)
+
+  2. Create cloudflare-worker-tail/ (Tail Consumer Worker)
+       Subscribes to studioos production logs; forwards structured
+       events to R2 (studioos-logs bucket, 7-year retention),
+       optionally to Logpush-style external sink.
+       wrangler.toml:
+         name = "studioos-tail"
+         main = "src/index.ts"
+         [[tail_consumers]]
+         service = "studioos"
+
+  3. Secrets — run, in this order (Replit asks the user for each
+     value):
+       wrangler secret put JWT_SECRET
+       wrangler secret put SCORING_HMAC_SECRET
+       wrangler secret put PII_KEK_HEX
+       wrangler secret put R2_KEK_HEX
+       wrangler secret put STRIPE_SECRET_KEY
+       wrangler secret put STRIPE_WEBHOOK_SECRET
+       wrangler secret put STRIPE_PRICE_FOUNDER_GROWTH_MONTHLY
+       wrangler secret put STRIPE_PRICE_FOUNDER_GROWTH_ANNUAL
+       wrangler secret put STRIPE_PRICE_FOUNDER_STUDIO_MONTHLY
+       wrangler secret put STRIPE_PRICE_FOUNDER_STUDIO_ANNUAL
+       wrangler secret put STRIPE_PRICE_INVESTOR_PRO_MONTHLY
+       wrangler secret put STRIPE_PRICE_INVESTOR_PRO_ANNUAL
+       wrangler secret put STRIPE_PRICE_INVESTOR_INST_MONTHLY
+       wrangler secret put STRIPE_PRICE_INVESTOR_INST_ANNUAL
+       wrangler secret put STRIPE_ATLAS_API_KEY
+       wrangler secret put GMAIL_CLIENT_ID
+       wrangler secret put GMAIL_CLIENT_SECRET
+       wrangler secret put GMAIL_REFRESH_TOKEN
+       wrangler secret put EMAIL_FROM
+       wrangler secret put GOOGLE_CLIENT_ID
+       wrangler secret put GOOGLE_CLIENT_SECRET
+       wrangler secret put PERSONA_API_KEY      # OR Sumsub trio
+       wrangler secret put TURNSTILE_SECRET_KEY
+       wrangler secret put HUBSPOT_CLIENT_ID
+       wrangler secret put HUBSPOT_CLIENT_SECRET
+       wrangler secret put SF_CLIENT_ID
+       wrangler secret put SF_CLIENT_SECRET
+       wrangler secret put CARTA_CLIENT_ID
+       wrangler secret put CARTA_CLIENT_SECRET
+       wrangler secret put CALENDLY_CLIENT_ID
+       wrangler secret put CALENDLY_CLIENT_SECRET
+       wrangler secret put CRUNCHBASE_API_KEY
+       wrangler secret put SLACK_CLIENT_ID
+       wrangler secret put SLACK_CLIENT_SECRET
+       wrangler secret put DOCUSIGN_INTEGRATION_KEY
+       wrangler secret put DOCUSIGN_SECRET
+       wrangler secret put DOCUSIGN_RSA_PRIVATE_KEY
+       wrangler secret put GCP_IDENTITY_API_KEY
+       wrangler secret put GCP_PROJECT_ID
+       wrangler secret put GCP_SERVICE_ACCOUNT_JSON
+
+  4. cloudflare-worker/src/types.ts — add every secret to the Env
+     interface as optional string for type safety.
+
+  5. Dashboard tasks (write to user as a checklist; do NOT attempt to
+     run from Replit):
+       a. Cloudflare > Zero Trust > Access > Applications:
+          create policy gating /api/admin/*, /api/monitoring/*,
+          /api/infra/* to the Axal team email allow-list.
+       b. Cloudflare > Security > WAF: enable Managed Ruleset,
+          add custom rule "rate-limit /api/auth/* to 10 req/min/IP".
+       c. Cloudflare > DNS: enable DNSSEC, add CAA records pointing
+          to Let's Encrypt + a backup CA.
+       d. GitHub > Settings > Branches: branch protection on `main`
+          (PR review required, CI green, signed commits, no force-push).
+       e. GitHub > Security: enable secret scanning + push protection.
+       f. Stripe: create the product + price IDs above.
+       g. Google Cloud: enable Identity Toolkit + add SMS auth quota.
+
+  6. CI workflow .github/workflows/ci.yml (if not already): typecheck,
+     lint, unit tests, api drift smoke test, wrangler validate, build
+     the frontend, deploy to preview env on PR.
+
+Acceptance
+  - wrangler deploy succeeds with all new bindings.
+  - JWT_SECRET set; the "blocks all requests" failure path is gone.
+  - Workers Traces visible in dashboard; tail consumer streams logs
+    into R2.
+  - Preview environment deploys on each PR; users can click a
+    preview URL.
+  - All cron triggers fire on schedule (verify in dashboard).
+  - Dashboard checklist completed by user.

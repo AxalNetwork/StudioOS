@@ -1,0 +1,81 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, Cloudflare AI Workers, async job queue, lightweight D1 ORM, and complete D1 tables (users, deals, subsidiaries/spin-outs, vc_funds, limited_partners, legal_documents, spinout_events, capital_calls, activity_logs, system_metrics, and all others from previous builds). We also have the Partner Dashboard, Pipeline Board, Spin-Out Wizard, and monitoring.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style with routers)
+- cloudflare-worker/ (Workers + D1 + AI Workers + Queues)
+- frontend/ (static HTML/JS)
+
+Add complete **Liquidity / Secondary Market Tools + Exit Automation** with these exact requirements:
+
+1. **Database Models (new D1 tables)**  
+   Create these tables with proper indexes, foreign keys, and timestamps:
+   - `liquidity_events`
+     • id (PK)
+     • subsidiary_id or deal_id (FK)
+     • event_type (text: 'secondary_sale', 'm&a_exit', 'ipo_prep', 'distribution')
+     • status (text: 'listed', 'matched', 'executed', 'cancelled')
+     • valuation (decimal)
+     • shares_offered (decimal)
+     • buyer_type (text: 'secondary_fund', 'strategic', 'lp_rollover')
+     • executed_price (decimal, optional)
+     • created_at, executed_at
+   - `secondary_listings`
+     • id (PK)
+     • user_id (FK — seller LP or founder)
+     • subsidiary_id (FK)
+     • shares (decimal)
+     • asking_price (decimal)
+     • status (text: 'open', 'matched', 'sold')
+     • ai_valuation (decimal)
+     • created_at, matched_at
+   - `exit_matches`
+     • id (PK)
+     • listing_id (FK)
+     • buyer_user_id (FK)
+     • match_score (float)
+     • ai_explanation (text)
+     • status (text)
+
+2. **Automation Logic**  
+   - Trigger automatically after a spin-out reaches 'independent' status or on-demand from any subsidiary/fund:
+     • Enqueue a job for AI-powered valuation (using Cloudflare AI Worker)
+     • Create secondary listing option for LPs/founders
+     • Run AI matching engine for buyers (LPs, secondary funds, strategics) using existing match_scores + user_preferences
+   - On exit execution: auto-update limited_partners returns, trigger returns distribution via Capital Engine, log to activity_logs.
+   - Support "Continue / Iterate" fallback (no liquidity event).
+
+3. **Backend Endpoints (add to backend/routers/liquidity.py)**  
+   - POST /api/liquidity/list (create secondary listing — protected for LPs/investors/founders)
+   - GET /api/liquidity/marketplace (open listings + AI matches)
+   - POST /api/liquidity/match (trigger AI buyer matching)
+   - POST /api/liquidity/execute-exit (admin/operator only — records sale and distributes returns)
+   - GET /api/liquidity/my-portfolio (LP view of their holdings + liquidity options)
+   - All endpoints protected by RBAC and routed through job queue for non-blocking high-volume processing.
+
+4. **Frontend**  
+   - New "Liquidity & Exits" tab in the Partner Dashboard (visible to LPs/investors/admins)
+   - Liquidity Marketplace page (/liquidity.html):
+     • Grid of open secondary listings with AI valuation badges
+     • "List My Shares" wizard (step-by-step: select subsidiary, shares, asking price, AI valuation preview)
+     • AI Match button on each listing → shows potential buyers + match_score + explanation
+     • Portfolio view for LPs: current holdings, potential liquidity value, exit history
+   - Integrate with existing dashboard sidebar and charts (Chart.js: secondary market volume, exit pipeline funnel).
+   - Use fetch() + SSE for live updates on matches/executions.
+
+5. **Security & Best Practices**  
+   - RBAC: LPs/investors can list & view marketplace; operators/admins execute exits; all see their own portfolio.
+   - All money/valuation amounts stored as integer cents.
+   - Full audit trail via liquidity_events + activity_logs.
+   - Use existing job queue for AI valuation & matching (non-blocking).
+   - Rate limiting already in place — enforce stricter limits on execute-exit.
+   - Mock real buyer execution first (ready for future integration with external secondary platforms).
+
+Build this step-by-step:  
+1. First create the new D1 tables + migration + seed sample liquidity events.  
+2. Then implement automation logic + AI valuation/matching (using Cloudflare AI Worker).  
+3. Then add backend endpoints and router.  
+4. Finally build the frontend Liquidity & Exits tab + marketplace page and integrate with the Partner Dashboard.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

@@ -1,0 +1,30 @@
+#32 - Audience-first Brand & Landing flow
+What & Why
+Restructure the existing Brand & Landing Page wizard into the audience-first flow the user approved: Step 1 — Pick project & audience → Step 2 — Pick a recommended template → Step 3 — Tune brand kit & copy → Step 4 — Share. Today's wizard leads with brand-direction generation and a separate audience-copy step; this task reorders it around audience selection and surfaces the new template catalog as recommendations, while folding the existing tuning (logo/colors/fonts/copy) and share steps into the new structure. Published pages keep their current visual styles.
+Done looks like
+* Step 1: founder selects a project and an audience (the 6 audiences); a sensible default goal is prefilled. Sector/description capture is preserved here.
+* Step 2: founder sees templates recommended for the chosen audience (cards from the catalog, recommended first) and picks one.
+* Step 3: the chosen template seeds editable brand-kit copy (name, headline, subheadline, CTA); founder can tune logo, colors, palette, fonts and copy. The existing "generate brand ideas / directions", palette-suggest, and tagline-iterate actions remain available here (relocated, not removed).
+* Step 4: founder publishes and gets the public URL + private preview URL (unchanged behavior).
+* Selections (audience, goal, chosen template) are saved and restored on reopen via the backend.
+* Dark mode and theme/density variants are respected on any new/changed UI; npm run test:drift passes.
+Out of scope
+* Recreating the zip designs / new visual templates (published output uses existing styles).
+* Backend schema/API additions (handled by the persistence task — this task consumes that API).
+* The catalog data + helpers (handled by the catalog task — this task imports them).
+Steps
+1. Reorder into 4 steps — Rework the wizard so audience selection comes first and template selection is driven by the catalog's per-audience recommendations; preserve project/sector/description capture.
+2. Template recommendation UI — Replace the current fixed 5-template picker with catalog-driven recommended cards for the selected audience (label, goal, CTA, mapped visual style), defaulting copy/CTA from the chosen template.
+3. Fold tuning + share — Consolidate today's logo/color/font/copy tuning and the share step into Steps 3–4; keep brand-direction generation, palette suggest, and tagline iterate as actions within tuning.
+4. Wire persistence — Save/restore audience, goal, and chosen template via the brand-landing API, and add the required entries to both changelogs (technical + user-facing).
+Relevant files
+* frontend/src/pages/BrandBuilderPage.jsx
+* frontend/src/lib/api.js:1340-1354
+* cloudflare-worker/src/services/landingTemplates.ts:9-60
+Dependencies
+
+Brand template catalog & matching
+Main
+
+Save audience, goal & template choice
+Main

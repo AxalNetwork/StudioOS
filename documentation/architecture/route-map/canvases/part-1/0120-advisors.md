@@ -1,0 +1,1 @@
+| Advisors | founder | `/spinout-lab/advisors` | `/spinout-lab/advisors` | `advisors.ts`, `scoring.ts`, `values.ts`, `projects.ts`, `spinout_lab.ts` | OUT OF SCOPE | Lab tool. `SpinoutLabAdvisorsPage.jsx:3` names its handoff and documents fabricated canvas content not reproduced. Distinct from the platform-wide `/advisors` directory. |

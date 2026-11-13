@@ -1,0 +1,77 @@
+**✅ Here are the exact configs / steps you need** before prompting Replit.
+
+### 1. Cloudflare Dashboard Setup (do this manually once)
+1. Go to [Zero Trust → Access → Applications](https://one.dash.cloudflare.com/)
+2. Create a new **Self-hosted Application**:
+   - Name: `Axal StudioOS Admin & Internal Tools`
+   - Type: Self-hosted
+   - Domain: `axal.vc` (or your custom domain)
+   - Path: `/admin*` and `/api/admin*` (you can add multiple paths)
+   - Identity providers: Use **Email** (allow-list your team emails) or connect Google/Microsoft SSO
+   - Policy: Create a policy that requires authentication + your email domain (or specific users)
+3. Note the **Application ID** and **Policy ID** (you’ll use them in code if needed)
+
+### 2. `.env.example` (add these lines)
+```env
+# Cloudflare Zero Trust / Access
+CLOUDFLARE_ACCESS_AUDIENCE=your-application-audience-id   # From the Access Application settings
+CLOUDFLARE_ACCESS_TEAM=your-team-name.cloudflareaccess.com  # e.g. axal.cloudflareaccess.com
+```
+
+---
+
+**Now copy-paste this full prompt into Replit Agent:**
+
+```
+You are the senior security engineer for Axal StudioOS. Implement **Cloudflare Zero Trust / Access** to protect the Admin Console, internal tools, and all sensitive routes.
+
+Use the exact environment variables from the configs I provided (CLOUDFLARE_ACCESS_AUDIENCE and CLOUDFLARE_ACCESS_TEAM).
+
+Exact requirements:
+
+1. **Middleware for Zero Trust**
+   - Create `backend/middleware/zero_trust.py`
+   - Add a middleware that:
+     - Validates the Cloudflare Access JWT / cookie on every request to protected routes
+     - Uses the audience and team values from environment variables
+     - Returns 401/403 with clear message if authentication fails
+
+2. **Protected Routes**
+   - Protect everything under:
+     - /admin*
+     - /api/admin*
+     - /api/monitoring*
+     - /api/infra*
+     - Any other internal or admin-only endpoints
+   - Keep public routes (register, referral links, marketing site) unprotected
+
+3. **Integration**
+   - Add the Zero Trust middleware to main.py (apply it globally or per-router)
+   - Update existing RBAC middleware to run after Zero Trust (layered security)
+   - Log every blocked access attempt to activity_logs (action_type = "zero_trust_blocked")
+
+4. **Frontend**
+   - Update Admin Console and any internal pages to show a friendly "Access Denied – Please log in via Cloudflare Zero Trust" message if needed
+   - Add a note in the Admin Console that it is protected by Zero Trust
+
+5. **Dashboard Setup Reminder**
+   - Include a clear comment block at the top of the middleware file with step-by-step instructions for creating the Access Application and Policy in the Cloudflare Zero Trust dashboard (use the exact steps I gave you earlier).
+
+Build this step-by-step:
+1. First create backend/middleware/zero_trust.py with the validation logic.
+2. Then update main.py to apply the middleware to protected routes.
+3. Then update existing routers (admin, monitoring, etc.) to use the new middleware.
+4. Finally add the dashboard setup instructions as comments and test the protection.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Just copy the configs + dashboard steps above first, then paste the prompt into Replit Agent.
+
+This gives you enterprise-grade protection on the Admin Console and all sensitive internal tools while keeping the public marketing / referral flows open.
+
+Would you like the next prompt for **R2 (KYC document storage)** or for **full GitHub sync + deployment checklist**? Just say the word.

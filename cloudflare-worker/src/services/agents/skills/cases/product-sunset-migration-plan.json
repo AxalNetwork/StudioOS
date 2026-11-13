@@ -1,0 +1,65 @@
+{
+  "skill": "product-sunset-migration-plan",
+  "version": 1,
+  "note": "Synthetic product fixture only; no production or personal data.",
+  "input": {
+    "records": {
+      "build.records": {
+        "record_id": "sunset-proposal-05",
+        "feature": "Export API v1",
+        "proposal_status": "draft",
+        "target_date": "2027-01-31",
+        "replacement": "Export API v2",
+        "replacement_formats": [
+          "JSON",
+          "CSV"
+        ],
+        "dependency": [
+          {
+            "integration_id": "bulk-archive-job",
+            "required_format": "ZIP",
+            "endpoint": "/v1/exports"
+          }
+        ],
+        "rollback_owner": null
+      },
+      "grow.records": {
+        "record_id": "api-usage-21",
+        "window_start": "2026-10-01",
+        "window_end": "2026-10-31",
+        "unit": "account",
+        "active_accounts": 90,
+        "migration_states_mutually_exclusive": true,
+        "confirmed_v2_migrations": 60,
+        "remaining_v1_dependencies": 30
+      },
+      "compliance.calendar": [
+        {
+          "record_id": "obligation-summary-07",
+          "source_ref": "recorded-contract-summary-07",
+          "scope": "Export API retirement",
+          "minimum_notice_days": 90,
+          "notice_date": null,
+          "owner_review": "Pending"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "30 accounts",
+      "ZIP",
+      "90 days"
+    ],
+    "must_say_not_recorded": [
+      "notice date",
+      "rollback owner"
+    ],
+    "must_not_include": [
+      "The sunset is approved",
+      "All 90 accounts have completed migration",
+      "I sent the notice"
+    ]
+  }
+}

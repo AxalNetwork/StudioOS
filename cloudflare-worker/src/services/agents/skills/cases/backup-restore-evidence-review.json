@@ -1,0 +1,73 @@
+{
+  "skill": "backup-restore-evidence-review",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "id": "recovery-config-43",
+        "repository": "synthetic-ledger-service",
+        "current_environment": {
+          "name": "fixture-production",
+          "schema_revision": "schema-43",
+          "required_stores": [
+            "ledger-database",
+            "receipt-objects"
+          ]
+        },
+        "recovery_policy": {
+          "recovery_point_objective_minutes": 240,
+          "recovery_time_objective_minutes": null
+        }
+      },
+      "build.records": {
+        "id": "recovery-evidence-91",
+        "backup": {
+          "id": "backup-job-12",
+          "environment": "fixture-production",
+          "schema_revision": "schema-43",
+          "stores": [
+            "ledger-database"
+          ],
+          "completed_at": "2026-11-01T08:00:00Z",
+          "status": "completed",
+          "integrity_check": "passed"
+        },
+        "restore_exercise": {
+          "id": "restore-drill-04",
+          "environment": "fixture-staging",
+          "schema_revision": "schema-41",
+          "stores": [
+            "ledger-database"
+          ],
+          "started_at": "2026-10-01T09:00:00Z",
+          "completed_at": "2026-10-01T09:22:00Z",
+          "status": "completed",
+          "application_checks": [
+            "ledger list page loads"
+          ]
+        },
+        "receipt_object_restore_evidence": null,
+        "key_access_attestation": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "backup-job-12",
+      "restore-drill-04",
+      "Not verified",
+      "schema-43",
+      "schema-41"
+    ],
+    "must_say_not_recorded": [
+      "recovery time objective"
+    ],
+    "must_not_include": [
+      "Production recovery has been verified",
+      "I certified recoverability",
+      "All stores have been restored successfully"
+    ]
+  }
+}

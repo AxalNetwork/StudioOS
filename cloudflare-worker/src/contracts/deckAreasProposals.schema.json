@@ -1,0 +1,59 @@
+{
+  "$id": "deckAreasProposals",
+  "title": "GET /api/decks/:id/areas/proposals?batch=<uid> (D1512, #3764)",
+  "description": "What the deck v2 adapter's `areasGenerate` method reads once its run is admitted (`POST /api/decks/:id/areas`): the run's charged-of-held, whether every area has settled, and one proposal per area with its variants, each labelled by model, seed, cost and seconds, with its own error and the free code critique. Nothing is placed by this reply. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch", "done", "proposals"],
+  "properties": {
+    "batch": {
+      "type": "object", "additionalProperties": false, "required": ["uid", "state", "held_microusd", "charged_microusd"],
+      "properties": {
+        "uid": { "type": "string" },
+        "state": { "enum": ["queued", "running", "cancelling", "done", "cancelled", "failed"] },
+        "held_microusd": { "type": "integer", "minimum": 0 },
+        "charged_microusd": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "done": { "type": "boolean" },
+    "proposals": { "type": "array", "items": { "$ref": "#/$defs/proposal" } }
+  },
+  "$defs": {
+    "proposal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["uid", "card_uid", "area_id", "element", "mode", "kind", "batch_uid", "state", "outcome", "accepted_variant", "replaces_block", "variants", "created_at", "decided_at", "expires_at"],
+      "properties": {
+        "uid": { "type": "string" },
+        "card_uid": { "type": "string" },
+        "area_id": { "type": "string" },
+        "element": { "type": "string" },
+        "mode": { "enum": ["variants", "records"] },
+        "kind": { "type": ["string", "null"] },
+        "batch_uid": { "type": ["string", "null"] },
+        "state": { "enum": ["running", "ready", "failed", "accepted", "discarded", "expired"] },
+        "outcome": { "type": ["string", "null"] },
+        "accepted_variant": { "type": ["integer", "null"] },
+        "replaces_block": { "type": ["string", "null"] },
+        "variants": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/variant" } },
+        "created_at": { "type": "string" },
+        "decided_at": { "type": ["string", "null"] },
+        "expires_at": { "type": "string" }
+      }
+    },
+    "variant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["n", "seed", "model_label", "cost_microusd", "seconds", "state", "error", "payload", "critique"],
+      "properties": {
+        "n": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "seed": { "type": ["integer", "null"] },
+        "model_label": { "type": "string" },
+        "cost_microusd": { "type": "integer", "minimum": 0 },
+        "seconds": { "type": ["number", "null"] },
+        "state": { "enum": ["ready", "failed", "stopped", "waiting", "running"] },
+        "error": { "description": "Null when the variant is ready; else `{ code, message }`. No `type`, so null holds." },
+        "payload": { "description": "What Accept places: `{ kind: 'text', before, after }`, `{ kind: 'block', block }`, `{ kind: 'image', image }` or `{ kind: 'blocks', blocks, bindings }`; null when it failed. No `type`, so null holds." },
+        "critique": { "description": "The free code critique of a text variant (`fits`, `contrast_aa`, `density_ok`, each true, false or null when not checked); null otherwise. No `type`, so null holds." }
+      }
+    }
+  }
+}

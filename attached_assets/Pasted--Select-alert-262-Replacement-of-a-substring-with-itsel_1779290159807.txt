@@ -1,0 +1,155 @@
+
+Select alert #262
+Replacement of a substring with itself
+Medium
+Test
+#262 opened last week • Detected by CodeQL in cloudflare-worker/test/referral_join_notify.tes... :114
+main
+
+Select alert #263
+Missing regular expression anchor
+High
+Test
+#263 opened last week • Detected by CodeQL in cloudflare-worker/test/advisor_explain_router.t... :212
+main
+
+Select alert #285
+Missing space in string concatenation
+Warning
+#285 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :722
+main
+
+Select alert #284
+Missing space in string concatenation
+Warning
+#284 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :721
+main
+
+Select alert #283
+Missing space in string concatenation
+Warning
+#283 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :720
+main
+
+Select alert #282
+Missing space in string concatenation
+Warning
+#282 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :719
+main
+
+Select alert #281
+Missing space in string concatenation
+Warning
+#281 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :718
+main
+
+Select alert #280
+Missing space in string concatenation
+Warning
+#280 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/progress.ts :717
+main
+
+Select alert #279
+Missing space in string concatenation
+Warning
+#279 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :63
+main
+
+Select alert #278
+Missing space in string concatenation
+Warning
+#278 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :62
+main
+
+Select alert #277
+Missing space in string concatenation
+Warning
+#277 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :61
+main
+
+Select alert #276
+Missing space in string concatenation
+Warning
+#276 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :60
+main
+
+Select alert #275
+Missing space in string concatenation
+Warning
+#275 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :58
+main
+
+Select alert #274
+Missing space in string concatenation
+Warning
+#274 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/financials.ts :57
+main
+
+Select alert #265
+Identical operands
+Warning
+Test
+#265 opened last week • Detected by CodeQL in frontend/.../e2e/market_intelligence.spec... :482
+main
+
+Select alert #264
+Useless assignment to local variable
+Warning
+#264 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/advisor.ts :1727
+main
+
+Select alert #261
+Useless assignment to local variable
+Warning
+#261 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/admin_publications.ts :320
+main
+
+Select alert #287
+Unused variable, import, function or class
+Note
+#287 opened last week • Detected by CodeQL in frontend/.../pages/PitchDeckPage.jsx :29
+main
+
+Select alert #286
+Unused variable, import, function or class
+Note
+#286 opened last week • Detected by CodeQL in cloudflare-worker/.../routes/decks.ts :12
+main
+
+Select alert #273
+Unused variable, import, function or class
+Note
+#273 opened last week • Detected by CodeQL in cloudflare-worker/.../providers/stripe.ts :34
+main
+
+Select alert #272
+Unused variable, import, function or class
+Note
+#272 opened last week • Detected by CodeQL in cloudflare-worker/src/index.ts :87
+main
+
+Select alert #271
+Unused variable, import, function or class
+Note
+Test
+#271 opened last week • Detected by CodeQL in cloudflare-worker/test/_ts-loader.mjs :10
+main
+
+Select alert #270
+Unused variable, import, function or class
+Note
+Test
+#270 opened last week • Detected by CodeQL in cloudflare-worker/test/_ts-loader.mjs :9
+main
+
+Select alert #269
+Unused variable, import, function or class
+Note
+#269 opened last week • Detected by CodeQL in frontend/.../advisor/PersonalAdvisor.jsx :976
+main
+
+Select alert #268
+Unused variable, import, function or class
+Note
+#268 opened last week • Detected by CodeQL in frontend/.../advisor/PersonalAdvisor.jsx :78
+main

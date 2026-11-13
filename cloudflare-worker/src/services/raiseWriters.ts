@@ -1,0 +1,884 @@
+/**
+ * D663 — the one writer for each Raise record migration 442 added, and D691
+ * (#1700) — the writes behind each Add and Edit form (migration 463's stores).
+ *
+ * Each writer validates its values against a fixed list and binds every one
+ * of them. None decides who may write: `routes/cycle_raise.ts` and the
+ * record route check their project gate first (`canWrite`, or D1191's capital
+ * editor gate). Legacy prospect create/import/edit/promotion enter here too.
+ * Every id a write takes,
+ * in its path or its body, is checked here with `ownedRow` (D690), the same
+ * check the record route makes, and answers 404 when it is not this venture's.
+ *
+ * LOGGING (D691 decision 12). Every write logs one row per record it writes
+ * through `logCycleWrite` (D690): `entity_type` is `raise.<module slug>`,
+ * `entity_id` the record's id, and no summary holds a holder's or an
+ * investor's name. Rows written before this by the old free-text writer are
+ * read as they are, never rewritten. Re-score and Edit split each write
+ * several records (an item per check, a section per share), so each of those
+ * records gets its own row. `addHolder()` / `updateHolder()` log nothing
+ * themselves: the cap-table writers here log their row.
+ */
+import type { Env, User } from '../types';
+import { recomputePmf } from './scoring/pmfStore';
+import { WriterError, isoDateOrNull } from './validateWriters';
+import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
+import { logCycleWrite, logCycleWriteStatement, type CycleModules } from './cycleActivity';
+import { ownedRow } from './records/owned';
+import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
+import { SERVED_FUNDS } from './researchFundDirectory';
+import { ensureTier } from '../middleware/requireTier';
+import { DECK_STUDIO_TIER } from './decks/studioAccess';
+import { watermarkFor } from './decks/variants';
+import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
+import { shareIncludeFromBody } from './decks/shareInclude';
+import { withTimePerSlide } from './decks/slideAnalytics';
+import { approvalSentence, pendingApprovers } from './decks/deckApproval';
+import { createProspect, RAISE_STAGES } from '../routes/contacts';
+import {
+  READINESS_ITEMS, READINESS_KEYS, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
+  changedSinceScored, computeReadiness, checkInputs, consistencyCheck, type Mismatch,
+} from './raiseCycle';
+
+export { WriterError };
+
+const trimOrNull = (v: unknown, max = 500): string | null => {
+  const s = String(v ?? '').trim();
+  return s ? s.slice(0, max) : null;
+};
+
+const has = (b: Record<string, unknown>, k: string) => Object.prototype.hasOwnProperty.call(b, k);
+const posInt = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : null);
+
+/** One row for one Raise record (decision 12). */
+async function logRaise(env: Env, userId: number, projectId: number, module: CycleModules['raise'], entityId: string | number, action: string, summary: string) {
+  await logCycleWrite(env, { projectId, userId, cycle: 'raise', module, entityId, action, summary });
+}
+
+/** Create the project's eight readiness items if they are missing; returns key → item id. */
+export async function ensureReadinessItems(env: Env, projectId: number): Promise<Map<string, number>> {
+  for (const [i, item] of READINESS_ITEMS.entries()) {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO readiness_items (project_id, item_key, label, position) VALUES (?, ?, ?, ?)`,
+    ).bind(projectId, item.key, item.label, i).run();
+  }
+  const res = await env.DB.prepare('SELECT id, item_key FROM readiness_items WHERE project_id = ?')
+    .bind(projectId).all<{ id: number; item_key: string }>();
+  return new Map((res.results || []).map((r) => [r.item_key, Number(r.id)]));
+}
+
+/** A person's score for one readiness item. */
+export async function scoreReadinessItem(env: Env, a: {
+  projectId: number; userId: number; key: unknown; score: unknown; evidence: unknown; missing: unknown;
+}): Promise<{ ok: true }> {
+  const key = String(a.key ?? '');
+  if (!READINESS_KEYS.includes(key)) throw new WriterError(400, 'Unknown readiness item');
+  if (key !== 'team') throw new WriterError(400, 'This item is scored by its check; use Re-score instead');
+  const score = Number(a.score);
+  if (!Number.isInteger(score) || score < 0 || score > 10) throw new WriterError(400, 'The score is a whole number from 0 to 10');
+  const evidence = String(a.evidence ?? '');
+  if (!['anecdote', 'pattern'].includes(evidence)) throw new WriterError(400, 'A personal score uses anecdote or pattern evidence');
+  const ids = await ensureReadinessItems(env, a.projectId);
+  await env.DB.prepare(
+    `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
+  ).bind(ids.get(key), a.projectId, score, evidence, trimOrNull(a.missing), a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', key, 'readiness_scored', `Scored ${score}/10 (${evidence})`);
+  return { ok: true };
+}
+
+/** Each computed check's newest eligible score; manual history never sets its re-score clock. */
+async function newestScores(env: Env, projectId: number) {
+  const res = await env.DB.prepare(
+    `SELECT i.item_key, s.score, s.missing, s.scored_at, s.input_hash FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+      WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
+  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
+  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
+  for (const r of res.results || []) out.set(r.item_key, r);
+  return out;
+}
+
+/** The six items a check scores; `team` is scored by a person. */
+export const COMPUTED_KEYS: readonly string[] = READINESS_KEYS.filter((k) => k !== 'team' && k !== 'pmf');
+
+/**
+ * Run the computed readiness checks and store what each found (decision 8).
+ * `items` is a subset of the six computed keys; with none, all six. `since`
+ * is `'all'` (the default) or `'last'`, which skips an item whose stores have
+ * not changed since its newest score (`changedSinceScored`). PMF runs through
+ * its own change-only engine only when `pmf: true` is explicitly requested.
+ */
+export async function rescoreReadiness(env: Env, a: { projectId: number; userId: number; items?: unknown; since?: unknown; pmf?: unknown }): Promise<{ scored: number; items: string[]; pmf?: unknown }> {
+  if (a.pmf !== undefined && typeof a.pmf !== 'boolean') throw new WriterError(400, 'pmf is a boolean');
+  let wanted: string[] = [...COMPUTED_KEYS];
+  if (a.items !== undefined && a.items !== null) {
+    if (!Array.isArray(a.items) || a.items.some((k) => typeof k !== 'string')) throw new WriterError(400, 'items is a list of readiness item keys');
+    if (a.items.includes('team')) throw new WriterError(400, 'Team is scored by a person, not by a check');
+    if (a.items.some((k) => !COMPUTED_KEYS.includes(k as string) && !(k === 'pmf' && a.pmf === true))) throw new WriterError(400, 'Unknown readiness item');
+    if (a.items.length) wanted = COMPUTED_KEYS.filter((k) => (a.items as string[]).includes(k));
+  }
+  const since = a.since === undefined || a.since === null ? 'all' : a.since;
+  if (since !== 'all' && since !== 'last') throw new WriterError(400, "since is 'last' or 'all'");
+  let pmf: Awaited<ReturnType<typeof recomputePmf>> | undefined;
+  if (a.pmf === true) {
+    try { pmf = await recomputePmf(env, a.projectId, a.userId, 'rescore', new Date().toISOString().slice(0,10)); }
+    catch { throw new WriterError(503, 'Product-market fit could not be read'); }
+  }
+  const ids = await ensureReadinessItems(env, a.projectId);
+  let computed = wanted.length ? (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key)) : [];
+  if (since === 'last') {
+    const newest = await newestScores(env, a.projectId);
+    const changed: typeof computed = [];
+    for (const c of computed) if (await changedSinceScored(env, a.projectId, c, newest.get(c.key))) changed.push(c);
+    computed = changed;
+  }
+  for (const c of computed) {
+    await env.DB.prepare(
+      `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by, input_hash) VALUES (?, ?, ?, ?, ?, 'computed', ?, ?)`,
+    ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId, c.input_hash ?? null).run();
+    await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', c.score == null ? `Not scored: ${c.missing}` : `Re-scored by its check: ${c.score}/10`);
+  }
+  return { scored: computed.length + (pmf?.changed ? 1 : 0), items: [...computed.map((c) => c.key), ...(pmf?.changed ? ['pmf'] : [])], ...(pmf ? { pmf } : {}) };
+}
+
+// ---------------------------------------------------------------------------
+// Investor narrative (decision 7)
+// ---------------------------------------------------------------------------
+
+/** One-liner and The ask live in the version's own deck wording rows. */
+const WORD_FIELDS = { one_liner: { key: 'cover.thesis', max: 500 }, ask: { key: 'ask.title', max: 300 } } as const;
+export const START_FROM = ['live', 'version', 'blank'] as const;
+/** Check against offers the deck and the metrics; the data room is not a check source. */
+export const CHECK_SOURCES = ['deck', 'metrics'] as const;
+
+type NarrativeFields = {
+  investorType?: unknown; basedOnVersion?: unknown; oneLiner?: unknown; whyNow?: unknown; ask?: unknown; checkAgainst?: unknown;
+};
+
+/** A version number of this venture's, or a 404. */
+export async function ownVersion(env: Env, projectId: number, v: unknown, what: string): Promise<number> {
+  const n = posInt(typeof v === 'string' && /^[1-9][0-9]{0,8}$/.test(v) ? Number(v) : v);
+  if (n == null || !await ownedRow(env, 'spinout_deck_overrides', n, projectId)) throw new WriterError(404, `${what} not found`);
+  return n;
+}
+
+function checkSources(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  if (!Array.isArray(v) || !v.length || v.some((x) => !(CHECK_SOURCES as readonly unknown[]).includes(x))) {
+    throw new WriterError(400, 'check_against is a list of deck and metrics');
+  }
+  return JSON.stringify(CHECK_SOURCES.filter((x) => v.includes(x)));
+}
+
+/** Set (or, with an empty value, clear) one wording row of a version. */
+export async function setWords(env: Env, a: { projectId: number; userId: number; version: number; investorType: string | null; deckVersion: number | null; fieldKey: string; value: string | null }) {
+  await env.DB.prepare('DELETE FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key = ?')
+    .bind(a.projectId, a.version, a.fieldKey).run();
+  if (a.value == null) return;
+  await env.DB.prepare(
+    `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
+     VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)`,
+  ).bind(a.projectId, a.fieldKey, a.value, a.userId, a.version, a.investorType, a.deckVersion).run();
+}
+
+/** Run the consistency check on a version and store every mismatch, replacing the version's earlier ones. */
+export async function runCheck(env: Env, projectId: number, version: number): Promise<Mismatch[]> {
+  const { stated, metrics } = await checkInputs(env, projectId, version);
+  const mismatches = consistencyCheck(stated, metrics);
+  await env.DB.prepare('DELETE FROM narrative_checks WHERE project_id = ? AND version = ?').bind(projectId, version).run();
+  for (const m of mismatches) {
+    await env.DB.prepare(
+      `INSERT INTO narrative_checks (project_id, version, figure, stated_value, stated_source, metric_value, metric_source) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, version, m.figure, m.stated_value, m.stated_source, m.metric_value, m.metric_source).run();
+  }
+  return mismatches;
+}
+
+/**
+ * Save narrative version N for an investor type, with the deck version it
+ * goes with. Start from is `live` (the default: the live deck wording,
+ * version 0, as before), `version` (that version's rows; `based_on_version`
+ * must be one of this venture's) or `blank` (nothing). One-liner and The ask
+ * then set the version's own `cover.thesis` and `ask.title` rows, Why now and
+ * Check against go in `narrative_version_meta`, and the consistency check
+ * runs on the result. A body with only `investor_type` (#1652's caller)
+ * saves as it always did.
+ */
+export async function saveNarrativeVersion(env: Env, a: { projectId: number; userId: number; startFrom?: unknown } & NarrativeFields): Promise<{ version: number; mismatches: Mismatch[] }> {
+  const investorType = String(a.investorType ?? '');
+  if (!(INVESTOR_TYPES as readonly string[]).includes(investorType)) throw new WriterError(400, 'Unknown investor type');
+  const startFrom = a.startFrom === undefined || a.startFrom === null ? 'live' : String(a.startFrom);
+  if (!(START_FROM as readonly string[]).includes(startFrom)) throw new WriterError(400, 'start_from is live, version or blank');
+  await ensureSpinoutDeckOverridesSchema(env);
+  let basedOn: number | null = null;
+  if (startFrom === 'version') basedOn = await ownVersion(env, a.projectId, a.basedOnVersion, 'The version to start from');
+  else if (a.basedOnVersion != null) throw new WriterError(400, 'based_on_version goes with start_from: version');
+  const checkAgainst = checkSources(a.checkAgainst);
+  const inherited = basedOn == null ? null : await env.DB.prepare(
+    'SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
+  ).bind(a.projectId, basedOn).first<{ why_now: string | null; check_against_json: string | null }>();
+  const whyNow = a.whyNow === undefined ? inherited?.why_now ?? null : trimOrNull(a.whyNow, 2000);
+  const max = await env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM spinout_deck_overrides WHERE project_id = ?')
+    .bind(a.projectId).first<{ v: number }>();
+  const version = Number(max?.v ?? 0) + 1;
+  // Saving words is not evidence that a deck reads this version.
+  const deckVersion = null;
+  if (startFrom !== 'blank') {
+    await env.DB.prepare(
+      `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
+       SELECT project_id, field_key, value, ?, datetime('now'), ?, ?, ? FROM spinout_deck_overrides
+        WHERE project_id = ? AND version = ? AND field_key != ?`,
+    ).bind(a.userId, version, investorType, deckVersion, a.projectId, startFrom === 'version' ? basedOn : 0, VERSION_MARKER_KEY).run();
+  }
+  // The marker row: a version saved before any wording was overridden still exists.
+  await env.DB.prepare(
+    `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
+     VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?)`,
+  ).bind(a.projectId, VERSION_MARKER_KEY, investorType, a.userId, version, investorType, deckVersion).run();
+  // D908 (#2692): a version started from another carries that version's sections, bindings and positioning overrides too.
+  if (startFrom === 'version') await copyNarrativeStores(env, a.projectId, basedOn!, version, a.userId);
+  for (const [field, spec] of Object.entries(WORD_FIELDS)) {
+    const v = field === 'one_liner' ? a.oneLiner : a.ask;
+    if (v === undefined) continue;
+    await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType, deckVersion, fieldKey: spec.key, value: trimOrNull(v, spec.max) });
+  }
+  await env.DB.prepare(
+    `INSERT INTO narrative_version_meta (project_id, version, start_from, based_on_version, why_now, check_against_json, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(a.projectId, version, startFrom, basedOn, whyNow, checkAgainst === undefined ? inherited?.check_against_json ?? null : checkAgainst, a.userId).run();
+  const mismatches = await runCheck(env, a.projectId, version);
+  const label = INVESTOR_TYPE_LABEL[investorType] ?? investorType;
+  await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_created',
+    `Version ${version} saved for ${label}${basedOn != null ? `, based on version ${basedOn}` : ''}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
+  return { version, mismatches };
+}
+
+/** D908: copy one version's narrative_sections, narrative_bindings and positioning overrides to a new version. */
+async function copyNarrativeStores(env: Env, projectId: number, from: number, to: number, userId: number) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO narrative_sections (project_id, version, section, position, body, audience_note, source_kind, source_ref, source_label, updated_by, updated_at)
+       SELECT project_id, ?, section, position, body, audience_note, source_kind, source_ref, source_label, ?, datetime('now')
+         FROM narrative_sections WHERE project_id = ? AND version = ? AND undone_at IS NULL`,
+    ).bind(to, userId, projectId, from),
+    env.DB.prepare(
+      `INSERT INTO narrative_bindings (project_id, version, section, position, source_key, record_ref, as_of, grade, snapshot_hash, created_by)
+       SELECT project_id, ?, section, position, source_key, record_ref, as_of, grade, snapshot_hash, ?
+         FROM narrative_bindings WHERE project_id = ? AND version = ?`,
+    ).bind(to, userId, projectId, from),
+    env.DB.prepare(
+      `INSERT INTO narrative_positioning (project_id, version, kind, position, text, source_kind, source_ref, source_label, updated_by, updated_at)
+       SELECT project_id, ?, kind, position, text, source_kind, source_ref, source_label, ?, datetime('now')
+         FROM narrative_positioning WHERE project_id = ? AND version = ?`,
+    ).bind(to, userId, projectId, from),
+  ]);
+}
+
+/**
+ * Edit a saved version: the same fields as New version but Start from. The
+ * words change in that version's rows, Why now, Based on and Check against in
+ * its meta, and the check runs again. A version saved before 463 gets its
+ * meta row on its first edit, as `live`: every earlier version copied the
+ * live wording.
+ */
+export async function updateNarrativeVersion(env: Env, a: { projectId: number; userId: number; version: unknown } & NarrativeFields): Promise<{ version: number; mismatches: Mismatch[] }> {
+  await ensureSpinoutDeckOverridesSchema(env);
+  const version = await ownVersion(env, a.projectId, a.version, 'Version');
+  if (version < 1) throw new WriterError(404, 'Version not found');
+  const marker = await env.DB.prepare(
+    'SELECT investor_type, deck_version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? ORDER BY field_key = ? DESC LIMIT 1',
+  ).bind(a.projectId, version, VERSION_MARKER_KEY).first<{ investor_type: string | null; deck_version: number | null }>();
+  let investorType = marker?.investor_type ?? null;
+  const changed: string[] = [];
+  if (a.investorType !== undefined) {
+    const t = String(a.investorType ?? '');
+    if (!(INVESTOR_TYPES as readonly string[]).includes(t)) throw new WriterError(400, 'Unknown investor type');
+    investorType = t;
+  }
+  let basedOn: number | null | undefined;
+  if (a.basedOnVersion !== undefined) {
+    basedOn = a.basedOnVersion === null ? null : await ownVersion(env, a.projectId, a.basedOnVersion, 'The version to start from');
+    if (basedOn != null && basedOn >= version) throw new WriterError(400, 'A version is based on an earlier one');
+  }
+  const checkAgainst = checkSources(a.checkAgainst);
+  const whyNow = a.whyNow === undefined ? undefined : trimOrNull(a.whyNow, 2000);
+  if ([a.investorType, a.basedOnVersion, a.oneLiner, a.whyNow, a.ask, a.checkAgainst].every((v) => v === undefined)) {
+    throw new WriterError(400, 'Nothing to change');
+  }
+
+  if (a.investorType !== undefined) {
+    await env.DB.prepare('UPDATE spinout_deck_overrides SET investor_type = ? WHERE project_id = ? AND version = ?')
+      .bind(investorType, a.projectId, version).run();
+    await env.DB.prepare('UPDATE spinout_deck_overrides SET value = ?, updated_by = ?, updated_at = datetime(\'now\') WHERE project_id = ? AND version = ? AND field_key = ?')
+      .bind(investorType, a.userId, a.projectId, version, VERSION_MARKER_KEY).run();
+    changed.push('investor type');
+  }
+  for (const [field, spec] of Object.entries(WORD_FIELDS)) {
+    const v = field === 'one_liner' ? a.oneLiner : a.ask;
+    if (v === undefined) continue;
+    await setWords(env, { projectId: a.projectId, userId: a.userId, version, investorType, deckVersion: marker?.deck_version ?? null, fieldKey: spec.key, value: trimOrNull(v, spec.max) });
+    changed.push(field === 'one_liner' ? 'one-liner' : 'the ask');
+  }
+  if (basedOn !== undefined || whyNow !== undefined || checkAgainst !== undefined) {
+    await env.DB.prepare(
+      `INSERT INTO narrative_version_meta (project_id, version, start_from, created_by) VALUES (?, ?, 'live', ?)
+       ON CONFLICT (project_id, version) DO NOTHING`,
+    ).bind(a.projectId, version, a.userId).run();
+    const sets: string[] = []; const params: unknown[] = [];
+    if (basedOn !== undefined) { sets.push('based_on_version = ?'); params.push(basedOn); changed.push('based on'); }
+    if (whyNow !== undefined) { sets.push('why_now = ?'); params.push(whyNow); changed.push('why now'); }
+    if (checkAgainst !== undefined) { sets.push('check_against_json = ?'); params.push(checkAgainst); changed.push('check against'); }
+    await env.DB.prepare(`UPDATE narrative_version_meta SET ${sets.join(', ')}, updated_at = datetime('now') WHERE project_id = ? AND version = ?`)
+      .bind(...params, a.projectId, version).run();
+  }
+  const mismatches = await runCheck(env, a.projectId, version);
+  await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_updated',
+    `Version ${version} edited: ${changed.join(', ')}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
+  return { version, mismatches };
+}
+
+// ---------------------------------------------------------------------------
+// Pitch deck links (decision 5)
+// ---------------------------------------------------------------------------
+
+export const LINK_EXPIRY_DAYS = [7, 14, 30] as const;
+/** D902 — the most views a link may be limited to. */
+export const LINK_VIEW_LIMIT_MAX = 100;
+
+/** `view_limit`: a whole number 1–100, or null (or left out) for no limit. */
+function viewLimit(v: unknown): number | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > LINK_VIEW_LIMIT_MAX) {
+    throw new WriterError(400, `view_limit is a whole number from 1 to ${LINK_VIEW_LIMIT_MAX}, or null for no limit`);
+  }
+  return v;
+}
+
+/** `expires_days`: 7, 14 or 30, or null for Never. */
+function expiryDays(v: unknown): number | null {
+  if (v === null) return null;
+  if (!(LINK_EXPIRY_DAYS as readonly unknown[]).includes(v)) throw new WriterError(400, 'expires_days is 7, 14, 30 or null (Never)');
+  return v as number;
+}
+
+function flag(v: unknown, name: string): boolean | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== 'boolean') throw new WriterError(400, `${name} is true or false`);
+  return v;
+}
+
+/** A prospect of this venture's, or a 404. */
+async function ownProspect(env: Env, projectId: number, v: unknown): Promise<number> {
+  const id = posInt(v);
+  if (id == null || !await ownedRow(env, 'raise_prospects', id, projectId)) throw new WriterError(404, 'Prospect not found');
+  return id;
+}
+
+/** The investor a link is for: a prospect of this venture, or a name typed in. Never both. */
+async function linkInvestor(env: Env, projectId: number, b: Record<string, unknown>): Promise<{ prospectId: number | null; label: string | null } | undefined> {
+  const hasP = b.prospect_id != null, hasL = b.investor_label != null && String(b.investor_label).trim() !== '';
+  if (!hasP && !hasL) return undefined;
+  if (hasP && hasL) throw new WriterError(400, 'Name the investor once: a prospect or a name, not both');
+  if (hasP) return { prospectId: await ownProspect(env, projectId, b.prospect_id), label: null };
+  return { prospectId: null, label: String(b.investor_label).trim().slice(0, 200) };
+}
+
+/**
+ * New link: one token for one of this venture's decks, through
+ * `createShareLink()`, which logs it. The raw link is returned here once and
+ * never read back. The plan gate is the share route's (decision 13).
+ *
+ * D902 — THE ONE LINK WRITER (decision 5). The studio's Share (the editor and
+ * "New link" on Share & analytics) and the Raise module's form send this one
+ * body: the investor, `expires_days`, `view_limit` (1–100, or null for none),
+ * `allow_download`, `allow_forwarding`, `nda_required`, and `include`
+ * (`services/decks/shareInclude.ts`; left out, answer A).
+ */
+export async function createDeckLink(env: Env, a: { projectId: number; user: User; body: Record<string, unknown> }) {
+  ensureTier(a.user, DECK_STUDIO_TIER);
+  const b = a.body;
+  const deckId = posInt(b.deck_id);
+  const deck = deckId == null ? null : await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE id = ? AND project_id = ?')
+    .bind(deckId, a.projectId).first<{ id: number; version: number }>();
+  if (!deck) throw new WriterError(404, 'Deck not found');
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(env, a.projectId, deck.id);
+  if (waiting.length) throw new WriterError(409, approvalSentence(waiting));
+  const investor = await linkInvestor(env, a.projectId, b);
+  if (!investor) throw new WriterError(400, 'Name the investor: a prospect or a name');
+  if (!has(b, 'expires_days')) throw new WriterError(400, 'expires_days is 7, 14, 30 or null (Never)');
+  const days = expiryDays(b.expires_days);
+  const allowDownload = flag(b.allow_download, 'allow_download') ?? true;
+  const allowForwarding = flag(b.allow_forwarding, 'allow_forwarding') ?? true;
+  const limit = viewLimit(b.view_limit);
+  const ndaRequired = flag(b.nda_required, 'nda_required') ?? false;
+  const include = shareIncludeFromBody(b.include);
+  if (!include) throw new WriterError(400, 'include is an object of figures, sources, notes and bands, each true or false');
+  // D1573 (#3820): "Time per slide", on unless the founder turns it off; off keeps visit counts only.
+  const timePerSlide = flag(b.time_per_slide, 'time_per_slide') ?? true;
+  const link = await createShareLink(env, {
+    deckId: deck.id, deckVersion: Number(deck.version), userId: Number(a.user.id) || null, actorEmail: a.user.email || null,
+    ttlSeconds: days == null ? null : days * 86400, prospectId: investor.prospectId, investorLabel: investor.label,
+    allowDownload, allowForwarding, projectId: a.projectId,
+    viewLimit: limit, ndaRequired, include,
+  });
+  if (link.id == null) throw new WriterError(500, 'The link was made but its id was not reported');
+  // D1565 (#3812): every link names its recipient in a watermark: the prospect and their fund, or the name typed.
+  const firm = investor.prospectId == null ? null
+    : await env.DB.prepare('SELECT name, firm FROM raise_prospects WHERE id = ?').bind(investor.prospectId).first<{ name: string | null; firm: string | null }>();
+  await env.DB.prepare('UPDATE pitch_deck_share_tokens SET watermark_text = ? WHERE id = ?')
+    .bind(watermarkFor(firm?.name ?? investor.label, firm?.firm ?? null), link.id).run();
+  // The consent is the link's own `include_json` key (D1573), beside what it includes; on is its absence.
+  if (!timePerSlide) {
+    const stored = await env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(link.id).first<{ include_json: string | null }>();
+    await env.DB.prepare('UPDATE pitch_deck_share_tokens SET include_json = ? WHERE id = ?').bind(withTimePerSlide(stored?.include_json ?? null, false), link.id).run();
+  }
+  return {
+    id: link.id, share_path: `/share/deck/${link.token}`, expires_at: link.expiresAt,
+    allow_download: allowDownload, allow_forwarding: allowForwarding,
+    view_limit: limit ?? null, nda_required: ndaRequired, include, time_per_slide: timePerSlide,
+    // The version the link is frozen to (D902 §0.4): a link never follows a later save.
+    deck_version: Number(deck.version),
+  };
+}
+
+const sqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
+
+/**
+ * Edit a link: its investor, its two settings, and an earlier expiry. An
+ * edit can bring the expiry forward, never extend it, so Never is accepted
+ * only on a link that never expires already.
+ */
+export async function updateDeckLink(env: Env, a: { projectId: number; user: User; linkId: unknown; body: Record<string, unknown> }) {
+  ensureTier(a.user, DECK_STUDIO_TIER);
+  const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
+  const row = id == null ? null : await env.DB.prepare(
+    `SELECT t.id, t.expires_at FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id
+      WHERE t.id = ? AND d.project_id = ?`,
+  ).bind(id, a.projectId).first<{ id: number; expires_at: string }>();
+  if (!row) throw new WriterError(404, 'Link not found');
+  const b = a.body;
+  const sets: string[] = []; const params: unknown[] = []; const changed: string[] = [];
+  const investor = await linkInvestor(env, a.projectId, b);
+  if (investor) {
+    sets.push('prospect_id = ?', 'investor_label = ?'); params.push(investor.prospectId, investor.label); changed.push('investor');
+  }
+  for (const [key, col] of [['allow_download', 'download'], ['allow_forwarding', 'forwarding']] as const) {
+    const v = flag(b[key], key);
+    if (v === undefined) continue;
+    sets.push(`${key} = ?`); params.push(v ? 1 : 0); changed.push(`${col} ${v ? 'on' : 'off'}`);
+  }
+  if (has(b, 'expires_days')) {
+    const days = expiryDays(b.expires_days);
+    const next = days == null ? SHARE_NEVER_EXPIRES : sqlTime(Date.now() + days * 86400_000);
+    if (next > String(row.expires_at)) throw new WriterError(400, 'An edit can bring the expiry forward, never extend it');
+    sets.push('expires_at = ?'); params.push(next); changed.push('expiry');
+  }
+  if (!sets.length) throw new WriterError(400, 'Nothing to change');
+  await env.DB.prepare(`UPDATE pitch_deck_share_tokens SET ${sets.join(', ')} WHERE id = ?`).bind(...params, row.id).run();
+  await logRaise(env, Number(a.user.id), a.projectId, 'pitch-deck', row.id, 'deck_link_updated', `Link edited: ${changed.join(', ')}`);
+  return { ok: true as const, id: row.id };
+}
+
+// ---------------------------------------------------------------------------
+// Cap table (decision 4)
+// ---------------------------------------------------------------------------
+
+const GROUP_IN: Record<string, string> = { founders: 'founders', investors: 'investors', option_pool: 'option_pool', advisors: 'advisors' };
+const INSTRUMENT_IN: Record<string, string> = { common: 'common', safe: 'safe', note: 'note', convertible_note: 'note', options: 'options', preferred: 'preferred' };
+const GROUP_TEXT: Record<string, string> = { founders: 'Founders', investors: 'Investors' };
+const INSTRUMENT_TEXT: Record<string, string> = { common: 'Common', safe: 'SAFE', note: 'Convertible note' };
+const word = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+/** A refusal from the shared cap-table writes, in this file's shape. */
+function holderFailed(e: unknown): never {
+  if (e instanceof HolderError) throw new WriterError(e.status, e.sentence);
+  throw e;
+}
+
+/** The fields `addHolder()` / `updateHolder()` take, from a form body; what a body leaves out stays undefined. */
+function holderFields(b: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const k of ['name', 'email', 'shares', 'ownership_pct', 'amount_cents', 'cap_cents', 'discount_pct', 'founder_role', 'vesting', 'prospect_id']) {
+    if (has(b, k)) out[k] = b[k];
+  }
+  return out;
+}
+
+/**
+ * Add holder: Founders · Common, or Investors · SAFE or Convertible note,
+ * through `addHolder()`, which keeps the tool's plan gate (its 402 is thrown
+ * as a Response) and refuses every other pair with 400.
+ */
+export async function addCapHolder(env: Env, a: { projectId: number; user: User; body: Record<string, unknown> }) {
+  const group = GROUP_IN[word(a.body.group)] ?? word(a.body.group);
+  const instrument = INSTRUMENT_IN[word(a.body.instrument)] ?? word(a.body.instrument);
+  let out: { id: string };
+  try {
+    out = await addHolder(env, {
+      ...holderFields(a.body), projectId: a.projectId, actor: a.user,
+      group: group as AddHolderArgs['group'], instrument: instrument as AddHolderArgs['instrument'],
+    } as AddHolderArgs);
+  } catch (e) { holderFailed(e); }
+  await logRaise(env, Number(a.user.id), a.projectId, 'cap-table', out.id, 'holder_created',
+    `Holder added: ${GROUP_TEXT[group]} · ${INSTRUMENT_TEXT[instrument]}`);
+  return out;
+}
+
+/** Edit holder, on an `h-` or `e-` id, through `updateHolder()`. */
+export async function updateCapHolder(env: Env, a: { projectId: number; user: User; id: string; body: Record<string, unknown> }) {
+  const fields = holderFields(a.body);
+  if (!Object.keys(fields).length) throw new WriterError(400, 'Nothing to change');
+  let out: { id: string };
+  try {
+    out = await updateHolder(env, { ...fields, projectId: a.projectId, actor: a.user, id: a.id } as any);
+  } catch (e) { holderFailed(e); }
+  await logRaise(env, Number(a.user.id), a.projectId, 'cap-table', out.id, 'holder_updated',
+    `Holder edited: ${Object.keys(fields).map((k) => k.replace(/_/g, ' ')).join(', ')}`);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Use of funds (decision 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Edit split: the five stored sections in `projects.use_of_funds` (through
+ * `normalizeUseOfFunds`, so they total 100), the raise in `funding_needed`
+ * (that column's dollars), and runway and each section's milestone merged
+ * into `use_of_funds_meta`, every other key kept. A change marks the deck's
+ * use-of-funds slide out of sync, as the Lab page does: the deck reads the
+ * split, and nothing is written to a deck.
+ */
+export async function saveUseOfFunds(env: Env, a: { projectId: number; userId: number; body: Record<string, unknown> }) {
+  // D1176: record-drawer edits and the module PUT share the same dual writer.
+  const { saveSplit, PlanError } = await import('./useOfFunds/store');
+  const user = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.userId).first<User>();
+  const owner = await env.DB.prepare("SELECT u.id FROM projects p JOIN users u ON u.founder_id=p.founder_id AND u.role='founder' AND u.is_active=1 WHERE p.id=? AND p.deleted_at IS NULL ORDER BY u.id LIMIT 1").bind(a.projectId).first<{id:number}>();
+  if (!user || !owner) throw new WriterError(404, 'The founder plan is unavailable.');
+  // D5375: this path no longer saves without the revision it was opened at. The record drawer's
+  // Edit split sends `expected_revision` (read with the record); a body without one is refused.
+  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body, true); }
+  catch (e) {
+    if (e instanceof PlanError) throw new WriterError(e.status, e.sentence, { code: e.code, error: e.code, ...(e.currentRevision !== undefined ? { current_revision: e.currentRevision } : {}) });
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Capital relationships (decision 10)
+// ---------------------------------------------------------------------------
+
+/** Identified is stored `to_contact`; every other stage under its own name. */
+function stageIn(v: unknown): string {
+  const s = word(v);
+  const stored = s === 'identified' ? 'to_contact' : s;
+  if (!RAISE_STAGES.includes(stored)) throw new WriterError(400, 'stage is Identified, Contacted, Meeting, Diligence, Committed or Passed');
+  return stored;
+}
+
+const STAGE_TEXT: Record<string, string> = { to_contact: 'Identified', contacted: 'Contacted', meeting: 'Meeting', diligence: 'Diligence', committed: 'Committed', passed: 'Passed' };
+
+/** A fund from the Research directory, read only through SERVED_FUNDS (D597), or a 404. */
+async function servedFund(env: Env, v: unknown): Promise<{ uid: string; name: string }> {
+  const uid = typeof v === 'string' ? v.trim() : '';
+  const row = !uid || uid.length > 120 ? null : await env.DB.prepare(`SELECT f.uid, f.name FROM ${SERVED_FUNDS} AS f WHERE f.uid = ?`)
+    .bind(uid).first<{ uid: string; name: string }>();
+  if (!row) throw new WriterError(404, 'Fund not found');
+  return row;
+}
+
+function dueOrNull(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const d = isoDateOrNull(v);
+  if (d == null) throw new WriterError(400, 'The due date is YYYY-MM-DD');
+  return d;
+}
+
+/** The cycle's own fields on a prospect: what `createProspect` does not take. */
+function cycleFields(b: Record<string, unknown>) {
+  const sets: string[] = []; const params: unknown[] = [];
+  if (has(b, 'warm_path')) { sets.push('warm_path = ?'); params.push(trimOrNull(b.warm_path, 300)); }
+  if (has(b, 'next_step')) { sets.push('next_step = ?'); params.push(trimOrNull(b.next_step, 300)); }
+  if (has(b, 'next_step_due')) { sets.push('next_step_due = ?'); params.push(dueOrNull(b.next_step_due)); }
+  return { sets, params };
+}
+
+/**
+ * Add investor: `createProspect` (the pipeline's own create, which links the
+ * Contacts hub and answers a duplicate email with 409), then the cycle's
+ * fields. A fund from the directory names the prospect and its firm.
+ */
+export async function addProspect(env: Env, a: { projectId: number; userId: number; body: Record<string, unknown> }) {
+  const b = a.body;
+  const stage = b.stage === undefined || b.stage === null || b.stage === '' ? 'to_contact' : stageIn(b.stage);
+  const fund = b.research_fund_uid != null && b.research_fund_uid !== '' ? await servedFund(env, b.research_fund_uid) : null;
+  const name = fund ? fund.name : trimOrNull(b.name, 200);
+  if (!name) throw new WriterError(400, 'Name the investor, or pick a fund');
+  const extra = cycleFields(b);
+  const out = await createProspect(env, a.projectId, { name, email: b.email, firm: fund ? fund.name : b.firm, stage, notes: b.notes });
+  if (out === 'invalid') throw new WriterError(400, 'A name or a valid email is required');
+  if (out === 'duplicate') throw new WriterError(409, 'This project already tracks a prospect with that email');
+  const id = Number(out.prospect.id);
+  if (fund) { extra.sets.push('research_fund_uid = ?'); extra.params.push(fund.uid); }
+  if (extra.sets.length) {
+    await env.DB.prepare(`UPDATE raise_prospects SET ${extra.sets.join(', ')}, updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+      .bind(...extra.params, id, a.projectId).run();
+  }
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_created', `Investor added at ${STAGE_TEXT[stage]}`);
+  return { id };
+}
+
+// Contacts uses the narrow leaf; all Raise writers share its implementation.
+export { addLegacyProspect, updateLegacyProspect, promoteLegacyInvestor } from './raiseProspectWriters';
+
+/**
+ * D1192 (#3126, CRL5): Import, parsed client-side, at most 50 rows a request.
+ * Each row goes through `createProspect`, as Add investor does, and each
+ * created row is logged. A row that cannot be added is reported with its
+ * number and why, never dropped silently.
+ */
+export const IMPORT_MAX_ROWS = 50;
+export async function importProspects(env: Env, a: { projectId: number; userId: number; rows: unknown }) {
+  if (!Array.isArray(a.rows) || a.rows.length === 0) throw new WriterError(400, 'rows is required');
+  if (a.rows.length > IMPORT_MAX_ROWS) throw new WriterError(400, `Import at most ${IMPORT_MAX_ROWS} rows a request`);
+  let created = 0;
+  const skipped: { row: number; reason: string }[] = [];
+  for (let i = 0; i < a.rows.length; i++) {
+    const r = a.rows[i] && typeof a.rows[i] === 'object' ? a.rows[i] as Record<string, unknown> : {};
+    const stage = r.stage == null || r.stage === '' ? 'to_contact' : word(r.stage) === 'identified' ? 'to_contact' : word(r.stage);
+    if (!RAISE_STAGES.includes(stage)) { skipped.push({ row: i + 1, reason: 'The stage is not one of the pipeline\u2019s' }); continue; }
+    const out = await createProspect(env, a.projectId, { name: r.name, email: r.email, firm: r.firm, amount: r.amount, stage, notes: r.notes });
+    if (out === 'invalid') { skipped.push({ row: i + 1, reason: 'A name or a valid email is required' }); continue; }
+    if (out === 'duplicate') { skipped.push({ row: i + 1, reason: 'Already in the pipeline' }); continue; }
+    created += 1;
+    await logRaise(env, a.userId, a.projectId, 'capital-relationships', Number(out.prospect.id), 'prospect_created', `Investor imported at ${STAGE_TEXT[stage]}`);
+  }
+  return { created, skipped, total: a.rows.length };
+}
+
+/** The statuses a committed prospect takes (CRL6); `contacts.ts` stores the same three. */
+export const PROSPECT_COMMIT_STATUSES: readonly string[] = ['soft', 'signed', 'wired'];
+
+/** Edit investor: the same fields, each changed only when the body names it. */
+export async function updateProspect(env: Env, a: { projectId: number; userId: number; prospectId: number; body: Record<string, unknown> }) {
+  const b = a.body;
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const { sets, params } = cycleFields(b);
+  const changed: string[] = [];
+  if (sets.length) changed.push('next step');
+  if (has(b, 'research_fund_uid') && b.research_fund_uid != null && b.research_fund_uid !== '') {
+    const fund = await servedFund(env, b.research_fund_uid);
+    sets.push('research_fund_uid = ?', 'name = ?', 'firm = ?'); params.push(fund.uid, fund.name, fund.name); changed.push('fund');
+  } else if (has(b, 'research_fund_uid')) {
+    sets.push('research_fund_uid = ?'); params.push(null); changed.push('fund');
+  }
+  if (has(b, 'name') && !changed.includes('fund')) {
+    const name = trimOrNull(b.name, 200);
+    if (!name) throw new WriterError(400, 'Name the investor, or pick a fund');
+    sets.push('name = ?'); params.push(name); changed.push('name');
+  }
+  // D1192 (#3126): a committed investor's status (CRL6). It lives only at
+  // Committed: a stage moved away clears it, and a status is refused on any
+  // other stage. No status is "Status not recorded", never counted.
+  const nextStage = has(b, 'stage') ? stageIn(b.stage) : null;
+  if (nextStage) {
+    // D1193 (#3127): the move's two stages, so Activity says what moved (CRL12).
+    const from = (await env.DB.prepare('SELECT stage FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, a.projectId).first<{ stage: string }>())?.stage;
+    sets.push('stage = ?'); params.push(nextStage);
+    changed.push(from && from !== nextStage && STAGE_TEXT[from] ? `stage ${STAGE_TEXT[from]} → ${STAGE_TEXT[nextStage]}` : 'stage');
+  }
+  if (has(b, 'commit_status')) {
+    const status = b.commit_status == null || b.commit_status === '' ? null : word(b.commit_status);
+    if (status != null && !PROSPECT_COMMIT_STATUSES.includes(status)) throw new WriterError(400, 'status is Soft, Signed or Wired');
+    const stage = nextStage ?? (await env.DB.prepare('SELECT stage FROM raise_prospects WHERE id = ? AND project_id = ?')
+      .bind(id, a.projectId).first<{ stage: string }>())?.stage;
+    if (status != null && stage !== 'committed') throw new WriterError(400, 'Only a committed investor has a status');
+    sets.push('commit_status = ?'); params.push(status); changed.push('status');
+  } else if (nextStage && nextStage !== 'committed') {
+    sets.push('commit_status = ?'); params.push(null);
+  }
+  if (has(b, 'notes')) { sets.push('notes = ?'); params.push(b.notes == null || b.notes === '' ? null : String(b.notes).slice(0, 4000)); changed.push('notes'); }
+  if (has(b, 'email')) {
+    const email = b.email == null || b.email === '' ? null : String(b.email).trim().toLowerCase();
+    if (email != null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new WriterError(400, 'A valid email is required');
+    if (email != null) {
+      const dup = await env.DB.prepare('SELECT id FROM raise_prospects WHERE project_id = ? AND email = ? AND id != ?')
+        .bind(a.projectId, email, id).first();
+      if (dup) throw new WriterError(409, 'This project already tracks a prospect with that email');
+    }
+    sets.push('email = ?'); params.push(email); changed.push('email');
+  }
+  if (!sets.length) throw new WriterError(400, 'Nothing to change');
+  await env.DB.prepare(`UPDATE raise_prospects SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ? AND project_id = ?`)
+    .bind(...params, id, a.projectId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_updated', `Investor edited: ${changed.join(', ')}`);
+  return { ok: true as const, id };
+}
+
+// ---------------------------------------------------------------------------
+// Record actions (step 6), each one writer, each id checked and one row logged.
+// The closing PR declares them on `services/records/raise.ts`'s records.
+// ---------------------------------------------------------------------------
+
+/**
+ * Duplicate a narrative version: the next version, started from this one
+ * (`start_from: 'version'`) for the same investor type, through
+ * `saveNarrativeVersion`, which logs it on the new version's record.
+ */
+export async function duplicateNarrativeVersion(env: Env, a: { projectId: number; userId: number; version: unknown }) {
+  await ensureSpinoutDeckOverridesSchema(env);
+  const version = await ownVersion(env, a.projectId, a.version, 'Version');
+  const marker = await env.DB.prepare(
+    'SELECT investor_type FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND investor_type IS NOT NULL LIMIT 1',
+  ).bind(a.projectId, version).first<{ investor_type: string }>();
+  if (!marker) throw new WriterError(409, 'This version records no investor type, so it cannot be duplicated');
+  return saveNarrativeVersion(env, { projectId: a.projectId, userId: a.userId, startFrom: 'version', basedOnVersion: version, investorType: marker.investor_type });
+}
+
+/**
+ * Revoke a link: the same withdrawal as `DELETE /api/decks/:id/shares/:shareId`
+ * (`revokeShareLink()`), on a link of this venture's deck. Revoking expires it
+ * and keeps every view. Not a paid capability: a lapsed plan may still
+ * withdraw a link it issued.
+ */
+export async function revokeDeckLink(env: Env, a: { projectId: number; userId: number; linkId: unknown }) {
+  const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
+  const row = id == null ? null : await env.DB.prepare(
+    'SELECT t.id, t.deck_id FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id WHERE t.id = ? AND d.project_id = ?',
+  ).bind(id, a.projectId).first<{ id: number; deck_id: number }>();
+  if (!row) throw new WriterError(404, 'Link not found');
+  const out = await revokeShareLink(env, Number(row.deck_id), Number(row.id));
+  if (!out) throw new WriterError(404, 'Link not found');
+  await logRaise(env, a.userId, a.projectId, 'pitch-deck', row.id, 'deck_link_revoked', out.newly_revoked ? 'Link revoked' : 'Link already revoked');
+  return { ok: true as const, ...out };
+}
+
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Add a hire to a use-of-funds section: `{ role, start_month (YYYY-MM), annual_cents, currency }`. */
+export async function addSectionHire(env: Env, a: { projectId: number; userId: number; sectionKey: unknown; body: Record<string, unknown> }) {
+  const section = FUND_SECTIONS.find((f) => f.key === a.sectionKey);
+  if (!section) throw new WriterError(404, 'Section not found');
+  const b = a.body;
+  const role = trimOrNull(b.role, 200);
+  if (!role) throw new WriterError(400, 'Name the role');
+  const month = b.start_month == null || b.start_month === '' ? null : String(b.start_month).trim();
+  if (month != null && !MONTH.test(month)) throw new WriterError(400, 'start_month is YYYY-MM');
+  const annual = b.annual_cents == null ? null : posInt(b.annual_cents);
+  if (b.annual_cents != null && annual == null) throw new WriterError(400, 'annual_cents is a positive whole number of cents');
+  const currency = b.currency == null || b.currency === '' ? 'usd' : String(b.currency).trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency is a three-letter code');
+  const actor = await env.DB.prepare('SELECT role FROM users WHERE id=?').bind(a.userId).first<{role:string}>();
+  const written = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO use_of_funds_hires (project_id, category_key, role, start_month, annual_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(a.projectId, section.key, role, month, annual, currency, a.userId),
+    logCycleWriteStatement(env, { projectId:a.projectId,userId:a.userId,cycle:'raise',module:'use-of-funds',entityId:section.key,
+      action:'hire_added',summary:actor?.role==='admin'?'Studio admin: Hire added.':'Hire added.' }),
+  ]);
+  return { ok: true as const, id: Number(written[0]?.meta?.last_row_id) || null };
+}
+
+export const EVENT_KINDS = ['meeting', 'intro', 'email', 'call', 'note'] as const;
+
+/** The two kinds that happen at a time, and so may carry a start (D1190). */
+export const TIMED_EVENT_KINDS = ['meeting', 'call'] as const;
+
+/**
+ * An ISO 8601 instant that names its zone (`Z` or `±hh:mm`), as UTC, or null
+ * when none is given. A time with no zone is refused rather than read as UTC.
+ */
+function startsAtOrNull(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(s)) {
+    throw new WriterError(400, 'starts_at is a date and time with its zone, like 2026-11-14T14:00Z');
+  }
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms)) throw new WriterError(400, 'starts_at is not a real date and time');
+  return new Date(ms).toISOString();
+}
+
+/**
+ * Log a step on a prospect's timeline: `{ kind, note, on, starts_at? }`. A date
+ * on or before today is when it happened (`done_at`); a later one is when it is
+ * due (`due_on`), and the timeline reads it as open.
+ *
+ * D1190 (#3124): a meeting or a call may carry `starts_at`, the instant it
+ * starts. Its day is then the step's day (`on`, if given, must be the same UTC
+ * day), and the step gets `calendar_item_uid`, the id its "Investor meeting"
+ * Calendar item keeps (`services/calendar/investorMeetings.ts`). A start on
+ * another kind is refused.
+ */
+export async function logProspectEvent(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const b = a.body;
+  const kind = String(b.kind ?? '');
+  if (!(EVENT_KINDS as readonly string[]).includes(kind)) throw new WriterError(400, 'kind is meeting, intro, email, call or note');
+  const startsAt = startsAtOrNull(b.starts_at);
+  if (startsAt != null && !(TIMED_EVENT_KINDS as readonly string[]).includes(kind)) {
+    throw new WriterError(400, 'Only a meeting or a call has a start time');
+  }
+  const given = b.on == null || b.on === '' ? null : isoDateOrNull(b.on);
+  if (b.on != null && b.on !== '' && given == null) throw new WriterError(400, 'on is YYYY-MM-DD');
+  if (startsAt != null && given != null && given !== startsAt.slice(0, 10)) {
+    throw new WriterError(400, 'on and starts_at name different days');
+  }
+  const on = startsAt != null ? startsAt.slice(0, 10) : (given ?? new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  const uid = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, '0')).join('');
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_events (uid, prospect_id, kind, note, due_on, done_at, starts_at, calendar_item_uid, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(uid, id, kind, trimOrNull(b.note, 2000), on > today ? on : null, on > today ? null : on,
+    startsAt, startsAt != null ? `investor-meeting-${uid}` : null, a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_event_logged', `${kind[0].toUpperCase()}${kind.slice(1)} logged for ${on}`);
+  return { ok: true as const };
+}
+
+/** Add feedback a prospect gave: `{ objection, answer? }`. */
+export async function addProspectFeedback(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const objection = trimOrNull(a.body.objection, 1000);
+  if (!objection) throw new WriterError(400, 'Write the objection');
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_feedback (prospect_id, objection, answer, created_by) VALUES (?, ?, ?, ?)`,
+  ).bind(id, objection, trimOrNull(a.body.answer, 2000), a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_feedback_added', 'Feedback added');
+  return { ok: true as const };
+}
+
+/** Mark passed: the stage `passed`, through Edit investor's own path. */
+export function markProspectPassed(env: Env, a: { projectId: number; userId: number; prospectId: number }) {
+  return updateProspect(env, { ...a, body: { stage: 'passed' } });
+}
+
+// ---------------------------------------------------------------------------
+// The two writes migration 442 added, kept
+// ---------------------------------------------------------------------------
+
+/** Which diligence-checklist item a data-room file answers; null clears it. */
+export async function setFileChecklistItem(env: Env, a: { projectId: number; userId: number; fileId: number; item: unknown }): Promise<{ ok: true }> {
+  const item = a.item == null || a.item === '' ? null : String(a.item);
+  if (item != null && !CHECKLIST_KEYS.has(item)) throw new WriterError(400, 'Unknown checklist item');
+  const r = await env.DB.prepare(
+    `UPDATE data_room_files SET checklist_item = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?`,
+  ).bind(item, a.fileId, a.projectId).run();
+  if (!Number(r?.meta?.changes ?? 0)) throw new WriterError(404, 'File not found');
+  await logRaise(env, a.userId, a.projectId, 'data-room', a.fileId, 'checklist_set', item ? `Answers checklist item ${item}` : 'Checklist item cleared');
+  return { ok: true };
+}
+
+/** A prospect's next step, when it is due, and its warm path. Each may be cleared with an empty value. */
+export async function setProspectNextStep(env: Env, a: {
+  projectId: number; userId: number; prospectId: number; next_step: unknown; next_step_due: unknown; warm_path: unknown;
+}): Promise<{ ok: true }> {
+  const due = a.next_step_due == null || a.next_step_due === '' ? null : isoDateOrNull(a.next_step_due);
+  if (a.next_step_due != null && a.next_step_due !== '' && due == null) throw new WriterError(400, 'The due date is YYYY-MM-DD');
+  const r = await env.DB.prepare(
+    `UPDATE raise_prospects SET next_step = ?, next_step_due = ?, warm_path = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?`,
+  ).bind(trimOrNull(a.next_step, 300), due, trimOrNull(a.warm_path, 300), a.prospectId, a.projectId).run();
+  if (!Number(r?.meta?.changes ?? 0)) throw new WriterError(404, 'Prospect not found');
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', a.prospectId, 'next_step_set', 'Next step set');
+  return { ok: true };
+}

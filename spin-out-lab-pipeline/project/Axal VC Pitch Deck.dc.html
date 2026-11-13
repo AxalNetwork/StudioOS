@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="./doc-page.js"></script>
+  <style>
+    doc-page:not(:defined){visibility:hidden}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+  </style>
+</helmet>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+    <rect width="320" height="180" fill="#6B46C1"/>
+    <rect x="96" y="54" width="128" height="72" rx="8" fill="#fff" opacity=".95"/>
+    <text x="160" y="100" font-family="Inter,sans-serif" font-size="30" font-weight="900" fill="#6B46C1" text-anchor="middle">N</text>
+  </svg>
+</template>
+
+<doc-page width="1280px" height="720px">
+  <sc-for list="{{ deckSlides }}" as="s" hint-placeholder-count="11">
+    <section class="page" style="position:relative;overflow:hidden;background:#fff">
+      <dc-import name="AxalSlide" type="{{ s.type }}" data="{{ s.data }}" page-num="{{ s.n }}" page-total="{{ s.total }}" hint-size="1280px,720px"></dc-import>
+    </section>
+  </sc-for>
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:720}}">
+class Component extends DCLogic {
+  state = { d: null };
+
+  componentDidMount() {
+    let saved = null;
+    try {
+      const raw = window.localStorage.getItem('axal.pitchdeck.v1');
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) { saved = null; }
+    this.setState({ d: saved || this.defaults() });
+  }
+
+  defaults(){ return {
+    company:'NovaCraft AI', tagline:'The intelligent async layer for distributed teams.', version:'Pre-Seed · July 2026',
+    logoInitials:'N', sector:'B2B SaaS · Workflow', stage:'Pre-seed / Incorporated', founderName:'Guillaume L.', readinessScore:'82 / 100',
+    discCustomers:'18', discAdvisors:'4', discCofounders:'2', discInvestors:'6',
+    problemHead:'Distributed teams lose hours to fragmented async work',
+    problemPt1:'Context scattered across five disconnected tools', problemMentions1:'14 of 18',
+    problemPt2:'No single source of truth for decisions or status', problemMentions2:'11 of 18',
+    problemPt3:'Cross-timezone handoffs take 3x longer than they should', problemMentions3:'9 of 18',
+    icp:'Ops leads at distributed SaaS companies, 50–500 employees',
+    painQuote:'Current tools don’t handle async workflows — we lose the thread constantly.',
+    painAuthor:'Sarah T.', painRole:'VP Ops · SaaS', painInitials:'ST',
+    interviews:'30', distinctPains:'12', hypothesesValidated:'4 of 5',
+    funnelReached:'30', funnelQualified:'22', funnelPainConfirmed:'17', funnelSolutionFit:'11',
+    revMRR:'$1.8k', revCustomers:'3', revACV:'$600/mo', revTakeaway:'Discovery feedback is reinforced by early revenue proof.',
+    tam:'$2.4B', tamDesc:'Workflow automation, global', tamSrc:'Gartner 2025', cagr:'18%',
+    sam:'$340M', samDesc:'Distributed SaaS teams', samSrc:'CB Insights Q1 2026',
+    som:'$34M', somDesc:'Reachable within 3 years',
+    seg1name:'Distributed SaaS', seg1val:'$210M', seg1pct:'62%',
+    seg2name:'Agencies', seg2val:'$82M', seg2pct:'24%',
+    seg3name:'Remote-first SMB', seg3val:'$48M', seg3pct:'14%',
+    marketConfidence:'Medium · 2 sources', marketSources:'Gartner 2025 Workflow Automation Report · CB Insights SaaS Market Sizing, Q1 2026.',
+    marketNote:'Pre-populated from your Week 1 problem definition — review and confirm before Week 3.',
+    marketProvenance:'Pulled from Market Intel · Week 1',
+    solHead:'One intelligent layer across every async tool',
+    solPt1:'Unifies threads, docs, and decisions in one timeline',
+    solPt2:'AI surfaces the context you need, when you need it',
+    solPt3:'Native Slack integration — zero workflow change',
+    differentiator:'Cross-team workflow graph competitors can’t replicate',
+    beforeTxt:'5 tools · scattered context · slow handoffs',
+    afterTxt:'1 layer · shared context · instant handoffs',
+    demoHead:'NovaCraft workspace', demoCaption:'Live product walkthrough', liveURL:'novacraft.ai',
+    feature1:'Unified timeline', feature2:'AI context surfacing', feature3:'Slack-native',
+    roadmapTitle:'NovaCraft AI · 12-month roadmap', roadmapProgress:'40%',
+    founder1Name:'Guillaume Laurent', founder1Role:'Founder & CEO', founder1Bio:'Ex-Stripe. 8 years building async collaboration tools.', founder1Initials:'GL',
+    founder2Name:'Priya Nair', founder2Role:'Co-founder & CTO', founder2Bio:'Ex-Notion infra. Led real-time sync at scale.', founder2Initials:'PN',
+    adv1Name:'Rae Osei', adv1Domain:'GTM', adv1Equity:'0.5%',
+    adv2Name:'Marcus Lin', adv2Domain:'Enterprise SaaS', adv2Equity:'0.4%',
+    skill1:'Product', skill1pct:'85', skill2:'Engineering', skill2pct:'80', skill3:'Go-to-market', skill3pct:'50', skill4:'Finance / Ops', skill4pct:'45', skill5:'Design', skill5pct:'70',
+    skillGap:'Go-to-market & Finance',
+    optionPool:'10%', filed83b:true, filed83bDate:'Jul 8, 2026', totalShares:'10,000,000',
+    capFounder1:'5,500,000', capFounder1Pct:'55%', capFounder2:'3,500,000', capFounder2Pct:'35%',
+    raise:'$750K', roundType:'Pre-Seed', runway:'18 months', postMoney:'$6.5M',
+    useCat1:'Engineering', usePct1:'55%', useAmt1:'$412K', useDetail1:'2 senior engineers + infra to ship public beta',
+    useCat2:'Go-to-market', usePct2:'30%', useAmt2:'$225K', useDetail2:'Founder-led sales + first GTM hire',
+    useCat3:'Operations', usePct3:'15%', useAmt3:'$113K', useDetail3:'Legal, compliance, and runway buffer',
+    readinessPct:'82%',
+    tractionProvenance:'Pulled from Revenue · Week 3',
+    revGrowth:'+64%', revGrowthNote:'3-month average',
+    tractionTakeaway:'Revenue is recurring and expanding month over month, converted directly from logged discovery interviews.',
+    trend1m:'Apr', trend1v:'$300', trend2m:'May', trend2v:'$700', trend3m:'Jun', trend3v:'$1.1k', trend4m:'Jul', trend4v:'$1.8k',
+    mix1:'Paid pilots', mix1v:'$1.2k', mix1pct:'67%', mix2:'Annual prepay', mix2v:'$0.4k', mix2pct:'22%', mix3:'Services', mix3v:'$0.2k', mix3pct:'11%',
+    compProvenance:'Pulled from Market Intel · Week 1',
+    comp1name:'Loop', comp1cat:'Direct', comp1share:'18%', comp1stage:'Series B', comp1gap:'Thread-level only — no cross-tool context graph',
+    comp2name:'Notion AI', comp2cat:'Indirect', comp2share:'26%', comp2stage:'Series C', comp2gap:'Docs-first; async decisions live outside the workspace',
+    comp3name:'Slack Huddles', comp3cat:'Adjacent', comp3share:'31%', comp3stage:'Incumbent', comp3gap:'Synchronous by design; no persistent decision record',
+    comp4name:'Range', comp4cat:'Direct', comp4share:'7%', comp4stage:'Seed', comp4gap:'Standup-focused; no AI context surfacing',
+    compEdge1:'Cross-tool workflow graph, not another destination app',
+    compEdge2:'AI surfaces context at the moment of handoff',
+    compEdge3:'Slack-native — adoption without workflow change',
+    compWhitespace:'No incumbent owns the async handoff between tools — the seam where distributed teams actually lose hours.',
+    dealSummary:'Incorporated Delaware C-Corp, clean cap table, 83(b) filed. 30 interviews and strong solution-fit validate pull.',
+    contact:'guillaume@novacraft.ai', dataRoomComplete:'4 of 6',
+  }; }
+
+  buildDeckData(d){
+    const fnl = (n)=>parseInt(String(d[n]).replace(/[^0-9]/g,''))||0;
+    return Object.assign({}, d, {
+      discovery:[ {k:'Customers',v:d.discCustomers},{k:'Advisors',v:d.discAdvisors},{k:'Co-founders',v:d.discCofounders},{k:'Investors',v:d.discInvestors} ],
+      problemPts:[ {t:d.problemPt1,mentions:d.problemMentions1},{t:d.problemPt2,mentions:d.problemMentions2},{t:d.problemPt3,mentions:d.problemMentions3} ],
+      funnel:[ {label:'Reached',value:fnl('funnelReached')},{label:'Qualified',value:fnl('funnelQualified')},{label:'Pain confirmed',value:fnl('funnelPainConfirmed')},{label:'Solution-fit',value:fnl('funnelSolutionFit')} ],
+      segments:[ {name:d.seg1name,value:d.seg1val,pct:d.seg1pct,recommended:true},{name:d.seg2name,value:d.seg2val,pct:d.seg2pct},{name:d.seg3name,value:d.seg3val,pct:d.seg3pct} ],
+      solPts:[d.solPt1,d.solPt2,d.solPt3],
+      features:[d.feature1,d.feature2,d.feature3],
+      roadmapPhases:[
+        { label:'Validate & Structure', window:'Weeks 1–2 · done', state:'done', tasks:[ {t:'Problem & ICP defined',done:true},{t:'30 customer interviews',done:true},{t:'Incorporated + 83(b) filed',done:true} ] },
+        { label:'Build & Pitch', window:'Weeks 3–4 · now', state:'active', tasks:[ {t:'MVP scope locked',done:true},{t:'Public beta shipped',done:false},{t:'Pitch deck v1',done:true} ] },
+        { label:'Scale post-program', window:'Months 2–12', state:'todo', tasks:[ {t:'500 teams onboarded',done:false},{t:'$1M ARR run-rate',done:false},{t:'Seed round closed',done:false} ] },
+      ],
+      founders:[ {name:d.founder1Name,role:d.founder1Role,bio:d.founder1Bio,initials:d.founder1Initials},{name:d.founder2Name,role:d.founder2Role,bio:d.founder2Bio,initials:d.founder2Initials} ],
+      advisors:[ {name:d.adv1Name,domain:d.adv1Domain,equity:d.adv1Equity},{name:d.adv2Name,domain:d.adv2Domain,equity:d.adv2Equity} ],
+      skills:[ {name:d.skill1,pct:parseInt(d.skill1pct)||0},{name:d.skill2,pct:parseInt(d.skill2pct)||0},{name:d.skill3,pct:parseInt(d.skill3pct)||0},{name:d.skill4,pct:parseInt(d.skill4pct)||0},{name:d.skill5,pct:parseInt(d.skill5pct)||0} ],
+      capRows:[ {name:d.founder1Name,shares:d.capFounder1,pct:d.capFounder1Pct,vesting:'4yr / 1yr cliff'},{name:d.founder2Name,shares:d.capFounder2,pct:d.capFounder2Pct,vesting:'4yr / 1yr cliff'},{name:'Option pool',shares:'1,000,000',pct:d.optionPool,vesting:'Reserved'} ],
+      founderPct:'90%',
+      capLegend:[ {name:d.founder1Initials,pct:d.capFounder1Pct,val:parseInt(d.capFounder1Pct)||0},{name:d.founder2Initials,pct:d.capFounder2Pct,val:parseInt(d.capFounder2Pct)||0},{name:'Pool',pct:d.optionPool,val:parseInt(d.optionPool)||0} ],
+      useOfFunds:[ {cat:d.useCat1,pct:d.usePct1,amount:d.useAmt1,detail:d.useDetail1},{cat:d.useCat2,pct:d.usePct2,amount:d.useAmt2,detail:d.useDetail2},{cat:d.useCat3,pct:d.usePct3,amount:d.useAmt3,detail:d.useDetail3} ],
+      filed83bLabel: d.filed83b ? ('83(b) filed ✓ '+d.filed83bDate) : '83(b) not yet filed',
+      revenueTrend:[
+        {month:d.trend1m,label:d.trend1v,value:parseFloat(String(d.trend1v).replace(/[^0-9.]/g,''))*(String(d.trend1v).includes('k')?1000:1)||0},
+        {month:d.trend2m,label:d.trend2v,value:parseFloat(String(d.trend2v).replace(/[^0-9.]/g,''))*(String(d.trend2v).includes('k')?1000:1)||0},
+        {month:d.trend3m,label:d.trend3v,value:parseFloat(String(d.trend3v).replace(/[^0-9.]/g,''))*(String(d.trend3v).includes('k')?1000:1)||0},
+        {month:d.trend4m,label:d.trend4v,value:parseFloat(String(d.trend4v).replace(/[^0-9.]/g,''))*(String(d.trend4v).includes('k')?1000:1)||0},
+      ],
+      revenueMix:[ {label:d.mix1,value:d.mix1v,pct:d.mix1pct},{label:d.mix2,value:d.mix2v,pct:d.mix2pct},{label:d.mix3,value:d.mix3v,pct:d.mix3pct} ],
+      competitors:[
+        {name:d.comp1name,category:d.comp1cat,share:d.comp1share,stage:d.comp1stage,gap:d.comp1gap},
+        {name:d.comp2name,category:d.comp2cat,share:d.comp2share,stage:d.comp2stage,gap:d.comp2gap},
+        {name:d.comp3name,category:d.comp3cat,share:d.comp3share,stage:d.comp3stage,gap:d.comp3gap},
+        {name:d.comp4name,category:d.comp4cat,share:d.comp4share,stage:d.comp4stage,gap:d.comp4gap},
+      ],
+      compEdges:[d.compEdge1,d.compEdge2,d.compEdge3],
+      dataRoom:[ {label:'Delaware C-Corp filed',done:true},{label:'83(b) election filed',done:d.filed83b},{label:'Cap table on Carta',done:true},{label:'Financial model',done:true},{label:'Pitch deck complete',done:false},{label:'Data room / diligence',done:false} ],
+    });
+  }
+
+  renderVals() {
+    // Narrative arc: problem (with its validation evidence) → solution → proof → opportunity
+    // → traction → plan → team → the raise. Validation merged into Problem; Cap Table merged into Ask.
+    const TYPES = ['cover','problem','solution','demo','market','competitive','traction','roadmap','team','ask','review'];
+    const d = this.state.d || this.defaults();
+    const deckData = this.buildDeckData(d);
+    return {
+      deckSlides: TYPES.map((type, i) => ({ type, n:i+1, total:TYPES.length, data:deckData })),
+    };
+  }
+}
+</script>
+</body>
+</html>

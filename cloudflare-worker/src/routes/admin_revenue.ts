@@ -1,0 +1,351 @@
+/**
+ * HQ · Revenue — the money rails, and the token P&L (Admin · Super canvas, H5).
+ *
+ * SUPER ADMIN ONLY.
+ *
+ *   GET /summary      one payload for the Revenue page
+ *   GET /summary?period=YYYY-Qn
+ *                     the same payload for another calendar quarter (D5039)
+ *
+ * D5039 — WHICH FIGURES FOLLOW THE PERIOD. Without `period` the quarter is the
+ * one today falls in, as it always was. With it, the quarter is the one named,
+ * written exactly `2026-Q4` (the key statements and ceilings already use); any
+ * other spelling is refused with 400 rather than read as "this quarter", which
+ * would put this quarter's figures under another quarter's label. Only the
+ * figures read over a date window follow it: the token cost and margin, and
+ * the branch usage-report coverage. The licence run-rate is computed from the
+ * licences active NOW and the promotion counts are what checkout would honour
+ * NOW, so they are point-in-time whatever period is asked for, and `temporal`
+ * says so per block so the page labels each one and never implies otherwise.
+ *
+ * WHAT THIS ENDPOINT IS FOR. The artboard draws five zones over three
+ * revenue streams. Checking each against the database before writing this
+ * changed what it could honestly be: two zones are real, one is half real,
+ * and two have no store at all. The payload says which is which per zone
+ * rather than returning a number for everything and letting the page guess.
+ *
+ *   By stream
+ *     Licence fees   TWO FIGURES, NOT ONE (D5036). `licence_fees` is the
+ *                    CONTRACTED QUARTERLY RUN-RATE: a quarter of each active
+ *                    licence's `annual_fee_cents`, which is what the terms
+ *                    would bring in, not what was invoiced or paid.
+ *                    `licence_invoices` is the invoice ledger (migration 513):
+ *                    invoiced, collected, outstanding, overdue and void per
+ *                    currency, and the billable licences not yet invoiced
+ *                    (`services/licenceFeeReceivables.ts`).
+ *     Subscriptions  NOT RECORDED. `account_subscriptions` has a plan and a
+ *                    status and NO amount, and `/api/admin/billing/ltv` reads
+ *                    charges from the Stripe API per customer — there is no
+ *                    local charge ledger to total a quarter from.
+ *     Token margin   HALF. The COST is real (`ai_usage_logs.est_cost_usd`).
+ *                    What was billed for tokens is stored nowhere, so the
+ *                    margin cannot be derived, only the cost reported.
+ *
+ *   Token P&L by subsidiary   U1. Nothing ties inference spend to a licence.
+ *   Statements and Stripe     NOT HERE. Two stores exist (migration 260:
+ *                             `subsidiary_statements` and
+ *                             `subsidiary_usage_reports`), read by
+ *                             routes/admin_statements.ts on their own
+ *                             endpoint. D266 corrected this line, which said
+ *                             no store existed.
+ *   Promo budget              `promo_codes` has discounts and redemption caps.
+ *                             There is no budget or per-subsidiary allocation.
+ *
+ * NO TOTAL IS SUMMED ACROSS CURRENCIES. Licence fees are denominated per
+ * licence (`territory_licences.currency`, EUR by default) and `est_cost_usd`
+ * is USD by its own name. Adding them would produce a headline figure that
+ * is wrong by whatever the rate happens to be, presented to the precision of
+ * a cent. Each currency is reported in its own bucket and the page shows
+ * them apart.
+ *
+ * NO STRIPE CALL. Open disputes are real but live in the Stripe API, behind
+ * `GET /api/admin/billing/disputes`. Fanning out to Stripe from a page-load
+ * endpoint would make the whole payload as slow and as failure-prone as the
+ * slowest external call; the page reads that endpoint separately so one
+ * unreadable zone does not take the other four down with it.
+ *
+ * Mounted at /api/admin/revenue BEFORE the catch-all /api/admin in index.ts.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireSuperAdmin } from '../auth';
+import {
+  REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+  TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
+} from './licence';
+import { subsidiaryUsageCoverage } from '../services/subsidiaryUsageCoverage';
+import { promoState } from '../services/promos';
+import { licenceFeeReceivables } from '../services/licenceFeeReceivables';
+
+const r = new Hono<{ Bindings: Env }>();
+
+/**
+ * D762 (#2019): the token margin for a quarter, in micro-USD. Read apart from
+ * the cost, so a ledger that cannot be read marks only the margin unknown.
+ */
+async function tokenMargin(env: Env, quarter: { start: string; end: string }) {
+  try {
+    const runs = await env.DB.prepare(
+      `SELECT COUNT(*) AS runs,
+              SUM(CASE WHEN l.id IS NULL THEN 1 ELSE 0 END) AS not_recorded,
+              COALESCE(SUM(r.actual_included_microusd), 0) AS included,
+              COALESCE(SUM(CASE WHEN l.id IS NOT NULL THEN r.actual_topup_microusd ELSE 0 END), 0) AS topup_spend,
+              COALESCE(SUM(CASE WHEN l.id IS NOT NULL AND r.actual_included_microusd + r.actual_topup_microusd > 0
+                THEN l.est_cost_usd * 1000000.0 * r.actual_topup_microusd / (r.actual_included_microusd + r.actual_topup_microusd)
+                ELSE 0 END), 0) AS topup_cost
+         FROM ai_budget_reservations r
+         JOIN users u ON u.id = r.user_id AND u.role <> 'admin'
+         LEFT JOIN ai_usage_logs l ON l.reservation_uid = r.uid AND l.refusal IS NULL
+        WHERE r.status = 'settled' AND r.updated_at >= ? AND r.updated_at < ?`,
+    ).bind(quarter.start, quarter.end).first<Record<string, number>>();
+    const given = await env.DB.prepare(
+      `SELECT COALESCE(SUM(g.delta_microusd), 0) AS given
+         FROM ai_credit_ledger g JOIN users u ON u.id = g.user_id AND u.role <> 'admin'
+        WHERE g.kind IN ('bonus', 'adjustment') AND g.created_at >= ? AND g.created_at < ?`,
+    ).bind(quarter.start, quarter.end).first<{ given: number }>();
+    if (!runs || !given) throw new Error('token margin unreadable');
+    const n = (v: unknown) => Number(v) || 0;
+    const recorded = n(runs.runs) - n(runs.not_recorded);
+    const topupSpend = n(runs.topup_spend);
+    const topupCost = Math.round(n(runs.topup_cost));
+    const tokensGiven = n(given.given);
+    return {
+      billed_available: true,
+      member_runs: n(runs.runs),
+      // Holds settled before migration 493: "Not recorded", and outside the margin.
+      runs_not_recorded: n(runs.not_recorded),
+      included_in_plans_microusd: n(runs.included),
+      topup_spend_microusd: topupSpend,
+      topup_cost_microusd: topupCost,
+      tokens_given_microusd: tokensGiven,
+      // Null when every run this quarter predates migration 493: nothing to compute it from.
+      margin_microusd: recorded === 0 && n(runs.not_recorded) > 0 ? null : topupSpend - topupCost - tokensGiven,
+    };
+  } catch {
+    return { billed_available: false, billed_reason: 'The AI holds and token ledger could not be read, so the margin is not shown.' };
+  }
+}
+
+/** The calendar quarter `now` falls in, as ISO dates, a label and its `YYYY-Qn` key (D5036, D5039). */
+export function quarterOf(now: Date): { start: string; end: string; label: string; key: string } {
+  const y = now.getUTCFullYear();
+  const q = Math.floor(now.getUTCMonth() / 3);           // 0-3
+  const start = new Date(Date.UTC(y, q * 3, 1));
+  const end = new Date(Date.UTC(y, q * 3 + 3, 1));       // exclusive
+  return {
+    start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), label: `Q${q + 1} ${y}`, key: `${y}-Q${q + 1}`,
+  };
+}
+
+/**
+ * D5039 — a requested period, or null when it is not exactly `YYYY-Qn` with a
+ * quarter 1 to 4 and a year from 2000 to 2999. Never a fallback: a caller that
+ * gets null refuses the request.
+ */
+export const SUMMARY_PERIOD_RE = /^(2\d{3})-Q([1-4])$/;
+export function quarterFromKey(key: string): { start: string; end: string; label: string; key: string } | null {
+  const m = SUMMARY_PERIOD_RE.exec(key);
+  if (!m) return null;
+  return quarterOf(new Date(Date.UTC(Number(m[1]), (Number(m[2]) - 1) * 3, 1)));
+}
+
+/**
+ * D5039 — what each block's figures are measured over, said once in the reply
+ * so the page's temporal labels come from the Worker and not from a guess:
+ * `period` follows the requested quarter, `as_of_now` is a point-in-time read
+ * that ignores it, and `not_recorded` has no figure to measure.
+ */
+export const SUMMARY_TEMPORAL = Object.freeze({
+  licence_fees: 'as_of_now',
+  token_cost: 'period',
+  usage_coverage: 'period',
+  promos: 'as_of_now',
+  subscriptions: 'not_recorded',
+  // D5036: invoiced, collected, outstanding and void follow the quarter (by issue date); its receivable and overdue
+  // list are as at today, and say so in their own `basis`.
+  licence_invoices: 'period',
+});
+
+r.get('/summary', async (c) => {
+  await requireSuperAdmin(c);
+  const env = c.env;
+  const readAt = new Date();
+  const current = quarterOf(readAt);
+  const today = readAt.toISOString().slice(0, 10);
+  // Present but empty (`?period=`) is refused too: it is a request for a period that names none.
+  const asked = c.req.query('period');
+  let quarter = current;
+  if (asked !== undefined) {
+    const parsed = quarterFromKey(asked);
+    if (!parsed) {
+      return c.json({ error: 'bad_period', message: 'period must be a calendar quarter written YYYY-Qn, such as 2026-Q4.' }, 400);
+    }
+    quarter = parsed;
+  }
+
+  // ── Licence fees ──────────────────────────────────────────────────────
+  // Per currency, never added together. `status = 'active'` only: a
+  // suspended licence holds its territory but bills nothing, so it belongs
+  // in the count of what is NOT contributing rather than in the total.
+  let licenceFees: unknown;
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT currency, COUNT(*) AS licences, SUM(annual_fee_cents) AS annual_cents
+         FROM territory_licences
+        WHERE status = 'active' AND annual_fee_cents IS NOT NULL
+        GROUP BY currency`,
+    ).all<{ currency: string; licences: number; annual_cents: number }>();
+    const suspended = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM territory_licences WHERE status = 'suspended'",
+    ).first<{ n: number }>();
+    const missingFee = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM territory_licences WHERE status = 'active' AND annual_fee_cents IS NULL",
+    ).first<{ n: number }>();
+    licenceFees = {
+      available: true,
+      // D5036: WHAT THIS FIGURE IS. A quarter of each active annual fee, read
+      // from today's licence terms: a contracted run-rate, never "revenue". It
+      // is not invoices issued, not cash collected, and not pro-rated for a
+      // mid-quarter start; `licence_invoices` below carries those.
+      measure: 'contracted_run_rate',
+      label: 'Contracted quarterly run-rate',
+      basis: 'One quarter of each active annual fee at today\'s terms, not pro-rated for a mid-quarter start. This is what the licences are contracted to bring in, not what was invoiced or collected.',
+      by_currency: (rows.results || []).map((row) => ({
+        currency: String(row.currency || 'EUR'),
+        licences: Number(row.licences) || 0,
+        annual_cents: Number(row.annual_cents) || 0,
+        quarter_cents: Math.round((Number(row.annual_cents) || 0) / 4),
+      })),
+      suspended_licences: Number(suspended?.n) || 0,
+      // Not folded into the figure above and not silently dropped: an active
+      // licence with no fee recorded is a gap in the ledger, and a total
+      // that quietly excludes it reads as complete when it is not.
+      active_without_fee: Number(missingFee?.n) || 0,
+    };
+  } catch {
+    licenceFees = { available: false, reason: 'The territory licence ledger could not be read.' };
+  }
+
+  // ── Token cost and token margin ───────────────────────────────────────
+  // The cost is `est_cost_usd`, what the inference cost. D762 (#2019): the
+  // margin is what members paid from their tokens (the top-up part of each
+  // settled hold) less that part's share of the cost, less the tokens HQ gave
+  // away (D755's bonus and adjustment entries). Allowance draws are shown
+  // apart, as "Included in plans": the plan's price already pays for them.
+  // Admin-licence runs are left out of both. A hold settled before migration
+  // 493 names no log row, so its cost share is unknown: it is counted as not
+  // recorded and left out of the margin, never guessed.
+  let tokenCost: unknown;
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS calls, SUM(est_cost_usd) AS usd
+         FROM ai_usage_logs
+        WHERE created_at >= ? AND created_at < ?`,
+    ).bind(quarter.start, quarter.end).first<{ calls: number; usd: number }>();
+    tokenCost = {
+      available: true,
+      currency: 'USD',
+      calls: Number(row?.calls) || 0,
+      cost_usd: Number(row?.usd) || 0,
+      ...(await tokenMargin(env, quarter)),
+    };
+  } catch {
+    tokenCost = { available: false, reason: 'The AI usage log could not be read.' };
+  }
+
+  // ── Promotions ────────────────────────────────────────────────────────
+  // What `promo_codes` actually holds, which is not a budget. Reported as
+  // itself rather than dressed up as the "promo budget left" the canvas
+  // draws: HQ allocating a spend ceiling per subsidiary does not exist.
+  let promos: unknown;
+  try {
+    // D213 — "REDEEMABLE NOW" MEANS ACTIVE AND UNEXPIRED, by the one rule
+    // checkout and HQ · Platform also read (`promoState`). This used to count
+    // `WHERE active = 1`, so a code past its expiry — which checkout refuses —
+    // was counted as redeemable. A code at its cap is not redeemable either.
+    // The mirror's `times_redeemed` is the count here, a lower bound: Stripe
+    // counts subscription redemptions and nothing mirrors them.
+    const res = await env.DB.prepare(
+      `SELECT active, expires_at, max_redemptions, times_redeemed FROM promo_codes`,
+    ).all<{ active: number; expires_at: string | null; max_redemptions: number | null; times_redeemed: number }>();
+    const nowMs = Date.now();
+    let activeCodes = 0;
+    let redemptions = 0;
+    for (const row of res.results || []) {
+      const redeemed = Number(row.times_redeemed);
+      if (!Number.isFinite(redeemed)) throw new Error('times_redeemed unreadable');
+      if (promoState(row, redeemed, nowMs) !== 'active') continue;
+      activeCodes += 1;
+      redemptions += redeemed;
+    }
+    promos = {
+      available: true,
+      active_codes: activeCodes,
+      redemptions,
+      // A CEILING EXISTS NOW; A BUDGET COMPUTED FROM THIS TABLE STILL DOES
+      // NOT, and they are different claims. HQ sets a spend ceiling per
+      // licence per period (D111) and reads it from its own endpoint. What
+      // `promo_codes` cannot say is what any given branch has issued against
+      // one: a code carries a discount and an optional redemption cap and
+      // names no subsidiary, so the issued figure could only come from the
+      // branch — and nothing carries one to HQ today (D266), so it is never
+      // one this row derives.
+      budget_available: false,
+      budget_reason:
+        'A promotional ceiling is set per licence at HQ and read from /api/admin/promo-ceilings. '
+        + 'It is not derived here and could not be: `promo_codes` carries a discount and an '
+        + 'optional redemption cap per code and attributes none of them to a subsidiary, so what '
+        + 'a branch has issued against its ceiling could only come from the branch, and no branch '
+        + 'reports it to HQ yet.',
+      ceilings_endpoint: '/api/admin/promo-ceilings',
+    };
+  } catch {
+    promos = { available: false, reason: 'The promotion codes table could not be read.' };
+  }
+
+  // The quarter's first day lies inside it, so the coverage read keys on the requested period.
+  const usageCoverage = await subsidiaryUsageCoverage(env, new Date(`${quarter.start}T00:00:00Z`));
+
+  // D5036 — the invoice ledger, its own failure domain: an unreadable ledger
+  // leaves the run-rate on screen and says so, never a zero.
+  const licenceInvoices = await licenceFeeReceivables(env, quarter, today);
+
+  return c.json({
+    quarter,
+    // D5039: the quarter today falls in, whether or not it was the one asked for, and when this was read.
+    current_period: current.key,
+    period_requested: asked !== undefined,
+    read_at: readAt.toISOString(),
+    temporal: SUMMARY_TEMPORAL,
+    licence_fees: licenceFees,
+    licence_invoices: licenceInvoices,
+    token_cost: tokenCost,
+    promos,
+    usage_coverage: usageCoverage,
+
+    // Subscriptions. Not a read that failed — a figure the platform cannot
+    // produce, which is a different thing and says so.
+    subscriptions_available: false,
+    subscriptions_reason:
+      'Subscription revenue is not totalled anywhere in the database. `account_subscriptions` '
+      + 'records a plan and a status but no amount, and the lifetime-value endpoint reads charges '
+      + 'from the Stripe API one customer at a time. A quarter figure would mean walking every '
+      + 'customer in Stripe on page load.',
+
+    // Statements between HQ and each subsidiary. THE STORE EXISTS NOW
+    // (migration 260, D111) and is deliberately NOT fetched here, for the
+    // reason disputes are not: this endpoint's whole contract is that it
+    // reads and stores nothing, and a ledger with writes does not belong
+    // inside it. It is also its own read so that a slow or failed statements
+    // query costs that zone and not the four that read D1 perfectly well.
+    statements_endpoint: '/api/admin/statements',
+
+    // Open disputes are real, and deliberately not fetched here.
+    disputes_endpoint: '/api/admin/billing/disputes',
+
+    ...REVENUE_PER_SUBSIDIARY_UNAVAILABLE,
+    ...TOKEN_PL_PER_SUBSIDIARY_UNAVAILABLE,
+  });
+});
+
+export default r;

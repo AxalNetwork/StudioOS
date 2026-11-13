@@ -1,0 +1,35 @@
+{
+  "skill": "opportunity-sizing-outline",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "segments": [
+          {
+            "name": "Dental clinics in Ontario",
+            "count": 2400
+          }
+        ]
+      },
+      "research.library": [
+        {
+          "title": "Ontario dental association census 2025"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "2400",
+      "Ontario dental association census 2025"
+    ],
+    "must_say_not_recorded": [
+      "price point"
+    ],
+    "must_not_include": [
+      "billion"
+    ]
+  }
+}

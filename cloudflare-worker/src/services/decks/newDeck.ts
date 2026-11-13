@@ -1,0 +1,708 @@
+/**
+ * D897 (#2677, part 3 of #2434) — a New deck: who it is for, an outline, and
+ * a proposal the founder keeps card by card.
+ *
+ * CODE FILLS EVERY FIGURE. A card's figures are its `sources` slots read by
+ * `readSources` (D896), each written into the card with its binding: a value
+ * the store holds is formatted here, and a slot it does not hold is
+ * `value: null` with a "Not recorded" binding, which every reader shows as
+ * "Not recorded on StudioOS" with its module link. Eadwyn's run writes only
+ * words: a headline and a sentence per card, and an outline of cards from
+ * this file's catalogue. It sees the figures as read-only facts, and any text
+ * of its that names a number is dropped (`numberIn`), so a generated deck
+ * holds no number that is not a binding.
+ *
+ * A PROMPT IS NOT A SOURCE. "Say we have 200 customers" is refused before any
+ * run, with the module that records customers (`figureRefusal`), so a refused
+ * prompt costs nothing. The founder's own outline rows are held to the same
+ * rule, because their titles become card headings.
+ *
+ * Pure: no env, no D1, no model. `routes/deck_new.ts` reads, runs and writes.
+ */
+import { DECK_SOURCES, type SourceItem, type Unit } from './sources';
+import { numberIn } from './numbers';
+import { AUDIENCES, modelProblems } from './slideModel';
+import { TYPE_STEPS, capacityAt, chooseLayout, fitProblems, fitText, typeRoleOf, type Evidence } from './designSystem';
+import type { Series } from './chartSeries';
+import { sanitizeDiagram, type Diagram } from './diagramModel';
+import { chartTypeFor } from './visuals';
+import { unrecordedLinks, untrustedBlock } from '../ai/untrusted';
+import { glossaryProblems, promptFor } from './prompts';
+
+export type Audience = typeof AUDIENCES[number];
+
+/** PD3's audience cards: the canvas's words, in `AUDIENCES` order. */
+export const AUDIENCE_CARDS: Record<Audience, { label: string; line: string }> = {
+  angel: { label: 'Angel', line: 'short, personal' },
+  pre_seed_fund: { label: 'Pre-seed fund', line: 'problem and team' },
+  seed_fund: { label: 'Seed fund', line: 'traction and market' },
+  series_a_fund: { label: 'Series A fund', line: 'metrics and plan' },
+  strategic: { label: 'Strategic', line: 'fit and integration' },
+  grant: { label: 'Grant', line: 'impact and budget' },
+  other: { label: 'Other', line: 'you choose' },
+};
+
+/** The fast path's audience when the founder has not chosen one (PD2: "for a seed fund"). */
+export const FAST_PATH_AUDIENCE: Audience = 'seed_fund';
+
+export const LENGTHS = [
+  { id: 'short', label: 'Short (6)' },
+  { id: 'standard', label: 'Standard (10-12)' },
+  { id: 'full', label: 'Full (15 + appendix)' },
+] as const;
+export type Length = typeof LENGTHS[number]['id'];
+export const LENGTH_IDS = LENGTHS.map((l) => l.id) as readonly string[];
+
+/** The longest optional prompt (PD3), in characters. */
+export const PROMPT_MAX = 500;
+/** The most rows an outline holds. */
+export const OUTLINE_MAX = 20;
+export const TITLE_MAX = 80;
+export const PURPOSE_MAX = 200;
+export const HEADLINE_MAX = 120;
+export const BODY_MAX = 400;
+/** The most figures the appendix card lists. */
+export const APPENDIX_FIGURES = 20;
+
+/**
+ * Every card a New deck can hold, with the slots it is filled from. A card's
+ * words are Eadwyn's; its figures are only ever these slots. The canvas's
+ * twelve (`CARDS` on the page canvas) are the standard deck.
+ */
+export type CardSpec = { card: string; title: string; purpose: string; sources: string[]; appendix?: boolean };
+export const CARD_CATALOGUE: CardSpec[] = [
+  { card: 'title', title: 'Title', purpose: 'The venture and what it does, in a line', sources: [] },
+  { card: 'problem', title: 'Problem', purpose: 'The pain, as customers told it', sources: ['validate.top_pain', 'validate.interviews'] },
+  { card: 'why_now', title: 'Why now', purpose: 'What changed that makes this the moment', sources: [] },
+  { card: 'solution', title: 'Solution', purpose: 'What the product does about the pain', sources: ['build.must_haves'] },
+  { card: 'traction', title: 'Traction', purpose: 'Revenue and customers from your records', sources: ['grow.mrr', 'grow.paying_customers', 'grow.mercury_growth', 'grow.arr'] },
+  { card: 'validation', title: 'Validation', purpose: 'Interviews, letters of intent and validated claims', sources: ['validate.interviews', 'validate.strong_fit', 'validate.lois', 'validate.claims_validated'] },
+  { card: 'product', title: 'Product', purpose: 'Must-haves done and what shipped', sources: ['build.must_haves', 'build.releases_90d', 'build.commits_90d'] },
+  { card: 'market', title: 'Market', purpose: 'Who else is here and the demand you have seen', sources: ['validate.competitors', 'validate.demand', 'validate.notion_research'] },
+  { card: 'unit_economics', title: 'Unit economics', purpose: 'Runway, burn and churn as recorded', sources: ['grow.runway', 'grow.net_burn', 'grow.churn', 'grow.mercury_revenue'] },
+  { card: 'team', title: 'Team', purpose: 'The founders and what they bring', sources: ['team.founders', 'team.archetypes', 'team.skills'] },
+  { card: 'round', title: 'The round', purpose: 'Instrument, amount and close', sources: ['raise.round_target', 'raise.round_terms', 'raise.round_close'] },
+  { card: 'use_of_funds', title: 'Use of funds', purpose: 'Where the money goes', sources: ['raise.use_of_funds'] },
+  { card: 'competition', title: 'Competition', purpose: 'The companies you are tracked against', sources: ['validate.competitors'] },
+  { card: 'roadmap', title: 'Roadmap', purpose: 'The objectives ahead and the pace so far', sources: ['build.roadmap', 'build.releases_90d'] },
+  { card: 'cap_table', title: 'Cap table', purpose: 'Who holds the company today', sources: ['raise.cap_table', 'raise.vesting', 'team.founders'] },
+  { card: 'every_figure', title: 'Appendix · Every figure', purpose: 'Each recorded figure with its source', sources: [], appendix: true },
+];
+export const CARD_IDS = CARD_CATALOGUE.map((c) => c.card);
+const specOf = (card: string) => CARD_CATALOGUE.find((c) => c.card === card) ?? null;
+
+const STANDARD = ['title', 'problem', 'why_now', 'solution', 'traction', 'validation', 'product', 'market', 'unit_economics', 'team', 'round', 'use_of_funds'];
+const DECK_CARDS_SHORT = ['title', 'problem', 'solution', 'traction', 'team', 'round'];
+const DECK_CARDS: Record<Length, string[]> = {
+  short: DECK_CARDS_SHORT,
+  standard: STANDARD,
+  full: [...STANDARD, 'competition', 'roadmap', 'cap_table', 'every_figure'],
+};
+
+/**
+ * D897 §9 (#3659): a row may carry its `message`, the one thing the card must
+ * say, in words. It is planned before any card is built and steers the
+ * card's headline; like a title, it names no number.
+ */
+export type OutlineRow = { card: string; title: string; purpose: string; message?: string };
+export const MESSAGE_MAX = 140;
+
+/**
+ * D897 §9 (#3659): what each audience reads first. These cards move up to
+ * just after the title, in this order; the rest keep the length's order, so
+ * the same records make a different story for an angel and a Series A fund.
+ * A short deck takes its six from the audience's own list.
+ */
+export const AUDIENCE_EMPHASIS: Record<Audience, { lead: string[]; short: string[] }> = {
+  angel: { lead: ['problem', 'team', 'solution'], short: ['title', 'problem', 'solution', 'team', 'traction', 'round'] },
+  pre_seed_fund: { lead: ['problem', 'team', 'solution'], short: ['title', 'problem', 'team', 'solution', 'validation', 'round'] },
+  seed_fund: { lead: ['problem', 'traction', 'solution'], short: ['title', 'problem', 'solution', 'traction', 'team', 'round'] },
+  series_a_fund: { lead: ['traction', 'unit_economics', 'market'], short: ['title', 'traction', 'unit_economics', 'market', 'team', 'round'] },
+  strategic: { lead: ['product', 'market', 'solution'], short: ['title', 'problem', 'product', 'market', 'team', 'round'] },
+  grant: { lead: ['problem', 'solution', 'validation'], short: ['title', 'problem', 'solution', 'validation', 'team', 'use_of_funds'] },
+  other: { lead: [], short: DECK_CARDS_SHORT },
+};
+
+/** The outline StudioOS proposes without a model: the length's cards, in the audience's order when one is named. */
+export function standardOutline(length: Length, audience?: Audience): OutlineRow[] {
+  return cardsFor(length, audience).map((card) => {
+    const s = specOf(card)!;
+    return { card, title: s.title, purpose: s.purpose };
+  });
+}
+
+/** The cards of a length for an audience: the title first, its lead cards next, the rest in order. */
+export function cardsFor(length: Length, audience?: Audience): string[] {
+  const e = audience ? AUDIENCE_EMPHASIS[audience] : null;
+  if (!e) return DECK_CARDS[length];
+  if (length === 'short') return e.short;
+  const cards = DECK_CARDS[length];
+  const lead = e.lead.filter((c) => cards.includes(c));
+  return ['title', ...lead, ...cards.filter((c) => c !== 'title' && !lead.includes(c))];
+}
+
+// ─────────────────────────────────────────────────────────── numbers in text
+
+export { NUMBER_WORDS_BY_LANGUAGE, numberIn } from './numbers';
+
+// ─────────────────────────────────────────────────────────── the refusal
+
+/** Words in a prompt, mapped to the slot that records what they claim. */
+const CLAIM_SLOTS: Array<[RegExp, string]> = [
+  [/\b(customers?|clients?|users?|accounts?|subscribers?)\b/i, 'grow.paying_customers'],
+  [/\b(arr|annual recurring)\b/i, 'grow.arr'],
+  [/\b(mrr|revenue|sales|turnover|monthly recurring)\b/i, 'grow.mrr'],
+  [/\bchurn\b/i, 'grow.churn'],
+  [/\brunway\b/i, 'grow.runway'],
+  [/\bburn\b/i, 'grow.net_burn'],
+  [/\b(growth|growing|grew)\b/i, 'grow.mercury_growth'],
+  [/\binterview/i, 'validate.interviews'],
+  [/\b(lois?|letters? of intent)\b/i, 'validate.lois'],
+  [/\bcompetitors?\b/i, 'validate.competitors'],
+  [/\b(raise|raising|round|valuation|safe|investment)\b/i, 'raise.round_target'],
+  [/\b(founders?|team|employees|people|hires?)\b/i, 'team.founders'],
+  [/\breleases?\b/i, 'build.releases_90d'],
+  [/\bcommits?\b/i, 'build.commits_90d'],
+  [/\bmust-haves?\b/i, 'build.must_haves'],
+];
+
+/** Where a slot is recorded: its label, its module and the module's address for this venture. */
+export function slotHome(sourceKey: string, projectId: number): { source_key: string; label: string; module: string; href: string } | null {
+  for (const a of DECK_SOURCES) {
+    const slot = a.slots.find((s) => s.key === sourceKey);
+    if (slot) return { source_key: slot.key, label: slot.label, module: a.module, href: a.href(projectId) };
+  }
+  return null;
+}
+
+/** The deck's sources page, for a figure no slot names. */
+export const SOURCES_HREF = (projectId: number) => `/raise/pitch/new?project_id=${projectId}&step=2`;
+
+export type FigureRefusal = {
+  code: 'figure_in_prompt';
+  message: string;
+  figure: string;
+  source_key: string | null;
+  module: string | null;
+  href: string;
+};
+
+/**
+ * Why `text` may not steer a deck, or null when it may: it names a number. The
+ * answer says which module records what it claims, so the founder can record
+ * it there and the deck reads it from the record.
+ */
+export function figureRefusal(text: unknown, projectId: number, where = 'the prompt'): FigureRefusal | null {
+  const figure = numberIn(text);
+  if (!figure) return null;
+  const hit = CLAIM_SLOTS.find(([re]) => re.test(String(text)));
+  const home = hit ? slotHome(hit[1], projectId) : null;
+  const message = home
+    ? `Figures come from your records, never from ${where}. Record ${home.label.toLowerCase()} in ${home.module}, and the deck reads it from there.`
+    : `Figures come from your records, never from ${where}. Record the figure in its module, and the deck reads it from there.`;
+  return {
+    code: 'figure_in_prompt', message, figure,
+    source_key: home?.source_key ?? null, module: home?.module ?? null, href: home?.href ?? SOURCES_HREF(projectId),
+  };
+}
+
+// ─────────────────────────────────────────────────────────── the outline
+
+const text = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+/**
+ * The founder's outline as sent, checked: each row names a catalogue card, and
+ * its title and purpose name no number. Returns the rows, or why not.
+ */
+export function outlineFromBody(input: unknown, projectId: number): { rows: OutlineRow[] } | { error: string; refusal?: FigureRefusal } {
+  if (!Array.isArray(input) || input.length === 0) return { error: 'outline must list at least one card' };
+  if (input.length > OUTLINE_MAX) return { error: `an outline holds at most ${OUTLINE_MAX} cards` };
+  const rows: OutlineRow[] = [];
+  for (const [i, r] of input.entries()) {
+    const spec = specOf(String((r as any)?.card ?? ''));
+    if (!spec) return { error: `outline row ${i + 1}: card must be one of ${CARD_IDS.join(', ')}` };
+    const title = text((r as any)?.title, TITLE_MAX) || spec.title;
+    const purpose = text((r as any)?.purpose, PURPOSE_MAX) || spec.purpose;
+    const message = text((r as any)?.message, MESSAGE_MAX);
+    const refused = figureRefusal(`${title} ${purpose} ${message}`, projectId, `an outline row (row ${i + 1})`);
+    if (refused) return { error: refused.message, refusal: refused };
+    rows.push({ card: spec.card, title, purpose, ...(message ? { message } : {}) });
+  }
+  return { rows };
+}
+
+/**
+ * Eadwyn's proposed outline, kept to the catalogue: an unknown card is
+ * dropped, and a title or purpose that names a number falls back to the
+ * catalogue's own words. Null when nothing usable came back.
+ */
+export function outlineFromModel(raw: unknown, length: Length): OutlineRow[] | null {
+  const list = Array.isArray((raw as any)?.rows) ? (raw as any).rows : Array.isArray(raw) ? raw : null;
+  if (!list) return null;
+  const rows: OutlineRow[] = [];
+  for (const r of list.slice(0, OUTLINE_MAX)) {
+    const spec = specOf(String(r?.card ?? ''));
+    if (!spec || rows.some((x) => x.card === spec.card)) continue;
+    const title = text(r?.title, TITLE_MAX);
+    const purpose = text(r?.purpose, PURPOSE_MAX);
+    const message = text(r?.message, MESSAGE_MAX);
+    rows.push({
+      card: spec.card,
+      title: title && !numberIn(title) ? title : spec.title,
+      purpose: purpose && !numberIn(purpose) ? purpose : spec.purpose,
+      // A message that names a number is dropped, as a title is; the card then says its purpose.
+      ...(message && !numberIn(message) ? { message } : {}),
+    });
+  }
+  // Too few cards for the length asked is not that length's deck.
+  return rows.length >= Math.min(3, DECK_CARDS[length].length) ? rows : null;
+}
+
+/** Source keys the founder left out at PD4: a slot named here is on no card and in no prompt. */
+export type Excluded = ReadonlySet<string>;
+const NONE: Excluded = new Set();
+
+/** The keys a card shows: its own slots, or for the appendix every recorded one, less the excluded. */
+function keysOf(spec: CardSpec, items: SourceItem[], exclude: Excluded): string[] {
+  const keys = spec.card === 'every_figure' ? recordedKeys(items).filter((k) => !exclude.has(k)).slice(0, APPENDIX_FIGURES) : spec.sources;
+  return keys.filter((k) => !exclude.has(k));
+}
+
+/** The excluded keys as a request sends them: source keys only, at most one per slot. */
+export function excludedOf(input: unknown): string[] | string {
+  if (input == null) return [];
+  if (!Array.isArray(input) || input.length > 100) return 'exclude must be a list of source keys';
+  const keys = [...new Set(input.filter((k): k is string => typeof k === 'string'))];
+  if (keys.length !== input.length || keys.some((k) => !/^[a-z]+\.[a-z0-9_]{1,48}$/.test(k))) return 'exclude must be a list of source keys';
+  return keys.sort();
+}
+
+/** What one card's facts are, as the model reads them: labels and values, never instructions. */
+export function factsFor(spec: CardSpec, items: SourceItem[], exclude: Excluded = NONE): Array<{ label: string; value: string }> {
+  const keys = keysOf(spec, items, exclude);
+  return keys.map((k) => {
+    const it = items.find((x) => x.source_key === k);
+    return { label: it?.label ?? slotHome(k, 0)?.label ?? k, value: it && it.state === 'recorded' ? (k.startsWith('dataroom.') ? 'Recorded; placed by code' : valueText(it) ?? 'Not recorded') : 'Not recorded' };
+  });
+}
+
+const recordedKeys = (items: SourceItem[]) => items.filter((i) => i.state === 'recorded' && !i.optional).map((i) => i.source_key);
+
+/** D1519 (#3771): the outline's system prompt, from the registry (`prompts/outline.default.ts`), with the house voice. */
+export const OUTLINE_SYSTEM = promptFor('outline').system;
+
+/** The outline run's message: the audience, the length, the cards it may use, what the venture has on record. */
+export function outlineMessage(o: { audience: Audience; length: Length; prompt: string; items: SourceItem[] }): string {
+  const cards = CARD_CATALOGUE.map((c) => ({ card: c.card, title: c.title, records: c.sources.map((k) => {
+    const it = o.items.find((x) => x.source_key === k);
+    return `${it?.label ?? k}: ${it?.state === 'recorded' ? 'recorded' : 'not recorded'}`;
+  }) }));
+  return [
+    `Plan a ${LENGTHS.find((l) => l.id === o.length)!.label} pitch deck for ${AUDIENCE_CARDS[o.audience].label} (${AUDIENCE_CARDS[o.audience].line}).`,
+    `Pick about ${DECK_CARDS[o.length].length} cards from this list, in the order this audience should read them, and say in under twelve words what each card shows. Give each card one message: the single takeaway the reader should leave with, in under twenty words, drawn only from what is recorded: ${JSON.stringify(cards)}.`,
+    o.prompt ? `The founder's note on tone and emphasis (it is not a source of facts):\n${untrustedBlock('instruction', JSON.stringify(o.prompt))}` : '',
+    promptFor('outline').template,
+  ].filter(Boolean).join('\n');
+}
+
+/** D1519 (#3771): the build's system prompt for a model with no family of its own; a run asks `promptFor('build', model, voice)`. */
+export const BUILD_SYSTEM = promptFor('build').system;
+
+/** The build run's message: one entry per card, with its facts as read-only context. */
+export function buildMessage(o: { audience: Audience; prompt: string; rows: OutlineRow[]; items: SourceItem[]; ventureName: string | null; exclude?: Excluded; visuals?: CardVisuals }): string {
+  // D1517 (#3769): each card carries its own areas' budgets, so the words are written to fit.
+  const cards = o.rows.map((r, i) => {
+    const budget = wordBudget(r, o.items, o.exclude ?? NONE, o.visuals ?? NO_VISUALS);
+    return {
+      n: i + 1, title: r.title, shows: r.purpose, ...(r.message ? { message: r.message } : {}), facts: factsFor(specOf(r.card)!, o.items, o.exclude ?? NONE),
+      headline_max_chars: budget.headline, ...(budget.body != null ? { body_max_chars: budget.body } : {}),
+    };
+  });
+  return [
+    `Write the cards of a pitch deck${o.ventureName ? ` for ${JSON.stringify(o.ventureName)}` : ''}, for ${AUDIENCE_CARDS[o.audience].label} (${AUDIENCE_CARDS[o.audience].line}).`,
+    // D1506: the facts carry text the venture's records hold (a document's words, a crawled competitor's name).
+    // D1519: the instruction is the registry's (`prompts/build.default.ts`), the same for every family.
+    `${promptFor('build').template} Cards:\n${untrustedBlock('record_text', JSON.stringify(cards))}`,
+    o.prompt ? `The founder's note on tone and emphasis (it is not a source of facts):\n${untrustedBlock('instruction', JSON.stringify(o.prompt))}` : '',
+    'Return {"cards":[{"n":<card number>,"headline":"...","body":"...","notes":"..."}]}.',
+  ].filter(Boolean).join('\n');
+}
+
+// D1560 (#3807): `notes`, the card's speaker notes from the same run, so a built deck is present-ready.
+export type Wording = { headline: string | null; body: string | null; notes?: string | null };
+export const NOTES_MAX = 900;
+
+/**
+ * The run's words per card (by position), with every string that names a
+ * number dropped and counted. A card the run did not answer has no words.
+ * D1506: so is every string with a link or email address no record holds
+ * (`records`, the recorded values the run was given).
+ */
+export function wordingFromModel(raw: unknown, count: number, records: readonly string[] = []): { byIndex: Wording[]; dropped: number } {
+  const list = Array.isArray((raw as any)?.cards) ? (raw as any).cards : [];
+  const byIndex: Wording[] = Array.from({ length: count }, () => ({ headline: null, body: null }));
+  let dropped = 0;
+  for (const c of list) {
+    const i = Number(c?.n) - 1;
+    if (!Number.isInteger(i) || i < 0 || i >= count) continue;
+    for (const [k, max] of [['headline', HEADLINE_MAX], ['body', BODY_MAX], ['notes', NOTES_MAX]] as const) {
+      const v = text(c?.[k], max);
+      if (!v) continue;
+      // D1519: a string out of the house voice (`prompts/voice.ts`'s glossary) is dropped like one that names a number.
+      if (numberIn(v) || unrecordedLinks(v, records).length || glossaryProblems(v).length) { dropped += 1; continue; }
+      byIndex[i][k] = v;
+    }
+  }
+  return { byIndex, dropped };
+}
+
+// ─────────────────────────────────────────────────────────── the cards
+
+const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A recorded slot's value as a card prints it, by unit; null when there is none. Mirrors `sourcesModel.js`. */
+/** The text of every recorded value: what a link in a model's words must come from (D1506). */
+export const recordTexts = (items: readonly SourceItem[]): string[] =>
+  items.filter((i) => i.state === 'recorded').map((i) => valueText(i)).filter((t): t is string => typeof t === 'string' && !!t);
+
+export function valueText(it: Pick<SourceItem, 'value' | 'unit' | 'of'>): string | null {
+  const v = it.value;
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  const unit: Unit = it.unit;
+  let out: string;
+  switch (unit) {
+    case 'usd': out = Number.isFinite(n) ? usd(n) : String(v); break;
+    case 'cents': out = Number.isFinite(n) ? usd(n / 100) : String(v); break;
+    case 'percent': out = Number.isFinite(n) ? `${Math.round(n * 10) / 10}%` : String(v); break;
+    case 'months': out = Number.isFinite(n) ? `${Math.round(n * 10) / 10} months` : String(v); break;
+    case 'date': {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v));
+      out = m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(v);
+      break;
+    }
+    case 'count': out = Number.isFinite(n) ? n.toLocaleString('en-US') : String(v); break;
+    default: out = String(v);
+  }
+  return it.of != null ? `${out} of ${Number(it.of).toLocaleString('en-US')}` : out;
+}
+
+/** A slot's binding as a card stores it (D896's five keys); a missing slot is bound as Not recorded. */
+function bindingOf(key: string, it: SourceItem | undefined) {
+  if (it && it.state === 'recorded') {
+    return { source_key: key, record_ref: it.record_ref, as_of: it.as_of, grade: it.grade, snapshot_hash: it.snapshot_hash };
+  }
+  return { source_key: key, record_ref: null, as_of: null, grade: 'Not recorded', snapshot_hash: null };
+}
+
+type Figure = { key: string; label: string; value: string | null; binding: ReturnType<typeof bindingOf> };
+
+function figuresOf(spec: CardSpec, items: SourceItem[], exclude: Excluded): Figure[] {
+  return keysOf(spec, items, exclude).map((key) => {
+    const it = items.find((x) => x.source_key === key);
+    const recorded = it && it.state === 'recorded' ? it : undefined;
+    return { key, label: it?.label ?? slotHome(key, 0)?.label ?? key, value: recorded ? valueText(recorded) : null, binding: bindingOf(key, recorded ?? it) };
+  });
+}
+
+/**
+ * D897 §9 (#3659): what a card may draw besides its slots. `series` are the
+ * venture's chart series (`chartSeries.ts`, read by code), `diagrams` a typed
+ * diagram per card that a record placed, and `rows` how many records a matrix
+ * placed (D903 §10, `visuals.ts` `recordDiagrams`). Nothing here comes from a model.
+ */
+export type CardVisuals = { series?: Series[]; diagrams?: Record<string, Diagram>; rows?: Record<string, number> };
+const NO_VISUALS: CardVisuals = {};
+
+/** The chart series each card may plot, best first: a connector's before the founder's typed one. */
+export const CARD_SERIES: Record<string, string[]> = {
+  traction: ['grow.mrr.monthly', 'grow.mrr.typed', 'grow.arr.monthly', 'grow.arr.typed', 'grow.paying_customers.monthly', 'grow.paying_customers.typed'],
+  validation: ['validate.interviews.weekly'],
+  unit_economics: ['grow.churn.monthly', 'grow.churn.typed'],
+};
+
+/** The series a card plots: the first recorded one with two points or more, or null. */
+export function seriesFor(card: string, series: Series[] | undefined): Series | null {
+  for (const key of CARD_SERIES[card] ?? []) {
+    const s = (series ?? []).find((x) => x.key === key);
+    if (s && s.state === 'recorded' && s.points.length >= 2) return s;
+  }
+  return null;
+}
+
+/**
+ * The one line a card with nothing recorded says instead of empty tiles. A
+ * label that names a number ("Releases in 90 days") stays off unbound text;
+ * the card's own read-only fields still name it.
+ */
+function missingLine(figures: Figure[]): string {
+  const named = figures.map((f) => f.label).filter((l) => !numberIn(l));
+  const rest = figures.length - named.length;
+  return `Not recorded on StudioOS yet: ${[...named, ...(rest ? [rest === 1 ? 'one more figure' : 'other figures'] : [])].join(', ')}.`;
+}
+
+/** A recorded text figure too long for a tile reads as a bound line of text instead. */
+const TILE_TEXT_MAX = 12;
+const isLongText = (f: Figure) => f.value != null && f.value.length > TILE_TEXT_MAX;
+
+/** What a card's records give it, counted by code: the evidence `chooseLayout` reads. */
+export function evidenceOf(row: OutlineRow, items: SourceItem[], exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): Evidence {
+  const figures = figuresOf(specOf(row.card)!, items, exclude);
+  const recorded = figures.filter((f) => f.value != null);
+  const diagram = visuals.diagrams?.[row.card] ? sanitizeDiagram(visuals.diagrams[row.card]) : null;
+  return {
+    // Tiles are worth drawing once one figure is recorded; the missing ones then read "Not recorded" beside it.
+    metrics: recorded.length ? figures.filter((f) => !isLongText(f)).length : 0,
+    series: seriesFor(row.card, visuals.series) ? 1 : 0,
+    people: 0, images: 0,
+    // D903 §10: a matrix is the comparison's rows; any other diagram is ordered steps.
+    rows: diagram?.type === 'matrix' ? Number(visuals.rows?.[row.card] ?? 0) : 0,
+    steps: diagram && diagram.type !== 'matrix' ? diagram.items.length : 0,
+  };
+}
+
+const G = (c1: number, c2: number, r1: number, r2: number) => ({ c1, c2, r1, r2 });
+const metricBlock = (id: string, f: Figure, grid: ReturnType<typeof G>) => ({ id, kind: 'metric', grid, label: f.label, value: f.value, binding: f.binding });
+const seriesBinding = (s: Series) => ({ source_key: s.key, record_ref: s.record_ref, as_of: s.as_of, grade: s.grade, snapshot_hash: s.snapshot_hash });
+
+/**
+ * The blocks of one card for the layout its evidence earns. Code places every
+ * figure (a metric, a chart series or a bound line); Eadwyn's words are the
+ * heading and one sentence. Words that do not fit their space go to the
+ * card's notes rather than overflow it.
+ */
+function compose(layout: string, row: OutlineRow, figures: Figure[], words: { headline: string; body: string | null }, visuals: CardVisuals): { blocks: any[]; notes: string[] } {
+  const blocks: any[] = [];
+  const notes: string[] = [];
+  const heading = (grid: ReturnType<typeof G>) => blocks.push({ id: 'h', kind: 'text', grid, style: 'heading', text: words.headline });
+  const body = (grid: ReturnType<typeof G>) => { if (words.body) blocks.push({ id: 'p', kind: 'text', grid, style: 'paragraph', text: words.body }); };
+  const tiles = figures.filter((f) => !isLongText(f));
+  const lines = figures.filter(isLongText);
+  const boundLines = (c1: number, c2: number, r1: number) => lines.slice(0, 6 - r1 + 1).forEach((f, i) =>
+    blocks.push({ id: `t${i + 1}`, kind: 'text', grid: G(c1, c2, r1 + i, r1 + i), style: 'paragraph', text: `${f.label} · ${f.value}`, binding: f.binding }));
+  switch (layout) {
+    case 'title':
+      heading(G(1, 12, 2, 3));
+      body(G(1, 12, 4, 4));
+      break;
+    case 'chart_text': {
+      const s = seriesFor(row.card, visuals.series)!;
+      heading(G(1, 12, 1, 1));
+      blocks.push({ id: 'c', kind: 'chart', grid: G(1, 8, 2, 6), chart_type: chartTypeFor(s) ?? 'line', range: 'all', previous: false, labels: true, series: [{ label: s.label, binding: seriesBinding(s) }] });
+      tiles.filter((f) => f.value != null).slice(0, 2).forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(9, 12, 2 + i * 2, 3 + i * 2))));
+      if (words.body) notes.push(words.body);
+      break;
+    }
+    case 'metric_tiles': {
+      heading(G(1, 12, 1, 1));
+      const shown = tiles.slice(0, 4);
+      const per = Math.floor(12 / Math.max(1, shown.length));
+      shown.forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(i * per + 1, i === shown.length - 1 ? 12 : i * per + per, 2, 4))));
+      if (lines.length) { boundLines(1, 12, 5); if (words.body) notes.push(words.body); } else body(G(1, 12, 5, 6));
+      break;
+    }
+    case 'timeline': {
+      heading(G(1, 12, 1, 1));
+      const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
+      blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });
+      body(G(1, 12, 6, 6));
+      break;
+    }
+    case 'comparison_table': {
+      // D903 §10: the market as a matrix the founder's recorded positions placed.
+      heading(G(1, 12, 1, 1));
+      const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
+      blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });
+      body(G(1, 12, 6, 6));
+      break;
+    }
+    case 'two_columns':
+      heading(G(1, 12, 1, 1));
+      body(G(1, 6, 2, 6));
+      if (lines.length) boundLines(7, 12, 2);
+      else if (figures.some((f) => f.value != null)) tiles.filter((f) => f.value != null).slice(0, 2).forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(7, 12, 2 + i * 2, 3 + i * 2))));
+      else if (figures.length) blocks.push({ id: 'n', kind: 'text', grid: G(7, 12, 2, 3), style: 'paragraph', text: missingLine(figures) });
+      break;
+    default: {
+      // statement: the message large, the sentence under it, and the card's figures beneath when one is recorded.
+      // With none recorded, one line names what is missing instead of a row of empty tiles.
+      const anyRecorded = figures.some((f) => f.value != null);
+      const shown = anyRecorded ? figures.slice(0, 3) : [];
+      if (!anyRecorded && figures.length) {
+        heading(G(2, 11, 2, 4));
+        body(G(2, 11, 5, 5));
+        blocks.push({ id: 'n', kind: 'text', grid: G(2, 11, 6, 6), style: 'paragraph', text: missingLine(figures) });
+        break;
+      }
+      heading(G(2, 11, shown.length ? 1 : 2, 4));
+      if (shown.length) {
+        if (words.body) notes.push(words.body);
+        shown.forEach((f, i) => (isLongText(f)
+          ? blocks.push({ id: `t${i + 1}`, kind: 'text', grid: G(2 + i * 3, 4 + i * 3, 5, 6), style: 'paragraph', text: `${f.label} · ${f.value}`, binding: f.binding })
+          : blocks.push(metricBlock(`m${i + 1}`, f, G(2 + i * 3, 4 + i * 3, 5, 6)))));
+      } else body(G(2, 11, 5, 5));
+    }
+  }
+  return { blocks, notes };
+}
+
+/**
+ * D1517 (#3769): what a card's heading and sentence may hold, in characters,
+ * from the areas its layout gives them at the smallest step of the type scale
+ * (`TYPE_STEPS`), capped by HEADLINE_MAX and BODY_MAX. `body` is null when the
+ * layout draws no sentence.
+ */
+export function wordBudget(row: OutlineRow, items: SourceItem[], exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): { headline: number; body: number | null } {
+  const spec = specOf(row.card);
+  if (!spec) return { headline: HEADLINE_MAX, body: BODY_MAX };
+  const layout = spec.appendix ? 'appendix_table' : chooseLayout(row.card, evidenceOf(row, items, exclude, visuals)).layout;
+  const { blocks } = spec.appendix ? { blocks: [{ id: 'h', kind: 'text', grid: G(1, 12, 1, 1), style: 'heading' }] }
+    : compose(layout, row, figuresOf(spec, items, exclude), { headline: 'x', body: 'x' }, visuals);
+  const room = (id: string, max: number) => {
+    const b = blocks.find((x: any) => x.id === id);
+    if (!b) return null;
+    const role = typeRoleOf(b.style, layout);
+    return Math.min(max, capacityAt(b.grid, role, TYPE_STEPS[role][TYPE_STEPS[role].length - 1]).chars);
+  };
+  return { headline: room('h', HEADLINE_MAX) ?? HEADLINE_MAX, body: room('p', BODY_MAX) };
+}
+
+/**
+ * D1517 (#3769): the longest start of `text` that `fits`, cut at a sentence,
+ * then at a clause, never inside one; null when not even its first clause
+ * fits. Shortening is code, so it costs nothing beyond the run already quoted.
+ */
+export function shortenToFit(text: string, fits: (t: string) => boolean): string | null {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  if (fits(t)) return t;
+  for (const re of [/(?<=[.!?])\s+/, /(?<=[,;:])\s+|\s+[—–]\s+/]) {
+    const parts = t.split(re).filter(Boolean);
+    for (let n = parts.length - 1; n >= 1; n -= 1) {
+      let cand = parts.slice(0, n).join(' ').trim().replace(/[,;:]$/, '');
+      if (!/[.!?]$/.test(cand)) cand = `${cand}.`;
+      if (fits(cand)) return cand;
+    }
+  }
+  return null;
+}
+
+/**
+ * One card of the proposal, built by code from its outline row, its slots and
+ * Eadwyn's words. D897 §9 (#3659): its layout is the one its evidence earns
+ * (`designSystem.ts` `chooseLayout`), so a deck varies with its records instead
+ * of being a stack of tiles. Figures are metric blocks, bound chart series or
+ * bound lines, and read-only `auto` fields, each with its binding.
+ */
+export function cardOf(row: OutlineRow, items: SourceItem[], words: Wording, ventureName: string | null, exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): any {
+  const spec = specOf(row.card)!;
+  const headline = words.headline || row.message || row.title;
+  const figures = figuresOf(spec, items, exclude);
+  const fields: any[] = [];
+  let layout: string;
+  let blocks: any[] = [];
+  let notes: string[] = [];
+  if (spec.appendix) {
+    // The appendix is a reference table: one bound line per recorded figure, four across, five down.
+    layout = 'appendix_table';
+    blocks.push({ id: 'h', kind: 'text', grid: G(1, 12, 1, 1), style: 'heading', text: headline });
+    figures.forEach((f, i) => {
+      const c1 = (i % 4) * 3 + 1;
+      const r = 2 + Math.floor(i / 4);
+      if (r <= 6) blocks.push({ id: `m${i + 1}`, kind: 'text', grid: G(c1, c1 + 2, r, r), style: 'paragraph', text: `${f.label} · ${f.value ?? 'Not recorded'}`, binding: f.binding });
+    });
+  } else {
+    layout = chooseLayout(row.card, evidenceOf(row, items, exclude, visuals)).layout;
+    ({ blocks, notes } = compose(layout, row, figures, { headline, body: words.body }, visuals));
+    blocks = fixOrDrop(layout, blocks, row.title);
+  }
+  if (row.card === 'title' && ventureName) fields.push({ key: 'venture_name', label: 'Venture', kind: 'subtitle', value: ventureName, source: 'data', readonly: true });
+  if (words.headline) fields.push({ key: 'headline', label: 'Headline', kind: 'paragraph', value: words.headline, source: 'ai' });
+  if (words.body) fields.push({ key: 'body', label: 'Body', kind: 'paragraph', value: words.body, source: 'ai' });
+  for (const f of figures.slice(0, spec.appendix ? APPENDIX_FIGURES : 4)) {
+    fields.push({
+      key: f.key, label: f.label, kind: 'auto', readonly: true, binding: f.binding,
+      value: f.value != null ? `${f.label} · ${f.value}` : '', source: f.value != null ? 'data' : 'placeholder',
+    });
+  }
+  return {
+    title: row.title, subtitle: null, body: '', bullets: [], image_url: null,
+    spec_id: `new:${row.card}`, ...(spec.appendix ? { appendix: true } : {}),
+    layout, blocks, fields, ...(notes.length ? { notes: notes.join('\n\n') } : {}),
+  };
+}
+
+/**
+ * D1517 (#3769) fix-or-drop: every fit problem a card still has after its
+ * type stepped down is fixed or its block dropped, never moved to the notes.
+ * Words that overflow are shortened at a sentence or a clause; a heading that
+ * cannot be is the card's title; a sentence that cannot be is dropped. A chart
+ * or diagram that cannot be read at 16:9, or a figure too long for its tile,
+ * is dropped too: the card's bound figures stay in its fields.
+ */
+export function fixOrDrop(layout: string, input: any[], title: string): any[] {
+  let blocks = input.map((b) => ({ ...b }));
+  for (let pass = 0; pass < 3; pass += 1) {
+    const problems = fitProblems([{ layout, blocks }]);
+    if (!problems.length) break;
+    for (const p of problems) {
+      const b = blocks.find((x) => String(x.id) === p.block);
+      if (!b) continue;
+      if (p.kind === 'single_word_line') {
+        // A heading the balance could not mend gives way to the card's title; the title itself stays.
+        if (b.id === 'h' && b.text !== title) b.text = title;
+      } else if (b.kind === 'text' && p.kind === 'overflow') {
+        const role = typeRoleOf(b.style, layout);
+        const short = shortenToFit(b.text, (t) => fitText(b.grid, role, t).fits);
+        if (short) b.text = short;
+        else if (b.id === 'h' && b.text !== title) b.text = title;
+        else blocks = blocks.filter((x) => x !== b);
+      } else blocks = blocks.filter((x) => x !== b);
+    }
+  }
+  return blocks;
+}
+
+/** Every card of the proposal, in the outline's order, checked against the slide model and the design system's fit. */
+export function buildCards(rows: OutlineRow[], items: SourceItem[], wording: Wording[], ventureName: string | null, exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): { slides: any[]; problems: string[] } {
+  const slides = rows.map((r, i) => {
+    const card = cardOf(r, items, wording[i] ?? { headline: null, body: null }, ventureName, exclude, visuals);
+    // D1560 (#3807): the run's speaker notes ride on the card; a card with none has none, never a placeholder.
+    return wording[i]?.notes ? { ...card, notes: wording[i].notes } : card;
+  });
+  // A title the balance could not mend is a quality note (the rubric counts it), never an unsound card.
+  return { slides, problems: [...modelProblems(slides, () => null), ...fitProblems(slides.filter((s) => !s.appendix)).filter((p) => p.kind !== 'single_word_line').map((p) => p.message)] };
+}
+
+/**
+ * D897 §9: the story before any card is built: each card's message and the
+ * records it rests on, with their state. Code fills `sources`; a model never
+ * names one.
+ */
+export function planOf(rows: OutlineRow[], items: SourceItem[], exclude: Excluded = NONE): Array<{ card: string; message: string; sources: Array<{ source_key: string; state: string }> }> {
+  return rows.map((r) => ({
+    card: r.card,
+    message: r.message || r.purpose,
+    sources: keysOf(specOf(r.card)!, items, exclude).map((k) => ({ source_key: k, state: items.find((x) => x.source_key === k)?.state ?? 'not_recorded' })),
+  }));
+}
+
+/** What each card was filled from: its slots, how many are recorded, and the slots that are not. */
+export function cardProgress(rows: OutlineRow[], items: SourceItem[], wording: Wording[], exclude: Excluded = NONE): Array<{ n: number; title: string; filled: number; slots: number; missing: string[]; worded: boolean }> {
+  return rows.map((r, i) => {
+    const figures = figuresOf(specOf(r.card)!, items, exclude);
+    return {
+      n: i + 1, title: r.title,
+      filled: figures.filter((f) => f.value != null).length, slots: figures.length,
+      missing: figures.filter((f) => f.value == null).map((f) => f.key),
+      worded: Boolean(wording[i]?.headline || wording[i]?.body),
+    };
+  });
+}
+
+/** The kept indexes as stored: unique, ascending, within the proposal. */
+export function keptIndexes(input: unknown, count: number): number[] {
+  const list = Array.isArray(input) ? input : [];
+  return [...new Set(list.filter((x) => Number.isInteger(x) && x >= 0 && x < count) as number[])].sort((a, b) => a - b);
+}

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Forge · {{ page }}</span>
+    <span style="font-size:11px;color:#615c6e">›</span>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:13px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:12px;font-weight:800;color:{{ deep }}">Forge fills the blanks</span>
+      <span style="width:24px;height:14px;border-radius:999px;background:{{ fill }};position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+    </div>
+    <div style="font-size:10.5px;color:{{ deep }};margin-top:4px;line-height:1.45">Drafts, summarises and flags. Filled fields stay tinted until confirmed.</div>
+  </div>
+
+  <div style="border:1.5px solid #fecaca;background:#fffbfb;border-radius:9px;padding:10px 11px;margin-top:8px">
+    <div style="font-size:11px;font-weight:800;color:#991b1b">Forge never sends, signs or voids</div>
+    <div style="font-size:10.5px;color:#7f1d1d;margin-top:5px;line-height:1.5">Every outbound action is a human click. The timeline records the person, not the model.</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+      <span style="font-size:12px;font-weight:800">{{ modelName }}</span>
+      <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:{{ deep }};background:#fff;border:1px solid {{ edge }};border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span>
+    </div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ modelId }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ modelWhy }}</div>
+    <div style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:8px;padding-top:7px;border-top:1px solid {{ edge }}">{{ price }}</div>
+    <div style="font-size:11px;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;margin-top:5px">{{ est }}</div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">{{ assistLabel }}</div>
+  <div style="display:grid;gap:7px;margin-top:9px">
+    <sc-for list="{{ assists }}" as="a" hint-placeholder-count="4">
+      <div style="border:1px solid #ececf1;border-radius:9px;padding:10px 11px">
+        <div style="font-size:11.5px;font-weight:700;line-height:1.4">{{ a.op }}</div>
+        <div style="font-size:10.5px;font-weight:700;color:{{ deep }};margin-top:6px;font-variant-numeric:tabular-nums">{{ a.cost }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ pct }}%;background:{{ fill }};border-radius:999px"></div></div>
+    <sc-if value="{{ margin }}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#615c6e">Axal VC margin</span>
+        <span style="font-size:12.5px;font-weight:800;color:#047857;font-variant-numeric:tabular-nums">{{ margin }}</span>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="{{ scopeStyle }}">{{ scopeChip }}</span>
+    <div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5">{{ scopeNote }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tier&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;subsidiary&quot;,&quot;super&quot;],&quot;default&quot;:&quot;subsidiary&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;page&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Contracts&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sup = this.props.tier === 'super';
+    const A = sup ? { deep:'#881337', fill:'#9f1239', tint:'#fff5f7', edge:'#fbcfe0' }
+                  : { deep:'#334155', fill:'#475569', tint:'#f6f8fa', edge:'#cbd5e1' };
+    const page = this.props.page || 'Contracts';
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+
+    // ══ The rail's contents follow the SURFACE it is mounted on, not only the tier. Keying
+    // on page as well as tier is what stops a help desk advertising contract assists. ══
+    const SURFACE = {
+      Contracts: {
+        label:'Contract assists',
+        scope:'contracts',
+        sub:{ name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
+              why:'Cover notes and merge-field drafting where tone is the deliverable.',
+              price:'$0.351 / M in · $0.555 / M out', tin:9200, tout:1360, pin:0.351, pout:0.555, spend:2.40,
+              assists:[{ op:'Draft a cover note for this SAFE', f:0.5 },
+                       { op:'Which contracts expire in 60 days, and what first', f:0.3 },
+                       { op:'Summarise what changed in the updated template', f:0.9 },
+                       { op:'Flag unusual terms in this countersigned draft', f:1.2 }] },
+        sup:{ name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+              why:'Clause-level diffing and unusual-term detection — the work with the least room for error.',
+              price:'$1.320 / M in · $3.960 / M out', tin:24800, tout:1840, pin:1.320, pout:3.960, spend:11.20,
+              assists:[{ op:'Summarise what changed between v2 and v3', f:1 },
+                       { op:'Draft a changelog for the pending publish', f:0.4 },
+                       { op:'Flag unusual terms in a countersigned draft', f:1.2 },
+                       { op:'Which doc types have stale adoption', f:0.3 }] }
+      },
+      Support: {
+        label:'Support assists',
+        scope:'tickets',
+        sub:{ name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro',
+              why:'Near-free triage, which is what makes summarising every open ticket viable.',
+              price:'$0.017 / M in · $0.112 / M out', tin:7400, tout:980, pin:0.017, pout:0.112, spend:0.90,
+              assists:[{ op:'Triage the open queue and group by cause', f:1 },
+                       { op:'Draft replies for the billing tickets', f:0.8 },
+                       { op:'Which open tickets mention billing', f:0.3 },
+                       { op:'Summarise this thread before I reply', f:0.5 }] },
+        sup:{ name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+              why:'Synthesis across three queues and every tenant in one read.',
+              price:'$0.293 / M in · $2.253 / M out', tin:16800, tout:1240, pin:0.293, pout:2.253, spend:4.60,
+              assists:[{ op:'Which tenants are trending past SLA', f:1 },
+                       { op:'Cluster licensee tickets by root cause', f:0.9 },
+                       { op:'Draft an escalation note to engineering', f:0.5 },
+                       { op:'Summarise sync failures this week', f:0.3 }] }
+      },
+      Security: {
+        label:'Security assists',
+        scope:'security events',
+        sub:{ name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro',
+              why:'Cheap enough to summarise every anomaly rather than only the loud ones.',
+              price:'$0.017 / M in · $0.112 / M out', tin:7400, tout:980, pin:0.017, pout:0.112, spend:0.60,
+              assists:[{ op:'Summarise this week\u2019s auth anomalies', f:1 }] },
+        sup:{ name:'Llama Guard 3 8B', id:'@cf/meta/llama-guard-3-8b',
+              why:'The screening model itself — here it is the subject rather than the filter.',
+              price:'$0.045 / M in · $0.384 / M out', tin:11200, tout:640, pin:0.045, pout:0.384, spend:1.10,
+              assists:[{ op:'Cluster guardrail hits by what tripped them', f:1 },
+                       { op:'Is this login pattern credential stuffing', f:0.8 },
+                       { op:'Draft a DSR acknowledgement', f:0.4 },
+                       { op:'Which sessions to revoke first', f:0.5 }] }
+      },
+      Record: {
+        label:'Record assists',
+        scope:'this contract',
+        sub:{ name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
+              why:'Reads one envelope closely — its terms, its timeline, and what is outstanding.',
+              price:'$0.351 / M in · $0.555 / M out', tin:9200, tout:1360, pin:0.351, pout:0.555, spend:2.40,
+              assists:[{ op:'Summarise what is outstanding on this envelope', f:0.6 },
+                       { op:'Draft a reminder to the two unsigned parties', f:0.4 },
+                       { op:'Compare the signed terms to the accepted offer', f:1 }] },
+        sup:{ name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+              why:'Clause-level reading where a missed term is the expensive kind of error.',
+              price:'$1.320 / M in · $3.960 / M out', tin:24800, tout:1840, pin:1.320, pout:3.960, spend:11.20,
+              assists:[{ op:'Flag unusual terms against the master version', f:1 },
+                       { op:'Compare the signed terms to the accepted offer', f:0.8 }] }
+      }
+    };
+    const S = SURFACE[page] || SURFACE.Contracts;
+    const M = sup ? S.sup : S.sub;
+    const cost = run(M.tin, M.tout, M.pin, M.pout);
+    const PLAN = sup ? 400 : 80;
+    const MARGIN = 0.31;
+    const ASSISTS = M.assists;
+
+    return {
+      page, deep:A.deep, fill:A.fill, tint:A.tint, edge:A.edge,
+      modelName:M.name, modelId:M.id, modelWhy:M.why, price:M.price,
+      est:'≈ ' + c4(cost) + ' per run',
+      assists:ASSISTS.map(a => ({ op:a.op, cost:'≈ ' + c4(cost * a.f) })),
+      spend:'$' + M.spend.toFixed(2), plan:'$' + PLAN.toFixed(2),
+      pct:String(Math.round(M.spend / PLAN * 100)),
+      margin: sup ? '$' + (M.spend * MARGIN).toFixed(2) : null,
+      scopeChip: sup ? 'Cross-tenant' : 'Axal VC France only',
+      scopeStyle: sup
+        ? 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#881337;background:#fff5f7;border:1px solid #fbcfe0;border-radius:4px;padding:3px 7px'
+        : 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px',
+      assistLabel: S.label,
+      scopeNote: sup
+        ? 'Answers may span every subsidiary\u2019s ' + S.scope + '. Anything surfaced about a named tenant is written to the audit log.'
+        : 'Forge reads your territory\u2019s ' + S.scope + ' only. Asked about another subsidiary\u2019s it declines and says there is no cross-tenant read behind it to decline from.'
+    };
+  }
+}
+</script>
+</body>
+</html>

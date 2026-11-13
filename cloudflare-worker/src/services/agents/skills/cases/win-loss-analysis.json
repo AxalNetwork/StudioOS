@@ -1,0 +1,40 @@
+{
+  "skill": "win-loss-analysis",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "deals": [
+          {
+            "name": "Riverside Clinics",
+            "outcome": "lost",
+            "competitor": "Dentrix",
+            "reason": "Price"
+          },
+          {
+            "name": "Northgate Dental",
+            "outcome": "won",
+            "reason": "Multi-site view"
+          }
+        ]
+      },
+      "research.library": [
+        {
+          "title": "Dentrix pricing 2026"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Price",
+      "Multi-site view"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "always win"
+    ]
+  }
+}

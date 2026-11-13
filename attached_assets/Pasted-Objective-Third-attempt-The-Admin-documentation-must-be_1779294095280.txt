@@ -1,0 +1,58 @@
+Objective
+  Third attempt. The Admin documentation must be invisible to non-
+  admin users in every code path. Previous PRs have apparently not
+  closed this — verify, then close.
+
+Audit + fix
+  1. frontend/src/pages/docs/sections/index.js
+     Find any section with key starting with 'admin/'.
+     For each, add: roles: ['admin']
+     Examples:
+       - admin/admin-console
+       - admin/monitoring
+       - admin/user-analytics
+       - admin/due-diligence
+       - admin/partner-invitations
+       - admin/trust-center-oversight
+       - admin/infrastructure
+       - admin/contracts
+       - admin/integration-keys
+       - admin/audit-log
+
+  2. frontend/src/pages/docs/DocsLayout.jsx
+     Filter rail by user.role. Confirm the filter actually applies.
+     Test scenarios:
+       - logged-out user                  → no admin entries
+       - logged-in founder                → no admin entries
+       - logged-in admin                  → admin entries visible
+
+  3. Direct-URL guard
+     /docs/admin/* routes wrapped to 404 (not 403) for non-admin.
+
+  4. Search index
+     Confirm the client-side Fuse.js index excludes admin content
+     for non-admin users.
+
+  5. Audit checklist (commit DOCS_VISIBILITY_AUDIT.md):
+       [ ] index.js: every admin section has roles: ['admin']
+       [ ] DocsLayout filters by role on initial render
+       [ ] Direct URL /docs/admin/anything as non-admin → 404
+       [ ] Search across docs as non-admin returns 0 admin results
+       [ ] Header search bar same
+       [ ] Internal cross-links from non-admin sections never link
+            into admin sections
+
+  6. End-to-end test
+     frontend/tests/e2e/docs-admin-visibility.spec.ts:
+       - login as founder; visit /docs; assert "Admin" not in rail
+       - login as admin; visit /docs; assert "Admin" present
+       - login as founder; visit /docs/admin/admin-console;
+         assert 404 page
+       - login as anonymous; visit /docs/admin/admin-console;
+         assert 404 page
+
+Acceptance
+  - DOCS_VISIBILITY_AUDIT.md committed with every box ticked.
+  - e2e test green in CI.
+  - Manual spot-check from a founder account confirms admin docs
+    are gone.

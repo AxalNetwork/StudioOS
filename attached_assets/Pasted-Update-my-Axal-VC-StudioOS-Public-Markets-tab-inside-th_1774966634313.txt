@@ -1,0 +1,41 @@
+Update my Axal VC StudioOS "Public Markets" tab inside the Market Intelligence section.
+
+Current layout (exactly as in the latest screenshot):
+- Light background
+- Header: "Market Intelligence" + subtitle "Signal-to-Action pipeline for competitive advantage"
+- Top tabs: Market Pulse (gray), Public Markets (active, purple #7e22ce), Private Rounds, High Conviction, Studio Benchmarks (gray)
+- Two summary boxes side-by-side:
+  • Exit Environment: "Improving. Strategic M&A picking up in AI/Infrastructure."
+  • Interest Rate Impact: "Moderate — rates stabilized, favoring growth equity."
+- Below: Clean responsive table with headers: Sector | Avg P/E | YoY Growth | IPO Window | Trend
+- Table styling (match 100%):
+  - White background with subtle borders
+  - Sector names bold
+  - Avg P/E and YoY Growth in black/purple numbers
+  - IPO Window uses colored rounded badges: green="Open", yellow="Selective", orange="Cautious", blue="Opening"
+  - Trend column uses colored arrows: green ↑, gray —, red ↓
+
+Keep these 6 existing table rows EXACTLY as they appear (with their current numbers and badges):
+1. AI / ML → 45.2x → 34.5% → Open (green) → ↑ (green)
+2. SaaS → 32.1x → 18.2% → Selective (yellow) → —
+3. Fintech → 28.7x → 12.4% → Cautious (orange) → —
+4. Blockchain → 38.5x → 28.1% → Opening (blue) → ↑ (green)
+5. Biotech → 22.3x → 8.6% → Selective (yellow) → ↓ (red)
+6. Climate Tech → 30.4x → 22.3% → Open (green) → ↑ (green)
+
+Keep the two top summary boxes unchanged.
+
+Now add these 3 new rows at the bottom of the table (make the whole table responsive and scrollable on mobile if needed). Use the exact same styling.
+
+New rows:
+7. Cybersecurity → 41.8x → 25.6% → Open (green) → ↑ (green)
+8. Semiconductors → 52.3x → 41.2% → Open (green) → ↑ (green)
+9. Enterprise AI Software → 38.9x → 29.4% → Selective (yellow) → ↑ (green)
+
+Requirements:
+- Match the exact font weights, colors, badge styles, and arrow icons of the current table.
+- Keep the two summary boxes exactly as they are.
+- Return ONLY the updated React component / HTML + Tailwind code for the full Public Markets tab (or the table component if it’s one file). Include variables/constants so I can easily edit numbers later.
+- Make the table production-ready and visually identical to the screenshot.
+
+This should turn Public Markets into a complete 9-row live market overview that flows perfectly with the rest of the dashboard.

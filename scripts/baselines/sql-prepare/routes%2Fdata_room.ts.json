@@ -1,0 +1,4 @@
+{
+  "scope.sql @ routes/data_room.ts": 1,
+  "sets.join(', ') @ routes/data_room.ts": 2
+}

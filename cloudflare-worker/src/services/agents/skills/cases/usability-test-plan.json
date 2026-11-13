@@ -1,0 +1,34 @@
+{
+  "skill": "usability-test-plan",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "item": "New booking flow"
+      },
+      "validate.records": {
+        "segments": [
+          "Front-desk staff"
+        ],
+        "problems": [
+          {
+            "text": "Double bookings at the front desk",
+            "interviews": 4
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "New booking flow",
+      "Front-desk staff"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "recruit 100"
+    ]
+  }
+}

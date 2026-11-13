@@ -1,0 +1,150 @@
+
+Select alert #200
+Unused global variable
+Note
+#200 opened 3 days ago • Detected by CodeQL in backend/.../routes/settings.py :1135
+main
+
+Select alert #112
+Empty except
+Note
+#112 opened 5 days ago • Detected by CodeQL in backend/.../services/watchlist.py :84
+main
+
+Select alert #110
+Empty except
+Note
+#110 opened 5 days ago • Detected by CodeQL in backend/.../routes/trust.py :342
+main
+
+Select alert #109
+Empty except
+Note
+#109 opened 5 days ago • Detected by CodeQL in backend/.../routes/tickets.py :116
+main
+
+Select alert #108
+Empty except
+Note
+#108 opened 5 days ago • Detected by CodeQL in backend/.../routes/settings.py :705
+main
+
+Select alert #107
+Empty except
+Note
+#107 opened 5 days ago • Detected by CodeQL in backend/.../routes/settings.py :435
+main
+
+Select alert #106
+Empty except
+Note
+#106 opened 5 days ago • Detected by CodeQL in backend/.../routes/scoring.py :218
+main
+
+Select alert #105
+Empty except
+Note
+#105 opened 5 days ago • Detected by CodeQL in backend/.../services/portfolio_health.py :527
+main
+
+Select alert #104
+Empty except
+Note
+#104 opened 5 days ago • Detected by CodeQL in backend/.../routes/pipeline_votes.py :348
+main
+
+Select alert #103
+Empty except
+Note
+#103 opened 5 days ago • Detected by CodeQL in backend/.../routes/legal.py :2528
+main
+
+Select alert #102
+Empty except
+Note
+#102 opened 5 days ago • Detected by CodeQL in backend/.../routes/legal.py :2477
+main
+
+Select alert #101
+Empty except
+Note
+#101 opened 5 days ago • Detected by CodeQL in backend/.../routes/legal.py :2316
+main
+
+Select alert #100
+Empty except
+Note
+#100 opened 5 days ago • Detected by CodeQL in backend/.../routes/insights.py :502
+main
+
+Select alert #99
+Empty except
+Note
+#99 opened 5 days ago • Detected by CodeQL in backend/.../routes/deals.py :123
+main
+
+Select alert #98
+Empty except
+Note
+#98 opened 5 days ago • Detected by CodeQL in backend/.../services/compliance_reminders.py :207
+main
+
+Select alert #97
+Empty except
+Note
+#97 opened 5 days ago • Detected by CodeQL in backend/.../routes/capital.py :324
+main
+
+Select alert #96
+Empty except
+Note
+#96 opened 5 days ago • Detected by CodeQL in backend/.../routes/capital.py :230
+main
+
+Select alert #95
+Empty except
+Note
+#95 opened 5 days ago • Detected by CodeQL in backend/.../routes/calendar.py :409
+main
+
+Select alert #94
+Empty except
+Note
+#94 opened 5 days ago • Detected by CodeQL in backend/.../routes/auth.py :299
+main
+
+Select alert #93
+Empty except
+Note
+#93 opened 5 days ago • Detected by CodeQL in backend/.../routes/admin.py :297
+main
+
+Select alert #92
+Empty except
+Note
+#92 opened 5 days ago • Detected by CodeQL in backend/.../routes/admin.py :283
+main
+
+Select alert #89
+Cyclic import
+Note
+#89 opened 5 days ago • Detected by CodeQL in backend/.../routes/settings.py :27
+main
+
+Select alert #88
+Cyclic import
+Note
+#88 opened 5 days ago • Detected by CodeQL in backend/.../routes/auth.py :563
+main
+
+Select alert #47
+Use of a print statement at module level
+Note
+#47 opened 5 days ago • Detected by CodeQL in backend/app/database.py :7
+main
+
+Select alert #45
+Unused global variable
+Note
+#45 opened 5 days ago • Detected by CodeQL in backend/.../routes/settings.py :161
+main

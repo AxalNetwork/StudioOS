@@ -1,0 +1,536 @@
+/**
+ * frontend/src/workspaces/shellConfig.js — the four workspace shells, as data.
+ *
+ * WHAT THIS IS. Every route the Founder, Investor/LP, Advisor and
+ * Partner/Operator canvases propose, in one place, in canvas order. The
+ * sidebar reads it, the router reads it, and a guard test asserts that every
+ * zone named here is actually registered in App.jsx — so a row can never
+ * advertise a door that does not open.
+ *
+ * WHY IT IS DATA AND NOT COMPONENTS. Each shell is the same shape: eight
+ * sidebar rows, of which five or six are buckets, and each bucket is a short
+ * list of zones. The canvases differ in their content, not their structure.
+ * Encoding the structure once means adding a zone is a line here plus a route,
+ * rather than a new tab bar per bucket — which is how the app ended up with
+ * FounderWorkspaceTabs, PartnerWorkspaceTabs, WorkspaceTabs and three bespoke
+ * investor workspaces all solving the same problem four ways.
+ *
+ * THE ARCHETYPES are the canvases' own taxonomy and they are load-bearing, not
+ * decoration: a zone's archetype says what kind of surface it is. The badge
+ * colours follow the per-bucket canvases; the two Detail Layer canvases draw
+ * a different palette (Canvas I and II disagree with each other too), and the
+ * tests pin this one, so do not repaint from the Detail Layer files (D400).
+ *
+ * WHAT IS DELIBERATELY ABSENT. Spin-Out Lab keeps its own route tree and is
+ * referenced only as a sidebar row target — no Lab route is defined, renamed
+ * or re-bucketed here. Axal VC Fund is the same: one row, one target, no
+ * zones. Both are read-only as far as this file is concerned.
+ *
+ * ROUTE OWNERSHIP. `/network/*` and `/research/*` are shared paths whose zone
+ * list differs per role — the same arrangement `/network` already has today,
+ * where one route role-branches its element. Every other bucket prefix belongs
+ * to exactly one shell.
+ */
+
+// The six archetypes, with the per-bucket canvases' badge palette:
+// [background, ink, border]. Do not re-derive these per surface.
+export const ARCHETYPE = {
+  WORK_BOARD:   { label: 'WORK BOARD',   colors: ['#eff6ff', '#1d4ed8', '#dbeafe'] },
+  LEDGER:       { label: 'LEDGER',       colors: ['#f5f5ff', '#3730a3', '#c7d2fe'] },
+  COLLECTION:   { label: 'COLLECTION',   colors: ['#f0fdf6', '#065f46', '#a7f3d0'] },
+  FEED:         { label: 'FEED',         colors: ['#fffbeb', '#92400e', '#fde68a'] },
+  MATCH_ENGINE: { label: 'MATCH ENGINE', colors: ['#fdf4ff', '#86198f', '#f5d0fe'] },
+  ANALYTICS:    { label: 'ANALYTICS',    colors: ['#f0fdff', '#0e7490', '#a5edf5'] },
+};
+
+// Per-role accent. Cyan (#0e7490) is NOT in this map and never will be: it is
+// reserved system-wide for founder-sourced objects — the seam — so a product
+// accent can never be mistaken for provenance. ANALYTICS owns that hue as an
+// archetype badge only, which is why that badge never carries a seam legend.
+//
+// `deepDark`/`tintDark` are the same accent on a dark ground, and they are not
+// a lightness flip of the light pair. The Investor canvas states the reason:
+// "Indigo lifts to indigo-400 on dark. Violet-600 and indigo-600 are
+// indistinguishable at low luminance, so the accent has to move for the two
+// licences to stay legible apart." Each is the 400 weight of its own hue, which
+// is what `ui/workerRail.css` and every investor page's `.dark` block already
+// use independently — this table is now the single place they come from.
+export const ACCENT = {
+  founder:  { ink: '#7c3aed', deep: '#6d28d9', tint: '#f5f3ff', border: '#ddd6fe', deepDark: '#a78bfa', tintDark: '#241d38' },
+  investor: { ink: '#4f46e5', deep: '#4338ca', tint: '#eef2ff', border: '#c7d2fe', deepDark: '#818cf8', tintDark: '#211f3d' },
+  advisor:  { ink: '#047857', deep: '#065f46', tint: '#f0fdf6', border: '#a7f3d0', deepDark: '#34d399', tintDark: '#0d2b22' },
+  partner:  { ink: '#b45309', deep: '#92400e', tint: '#fffbf2', border: '#fde68a', deepDark: '#fbbf24', tintDark: '#2b210d' },
+  // HQ. Oxblood, per every Super canvas ("oxblood · owns the system, not the
+  // paperwork"). Not a fifth licence — the franchisor's tier above the four —
+  // and the accent has to sit apart from founder violet and investor indigo
+  // for the same reason those two sit apart from each other.
+  super_admin: { ink: '#881337', deep: '#9f1239', tint: '#fff5f7', border: '#f9c8d2', deepDark: '#fb7185', tintDark: '#2c1018' },
+  // The subsidiary tier (D107). Steel `#334155`, per the Admin · Subsidiary
+  // canvas. `deepDark` is slate-400 — the 400 weight of steel's OWN hue, the
+  // way every entry above takes its dark-ground pair, and not a lightness
+  // flip of the ink: a branch admin on a dark ground should still read
+  // "steel", which is the one thing that tells their chrome apart from HQ's
+  // oxblood at a glance.
+  branch_admin: { ink: '#334155', deep: '#1e293b', tint: '#f8fafc', border: '#cbd5e1', deepDark: '#94a3b8', tintDark: '#151a22' },
+  // D286 — the plain Admin shell, which today is the shell on accounts HQ
+  // holds directly (canvas S20). Steel, the same pair as `branch_admin`, on
+  // purpose: S20 is the subsidiary shell's eight rows pointed at HQ's
+  // consoles, and every plain admin is HQ-held until a branch is deployed.
+  // Not a new shell key — `shellRoleFor` still answers `'admin'` — because a
+  // key that named "held" would have to be retired the day a branch goes
+  // live, and the accent is the only thing the shell needed from this table.
+  admin: { ink: '#334155', deep: '#1e293b', tint: '#f8fafc', border: '#cbd5e1', deepDark: '#94a3b8', tintDark: '#151a22' },
+};
+
+/**
+ * The class a licence's inline links wear. Tailwind needs the class name whole
+ * at build time, so this cannot be derived from `ACCENT`'s hex values — but it
+ * belongs beside them rather than copied into each workspace, which is where it
+ * lived until a second caller needed it.
+ */
+export const accentLinkClass = (role) => ({
+  founder: 'text-axal-violet', investor: 'text-indigo-700',
+  advisor: 'text-emerald-700', partner: 'text-amber-700',
+}[role] || 'text-axal-violet');
+
+/**
+ * The class a licence's SELECTED filter chip wears — the canvas's `.fil.on`,
+ * which is the same tint/border/ink triple as `ACCENT` above and, like
+ * `accentLinkClass`, has to be written out whole because Tailwind reads class
+ * names at build time and cannot see a hex value assembled at runtime.
+ *
+ * An unselected chip is not in here on purpose: it is grey in all four
+ * canvases, so it lives in `ZoneToolbar` with the rest of the neutral
+ * treatment and only the selected state varies by licence.
+ */
+export const accentChipClass = (role) => ({
+  founder: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  investor: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
+  advisor: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  partner: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+}[role] || 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300');
+
+export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };
+
+const A = ARCHETYPE;
+
+/**
+ * D4841 (#4841): the Offers zones grouped by commercial purpose (Offers V2
+ * canvas, OF-01). Display only: `ZoneNav` draws the same pills under these
+ * labels and the readiness root draws one preview per group. The zones, their
+ * order in the bucket and their URLs are unchanged. No other bucket has groups.
+ */
+export const OFFER_GROUPS = [
+  { key: 'sell', label: 'Sell', zones: ['catalog', 'perk-deals'] },
+  { key: 'prove', label: 'Prove', zones: ['proof', 'visibility'] },
+  { key: 'target', label: 'Target', zones: ['audience-fit'] },
+  { key: 'test', label: 'Test', zones: ['testing'] },
+];
+
+/**
+ * Zones shared by more than one shell.
+ *
+ * `/network/*` is identical in all four: a relationship book, a double-opt-in
+ * introduction pipeline, and an organizations roll-up. The three canvases that
+ * specify it (Investor, Advisor, Partner) agree on the zone names, the
+ * archetypes and the consent-gate semantics, so it is defined once.
+ */
+const NETWORK_ZONES = [
+  { slug: 'relationships', label: 'Relationships', archetype: A.MATCH_ENGINE },
+  { slug: 'introductions', label: 'Introductions', archetype: A.FEED },
+  { slug: 'organizations', label: 'Organizations', archetype: A.COLLECTION },
+];
+
+/**
+ * `/research/*` is shared but its zone list is genuinely per-role — each
+ * license researches a different world. Ask and Library are common to all four
+ * and are one system in every canvas: what is indexed in Library is exactly
+ * what Ask can answer over.
+ *
+ * `geographies` (D546, #1080) sits beside Markets in every list: the countries
+ * the directories place companies and funds in, read by every licence that
+ * reads Markets.
+ *
+ * NOTE on `markets`: the Partner canvas named this zone `market` (singular)
+ * while Founder, Investor and Advisor all use `markets`. One path, one
+ * spelling — normalised to the plural the other three already share.
+ */
+const RESEARCH_ZONES = {
+  founder: [
+    // D5157 (#5157): My Research, the Research Projects, first after the
+    // Overview as the Research v2 canvas orders it. Its routes are in
+    // `routes/researchProjects.jsx`.
+    { slug: 'projects', label: 'My Research', archetype: A.COLLECTION },
+    { slug: 'ask', label: 'Ask', archetype: A.FEED },
+    { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
+    { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
+    { slug: 'funds', label: 'Funds', archetype: A.MATCH_ENGINE },
+    { slug: 'library', label: 'Library', archetype: A.COLLECTION },
+  ],
+  investor: [
+    { slug: 'ask', label: 'Ask', archetype: A.FEED },
+    { slug: 'diligence', label: 'Diligence', archetype: A.COLLECTION },
+    { slug: 'benchmarking', label: 'Benchmarking', archetype: A.ANALYTICS },
+    { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
+    { slug: 'library', label: 'Library', archetype: A.COLLECTION },
+  ],
+  advisor: [
+    { slug: 'ask', label: 'Ask', archetype: A.FEED },
+    { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
+    { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
+    { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
+    { slug: 'library', label: 'Library', archetype: A.COLLECTION },
+  ],
+  partner: [
+    { slug: 'ask', label: 'Ask', archetype: A.FEED },
+    { slug: 'client-prep', label: 'Client prep', archetype: A.WORK_BOARD },
+    { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
+    { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
+    { slug: 'library', label: 'Library', archetype: A.COLLECTION },
+  ],
+};
+
+/**
+ * SHELLS — eight rows per role, in canvas order.
+ *
+ * A row is either a BUCKET (has `zones`, owns a route prefix) or a LINK (one
+ * destination, no zones — Home, Spin-Out Lab, Axal VC Fund, Trust, Settings).
+ *
+ * `legacy` on a zone names the live route that answers this concept today, so
+ * the router can redirect the old URL instead of stranding every inbound link
+ * in the app. A zone with no `legacy` is new ground.
+ */
+export const SHELLS = {
+  founder: {
+    accent: 'founder',
+    rows: [
+      { kind: 'link', label: 'Home', to: '/studio' },
+      // Spin-Out Lab keeps its own tree. One row, one target, nothing below it.
+      { kind: 'link', label: 'Spin-Out Lab', to: '/spinout-lab', untouched: true },
+      // D704 (#1666, decision 3): Validate keeps its row, prefix and tagline, with
+      // no zones. Its pages are the cycle's module pages (`CycleRoute`), and the
+      // prefix still drives full bleed and `bucketForPath`.
+      { kind: 'bucket', label: 'Validate', prefix: '/validate', tagline: 'Prove someone wants this',
+        zones: [] },
+      { kind: 'bucket', label: 'Build', prefix: '/build', tagline: 'Operate the company this week',
+        zones: [
+          { slug: 'this-week', label: 'This week', archetype: A.WORK_BOARD },
+          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD },
+          { slug: 'roadmap', label: 'Roadmap', archetype: A.WORK_BOARD },
+          { slug: 'cadence', label: 'Cadence', archetype: A.FEED },
+          { slug: 'kpi', label: 'KPI entry', archetype: A.LEDGER, legacy: '/build/metrics' },
+        ] },
+      { kind: 'bucket', label: 'Raise', prefix: '/raise', tagline: 'Get capital, stay legal',
+        zones: [
+          { slug: 'status', label: 'Status', archetype: A.ANALYTICS },
+          { slug: 'pitch', label: 'Pitch', archetype: A.COLLECTION },
+          { slug: 'capital', label: 'Capital', archetype: A.LEDGER },
+          { slug: 'capital-match', label: 'Investor match', archetype: A.MATCH_ENGINE, legacy: '/grow/capital-match' },
+          { slug: 'legal', label: 'Legal', archetype: A.COLLECTION, legacy: '/raise/legal-engine' },
+          { slug: 'data-room', label: 'Data room', archetype: A.COLLECTION },
+          // Liquidity stood here (`legacy: '/liquidity'`); the owner removed
+          // Liquidity & Exits on 2026-10-20.
+        ] },
+      { kind: 'bucket', label: 'Grow', prefix: '/grow', tagline: 'Get customers, people, reach',
+        zones: [
+          { slug: 'focus', label: 'Focus', archetype: A.ANALYTICS },
+          { slug: 'talent', label: 'Talent', archetype: A.MATCH_ENGINE, legacy: '/build/team' },
+          { slug: 'customers', label: 'Customers', archetype: A.WORK_BOARD },
+          { slug: 'partnerships', label: 'Partnerships', archetype: A.WORK_BOARD },
+          { slug: 'brand', label: 'Brand', archetype: A.COLLECTION },
+          { slug: 'launch', label: 'Launch', archetype: A.FEED },
+        ] },
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
+        zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep on a market or company',
+        zones: RESEARCH_ZONES.founder },
+    ],
+  },
+
+  investor: {
+    accent: 'investor',
+    rows: [
+      { kind: 'link', label: 'Home', to: '/studio' },
+      { kind: 'bucket', label: 'Deals', prefix: '/deals', tagline: 'Find and close investments',
+        zones: [
+          // D1243 (#3256): the Pipeline zone is retired. Deal flow's table at
+          // `/deals?view=table` does its job, and `/deals/pipeline` forwards
+          // there. `/pipeline` stays role-forked in App.jsx: only an
+          // investor's forwards; the partner's bucket root and the founder's
+          // and an admin's board are untouched.
+          { slug: 'screening', label: 'Screening', archetype: A.ANALYTICS, legacy: '/pipeline/screening' },
+          { slug: 'commit', label: 'Commit', archetype: A.LEDGER, legacy: '/pipeline/commit' },
+          // The route said "transactions"; InvestorDealsWorkspace's own nav has
+          // always said "Closing". The component wins — it is what renders.
+          { slug: 'closing', label: 'Closing', archetype: A.COLLECTION, legacy: '/pipeline/transactions' },
+        ] },
+      { kind: 'bucket', label: 'Portfolio', prefix: '/portfolio', tagline: 'Know how my investments are doing',
+        zones: [
+          // Three names still point at two pages — "Positions" (canvas),
+          // "Health" (route) and "Cap Table" (the generic tab bar) — and
+          // settling that vocabulary is a content decision. What is settled:
+          // `/portfolio` is the OVERVIEW, `/portfolio/positions` is the book,
+          // and `/portfolio/health` is the overview's legacy alias. So
+          // `positions` carries no `legacy` — it used to name
+          // `/portfolio/health`, which is the overview, not this zone.
+          { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
+          // D1056 (#2427): the canvas names this zone Reports; the address stays.
+          { slug: 'updates', label: 'Reports', archetype: A.FEED },
+          { slug: 'value-add', label: 'Value-add', archetype: A.FEED },
+        ] },
+      // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on
+      // below it, and not touched by this migration.
+      { kind: 'link', label: 'Axal VC Fund', to: '/spinout-lab/investor-workspace', untouched: true },
+      // PLURAL, and deliberately. This bucket was declared at `/fund`, which
+      // documentation/architecture/ROUTE_MAP.md rules out: singular and plural
+      // route correctly but sit one letter apart, so a misread lands somewhere
+      // real. That stopped being hypothetical once `/fund/accounting` and
+      // `/funds/accounting` were both live and rendered different components.
+      //
+      // The zones are the fund OVERVIEW; `/funds/*` held the operations tool
+      // (Fund Ops, retired by D1160: an admin's `/funds` now forwards to
+      // `/admin/fund-admin`) and kept it — less
+      // its Capital Calls tab, which D371 retired: `/funds/capital-calls` now
+      // redirects to the `calls` zone, so that zone's `legacy` is a route
+      // App.jsx really does send here, as `legacyRedirects` reports. The
+      // two are not rivals. `accounting` is `ledger` here — the page's own
+      // section heading. Fund Ops' Accounting (`/funds/accounting`) and LP
+      // Reporting (`/lp-reports`) tabs were removed on the owner's instruction
+      // (2026-10-20), so neither zone names a legacy route any more.
+      { kind: 'bucket', label: 'Fund', prefix: '/funds', tagline: 'Run my fund',
+        requiredInvestorTier: 'institutional',
+        zones: [
+          { slug: 'lps', label: 'LPs', archetype: A.COLLECTION },
+          { slug: 'calls', label: 'Calls', archetype: A.LEDGER, legacy: '/funds/capital-calls' },
+          { slug: 'ledger', label: 'Accounting', archetype: A.LEDGER },
+          { slug: 'reporting', label: 'Reporting', archetype: A.COLLECTION },
+        ] },
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
+        zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep before money moves',
+        zones: RESEARCH_ZONES.investor },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
+      { kind: 'link', label: 'Firm Settings', to: '/account/portfolio/settings' },
+    ],
+  },
+
+  advisor: {
+    accent: 'advisor',
+    // The leanest shell by design: no tier gating, no locked row, nothing to
+    // upsell. Eight rows — the canvas said seven and listed eight once Cohorts
+    // was reconciled against its own depth files.
+    rows: [
+      { kind: 'link', label: 'Home', to: '/studio' },
+      { kind: 'bucket', label: 'Practice', prefix: '/practice', tagline: 'Run my advisory business',
+        zones: [
+          // THREE OF THESE FIVE ADVERTISED THE WRONG PAGE TYPE, and the canvas
+          // has said so since it was drawn. `Advisor Detail · Practice.dc.html`
+          // tags each artboard in its own header and repeats the set in
+          // `setIndex`, and the two agree: Opportunities FEED, Engagements WORK
+          // BOARD, Delivery COLLECTION, Sessions FEED, Earnings LEDGER. This
+          // list said MATCH ENGINE, WORK BOARD, WORK BOARD, WORK BOARD, LEDGER.
+          //
+          // It went unnoticed because the archetype is only read by ZoneNav and
+          // the badge — nothing breaks, the nav just names the wrong kind of
+          // page — and because `investor_shell_canvas.test.mjs` pins the
+          // investor shell to its canvases while the advisor shell had no
+          // equivalent. `advisor_shell_canvas.test.mjs` is that equivalent, and
+          // it reads the canvas rather than remembering it.
+          { slug: 'opportunities', label: 'Opportunities', archetype: A.FEED, legacy: '/advisor/advisory/opportunities' },
+          { slug: 'engagements', label: 'Engagements', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/engagements' },
+          { slug: 'delivery', label: 'Delivery', archetype: A.COLLECTION, legacy: '/advisor/advisory/delivery' },
+          { slug: 'sessions', label: 'Sessions', archetype: A.FEED },
+          { slug: 'earnings', label: 'Earnings', archetype: A.LEDGER },
+        ] },
+      // Cohorts reads Spin-Out Lab data. Read-only: it owns no Lab route and
+      // writes nothing back.
+      { kind: 'bucket', label: 'Cohorts', prefix: '/cohorts', tagline: 'Guide the batch',
+        readsLab: true,
+        // D393 — the five archetypes are the Cohorts canvas's own artboard
+        // headers (C1–C5), and `advisor_cohorts_alignment_d393.test.mjs` reads
+        // them from the canvas so the nav cannot drift from it again. They had
+        // drifted on all five: COLLECTION / WORK BOARD ×3 / ANALYTICS against
+        // the canvas's WORK BOARD / FEED / COLLECTION / FEED / COLLECTION.
+        zones: [
+          { slug: 'founders', label: 'Founders', archetype: A.WORK_BOARD },
+          { slug: 'guidance', label: 'Guidance', archetype: A.FEED },
+          { slug: 'this-week', label: 'This week', archetype: A.COLLECTION },
+          { slug: 'calendar', label: 'Calendar', archetype: A.FEED },
+          { slug: 'outcomes', label: 'Outcomes', archetype: A.COLLECTION },
+        ] },
+      { kind: 'bucket', label: 'Expertise', prefix: '/expertise', tagline: 'Package what I know',
+        zones: [
+          { slug: 'profile', label: 'Profile', archetype: A.COLLECTION },
+          { slug: 'services', label: 'Services', archetype: A.LEDGER },
+          { slug: 'proof', label: 'Proof', archetype: A.COLLECTION },
+          { slug: 'thinking', label: 'Thinking', archetype: A.FEED },
+          { slug: 'visibility', label: 'Visibility', archetype: A.ANALYTICS },
+        ] },
+      // The canvas titles these two ("Work my relationships", "Know more than
+      // the room") and the other three advisor buckets already carry theirs.
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
+        zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Know more than the room',
+        zones: RESEARCH_ZONES.advisor },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
+      { kind: 'link', label: 'Practice Settings', to: '/account/portfolio/settings' },
+    ],
+  },
+
+  partner: {
+    accent: 'partner',
+    // One license, two delivery modes: a firm that ships projects and an
+    // operator who embeds inside the client. Both modes share every page —
+    // which is why there is no tier gate anywhere in this shell.
+    rows: [
+      { kind: 'link', label: 'Home', to: '/studio' },
+      { kind: 'bucket', label: 'Pipeline', prefix: '/pipeline', tagline: 'Win the work',
+        zones: [
+          { slug: 'leads', label: 'Leads', archetype: A.MATCH_ENGINE, legacy: '/needs' },
+          { slug: 'proposals', label: 'Proposals', archetype: A.COLLECTION, legacy: '/partner/operations/engagements' },
+          { slug: 'negotiations', label: 'Negotiations', archetype: A.WORK_BOARD },
+          { slug: 'retainers', label: 'Retainers', archetype: A.LEDGER },
+          { slug: 'analytics', label: 'Analytics', archetype: A.ANALYTICS, legacy: '/partner/insights' },
+        ] },
+      { kind: 'bucket', label: 'Delivery', prefix: '/delivery', tagline: 'Ship the work',
+        zones: [
+          // D395 — `legacy` here matches App.jsx's redirects for the retired
+          // /partner/operations/*: overview went to /company-settings (the
+          // firm profile card, no zone), portfolio to Health.
+          { slug: 'board', label: 'Board', archetype: A.WORK_BOARD },
+          { slug: 'deliverables', label: 'Deliverables', archetype: A.COLLECTION },
+          { slug: 'capacity', label: 'Capacity', archetype: A.ANALYTICS },
+          { slug: 'status-reports', label: 'Status reports', archetype: A.FEED },
+          { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/portfolio' },
+        ] },
+      { kind: 'bucket', label: 'Offers', prefix: '/offers', tagline: 'Package what we sell',
+        groups: OFFER_GROUPS,
+        zones: [
+          { slug: 'catalog', label: 'Catalog', archetype: A.LEDGER, legacy: '/services' },
+          { slug: 'perk-deals', label: 'Perk deals', archetype: A.LEDGER, legacy: '/perks' },
+          { slug: 'visibility', label: 'Visibility', archetype: A.ANALYTICS },
+          { slug: 'proof', label: 'Proof', archetype: A.COLLECTION },
+          { slug: 'audience-fit', label: 'Audience fit', archetype: A.MATCH_ENGINE },
+          // D815 (#2261): the firm's product testing programmes (D812).
+          { slug: 'testing', label: 'Product testing', archetype: A.COLLECTION },
+        ] },
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work our relationships', zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: "Know the client's world", zones: RESEARCH_ZONES.partner },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
+      { kind: 'link', label: 'Firm Settings', to: '/account/portfolio/settings' },
+    ],
+  },
+};
+
+/** Every bucket row for a role, in shell order. */
+export function bucketsFor(role) {
+  const shell = SHELLS[role];
+  if (!shell) return [];
+  return shell.rows.filter((r) => r.kind === 'bucket');
+}
+
+/** The bucket a pathname belongs to, or null. Longest prefix wins. */
+export function bucketForPath(role, pathname) {
+  const path = String(pathname || '');
+  return bucketsFor(role)
+    .filter((b) => path === b.prefix || path.startsWith(`${b.prefix}/`))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0] || null;
+}
+
+/**
+ * The heading a bucket ROOT gives itself.
+ *
+ * Every `Pages · …` and operator canvas draws a bucket root with its TAGLINE as
+ * the h1 — "Win the work" over `/pipeline`, "Package what I know" over
+ * `/expertise` — and the bucket's own noun only in the crumb above it. The
+ * shells have carried `tagline` since they were written and nothing rendered
+ * it, so a root drew `bucket.label` in both places and said "Pipeline" twice.
+ *
+ * The field was always meant to be that h1. Five of the seven partner/advisor
+ * buckets already matched their artboard verbatim, and
+ * `founder_shell_canvas.test.mjs:17` / `investor_shell_canvas.test.mjs:17`
+ * already pin the founder and investor sets to their canvases. The two advisor
+ * strings that did NOT match — Practice was "Win and deliver" against V3's "Run
+ * my advisory business", Expertise "Be findable" against V4's "Package what I
+ * know" — were drift, and are corrected here rather than papered over with a
+ * second field. The two partner buckets that carried no tagline at all now
+ * carry theirs from P6 and P7.
+ *
+ * Falls back to the label, so a bucket added without a tagline degrades to
+ * today's behaviour instead of rendering an empty h1. `workspace_taglines`
+ * fails the build in that case, which is the real fix.
+ */
+export const bucketTitle = (bucket) => bucket?.tagline || bucket?.label;
+
+/**
+ * The zone within a bucket that a pathname resolves to.
+ *
+ * A BUCKET ROOT ANSWERS WITH THE FIRST ZONE; AN UNKNOWN SLUG ANSWERS NULL, AND
+ * THE DIFFERENCE IS THE WHOLE POINT. This used to end `|| bucket.zones[0]` for
+ * both cases, which is right for the root (`/research`, where there is no slug
+ * to match) and quietly wrong for a slug this role's shell does not list.
+ * `ResearchWorkspace` dispatches its BODY on the resolved slug, so an advisor
+ * at `/research/funds` — a zone only the founder shell has — rendered Ask's
+ * body under Ask's heading. Not an error, not an empty state: a different page
+ * wearing the URL of the one that was asked for, across nineteen role/route
+ * combinations.
+ *
+ * `route_role_zone_contract.test.mjs` stops the routes admitting those roles in
+ * the first place. This is the second half of that fix rather than a duplicate
+ * of it: a guard list is hand-maintained, and when the next one drifts the
+ * caller should get `null` and redirect, not silently serve a neighbour.
+ *
+ * Callers already treat null as "no zone" — five of the eight resolve the root
+ * themselves (`isRoot ? null : zoneForPath(...)`), so for them the old fallback
+ * was already unreachable.
+ *
+ * A bucket with no zones answers its root with null, not `undefined` (D704
+ * decision 3): Validate keeps its bucket for full bleed and `bucketForPath`
+ * once its zone pages are retired, and null is the "no zone" every caller reads.
+ */
+export function zoneForPath(bucket, pathname) {
+  if (!bucket) return null;
+  const rest = String(pathname || '').slice(bucket.prefix.length).replace(/^\//, '');
+  if (!rest) return bucket.zones[0] ?? null;
+  return bucket.zones.find((z) => z.slug === rest) || null;
+}
+
+/** `/prefix/slug` for a zone. The one place a workspace URL is composed. */
+export const zonePath = (bucket, zone) => `${bucket.prefix}/${zone.slug}`;
+
+/**
+ * Every canonical route this config claims, as flat strings. The guard test
+ * reads this and asserts each one is registered in App.jsx — a row that
+ * advertises a door the router does not open is the failure this prevents.
+ */
+export function allZoneRoutes(role) {
+  return bucketsFor(role).flatMap((b) => b.zones.map((z) => zonePath(b, z)));
+}
+
+/**
+ * Legacy → canonical, for the redirects that keep old inbound links alive.
+ *
+ * THIS IS NOT A LIST TO MOUNT WHOLESALE, AND THAT IS THE WHOLE WARNING. It is
+ * exported and called by nothing, and on 2026-09-16 every one of its rows
+ * named a path that App.jsx **still mounts as a live route**. Mounting the set
+ * would have replaced each of those pages with a redirect to itself's
+ * successor — which is why D119 moved exactly three paths by hand and left the
+ * rest alone.
+ *
+ * `legacyForked` excludes a path that is NOT retiring because the route forks
+ * on role and only one arm was superseded. `/pipeline` was the case it was
+ * written for, until D1243 retired that zone (its investor arm is a counted
+ * forward in App.jsx now). A `?` in the path excludes a tab deep-link, which
+ * is a query on a page rather than a page of its own.
+ */
+export function legacyRedirects(role) {
+  return bucketsFor(role).flatMap((b) =>
+    b.zones
+      .filter((z) => z.legacy && !z.legacyForked && !z.legacy.includes('?'))
+      .map((z) => ({ from: z.legacy, to: zonePath(b, z) })));
+}
+
+export const ROLES_WITH_SHELL = Object.keys(SHELLS);

@@ -1,0 +1,67 @@
+Objective
+  Frontend calls /api/trust/* but Worker only serves /api/kyc/*.
+  Pairwise NDAs and Sanctions screening have no handlers at all.
+
+Tasks
+  1. Create cloudflare-worker/src/routes/trust.ts
+     Mount: app.route('/api/trust', trust)
+     Endpoints:
+       GET  /summary                    user obligations + completion ring
+       GET  /agreements                 signed + pending NDAs (union with
+                                         esign_envelopes from Prompt C)
+       GET  /nda/required               per-role obligation set
+       POST /nda/sign/:envelope_uuid    redirect to esign sign flow
+       POST /intro/request              {founder_user_id} → 3-way NDA
+                                         issuance (uses pairwise_ndas table)
+       GET  /intro/status?founder=...   NDA status for current pair
+       GET  /pairwise-ndas              list (admin sees all; user sees their own pairs)
+       POST /pairwise-ndas/:id/resend
+       POST /pairwise-ndas/:id/void
+       GET  /sanctions                  admin only; list user screenings
+       POST /sanctions/screen/:user_id  admin trigger
+       POST /kyb/start                  proxies to kyc.ts KYB flow
+     Reuse the existing /api/kyc/* handlers internally for KYC ops;
+     do NOT remove them — add a thin trust.ts façade so old clients
+     still work.
+
+  2. Schema (idempotent CREATE):
+       legal_obligations (per Prompt Y)
+       pairwise_ndas (per Prompt Y)
+       sanctions_screenings (
+         id PK, user_id, provider, run_at, hit INTEGER,
+         severity TEXT, payload_json TEXT, reviewed_by, reviewed_at
+       )
+
+  3. Sanctions screening connector
+       cloudflare-worker/src/services/sanctions.ts
+       Implements OFAC consolidated list lookup (free public JSON feed)
+       + EU consolidated list + UK Treasury list. Cached in KV for 24h
+       (the lists themselves). Compares full_legal_name +
+       date_of_birth + nationality fuzzy-match.
+
+  4. Auto-NDA issuance
+       When /intro/request is called and no valid pairwise_ndas row
+       exists (or it's expired), generate a new e-sign envelope from
+       template `nda_3way_founder_investor_axal_v1` with three
+       signers (Founder, Investor, Axal counter-signer admin).
+       Persist a pairwise_ndas row with envelope_uuid + status=pending.
+       Frontend unlock logic uses GET /intro/status.
+
+  5. Frontend (frontend/src/pages/TrustCenterPage.jsx)
+       Wire the existing "Pairwise NDAs" and "Sanctions screening"
+       sections to the new endpoints. Empty states copy:
+         "No pairwise NDAs yet. They'll appear here when an investor
+          requests an intro to a founder you're associated with."
+         "Sanctions screening will run automatically on KYB/KYC
+          submission. Admins can trigger a re-screen."
+
+Acceptance
+  - /api/trust/summary returns the user's role-correct obligation list
+    (per the role-based legal strategy).
+  - Pairwise NDAs section renders rows from pairwise_ndas with status,
+    valid_until, signers list, and actions.
+  - Sanctions section (admin only) shows screenings + lets admin
+    trigger a re-screen.
+  - Investor requesting an intro automatically issues a 3-way NDA;
+    Founder + Axal admin receive notification + sign request.
+  - All old /api/kyc/* clients continue working.

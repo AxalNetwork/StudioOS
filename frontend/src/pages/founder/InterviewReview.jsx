@@ -1,0 +1,375 @@
+import React, { useState } from 'react';
+import { placementSource, runLabel } from './assistantSession.js';
+import { VERDICT_NOTE, acceptAllOutcome, groupBySlug, heardIn, spansOf } from './sessionDigestModel.js';
+
+/**
+ * The review step of an interview session (D660 part 2, #1473), to
+ * `design/incoming/Interview Session.dc.html`, step `review`, on the response
+ * shapes of #1494 (D658 part 2).
+ *
+ * NOT MOUNTED YET. These components take data as props and call nothing: the
+ * routes they render (`GET …/sessions/:id/placements`, `POST …/structure`,
+ * `POST …/ask`, the structuring receipt) are in #1494, and the drift test
+ * refuses a client method whose route is not on main (D527). When #1494
+ * merges, the client methods are added and `InterviewSessionPage` mounts this.
+ *
+ * WHAT EADWYN SAYS IS A PROPOSAL. Each placement names its module, quotes the
+ * passage it came from, and waits for the founder: accept, edit then accept,
+ * or discard. A kind with no store yet (a market fact) says so and cannot be
+ * accepted. An answer from "Ask the transcript" is shown only with the
+ * passages it cites; the Worker refuses an answer that cites nothing, and the
+ * page shows that refusal, not an answer.
+ */
+
+export const MODULE_LABELS = {
+  problem_discovery: 'Problem discovery',
+  customer_research: 'Customer research',
+  ideal_customer_profile: 'Ideal customer profile',
+  demand_signals: 'Demand signals',
+  experiments: 'Experiments',
+  market_intelligence: 'Market intelligence',
+  other: 'Other',
+};
+
+export const MODULE_ORDER = Object.keys(MODULE_LABELS);
+
+/**
+ * The models `structure_interview` offers, as `aiRouter.ts` lists them
+ * (its `alternates`). No route lists them yet, so they are mirrored here,
+ * and `interview_review_d660.test.mjs` fails if the two lists part.
+ */
+export const STRUCTURE_MODELS = [
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
+];
+
+/** The model a second run should use, to compare against the latest run's. */
+export function nextStructureModel(read) {
+  const runs = read?.runs || [];
+  const last = runs[runs.length - 1]?.model;
+  return STRUCTURE_MODELS.find((m) => m !== last) || STRUCTURE_MODELS[0];
+}
+
+const SEVERITY = { severe: 'Severe', real: 'Real', mild: 'Mild' };
+const FIT = { strong: 'Strong fit', partial: 'Partial fit', none: 'Not a fit' };
+const DEMAND = { need_to_have: 'Need to have', would_pay: 'Would pay', loi: 'Letter of intent', pre_sale: 'Pre-sale' };
+const STRENGTH = { anecdote: 'Anecdote', pattern: 'Pattern', measured: 'Measured' };
+// D685 §5.10: the summary's receipt lines (#1605) are listed with structuring's.
+const STEP_LABELS = { structured: 'Structured', re_structured: 'Re-structured', asked: 'Asked', summarised: 'Summarised', re_summarised: 'Re-summarised' };
+export const STRUCTURING_STEPS = new Set(Object.keys(STEP_LABELS));
+
+/** A placement's payload, as one line a founder reads. Unknown shapes say so. */
+export function placementText(p) {
+  const v = p?.edited_payload || p?.payload || {};
+  switch (p?.kind) {
+    case 'interview_summary': case 'quotable_line': case 'verdict_contribution': return v.text;
+    case 'pain_severity': return `“${v.phrase}” · ${SEVERITY[v.severity] || 'Severity not recorded'}`;
+    case 'icp_fit': return `${FIT[v.fit] || 'Fit not recorded'} · ${v.reason || ''}`.replace(/ · $/, '');
+    case 'segment': return `Segment: ${v.name}`;
+    case 'demand_signal': return `${DEMAND[v.signal] || 'Signal not recorded'}${v.detail ? ` · ${v.detail}` : ''}`;
+    case 'evidence': {
+      const h = p.evidence_context?.hypothesis;
+      const g = p.evidence_context?.pain_group;
+      return `${v.direction === 'refutes' ? 'Refutes' : 'Supports'} ${h ? `${h.code} · ${h.claim}` : 'Hypothesis not recorded'} through ${g?.title || 'Pain group not recorded'} · ${STRENGTH[v.strength] || 'Strength not recorded'}`;
+    }
+    case 'competitor_mention': return `${v.name}${v.context ? ` · ${v.context}` : ''}`;
+    case 'market_fact': return `${v.fact}${v.topic ? ` · ${v.topic}` : ''}${v.source ? ` · source: ${v.source}` : ''}`;
+    case 'firmographic': return `${(v.attribute || 'Attribute').replaceAll('_', ' ')}: ${v.value}`;
+    case 'job_to_be_done': return v.job;
+    case 'alternative': return `${v.name} · ${(v.kind || '').replaceAll('_', ' ')}`;
+    case 'budget': return v.detail;
+    case 'timing': return v.when;
+    case 'urgency': return `${v.level} urgency${v.reason ? ` · ${v.reason}` : ''}`;
+    case 'buying_trigger': return v.trigger;
+    case 'objection': return `${v.about}: ${v.detail}`;
+    case 'follow_up': return [v.detail, v.owner_hint, v.due_hint].filter(Boolean).join(' · ');
+    case 'decision': return [v.statement, v.owner_hint].filter(Boolean).join(' · ');
+    case 'prototype_ask': return [v.feature, v.workflow, v.pain_ref].filter(Boolean).join(' · ');
+    case 'hypothesis_new': return [v.claim, v.disproof].filter(Boolean).join(' · ');
+    case 'experiment_idea': return [v.title, v.method].filter(Boolean).join(' · ');
+    default: return 'Unreadable: this placement has a shape the page does not know.';
+  }
+}
+
+/** ms → m:ss, for a cited span. */
+export function spanLabel(from, to) {
+  const f = (ms) => { const t = Math.max(0, Math.floor((ms || 0) / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+  return Number.isFinite(from) && Number.isFinite(to) ? `${f(from)}–${f(to)}` : 'Span not recorded';
+}
+
+/**
+ * The placements to review, grouped by module in the canvas's order: the
+ * latest run of each source. With StudioOS's runs only, that is the latest
+ * run, as before. D668: an AI assistant's run (D667) stays listed after
+ * StudioOS structures the same transcript to compare, so its proposals can
+ * still be accepted; each card names its source.
+ */
+export function groupByModule(read) {
+  const runs = read?.runs || [];
+  const latestOf = (src) => [...runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
+  const shown = [...runs.filter((r) => String(r.run_id).startsWith('output:')), latestOf('assistant'), latestOf('studioos')].filter((r, i, all) => r && all.indexOf(r) === i);
+  const groups = new Map();
+  for (const pl of shown.flatMap((r) => r.placements || [])) {
+    const m = MODULE_LABELS[pl.module] ? pl.module : 'other';
+    if (!groups.has(m)) groups.set(m, []);
+    groups.get(m).push(pl);
+  }
+  return MODULE_ORDER.filter((m) => groups.has(m)).map((m) => ({ module: m, label: MODULE_LABELS[m], placements: groups.get(m) }));
+}
+
+/**
+ * What a refused call means for the page. A budget refusal (D640: a
+ * `budget_*` refusal, sent with 402) is its own state, in the budget's own
+ * words. The `refusal` field decides, never the status code.
+ */
+export function refusalKind(err) {
+  const refusal = err?.data?.refusal;
+  if (typeof refusal === 'string' && refusal.startsWith('budget_')) return 'budget';
+  if (err?.code === 'no_citation' || err?.data?.error === 'no_citation') return 'no_citation';
+  if (err?.code === 'writer_refused' || err?.data?.error === 'writer_refused') return 'writer_refused';
+  return 'error';
+}
+
+const usd = (micro) => `$${(Number(micro || 0) / 1e6).toFixed(4)}`;
+const CARD = 'rounded-xl border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900';
+const BTN = 'rounded-md px-2.5 py-1 text-[12px] font-bold disabled:cursor-not-allowed disabled:opacity-50';
+
+export function BudgetRefusal({ err }) {
+  return (
+    <p role="alert" data-testid="budget-refused" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-[13px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      {err?.data?.message || err?.message || 'Your AI allowance is used up.'} Nothing was run and nothing was stored.
+    </p>
+  );
+}
+
+export function PlacementCard({ p, error, busy, onAccept, onDiscard, heard = null }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => JSON.stringify(p.edited_payload || p.payload || {}, null, 2));
+  const decided = p.status !== 'pending';
+  return (
+    <li className={CARD} data-testid={`placement-${p.id}`} data-status={p.status}>
+      <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{placementText(p)}</p>
+      <p className="mt-0.5 text-[11px] font-semibold text-axal-faint" data-testid={`placement-source-${p.id}`} data-source={p.source === 'assistant' ? 'assistant' : 'studioos'}>{placementSource(p)}</p>
+      {/* D757 §2.7 (#1927): "Heard in <name> · 00:12:31 · <speaker>", linking the line. */}
+      {heard && (heard.href
+        ? <a href={heard.href} className="mt-0.5 inline-block text-[11.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid={`placement-heard-${p.id}`}>{heard.text}</a>
+        : <p className="mt-0.5 text-[11.5px] text-axal-faint" data-testid={`placement-heard-${p.id}`}>{heard.text}</p>)}
+      <blockquote className="mt-1 border-l-2 border-violet-300 pl-2 text-[12px] italic text-gray-600 dark:border-violet-700 dark:text-gray-300" data-testid={`placement-cite-${p.id}`}>
+        {p.cite?.source_deleted ? (p.cite.source_note || 'Deleted at the source.') : (p.cite?.quote || 'Quote not recorded')} <span className="not-italic text-axal-faint">· {spanLabel(p.cite?.from, p.cite?.to)}</span>
+      </blockquote>
+      {error && (refusalKind(error) === 'budget'
+        ? <BudgetRefusal err={error} />
+        : <p role="alert" data-testid={`placement-error-${p.id}`} className="mt-2 text-[12px] font-semibold text-red-700 dark:text-red-400">{error.data?.detail || error.message} It is still proposed.</p>)}
+      {!p.can_accept && <p className="mt-2 text-[12px] text-axal-faint" data-testid={`placement-no-store-${p.id}`}>Not recorded: {MODULE_LABELS[p.module] || 'this module'} has no store for this yet, so it stays proposed.</p>}
+      {decided ? (
+        <p className="mt-2 text-[12px] font-bold text-axal-muted">{p.status === 'accepted' ? 'Accepted' : p.status === 'discarded' ? 'Discarded' : p.status}</p>
+      ) : (
+        <>
+          {editing && (
+            <textarea aria-label="Edit before accepting" data-testid={`placement-edit-${p.id}`} rows={4} value={draft} onChange={(e) => setDraft(e.target.value)}
+              className="mt-2 w-full rounded-md border border-gray-200 bg-white p-2 font-mono text-[12px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
+          )}
+          <div className="mt-2 flex gap-2">
+            <button type="button" data-testid={`placement-accept-${p.id}`} disabled={!p.can_accept || busy}
+              onClick={() => { if (!editing) return onAccept?.(p.id); let payload; try { payload = JSON.parse(draft); } catch { return undefined; } return onAccept?.(p.id, payload); }}
+              className={`${BTN} bg-violet-700 text-white`}>{editing ? 'Save and accept' : 'Accept'}</button>
+            <button type="button" data-testid={`placement-edit-toggle-${p.id}`} disabled={!p.can_accept || busy} onClick={() => setEditing((x) => !x)} className={`${BTN} border border-gray-200 dark:border-gray-700`}>{editing ? 'Cancel edit' : 'Edit'}</button>
+            <button type="button" data-testid={`placement-discard-${p.id}`} disabled={busy} onClick={() => onDiscard?.(p.id)} className={`${BTN} text-gray-600 dark:text-gray-300`}>Discard</button>
+          </div>
+        </>
+      )}
+    </li>
+  );
+}
+
+/** Placements, grouped by module; or running, none, or the refusal. */
+export function PlacementsPanel({ read, running, runError, errors = {}, busyId, onAccept, onDiscard, onStructure }) {
+  if (running) return <p data-testid="structuring-running" aria-live="polite" className="text-[13px] text-axal-muted">Eadwyn is reading the transcript and placing what it finds…</p>;
+  const groups = groupByModule(read);
+  return (
+    <section data-testid="placements" className="space-y-3">
+      {runError && (refusalKind(runError) === 'budget' ? <BudgetRefusal err={runError} /> : <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{runError.message}</p>)}
+      {groups.length === 0 ? (
+        <div data-testid="placements-none" className="text-[13px] text-axal-faint">
+          <p>No placements yet. Eadwyn has not structured this transcript, or found nothing it could cite.</p>
+          {/* Called with no argument: the click event is not a model (#1589). */}
+          {onStructure && <button type="button" data-testid="button-structure" onClick={() => onStructure()} className={`${BTN} mt-2 bg-violet-700 text-white`}>Structure the transcript</button>}
+        </div>
+      ) : groups.map((g) => (
+        <div key={g.module} data-testid={`module-${g.module}`}>
+          <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wide text-axal-faint">{g.label}</h3>
+          <ul className="space-y-2">{g.placements.map((pl) => <PlacementCard key={pl.id} p={pl} error={errors[pl.id]} busy={busyId === pl.id} onAccept={onAccept} onDiscard={onDiscard} />)}</ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * D757 §2.7 (#1927): the suggestions under all seven Validate modules, each
+ * with where it was heard and its line, and "Accept all for <module>", which
+ * runs each one's own Accept (#1925) and reports every outcome. Verdict is
+ * listed and says that nothing is ever suggested there.
+ */
+export function ModuleSuggestions({
+  read, running, runError, errors = {}, busyId, onAccept, onDiscard, onStructure, onAcceptAll, acceptAll = {},
+  segments = [], interviewee = null, thread = false,
+}) {
+  if (running) return <p data-testid="structuring-running" aria-live="polite" className="text-[13px] text-axal-muted">Eadwyn is reading the transcript and placing what it finds…</p>;
+  const groups = groupBySlug(read);
+  const spans = spansOf(segments);
+  const any = groups.some((g) => g.placements.length);
+  return (
+    <section data-testid="module-suggestions" className="space-y-4">
+      {read?.outputs && <ul className="space-y-1 text-[13px] text-axal-muted dark:text-gray-300" aria-label="Call outputs">
+        {read.outputs.map((o) => <li key={o.output}>{o.label}: {o.status === 'empty' ? 'No new proposals'
+          : (o.status === 'failed' || o.retryable) ? <>Could not be extracted · <button type="button" className="underline" onClick={() => onStructure?.({ output: o.output })}>Try again</button></>
+            : o.status === 'cancelled' ? 'Cancelled: consent withdrawn' : o.status === 'done' ? 'Proposals ready for review' : o.status === 'running' ? 'Extracting…' : 'Waiting for the final transcript'}</li>)}
+      </ul>}
+      {runError && (refusalKind(runError) === 'budget' ? <BudgetRefusal err={runError} /> : <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{runError.message}</p>)}
+      {!any && (
+        <div data-testid="suggestions-none" className="text-[13px] text-axal-faint">
+          <p className="m-0">No suggestions yet. Axal has not read this conversation for findings, or found nothing it could cite.</p>
+          {/* Called with no argument: the click event is not a model (#1589). */}
+          {onStructure && <button type="button" data-testid="button-find-suggestions" onClick={() => onStructure()} className={`${BTN} mt-2 bg-violet-700 text-white`}>Find suggestions</button>}
+        </div>
+      )}
+      {groups.map((g) => {
+        const outcome = acceptAll[g.slug];
+        const said = outcome?.result ? acceptAllOutcome(outcome.result) : null;
+        return (
+          <div key={g.slug} data-testid={`suggestions-${g.slug}`} data-count={g.placements.length}>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="m-0 text-[11px] font-bold uppercase tracking-wide text-axal-faint">{g.name}{g.pending ? ` · ${g.pending} to review` : ''}</h3>
+              {g.pending > 1 && onAcceptAll && (
+                <button type="button" data-testid={`button-accept-all-${g.slug}`} disabled={!!outcome?.busy} onClick={() => onAcceptAll(g.slug)}
+                  className={`${BTN} border border-violet-300 text-violet-800 dark:border-violet-700 dark:text-violet-200`}>{outcome?.busy ? 'Accepting…' : `Accept all for ${g.name}`}</button>
+              )}
+            </div>
+            {said && (
+              <div role="status" className="mb-2 text-[12.5px]" data-testid={`accept-all-outcome-${g.slug}`}>
+                <p className="m-0 font-semibold">{said.text}</p>
+                {said.refused.length > 0 && <ul className="m-0 mt-1 list-disc pl-5 text-red-700 dark:text-red-400">{said.refused.map((r) => <li key={r.id} data-testid={`accept-all-refused-${r.id}`}>{r.text}</li>)}</ul>}
+              </div>
+            )}
+            {outcome?.error && <p role="alert" className="mb-2 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid={`accept-all-error-${g.slug}`}>{outcome.error.data?.detail || outcome.error.message}</p>}
+            {g.slug === 'verdict' && g.placements.length === 0
+              ? <p className="m-0 text-[12.5px] text-axal-faint" data-testid="suggestions-verdict-note">{VERDICT_NOTE}</p>
+              : g.placements.length === 0
+                ? <p className="m-0 text-[12.5px] text-axal-faint">Nothing suggested here.</p>
+                : <ul className="m-0 list-none space-y-2 p-0">{g.placements.map((pl) => (
+                  <PlacementCard key={pl.id} p={pl} error={errors[pl.id]} busy={busyId === pl.id || !!outcome?.busy} onAccept={onAccept} onDiscard={onDiscard}
+                    heard={heardIn({ cite: pl.cite, spans, name: interviewee, thread })} />
+                ))}</ul>}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Two runs side by side, by module. Needs two runs; says so otherwise. */
+export function ComparePanel({ read, onRestructure, busy }) {
+  const cmp = read?.compare;
+  const again = onRestructure && (read?.runs || []).length > 0 && (
+    <button type="button" data-testid="button-restructure" disabled={busy} onClick={() => onRestructure(nextStructureModel(read))}
+      className={`${BTN} mt-2 border border-gray-200 dark:border-gray-700`}>Structure again with {nextStructureModel(read)}</button>
+  );
+  if (!cmp) return <div data-testid="compare-none" className="text-[13px] text-axal-faint"><p>Structure again with a second model to compare the two.</p>{again}</div>;
+  // D668: an assistant's run is headed by the assistant, StudioOS's by its model.
+  const model = (id) => runLabel(read.runs.find((r) => r.run_id === id));
+  return (
+    <>
+    <table data-testid="compare" className="w-full table-fixed text-[12px]">
+      <thead><tr><th className="w-1/4 text-left">Module</th><th className="text-left">{model(cmp.first)}</th><th className="text-left">{model(cmp.second)}</th></tr></thead>
+      <tbody>
+        {cmp.modules.map((m) => (
+          <tr key={m.module} className="border-t border-axal-hairline align-top dark:border-gray-800" data-testid={`compare-${m.module}`}>
+            <td className="py-1 font-semibold">{MODULE_LABELS[m.module] || m.module}</td>
+            {[m.first, m.second].map((side, i) => (
+              <td key={i} className="py-1 pr-2">{side.length ? side.map((pl) => <div key={pl.id}>{placementText(pl)}</div>) : <span className="text-axal-faint">Nothing placed</span>}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    {again}
+    </>
+  );
+}
+
+/** "Ask the transcript": an answer only with its cited passages. */
+export function AskPanel({ result, error, busy, onAsk }) {
+  const [q, setQ] = useState('');
+  const kind = error ? refusalKind(error) : null;
+  return (
+    <section data-testid="ask" className="space-y-2">
+      <form onSubmit={(e) => { e.preventDefault(); if (q.trim()) onAsk?.(q.trim()); }} className="flex gap-2">
+        <input aria-label="Ask the transcript" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask the transcript…"
+          className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[13px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
+        <button type="submit" disabled={busy} className={`${BTN} bg-violet-700 text-white`}>Ask</button>
+      </form>
+      {kind === 'budget' && <BudgetRefusal err={error} />}
+      {kind === 'no_citation' && <p role="status" data-testid="ask-no-citation" className="text-[13px] text-axal-muted">{error.data?.detail || error.message}</p>}
+      {kind === 'error' && <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">{error.message}</p>}
+      {!error && result?.ok && Array.isArray(result.cites) && result.cites.length > 0 && (
+        <div data-testid="ask-answer" className={CARD}>
+          <p className="text-[13px]">{result.answer}</p>
+          <ul className="mt-2 space-y-1">
+            {result.cites.map((c, i) => (
+              <li key={i} data-testid="ask-cite" className="border-l-2 border-violet-300 pl-2 text-[12px] italic text-gray-600 dark:border-violet-700 dark:text-gray-300">
+                {c.quote} <span className="not-italic text-axal-faint">· {spanLabel(c.from, c.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The structuring lines of the session's receipt: step, model, cost, time. */
+export function StructureReceipt({ items }) {
+  if (items === null) return <p className="text-[12px] text-axal-faint">Unreadable: the receipt could not be read.</p>;
+  const rows = (items || []).filter((r) => STRUCTURING_STEPS.has(r.kind));
+  if (!rows.length) return <p data-testid="structure-receipt-none" className="text-[12px] text-axal-faint">Not recorded</p>;
+  return (
+    <ul data-testid="structure-receipt" className="space-y-1 text-[12px]">
+      {rows.map((r, i) => (
+        <li key={i} className="flex justify-between gap-2">
+          <span>
+            {STEP_LABELS[r.kind]} · {r.model}
+            {Number(r.fallback_used) ? ` (fallback for ${r.requested_model || 'the chosen model'})` : ''}
+            {r.outcome === 'refused' ? ` · refused${r.refusal ? ` (${r.refusal})` : ''}` : ''}
+            <span className="text-axal-faint"> · {r.created_at || 'Time not recorded'}</span>
+          </span>
+          <span className="tabular-nums">{usd(r.cost_microusd)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The whole review step, light by default, dark on request. */
+export default function InterviewReview({
+  theme = 'light', read, running, runError, errors, busyId, onAccept, onDiscard, onStructure, ask = {}, onAsk, receiptItems,
+  grouped = null, onAcceptAll, acceptAll,
+}) {
+  return (
+    <div data-testid="interview-review" data-theme={theme} className={theme === 'dark' ? 'dark' : ''}>
+      <div className="grid gap-6 bg-white p-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 md:grid-cols-[1fr_280px]">
+        <div className="space-y-6">
+          {/* D757 (#1927): the session page groups by the seven Validate modules, with each line linked. */}
+          {grouped
+            ? <ModuleSuggestions read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure}
+              onAcceptAll={onAcceptAll} acceptAll={acceptAll} segments={grouped.segments} interviewee={grouped.interviewee} thread={grouped.thread} />
+            : <PlacementsPanel read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure} />}
+          <section><h2 className="mb-2 text-[14px] font-bold">Compare models</h2><ComparePanel read={read} busy={running} onRestructure={onStructure} /></section>
+          <section><h2 className="mb-2 text-[14px] font-bold">Ask the transcript</h2><AskPanel result={ask.result} error={ask.error} busy={ask.busy} onAsk={onAsk} /></section>
+        </div>
+        <aside><h2 className="mb-2 text-[11px] font-bold uppercase text-axal-faint">Structuring receipt</h2><StructureReceipt items={receiptItems} /></aside>
+      </div>
+    </div>
+  );
+}

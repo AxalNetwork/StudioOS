@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Library v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">AI agents · Skill Library · v2 · #4956</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Skill Library — discover, author, qualify and publish skills you can trust</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Two audiences. HQ Super Admins author, evaluate, review, publish and retire Axal's skills in HQ › AI agents › Skills library. Teams discover and assign skills in Grow › Talent › AI agents › Skills. One readiness model runs through both: Draft, Missing cases, Needs evaluation, Failing, Stale, In review, Changes requested, Ready to publish, Published, Retired. The evaluation is a golden case × model matrix with Pass, Fail, Not run, Stale and Missing, reported as “x of y” against the 9-of-10 bar, never as a percentage. Publish is a checklist the server re-checks; refusals show its own words and code. <b>Relation to existing canvases:</b> this builds on Agent Skills (D1612) and Agents Skills v2 (D4116) and does not replace them. The Team page keeps its areas, directories, SKILL.md, version pins, read-only tools and no roles; this canvas adds the HQ qualification workspace plus search, filters and assign reasons for Teams. Re-checked against main: the brief's P0s (HQ lifecycle, Team authoring stubs) are already built (D4160, #4739, D4733), so those boards draw working flows.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 8 Nov 2026 · Super Admin and a founder team · skills, people, companies and outputs are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Skill Library v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SK-01', 'HQ library', 'From Axal and Company skills. Search by name or slug, filter by readiness, area, output and evaluation, use quick chips, and see each skill’s readiness, version, pinned agents, golden-case runs, last evaluation and next action. Filters live in the URL.', [F('SK01', false, 1000)]],
+      ['SK-02', 'Skill overview', 'What it does, what it reads (read-only tools), what it produces, an example output from a golden case, and the facts at a glance. Run cost reads Not recorded.', [F('SK02', false, 900)]],
+      ['SK-03', 'Test cases and evaluations', 'A · Meets the bar: 9 of 10 runs pass. The matrix shows golden case × model with evidence links. B · Failing: 6 of 10, with stale cells from an older draft and a model not run on the newest case. Missing, Not run and Stale never count as a pass.', [F('SK03a', 'A · Meets the bar', 940), F('SK03b', 'B · Failing, stale, not run', 940)]],
+      ['SK-04', 'Authoring', 'A · The guided steps (Draft → Validate → Golden cases → Evaluate → Review → Publish), an immutable slug, numbered steps, read-only tools, and two unsaved changes. B · A validation error tied to its field. C · The leave-with-unsaved-changes dialog, with local recovery. D · The draft changed underneath (needs a version check).', [F('SK04a', 'A · Editing', 960), F('SK04b', 'B · Validation', 960), C('SK04c', 'C · Unsaved changes', 560, 300), C('SK04d', 'D · Conflict', 600, 320)]],
+      ['SK-05', 'Review and versions', 'The v1 → draft diff (frontmatter and steps) beside the reviewer panel: a named second Super Admin, never the author, with a comment required to request changes. Published versions are immutable; rollback waits on #4533.', [F('SK05', false, 1050)]],
+      ['SK-06', 'Publish gate', 'A · Both conditions met, with immutable v2, pins kept, and a reason. B · needs_approval: the approval was for an earlier draft. C · golden_cases_failing: 6 of 10. D · Published, confirmed by the server.', [C('SK06a', 'A · Ready', 640, 440), C('SK06b', 'B · Needs approval', 640, 340), C('SK06c', 'C · Below the bar', 640, 340), C('SK06d', 'D · Done', 640, 100)]],
+      ['SK-07', 'Retire with a replacement', 'Pinned agents keep working and say what replaced the skill. The replacement and a reason are required.', [C('SK07', false, 640, 400)]],
+      ['SK-08', 'Usage and assignments', 'Agents pinned to each version. Quality and cost by executed version read Not recorded until runs record the version (#4536).', [F('SK08', false, 820)]],
+      ['SK-09', 'Team library', 'The existing Skills tab gains search, area and source filters, and an assign reason on every card: Can be assigned, Can’t be assigned yet with a remedy, Retired with pins kept, or Draft.', [F('SK09', false, 1000)]],
+      ['SK-10', 'Team skill page', 'A plain summary (what it does, what it reads, what you get), your agents and their pinned versions with Update to vN, and quality.', [F('SK10', false, 900)]],
+      ['SK-11', 'Import a SKILL.md', 'Shown as text, never HTML. It lands as a draft, and a write tool is refused with tool_not_read_only.', [C('SK11', false, 680, 460)]],
+      ['SK-12', 'States', 'Loading, empty, no results, partial, error, permission denied, agents switched off, stale evaluation, saving, save failed, refused and offline.', [C('SK12', false, 1400, 560)]],
+      ['SK-13', 'Readiness model', 'Ten states, each with a word, a shape and its source in the Worker’s data.', [C('SK13', false, 1400, 280)]],
+      ['SK-14', 'Phone 390', 'A · The HQ library as cards. B · Evaluations as one card per case. C · A Team skill page.', [P('SK14a', 'A · Library'), P('SK14b', 'B · Evaluations'), P('SK14c', 'C · Team skill')]],
+      ['SK-15', 'Tablet 768', 'The HQ library as two-column cards; filters move into one sheet.', [D('SK15', false, 768, 1180, 16)]],
+      ['SK-16', 'Dark mode', 'The skill overview on #0B1220 / #111827.', [F('SK16', false, 900)]],
+      ['SK-A', 'Audit, re-checked against main', 'The brief’s findings against what main has today.', [W('SKA')]],
+      ['SK-B', 'IA, flows and relation to the existing canvases', 'HQ and Team structures, and how this builds on D1612 and D4116.', [W('SKB')]],
+      ['SK-C', 'Components, accessibility and tickets', 'Reusable parts, accessibility notes, and tickets linked to #4533, #4536 and #4538.', [W('SKC')]],
+      ['SK-D', 'Backend fit', 'What exists, and what is backend required.', [W('SKD')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

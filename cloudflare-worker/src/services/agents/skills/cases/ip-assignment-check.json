@@ -1,0 +1,36 @@
+{
+  "skill": "ip-assignment-check",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "team.roster": [
+        {
+          "name": "Lena Ortiz",
+          "role": "Engineering lead"
+        },
+        {
+          "name": "Raj Patel",
+          "role": "Contract designer"
+        }
+      ],
+      "data_room.index": [
+        {
+          "name": "Lena Ortiz PIIA.pdf",
+          "signed": "2026-03-01"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Raj Patel",
+      "Lena Ortiz"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "all agreements in place"
+    ]
+  }
+}

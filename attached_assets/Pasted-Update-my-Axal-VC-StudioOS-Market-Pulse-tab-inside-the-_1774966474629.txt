@@ -1,0 +1,49 @@
+Update my Axal VC StudioOS "Market Pulse" tab inside the Market Intelligence section.
+
+Current layout (exactly as in the latest screenshot):
+- Light background
+- Header: "Market Intelligence" + subtitle "Signal-to-Action pipeline for competitive advantage"
+- Top tabs: Market Pulse (active, purple #7e22ce), Public Markets, Private Rounds, High Conviction, Studio Benchmarks (gray)
+- 6 white rounded cards in a 2-row × 3-column grid
+- Each card style (match 100%):
+  - Sector name bold black at top-left
+  - Colored status badge top-right (green = Aggressive, yellow = Wait-and-See, orange = Cautious)
+  - Huge purple number + "x" (e.g. 22.4x)
+  - "Tech Signal:" section
+  - "Hiring:" section
+  - Thin divider
+  - "Spin-out Opportunity:" in purple text
+
+Keep these 6 existing cards exactly as they appear (with their current text and numbers):
+1. Agentic B2B – Aggressive – 22.4x – (all text exactly as in screenshot)
+2. Bio-Automation – Wait-and-See – 14.1x – (all text)
+3. AI Infrastructure – Aggressive – 28.7x – (all text)
+4. Fintech / DeFi – Cautious – 16.3x – (all text)
+5. Data / Analytics – Aggressive – 19.8x – (all text)
+6. Cybersecurity – Aggressive – 24.2x – (all text)
+
+Now add these 3 new cards as a clean third row (make the whole grid responsive 3-column with Tailwind or plain CSS so it stacks nicely on mobile). Use the exact same styling.
+
+New cards:
+7. Autonomous Robotics – Aggressive – 26.3x
+   Tech Signal: Vision-language models enabling 40%+ YoY increase in warehouse and last-mile automation pilots.
+   Hiring: Robotics software + perception engineers up 31% across logistics and manufacturing.
+   Spin-out Opportunity: Unified agentic control layer for heterogeneous robot fleets.
+
+8. Climate Intelligence – Aggressive – 17.9x
+   Tech Signal: Post-IRA extension surge in carbon accounting and Scope 3 automation platforms.
+   Hiring: Sustainability AI engineers and emissions data scientists up 37%.
+   Spin-out Opportunity: Real-time MRV (Measurement, Reporting, Verification) API for enterprise net-zero compliance.
+
+9. Quantum Infrastructure – Wait-and-See – 12.4x
+   Tech Signal: Error-corrected logical qubits crossing 100+ threshold in multiple labs; hybrid quantum-classical workloads entering enterprise pilots.
+   Hiring: Quantum algorithm + error-correction researchers up 24% at hyperscalers and national labs.
+   Spin-out Opportunity: Cloud-accessible quantum optimization layer for supply-chain and portfolio risk modeling.
+
+Requirements:
+- Match the exact font weights, spacing, colors, and card shadows of the existing cards.
+- Make the grid responsive (3 columns on desktop, stack on mobile).
+- Return ONLY the updated React component / HTML + Tailwind code for the Market Pulse section (or the full grid if it’s one file). Include variables so I can easily edit numbers later.
+- Keep everything production-ready and visually identical to the current dashboard.
+
+This should turn Market Pulse into a complete 9-card live intelligence feed.

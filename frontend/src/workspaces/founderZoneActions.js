@@ -1,0 +1,283 @@
+import { makeZoneActions } from './zoneActionBuilder';
+
+/**
+ * The founder profile's twenty-six zones, and what each of their canvas actions
+ * actually does. Validate's four zone pages were retired by D704: each became a
+ * module page, so they have no entry here and the guard lists them as excluded. `zoneActionBuilder.js` states the four outcomes and the rules
+ * they follow; this file is the founder's answers.
+ *
+ * WHERE THE LABELS COME FROM. Verbatim from the `ops:` array of the zone's
+ * artboard in `design/canvases/integrated/Pages · Founder {Validate,Build,Grow,
+ * Network,Raise,Research}.dc.html`, in the canvas's own order. Nothing is
+ * invented and nothing is dropped: a zone whose canvas asks for three actions
+ * lists three here, even when all three are gaps, because the gap is the answer
+ * the reader needs. Validate states its ops as `tools:` on a `boards` array
+ * rather than `ops:` on a `PAGES` array; `artboardOps` in the guard reads both.
+ *
+ * `canvas:` IS PROVENANCE AND `label:` IS WHAT RENDERS, the same split the
+ * filters table uses, and for the same reason: exactly one op here would
+ * otherwise ship a word the product cannot honour. It is used once, and using it
+ * twice without the file saying why would be the drift it exists to prevent.
+ *
+ * EVERY `to` WAS CHECKED AGAINST THE ROUTER, NOT ASSUMED. Each one is a path
+ * `App.jsx` mounts with a guard that admits `founder`, and lands on a component
+ * that calls the write method the label promises. Four labels lost their link
+ * that way: `/matches` (where `introductionsRequest` lived, since removed) was
+ * admin, partner and investor only; `/contacts` redirects to `/network?tab=contacts`, whose
+ * tab a founder's Network desk does not read; `/build/discovery` sent a founder
+ * to the Validate desk, so the waitlist invite panel behind it was not theirs
+ * to reach; and `/build/team` rendered the Grow desk, not `FounderTeamPage`
+ * (it renders the Team workspace since D661 retired that desk). All four are
+ * notes below. A link that 404s, or that lands
+ * on a page the reader is not allowed to open, is the same broken promise as a
+ * button that does nothing — it is just slower to discover.
+ *
+ * `frontend/test/profile_zone_actions.test.mjs` re-derives the labels from the canvases
+ * and re-checks every `to` against `App.jsx`, so this table cannot drift from
+ * either without failing the build.
+ */
+
+export const FOUNDER_ZONE_ACTIONS = {
+  // ── Build ────────────────────────────────────────────────────────────────
+  'build/this-week': [
+    { label: 'Export CSV', kind: 'export' },
+    // WHAT WOULD CONFIGURE THIS DESK IS THE ROADMAP, so the op is a link to
+    // where the roadmap is edited. `/build/roadmap` is the READ-ONLY view of
+    // the same data — sending a reader there to change something is the
+    // round trip this note is meant to save them. The editor is
+    // `/execution?mode=workspace` (`RoadmapPage` calls `api.moveOkr`), which is the
+    // destination `New scenario` below already uses for the same reason.
+    { label: 'Configure zone', to: '/execution?mode=workspace#execution-roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
+  ],
+  // TWO OF THESE THREE ARE LIVE AS OF MIGRATION 253. `Bulk move` is a multi-select
+  // plus one all-or-nothing UPDATE that the lane's WIP limit can refuse;
+  // `Configure lanes` is the editor its own old reason asked for.
+  //
+  // `Automations` STAYS A GAP, and deliberately. The canvas reports "Automations · 3
+  // · 1 paused" and gives no other content: no trigger vocabulary, no action
+  // vocabulary, no example rule. Building a rules engine from a count would be
+  // inventing the feature rather than integrating it, which is the one thing #176
+  // asks not to do — "if a store genuinely cannot be built, say so to the user
+  // rather than shipping a chip that lies."
+  'build/board': [
+    { label: 'Bulk move', kind: 'handler', handler: 'bulkMove' },
+    // The `unbuilt:` string stays the engineering reason; `hover:` is what a founder
+    // reads on the disabled control, under the 120-char tooltip cap.
+    {
+      label: 'Automations',
+      unbuilt: 'no automation rules are stored, and the artboard specifies a count without a trigger or action vocabulary to build one from',
+      hover: 'No automation rule is stored yet — nothing here can fire on a card moving.',
+    },
+    // THE REASON HERE ONCE CLAIMED MORE THAN THE CODE HAD — it said the lanes were
+    // "the pipeline’s stored stages", implying a table an editor could write to —
+    // and was then corrected to say a stage table was needed first. Migration 253
+    // built one, and it is a LANE table rather than a stage table, which is the
+    // distinction that made it possible: the six pipeline stages are still a literal
+    // written twice (`FounderBuildBoard.jsx` and `pages/PipelinePage.jsx`) and still
+    // not a founder's to change, but a lane is the founder's own axis and always was.
+    { label: 'Configure lanes', kind: 'handler', handler: 'configureLanes' },
+  ],
+  'build/roadmap': [
+    // `New scenario` STOPS BEING A LINK TO SOMEWHERE ELSE. It pointed at
+    // `/execution/roadmap` with the note "objectives and key results are edited in
+    // Execution", which was true of objectives and beside the point for scenarios:
+    // the Execution editor writes the LIVE quarter on an item, which is the one
+    // thing a what-if must not do. Migration 254 stores the alternative beside the
+    // roadmap instead, so the form belongs on this desk.
+    { label: 'New scenario', kind: 'handler', handler: 'newScenario' },
+    { label: 'Export', kind: 'export' },
+    // `Configure` STAYS A GAP, on the same argument as `/build/board`'s
+    // `Automations`: the artboard names the control and specifies no setting for it
+    // to change — no default quarter, no horizon, no ordering rule, no example.
+    // Inventing a settings screen from a button label is the one thing #176 asks
+    // not to do, and a settings page nobody specified is worse than a disabled
+    // control that says why.
+    { label: 'Configure', unbuilt: 'the artboard names this control but specifies no roadmap setting for it to change, so there is nothing an editor could write', hover: 'No roadmap setting is specified yet — there is nothing here to change.' },
+  ],
+  // ALL THREE ARE LIVE AS OF MIGRATION 250, and all three were `unbuilt` for the
+  // same reason: there was no cadence store. There is one now
+  // (`routes/founder_cadence.ts`), so the reasons are deleted rather than
+  // softened — a refusal kept beside a working feature is the failure #193 was
+  // filed for.
+  //
+  // TWO HANDLERS AND ONE EXPORT, WHICH IS THE SPLIT THE OPS ACTUALLY HAVE.
+  // `New ritual` and `Edit templates` open forms the page owns (D67 — a table
+  // cannot hold a modal's state), and `Export archive` writes the rows the page
+  // has loaded under the chip the reader has selected, which is what
+  // `kind: 'export'` already does everywhere else.
+  'build/cadence': [
+    { label: 'New ritual', kind: 'handler', handler: 'newRitual' },
+    { label: 'Edit templates', kind: 'handler', handler: 'editTemplates' },
+    { label: 'Export archive', kind: 'export' },
+  ],
+  // TWO OF THESE FOUR WERE GAPS AND ARE NOT ANY MORE. `Import CSV` is
+  // `services/metricsCsv.ts` behind `POST /progress/metrics/:id/import-csv`;
+  // `Definitions` is migration 251. Both open a form the page owns (D67 — a table
+  // cannot hold a modal's state), which is why they are handlers rather than
+  // links: the import needs a dry run and a rejection list, and the definition
+  // editor needs the metric picker the route's own `keys` supplies.
+  // `Bulk entry` and `Stripe sync` linked `/build/metrics`'s editor, which
+  // #2336 retired on the owner's call ("Remove", #2297), the Stripe import
+  // with it. Bulk entry on this page is `Import CSV`; a single month is
+  // entered on Grow · Revenue and traction (`POST /cycles/grow/kpis`).
+  'build/kpi': [
+    { label: 'Bulk entry', unbuilt: 'no hand-entry grid is stored; Import CSV loads several months at once' },
+    { label: 'Import CSV', kind: 'handler', handler: 'importCsv' },
+    { label: 'Stripe sync', unbuilt: 'the Stripe import was retired with the Metrics editor' },
+    { label: 'Definitions', kind: 'handler', handler: 'definitions' },
+  ],
+
+  // ── Grow ─────────────────────────────────────────────────────────────────
+  'grow/focus': [
+    { label: 'New experiment', unbuilt: 'experiments are not a stored record' },
+    { label: 'Change metric', to: '/build/kpi' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'grow/talent': [
+    // "NO ROLE POSTING IS STORED" WAS PLAINLY FALSE. `job_postings` is the store —
+    // it even carries a `project_id`, which is how this page's role chips find the
+    // ones linked to this startup — `jobs.create()` writes one, and `/jobs/new` is
+    // a mounted route a founder may open. The posting surface existed the whole
+    // time; this desk just never pointed at it. Task #68 built it.
+    { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
+    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
+    // this page already puts those candidates in a table. What is missing is a
+    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
+    // so there is nothing for a reject — bulk or single — to call. A refusal that
+    // denied the records sent the next reader to build a store that is already
+    // there.
+    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'grow/customers': [
+    { label: 'Bulk sequence', unbuilt: 'no sequence store exists — nothing here sends mail' },
+    { label: 'New segment', unbuilt: 'segments are not stored' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'grow/partnerships': [
+    // D4439: the frozen canvas says New proposal; founders read published pieces, never submit partner pitches.
+    { canvas: 'New proposal', label: 'Open co-marketing', to: '/grow/partner-network/co-marketing' },
+    { label: 'Export terms', kind: 'export' },
+  ],
+  // D1194 (#3128): `raise/capital-match` is retired into Capital relationships › Match.
+  'grow/brand': [
+    { label: 'New page', to: '/build/brand' },
+    { label: 'Export leads', kind: 'export' },
+    // THE REASON WAS FALSE ABOUT THE BUILDER IT NAMED. It said templates are
+    // "chosen in the brand builder, not edited"; `/build/brand` mounts
+    // `BrandBuilderPage`, whose step 2 chooses a template and whose step 3
+    // renders `TemplateContentEditor` over `TEMPLATE_CONTENT_SCHEMA` — which
+    // is editing the template's content, field by field. A reason that names
+    // a surface the reader may open and then denies the capability that
+    // surface has is worse than no reason: it sends them away from the answer.
+    { label: 'Edit templates', to: '/build/brand', linkNote: 'Templates are chosen and their content edited in the brand builder.' },
+  ],
+  'grow/launch': [
+    { label: 'New item', to: '/calendar' },
+    { label: 'Export calendar', kind: 'export' },
+  ],
+
+  // ── Network ──────────────────────────────────────────────────────────────
+  'network/relationships': [
+    { label: 'Add person', unbuilt: 'the contact form is not reachable from a founder’s Network desk' },
+    { label: 'Set reminders', unbuilt: 'no reminder store exists' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'network/introductions': [
+    // Was 'the request flow lives on a surface a founder cannot open', which
+    // stopped being true when that surface, the AI Matches page, was removed.
+    { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
+    { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
+    { label: 'Export', kind: 'export' },
+  ],
+  // BOTH NOTES WERE TOO WEAK, and the filter half of this row is what showed
+  // it. `Add org` said the contact form was merely out of reach, and `Merge
+  // duplicates` said duplicates "stay as separate rows" — which describes rows
+  // this page can never have. A contact carries no organisation field at all,
+  // so the roll-up above is empty on every account and there is nothing to
+  // have duplicated. The two halves of this row now say the same thing.
+  'network/organizations': [
+    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add', hover: 'A contact records a person, an email and an audience — no field on it names an organisation.' },
+    { label: 'Merge duplicates', unbuilt: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
+    { label: 'Export', kind: 'export' },
+  ],
+
+  // ── Raise ────────────────────────────────────────────────────────────────
+  'raise/status': [
+    { label: 'Export brief', kind: 'export' },
+    { label: 'Share war-room', unbuilt: 'no share link is issued for this view' },
+  ],
+  'raise/capital': [
+    { label: 'Model a round', to: '/raise/use-of-funds/runway/forecast' },
+    { label: 'Export to Carta', to: '/raise/cap-table/import-export', linkNote: 'the cap table exports CSV; there is no Carta connection' },
+    { label: 'Add instrument', to: '/raise/cap-table/instruments' },
+  ],
+  'raise/legal': [
+    // THE REASON WAS STALE, NOT WRONG WHEN WRITTEN. "No e-signature provider
+    // is connected" reads as DocuSign being unconfigured, and DocuSign is the
+    // OPTIONAL second provider: `routes/esign.ts` declares `provider TEXT NOT
+    // NULL DEFAULT 'native'` and the native path signs without any third
+    // party. `/legal/send` is mounted for every licence, a founder included.
+    { label: 'Send for signature', to: '/legal/send' },
+    { label: 'Add document', to: '/legal' },
+    { label: 'Calendar', to: '/raise/legal-engine/compliance' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  // `New brief` STARTS A THREAD, and the label is the artboard's own. A brief
+  // on this licence is what a line of questions produces — the closing band is
+  // `Draft · session brief` — so beginning a new one is beginning a new
+  // session, which is the act migration 221 made possible. It was
+  // `unbuilt: 'the question box below starts one'`: true of the box, and never
+  // true of the op, since a box that always appends to one thread cannot start
+  // a second.
+  //
+  // `Clear history` KEEPS A NOTE, AND IT IS A DIFFERENT NOTE. "No session
+  // history is stored to clear" stopped being true with the same migration —
+  // but what replaced it is not a clear button. Nothing deletes an answer,
+  // deliberately: kept-or-not-kept is the only bit the ops row writes, and
+  // erasing a reader's own questions is the one irreversible act on this page.
+  // The reason is now about the refusal rather than about an absent store.
+  'research/ask': [
+    { label: 'New brief', kind: 'handler', handler: 'newSession' },
+    { label: 'Export session', kind: 'export' },
+    { label: 'Clear history', unbuilt: 'the history is stored now and nothing deletes from it — an answer is kept or not kept, and erasing a reader’s own questions is the one irreversible act this page declines to offer', hover: 'Nothing deletes from the history; an answer is kept or it is not.' },
+  ],
+  'research/markets': [
+    { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },
+    { label: 'Export', kind: 'export' },
+    { label: 'Cite in deck', unbuilt: 'nothing carries a sector into the deck builder' },
+  ],
+  'research/companies': [
+    { label: 'Add company', unbuilt: 'the directory is a sourced baseline; nothing here adds a company' },
+    { label: 'Compare', unbuilt: 'companies open one at a time; no comparison view is stored' },
+    { label: 'Export', kind: 'export' },
+  ],
+  // THIS KEY WAS MISSING AND THE ROW DREW NOTHING. `profile_zone_actions`
+  // excluded `research/funds` as "a card in ResearchWorkspace's ZONE_COPY, not
+  // a body" — true once, and untrue since `ZONE_COPY` became `{}` and
+  // `LIVE_ZONES` gained `funds`. `FundsZone` takes `zoneActions` and renders
+  // `zoneActions(visible)`, so three specified ops rendered as nothing at all.
+  // The same stale exclusion `research/client-prep` carried on two licences.
+  'research/funds': [
+    { label: 'Add fund', unbuilt: 'the add-a-fund form below takes one' },
+    // D312 — a brief is drafted per fund, from that one row, on its dossier.
+    // The list holds many funds and names none, so the op here says where.
+    { label: 'Brief me', unbuilt: 'a brief is drafted on one fund’s dossier, from that row alone — open the fund to draft it' },
+    { label: 'Export', kind: 'export' },
+  ],
+  // `Upload` IS THIS LICENCE'S WORD FOR THE SAME OP advisor and partner call
+  // `Add document`, and it opens the same file picker. It was
+  // `unbuilt: 'the add-document form below takes a file or a link'` — true of
+  // the form, never true of the op.
+  //
+  // D549: New collection opens the owned Library collection form.
+  'research/library': [
+    { label: 'Upload', kind: 'handler', handler: 'addDocument' },
+    { label: 'New collection', kind: 'handler', handler: 'newCollection' },
+    { label: 'Export', kind: 'export' },
+  ],
+};
+
+export const founderZoneActions = makeZoneActions(FOUNDER_ZONE_ACTIONS);

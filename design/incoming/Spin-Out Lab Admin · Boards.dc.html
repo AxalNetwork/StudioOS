@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Programs › Spin-Out Lab</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Spin-Out Lab · admin</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One program page for the Lab: one application queue, one cohort calendar, the people in the Lab, and every tool to run it. Drawn for an admin of [Studio Lisbon], with Super Admin callouts. Sample today is [10 Nov 2026]: [Nov 2026] is in Week 2 and [Dec 2026] is open for applications. Eadwyn stays out of the Lab, so there is no AI rail. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Spin-Out Lab Admin Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['SL1', 'Overview · Admin · desktop 1440 · light', 'Four tiles, the cohort calendar from [Sep 2026] to [Jan 2027], applications by cohort against places and the minimum, weeks passed as a heat table, the path from application to company, what needs the admin, and applications per week. The moved notice is for an old Admin Console link.', [D('SL1')]],
+      ['SL2', 'Applications', 'The one queue, with the cohort switch, status chips, capacity and a bulk bar. The second frame is the capacity bar below the minimum.', [D('SL2'), D('SL2b', 'Below the minimum', 1000)]],
+      ['SL3', 'One application · lightbox', 'A centred lightbox, not a drawer. Facts, the Lab’s Week 1 plan, the interview, what the founder sees and the history; the decision buttons sit at its foot.', [D('SL3'), D('SL3b', 'Other states', 1000)]],
+      ['SL4', 'Decision dialogs', 'Every decision carries an internal reason; the note to the founder is a separate field.', [D('SL4a', 'A · Approve', 680), D('SL4b', 'B · Waitlist', 680), D('SL4c', 'C · Decline', 680), D('SL4d', 'D · Move · NEW', 680), D('SL4e', 'E · Interview', 680), D('SL4f', 'F · Run below the minimum', 680), D('SL4g', 'G · Admit without an application · NEW', 680)]],
+      ['SL5', 'Cohorts · calendar and list', 'Twelve cohorts, each with its application window, review window and four weeks. Nothing here moves a date.', [D('SL5', 'Calendar'), D('SL5l', 'List')]],
+      ['SL6', 'One cohort · [Nov 2026]', 'Tiles, where the pool went, capacity, the four weeks, applicants, messages sent and the history.', [D('SL6')]],
+      ['SL7', 'Participants', 'The founders who need a decision, with where the cohort stands. Progress counts the 27 required items.', [D('SL7')]],
+      ['SL8', 'One founder · lightbox and dialogs', 'The four weeks with their checklists, tools unlocked, moderation and history; then grace, a changed outcome and a support session.', [D('SL8'), D('SL8a', 'A · Grace', 680), D('SL8b', 'B · Change a week', 680), D('SL8c', 'C · Open workspace', 680)]],
+      ['SL9', 'Hosts', 'Office-hours hosts waiting, approved, declined and removed.', [D('SL9')]],
+      ['SL10', 'Formation', '83(b) operator review and formation orders, for Lab ventures or all startups. The dialogs preselect nothing.', [D('SL10'), D('SL10d', 'Dialogs', 1440)]],
+      ['SL11', 'Graduation', 'Eligible and issued certificates. Emailed and downloaded are not recorded, with the reason.', [D('SL11'), D('SL11r', 'Revoke', 680)]],
+      ['SL12', 'How it runs', 'The playbook, one card per section, with the month on a small calendar. An admin reads Set by HQ.', [D('SL12'), D('SL12s', 'Super Admin', 1000)]],
+      ['SL13', 'Settings', 'Cohort size the admin edits; the grant terms, calendar rule and messages read only.', [D('SL13'), D('SL13d', 'Edit the minimum', 680)]],
+      ['SL14', 'Activity', 'One log of decisions, interviews, cohort events, outcomes, messages, hosts, certificates and formation.', [D('SL14'), D('SL14s', 'Super Admin · support sessions', 1000)]],
+      ['SL15', 'Overview · dark', 'SL1 in the dark colours; violet series and blocks become #a78bfa.', [D('SL15')]],
+      ['SL16', 'Empty', 'A to D as cards; E is a studio HQ has not granted the Lab.', [D('SL16a', 'A to D', 1100), D('SL16e', 'E · Not granted', 1440, 640)]],
+      ['SL17', 'Loading', 'Header and tabs live; every tile and card reads.', [D('SL17')]],
+      ['SL18', 'Error and refused', 'A one block failed while the next renders · B capacity unreadable · C refused decision · D note not sent · E authenticator needed · F not recorded.', [D('SL18', false, 1200)]],
+      ['SL19', 'No permission', 'A · a member who is not an admin. B · an admin opens support sessions. C · a case about another admin.', [D('SL19a', 'A · Not an admin', 1440, 720), D('SL19b', 'B and C', 1000)]],
+      ['SL20', 'Phone · 390 wide', 'Tiles two to a row and the calendar scrolling sideways; applications as cards; the application and the approve dialog as full-screen pages with sticky buttons.', [P('SL20a', 'Overview'), P('SL20b', 'Applications'), P('SL20c', 'Application'), P('SL20d', 'Approve')]],
+      ['SL21', 'Super Admin differences', 'The HQ shell with the HQ-held chip of today, and the four places the Super Admin differs.', [D('SL21'), D('SL21c', 'Callouts', 1000)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

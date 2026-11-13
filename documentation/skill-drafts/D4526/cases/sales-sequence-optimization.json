@@ -1,0 +1,37 @@
+{
+  "skill": "sales-sequence-optimization",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "sequence": "SEQ4",
+        "delivered": 100,
+        "replies": 8,
+        "opt_outs": 12,
+        "control_cohort": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "SEQ4",
+      "8%",
+      "12%"
+    ],
+    "must_say_not_recorded": [
+      "control cohort"
+    ],
+    "must_not_include": [
+      "proven uplift"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why control cohort is missing rather than inventing it.",
+    "Do not assert: proven uplift.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "SEQ4; 8%; 12%. control cohort: Not recorded. Human review required."
+}

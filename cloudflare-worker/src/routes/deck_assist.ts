@@ -1,0 +1,270 @@
+/**
+ * D899 (#2678, part 5 of #2434) — Eadwyn's card tools on the Pitch deck editor.
+ *
+ *   POST /api/decks/:id/cards/:card/assist/quote
+ *        { project_id, action, block?, text?, tone?, language?, instruction?, source_keys? }
+ *        or { tool: 'preflight_fix', finding: { check, block, title? }, block, text } (D4210)
+ *        → { action, option, ai: true, hold_microusd, model } | { action, option, ai: false, reason, message }
+ *   POST /api/decks/:id/cards/:card/assist
+ *        (the same body)
+ *        → { proposal, action, option, before?, after?, block?, title?, cost }
+ *
+ * `:id` is the version the editor opened (`pitch_decks.id`) and `:card` the
+ * card's place in it, from 0. The editor sends the text as it stands, saved or
+ * not, and the block it sits in.
+ *
+ * Each press runs through `run()` as one rail option (`ASSIST_OPTIONS`), is
+ * charged to the founder who pressed, and leaves one `ai_rail_proposals` row
+ * (D780): Accept places it in the editor and Save writes the version (D777
+ * §3). Nothing here writes a version.
+ *
+ * WHAT IS REFUSED BEFORE ANYTHING RUNS, so it costs nothing:
+ *   · a press on a figure bound to a record (a block with a binding, or a
+ *     metric tile): 422 `never_fill`, "Figures come from your records. Update
+ *     [module] to change this one.";
+ *   · an instruction that states a figure: 422 `figure_in_prompt`;
+ *   · a chart, table or timeline with nothing recorded to show: 422
+ *     `nothing_recorded`.
+ *   · a `preflight_fix` (D4210) for a check other than overflow, density,
+ *     font or placeholder: 422 `fix_not_offered`. Its reply must be shorter
+ *     than the text and keep every figure the text had, or it is not proposed.
+ * AFTER the run, a wording that names a number the founder's text did not is
+ * not placed (422 `figure_in_output`, with what the run charged), and a chart
+ * shows only the recorded sources the model named, each series a binding.
+ *
+ * Mounted in index.ts BEFORE `decks`, beside the other `/api/decks/*` routers.
+ */
+import { withoutGuarantees } from '../services/decks/compliance';
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { quoteRun, run, type RunOptions } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { parseJsonLoose } from '../services/decks/autofill';
+import {
+  ACTIONS, ASSIST_OPTIONS, ASSIST_PAGE, ASSIST_PROMPT_VERSION, CHART_ACTIONS, FIGURE_LINE, FINDING_TITLE_MAX, INSTRUCTION_MAX, LANGUAGES,
+  PREFLIGHT_FIX_CHECKS, TEXT_MAX, TONES, type PreflightFixCheck,
+  chartBlock, chartMessage, chartable, textMessage, wordingOf, wordingProblem, type Action, type ChartAction, type TextAction,
+} from '../services/decks/assist';
+import { figureRefusal } from '../services/decks/newDeck';
+import { readSources, sanitizeBinding, type SourceItem } from '../services/decks/sources';
+import { proposeRail } from '../services/railProposals';
+import { railFor, refuseRun } from '../util/railContext';
+import { refuse } from '../util/refusal';
+import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { cardRefOf } from '../services/decks/cardUids';
+import { mercuryFor } from './deck_sources';
+import { deckCeilingRefusal } from '../services/decks/observability';
+import { dailyCeiling } from '../services/decks/runQuotes';
+
+const deckAssist = new Hono<{ Bindings: Env }>();
+
+const today = () => new Date().toISOString().slice(0, 10);
+const isChart = (a: Action): a is ChartAction => (CHART_ACTIONS as readonly string[]).includes(a);
+
+type Press = {
+  action: Action; option: string; deckId: number; card: number; card_uid: string | null; projectId: number; text: string;
+  tone?: string; language?: string; instruction?: string; labels?: string[]; items: SourceItem[]; heading: string;
+  /** D1519: the deck theme's voice (`theme.voice`), read from the saved version. */
+  voice: string | null;
+  /** D4210: the preflight finding a `preflight_fix` press fixes. */
+  finding?: Finding;
+};
+
+type Finding = { check: PreflightFixCheck; block: string; title: string };
+
+/**
+ * D4210: the finding a `preflight_fix` press names, checked before anything
+ * runs, so a refusal costs nothing. Only a text check may be fixed
+ * (`PREFLIGHT_FIX_CHECKS`): `sources`, `contrast`, `image` and every other
+ * check are 422 `fix_not_offered`. The finding names one block, and it is the
+ * block the press sends.
+ */
+function findingOf(c: any, body: any): { finding: Finding } | { refused: Response } {
+  const f = body?.finding;
+  const check = typeof f?.check === 'string' ? f.check : '';
+  if (!(PREFLIGHT_FIX_CHECKS as readonly string[]).includes(check)) {
+    return { refused: refuse(c, 422, { code: 'fix_not_offered', message: 'Eadwyn suggests fixes for text that is too long, too dense, too small or a placeholder. Fix this one on the card. Nothing was run.', extra: { check: check || null } }) };
+  }
+  const block = typeof f?.block === 'string' ? f.block : '';
+  if (!block || block !== body?.block?.id) return { refused: c.json({ error: 'the finding names the block the press sends' }, 400) };
+  const title = typeof f?.title === 'string' ? f.title.replace(/\s+/g, ' ').trim().slice(0, FINDING_TITLE_MAX) : '';
+  return { finding: { check: check as PreflightFixCheck, block, title } };
+}
+
+/** The press a request asks for, checked, or the response that refuses it. */
+async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused: Response }> {
+  const body = await c.req.json().catch(() => ({} as any));
+  const deckId = Number(c.req.param('id'));
+  const cardParam = String(c.req.param('card') ?? '');
+  if (!Number.isSafeInteger(deckId) || deckId <= 0) return { refused: c.json({ error: 'deck id required' }, 400) };
+  // D1500: `:card` is the card's uid, or (an older editor) its place from 0.
+  const byPlace = /^(0|[1-9][0-9]?)$/.test(cardParam);
+  if (!byPlace && !/^[A-Za-z0-9_-]{1,40}$/.test(cardParam)) return { refused: c.json({ error: 'card must be a card of the deck' }, 400) };
+  // D4210: the preflight panel names its tool; every other press names its action.
+  if (body?.tool !== undefined && body.tool !== 'preflight_fix') return { refused: c.json({ error: 'tool must be preflight_fix' }, 400) };
+  const action = (body?.tool === 'preflight_fix' ? 'preflight_fix' : String(body?.action || '')) as Action;
+  if (!(ACTIONS as readonly string[]).includes(action)) return { refused: c.json({ error: `action must be one of ${ACTIONS.join(', ')}` }, 400) };
+
+  let row: any;
+  try { row = await getDeckRow(c.env, deckId); } catch { return { refused: c.json({ error: 'not found' }, 404) }; }
+  const projectId = Number(row.project_id);
+  let project: any;
+  try { project = await projectOwned(c, user, projectId, { write: true }); } catch (e: any) {
+    return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
+  }
+  const fix = action === 'preflight_fix' ? findingOf(c, body) : null;
+  if (fix && 'refused' in fix) return fix;
+  let savedCards: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) savedCards = parsed; } catch { savedCards = []; }
+  // A uid the saved version does not hold yet (a card added since) keeps the place the editor sends.
+  const ref = cardRefOf(savedCards, byPlace ? { card: Number(cardParam) } : { card_uid: cardParam, card: body?.card_index ?? null });
+  if ('error' in ref || ref.index === null) return { refused: c.json({ error: 'card must be a card of the deck. Save the deck, then ask again.' }, 400) };
+  const card = ref.index;
+  const cardUid = ref.uid;
+  const { items } = await readSources({ env: c.env, projectId, today: today(), mercury: await mercuryFor(c, user, project) });
+
+  // A figure bound to a record is the record's: the block as the editor holds it, or as the version stored it.
+  const block = body?.block && typeof body.block === 'object' ? body.block : null;
+  const stored = (() => {
+    try {
+      const slides = JSON.parse(row.slides || '[]');
+      const b = Array.isArray(slides?.[card]?.blocks) ? slides[card].blocks.find((x: any) => x?.id === block?.id) : null;
+      return b ?? null;
+    } catch { return null; }
+  })();
+  const bound = [block, stored].map((b) => (b ? sanitizeBinding(b.binding) : null)).find(Boolean)
+    ?? (block?.kind === 'metric' || stored?.kind === 'metric' ? { source_key: '' } : null);
+  if (!isChart(action) && action !== 'headline' && bound) {
+    const module = items.find((i) => i.source_key === bound.source_key)?.module ?? null;
+    return { refused: c.json({ error: 'never_fill', refusal: 'never_fill', message: FIGURE_LINE(module), source_key: bound.source_key || null, module }, 422) };
+  }
+
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+  const heading = typeof body?.heading === 'string' ? body.heading.trim().slice(0, 120) : '';
+  const voice = typeof themeOfRow(row)?.voice === 'string' ? String(themeOfRow(row).voice) : null;
+  const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, card_uid: cardUid, projectId, text, items, heading, voice };
+  if (fix) press.finding = fix.finding;
+  if (!isChart(action) && action !== 'headline') {
+    if (!text) return { refused: c.json({ error: 'text required: select the words to change' }, 400) };
+    if (text.length > TEXT_MAX) return { refused: c.json({ error: `the text is at most ${TEXT_MAX} characters` }, 400) };
+  }
+  if (action === 'tone') {
+    if (!(TONES as readonly string[]).includes(body?.tone)) return { refused: c.json({ error: `tone must be one of ${TONES.join(', ')}` }, 400) };
+    press.tone = body.tone;
+  }
+  if (action === 'translate') {
+    if (!(LANGUAGES as readonly string[]).includes(body?.language)) return { refused: c.json({ error: `language must be one of ${LANGUAGES.join(', ')}` }, 400) };
+    press.language = body.language;
+  }
+  if (action === 'ask') {
+    const instruction = typeof body?.instruction === 'string' ? body.instruction.trim() : '';
+    if (!instruction) return { refused: c.json({ error: 'instruction required: say what to change' }, 400) };
+    if (instruction.length > INSTRUCTION_MAX) return { refused: c.json({ error: `the instruction is at most ${INSTRUCTION_MAX} characters` }, 400) };
+    const fig = figureRefusal(instruction, projectId, 'an instruction');
+    if (fig) return { refused: refuse(c, 422, { code: fig.code, message: fig.message, extra: { figure: fig.figure, source_key: fig.source_key, module: fig.module, href: fig.href } }) };
+    press.instruction = instruction;
+  }
+  if (action === 'headline') {
+    const keys: string[] = Array.isArray(body?.source_keys) ? body.source_keys.filter((k: unknown): k is string => typeof k === 'string').slice(0, 6) : [];
+    const labels = keys.map((k) => items.find((i) => i.source_key === k && i.state === 'recorded')?.label).filter((l): l is string => Boolean(l));
+    if (!labels.length) return { refused: refuse(c, 422, { code: 'nothing_recorded', message: 'Choose at least one recorded figure for the card first. Nothing was run.' }) };
+    press.labels = labels;
+  }
+  if (isChart(action) && !chartable(items).length) {
+    return { refused: refuse(c, 422, { code: 'nothing_recorded', message: 'Nothing is recorded to chart yet. Record figures in their modules, and the chart reads them from there. Nothing was run.' }) };
+  }
+  return { press };
+}
+
+/** The run one press makes, as one options object, so the quote and the run read the same input. */
+function runOptions(c: any, user: User, p: Press): RunOptions {
+  const msg = isChart(p.action)
+    ? chartMessage(p.action, chartable(p.items), p.heading)
+    : textMessage(p.action as TextAction, p.text, { tone: p.tone, language: p.language, instruction: p.instruction, labels: p.labels, voice: p.voice, check: p.finding?.check, finding: p.finding?.title });
+  // The press names its own option: a header can name the page, never another option's price.
+  const rail = { ...railFor(c, { page: ASSIST_PAGE, option: p.option }, `deck:${p.deckId}`), option: p.option };
+  return {
+    task: 'rail_write',
+    userId: Number(user.id) || 0,
+    surface: AI_SURFACE.raisePitch,
+    rail,
+    systemPrompt: msg.system,
+    messages: [{ role: 'user', content: msg.user }],
+    temperature: isChart(p.action) ? 0.2 : 0.5,
+    maxTokens: isChart(p.action) ? 300 : Math.min(1600, 120 + Math.ceil(p.text.length / 2)),
+  };
+}
+
+/** What a run charged, from its usage row; null when it is not known. */
+async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
+  if (!usageLogId) return null;
+  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
+  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
+}
+
+deckAssist.post('/:id/cards/:card/assist/quote', async (c) => {
+  const user = await requireAuth(c);
+  const got = await pressOf(c, user);
+  if ('refused' in got) return got.refused;
+  const p = got.press;
+  const q = await quoteRun(c.env, runOptions(c, user, p));
+  if (q.ok) return c.json({ action: p.action, option: p.option, ai: true, hold_microusd: q.hold_microusd, model: q.model });
+  return c.json({ action: p.action, option: p.option, ai: false, reason: q.refusal, message: q.refusal === 'assist_off' ? 'AI assistance is off on this page. Your records still fill the figures.' : q.error });
+});
+
+deckAssist.post('/:id/cards/:card/assist', async (c) => {
+  const user = await requireAuth(c);
+  const got = await pressOf(c, user);
+  if ('refused' in got) return got.refused;
+  const p = got.press;
+  const userId = Number(user.id) || 0;
+  const opts = runOptions(c, user, p);
+  // D1510 (#3761): the owner's daily ceiling, before any hold; priced only once a ceiling is set.
+  if (dailyCeiling(c.env) != null) {
+    const q = await quoteRun(c.env, opts);
+    const ceiling = await deckCeilingRefusal(c.env, q.ok ? q.hold_microusd : 0);
+    if (ceiling) return refuse(c, 429, ceiling);
+  }
+  const res = await run(c.env, { ...opts, surface: AI_SURFACE.raisePitch, rail: opts.rail });
+  if (!res.ok) {
+    const stop = refuseRun(c, res);
+    if (stop) return stop;
+    return refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not answer. Nothing was charged and nothing changed.' });
+  }
+  const cost = { charged_microusd: await chargedOf(c.env, res.usageLogId, userId), usage_log_id: res.usageLogId ?? null };
+
+  let payload: Record<string, unknown>;
+  let answer: Record<string, unknown>;
+  if (isChart(p.action)) {
+    const made = chartBlock(p.action, parseJsonLoose<any>(res.output), p.items);
+    if (!made) return refuse(c, 422, { code: 'no_figures_chosen', message: 'Eadwyn named no recorded figure to show, so nothing was placed. It was charged for the run.', extra: { cost } });
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, block: made.block, title: made.title };
+    answer = { block: made.block, title: made.title };
+  } else {
+    // D1546: the guarantee-language block before anything is proposed; words that only promised a return propose nothing.
+    const { text: after, dropped: promised } = withoutGuarantees(wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX));
+    if (promised && !after.trim()) return refuse(c, 422, { code: 'guarantee_language', message: 'Eadwyn’s words promised a return, which a deck may not, so nothing was proposed. It was charged for the run.', extra: { cost } });
+    const problem = wordingProblem(p.action as TextAction, p.text, after);
+    if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
+    // #4188: what was asked rides along when the press carried it, so HQ's report queue reads it.
+    const asked = { ...(p.tone ? { tone: p.tone } : {}), ...(p.language ? { language: p.language } : {}), ...(p.instruction ? { instruction: p.instruction } : {}),
+      // D4210: which finding the fix answers, by check and block; never its words.
+      ...(p.finding ? { finding: { check: p.finding.check, block: p.finding.block } } : {}) };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, ...asked, before: p.text, after };
+    answer = { before: p.text, after };
+  }
+  let proposal = null;
+  try {
+    proposal = await proposeRail(c.env, {
+      userId, page: ASSIST_PAGE, option: p.option, record: `deck:${p.deckId}`, kind: 'proposal',
+      payload, model: res.usage?.model ?? null, usageLogId: res.usageLogId ?? null,
+    });
+  } catch {
+    return refuse(c, 503, { code: 'proposal_unsaved', message: 'Eadwyn answered, but the proposal could not be kept. It was charged for the run; try again in a moment.', extra: { cost } });
+  }
+  await auditDeckWrite(c, user, p.projectId, 'deck_card_assist_proposed', `Card ${p.card + 1}: ${p.action} proposed`);
+  return c.json({ proposal, action: p.action, option: p.option, ...answer, ...(isChart(p.action) ? {} : { prompt_version: ASSIST_PROMPT_VERSION }), cost });
+});
+
+export default deckAssist;

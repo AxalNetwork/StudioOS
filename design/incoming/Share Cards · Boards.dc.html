@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b6577">Axal VC · Open Graph</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Social share cards</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The 1200 × 630 images Axal VC’s public links show on LinkedIn, X, WhatsApp, Slack and iMessage. One light image per URL. Each family board carries the safe-area and square-crop layer; turn it off with the Overlays tweak.</p>
+</header>
+<section id="PAGE" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px"><span style="font-size:12px;font-weight:700;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">PAGE</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Every family at 1200 × 630</h2></div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<sc-for list="{{ row }}" as="f" hint-placeholder-count="9">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Share Cards Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Share Cards Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;overlays&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const ov = this.props.overlays ?? true;
+    const F = (v, cap, w, h, o) => ({ v: v + (o && ov ? '-o' : ''), cap: cap || '', wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w <= 400 ? 28 : 10}px;overflow:hidden;box-shadow:0 18px 44px rgba(24,24,27,.10)`, hs: `${w}px,${h || 700}px` });
+    const C = (v, cap, o) => F(v, cap, 1200, 630, o);
+    const B = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return {
+      row: [C('home', 'SC1 · Home'), C('price', 'SC2 · Pricing'), C('art', 'SC3 · Articles'), C('ev', 'SC4 · Events'), C('prof', 'SC5 · Profiles'), C('lab', 'SC6 · Spin-Out Lab'), C('trust', 'SC7 · Trust center'), C('priv', 'SC8 · Private link'), C('jobs', 'SC10 · Jobs')],
+      boards: [
+        B('SC0', 'Today’s card (reference)', [C('today', '')], 'The card that ships now on every record link, token link and signed-in link.'),
+        B('SC1', 'Home and marketing', [C('home', 'Home', 1), F('sc1v', 'Product variants and the product section card', 1788), C('long', 'Long title · the 44px step', 1)], 'The layout is centred so the mark and the eyebrow sit inside the centred square crop. Titles up to 34 characters also start inside it; longer titles keep their middle words in the square (pending owner). Bottom padding is 62px, not 58, so axal.vc ends inside the safe area.'),
+        B('SC2', 'Pricing', [C('price', '/pricing', 1), C('priceInv', '/pricing/investor', 1)], 'Tier names only. No prices.'),
+        B('SC3', 'Article and insight', [C('art', 'Family · /articles', 1), C('ins', 'Insights', 1), C('auth', 'Authors section', 1), F('sc3li', 'In a LinkedIn preview', 1780)], 'A record uses its own https cover; without one it falls back to the family image. Public insights use the same family.'),
+        B('SC4', 'Event', [C('ev', 'Family', 1), F('sc4sl', 'In a Slack unfurl', 1332)], 'Format reads Online, In person or Hybrid. No host, price, capacity, seat count or join link. An unlisted event shared by link gets the same record card (pending owner).'),
+        B('SC5', 'Public profile, venture and partner', [C('prof', 'Family', 1), F('sc5x', 'In an X preview', 1684)], 'People: name and headline only. Startups: stage and one line, on the family image, because the public read has no logo. Only partners listed in the directory get a record card.'),
+        B('SC6', 'Spin-Out Lab', [C('lab', '/spin-out-lab', 1), C('labDemo', 'Demo Day', 1)], 'A static card, with no deadline or who-can-apply chip.'),
+        B('SC7', 'Trust center and legal', [C('trust', 'Trust center', 1), F('sc7v', 'Tab and legal variants', 1732)], 'Lavender ground, a hairline frame and a document glyph. The variants change only the title; legal pages use the eyebrow LEGAL.'),
+        B('SC8', 'Private link', [C('priv', 'Every token link', 1)], 'No record data. Every token link gets this card and the same preview text (pending owner). Signed-in pages keep the home card.'),
+        B('SC9', 'Previews in context', [F('sc9crop', 'Crops', 1862), F('sc9li', 'LinkedIn feed · desktop', 1780), F('sc9x', 'X post · large summary card', 1684), F('sc9sl', 'Slack unfurl', 1984), F('wa1', 'WhatsApp · home', 390, 844), F('wa2', 'WhatsApp · article', 390, 844), F('wa3', 'WhatsApp · private link', 390, 844), F('im1', 'iMessage · home', 390, 844), F('im2', 'iMessage · article', 390, 844), F('im3', 'iMessage · private link', 390, 844)], 'Only Slack prints a site name line, “Axal VC StudioOS”. WhatsApp and iMessage show the centred square; X trims 15px from the top and the bottom.'),
+        B('SC10', 'Job', [C('jobs', 'Family', 1), F('sc10li', 'In a LinkedIn preview', 612)], 'Never the pay band, even when the job page shows it.'),
+        B('SC11', 'Fallback states', [F('sc11', '', 1444)], ''),
+        B('SC12', 'Dark reference', [C('home-d', 'SC1'), C('art-d', 'SC3'), C('ev-d', 'SC4'), C('priv-d', 'SC8')], 'Reference only. Platforms do not pick an image by theme, so these do not ship (pending owner).')
+      ]
+    };
+  }
+}
+</script>
+</body></html>

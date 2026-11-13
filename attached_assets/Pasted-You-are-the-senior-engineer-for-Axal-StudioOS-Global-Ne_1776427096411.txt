@@ -1,0 +1,52 @@
+You are the senior engineer for Axal StudioOS (Global Network Partner platform + high-throughput VC platform). The entire codebase is now in this Replit (FastAPI backend with routers, Cloudflare Workers + D1 + AI Workers + Queues, static frontend, full D1 ORM, all features we built: KYC, AI matching, Studio Ops, pipeline/decision gates, spin-out automation, Legal/Capital Engine, VC Fund core, liquidity/exits, integrations SDKs, monitoring, rate limiting, async job queue, etc.).
+
+Perform a complete **code optimization, security audit, bug fix, and improvement pass** with these exact requirements:
+
+1. **Security Audit & Hardening** (top priority)
+   - Scan every endpoint for proper RBAC enforcement, input validation/sanitization, and authentication.
+   - Ensure all secrets (API keys, webhook secrets, Stripe Atlas, etc.) are loaded only from Replit Secrets (never hardcoded).
+   - Encrypt sensitive D1 fields (api_key, webhook_secret, etc.) using Web Crypto.
+   - Verify rate limiting is applied globally and per-user/per-role.
+   - Check for SQL injection, XSS, CSRF, and open redirect risks.
+   - Add proper CORS, security headers, and helmet-style protections for Workers.
+   - Enforce HTTPS-only and secure cookie flags where applicable.
+   - Fix any missing audit logging in critical flows (spin-out, capital calls, liquidity events, payouts).
+
+2. **Performance Optimization & High-Throughput**
+   - Optimize all D1 queries (add missing indexes, use prepared statements, batch operations).
+   - Ensure every heavy operation (AI scoring, doc generation, spin-out, capital calls, liquidity matching) runs exclusively through the async job queue.
+   - Add intelligent caching (D1 + simple in-memory where appropriate) for dashboard, match scores, and partner summaries.
+   - Refactor any blocking calls in routers to be fully non-blocking.
+   - Optimize Cloudflare AI Worker calls and fallback to Replit AI.
+   - Reduce cold-start latency for Workers (bundle optimizations, minimize imports).
+
+3. **Bug Fixes & Stability**
+   - Scan and fix any runtime errors, unhandled exceptions, or race conditions in job queue, decision gates, spin-out triggers, and returns distribution.
+   - Fix any broken RBAC middleware edge cases (role inheritance, admin overrides).
+   - Ensure all Replit Auth callbacks, webhook handlers, and integration endpoints handle errors gracefully with proper JSON responses.
+   - Validate D1 schema consistency across all tables (foreign keys, indexes, constraints).
+   - Fix any frontend fetch() errors or UI state issues in dashboards (Partner, Pipeline, Liquidity, VC Fund, Integrations, Monitoring).
+
+4. **Code Quality & Best Practices**
+   - Add comprehensive error handling and structured logging (use Python logging + Cloudflare Worker logs).
+   - Organize code: ensure clean separation of routers, models, services, workers.
+   - Add type hints everywhere (Pydantic v2 where possible).
+   - Update requirements.txt / pyproject.toml with pinned, secure dependency versions.
+   - Add basic unit/integration test stubs for critical paths (KYC, spin-out, capital call, liquidity execution).
+   - Improve README.md inside the Replit with architecture overview, deployment instructions, and environment variables.
+
+5. **Deployment & Production Readiness**
+   - Update wrangler.toml with all required bindings (D1, Queues, AI, KV if needed).
+   - Add a production-ready deploy script that pushes to Cloudflare Pages + Workers.
+   - Add .env.example and a checklist for secrets.
+
+Build this step-by-step:
+1. First run a full security audit and apply all fixes/hardening.
+2. Then optimize performance and high-throughput flows.
+3. Then fix all bugs and improve error handling/logging.
+4. Then apply code quality improvements and add tests.
+5. Finally update deployment configs and README.
+
+After each major step, show me the exact code changes in diff style and ask for confirmation before continuing.
+
+Start now.

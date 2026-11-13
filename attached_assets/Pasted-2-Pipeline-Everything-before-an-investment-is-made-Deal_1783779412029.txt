@@ -1,0 +1,2917 @@
+2. Pipeline
+Everything before an investment is made.
+Deal Flow
+Deal Pipeline
+Kanban Board
+Pipeline Stages
+Watchlist
+Archived Deals
+Sourcing
+Incoming Applications
+Referrals
+Scouts
+Accelerators
+Conferences
+CRM Import
+Website Applications
+Screening
+AI Screening
+Scorecards
+Investment Thesis Match
+TAM Analysis
+Market Analysis
+Competitor Analysis
+Founder Analysis
+Risk Assessment
+Red Flags
+Due Diligence
+Data Room
+Checklist
+Financial Review
+Technical Review
+Legal Review
+Product Review
+Customer Calls
+Reference Calls
+Security Review
+Investment Committee
+Investment Memos
+Committee Meetings
+Voting
+Decision History
+Approvals
+Meeting Minutes
+Transactions
+SAFE
+Convertible Notes
+Equity
+Term Sheets
+Closing Documents
+
+—--
+
+Deal Flow
+Think of Deal Flow as the "home" for every investment opportunity. Every startup, acquisition target, fund investment, or secondary opportunity lives here.
+Overview Dashboard
+Shows:
+Total active deals
+New deals this week
+Deals requiring action
+Deals by stage
+Average days in stage
+Pipeline value
+Expected deployment
+Recent activity
+Upcoming meetings
+AI recommendations
+Quick actions:
+Add Deal
+Import Deal
+Schedule Meeting
+Generate Investment Memo
+Assign Partner
+Archive
+
+Deal Pipeline
+This is the master database of all investment opportunities.
+Table View
+Columns might include:
+Company
+Logo
+Company name
+Website
+Description
+Industry
+HQ
+Founded
+Founders
+Founder names
+LinkedIn
+Previous companies
+Contact info
+Investment
+Round
+Stage
+Raise amount
+Ticket size
+Ownership target
+Valuation
+Lead investor
+Syndicate
+Pipeline
+Current Stage
+Deal Score
+Probability
+Days in Stage
+Assigned Partner
+Investment Lead
+Activity
+Last Contact
+Next Meeting
+Notes
+Tasks
+Documents
+AI Summary
+Financial
+ARR
+Growth
+Burn
+Runway
+Gross Margin
+Customers
+Status
+Active
+Watching
+Declined
+Invested
+Exited
+
+Filters
+Users should filter by
+Industry
+Country
+Stage
+Valuation
+Fund
+Partner
+Founder
+Referral Source
+Score
+Investment Size
+Date Added
+Last Activity
+Next Meeting
+Tags
+Custom Fields
+
+Bulk Actions
+Select multiple deals
+Assign Partner
+Move Stage
+Archive
+Export
+Tag
+Delete
+Generate Reports
+AI Summary
+
+Kanban Board
+Visual pipeline.
+Each card represents one startup.
+Example
+Inbound
+
+• Stripe AI
+• Neural Labs
+• Quantum Robotics
+
+↓
+
+First Call
+
+• Atlas AI
+• MedTech Labs
+
+↓
+
+Partner Meeting
+
+• NanoVision
+
+↓
+
+Due Diligence
+
+• FinCore
+
+↓
+
+Investment Committee
+
+• Apollo Robotics
+
+↓
+
+Closing
+
+• FlowPay
+
+↓
+
+Portfolio
+
+Each Deal Card
+Contains
+Company Logo
+Company Name
+Founder
+Industry
+Country
+Current Raise
+Score
+Assigned Partner
+Last Activity
+Due Date
+Tags
+Unread Messages
+AI Risk Indicator
+Urgency
+Quick Actions
+Hover Actions
+Open
+Move
+Email
+Schedule Meeting
+Add Note
+Generate Memo
+Reject
+
+Pipeline Stages
+This should be customizable.
+Default stages
+
+1. Incoming
+Startup submitted
+Contains
+Submission date
+Source
+Website
+Deck
+Founder
+AI extraction
+Duplicate detection
+Spam detection
+Auto tags
+
+2. Screening
+Initial review.
+Contains
+Scorecard
+AI Thesis Match
+Industry
+Market Size
+Competition
+Revenue
+Team
+Technology
+Notes
+Decision
+
+3. Intro Call
+Meeting with founders.
+Contains
+Meeting Notes
+Transcript
+Recording
+Questions
+Founder Ratings
+Culture Fit
+Next Steps
+Action Items
+
+4. Partner Review
+Internal discussion.
+Contains
+Partner Notes
+Investment Champion
+Risks
+Pros
+Cons
+Investment Recommendation
+Vote
+
+5. Due Diligence
+Largest stage.
+Subsections
+Financial
+Legal
+Technology
+Security
+Sales
+Customers
+Product
+Compliance
+Hiring
+Market
+Competition
+Each with
+Status
+Assigned Owner
+Checklist
+Documents
+Comments
+Risk Level
+
+6. Investment Committee
+Contains
+Investment Memo
+Presentation
+Committee Members
+Agenda
+Voting
+Questions
+Meeting Minutes
+Decision
+Conditions
+
+7. Legal
+Contains
+Term Sheet
+SAFE
+Convertible Note
+SPA
+SHA
+Signatures
+Lawyers
+Closing Checklist
+
+8. Closing
+Contains
+Wire Instructions
+Investment Amount
+Ownership
+Cap Table
+Documents
+Closing Date
+Welcome Package
+
+9. Portfolio
+Automatically moves here.
+Creates
+Portfolio Company
+KPIs
+Founder Portal
+Reporting
+Board Meetings
+
+Watchlist
+Companies you're monitoring but not actively pursuing.
+Examples
+Too early
+Waiting for traction
+Waiting for next round
+Founder not fundraising
+Interesting market
+Strategic acquisition target
+
+Fields
+Reason
+Target Date
+Follow-up Reminder
+News Feed
+Funding Alerts
+Growth Tracking
+Competitor Tracking
+AI Summary
+
+Archived Deals
+Deals kept for historical reference.
+Reasons
+Duplicate
+Merged
+Company closed
+No response
+Paused
+Old opportunity
+
+Contains
+Everything from active deal
+Plus
+Archive Date
+Archive Reason
+Archived By
+Restore Button
+
+Lost Deals
+Deals you intentionally declined or lost to another investor.
+Reasons
+Too expensive
+Poor founder fit
+Market too small
+Competition
+Technology risk
+Legal issues
+Lost to Sequoia
+Lost to a strategic investor
+Founder declined
+Fund out of capital
+Timing
+
+Fields
+Lost Date
+Reason
+Winning Investor
+Valuation
+Winning Terms
+Lessons Learned
+Internal Notes
+Could Revisit
+Follow-up Date
+AI Analysis
+Sourcing
+The central hub for discovering and importing investment opportunities.
+Overview Dashboard
+Widgets:
+Total new opportunities
+Opportunities this week/month/year
+Top referral sources
+Source conversion rates
+Deals by source
+Geography map
+Sector distribution
+AI recommended deals
+Duplicate alerts
+Unassigned opportunities
+Response SLA
+Upcoming events
+Recent imports
+Quick Actions:
+Add Opportunity
+Import CSV
+Connect CRM
+Invite Scout
+Create Referral Link
+Create Application Form
+Sync Accelerator
+Scan Business Card
+Bulk Assign
+Export
+
+Incoming Applications
+All startups that have been submitted but not yet qualified.
+List View
+Columns
+Startup
+Logo
+Company Name
+Website
+Industry
+Short Description
+Founders
+Founder
+Co-founders
+Emails
+LinkedIn
+Phone
+Fundraising
+Round
+Amount Raising
+Minimum Ticket
+Valuation
+Previous Funding
+Source
+Submission Type
+Submission Date
+Referral Source
+Campaign
+Event
+Country
+AI Analysis
+AI Summary
+Thesis Match
+Investment Score
+Duplicate Score
+Risk Flags
+Recommended Partner
+Status
+New
+Reviewing
+Assigned
+Qualified
+Rejected
+Converted to Deal
+
+Startup Application Details
+Company
+Legal Name
+Brand Name
+Website
+Domain
+Logo
+Description
+Industry
+Subindustry
+Business Model
+Headquarters
+Countries Served
+Founded Date
+Team Size
+Founders
+Names
+Emails
+LinkedIn
+Previous Startups
+Previous Exits
+Education
+Employment History
+Fundraising
+Current Round
+Target Raise
+Committed Capital
+Existing Investors
+Lead Investor
+SAFE/Equity
+Use of Funds
+Metrics
+ARR
+MRR
+Revenue
+Growth
+Burn
+Runway
+Customers
+Enterprise Clients
+Churn
+Gross Margin
+CAC
+LTV
+Documents
+Pitch Deck
+Financial Model
+One Pager
+Cap Table
+Demo Video
+Product Screenshots
+Data Room Link
+Internal
+Assigned Partner
+Assigned Associate
+Internal Notes
+AI Summary
+Tags
+Tasks
+Status History
+
+Referrals
+Companies introduced by trusted contacts.
+Referral Dashboard
+Shows
+Top Referrers
+Accepted Referrals
+Conversion Rate
+Investments by Referrer
+Referral Leaderboard
+
+Referrer Profile
+Person
+Name
+Organization
+Role
+Email
+Phone
+LinkedIn
+Performance
+Number of Referrals
+Qualified Deals
+Investments
+Exits
+Success Rate
+Relationship
+Relationship Strength
+Mutual Contacts
+Previous Meetings
+Last Contact
+Notes
+
+Referral Record
+Contains
+Referrer
+Startup
+Introduction Email
+Date
+Warm/Cold Intro
+Notes
+AI Summary
+Status
+Follow-up
+Thank You Sent
+
+Scouts
+External individuals who proactively source startups for your firm.
+Scout Dashboard
+Active Scouts
+Opportunities Submitted
+Qualified Deals
+Investments
+Scout Rankings
+Geography Coverage
+Sector Coverage
+
+Scout Profile
+Personal
+Name
+Region
+Expertise
+Languages
+Bio
+Performance
+Deals Submitted
+Qualified Deals
+Investments
+Exits
+Conversion Rate
+Average Score
+Compensation
+Carry
+Success Fees
+Bonuses
+Payment History
+Network
+Universities
+Accelerators
+Communities
+Previous Employers
+
+Scout Submission
+Startup
+Why It Fits
+Personal Notes
+Founder Relationship
+Meeting History
+Attachments
+Confidence Level
+
+Accelerators
+Manage relationships with startup programs.
+Accelerator Database
+Name
+Country
+Website
+Cohort Size
+Focus Areas
+Partner Contact
+Alumni Count
+Demo Day Dates
+
+Cohorts
+Batch
+Year
+Start Date
+End Date
+Demo Day
+Number of Companies
+
+Startup List
+Each startup contains
+Company
+Founders
+Stage
+Industry
+Funding
+Demo Day
+Interest Score
+
+Relationships
+Partner Contact
+Meetings
+Sponsorships
+Events
+Notes
+Shared Startups
+
+Conferences
+Track investment opportunities from events.
+Event Profile
+Event Name
+Organizer
+Location
+Dates
+Website
+Booth
+Tickets
+Attendees
+
+Meetings
+Startup
+Founder
+Time
+Location
+Notes
+Business Cards
+AI Transcript
+
+Companies Met
+Startup
+Industry
+Country
+Stage
+Score
+Follow-up Status
+
+Business Cards
+OCR Scan
+Contact Creation
+Company Match
+Duplicate Detection
+Notes
+
+Event Analytics
+Meetings Held
+Companies Seen
+Qualified Deals
+Investments
+ROI
+
+CRM Import
+Import opportunities from external systems.
+Supported Sources
+Salesforce
+HubSpot
+Affinity
+DealCloud
+Airtable
+Notion
+Excel
+CSV
+Google Sheets
+Pipedrive
+
+Import Wizard
+Step 1
+Choose Source
+Step 2
+Authenticate
+Step 3
+Field Mapping
+Step 4
+Duplicate Detection
+Step 5
+Preview
+Step 6
+Import
+
+Import Settings
+Auto-create Contacts
+Auto-create Organizations
+Auto-create Deals
+Merge Existing Records
+Preserve History
+Import Notes
+Import Emails
+Import Files
+Assign Owner
+Apply Tags
+
+Import Report
+Imported
+Updated
+Skipped
+Errors
+Duplicate Matches
+Processing Time
+
+Website Applications
+Public-facing application forms integrated with your website.
+Application Forms
+You can create multiple forms for:
+General Startup Applications
+AI Startups
+FinTech
+HealthTech
+ClimateTech
+Seed Fund
+Series A
+Accelerator Applications
+Venture Partner Applications
+Scout Applications
+
+Form Builder
+Supports
+Basic Fields
+Company Name
+Website
+Email
+Founder
+Phone
+Business
+Industry
+Stage
+Business Model
+Geography
+Revenue
+Team Size
+Fundraising
+Round
+Raise Amount
+Valuation
+Existing Investors
+Lead Investor
+Uploads
+Pitch Deck
+Financial Model
+One Pager
+Product Demo
+Cap Table
+Data Room
+Questions
+Problem
+Solution
+Why Now?
+Competition
+Go-to-Market
+Biggest Risk
+Why Our Fund?
+
+Automation
+After submission, the system can automatically:
+Create the startup record
+Create founder contacts
+Generate a deal record
+Assign a partner or associate
+Detect duplicates
+Enrich company data from public sources
+Generate an AI summary
+Score the opportunity against the fund's investment thesis
+Notify the investment team
+Send a confirmation email
+Schedule follow-up reminders
+Route the opportunity to the appropriate pipeline stage
+Screening
+The Screening module evaluates opportunities before they move into Due Diligence.
+Overview Dashboard
+Widgets
+Companies awaiting review
+Average screening time
+Passed vs. rejected
+AI recommendations
+Top-scoring startups
+Screening by partner
+Industry distribution
+Stage distribution
+Geographic distribution
+Common rejection reasons
+Screening backlog
+Recent activity
+Quick Actions
+Start Screening
+Generate AI Analysis
+Assign Reviewer
+Open Scorecard
+Compare Companies
+Request Information
+Move to Due Diligence
+Reject Opportunity
+
+AI Screening
+An AI assistant automatically analyzes a company using its pitch deck, website, financials, CRM history, meeting notes, and external data.
+AI Company Summary
+Executive Summary
+Business Model
+Problem
+Solution
+Value Proposition
+Product Overview
+Target Customers
+Pricing Model
+Revenue Streams
+Business Stage
+
+AI Investment Recommendation
+Examples
+Strong Fit
+Moderate Fit
+Weak Fit
+Not Recommended
+Confidence Score
+Example
+93% confidence
+Reasoning
+Strong founder background
+Large market
+Excellent growth
+Weak competitive moat
+High burn rate
+
+AI Opportunity Score
+Breakdown
+Team
+Product
+Market
+Technology
+Traction
+Financials
+Competition
+Fund Fit
+Exit Potential
+Overall Score
+
+AI Extracted Metrics
+Automatically identifies
+Revenue
+ARR
+MRR
+Growth
+Burn
+Runway
+Customers
+Employees
+Funding
+Valuation
+Pricing
+Gross Margin
+Churn
+CAC
+LTV
+
+AI Suggested Questions
+Examples
+Why is churn increasing?
+What differentiates you from competitors?
+Why is CAC unusually high?
+Why has growth slowed?
+Explain customer concentration.
+Why is runway only nine months?
+How defensible is the technology?
+What assumptions drive the financial model?
+
+Scorecards
+A structured framework to evaluate every opportunity consistently.
+Overall Score
+Example
+87/100
+
+Categories
+Team
+Criteria
+Founder Experience
+Domain Expertise
+Leadership
+Hiring Ability
+Vision
+Coachability
+Execution
+Score
+Comments
+Reviewer
+
+Product
+Innovation
+Product-Market Fit
+UX
+Technology
+Scalability
+Roadmap
+Customer Validation
+
+Market
+TAM
+Growth
+Timing
+Regulation
+Demand
+Fragmentation
+
+Business
+Revenue
+Margins
+Pricing
+Sales Efficiency
+Customer Retention
+Growth
+
+Competition
+Defensibility
+Differentiation
+Moat
+Switching Costs
+Network Effects
+
+Financials
+Burn
+Runway
+Gross Margin
+Efficiency
+Unit Economics
+
+Investment
+Valuation
+Ownership
+Return Potential
+Exit Probability
+Strategic Fit
+
+Each section includes
+Numerical Score
+Weight
+Reviewer Notes
+AI Recommendation
+Confidence Level
+
+Investment Thesis Match
+Determines whether the startup aligns with the fund's predefined investment strategy.
+Strategy Matching
+Checks
+Industry
+Example
+AI
+FinTech
+Cybersecurity
+Climate
+HealthTech
+
+Stage
+Pre-Seed
+Seed
+Series A
+Series B
+
+Geography
+North America
+Europe
+MENA
+Asia
+
+Check Size
+Minimum
+Maximum
+
+Ownership
+Target Ownership
+Lead Investment
+Follow Investment
+
+Revenue
+Pre-Revenue
+ARR Range
+Growth Rate
+
+ESG
+Sustainability
+Governance
+Diversity
+
+Match Report
+Displays
+Overall Match %
+Matching Criteria
+Missing Criteria
+Exceptions
+AI Commentary
+
+TAM Analysis
+Estimates market opportunity.
+Market Size
+TAM
+SAM
+SOM
+
+Growth
+CAGR
+Historical Growth
+Future Growth
+
+Geography
+Global
+Regional
+Country Breakdown
+
+Customer Segments
+Enterprise
+SMB
+Consumer
+Government
+
+Drivers
+AI
+Regulation
+Technology
+Demographics
+Consumer Trends
+
+AI Opinion
+Is TAM realistic?
+Is market large enough?
+Is growth sustainable?
+Are assumptions credible?
+
+Market Analysis
+Broader assessment of the industry.
+Industry
+Sector
+Subsector
+Vertical
+Value Chain
+
+Market Structure
+Fragmented
+Consolidated
+Emerging
+Mature
+
+Trends
+AI
+Automation
+Regulation
+Consumer Behavior
+Digitalization
+
+Economics
+Margins
+Pricing Power
+Capital Intensity
+Sales Cycles
+
+SWOT
+Automatically generated
+Strengths
+Weaknesses
+Opportunities
+Threats
+
+Competitor Analysis
+Maps the startup against competitors.
+Competitor Database
+For each competitor
+Name
+Website
+Funding
+Revenue
+Employees
+Headquarters
+Valuation
+
+Comparison Matrix
+Columns
+Product Features
+Pricing
+Customers
+Geography
+Funding
+Growth
+Market Share
+
+Competitive Position
+Market Leader
+Challenger
+Niche
+Emerging
+
+Competitive Advantages
+Network Effects
+Brand
+Patents
+Technology
+Cost Advantage
+Distribution
+Partnerships
+
+AI Insights
+Closest competitors
+Missing features
+Strengths
+Weaknesses
+White-space opportunities
+Threats
+
+Founder Analysis
+Evaluates founders beyond resumes.
+Founder Profiles
+Biography
+Education
+Previous Companies
+Exits
+Failures
+Technical Background
+Leadership Experience
+
+Team Composition
+CEO
+CTO
+COO
+Founding Team
+Advisors
+
+Assessment
+Criteria
+Vision
+Execution
+Communication
+Integrity
+Coachability
+Sales Ability
+Technical Strength
+Hiring Ability
+Resilience
+Domain Expertise
+
+Relationship Intelligence
+Previous Meetings
+Mutual Contacts
+Previous Investments
+References
+Partner Notes
+
+AI Founder Summary
+Leadership Style
+Strengths
+Weaknesses
+Potential Risks
+Recommended Interview Questions
+
+Risk Assessment
+Centralized view of investment risks.
+Risk Categories
+Market Risk
+Small Market
+Declining Market
+Regulatory Risk
+
+Product Risk
+Product-Market Fit
+Technical Feasibility
+Product Maturity
+
+Financial Risk
+Burn Rate
+Runway
+Debt
+Revenue Concentration
+
+Founder Risk
+Key Person Dependency
+Team Gaps
+Governance
+Founder Disputes
+
+Legal Risk
+IP Ownership
+Litigation
+Compliance
+Licensing
+
+Technology Risk
+Cybersecurity
+Scalability
+Technical Debt
+Infrastructure
+
+Commercial Risk
+Customer Concentration
+Churn
+Pricing
+Sales Pipeline
+
+Risk Matrix
+Each risk contains
+Description
+Category
+Severity (Low / Medium / High / Critical)
+Likelihood
+Business Impact
+Mitigation Plan
+Owner
+Review Date
+Status
+
+Red Flags
+A dedicated module for issues requiring immediate attention.
+Founder Red Flags
+Founder disputes
+Unrealistic claims
+Lack of transparency
+High executive turnover
+Poor references
+Integrity concerns
+Lack of commitment
+
+Financial Red Flags
+Unverified financials
+High burn rate
+Short runway
+Aggressive revenue recognition
+Customer concentration
+Hidden liabilities
+
+Product Red Flags
+No product-market fit
+Weak user engagement
+High churn
+Poor scalability
+Heavy reliance on a single feature
+
+Market Red Flags
+Tiny addressable market
+Saturated industry
+Regulatory uncertainty
+Weak demand
+
+Legal Red Flags
+Pending lawsuits
+IP ownership issues
+Compliance gaps
+Missing contracts
+
+Technology Red Flags
+Security vulnerabilities
+Legacy architecture
+Lack of technical documentation
+Single developer dependency
+
+AI Alerts
+The platform can automatically flag anomalies such as:
+Financial metrics inconsistent with the pitch deck
+Claims that conflict with public information
+Duplicate founders or companies already in the CRM
+Significant valuation increases without supporting traction
+Missing mandatory documents
+Stalled communication or unresponsive founders
+Conflicts with the fund's investment thesis
+High-risk patterns observed in previous unsuccessful investments
+
+Screening Decision Center
+All screening outputs should converge into a single decision page summarizing:
+Overall investment score
+AI recommendation and confidence
+Investment thesis alignment
+Team, product, market, competition, and financial scores
+Key risks and red flags
+Reviewer comments
+Required follow-up questions
+Missing information
+Recommended next action:
+Advance to Due Diligence
+Request More Information
+Place on Watchlist
+Decline
+Escalate to a Partner Review
+
+Due Diligence
+Overview Dashboard
+Central command center for active diligence processes.
+KPIs
+Active due diligence processes
+Companies under review
+Completion percentage
+Average diligence duration
+Outstanding tasks
+Critical risks
+Missing documents
+Responsible team members
+Upcoming deadlines
+Status Overview
+Example:
+Company: Neural AI
+
+Overall Progress: 78%
+
+✓ Company Documents       100%
+✓ Financial Review         90%
+✓ Product Review           80%
+⚠ Technical Review         60%
+⚠ Customer References      50%
+✓ Legal Review             100%
+Quick Actions
+Open Data Room
+Assign Reviewer
+Request Documents
+Create Task
+Schedule Call
+Generate Diligence Report
+Update Risk Assessment
+Create Investment Memo
+
+Data Room
+Central repository for all investment documents.
+Structure
+Example:
+Company Data Room
+
+├── Corporate
+│   ├── Certificate of Incorporation
+│   ├── Articles of Association
+│   ├── Shareholder Agreement
+│   └── Board Minutes
+│
+├── Financial
+│   ├── Financial Statements
+│   ├── Revenue Reports
+│   ├── Forecast Model
+│   └── Bank Statements
+│
+├── Legal
+│   ├── Contracts
+│   ├── IP Agreements
+│   ├── Employment Agreements
+│   └── Licenses
+│
+├── Product
+│   ├── Product Roadmap
+│   ├── Architecture
+│   ├── Documentation
+│   └── User Research
+│
+├── Customers
+│   ├── Customer List
+│   ├── Case Studies
+│   ├── Contracts
+│   └── Testimonials
+│
+└── Fundraising
+    ├── Pitch Deck
+    ├── Cap Table
+    ├── Previous Rounds
+    └── Term Sheets
+
+Data Room Features
+Document Management
+Upload files
+Drag and drop
+Folder organization
+Version history
+Expiration dates
+Comments
+Approvals
+Permissions
+
+AI Document Intelligence
+Automatically extracts:
+Company name
+Investors
+Ownership
+Revenue numbers
+Contract values
+Customer names
+Key obligations
+Risks
+
+AI Document Review
+Detects:
+Missing documents
+Contradictions
+Unusual clauses
+Liability exposure
+Change of control issues
+IP ownership problems
+
+Access Control
+Internal team access
+External advisor access
+Founder access
+View-only permissions
+Download restrictions
+Audit logs
+
+Checklist
+Standardized diligence workflow.
+Checklist Templates
+Examples:
+Seed Investment
+Series A
+Series B
+AI Startup
+FinTech
+Healthcare
+Enterprise SaaS
+Crypto/Web3
+
+Checklist Categories
+Company
+Tasks:
+Verify incorporation
+Review corporate structure
+Confirm subsidiaries
+Check jurisdictions
+Review governance
+
+Founders & Team
+Tasks:
+Verify backgrounds
+Reference checks
+Employment history
+Equity ownership
+Founder agreements
+
+Financial
+Tasks:
+Validate revenue
+Review financial statements
+Analyze burn
+Confirm runway
+Review projections
+
+Product
+Tasks:
+Product demo
+Roadmap review
+User feedback
+Product metrics
+
+Technology
+Tasks:
+Architecture review
+Code review
+Infrastructure assessment
+
+Legal
+Tasks:
+IP ownership
+Contracts
+Compliance
+Litigation
+
+Commercial
+Tasks:
+Customer validation
+Sales pipeline
+Market analysis
+
+Each task contains:
+Task name
+Description
+Owner
+Priority
+Due date
+Status
+Evidence/document
+Comments
+Risk level
+
+Financial Review
+Analyzes the company's financial health.
+Financial Statements
+Review:
+Income Statement
+Balance Sheet
+Cash Flow Statement
+Tax Records
+Bank Statements
+
+Revenue Analysis
+Metrics:
+ARR
+MRR
+Revenue Growth
+Recurring Revenue
+Customer Concentration
+Contract Length
+Renewal Rate
+
+SaaS Metrics (if applicable)
+CAC
+LTV
+LTV/CAC Ratio
+Churn
+Net Revenue Retention
+Gross Margin
+Payback Period
+
+Expense Analysis
+Review:
+Payroll
+Infrastructure
+Marketing
+Sales
+R&D
+Operating Expenses
+
+Cash Analysis
+Metrics:
+Monthly Burn
+Gross Burn
+Net Burn
+Runway
+Cash Balance
+Funding Requirements
+
+Forecast Review
+Compare:
+Company Forecast
+vs.
+Investor Model
+Analyze:
+Revenue assumptions
+Growth assumptions
+Hiring plan
+Margin assumptions
+Capital efficiency
+
+AI Financial Analysis
+Detects:
+Unrealistic growth projections
+Revenue inconsistencies
+Missing costs
+Abnormal spending
+Runway risks
+Benchmark comparisons
+
+Technical Review
+Evaluates technology quality and scalability.
+Architecture Review
+Analyze:
+System architecture
+Infrastructure
+Cloud providers
+Databases
+APIs
+Scalability
+
+Code Review
+Review:
+Code quality
+Documentation
+Testing
+Technical debt
+Development practices
+
+Engineering Team
+Evaluate:
+Team size
+Experience
+Hiring needs
+Engineering velocity
+
+Technology Stack
+Capture:
+Programming languages
+Frameworks
+Cloud infrastructure
+Databases
+Third-party dependencies
+
+Scalability
+Questions:
+Can the system handle 10x growth?
+Performance limitations?
+Infrastructure costs?
+Bottlenecks?
+
+AI Technical Analysis
+Detect:
+Technical risks
+Architecture weaknesses
+Security concerns
+Competitive advantages
+
+Legal Review
+Ensures the investment is legally sound.
+Corporate Structure
+Review:
+Incorporation documents
+Jurisdiction
+Subsidiaries
+Ownership structure
+
+Cap Table Review
+Analyze:
+Founder ownership
+Investor ownership
+Options pool
+Dilution
+Previous rounds
+
+Contracts
+Review:
+Customer contracts
+Vendor agreements
+Partnership agreements
+Employment contracts
+
+Intellectual Property
+Check:
+Patents
+Trademarks
+Copyrights
+Software ownership
+Open-source licenses
+
+Regulatory
+Review:
+Compliance requirements
+Licenses
+Industry regulations
+Data protection
+
+Legal Risks
+Track:
+Lawsuits
+Disputes
+Missing agreements
+Liability
+
+Product Review
+Evaluates product-market fit and product quality.
+Product Demo
+Record:
+Demo video
+Notes
+Questions
+Feedback
+
+Product Assessment
+Evaluate:
+User experience
+Product quality
+Differentiation
+Adoption
+Roadmap
+
+Product Metrics
+Track:
+Users
+Active Users
+Retention
+Engagement
+Conversion
+Usage Frequency
+
+Customer Feedback
+Collect:
+Testimonials
+Complaints
+Feature requests
+Satisfaction scores
+
+Roadmap Review
+Analyze:
+Current roadmap
+Priorities
+Timeline
+Resources required
+
+Customer Calls
+Validate customer demand.
+Customer Interview Database
+Each call:
+Customer name
+Company
+Role
+Industry
+Revenue impact
+Interview date
+Investor conducting call
+
+Questions
+Problem
+How did you discover the company?
+What problem does it solve?
+How painful is the problem?
+Product
+How often do you use it?
+What features matter most?
+What alternatives exist?
+Commercial
+Buying process?
+Price sensitivity?
+Renewal likelihood?
+Competition
+What else did you consider?
+Why choose them?
+
+Customer Sentiment
+Capture:
+Satisfaction
+NPS
+Expansion potential
+Risks
+Quotes
+
+Reference Calls
+Validate founders and market reputation.
+Reference Types
+Founder References
+Previous employers
+Investors
+Co-founders
+Employees
+Customer References
+Existing customers
+Lost customers
+Industry References
+Experts
+Partners
+Competitors
+
+Reference Report
+Contains:
+Person interviewed
+Relationship
+Date
+Summary
+Positive signals
+Concerns
+Recommendation
+
+Security Review
+Evaluates cybersecurity and data protection.
+Security Assessment
+Review:
+Security architecture
+Access controls
+Encryption
+Monitoring
+Incident response
+
+Compliance
+Check:
+SOC 2
+ISO 27001
+GDPR
+HIPAA
+PCI DSS
+
+Infrastructure Security
+Review:
+Cloud configuration
+Network security
+Backups
+Disaster recovery
+
+Application Security
+Review:
+Vulnerability testing
+Penetration tests
+Authentication
+Authorization
+API security
+
+Data Protection
+Analyze:
+Data storage
+Privacy policies
+User consent
+Data retention
+
+AI Due Diligence Assistant
+A modern Venture OS should add:
+AI Diligence Summary
+Automatically generates:
+Investment highlights
+Key risks
+Missing information
+Open questions
+Recommendation
+
+AI Risk Detection
+Flags:
+Missing financial documents
+Inconsistent revenue numbers
+Unusual cap table structures
+Legal gaps
+Weak customer retention
+Technical vulnerabilities
+
+AI Investment Memo Generation
+Creates first draft:
+Company overview
+Market analysis
+Product analysis
+Team analysis
+Financial analysis
+Risks
+Recommendation
+
+Final Due Diligence Output
+Everything should roll into a single Investment Readiness Score:
+Due Diligence Status
+
+Company: Neural AI
+
+Overall Completion: 92%
+
+Financial Health       88/100
+Technology             94/100
+Product                86/100
+Market                 91/100
+Legal                  100/100
+Security               85/100
+Customers              90/100
+
+Critical Risks:
+⚠ High cloud infrastructure costs
+⚠ Customer concentration
+
+Recommendation:
+Proceed to Investment Committee
+
+Generated Documents:
+✓ Due Diligence Report
+✓ Risk Report
+✓ Investment Memo Draft
+
+
+Investment Committee
+Overview Dashboard
+Central view of all investments awaiting IC review.
+KPIs
+Deals awaiting committee
+Upcoming IC meetings
+Decisions pending
+Approval rate
+Average decision time
+Average check size
+Investments by partner
+Rejected opportunities
+Follow-on decisions
+
+IC Pipeline
+Stages:
+Ready for IC
+
+↓
+
+IC Scheduled
+
+↓
+
+Committee Review
+
+↓
+
+Decision Pending
+
+↓
+
+Approved
+
+↓
+
+Conditionally Approved
+
+↓
+
+Rejected
+
+↓
+
+Negotiation
+
+↓
+
+Closed
+
+Deal IC Card
+Each opportunity displays:
+Company name
+Logo
+Founders
+Sector
+Stage
+Round size
+Investment amount
+Valuation
+Ownership target
+Lead partner
+Investment thesis fit
+Due diligence completion %
+Risk score
+AI recommendation
+IC status
+Quick actions:
+Open Memo
+Review Documents
+Vote
+Comment
+Approve
+Reject
+Request More Information
+
+Investment Memos
+The core document presented to the Investment Committee.
+A Venture OS should generate this automatically from all previous modules.
+
+Investment Memo Structure
+1. Executive Summary
+Contains:
+Company name
+Investment recommendation
+Investment amount
+Round
+Valuation
+Ownership target
+Lead investor
+Decision requested
+Example:
+Recommendation:
+INVEST
+
+Investment:
+$2M
+
+Round:
+Series A
+
+Target Ownership:
+12%
+
+Confidence:
+87%
+
+2. Company Overview
+Contains:
+Company description
+Problem
+Solution
+Product
+Business model
+Current traction
+Key milestones
+
+3. Investment Thesis Fit
+Shows:
+Fund Strategy Match
+Sector alignment
+Stage alignment
+Geography alignment
+Check size alignment
+Ownership fit
+Example:
+AI Infrastructure:
+✓ Strong Match
+
+Seed Stage:
+✓ Match
+
+Europe:
+✓ Match
+
+Enterprise SaaS:
+✓ Match
+
+4. Market Analysis
+Contains:
+Market size
+TAM
+SAM
+SOM
+Growth rate
+Market trends
+Industry dynamics
+
+5. Competitive Landscape
+Contains:
+Competitors
+Market positioning
+Differentiation
+Competitive advantage
+Moat analysis
+
+6. Founder & Team Analysis
+Contains:
+Founder backgrounds
+Previous companies
+Technical expertise
+Leadership assessment
+Hiring plan
+Team gaps
+
+7. Product Analysis
+Contains:
+Product overview
+Technology
+Roadmap
+Product-market fit
+Customer feedback
+Usage metrics
+
+8. Financial Analysis
+Contains:
+Revenue
+ARR/MRR
+Growth
+Burn
+Runway
+Forecast
+Unit economics
+Financial model
+
+9. Due Diligence Summary
+Shows:
+Completed reviews:
+✓ Financial
+✓ Legal
+✓ Technical
+✓ Security
+✓ Customer References
+Open issues:
+Missing documents
+Remaining questions
+Risks
+
+10. Risks & Mitigation
+Risk table:
+Risk
+Severity
+Mitigation
+Competition
+Medium
+Strong technical moat
+Burn rate
+High
+Reduce hiring pace
+Regulation
+Medium
+Legal review
+
+
+11. Investment Structure
+Contains:
+Investment amount
+Security type
+SAFE / Equity
+Valuation cap
+Ownership
+Board rights
+Pro-rata rights
+Liquidation preference
+
+12. Return Potential
+Contains:
+Exit scenarios
+Comparable exits
+Revenue projections
+Expected ownership
+MOIC scenarios
+IRR scenarios
+
+13. Recommendation
+Final section:
+Options:
+Invest
+Do Not Invest
+Wait
+Request More Information
+Includes:
+Lead partner recommendation
+Confidence score
+Key reasons
+
+Committee Meetings
+Manage the actual IC session.
+
+Meeting Calendar
+Features:
+Schedule IC meeting
+Recurring meetings
+Participants
+Agenda
+Time allocation
+Video link
+Documents
+
+Meeting Agenda
+Automatically generated:
+Example:
+Investment Committee
+July 15, 2026
+
+1. Neural AI
+   30 minutes
+
+2. Quantum Health
+   20 minutes
+
+3. Portfolio Follow-on
+   15 minutes
+
+Meeting Preparation
+Before meeting:
+Send memos
+Collect questions
+Track document views
+Prepare summaries
+Highlight changes
+
+Live Meeting Mode
+During IC:
+Features:
+Memo view
+Notes
+Voting panel
+Discussion timeline
+Action items
+Decision capture
+
+Voting
+Structured decision mechanism.
+
+Voting Configuration
+Customize:
+Required approval percentage
+Required partners
+Voting anonymity
+Conflict-of-interest rules
+Examples:
+Majority
+50% approval
+Super Majority
+66%
+Unanimous
+100%
+
+Vote Types
+Investment Decision
+Approve
+Reject
+Abstain
+Request More Information
+
+Investment Terms
+Approve:
+Check size
+Valuation
+Ownership
+Structure
+
+Voting Dashboard
+Shows:
+Neural AI
+
+Votes:
+
+Partner A:
+✓ Approve
+
+Partner B:
+✓ Approve
+
+Partner C:
+⚠ More Information
+
+Partner D:
+✓ Approve
+
+
+Result:
+Approved
+
+Comments
+Each vote can include:
+Reason
+Conditions
+Concerns
+Notes
+
+Decision History
+Permanent investment record.
+
+Decision Timeline
+Example:
+Jan 10
+Deal Submitted
+
+Jan 15
+Screening Completed
+
+Feb 2
+Due Diligence Started
+
+Feb 20
+IC Meeting
+
+Feb 20
+Approved
+
+Mar 5
+Investment Closed
+
+Historical Decisions
+Search:
+Company
+Sector
+Partner
+Date
+Decision
+Reason
+
+Decision Analytics
+Analyze:
+Approval rate
+Rejection reasons
+Partner differences
+Investment performance
+Thesis accuracy
+
+Lessons Learned
+After outcomes:
+Record:
+Was thesis correct?
+Did risks materialize?
+Investment performance
+Exit outcome
+Useful for improving future decisions.
+
+Approvals
+Controls authorization before investment execution.
+
+Approval Workflow
+Example:
+Investment Committee Approved
+
+↓
+
+Managing Partner Approval
+
+↓
+
+Legal Approval
+
+↓
+
+Finance Approval
+
+↓
+
+Investment Execution
+
+Approval Types
+Investment Approval
+Amount
+Terms
+Ownership
+
+Legal Approval
+Documents
+Contracts
+Compliance
+
+Financial Approval
+Wire amount
+Fund allocation
+Capital availability
+
+Approval Tracking
+Shows:
+Pending approvals
+Completed approvals
+Rejected approvals
+Approval history
+
+Digital Signatures
+Integration:
+DocuSign
+Adobe Sign
+Internal signing
+
+Meeting Minutes
+Permanent record of IC discussions.
+
+Automatic Generation
+AI creates:
+Summary
+Key discussion points
+Decisions
+Action items
+Owners
+
+Meeting Details
+Contains:
+Date
+Participants
+Companies discussed
+Agenda
+Duration
+
+Discussion Notes
+Capture:
+Arguments for investment
+Concerns
+Questions
+Alternative opinions
+
+Action Items
+Example:
+Action
+Owner
+Deadline
+Verify customer contracts
+Analyst
+July 20
+Update financial model
+CFO
+July 22
+
+
+Final Decision Record
+Contains:
+Decision
+Vote outcome
+Conditions
+Required follow-ups
+
+AI Investment Committee Assistant
+A modern IC module should include:
+Before Meeting
+Generate memo
+Summarize diligence
+Prepare questions
+Compare with past investments
+During Meeting
+Take notes
+Track discussion
+Identify unresolved issues
+Capture votes
+After Meeting
+Generate minutes
+Create tasks
+Update CRM
+Notify stakeholders
+Archive decision
+
+Final IC Record
+Every investment should end with a complete institutional memory:
+Investment Decision Record
+
+Company:
+Neural AI
+
+Decision:
+APPROVED
+
+Date:
+15 July 2026
+
+Investment:
+$2M
+
+Ownership:
+12%
+
+Decision Makers:
+4 Partners
+
+Vote:
+4 Approve / 0 Reject
+
+Key Reasons:
+✓ Strong founder
+✓ Large market
+✓ Technical advantage
+
+Key Risks:
+⚠ Enterprise sales cycle
+
+Conditions:
+Complete security audit
+
+Documents:
+✓ Investment Memo
+✓ Due Diligence Report
+✓ Meeting Minutes
+✓ Approval Records
+
+
+Transactions
+Overview Dashboard
+Central view of all active and completed investments.
+KPIs
+Transactions in progress
+Awaiting signatures
+Pending legal review
+Pending funds transfer
+Closing this month
+Total invested capital
+Investments by instrument
+Average closing time
+Failed / delayed transactions
+
+Transaction Pipeline
+Example:
+IC Approved
+
+↓
+
+Term Negotiation
+
+↓
+
+Term Sheet Signed
+
+↓
+
+Legal Documentation
+
+↓
+
+Signature Collection
+
+↓
+
+Funds Transfer
+
+↓
+
+Closing Complete
+
+↓
+
+Portfolio Created
+
+Transaction Record
+Every investment has one transaction workspace.
+Contains:
+Company
+Company name
+Founders
+Contacts
+Sector
+Website
+Portfolio status
+Investment
+Investment amount
+Round
+Instrument type
+Valuation
+Ownership %
+Closing date
+Lead investor
+Co-investors
+Legal
+Lawyers
+Jurisdiction
+Documents
+Signature status
+Compliance checks
+Financial
+Fund allocation
+Bank details
+Wire status
+Capital call
+Accounting entry
+Timeline
+Created
+Approved
+Signed
+Funded
+Closed
+
+SAFE
+Simple Agreement for Future Equity management.
+Used primarily for pre-seed and seed investments.
+
+SAFE Creation
+Fields:
+Company Information
+Company name
+Jurisdiction
+Founders
+Company address
+
+Investment Terms
+Investment amount
+Date
+Investor entity
+Currency
+
+SAFE Terms
+Valuation Cap
+Example:
+$10M valuation cap
+
+Discount Rate
+Example:
+20% discount
+
+MFN Clause
+Most Favored Nation:
+Enabled/disabled
+Terms
+
+Pro Rata Rights
+Track:
+Included
+Excluded
+Future rights
+
+Conversion Events
+Automatic conversion triggers:
+Equity financing
+Liquidity event
+Dissolution event
+
+SAFE Tracking
+Monitor:
+Total SAFE amount
+Number of SAFEs
+Investors
+Conversion conditions
+Expected dilution
+Ownership scenarios
+
+SAFE Conversion Simulator
+AI/calculation tool:
+Inputs:
+Future valuation
+New round size
+Discount
+Cap
+Outputs:
+Shares received
+Ownership %
+Dilution impact
+
+Convertible Notes
+Debt instrument that converts into equity.
+
+Note Creation
+Fields:
+Principal
+Investment amount
+Currency
+Date issued
+
+Interest
+Interest rate
+Accrual method
+Maturity date
+
+Conversion Terms
+Conversion discount
+Valuation cap
+Qualified financing threshold
+
+Repayment Terms
+Maturity date
+Repayment conditions
+Extension options
+
+Convertible Note Tracking
+Monitor:
+Outstanding principal
+Accrued interest
+Conversion date
+Conversion price
+Converted shares
+
+Conversion Events
+Automatically calculate:
+Before conversion:
+Debt
+↓
+Qualified Financing
+↓
+Equity Conversion
+↓
+Shares Issued
+
+Equity Investments
+Direct ownership purchase.
+
+Equity Investment Setup
+Fields:
+Share Purchase
+Number of shares
+Share class
+Price per share
+Ownership percentage
+
+Valuation
+Pre-money valuation
+Investment amount
+Post-money valuation
+
+Ownership
+Track:
+Investor ownership
+Founder ownership
+Employee option pool
+Other investors
+
+Cap Table Integration
+Displays:
+Before investment:
+Founder A     70%
+Founder B     20%
+Employees     10%
+After investment:
+Founder A     58%
+Founder B     17%
+Employees      8%
+Investor      17%
+
+Equity Rights
+Track:
+Voting rights
+Preferred shares
+Liquidation preference
+Anti-dilution
+Board rights
+Information rights
+Pro-rata rights
+
+Term Sheets
+The negotiation document before final agreements.
+
+Term Sheet Builder
+Templates:
+Seed Round
+Series A
+Series B
+SAFE Conversion
+Venture Debt
+
+Key Terms
+Investment Terms
+Investment amount
+Security type
+Valuation
+Ownership
+Round size
+
+Economic Terms
+Liquidation preference
+Participation rights
+Dividends
+Conversion rights
+Anti-dilution
+
+Governance
+Board seat
+Observer rights
+Voting rights
+Protective provisions
+
+Investor Rights
+Information rights
+Pro-rata rights
+ROFR
+Co-sale rights
+Founder vesting
+
+Closing Conditions
+Due diligence completion
+Legal approval
+Investor approval
+Regulatory approval
+
+Term Sheet Workflow
+Draft
+
+↓
+
+Internal Review
+
+↓
+
+Founder Negotiation
+
+↓
+
+Revision
+
+↓
+
+Signed
+
+↓
+
+Generate Legal Documents
+
+Term Sheet Comparison
+Compare versions:
+Version 1
+vs.
+Version 2
+Track:
+Changed valuation
+Ownership changes
+Rights changes
+Economic impact
+
+Closing Documents
+Final legal package required to complete the investment.
+
+Document Management
+Store:
+Corporate Documents
+Certificate of incorporation
+Articles
+Board resolutions
+Shareholder agreements
+
+Investment Documents
+Stock Purchase Agreement
+Subscription Agreement
+SAFE Agreement
+Convertible Note
+Investor Rights Agreement
+
+Governance Documents
+Voting Agreement
+Board Consent
+Side Letters
+
+Compliance Documents
+KYC documents
+AML checks
+Tax forms
+Regulatory documents
+
+Closing Checklist
+Example:
+✓ IC Approval
+
+✓ Term Sheet Signed
+
+✓ Legal Review Complete
+
+✓ Company Documents Verified
+
+✓ Cap Table Approved
+
+✓ Investor Signatures Complete
+
+✓ Founder Signatures Complete
+
+✓ Funds Sent
+
+✓ Shares Issued
+
+✓ Portfolio Created
+
+Signature Management
+Integrations:
+DocuSign
+Adobe Sign
+Track:
+Sent
+Viewed
+Signed
+Rejected
+Expired
+
+Funds Transfer
+Manage money movement.
+Fields:
+Bank details
+Wire instructions
+Amount
+Currency
+Transfer date
+Confirmation number
+Status
+
+Post-Closing Automation
+Once closed:
+Automatically create:
+Portfolio Company
+Company profile
+Ownership record
+Investment history
+Reporting
+Quarterly reporting schedule
+Founder updates
+KPI tracking
+Accounting
+Investment entry
+Fund allocation
+Portfolio valuation
+Relationship Updates
+Founder relationship
+Co-investors
+Legal contacts
+
+AI Transaction Assistant
+A modern Venture OS should automate:
+Document Intelligence
+Extract terms from legal documents
+Compare against market standards
+Identify unusual clauses
+
+Term Analysis
+AI flags:
+Unfavorable liquidation preferences
+Excessive investor rights
+Low ownership protection
+Missing protections
+
+Closing Monitoring
+Alerts:
+Missing signatures
+Expiring documents
+Delayed wires
+Incomplete compliance
+
+Final Transaction Record
+Example:
+Investment Completed
+
+Company:
+Neural AI
+
+Instrument:
+Series A Preferred Equity
+
+Amount:
+$2,000,000
+
+Valuation:
+$18M post-money
+
+Ownership:
+11.1%
+
+Closing Date:
+August 15, 2026
+
+Documents:
+✓ Term Sheet
+✓ SPA
+✓ Investor Rights Agreement
+✓ Board Consent
+
+Status:
+ACTIVE PORTFOLIO COMPANY
+
+A strong Transactions module ensures the investment journey flows seamlessly:
+Pipeline → Screening → Due Diligence → IC Approval → Transaction Execution → Portfolio Management
+without losing legal history, ownership data, financial records, or institutional knowledge.

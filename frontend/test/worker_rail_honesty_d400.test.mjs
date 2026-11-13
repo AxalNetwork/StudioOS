@@ -1,0 +1,197 @@
+/**
+ * D400 — the AI rails say when a read failed, and stop calling the assistant
+ * an advisor.
+ *
+ * Four defects, each of which put a false statement on screen:
+ *
+ *   1. A failed usage read rendered "Not recorded" on WorkerRail, and "$0.00"
+ *      on AssistRail — `eadwynConfig` passed `spend_usd ?? 0`, and AssistRail
+ *      fell back to a sum over pages that carry no spend. "Not recorded" says
+ *      the log was read and holds nothing; "$0.00" says nothing was spent.
+ *      Neither is known when the read failed.
+ *   2. A failed PRICING read removed the model block without a word, so the
+ *      page looked like one with no model to offer.
+ *   3. The `advisory` surface's label rendered "Advisory assist" (the
+ *      surface left with the /advisory page, #2341).
+ *   4. The RECOMMENDED badge (covered in worker_rail_models.test.mjs).
+ *
+ * Run with:
+ *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/worker_rail_honesty_d400.test.mjs
+ * (from the repo root — the paths below are repo-relative)
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { codeOnly } from './_codeOnly.mjs';
+import { renderedText } from './_renderedText.mjs';
+import AssistRail from '../src/ui/AssistRail.jsx';
+import { eadwynConfig, ASSIST_SURFACES } from '../src/ui/eadwynConfig.js';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const RAIL = 'frontend/src/ui/WorkerRail.jsx';
+const HOOK = 'frontend/src/hooks/useAiSpend.js';
+
+/** The Usage box of WorkerRail (AIRail canvas, D698), from source. */
+function usageBlock() {
+  const src = codeOnly(read(RAIL));
+  const from = src.indexOf('export function RailUsage(');
+  assert.ok(from > 0, 'the usage block was not found');
+  return src.slice(from, src.indexOf('export const RETIRED_RAIL_PROPS', from));
+}
+
+// ── The hook ────────────────────────────────────────────────────────────
+
+test('the hook reports a failed pricing read, separately from spend', () => {
+  const src = codeOnly(read(HOOK));
+  // The pricing branch must record its own error. It used to set pricing on
+  // success and do nothing otherwise, so a failed read was indistinguishable
+  // from a slow one.
+  assert.match(src, /if \(p && !p\.__err\) \{[^}]*\} else \{[^}]*setPricingError\(/,
+    'a failed /api/ai/pricing read is dropped rather than recorded');
+  assert.match(src, /if \(s && !s\.__err\) \{[^}]*\} else \{[^}]*setSpendError\(/,
+    'a failed /api/ai/me/spend read is dropped rather than recorded');
+  assert.match(src, /return \{[^}]*\bspendError\b[^}]*\bpricingError\b[^}]*\breload\b[^}]*\}/,
+    'the hook no longer hands callers both errors and a retry');
+});
+
+test('reload re-runs the reads', () => {
+  const src = codeOnly(read(HOOK));
+  // A Retry that calls a function which changes nothing is a dead control.
+  // The counter must be in the effect's dependency list or bumping it does
+  // nothing.
+  assert.match(src, /const reload = useCallback\(\(\) => setAttempt\(/);
+  assert.match(src, /\}, \[enabled, attempt(, pageKey)?\]\);/,
+    'the retry counter is not a dependency of the fetch, so Retry fetches nothing');
+});
+
+// ── WorkerRail ──────────────────────────────────────────────────────────
+
+test('WorkerRail: a failed usage read is Unreadable with a retry, never "Not recorded"', () => {
+  // D698: the Usage box reads the allowance ledger (`/api/ai-budget/me`). A
+  // failed read, or one without its `held_for_review` list, is Unreadable.
+  const block = usageBlock();
+  assert.doesNotMatch(block, /Not recorded/,
+    'the usage block says "Not recorded" — that claims the log was read');
+  assert.match(block, /if \(reading\.budgetError \|\| !budgetReadable\(b\)\) \{[\s\S]{0,200}?<Unreadable[\s\S]{0,200}?onRetry=\{reading\.reload\}/,
+    'the usage block has no Unreadable with a retry');
+});
+
+test('WorkerRail: a failed read of the page\'s models draws the suggestions block, saying so', () => {
+  // D769 PR 2 (#2088): the models are the page's row, `GET /api/ai/rail`.
+  const src = codeOnly(read(RAIL));
+  const gate = /\{rail\.state === 'unreadable' && \(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,200}?onRetry=\{row\.reload\}/;
+  assert.match(src, gate,
+    'a failed read renders nothing — the model block vanishes and reads as "no model here"');
+});
+
+test('WorkerRail: a failed allowance read is Unreadable with a retry, never a $0.00 bar', () => {
+  const fn = usageBlock();
+  assert.ok(fn.length > 100, 'RailUsage could not be located');
+  // No cap draws no bar.
+  assert.match(fn, /r\.cap > 0 \? spendMeter\(r\.spent, r\.cap\) : null/);
+});
+
+test('WorkerRail: no zero stands in for the cap', () => {
+  const src = codeOnly(read(RAIL));
+  assert.doesNotMatch(src, /cap_usd \?\? 0|cap_usd \|\| 0/, 'a missing cap is being drawn as $0');
+  assert.doesNotMatch(src, /spendMeter\([^)]*: 0,/, 'the meter is fed a zero for an unknown spend');
+});
+
+test('WorkerRail imports Unreadable from the house component, not a local copy', () => {
+  const src = read(RAIL);
+  assert.match(src, /import \{ Unreadable \} from '\.\/Honesty';/);
+  assert.doesNotMatch(codeOnly(src), /function Unreadable/);
+});
+
+// ── eadwynConfig and AssistRail ─────────────────────────────────────────
+
+const UNREADABLE_SPEND = {
+  recorded: false,
+  month: { spend_usd: null, cap_usd: 50, calls: null },
+  by_task: [],
+};
+const pricing = {
+  prices: { 'x/model': { in: 0.1, out: 0.2 } },
+  routes: { dd_synthesis: { model: 'x/model', alternates: [] } },
+};
+
+test('eadwynConfig passes an unreadable total as null, not zero', () => {
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
+  assert.equal(cfg.totalSpend, null, 'recorded:false became a number');
+  assert.equal(cfg.planCap, 50);
+  // No cap in the response is no cap, not a $0 cap.
+  const noCap = eadwynConfig({ surface: 'deck_review', spend: { recorded: true, month: { spend_usd: 1 } }, pricing });
+  assert.equal(noCap.planCap, null);
+  assert.equal(noCap.totalSpend, 1);
+});
+
+test('AssistRail: an unreadable usage log renders Unreadable, never $0.00', () => {
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
+  let retried = 0;
+  const html = renderToStaticMarkup(React.createElement(AssistRail, {
+    config: cfg, page: 'deck_review', onRetrySpend: () => { retried += 1; },
+  }));
+  const text = renderedText(html);
+  assert.doesNotMatch(text, /\$0\.00/, 'an unreadable usage log rendered as $0.00');
+  assert.doesNotMatch(text, /This month\s*Not recorded/, 'a failed read is labelled as an empty store');
+  assert.match(text, /Unreadable/);
+  assert.match(text, /could not be read/);
+  assert.match(html, />Retry</, 'the unreadable spend has no retry');
+});
+
+test('AssistRail: raw usage remains visible while its separate included allowance is loading', () => {
+  const cfg = eadwynConfig({
+    surface: 'deck_review',
+    spend: { recorded: true, month: { spend_usd: 12.5, cap_usd: 50, calls: 3 }, by_task: [] },
+    pricing,
+  });
+  const text = renderedText(renderToStaticMarkup(React.createElement(AssistRail, { config: cfg, page: 'deck_review' })));
+  assert.match(text, /\$12\.50/);
+  assert.match(text, /Loading AI allowance/);
+  assert.doesNotMatch(text, /\$50\.00/);
+  assert.doesNotMatch(text, /Unreadable/);
+});
+
+test('AssistRail sums nothing in place of an unknown total', () => {
+  const src = codeOnly(read('frontend/src/ui/AssistRail.jsx'));
+  assert.doesNotMatch(src, /p\.spend \?\? 0/, 'the page-sum fallback is back: an unknown total sums to $0');
+  assert.doesNotMatch(src, /spendMeter\(spendKnown \? spent : 0/);
+});
+
+// ── Voice ───────────────────────────────────────────────────────────────
+
+test('no assist surface is labelled as advice', () => {
+  // Every label renders as `${label} assist` in the mode card. The regulated-
+  // wording scanner treats a one-word literal as an identifier, so it cannot
+  // catch this; the rendered label can.
+  for (const [key, s] of Object.entries(ASSIST_SURFACES)) {
+    assert.doesNotMatch(s.label, /advis|advice|recommend|fiduciar/i,
+      `ASSIST_SURFACES.${key}.label is "${s.label}"`);
+  }
+  // The surface that once read "Advisory assist" left with /advisory (#2341).
+  assert.equal(ASSIST_SURFACES.advisory, undefined, 'the retired advisory surface is back');
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
+  assert.equal(cfg.mode.label, 'Deck reviewer assist');
+});
+
+// ── Stale claims corrected in D400 ──────────────────────────────────────
+
+test('the rail docs no longer claim what the code disproves', () => {
+  const index = read('frontend/src/ui/index.js');
+  assert.doesNotMatch(index, /Mode persistence and a user-selectable model do not exist/,
+    'ui/index.js says mode persistence and model choice do not exist; both do');
+  const assist = read('frontend/src/ui/AssistRail.jsx');
+  assert.doesNotMatch(assist, /declares every surface `kind: 'fixed'`/,
+    'AssistRail says every surface is fixed-mode; two declare a choice');
+  // Task membership belongs to TaskClass; prose must not duplicate a changing total.
+  const countClaim = /\b(?:\d+|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-[a-z]+)?) (?:registered )?task classes\b/;
+  assert.doesNotMatch(assist, countClaim, 'AssistRail must not pin a task-class total');
+  assert.doesNotMatch(read('cloudflare-worker/src/services/aiSpend.ts'), countClaim,
+    'aiSpend must not pin a task-class total');
+  const rail = read(RAIL);
+  assert.doesNotMatch(rail, /returns totals, not the latest row/,
+    'WorkerRail says the spend endpoint returns no latest row; it returns last_run');
+});

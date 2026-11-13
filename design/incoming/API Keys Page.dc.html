@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="position:relative;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;background:#f4f3f7;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums">
+
+<sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:186px minmax(0,1fr);min-height:960px">
+  <aside style="background:#fff;border-right:1px solid #ececf1;padding:16px 10px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:8px;padding:2px 8px 14px"><span style="width:22px;height:22px;border-radius:6px;background:#7c3aed"></span><span style="font-weight:700;font-size:15px;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-if value="{{ hq }}" hint-placeholder-val="{{ false }}"><div style="margin:0 8px 10px;padding:5px 8px;border-radius:7px;background:#881337;color:#fff;font:600 10px 'Roboto Mono',monospace;letter-spacing:.07em">AXAL VC HQ</div></sc-if>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="padding:8px 10px;border-radius:8px;font-size:13px;font-weight:600;color:#6b6577">{{ s }}</div></sc-for>
+  </aside>
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:0 20px"><span style="width:30px;height:30px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace;color:#6d28d9">[AB]</span><span style="font-size:12px;color:#6b6577">▾</span></div>
+    <main style="padding:30px;display:flex;flex-direction:column;gap:20px">
+      <div><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Account</h1><div style="margin-top:4px;font-size:13.5px;color:#6b6577">Settings that belong to you, across every company.</div></div>
+      <div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px;align-items:start">
+        <nav aria-label="Account sections" style="display:flex;flex-direction:column;gap:1px;background:#fff;border:1px solid #ececf1;border-radius:12px;padding:6px">
+          <sc-for list="{{ secs }}" as="x" hint-placeholder-count="12"><span style="{{ x.style }}">{{ x.t }}</span></sc-for>
+        </nav>
+        <div style="min-width:0;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">BUILDER › API KEYS</span>
+            <h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em">Builder</h2>
+            <div style="font-size:13px;color:#6b6577;line-height:1.5">Keys your own scripts use to call StudioOS. Each key reaches only what you choose, and its secret is shown once.</div>
+          </div>
+          <sc-if value="{{ support }}" hint-placeholder-val="{{ false }}"><div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;color:#92400e">You are viewing as [Member]. Keys cannot be created, rotated or revoked in a support session.</div></sc-if>
+
+          <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:11px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-.02em">API keys</h3><sc-if value="{{ create }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Create a key</span></sc-if></div>
+              <sc-if value="{{ notice.show }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ notice.style }}">{{ notice.t }}</div></sc-if>
+              <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center">
+                <div style="flex:1;min-width:220px;border:1px solid #ececf1;border-radius:7px;padding:7px 10px;font-size:13px;color:#a1a1aa">Search keys</div>
+                <sc-for list="{{ chips }}" as="f" hint-placeholder-count="3"><span style="{{ f.s }}">{{ f.t }} <span style="font-family:'Roboto Mono',monospace">{{ f.n }}</span></span></sc-for>
+                <span style="font-size:12.5px;color:#6b6577;white-space:nowrap">Sort: Last used ▾</span>
+              </div>
+              <div style="border:1px solid #ececf1;border-radius:10px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:minmax(70px,1fr) 140px 90px 112px 46px 78px 56px 98px 118px 14px;gap:8px;padding:8px 12px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577"><span>NAME</span><span>KEY</span><span>COMPANIES</span><span>PERMISSIONS</span><span>CREATED</span><span>LAST USED</span><span>EXPIRES</span><span>AI TOKENS</span><span>STATE</span><span></span></div>
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:minmax(70px,1fr) 140px 90px 112px 46px 78px 56px 98px 118px 14px;gap:8px;padding:10px 12px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:12px;background:{{ r.bg }};color:{{ r.ink }}">
+                    <span style="display:flex;flex-direction:column;gap:3px;font-weight:700">{{ r.n }}<sc-if value="{{ r.repl }}" hint-placeholder-val="{{ false }}"><span style="font-weight:600;color:#7c3aed;font-size:11.5px">{{ r.repl }}</span></sc-if></span>
+                    <span style="{{ r.ks }}">{{ r.key }}</span>
+                    <span>{{ r.co }}</span>
+                    <span style="display:flex;flex-wrap:wrap;gap:4px"><sc-for list="{{ r.perms }}" as="p" hint-placeholder-count="1"><span style="font:500 10.5px 'Roboto Mono',monospace;border:1px solid #ececf1;border-radius:999px;padding:1px 7px;white-space:nowrap">{{ p }}</span></sc-for></span>
+                    <span style="font:400 11.5px 'Roboto Mono',monospace">{{ r.cr }}</span>
+                    <span style="font:400 11.5px 'Roboto Mono',monospace;display:flex;flex-direction:column;gap:1px">{{ r.lu }}<span style="font-family:'Space Grotesk',sans-serif;font-size:11px;color:#6b6577">{{ r.luNote }}</span></span>
+                    <span style="font:400 11.5px 'Roboto Mono',monospace">{{ r.ex }}</span>
+                    <span><sc-if value="{{ r.meter }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:4px"><span style="font:500 11px 'Roboto Mono',monospace">{{ r.used }} of {{ r.lim }}</span><span style="display:block;height:4px;border-radius:99px;background:#dedce4"><span style="display:block;height:4px;border-radius:99px;background:#7c3aed;width:{{ r.pct }}"></span></span></span></sc-if><sc-if value="{{ r.tok }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:1px;font-size:11.5px">{{ r.tok }}<span style="font-size:11px;color:#6b6577">{{ r.tokNote }}</span></span></sc-if></span>
+                    <span style="display:flex;flex-direction:column;gap:3px;align-items:flex-start"><span style="{{ r.ps }}"><span aria-hidden="true">{{ r.pg }}</span>{{ r.pt }}</span><span style="font:400 10.5px 'Roboto Mono',monospace;color:#6b6577">{{ r.when }}</span></span>
+                    <span aria-label="More actions" style="color:#6b6577;font-weight:700">{{ r.menu }}</span>
+                  </div>
+                </sc-for>
+                <div style="padding:9px 12px;display:flex;justify-content:space-between;font:400 11.5px 'Roboto Mono',monospace;color:#6b6577"><span>1–25 of [N]</span><span>‹ 1 ›</span></div>
+              </div>
+              <div style="font-size:12px;color:#6b6577;line-height:1.5">A key acts for you. It reaches only the companies and permissions you chose, and never more than you hold. Signing out everywhere ends every key made before it.</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-.02em">API keys</h3><span style="font:500 11px 'Roboto Mono',monospace;color:#6b6577">Reading…</span></div>
+              <sc-for list="{{ skel }}" as="k" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:1fr 148px 96px 120px 104px 112px;gap:10px;padding:8px 0;border-bottom:1px solid #f4f3f7"><span style="height:12px;border-radius:99px;background:#ececf1"></span><span style="height:12px;border-radius:99px;background:#f4f3f7"></span><span style="height:12px;border-radius:99px;background:#f4f3f7"></span><span style="height:12px;border-radius:99px;background:#f4f3f7"></span><span style="height:12px;border-radius:99px;background:#f4f3f7"></span><span style="height:12px;border-radius:99px;background:#f4f3f7"></span></div></sc-for>
+              <div style="font-size:12px;color:#6b6577">Create a key appears once your companies have been read.</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isMsg }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ msg.cs }}">
+              <h3 style="{{ msg.ts }}">{{ msg.title }}</h3>
+              <div style="font-size:13px;line-height:1.55;color:#4a4553;max-width:640px">{{ msg.line }}</div>
+              <sc-if value="{{ msg.btn }}" hint-placeholder-val="{{ false }}"><span style="{{ msg.bs }}">{{ msg.btn }}</span></sc-if>
+              <sc-if value="{{ msg.link }}" hint-placeholder-val="{{ false }}"><a href="#" style="font-size:13px;font-weight:600">{{ msg.link }}</a></sc-if>
+              <sc-if value="{{ msg.extra }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:#4a4553;border-top:1px solid #ececf1;padding-top:10px;width:100%">{{ msg.extra }} <a href="#" style="font-weight:600">{{ msg.extraLink }}</a></div></sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ card2 }}" hint-placeholder-val="{{ true }}">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:11px">
+              <h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-.02em">How to use a key</h3>
+              <div style="background:#f4f3f7;border:1px solid #ececf1;border-radius:10px;padding:12px 14px;font:500 12.5px/1.75 'Roboto Mono',monospace">POST https://axal.vc/mcp<br>Authorization: Bearer axk_[your key]</div>
+              <div style="font-size:12.5px;line-height:1.5;color:#4a4553">Limits: <span style="font-family:'Roboto Mono',monospace">[60]</span> calls a minute per key, <span style="font-family:'Roboto Mono',monospace">[120]</span> across all your keys and assistants.</div>
+              <sc-if value="{{ refusals }}" hint-placeholder-val="{{ false }}">
+                <div style="border:1px solid #ececf1;border-radius:10px;overflow:hidden">
+                  <div style="padding:8px 12px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">WHAT A REFUSED CALL RETURNS</div>
+                  <sc-for list="{{ refs }}" as="e" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:44px 190px minmax(0,1fr);gap:12px;padding:8px 12px;border-bottom:1px solid #f4f3f7;font-size:12.5px;align-items:center"><span style="font:600 12px 'Roboto Mono',monospace">{{ e.c }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:#6d28d9">{{ e.k }}</span><span style="color:#4a4553">{{ e.t }}</span></div></sc-for>
+                  <div style="padding:8px 12px;font-size:12px;color:#6b6577">A refusal never says whether a key exists.</div>
+                </div>
+              </sc-if>
+              <a href="#" style="font-size:13px;font-weight:600">See API usage ›</a>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ dev7 }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ dev7cards }}" as="d" hint-placeholder-count="3"><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px;font-weight:800;letter-spacing:-.02em">{{ d }}</span><span style="font-size:12px;color:#6b6577">As drawn on DEV7 ▸</span></div></sc-for>
+          </sc-if>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<sc-if value="{{ dim }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;inset:0;background:rgba(24,24,27,.32)"></div></sc-if>
+
+<sc-if value="{{ dlg }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:0;right:0;top:84px;display:flex;justify-content:center">
+<div role="dialog" aria-modal="true" style="width:640px;background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.18);overflow:hidden">
+  <div style="padding:18px 22px 4px;display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em">{{ dlgTitle }}</h3><span aria-label="Close" style="font-size:18px;color:#6b6577">×</span></div>
+
+  <sc-if value="{{ isCreate }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 22px 16px;display:flex;flex-direction:column;gap:14px">
+      <sc-if value="{{ createErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:9px 12px;font-size:12.5px;color:#b91c1c">{{ createErr }}</div></sc-if>
+      <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:700">Name</span><div style="border:1px solid #ececf1;border-radius:7px;padding:8px 10px;font-size:13px">[Deploy bot]</div><span style="font-size:12px;color:#6b6577">So you can tell your keys apart. Not secret. Up to <span style="font-family:'Roboto Mono',monospace">60</span> characters.</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:700">Companies</span>
+        <div style="display:flex;gap:9px;align-items:center;font-size:13px"><span style="width:16px;height:16px;border-radius:4px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-size:11px">✓</span>[Northwind Labs]</div>
+        <div style="display:flex;gap:9px;align-items:center;font-size:13px"><span style="width:14px;height:14px;border-radius:4px;border:1.5px solid #a1a1aa"></span>[Bluefern Health]</div>
+        <span style="font-size:12px;color:#6b6577">Only companies you own. If one stops being yours, the key loses it at once.</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:700">Permissions</span>
+        <div style="display:flex;gap:9px;align-items:flex-start;font-size:13px"><span style="flex:none;width:16px;height:16px;border-radius:4px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-size:11px;margin-top:1px">✓</span><span><b>Read Validate</b> · Read your Validate context</span></div>
+        <div style="display:flex;gap:9px;align-items:flex-start;font-size:13px"><span style="flex:none;width:14px;height:14px;border-radius:4px;border:1.5px solid #a1a1aa;margin-top:1px"></span><span><b>Submit interviews</b> <span style="font:600 10px 'Roboto Mono',monospace;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:999px;padding:1px 6px">Write</span> · Submit interviews for your review<br><span style="font-size:12px;color:#6b6577">Proposals still wait for your review.</span></span></div>
+        <span style="font-size:12px;color:#6b6577">It cannot change a module, delete anything, or see other companies.</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:700">Expires</span>
+        <div role="radiogroup" style="display:flex;border:1px solid #ececf1;border-radius:9px;padding:3px;gap:3px;align-self:flex-start"><sc-for list="{{ exp }}" as="o" hint-placeholder-count="4"><span style="{{ o.s }}">{{ o.t }}</span></sc-for></div>
+        <sc-if value="{{ never }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:6px 9px;align-self:flex-start">A key that never expires stays valid until you revoke it.</span></sc-if></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12.5px;font-weight:700">Monthly AI token limit (optional)</span><div style="border:1px solid #ececf1;border-radius:7px;padding:8px 10px;font:500 13px 'Roboto Mono',monospace;width:160px">$ 20.00</div><span style="font-size:12px;color:#6b6577">Calls stop for this key when it reaches this. Your account’s own limits still apply.</span></div>
+      <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5">{{ summary }}</div>
+    </div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;justify-content:flex-end;gap:8px"><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:8px 14px">Cancel</span><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Create key</span></div>
+  </sc-if>
+
+  <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 22px 18px;display:flex;flex-direction:column;gap:10px"><div style="font-size:13.5px;line-height:1.5">For your security, confirm it’s you.</div><span style="font-size:12.5px;font-weight:700">Authenticator code</span><div style="border:1px solid #7c3aed;border-radius:7px;padding:9px 12px;font:500 16px 'Roboto Mono',monospace;letter-spacing:.3em;width:200px;color:#a1a1aa">______</div><span style="font-size:12px;color:#6b6577">The six digits in your authenticator app. Your key is created after this.</span></div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;justify-content:flex-end;gap:8px"><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:8px 14px">Cancel</span><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Confirm</span></div>
+  </sc-if>
+
+  <sc-if value="{{ isReveal }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 22px 16px;display:flex;flex-direction:column;gap:12px">
+      <div role="status" style="font-size:13px;color:#047857;font-weight:600">✓ {{ rv.ok }}</div>
+      <sc-if value="{{ rv.old }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#4a4553">{{ rv.old }}</div></sc-if>
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;color:#92400e">This is the only time the secret is shown. StudioOS keeps only a fingerprint and cannot show it again. If you lose it, rotate the key.</div>
+      <div style="display:flex;gap:8px;align-items:stretch"><div aria-label="API key, shown once" style="{{ rv.fs }}">{{ rv.secret }}</div><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:9px 16px;display:flex;align-items:center">{{ rv.copy }}</span></div>
+      <sc-if value="{{ rv.copied }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#6b6577">Copied and hidden from view. Paste it into your secret store now.</div></sc-if>
+      <div style="display:flex;gap:9px;align-items:center;font-size:13px"><span style="{{ rv.box }}">{{ rv.tick }}</span>I have stored this key somewhere safe</div>
+      <div style="font-size:12px;color:#6b6577">Use it as <span style="font-family:'Roboto Mono',monospace">Authorization: Bearer axk_…</span> on <span style="font-family:'Roboto Mono',monospace">https://axal.vc/mcp</span>.</div>
+    </div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;justify-content:flex-end"><span style="{{ rv.done }}">Done</span></div>
+  </sc-if>
+
+  <sc-if value="{{ isRotate }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 22px 18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5"><div>A new secret is made with the same name, companies, permissions and limit.</div><div>The current key stops working at once. Anything using it fails until you paste the new one.</div></div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;justify-content:flex-end;gap:8px"><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:8px 14px">Keep</span><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px">Rotate</span></div>
+  </sc-if>
+
+  <sc-if value="{{ isRevoke }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:10px 22px 18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.5"><div>It stops working at once, everywhere.</div><div>Requests already finished stay in your API usage.</div><div>This cannot be undone. To use the API again, create a new key.</div>
+      <span style="font-size:12.5px;font-weight:700;margin-top:6px">Type the key’s name to confirm</span><div style="border:1px solid #ececf1;border-radius:7px;padding:8px 10px;font-size:13px">[Deploy bot]</div></div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;justify-content:flex-end;gap:8px"><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:8px 14px">Cancel</span><span style="font-size:13px;font-weight:600;color:#fff;background:#b91c1c;border-radius:9px;padding:8px 14px">Revoke</span></div>
+  </sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ confirmClose }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;background:rgba(24,24,27,.28)"></div>
+  <div style="position:absolute;left:0;right:0;top:340px;display:flex;justify-content:center"><div role="alertdialog" aria-modal="true" style="width:420px;background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.2);padding:18px 20px;display:flex;flex-direction:column;gap:14px"><div style="font-size:14px;font-weight:700;line-height:1.45">Close without storing the key? You will not see it again.</div><div style="display:flex;justify-content:flex-end;gap:8px"><span style="font-size:13px;font-weight:600;color:#b91c1c;border:1px solid #fecaca;border-radius:9px;padding:8px 14px">Close</span><span style="font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px;outline:2px solid #7c3aed;outline-offset:2px">Go back</span></div></div></div>
+</sc-if>
+
+<sc-if value="{{ drawer }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-modal="true" style="position:absolute;top:0;right:0;bottom:0;width:560px;background:#fff;border-left:1px solid #ececf1;border-radius:16px 0 0 16px;box-shadow:-18px 0 44px rgba(24,24,27,.14);display:flex;flex-direction:column">
+  <div style="padding:16px 22px;border-bottom:1px solid #ececf1;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between"><a href="#" style="font-size:13px;font-weight:600">‹ API keys</a><span aria-label="Close" style="font-size:18px;color:#6b6577;line-height:1">×</span></div><sc-if value="{{ own }}" hint-placeholder-val="{{ true }}"><div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em">[Deploy bot]</h3><span style="{{ activeS }}"><span aria-hidden="true">✓</span>Active</span></div></sc-if></div>
+  <sc-if value="{{ foreign }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 22px;display:flex;flex-direction:column;gap:10px"><div style="font-size:15px;font-weight:800">This key is not on your account.</div><a href="#" style="font-size:13px;font-weight:600">Back to API keys</a></div></sc-if>
+  <sc-if value="{{ own }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:hidden;padding:4px 22px;display:flex;flex-direction:column">
+      <div style="padding:12px 0;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:4px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">KEY</span><span style="font:500 13px 'Roboto Mono',monospace">axk_[k7f3m2q9x4p1]_••••</span><span style="font-size:12px;color:#6b6577">The secret was shown once on [2 Oct].</span></div>
+      <div style="padding:12px 0;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:6px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">REACHES</span><div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;flex-wrap:wrap"><span style="font-weight:600">[Northwind Labs]</span><span style="{{ reachS }}">{{ reachT }}</span></div><div style="display:flex;gap:7px"><span style="font:500 11px 'Roboto Mono',monospace;border:1px solid #ececf1;border-radius:999px;padding:2px 8px">Read Validate</span></div></div>
+      <div style="padding:12px 0;border-bottom:1px solid #f4f3f7;display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><span style="display:flex;flex-direction:column;gap:3px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">CREATED</span><span style="font:500 12.5px 'Roboto Mono',monospace">[2 Oct]</span></span><span style="display:flex;flex-direction:column;gap:3px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">LAST USED</span><span style="font:500 12.5px 'Roboto Mono',monospace">[21 Oct] · 14:32</span></span><span style="display:flex;flex-direction:column;gap:3px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">EXPIRES</span><span style="font:500 12.5px 'Roboto Mono',monospace">[31 Dec]</span></span></div>
+      <div style="padding:12px 0;border-bottom:1px solid #f4f3f7;display:flex;flex-direction:column;gap:6px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">AI TOKENS THIS MONTH</span><div style="display:flex;justify-content:space-between;font:500 12.5px 'Roboto Mono',monospace"><span>[$4.10] of [$20.00]</span><span style="font-family:'Space Grotesk',sans-serif;font-size:12px;color:#6b6577">Resets on the 1st</span></div><div style="height:6px;border-radius:99px;background:#dedce4"><div style="height:6px;width:21%;border-radius:99px;background:#7c3aed"></div></div><a href="#" style="font-size:12.5px;font-weight:600">See in API usage ›</a></div>
+      <div style="padding:12px 0;display:flex;flex-direction:column;gap:2px"><span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577;margin-bottom:4px">RECENT REQUESTS</span>
+        <sc-for list="{{ reqs }}" as="q" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:70px minmax(0,1fr) 110px 86px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #f4f3f7;font-size:12px"><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">{{ q.t }}</span><span style="font:500 11.5px 'Roboto Mono',monospace">{{ q.tool }}</span><span>[Northwind Labs]</span><span style="{{ q.os }}">{{ q.o }}</span></div></sc-for>
+        <a href="#" style="font-size:12.5px;font-weight:600;margin-top:6px">See all in Activity ›</a></div>
+    </div>
+    <div style="padding:12px 22px;border-top:1px solid #ececf1;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600;border:1px solid #ececf1;border-radius:9px;padding:8px 14px">Rotate</span><span style="font-size:13px;font-weight:600;color:#b91c1c;padding:8px 6px">Revoke</span></div><span style="font-size:12px;color:#6b6577">Name and limit are read-only. To change a key’s companies or permissions, create a new key.</span></div>
+  </sc-if>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ phone }}" hint-placeholder-val="{{ false }}">
+<div style="width:390px;min-height:844px;display:flex;flex-direction:column;position:relative;background:#f4f3f7">
+  <div style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;padding:0 14px;font-size:14px;font-weight:600;color:#7c3aed">{{ pBar }}</div>
+
+  <sc-if value="{{ f1 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:14px 14px 96px;display:flex;flex-direction:column;gap:11px">
+      <span style="font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.07em;color:#6b6577">BUILDER › API KEYS</span>
+      <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Builder</h2>
+      <div style="display:flex;gap:7px;overflow-x:auto;white-space:nowrap;padding-bottom:2px"><sc-for list="{{ pTabs }}" as="t" hint-placeholder-count="4"><span style="{{ t.s }}">{{ t.t }}</span></sc-for></div>
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4"><div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;color:{{ r.ink }}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:14px;font-weight:700">{{ r.n }}</span><span style="{{ r.ps }}"><span aria-hidden="true">{{ r.pg }}</span>{{ r.pt }}</span></div><span style="{{ r.ks }}">{{ r.key }}</span><span style="font-size:12px;color:#6b6577">Last used <span style="font-family:'Roboto Mono',monospace">{{ r.lu }}</span> {{ r.luNote }}</span><sc-if value="{{ r.meter }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:4px"><span style="font:500 11.5px 'Roboto Mono',monospace">{{ r.used }} of {{ r.lim }}</span><span style="display:block;height:4px;border-radius:99px;background:#dedce4"><span style="display:block;height:4px;border-radius:99px;background:#7c3aed;width:{{ r.pct }}"></span></span></span></sc-if></div></sc-for>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:12px 14px 22px;background:#fff;border-top:1px solid #ececf1"><div style="min-height:48px;border-radius:9px;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Create a key</div></div>
+  </sc-if>
+
+  <sc-if value="{{ f2 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:16px 14px 110px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em">Create an API key</h2><span style="font:500 11.5px 'Roboto Mono',monospace;color:#6b6577">Step 2 of 5</span></div>
+      <div style="height:4px;border-radius:99px;background:#dedce4"><div style="height:4px;width:40%;border-radius:99px;background:#7c3aed"></div></div>
+      <span style="font-size:14px;font-weight:700">Companies</span>
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;overflow:hidden"><div style="min-height:48px;display:flex;gap:10px;align-items:center;padding:0 14px;border-bottom:1px solid #f4f3f7;font-size:14px"><span style="width:20px;height:20px;border-radius:5px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-size:12px">✓</span>[Northwind Labs]</div><div style="min-height:48px;display:flex;gap:10px;align-items:center;padding:0 14px;font-size:14px"><span style="width:18px;height:18px;border-radius:5px;border:1.5px solid #a1a1aa"></span>[Bluefern Health]</div></div>
+      <span style="font-size:12.5px;color:#6b6577;line-height:1.5">Only companies you own. If one stops being yours, the key loses it at once.</span>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:12px 14px 22px;background:#fff;border-top:1px solid #ececf1;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="min-height:48px;border-radius:9px;border:1px solid #ececf1;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Back</div><div style="min-height:48px;border-radius:9px;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Next</div></div>
+  </sc-if>
+
+  <sc-if value="{{ f3 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:16px 14px 110px;display:flex;flex-direction:column;gap:12px">
+      <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Copy your key now</h2>
+      <div style="font-size:13.5px;color:#047857;font-weight:600">✓ [Deploy bot] was created.</div>
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;color:#92400e">This is the only time the secret is shown. StudioOS keeps only a fingerprint and cannot show it again. If you lose it, rotate the key.</div>
+      <div aria-label="API key, shown once" style="border:1px solid #ddd0fb;border-radius:7px;padding:11px 12px;font:500 14px/1.5 'Roboto Mono',monospace;background:#faf8ff;word-break:break-all;outline:2px solid #7c3aed;outline-offset:1px">axk_[example]_[shown once]</div>
+      <div style="min-height:48px;border-radius:9px;border:1px solid #ececf1;background:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Copy</div>
+      <div style="min-height:48px;display:flex;gap:10px;align-items:center;font-size:14px"><span style="width:20px;height:20px;border-radius:5px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-size:12px">✓</span>I have stored this key somewhere safe</div>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:12px 14px 22px;background:#fff;border-top:1px solid #ececf1"><div style="min-height:48px;border-radius:9px;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Done</div></div>
+  </sc-if>
+
+  <sc-if value="{{ f4 }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:16px 14px 110px;display:flex;flex-direction:column;gap:11px">
+      <div style="display:flex;align-items:center;gap:10px"><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">[Deploy bot]</h2><span style="{{ activeS }}"><span aria-hidden="true">✓</span>Active</span></div>
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:13px"><span style="font:500 13px 'Roboto Mono',monospace">axk_[k7f3m2q9x4p1]_••••</span><span style="color:#6b6577;font-size:12px">The secret was shown once on [2 Oct].</span><span><b>[Northwind Labs]</b> · Still yours ✓</span><span style="font-family:'Roboto Mono',monospace;font-size:12px">Read Validate</span><span style="font-family:'Roboto Mono',monospace;font-size:12px">Created [2 Oct] · Last used [21 Oct] · 14:32 · Expires [31 Dec]</span><span style="font-family:'Roboto Mono',monospace;font-size:12px">[$4.10] of [$20.00] this month</span><div style="height:6px;border-radius:99px;background:#dedce4"><div style="height:6px;width:21%;border-radius:99px;background:#7c3aed"></div></div></div>
+      <a href="#" style="min-height:44px;display:flex;align-items:center;font-size:14px;font-weight:600">See in API usage ›</a>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:12px 14px 22px;background:#fff;border-top:1px solid #ececf1;display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="min-height:48px;border-radius:9px;border:1px solid #ececf1;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Rotate</div><div style="min-height:48px;border-radius:9px;border:1px solid #fecaca;color:#b91c1c;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center">Revoke</div></div>
+  </sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;board&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;apik1&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;crop&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;frame&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const b = this.props.board ?? 'apik1', c = this.props.crop ?? '', phone = !!this.props.phone, fr = Number(this.props.frame ?? 1);
+    const role = b === 'apik9' ? (c || 'investor') : 'founder';
+    const SIDES = { founder: ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', 'Spin-Out Lab'], investor: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust', 'Firm Settings'], explorer: ['Studio', 'Network', 'Research'], hq: ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'] };
+    const SEC = [['Profile and identity', 0], ['Companies and Projects', 0], ['Notifications', 0], ['Sign-in and security', 0], ['Billing and orders', 0], ['Usage', 0], ['Overview', 1], ['Cost', 1], ['AI tokens', 1], ['Limits', 1], ['Storage', 1], ['Connectors', 0], ['Following', 0], ['Builder', 0], ['MCP and services', 1], ['API keys', 1], ['API usage', 1], ['Activity', 1], ['More', 0], ['Onboarding', 1], ['Appearance', 1], ['Activity Log', 1]];
+    const secs = SEC.map(([t, ind]) => { const lit = t === 'API keys', grp = t === 'Builder'; return { t, style: 'padding:' + (ind ? '5px 10px 5px 22px' : '7px 10px') + ';border-radius:8px;font-size:' + (ind ? 12.5 : 13) + 'px;font-weight:' + (lit || grp ? 700 : 500) + ';color:' + (lit ? '#6d28d9' : grp ? '#18181b' : '#4a4553') + ';background:' + (lit ? '#f4f0fe' : 'transparent') + ';border:1px solid ' + (lit ? '#ddd0fb' : 'transparent') }; });
+    const PILL = (fg, bg, bd) => 'display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px solid ' + bd;
+    const ST = { active: [PILL('#047857', '#ecfdf5', '#a7f3d0'), '✓', 'Active'], soon: [PILL('#92400e', '#fffbeb', '#fcd34d'), '!', 'Expires in [6] days'], expired: [PILL('#4a4553', '#f4f3f7', '#dedce4'), '–', 'Expired'], revoked: [PILL('#4a4553', '#f4f3f7', '#dedce4'), '×', 'Revoked'] };
+    const BP = 'font-size:13px;font-weight:600;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 14px';
+    const BG = 'font-size:13px;font-weight:600;color:#18181b;background:#fff;border:1px solid #ececf1;border-radius:9px;padding:8px 14px';
+    const NOTE = (tone, t) => ({ show: true, t, style: 'border-radius:10px;padding:9px 12px;font-size:12.5px;line-height:1.5;' + ({ ok: 'background:#ecfdf5;border:1px solid #a7f3d0;color:#047857', bad: 'background:#fef2f2;border:1px solid #fecaca;color:#b91c1c', warn: 'background:#fffbeb;border:1px solid #fcd34d;color:#92400e', lav: 'background:#f4f0fe;border:1px solid #ddd0fb;color:#6d28d9' })[tone] });
+    let notice = { show: false, t: '', style: '' };
+    const K = [
+      { n: '[Deploy bot]', id: 'k7f3m2q9x4p1', co: '[Northwind Labs]', perms: ['Read Validate'], cr: '[2 Oct]', lu: '[21 Oct] · 14:32', ex: '[31 Dec]', used: '[$4.10]', lim: '[$20.00]', pct: '21%', st: 'active' },
+      { n: '[Nightly sync]', id: 'r2d8w5n1c6v3', co: 'Both companies', perms: ['Read Validate', 'Submit interviews'], cr: '[12 Sep]', lu: '', ex: '[30 Oct]', st: 'soon' },
+      { n: '[Old laptop script]', id: 'h9j4t7b2m5x8', co: '[Northwind Labs]', perms: ['Read Validate'], cr: '[4 Aug]', lu: '[17 Oct] · 09:12', ex: '—', st: 'revoked', when: '[18 Oct]' },
+      { n: '[Trial import]', id: 'p3s6v9y2b5e8', co: '[Bluefern Health]', perms: ['Submit interviews'], cr: '[1 Sep]', lu: '[30 Sep] · 16:05', ex: '[1 Oct]', st: 'expired', when: '[1 Oct]' },
+    ];
+    const support = b === 'apik14' && c === 'support';
+    let hl = false, repl = false, filt = null;
+    if (b === 'apik4') { hl = true; notice = NOTE('lav', '[Deploy bot] is ready. Its secret is no longer shown anywhere.'); }
+    if (b === 'apik7' && c === 'after') { K[0] = Object.assign({}, K[0], { st: 'revoked', when: '[24 Oct]' }); notice = NOTE('ok', '[Deploy bot] was revoked.'); }
+    if (b === 'apik8') { filt = ['expired', 'revoked']; repl = true; }
+    if (b === 'apik12' && c === 'failed') notice = NOTE('bad', '[Deploy bot] was not changed. Try again.');
+    if (b === 'apik12' && c === 'rate') notice = NOTE('warn', 'Too many changes. Try again in [30] seconds.');
+    const list = filt ? K.filter(k => filt.indexOf(k.st) >= 0) : K;
+    const rows = list.map((k, i) => { const dead = k.st === 'revoked' || k.st === 'expired', s = ST[k.st]; return {
+      n: k.n, key: 'axk_[' + k.id + ']_••••', ks: "font:500 10.5px 'Roboto Mono',monospace;color:" + (dead ? '#4a4553' : '#18181b') + (k.st === 'revoked' ? ';text-decoration:line-through' : ''),
+      co: k.co, perms: k.perms, cr: k.cr, lu: k.lu || '—', luNote: k.lu ? '' : 'No call recorded', ex: k.ex,
+      meter: !!k.lim && !dead, used: k.used || '', lim: k.lim || '', pct: k.pct || '0%', tok: dead ? '—' : (k.lim ? '' : 'No limit'), tokNote: !dead && !k.lim ? 'No call recorded' : '',
+      ps: s[0], pg: s[1], pt: s[2], when: k.when || '', ink: dead ? '#4a4553' : '#18181b', bg: hl && i === 0 ? '#f4f0fe' : '#fff', menu: support ? '' : '⋯', repl: repl && k.st === 'expired' ? 'Create a replacement' : '' }; });
+    const chip = (t, n, on) => ({ t, n, s: 'font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;white-space:nowrap;border:1px solid ' + (on ? '#ddd0fb' : '#ececf1') + ';background:' + (on ? '#f4f0fe' : '#fff') + ';color:' + (on ? '#6d28d9' : '#4a4553') });
+    const chips = [chip('Active', '[2]', false), chip('Expired', '[1]', !!filt), chip('Revoked', '[1]', !!filt)];
+    const isMsg = !phone && (b === 'apik9' || b === 'apik13' || b === 'apik10' || (b === 'apik12' && c === 'list'));
+    const isLoading = !phone && b === 'apik11';
+    const isList = !phone && !isMsg && !isLoading;
+    const MSG = {
+      investor: { title: 'Nothing a key could reach yet', line: 'StudioOS’s tools today work on companies a founder owns. Your profile owns none, so a key would have nothing to call.' },
+      explorer: { title: 'API keys open once your profile is set.', line: 'Finish setting up your profile, then come back.', btn: 'Set up your profile', prim: 1 },
+      hq: { title: 'Nothing a key could reach yet', line: 'StudioOS’s tools today work on companies a founder owns. Your profile owns none, so a key would have nothing to call.', extra: 'Platform keys for connectors are set in HQ › Integration keys.', extraLink: 'Open Integration keys ›' },
+      off: { title: 'API keys are not available yet.', line: 'Assistants can still sign in from MCP and services.', link: 'Open MCP and services ›' },
+      err: { title: 'Your keys could not be read.', line: 'That is not the same as having none.', btn: 'Try again', bad: 1 },
+      empty: { title: 'No API keys yet.', line: 'Create a key for a script or tool you run yourself. An assistant can sign in instead, with no key.', btn: 'Create a key', prim: 1, link: 'Connect an assistant ›' },
+    };
+    const m0 = MSG[b === 'apik9' ? role : b === 'apik13' ? 'off' : b === 'apik10' ? 'empty' : 'err'];
+    const msg = { title: m0.title, line: m0.line, btn: m0.btn || '', link: m0.link || '', extra: m0.extra || '', extraLink: m0.extraLink || '', bs: m0.prim ? BP : BG,
+      cs: 'border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;' + (m0.bad ? 'background:#fef2f2;border:1px solid #fecaca' : 'background:#fff;border:1px solid #ececf1'),
+      ts: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.02em;color:' + (m0.bad ? '#b91c1c' : '#18181b') };
+    const ov = b === 'apik2' ? (c === 'auth' ? 'auth' : 'create') : b === 'apik3' ? 'reveal' : b === 'apik6' ? (c === 'reveal' ? 'reveal' : 'rotate') : (b === 'apik7' && c !== 'after') ? 'revoke' : (b === 'apik12' && c === 'refused') ? 'create' : '';
+    const drawer = !phone && (b === 'apik5' || (b === 'apik14' && c !== 'support'));
+    const never = b === 'apik2' && c === 'never';
+    const exp = ['30 days', '90 days', '1 year', 'Never'].map(t => { const on = t === (never ? 'Never' : '90 days'); return { t, s: 'font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:7px;' + (on ? 'background:#7c3aed;color:#fff' : 'color:#4a4553') }; });
+    const copied = b === 'apik3' && c === 'copied';
+    const rv = { ok: b === 'apik6' ? '[Deploy bot] has a new secret.' : '[Deploy bot] was created.', old: b === 'apik6' ? 'The old key axk_[k7f3m2q9x4p1]_•••• was revoked at [14:40].' : '',
+      secret: copied ? 'axk_[example]_••••' : 'axk_[example]_[shown once]', copy: copied ? 'Copied' : 'Copy', copied,
+      fs: "flex:1;border:1px solid #ddd0fb;border-radius:7px;padding:9px 11px;font:500 13px 'Roboto Mono',monospace;background:#faf8ff;user-select:all" + (copied ? '' : ';outline:2px solid #7c3aed;outline-offset:1px'),
+      box: copied ? 'width:16px;height:16px;border-radius:4px;background:#7c3aed;color:#fff;display:grid;place-items:center;font-size:11px' : 'width:14px;height:14px;border-radius:4px;border:1.5px solid #6b6577', tick: copied ? '✓' : '',
+      done: copied ? BP : 'font-size:13px;font-weight:600;color:#fff;background:#c4b5fd;border-radius:9px;padding:8px 14px;cursor:not-allowed' };
+    const lost = b === 'apik5' && c === 'lost';
+    const reqs = [['14:32', 'get_validate_context', 'OK'], ['14:31', 'list_hypotheses', 'OK'], ['14:30', 'get_validate_context', 'OK'], ['14:28', 'submit_interview', 'Refused · 403'], ['14:27', 'get_validate_context', 'OK']].map(([t, tool, o]) => ({ t: '[' + t + ']', tool: '[' + tool + ']', o, os: o === 'OK' ? PILL('#047857', '#ecfdf5', '#a7f3d0') : PILL('#b91c1c', '#fef2f2', '#fecaca') }));
+    const tabs = ['MCP and services', 'API keys', 'API usage', 'Activity'].map(t => ({ t, s: 'font-size:13px;font-weight:600;padding:10px 13px;border-radius:999px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;border:1px solid ' + (t === 'API keys' ? '#ddd0fb' : '#ececf1') + ';background:' + (t === 'API keys' ? '#f4f0fe' : '#fff') + ';color:' + (t === 'API keys' ? '#6d28d9' : '#4a4553') }));
+    return {
+      desk: !phone, phone, side: SIDES[role] || SIDES.founder, hq: role === 'hq', secs, support,
+      isList, isLoading, isMsg, msg, create: isList && !support, notice, chips, rows, skel: [1, 2, 3, 4, 5, 6],
+      card2: role === 'founder' && b !== 'apik13', refusals: b === 'apik15', dev7: b !== 'apik13', dev7cards: ['Keys you gave StudioOS', 'Webhooks into StudioOS', 'Webhooks from StudioOS'],
+      refs: [['401', 'invalid_key', 'The key is wrong or unknown.'], ['401', 'revoked_key', 'The key was revoked.'], ['401', 'expired_key', 'The key has expired.'], ['403', 'insufficient_scope', 'The key lacks the permission for this tool.'], ['402', 'insufficient_tokens', 'Not enough AI tokens. Add tokens in Usage › AI tokens.'], ['429', 'rate_limited', 'Too many calls. Wait for the time in Retry-After.']].map(([c0, k, t]) => ({ c: c0, k, t })),
+      dim: !!ov || drawer, dlg: !!ov, isCreate: ov === 'create', isAuth: ov === 'auth', isReveal: ov === 'reveal', isRotate: ov === 'rotate', isRevoke: ov === 'revoke',
+      dlgTitle: { create: 'Create an API key', auth: 'Create an API key', reveal: b === 'apik6' ? 'Copy your new key' : 'Copy your key now', rotate: 'Rotate [Deploy bot]?', revoke: 'Revoke [Deploy bot]?' }[ov] || '',
+      createErr: b === 'apik12' ? 'That company is not one you own.' : '', never, exp,
+      summary: '[Deploy bot] can read Validate for [Northwind Labs], ' + (never ? 'with no expiry' : 'until [19 Jan 2027]') + ', up to [$20.00] of AI tokens a month.',
+      rv, confirmClose: b === 'apik3' && c === 'confirm', drawer, own: drawer && b === 'apik5', foreign: drawer && b === 'apik14',
+      activeS: ST.active[0], reachT: lost ? 'You no longer own this company. Calls for it are refused.' : 'Still yours ✓', reachS: lost ? 'font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:7px;padding:4px 8px' : 'font-size:12.5px;color:#047857;font-weight:600', reqs,
+      pBar: fr === 1 ? '‹ Account' : fr === 4 ? '‹ API keys' : fr === 2 ? 'Cancel' : '', pTabs: tabs, f1: phone && fr === 1, f2: phone && fr === 2, f3: phone && fr === 3, f4: phone && fr === 4,
+    };
+  }
+}
+</script>
+</body>
+</html>

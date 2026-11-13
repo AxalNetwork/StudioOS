@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .lp-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .lp-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa}
+    .lp-btn{transition:background .12s,border-color .12s,box-shadow .12s;cursor:pointer;font-family:inherit}
+    .lp-card{transition:border-color .12s,box-shadow .12s}
+    .lp-tier:hover{border-color:#ddd6fe}
+    .lp-row:hover{background:#faf9fc}
+    input[type=range].lp-slider{-webkit-appearance:none;appearance:none;height:5px;border-radius:99px;background:#ece7f8;outline:none;width:100%}
+    input[type=range].lp-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer}
+    @keyframes lpFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @keyframes lpPulse{0%,100%{opacity:1}50%{opacity:.45}}
+    @media (max-width:1180px){.lp-2col{grid-template-columns:1fr!important}.lp-kpi{grid-template-columns:repeat(2,1fr)!important}.lp-founders{grid-template-columns:repeat(2,1fr)!important}.lp-tiers{grid-template-columns:1fr!important}}
+    @media (max-width:820px){.lp-founders{grid-template-columns:1fr!important}.lp-hero{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div style="max-width:1440px;margin:0 auto;padding:0 24px 120px">
+  <div style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px;margin-bottom:16px"></div>
+
+  <!-- TOP BAR -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0">
+      <div style="width:34px;height:34px;border-radius:9px;background:#f4f0ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;flex:none">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div style="min-width:0">
+        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Spin-Out Lab · LP &amp; Investor Workspace</h1>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Curated capital participation in the Spin-Out Lab fund — fund thesis, live founder performance, reporting, and gated allocation.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="{{ profileChipStyle }}">{{ profileChip }}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700">HK</div>
+        <span style="font-size:12.5px;font-weight:600;color:#3f3f46">Helena K.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE SWITCHER -->
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+    <span class="lp-lbl">Access state</span>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <sc-for list="{{ stateTabs }}" as="t" hint-placeholder-count="5">
+        <button class="lp-btn" onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- GATED ACCESS BANNER -->
+  <div style="{{ gateBanner.wrapStyle }}">
+    <div style="{{ gateBanner.iconStyle }}" dangerouslySetInnerHTML="{{ gateBanner.icon }}"></div>
+    <div style="min-width:0;flex:1">
+      <div style="font-size:13.5px;font-weight:700;color:#18181b">{{ gateBanner.title }}</div>
+      <div style="font-size:12.5px;color:#52525b;line-height:1.6;margin-top:3px">{{ gateBanner.body }}</div>
+    </div>
+    <button class="lp-btn" onClick="{{ gateBanner.go }}" style="flex:none;padding:8px 14px;border-radius:8px;border:1px solid #7c3aed;background:{{ gateBanner.ctaBg }};font-size:12.5px;font-weight:700;color:{{ gateBanner.ctaFg }}">{{ gateBanner.cta }}</button>
+  </div>
+
+  <!-- FUND HERO -->
+  <div class="lp-hero" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:22px;margin-top:22px;align-items:stretch">
+    <div style="background:linear-gradient(135deg,#1e1533 0%,#2d1d52 60%,#3b2470 100%);border-radius:18px;padding:30px 32px;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-60px;right:-60px;width:240px;height:240px;border-radius:50%;background:rgba(124,58,237,.25);filter:blur(60px)"></div>
+      <div style="position:relative">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px">
+          <span style="padding:4px 11px;border-radius:99px;font-size:11px;font-weight:700;background:rgba(134,239,172,.15);color:#86efac">Fund open · raising</span>
+          <span style="font-size:12px;color:rgba(255,255,255,.55)">Axal Spin-Out Fund I · Cohort-backed pre-seed</span>
+        </div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.25;max-width:560px">Back companies at the moment they become companies.</div>
+        <div style="font-size:13.5px;color:rgba(255,255,255,.75);line-height:1.7;margin-top:12px;max-width:560px">The fund invests exclusively in Spin-Out Lab graduates — incorporated, 83(b)-filed, cap-table-clean companies with verified customer discovery and revenue proof, underwritten by 30 days of observed execution data rather than a pitch.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:22px">
+          <button class="lp-btn" onClick="{{ heroPrimaryGo }}" style="padding:10px 18px;border-radius:9px;border:none;background:#fff;color:#2d1d52;font-size:13px;font-weight:700">{{ heroPrimaryCta }}</button>
+          <button class="lp-btn" onClick="{{ openBrief }}" style="padding:10px 18px;border-radius:9px;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;font-size:13px;font-weight:600">Download fund brief</button>
+        </div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:18px;padding:22px 24px;display:flex;flex-direction:column">
+      <div class="lp-lbl" style="margin-bottom:14px">Fund at a glance</div>
+      <div style="display:flex;flex-direction:column;gap:11px;flex:1">
+        <sc-for list="{{ fundFacts }}" as="f" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:11px;border-bottom:1px solid #f6f6f7">
+            <span style="font-size:12px;color:#71717a">{{ f.k }}</span>
+            <span class="lp-mono" style="font-size:12.5px;font-weight:700;color:#18181b;text-align:right">{{ f.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px"><span style="color:#71717a">Committed vs target</span><span class="lp-mono" style="font-weight:700;color:#6d28d9">$6.8M / $10M</span></div>
+        <div style="height:6px;background:#f1f0f5;border-radius:99px;overflow:hidden"><div style="height:100%;width:68%;background:#7c3aed"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PACKAGE / TIERS -->
+  <div style="margin-top:26px">
+    <div class="lp-lbl" style="margin-bottom:12px">Fund package · commitment tiers</div>
+    <div class="lp-tiers" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+      <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="3">
+        <button class="lp-btn lp-tier" onClick="{{ t.select }}" style="{{ t.wrapStyle }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:700;color:#18181b">{{ t.name }}</div>
+            <span style="{{ t.tagStyle }}">{{ t.tag }}</span>
+          </div>
+          <div class="lp-mono" style="font-size:22px;font-weight:700;letter-spacing:-.02em;color:#18181b">{{ t.amount }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:3px">minimum commitment</div>
+          <div style="display:flex;flex-direction:column;gap:7px;margin-top:14px;text-align:left">
+            <sc-for list="{{ t.perks }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex;gap:8px;font-size:12px;color:#52525b;line-height:1.5">
+                <span style="color:#7c3aed;flex:none;font-weight:700">✓</span><span>{{ p }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </button>
+      </sc-for>
+    </div>
+    <div style="font-size:11.5px;color:#a1a1aa;margin-top:10px">Reserve policy: 40% held for follow-on into top-quartile graduates · Quarterly reporting, annual audited statements · Participation rights scale with commitment, never with volume of requests.</div>
+  </div>
+
+  <!-- APPLICATION -->
+  <sc-if value="{{ showApply }}">
+  <div style="margin-top:26px">
+    <div class="lp-lbl" style="margin-bottom:12px">Apply to participate</div>
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:18px;padding:24px 26px">
+      <div class="lp-2col" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:26px;align-items:start">
+        <div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:7px">Investor type</div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap">
+                <sc-for list="{{ invTypes }}" as="i" hint-placeholder-count="4">
+                  <button class="lp-btn" onClick="{{ i.onClick }}" style="{{ i.style }}">{{ i.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:7px">
+                <div style="font-size:12px;font-weight:600;color:#3f3f46">Target commitment</div>
+                <div class="lp-mono" style="font-size:13px;font-weight:700;color:#6d28d9">{{ commitLabel }}</div>
+              </div>
+              <input type="range" class="lp-slider" min="0" max="9" step="1" value="{{ commitIdx }}" onInput="{{ setCommit }}">
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#a1a1aa;margin-top:5px"><span>$50K</span><span>$250K unlocks allocation rights</span><span>$2M</span></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:7px">Preference areas</div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap">
+                <sc-for list="{{ prefs }}" as="p" hint-placeholder-count="6">
+                  <button class="lp-btn" onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fafafa;border:1px solid #f4f4f5;border-radius:10px">
+              <button class="lp-btn" onClick="{{ toggleAccred }}" style="{{ accredBoxStyle }}">{{ accredGlyph }}</button>
+              <div style="font-size:12px;color:#52525b;line-height:1.5">I confirm accredited-investor status and will complete KYC verification before any capital transfer.</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fafafa;border:1px solid #f4f4f5;border-radius:14px;padding:18px 20px">
+          <div class="lp-lbl" style="margin-bottom:12px">Application summary</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ applySummary }}" as="s" hint-placeholder-count="5">
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:12px">
+                <span style="color:#71717a">{{ s.k }}</span>
+                <span style="font-weight:600;color:{{ s.tone }};text-align:right">{{ s.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <button class="lp-btn" onClick="{{ submitApply }}" style="{{ submitStyle }}">{{ submitCta }}</button>
+          <div style="font-size:10.5px;color:#a1a1aa;line-height:1.6;margin-top:10px">Applications are reviewed by the fund team within 5 business days. Acceptance is selective and capacity-limited.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- PENDING NOTICE -->
+  <sc-if value="{{ showPending }}">
+  <div style="margin-top:26px;background:#fffdf5;border:1px solid #fde68a;border-radius:18px;padding:22px 26px;display:flex;align-items:center;gap:16px">
+    <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;color:#b45309;display:flex;align-items:center;justify-content:center;flex:none;animation:lpPulse 2.4s ease-in-out infinite">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    </div>
+    <div style="min-width:0;flex:1">
+      <div style="font-size:14px;font-weight:700;color:#18181b">Application under review</div>
+      <div style="font-size:12.5px;color:#52525b;line-height:1.6;margin-top:3px">Submitted Aug 1, 2026 · $250K target commitment · Fund team review typically completes within 5 business days. You will be notified by email and here.</div>
+    </div>
+    <span class="lp-mono" style="flex:none;font-size:11.5px;font-weight:700;color:#b45309">Day 3 of 5</span>
+  </div>
+  </sc-if>
+
+  <!-- PERFORMANCE -->
+  <div style="margin-top:26px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="lp-lbl">Cohort &amp; founder performance</div>
+      <span style="font-size:11.5px;color:#a1a1aa">Cohort 4 · live program data · updated daily</span>
+    </div>
+    <div class="lp-kpi" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:14px;padding:15px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">{{ k.k }}</div>
+          <div class="lp-mono" style="font-size:20px;font-weight:700;margin-top:6px;letter-spacing:-.02em;color:#18181b">{{ k.v }}</div>
+          <div style="font-size:11px;color:{{ k.tone }};margin-top:3px;font-weight:600">{{ k.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div class="lp-founders" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px">
+      <sc-for list="{{ founders }}" as="f" hint-placeholder-count="6">
+        <div class="lp-card" style="background:#fff;border:1px solid #ececf1;border-radius:14px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px">
+            <div style="{{ f.avStyle }}">{{ f.initials }}</div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:700;color:#18181b">{{ f.company }}</div>
+              <div style="font-size:11px;color:#a1a1aa">{{ f.meta }}</div>
+            </div>
+            <span style="{{ f.stageStyle }}">{{ f.stage }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#71717a">Program progress</span><span class="lp-mono" style="font-weight:700;color:#18181b">{{ f.pct }}</span></div>
+            <div style="height:5px;background:#f1f0f5;border-radius:99px;overflow:hidden"><div style="height:100%;width:{{ f.pct }};background:{{ f.bar }}"></div></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+              <sc-for list="{{ f.signals }}" as="s" hint-placeholder-count="3">
+                <span style="padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;background:#f4f4f5;color:#52525b">{{ s }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="lp-2col" style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;margin-top:26px;align-items:start">
+    <!-- OPERATIONS -->
+    <div>
+      <div class="lp-lbl" style="margin-bottom:12px">Fund operations &amp; reporting</div>
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px 22px">
+        <div class="lp-kpi" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px">
+          <sc-for list="{{ opsStats }}" as="o" hint-placeholder-count="4">
+            <div style="background:#fafafa;border:1px solid #f4f4f5;border-radius:11px;padding:12px 13px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">{{ o.k }}</div>
+              <div class="lp-mono" style="font-size:15px;font-weight:700;margin-top:5px;color:#18181b">{{ o.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="lp-lbl" style="margin-bottom:11px;font-size:10px">Report timeline</div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ reports }}" as="r" hint-placeholder-count="4">
+            <div class="lp-row" style="display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid #f6f6f7">
+              <div style="{{ r.dotStyle }}"></div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:12.5px;font-weight:600;color:#18181b">{{ r.title }}</div>
+                <div class="lp-mono" style="font-size:10.5px;color:#a1a1aa;margin-top:2px">{{ r.meta }}</div>
+              </div>
+              <span style="{{ r.tagStyle }}">{{ r.tag }}</span>
+              <button class="lp-btn" onClick="{{ r.open }}" style="{{ r.btnStyle }}">{{ r.cta }}</button>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ reportsLocked }}">
+        <div style="font-size:11.5px;color:#a1a1aa;margin-top:12px">Full reports unlock after acceptance. Committed LPs receive quarterly reports and the annual audited statement.</div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- PARTICIPATION LADDER -->
+    <div>
+      <div class="lp-lbl" style="margin-bottom:12px">Participation rights</div>
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:18px 20px">
+        <div style="display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ ladder }}" as="l" hint-placeholder-count="4">
+            <div style="display:flex;gap:12px;padding-bottom:16px">
+              <div style="flex:none;display:flex;flex-direction:column;align-items:center">
+                <div style="{{ l.dotStyle }}">{{ l.glyph }}</div>
+                <sc-if value="{{ l.line }}"><div style="width:1px;flex:1;background:#f1f0f5;margin-top:3px"></div></sc-if>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div style="font-size:12.5px;font-weight:700;color:{{ l.titleTone }}">{{ l.title }}</div>
+                  <span style="{{ l.tagStyle }}">{{ l.tag }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:3px">{{ l.desc }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="{{ thresholdStyle }}">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;opacity:.8">Your access</div>
+          <div style="font-size:12.5px;font-weight:700">{{ thresholdText }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEMO DAY GATE -->
+  <div style="margin-top:26px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="lp-lbl">Demo day · capital allocation</div>
+      <span style="{{ gateChipStyle }}">{{ gateChip }}</span>
+    </div>
+
+    <sc-if value="{{ allocLocked }}">
+    <div style="position:relative;border-radius:18px;overflow:hidden;border:1px solid #ececf1">
+      <div style="filter:blur(5px);opacity:.55;pointer-events:none;background:#fff;padding:24px 26px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+          <sc-for list="{{ ghostCards }}" as="g" hint-placeholder-count="3">
+            <div style="border:1px solid #ececf1;border-radius:14px;padding:16px">
+              <div style="font-size:13px;font-weight:700">{{ g.name }}</div>
+              <div style="height:5px;background:#ece7f8;border-radius:99px;margin-top:12px"><div style="height:100%;width:{{ g.w }};background:#7c3aed;border-radius:99px"></div></div>
+              <div style="height:5px;background:#f1f0f5;border-radius:99px;margin-top:8px"></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(255,255,255,.55)">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#71717a" stroke-width="1.7" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <div style="font-size:15px;font-weight:700;color:#18181b;margin-top:10px">Allocation decisions unlock at $250K committed</div>
+        <div style="font-size:12.5px;color:#52525b;line-height:1.6;margin-top:6px;max-width:440px">{{ allocLockNote }}</div>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ allocOpen }}">
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:18px;padding:24px 26px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <div>
+          <div style="font-size:15px;font-weight:800;letter-spacing:-.01em">Cohort 4 demo day · allocate your committed capital</div>
+          <div style="font-size:12.5px;color:#71717a;margin-top:3px">Distribute {{ commitTotal }} across graduating companies. Votes are commitment-weighted; allocations settle at close.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="text-align:right">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Unallocated</div>
+            <div class="lp-mono" style="font-size:16px;font-weight:700;color:{{ remainTone }}">{{ remainLabel }}</div>
+          </div>
+          <button class="lp-btn" onClick="{{ submitAlloc }}" style="{{ allocSubmitStyle }}">{{ allocSubmitCta }}</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ allocRows }}" as="a" hint-placeholder-count="4">
+          <div style="border:1px solid #ececf1;border-radius:14px;padding:15px 18px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="{{ a.avStyle }}">{{ a.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div style="font-size:13.5px;font-weight:700;color:#18181b">{{ a.company }}</div>
+                  <span style="{{ a.scoreStyle }}">{{ a.score }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ a.summary }}</div>
+              </div>
+              <div style="flex:none;width:230px;min-width:160px">
+                <input type="range" class="lp-slider" min="0" max="100" step="5" value="{{ a.pct }}" onInput="{{ a.onSlide }}">
+              </div>
+              <div class="lp-mono" style="flex:none;width:120px;text-align:right">
+                <div style="font-size:14px;font-weight:700;color:#18181b">{{ a.amount }}</div>
+                <div style="font-size:10.5px;color:#a1a1aa">{{ a.pctLabel }} of commitment</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:11px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;flex:none">LP consensus</div>
+              <div style="flex:1;height:5px;background:#f1f0f5;border-radius:99px;overflow:hidden"><div style="height:100%;width:{{ a.consensus }};background:#c4b5fd"></div></div>
+              <span class="lp-mono" style="font-size:10.5px;color:#71717a;flex:none">{{ a.consensus }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+</div>
+
+<!-- MODAL -->
+<sc-if value="{{ modalOpen }}">
+<div onClick="{{ closeModal }}" style="position:fixed;inset:0;background:rgba(24,24,27,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;animation:lpFade .16s ease">
+  <div onClick="{{ stop }}" style="background:#fff;border-radius:18px;max-width:500px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+    <div style="padding:20px 24px;border-bottom:1px solid #f4f4f5;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:16px;font-weight:700;letter-spacing:-.01em">{{ modal.title }}</div>
+        <div style="font-size:12.5px;color:#71717a;margin-top:3px">{{ modal.sub }}</div>
+      </div>
+      <button class="lp-btn" onClick="{{ closeModal }}" style="border:none;background:transparent;font-size:19px;color:#a1a1aa;line-height:1;padding:0">×</button>
+    </div>
+    <div style="padding:22px 24px">
+      <div style="font-size:13px;color:#52525b;line-height:1.7">{{ modal.body }}</div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #f4f4f5;display:flex;justify-content:flex-end">
+      <button class="lp-btn" onClick="{{ closeModal }}" style="padding:9px 16px;border-radius:8px;border:1px solid #7c3aed;background:#7c3aed;font-size:12.5px;font-weight:700;color:#fff">{{ modal.cta }}</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440}}">
+class Component extends DCLogic {
+  state = {
+    access: 'approved',
+    invType: 'family',
+    commitIdx: 4,
+    prefsOn: { ai:true, saas:true, deeptech:false, fintech:false, climate:false, health:false },
+    accred: false,
+    alloc: { novacraft:30, meridianiq:25, loopsense:20, foundry:10 },
+    modal: null,
+  };
+
+  set(k, v) { this.setState({ [k]: v }); }
+  slide(k, e) { this.setState(s => ({ alloc: Object.assign({}, s.alloc, { [k]: Number(e.target.value) }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const P = '#7c3aed';
+    const tag = (bg, fg) => 'flex:none;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg;
+    const acc = st.access;
+
+    const STATES = [
+      { k:'visitor',  label:'Invited · not applied' },
+      { k:'pending',  label:'Applied · pending' },
+      { k:'approved', label:'Approved' },
+      { k:'committed',label:'Committed · $100K' },
+      { k:'voting',   label:'Committed · $250K+' },
+    ];
+    const stateTabs = STATES.map(s => ({
+      label:s.label, onClick: () => this.set('access', s.k),
+      style:'padding:6px 12px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '
+        + (acc===s.k ? P : '#ececf1') + ';background:' + (acc===s.k ? '#f4f0ff' : '#fff')
+        + ';color:' + (acc===s.k ? '#6d28d9' : '#71717a'),
+    }));
+
+    const profileMap = {
+      visitor:  { chip:'Invited guest', bg:'#f4f4f5', fg:'#52525b' },
+      pending:  { chip:'Applicant · under review', bg:'#fef3c7', fg:'#92400e' },
+      approved: { chip:'Approved LP', bg:'#ede9fe', fg:'#6d28d9' },
+      committed:{ chip:'Committed LP · $100K', bg:'#ede9fe', fg:'#6d28d9' },
+      voting:   { chip:'Committed LP · $250K · full rights', bg:'#dcfce7', fg:'#15803d' },
+    }[acc];
+
+    const lockIc = { __html:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' };
+    const checkIc = { __html:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' };
+
+    const GATE = {
+      visitor: { title:'You are viewing by invitation.', body:'This workspace is limited to curated LP and investor profiles. You can review the fund thesis, package terms, and cohort performance summaries — participation requires an application.', cta:'Apply for access', icon:lockIc, tone:'#71717a', bg:'#fafafa', border:'#ececf1', ctaBg:'#7c3aed', ctaFg:'#fff', go:() => this.set('access','pending') },
+      pending: { title:'Application submitted — review in progress.', body:'The fund team reviews every application individually. Reporting previews are visible below; full documents and participation unlock on acceptance.', cta:'View application', icon:lockIc, tone:'#b45309', bg:'#fffdf5', border:'#fde68a', ctaBg:'#fff', ctaFg:'#6d28d9', go:() => this.set('modal','application') },
+      approved:{ title:'You are approved. Complete your commitment to activate participation.', body:'Approved LPs can review full reporting. Commit capital to receive quarterly reports, and reach $250K to unlock demo-day allocation and voting rights.', cta:'Commit capital', icon:checkIc, tone:'#6d28d9', bg:'#faf9ff', border:'#e9e4fb', ctaBg:'#7c3aed', ctaFg:'#fff', go:() => this.set('modal','commit') },
+      committed:{ title:'You are a committed LP at $100K.', body:'You receive quarterly reporting, portfolio updates, and demo-day observer access. Increase your commitment to $250K to unlock allocation and voting rights.', cta:'Increase commitment', icon:checkIc, tone:'#6d28d9', bg:'#faf9ff', border:'#e9e4fb', ctaBg:'#7c3aed', ctaFg:'#fff', go:() => this.set('modal','commit') },
+      voting:  { title:'Full participation active — $250K committed.', body:'You hold allocation and voting rights for Cohort 4 demo day, full reporting access, and follow-on co-invest priority. Allocation closes Aug 21, 2026.', cta:'Go to allocation', icon:checkIc, tone:'#15803d', bg:'#f6fefa', border:'#bbf7d0', ctaBg:'#7c3aed', ctaFg:'#fff', go:() => this.set('modal','allocinfo') },
+    }[acc];
+    const gateBanner = {
+      title:GATE.title, body:GATE.body, cta:GATE.cta, icon:GATE.icon, go:GATE.go, ctaBg:GATE.ctaBg, ctaFg:GATE.ctaFg,
+      iconStyle:'width:36px;height:36px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid '+GATE.border+';color:'+GATE.tone,
+      wrapStyle:'display:flex;align-items:center;gap:16px;background:'+GATE.bg+';border:1px solid '+GATE.border+';border-radius:16px;padding:18px 22px',
+    };
+
+    const fundFacts = [
+      { k:'Fund size target', v:'$10M' },
+      { k:'Minimum commitment', v:'$50K' },
+      { k:'Voting threshold', v:'$250K' },
+      { k:'Strategy', v:'Pre-seed · Lab graduates only' },
+      { k:'Portfolio target', v:'24–30 companies' },
+      { k:'First close', v:'Sep 15, 2026' },
+    ];
+
+    const TIERS = [
+      { key:'supporter', name:'Supporter', amount:'$50K', tag:'Reporting', perks:['Quarterly fund reports','Annual audited statement','Cohort performance dashboard','Demo day livestream access'] },
+      { key:'member', name:'Member', amount:'$100K', tag:'Engagement', perks:['Everything in Supporter','Portfolio company updates','Demo day in-person seat','Founder office-hours introductions'] },
+      { key:'allocator', name:'Allocator', amount:'$250K', tag:'Full rights', perks:['Everything in Member','Demo-day capital allocation','Commitment-weighted voting','Follow-on co-invest priority'] },
+    ];
+    const tiers = TIERS.map((t, i) => ({
+      name:t.name, amount:t.amount, tag:t.tag, perks:t.perks,
+      select: () => this.set('modal','commit'),
+      tagStyle: i===2 ? tag('#ede9fe','#6d28d9') : tag('#f4f4f5','#52525b'),
+      wrapStyle:'text-align:left;background:#fff;border:1px solid ' + (i===2 ? '#c4b5fd' : '#ececf1')
+        + ';border-radius:16px;padding:20px 22px;transition:border-color .12s,box-shadow .12s'
+        + (i===2 ? ';box-shadow:0 0 0 2px rgba(124,58,237,.12)' : ''),
+    }));
+
+    // ---- application ----
+    const COMMITS = [50,75,100,150,250,400,600,1000,1500,2000];
+    const commitVal = COMMITS[st.commitIdx];
+    const commitLabel = commitVal >= 1000 ? '$' + (commitVal/1000) + 'M' : '$' + commitVal + 'K';
+    const IT = [{k:'angel',label:'Angel'},{k:'family',label:'Family office'},{k:'fund',label:'Fund of funds'},{k:'corp',label:'Corporate / strategic'}];
+    const invTypes = IT.map(i => ({
+      label:i.label, onClick: () => this.set('invType', i.k),
+      style:'padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid '
+        + (st.invType===i.k ? P : '#ececf1') + ';background:' + (st.invType===i.k ? '#f4f0ff' : '#fff')
+        + ';color:' + (st.invType===i.k ? '#6d28d9' : '#71717a'),
+    }));
+    const PREFS = [{k:'ai',label:'AI / ML'},{k:'saas',label:'B2B SaaS'},{k:'deeptech',label:'Deep tech'},{k:'fintech',label:'Fintech'},{k:'climate',label:'Climate'},{k:'health',label:'Health'}];
+    const prefs = PREFS.map(p => ({
+      label:p.label,
+      onClick: () => this.setState(s => ({ prefsOn: Object.assign({}, s.prefsOn, { [p.k]: !s.prefsOn[p.k] }) })),
+      style:'padding:6px 12px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '
+        + (st.prefsOn[p.k] ? P : '#ececf1') + ';background:' + (st.prefsOn[p.k] ? '#f4f0ff' : '#fff')
+        + ';color:' + (st.prefsOn[p.k] ? '#6d28d9' : '#71717a'),
+    }));
+    const prefList = PREFS.filter(p => st.prefsOn[p.k]).map(p => p.label);
+    const canSubmit = st.accred;
+    const applySummary = [
+      { k:'Investor type', v: (IT.find(i => i.k===st.invType) || {}).label, tone:'#18181b' },
+      { k:'Target commitment', v: commitLabel, tone:'#6d28d9' },
+      { k:'Tier', v: commitVal >= 250 ? 'Allocator · full rights' : commitVal >= 100 ? 'Member' : 'Supporter', tone:'#18181b' },
+      { k:'Preferences', v: prefList.length ? prefList.join(', ') : 'None selected', tone:'#18181b' },
+      { k:'Accreditation', v: st.accred ? 'Confirmed' : 'Required', tone: st.accred ? '#15803d' : '#b45309' },
+    ];
+
+    // ---- performance ----
+    const kpis = [
+      { k:'Cohort companies', v:'8', sub:'6 on pace', tone:'#15803d' },
+      { k:'Incorporated', v:'7 of 8', sub:'83(b) filed: 7', tone:'#15803d' },
+      { k:'Revenue proof', v:'$38.4K', sub:'5 companies monetizing', tone:'#15803d' },
+      { k:'Avg readiness score', v:'64', sub:'+9 week over week', tone:'#15803d' },
+      { k:'Demo day', v:'Aug 21', sub:'17 days out', tone:'#6d28d9' },
+    ];
+    const av = (bg) => 'width:32px;height:32px;border-radius:9px;background:'+bg+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none';
+    const stagePill = { Fund: tag('#dcfce7','#15803d'), Pitch: tag('#ede9fe','#6d28d9'), Build: tag('#e0f2fe','#0369a1') };
+    const founders = [
+      { company:'NovaCraft AI', meta:'Async workflow automation · Guillaume L.', initials:'NC', avBg:'#7c3aed', stage:'Fund', pct:'92%', signals:['$12.8K revenue','Score 71','3 intros'] },
+      { company:'MeridianIQ', meta:'Deal intelligence · Sarah O.', initials:'MI', avBg:'#0d9488', stage:'Fund', pct:'88%', signals:['$9.2K revenue','Score 68','LOI signed'] },
+      { company:'LoopSense', meta:'Sensor analytics · Priya M.', initials:'LS', avBg:'#b45309', stage:'Pitch', pct:'74%', signals:['$6.1K pilots','Score 62','2 advisors'] },
+      { company:'Foundry Legal', meta:'Contract ops · Marcus R.', initials:'FL', avBg:'#be185d', stage:'Pitch', pct:'70%', signals:['$4.9K revenue','Score 59','Deck v3'] },
+      { company:'Kelp Bio', meta:'Materials science · Diana K.', initials:'KB', avBg:'#15803d', stage:'Build', pct:'58%', signals:['University IP','Score 51','MVP live'] },
+      { company:'Arcline', meta:'Fin infra · James W.', initials:'AR', avBg:'#334155', stage:'Build', pct:'54%', signals:['$5.4K pilots','Score 49','Hiring CTO'] },
+    ].map(f => ({
+      company:f.company, meta:f.meta, initials:f.initials, stage:f.stage, pct:f.pct, signals:f.signals,
+      avStyle:av(f.avBg), stageStyle:stagePill[f.stage],
+      bar: f.stage==='Fund' ? '#16a34a' : f.stage==='Pitch' ? P : '#0ea5e9',
+    }));
+
+    // ---- operations / reports ----
+    const opsStats = [
+      { k:'Committed', v:'$6.8M' },
+      { k:'Deployed', v:'$1.9M' },
+      { k:'Reserve held', v:'$2.7M' },
+      { k:'Portfolio', v:'11 cos' },
+    ];
+    const hasReports = acc==='approved' || acc==='committed' || acc==='voting';
+    const REPORTS = [
+      { title:'Q2 2026 quarterly report', meta:'PDF · issued Jul 15, 2026', state:'ready' },
+      { title:'Cohort 3 outcome memo', meta:'PDF · issued Jul 2, 2026', state:'ready' },
+      { title:'Portfolio update · July', meta:'Issued Aug 1, 2026', state:'ready' },
+      { title:'Annual audited statement 2025', meta:'PDF · issued Mar 30, 2026', state:'ready' },
+    ];
+    const reports = REPORTS.map(r => ({
+      title:r.title, meta:r.meta,
+      tag: hasReports ? 'Available' : 'Locked',
+      tagStyle: hasReports ? tag('#dcfce7','#15803d') : tag('#f4f4f5','#a1a1aa'),
+      cta: hasReports ? 'Open' : 'Locked',
+      open: () => this.set('modal', hasReports ? 'report' : 'locked'),
+      btnStyle:'flex:none;padding:6px 11px;border-radius:7px;border:1px solid #ececf1;background:#fff;font-size:11.5px;font-weight:600;color:'
+        + (hasReports ? '#3f3f46' : '#a1a1aa') + (hasReports ? '' : ';cursor:not-allowed'),
+      dotStyle:'width:7px;height:7px;border-radius:50%;flex:none;background:' + (hasReports ? '#16a34a' : '#d4d4d8'),
+    }));
+
+    // ---- ladder ----
+    const tierRank = { visitor:0, pending:0, approved:1, committed:2, voting:3 };
+    const rank = tierRank[acc];
+    const LADDER = [
+      { title:'View-only access', desc:'Fund thesis, package terms, cohort performance summaries.', need:0 },
+      { title:'Approved · full reporting', desc:'Quarterly reports, audited statements, portfolio updates.', need:1 },
+      { title:'Committed · engagement', desc:'Demo day seat, founder introductions, portfolio deep-dives.', need:2 },
+      { title:'$250K+ · allocation rights', desc:'Commitment-weighted voting, capital allocation, co-invest priority.', need:3 },
+    ];
+    const ladder = LADDER.map((l, i) => {
+      const on = rank >= l.need;
+      return {
+        title:l.title, desc:l.desc, line: i < LADDER.length-1,
+        titleTone: on ? '#18181b' : '#a1a1aa',
+        tag: on ? 'Active' : 'Locked',
+        tagStyle: on ? tag('#dcfce7','#15803d') : tag('#f4f4f5','#a1a1aa'),
+        glyph: on ? '✓' : '',
+        dotStyle:'width:18px;height:18px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:'
+          + (on ? '#16a34a' : '#e4e4e7'),
+      };
+    });
+    const thresholdMap = {
+      visitor:'Invited guest — apply to begin.',
+      pending:'Application under review — view-only until accepted.',
+      approved:'Approved — commit capital to activate engagement tiers.',
+      committed:'$100K committed — $150K more unlocks allocation rights.',
+      voting:'$250K committed — all participation rights active.',
+    };
+    const thresholdStyle = 'margin-top:6px;padding:13px 15px;border-radius:11px;'
+      + (rank===3 ? 'background:#f6fefa;border:1px solid #bbf7d0;color:#15803d' : 'background:#faf9ff;border:1px solid #e9e4fb;color:#6d28d9');
+
+    // ---- allocation ----
+    const allocOpen = acc==='voting';
+    const commitTotalK = 250;
+    const ALLOC_META = [
+      { k:'novacraft', company:'NovaCraft AI', initials:'NC', avBg:'#7c3aed', score:'Score 71', summary:'$12.8K revenue · 5 verified pilots · Delaware C-Corp, clean cap table', consensus:'34%' },
+      { k:'meridianiq', company:'MeridianIQ', initials:'MI', avBg:'#0d9488', score:'Score 68', summary:'$9.2K revenue · signed LOI · strong founder-market fit', consensus:'27%' },
+      { k:'loopsense', company:'LoopSense', initials:'LS', avBg:'#b45309', score:'Score 62', summary:'$6.1K pilot revenue · hardware-adjacent moat · 2 matched advisors', consensus:'22%' },
+      { k:'foundry', company:'Foundry Legal', initials:'FL', avBg:'#be185d', score:'Score 59', summary:'$4.9K revenue · regulated-market wedge · deck v3 reviewed', consensus:'17%' },
+    ];
+    const totalPct = ALLOC_META.reduce((s, a) => s + (st.alloc[a.k] || 0), 0);
+    const remainPct = 100 - totalPct;
+    const allocRows = ALLOC_META.map(a => {
+      const pct = st.alloc[a.k] || 0;
+      return {
+        company:a.company, initials:a.initials, score:a.score, summary:a.summary, consensus:a.consensus,
+        avStyle:av(a.avBg), scoreStyle:tag('#ede9fe','#6d28d9'),
+        pct, pctLabel: pct + '%',
+        amount:'$' + Math.round(commitTotalK * pct / 100) + 'K',
+        onSlide: (e) => this.slide(a.k, e),
+      };
+    });
+    const overAlloc = remainPct < 0;
+
+    const MODALS = {
+      application: { title:'Your application', sub:'Submitted Aug 1, 2026', cta:'Close', body:'Target commitment $250K · Family office · Preferences: AI/ML, B2B SaaS. The fund team review typically completes within 5 business days.' },
+      commit: { title:'Commit capital', sub:'Axal Spin-Out Fund I', cta:'Continue to subscription docs', body:'Your subscription agreement is generated from your application. Signature and wire instructions follow KYC verification. Commitments become effective at the next monthly close.' },
+      allocinfo: { title:'Allocation window', sub:'Cohort 4 demo day · closes Aug 21, 2026', cta:'Got it', body:'Distribute up to 100% of your committed capital across graduating companies. Allocations are commitment-weighted, pooled with other LP votes, and settle after the fund team confirms final terms with each company.' },
+      report: { title:'Q2 2026 quarterly report', sub:'PDF · 18 pages', cta:'Download', body:'Capital deployed $1.9M across 11 companies · reserve $2.7M · two follow-ons completed · portfolio revenue up 41% quarter over quarter. Full PDF includes per-company detail and audited capital account statements.' },
+      locked: { title:'Reports are gated', sub:'Available after acceptance', cta:'Apply for access', body:'Full quarterly reports and audited statements are available to approved LPs. Submit an application to begin the review process.' },
+      applied: { title:'Application submitted', sub:'Review within 5 business days', cta:'Done', body:'Thank you — the fund team reviews every application individually. You will be notified by email and in this workspace when a decision is made.' },
+      brief: { title:'Fund brief', sub:'PDF · 12 pages', cta:'Download', body:'Thesis, track record, fee structure, reserve policy, governance, and the Spin-Out Lab graduation pipeline that sources every investment.' },
+    };
+    const modal = MODALS[st.modal] || MODALS.brief;
+
+    const heroPrimaryMap = {
+      visitor: { cta:'Apply for access', go:() => this.set('access','pending') },
+      pending: { cta:'View application status', go:() => this.set('modal','application') },
+      approved:{ cta:'Commit capital', go:() => this.set('modal','commit') },
+      committed:{ cta:'Increase commitment', go:() => this.set('modal','commit') },
+      voting:  { cta:'Allocate capital', go:() => this.set('modal','allocinfo') },
+    }[acc];
+
+    return {
+      profileChip:profileMap.chip,
+      profileChipStyle:'padding:5px 12px;border-radius:99px;font-size:11px;font-weight:700;background:'+profileMap.bg+';color:'+profileMap.fg,
+      stateTabs, gateBanner, fundFacts, tiers,
+      heroPrimaryCta:heroPrimaryMap.cta, heroPrimaryGo:heroPrimaryMap.go,
+      openBrief: () => this.set('modal','brief'),
+      showApply: acc==='visitor' || acc==='approved',
+      showPending: acc==='pending',
+      invTypes, prefs, commitIdx:st.commitIdx, commitLabel,
+      setCommit: (e) => this.set('commitIdx', Number(e.target.value)),
+      toggleAccred: () => this.set('accred', !st.accred),
+      accredGlyph: st.accred ? '✓' : '',
+      accredBoxStyle:'flex:none;width:19px;height:19px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:'
+        + (st.accred ? '#16a34a' : 'transparent') + ';border:1.5px solid ' + (st.accred ? '#16a34a' : '#d4d4d8'),
+      applySummary,
+      submitCta: canSubmit ? 'Submit application' : 'Confirm accreditation to submit',
+      submitStyle:'width:100%;margin-top:16px;padding:11px;border-radius:9px;border:1px solid ' + (canSubmit ? P : '#ececf1')
+        + ';background:' + (canSubmit ? P : '#f4f4f5') + ';color:' + (canSubmit ? '#fff' : '#a1a1aa')
+        + ';font-size:13px;font-weight:700' + (canSubmit ? '' : ';cursor:not-allowed'),
+      submitApply: () => { if (canSubmit) this.setState({ access:'pending', modal:'applied' }); },
+      kpis, founders, opsStats, reports, reportsLocked: !hasReports,
+      ladder, thresholdText: thresholdMap[acc], thresholdStyle,
+      gateChip: allocOpen ? 'Open · closes Aug 21, 2026' : 'Gated · $250K commitment required',
+      gateChipStyle: allocOpen ? tag('#dcfce7','#15803d') : tag('#f4f4f5','#71717a'),
+      allocLocked: !allocOpen, allocOpen,
+      allocLockNote: acc==='committed'
+        ? 'You are $150K below the allocation threshold. Increase your commitment to participate in demo-day decisions.'
+        : 'Committed LPs at the Allocator tier distribute their capital across graduating companies and vote on demo-day outcomes.',
+      ghostCards: [{name:'NovaCraft AI',w:'70%'},{name:'MeridianIQ',w:'55%'},{name:'LoopSense',w:'40%'}],
+      commitTotal:'$250K', allocRows,
+      remainLabel: (overAlloc ? '−' : '') + '$' + Math.abs(Math.round(commitTotalK * remainPct / 100)) + 'K',
+      remainTone: overAlloc ? '#b91c1c' : remainPct===0 ? '#15803d' : '#18181b',
+      allocSubmitCta: overAlloc ? 'Over-allocated' : 'Submit allocation',
+      allocSubmitStyle:'padding:10px 16px;border-radius:9px;border:1px solid ' + (overAlloc ? '#fecaca' : P)
+        + ';background:' + (overAlloc ? '#fff' : P) + ';color:' + (overAlloc ? '#b91c1c' : '#fff')
+        + ';font-size:12.5px;font-weight:700' + (overAlloc ? ';cursor:not-allowed' : ''),
+      submitAlloc: () => { if (!overAlloc) this.set('modal','allocinfo'); },
+      modalOpen: !!st.modal, modal,
+      closeModal: () => this.set('modal', null),
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "skill": "market-entry-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "research.library": [
+        {
+          "title": "Quebec dental market 2026"
+        }
+      ],
+      "validate.records": {
+        "signals": [
+          {
+            "text": "Waitlist signups from Montreal",
+            "count": 38
+          }
+        ]
+      },
+      "compliance.calendar": [
+        {
+          "name": "Bill 96 French-language requirements"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "38",
+      "Bill 96"
+    ],
+    "must_say_not_recorded": [
+      "market size"
+    ],
+    "must_not_include": [
+      "huge opportunity"
+    ]
+  }
+}

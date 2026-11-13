@@ -1,0 +1,762 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Layers, Plus, Loader2, Sparkles, X, TrendingUp, CheckCircle2, RotateCcw, AlertTriangle, Activity, Target, MessageSquare, Users as UsersIcon, EyeOff } from 'lucide-react';
+import { api } from '../lib/api';
+import SpinoutWizard from '../components/SpinoutWizard';
+import { useWebSocket } from '../hooks/useWebSocket';
+import Sheet from '../ui/Sheet.jsx';
+import { confidenceLine } from '../lib/decisionConfidence.js';
+import useBoardSync from './pipeline/useBoardSync.js';
+import { routeBoardEvent, acceptTally, mergePushedTally } from './pipeline/liveEvents.js';
+
+const STAGES = [
+  { id: 'idea', label: 'Idea', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', border: 'border-gray-300 dark:border-gray-600' },
+  { id: 'mvp_dev', label: 'MVP Dev', color: 'bg-blue-100 text-blue-700', border: 'border-blue-300' },
+  { id: 'traction_review', label: 'Traction Review', color: 'bg-amber-100 text-amber-700', border: 'border-amber-300' },
+  { id: 'decision_gate', label: 'Decision Gate', color: 'bg-violet-100 text-violet-700', border: 'border-violet-300' },
+  { id: 'spinout_ready', label: 'Spin-Out Ready', color: 'bg-emerald-100 text-emerald-700', border: 'border-emerald-300' },
+  { id: 'iterate', label: 'Iterate', color: 'bg-orange-100 text-orange-700', border: 'border-orange-300' },
+];
+
+// The Build desk list answers an envelope now (every page, `complete`, `total`);
+// a stubbed or dev-mirror client may still answer a bare array. Either is one list.
+const loadBoard = async () => {
+  const r = await api.pipelineActive();
+  return Array.isArray(r) ? { items: r, total: r.length, complete: true } : r;
+};
+
+export default function PipelinePage({ embedded = false }) {
+  // The list, its states and its re-reads live in `useBoardSync` (#4701): a
+  // first read that fails is `unreadable` rather than an empty board, a re-read
+  // that fails keeps the rows and says so, a stale answer is dropped, and a live
+  // event or a reconnect that lands during a local move is queued until the
+  // moves settle instead of being dropped.
+  const board = useBoardSync(loadBoard);
+  const deals = board.deals;
+  const reload = board.reload;
+  const [openId, setOpenId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [me, setMe] = useState(null);
+  const [spinoutDeal, setSpinoutDeal] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
+  const [pendingMoves, setPendingMoves] = useState({}); // { dealId: true } — cards mid-flight
+  const [moveError, setMoveError] = useState(null); // { text, retry: { dealId, toStage } | { reload: true } }
+  useEffect(() => { (async () => { try { setMe(await api.getCurrentUser()); } catch {} })(); }, []);
+
+  // Studio-operator write access. The board (create/advance/gate/tasks/metrics)
+  // is an operator surface — admins and partners only. Investors observe and
+  // vote (DealVoteWidget stays open to any session), matching the server gate in
+  // routes/pipeline.ts (ADVANCE_ROLES). Investor UX audit ④.
+  const canEdit = me && (me.role === 'admin' || me.role === 'partner');
+
+  // Live board updates: subscribe to the global pipeline 'overview' room for
+  // any authenticated session (the board is watchable — and votable — by all).
+  // A board event asks the sync for a re-read; the sync runs it now, or after
+  // the last local move settles, so an event is never dropped (#4701). A socket
+  // that dropped and came back cannot know what it missed, so it re-reads too.
+  //
+  // Vote tallies pushed live are the PUBLIC aggregate, keyed by deal_id. They
+  // carry no viewer state; the widget merges them over its own `my_vote`.
+  const [voteTallies, setVoteTallies] = useState({});
+
+  useWebSocket('/api/pipeline/ws/overview', {
+    enabled: !!me,
+    onOpen: ({ reconnect }) => { if (reconnect) board.reconnected(); },
+    onMessage: (msg) => routeBoardEvent(msg, {
+      refresh: board.refresh,
+      tally: (dealId, tally, ts) => setVoteTallies((prev) => acceptTally(prev, dealId, tally, ts)),
+    }),
+  });
+
+  // Optimistic stage move, shared by drag-and-drop, the drawer's buttons and
+  // the Try again button. Resolves `true` when the server confirmed the write
+  // (or the deal is already in that column) and `false` when it did not; it
+  // never throws, so no caller has to guess. On `false` the card is back in the
+  // column it came from and `moveError` says so, with a retry.
+  const moveDealToStage = async (dealId, toStage) => {
+    // One write per deal, decided BEFORE any state changes.
+    if (board.isMoving(dealId)) return false;
+    const target = board.getDeals().find(d => d.id === dealId);
+    if (!target) return false;
+    if (target.pipeline_stage === toStage) return true;
+    const fromStage = target.pipeline_stage;
+    const dealName = target.name;
+    const label = (id) => STAGES.find(s => s.id === id)?.label || id;
+
+    // Starting a move drops any read that began before it; settling it (below)
+    // drops one that began during it, and runs the re-read that was queued.
+    board.beginMove(dealId);
+    board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: toStage } : d));
+    setPendingMoves(p => ({ ...p, [dealId]: true }));
+    setMoveError(null);
+
+    let confirmed = false;
+    try {
+      await api.pipelineAdvance(dealId, toStage);
+      confirmed = true;
+    } catch {
+      confirmed = false;
+    }
+    setPendingMoves(p => { const n = { ...p }; delete n[dealId]; return n; });
+
+    if (!confirmed) {
+      // Only this deal's stage goes back; every other card and field is as it was.
+      board.writeDeals(board.getDeals().map(d => d.id === dealId ? { ...d, pipeline_stage: fromStage } : d));
+      setMoveError({
+        text: `Could not move "${dealName}" to ${label(toStage)}. It is back in ${label(fromStage)}.`,
+        retry: { dealId, toStage },
+      });
+    }
+    board.endMove(dealId);
+    return confirmed;
+  };
+
+  const grouped = STAGES.reduce((acc, s) => ({ ...acc, [s.id]: [] }), {});
+  for (const d of deals) (grouped[d.pipeline_stage] || grouped.idea).push(d);
+
+  const onCardDragStart = (deal) => (e) => {
+    // Block dragging a card that already has an in-flight write — prevents
+    // out-of-order operations on the same deal.
+    if (!canEdit || board.isMoving(deal.id)) {
+      e.preventDefault();
+      return;
+    }
+    setDragId(deal.id);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(deal.id)); } catch {}
+  };
+  const onCardDragEnd = () => { setDragId(null); setDragOverStage(null); };
+  const onColDragOver = (stageId) => (e) => {
+    if (!canEdit || dragId == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStage !== stageId) setDragOverStage(stageId);
+  };
+  const onColDragLeave = (stageId) => () => {
+    if (dragOverStage === stageId) setDragOverStage(null);
+  };
+  const onColDrop = (stageId) => (e) => {
+    e.preventDefault();
+    const id = dragId ?? parseInt(e.dataTransfer.getData('text/plain'), 10);
+    setDragId(null); setDragOverStage(null);
+    if (!canEdit || !id) return;
+    moveDealToStage(id, stageId);
+  };
+
+  return (
+    <div className={embedded ? '' : 'p-6 max-w-[1600px] mx-auto'}>
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          {!embedded && (
+            <>
+              <Layers className="text-violet-600" size={24} />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Pipeline Board</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Parallel MVP development with AI-driven decision gates.{canEdit ? ' Drag cards between columns to advance.' : ''}</p>
+              </div>
+            </>
+          )}
+          {embedded && canEdit && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Drag cards between columns to advance.</p>
+          )}
+        </div>
+        {canEdit && (
+          <button onClick={() => setCreating(true)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-3 py-2 rounded-lg">
+            <Plus size={14} /> New Pipeline Startup
+          </button>
+        )}
+      </div>
+
+      {moveError && (
+        <div role="alert" data-testid="pipeline-move-error" className="mb-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>{moveError.text}</span>
+          <span className="flex items-center gap-2">
+            {moveError.retry && (
+              <button type="button" onClick={() => { const r = moveError.retry; setMoveError(null); if (r.reload) reload(); else moveDealToStage(r.dealId, r.toStage); }}
+                className="min-h-[44px] px-3 rounded-lg border border-red-300 dark:border-red-800 font-semibold hover:bg-red-100 dark:hover:bg-red-950/50">
+                Try again
+              </button>
+            )}
+            <button type="button" aria-label="Dismiss" onClick={() => setMoveError(null)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-500 hover:text-red-700 dark:text-red-300"><X size={12} /></button>
+          </span>
+        </div>
+      )}
+
+      {board.status === 'ready' && board.refreshError && (
+        <div role="alert" data-testid="pipeline-refresh-error" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>The board could not be refreshed. What you see is from the last read that worked.</span>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Try again</button>
+        </div>
+      )}
+      {board.status === 'ready' && board.partial && (
+        <div role="alert" data-testid="pipeline-partial" className="mb-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-300 text-xs rounded-lg px-3 py-2 flex flex-wrap items-center justify-between gap-3">
+          <span>Showing {deals.length}{board.total != null ? ` of ${board.total}` : ''} projects. The rest could not be read, so this board is not the whole list.</span>
+          <button type="button" onClick={reload} className="min-h-[44px] px-3 font-semibold underline">Read the rest</button>
+        </div>
+      )}
+      {board.status === 'ready' && board.refreshing && (
+        <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1" data-testid="pipeline-refreshing" aria-live="polite"><Loader2 className="animate-spin" size={10} /> Refreshing…</div>
+      )}
+      {board.status === 'unreadable' ? (
+        <div role="alert" data-testid="pipeline-unreadable" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded-lg px-4 py-6 text-sm text-center">
+          <div className="font-semibold mb-1">The pipeline could not be read.</div>
+          <div className="text-xs mb-3">This is not an empty board — nothing was loaded. Try again in a moment.</div>
+          <button type="button" onClick={reload} className="min-h-[44px] bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 rounded">Try again</button>
+        </div>
+      ) : board.status === 'loading' ? <Loading text="Loading pipeline…" /> : (
+        <div className="sm:overflow-x-auto pb-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:min-w-max">
+            {STAGES.map(stage => {
+              const isOver = dragOverStage === stage.id && dragId != null;
+              return (
+                <div key={stage.id} className="w-full sm:w-72 sm:flex-shrink-0">
+                  <div className={`px-3 py-2 rounded-t-lg ${stage.color} font-semibold text-sm flex items-center justify-between border ${stage.border} border-b-0`}>
+                    <span>{stage.label}</span>
+                    <span className="bg-white dark:bg-gray-900/70 text-xs px-2 py-0.5 rounded-full">{grouped[stage.id].length}</span>
+                  </div>
+                  <div
+                    onDragOver={onColDragOver(stage.id)}
+                    onDragLeave={onColDragLeave(stage.id)}
+                    onDrop={onColDrop(stage.id)}
+                    className={`bg-gray-50 dark:bg-gray-900 border ${stage.border} border-t-0 rounded-b-lg min-h-[400px] p-2 space-y-2 transition-colors ${isOver ? 'bg-violet-50 ring-2 ring-violet-400 ring-inset' : ''}`}
+                  >
+                    {grouped[stage.id].length === 0 ? (
+                      <div className="text-xs text-gray-400 text-center py-8">{isOver ? 'Drop to move here' : 'Empty'}</div>
+                    ) : grouped[stage.id].map(d => (
+                      <DealCard
+                        key={d.id}
+                        deal={d}
+                        onOpen={() => setOpenId(d.id)}
+                        onSpinout={() => setSpinoutDeal(d)}
+                        draggable={canEdit}
+                        onDragStart={onCardDragStart(d)}
+                        onDragEnd={onCardDragEnd}
+                        isDragging={dragId === d.id}
+                        isPending={!!pendingMoves[d.id]}
+                        liveTally={voteTallies[d.id]?.tally}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {openId && <DealDrawer dealId={openId} canEdit={canEdit} onClose={() => setOpenId(null)} onChanged={reload} onAdvance={moveDealToStage} />}
+      {creating && <CreateModal onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload(); }} />}
+      {spinoutDeal && <SpinoutWizard deal={spinoutDeal} onClose={() => { setSpinoutDeal(null); reload(); }} onComplete={reload} />}
+    </div>
+  );
+}
+
+function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, isDragging, isPending, liveTally }) {
+  const tot = deal.task_counts.todo + deal.task_counts.in_progress + deal.task_counts.done;
+  const pct = tot ? Math.round((deal.task_counts.done / tot) * 100) : 0;
+  const traction = deal.latest_metrics?.traction_score;
+  const gate = deal.latest_gate;
+  return (
+    <div
+      onClick={onOpen}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-violet-400 hover:shadow-sm transition-all relative ${draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${isDragging ? 'opacity-40' : ''} ${isPending ? 'ring-1 ring-violet-300' : ''}`}
+    >
+      {isPending && (
+        <div className="absolute top-1 right-1 text-violet-500" title="Saving…"><Loader2 className="animate-spin" size={10} /></div>
+      )}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <button type="button" aria-label={`Open ${deal.name}`} onClick={(e) => { e.stopPropagation(); onOpen(); }} className="font-semibold text-sm text-left text-gray-900 truncate flex-1 dark:text-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500">{deal.name}</button>
+        {traction != null && <ScorePill score={traction} small />}
+      </div>
+      {deal.sector && <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">{deal.sector}</div>}
+      {tot > 0 && (
+        <div className="mb-2">
+          <div className="flex justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-1"><span>Tasks {deal.task_counts.done}/{tot}</span><span>{pct}%</span></div>
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-full h-1 overflow-hidden"><div className="h-full bg-violet-500" style={{width: `${pct}%`}} /></div>
+        </div>
+      )}
+      {deal.latest_metrics?.key_metrics && Object.keys(deal.latest_metrics.key_metrics).length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {Object.entries(deal.latest_metrics.key_metrics).filter(([k]) => !k.startsWith('_')).slice(0, 3).map(([k, v]) => (
+            <span key={k} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-700 px-1.5 py-0.5 rounded dark:text-gray-300">{k}: {String(v)}</span>
+          ))}
+        </div>
+      )}
+      {gate && (
+        <div className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 ${
+          gate.final_decision === 'passed' ? 'bg-emerald-50 text-emerald-700' :
+          gate.final_decision === 'iterate' ? 'bg-orange-50 text-orange-700' :
+          gate.final_decision === 'failed' ? 'bg-red-50 text-red-700' :
+          'bg-violet-50 text-violet-700'
+        }`}>
+          <Sparkles size={10} /> AI: {(gate.ai_recommendation || '').replace('_', ' ')}
+          {confidenceLine(gate.ai_confidence) && <span className="opacity-80">· {confidenceLine(gate.ai_confidence)}</span>}
+          {gate.final_decision && <span className="ml-auto font-bold">→ {gate.final_decision}</span>}
+        </div>
+      )}
+      <DealVoteWidget dealId={deal.id} liveTally={liveTally} />
+      {deal.pipeline_stage === 'spinout_ready' && onSpinout && (
+        <button onClick={(e) => { e.stopPropagation(); onSpinout(); }} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded flex items-center justify-center gap-1">
+          🚀 Execute Spin-Out
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Inline community-vote widget rendered on every DealCard. Self-fetches the
+// initial tally on mount, then accepts WebSocket-pushed `liveTally` overrides
+// from the parent so cross-user votes appear without a refetch.
+const VOTE_OPTIONS = [
+  { id: 'Strong_Buy', label: 'Strong Buy', short: 'SB', color: 'emerald' },
+  { id: 'Buy',        label: 'Buy',        short: 'B',  color: 'green'   },
+  { id: 'Hold',       label: 'Hold',       short: 'H',  color: 'amber'   },
+  { id: 'Pass',       label: 'Pass',       short: 'P',  color: 'rose'    },
+];
+
+function DealVoteWidget({ dealId, liveTally }) {
+  const [tally, setTally] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+  const [comment, setComment] = useState('');
+  const [anonymous, setAnonymous] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const [unreadable, setUnreadable] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api.getVotes(dealId).then(t => { if (alive) { setTally(t); setUnreadable(false); } }).catch(() => { if (alive) setUnreadable(true); });
+    return () => { alive = false; };
+  }, [dealId]);
+
+  // WS push from the parent is the public aggregate (#4701): it carries no
+  // `my_vote`, so it is merged over the viewer's own rather than replacing it.
+  useEffect(() => { if (liveTally) { setTally((cur) => mergePushedTally(cur, liveTally)); setUnreadable(false); } }, [liveTally]);
+
+  const cast = async (vote_type) => {
+    setBusy(true); setErr('');
+    try {
+      const next = await api.castVote(dealId, { vote_type, comment: comment || null, anonymous });
+      setTally(next);
+      setComment('');
+    } catch { setErr('Your vote could not be recorded. Your comment is still here. Try again.'); }
+    finally { setBusy(false); }
+  };
+
+  if (!tally) {
+    // A tally that could not be read is not "no votes". Say so.
+    return unreadable
+      ? <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-500 dark:text-gray-400" onClick={(e) => e.stopPropagation()}>Votes unavailable right now.</div>
+      : null;
+  }
+  const my = tally.my_vote;
+  const stop = (e) => e.stopPropagation();
+
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100" onClick={stop}>
+      <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-1.5">
+        <span className="flex items-center gap-1">
+          <UsersIcon size={10} /> {tally.total_voters} {tally.total_voters === 1 ? 'voter' : 'voters'}
+          {tally.total_weight > 0 && <span className="text-gray-400">· {tally.total_weight}w</span>}
+        </span>
+        <span className="font-semibold text-emerald-600">{tally.strong_buy_pct}% buy</span>
+      </div>
+      {tally.total_weight > 0 && (
+        <div className="flex h-1 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 mb-1.5">
+          {VOTE_OPTIONS.map(o => {
+            const w = tally.by_type[o.id]?.weight || 0;
+            const pct = (w / tally.total_weight) * 100;
+            if (pct === 0) return null;
+            const bg = { emerald: 'bg-emerald-500', green: 'bg-green-400', amber: 'bg-amber-400', rose: 'bg-rose-400' }[o.color];
+            return <div key={o.id} className={bg} style={{ width: `${pct}%` }} title={`${o.label}: ${w}w`} />;
+          })}
+        </div>
+      )}
+      {tally.threshold_reached && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded mb-1.5 flex items-center gap-1">
+          <CheckCircle2 size={10} /> Vote threshold reached
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-1">
+        {VOTE_OPTIONS.map(o => {
+          const isMine = my?.vote_type === o.id;
+          const ring = { emerald: 'ring-emerald-400', green: 'ring-green-400', amber: 'ring-amber-400', rose: 'ring-rose-400' }[o.color];
+          const bg = isMine
+            ? { emerald: 'bg-emerald-100 text-emerald-800', green: 'bg-green-100 text-green-800', amber: 'bg-amber-100 text-amber-800', rose: 'bg-rose-100 text-rose-800' }[o.color]
+            : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800';
+          return (
+            <button
+              key={o.id}
+              onClick={(e) => { stop(e); cast(o.id); }}
+              disabled={busy}
+              title={o.label + (isMine ? ' (your vote)' : '')}
+              aria-label={o.label}
+              className={`text-[10px] font-semibold py-1 rounded transition-colors disabled:opacity-50 ${bg} ${isMine ? `ring-1 ${ring}` : ''}`}
+            >
+              {o.short}
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={(e) => { stop(e); setExpanded(v => !v); }}
+        className="mt-1 text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1"
+      >
+        <MessageSquare size={9} /> {expanded ? 'Hide' : 'Add comment / anonymous'}
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-1" onClick={stop}>
+          <input
+            type="text"
+            value={comment}
+            aria-label="Vote comment"
+            onChange={e => setComment(e.target.value)}
+            placeholder="Optional comment (sent with next vote)"
+            className="w-full text-[10px] bg-white border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:border-violet-400 focus:outline-none dark:bg-gray-900 dark:border-gray-700"
+          />
+          <label className="flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-400 cursor-pointer">
+            <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} />
+            <EyeOff size={9} /> Vote anonymously
+          </label>
+        </div>
+      )}
+      {err && <div role="alert" className="mt-1 text-[10px] text-red-600">{err}</div>}
+    </div>
+  );
+}
+
+function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('overview');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const loadGen = useRef(0);
+  const loadedFor = useRef(null);
+
+  // The skeleton shows only while THIS deal has not loaded yet. Reloading after
+  // a save is a background refresh, so the tab, the open add-task or metrics
+  // form and what was typed in it survive. A response for a deal the drawer has
+  // since left is dropped, so it cannot overwrite the one now on screen.
+  const load = async () => {
+    const mine = ++loadGen.current;
+    if (loadedFor.current !== dealId) { setData(null); setLoading(true); }
+    try {
+      const next = await api.pipelineDealDetail(dealId);
+      if (mine !== loadGen.current) return;
+      loadedFor.current = dealId;
+      setData(next);
+    } catch {
+      if (mine === loadGen.current && loadedFor.current !== dealId) {
+        setErr('This deal did not load. Close it and open it again to retry.');
+      }
+    } finally {
+      if (mine === loadGen.current) setLoading(false);
+    }
+  };
+  useEffect(() => { setErr(''); load(); }, [dealId]);
+
+  const triggerReview = async () => {
+    setBusy(true); setErr('');
+    try { const result = await api.pipelineTriggerReview(dealId); if (result?.status === 'not_recorded') { setErr(result.reason || 'Traction not recorded'); return; } await load(); onChanged?.(); }
+    catch { setErr('The review did not start. Try again.'); }
+    finally { setBusy(false); }
+  };
+  const advance = async (stage) => {
+    // Route through the parent's mover so the board and the drawer can never
+    // disagree. It resolves true only after the server confirmed the write;
+    // on false the stage shown here goes back and the reason stays on screen.
+    setErr('');
+    if (onAdvance) {
+      const prevStage = data?.current_stage;
+      const forDeal = dealId;
+      setBusy(true);
+      setData(d => d ? { ...d, current_stage: stage } : d);
+      const ok = await onAdvance(dealId, stage);
+      if (!ok && loadedFor.current === forDeal) {
+        setData(d => d ? { ...d, current_stage: prevStage } : d);
+        setErr('The stage did not change. It is back where it was, so try again.');
+      }
+      setBusy(false);
+      return;
+    }
+    setBusy(true);
+    try { await api.pipelineAdvance(dealId, stage); await load(); onChanged?.(); }
+    catch { setErr('The stage did not change. Try again.'); }
+    finally { setBusy(false); }
+  };
+  const decide = async (gateId, decision) => {
+    setBusy(true); setErr('');
+    try { await api.pipelineDecide(gateId, decision); await load(); onChanged?.(); }
+    catch { setErr('That decision did not save. Try again.'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Sheet label={data?.project?.name || "Deal"} title={data?.project?.name || "Loading…"} width={760} testId="pipeline-deal-sheet" onClose={onClose} headerActions={canEdit ? <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">{busy ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} Trigger AI Review</button> : null}>
+      <div className="">
+
+        {loading || !data ? (err ? <div role="alert" className="p-6 text-xs text-red-700 dark:text-red-300">{err}</div> : <Loading text="" />) : (
+          <div className="p-6">
+            {err && <div role="alert" className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded p-2 text-xs mb-3">{err}</div>}
+
+            <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-700 dark:border-gray-800">
+              {[{id:'overview',label:'Overview',icon:Activity},{id:'tasks',label:`MVP Tasks (${data.tasks.length})`,icon:Target},{id:'metrics',label:`Metrics (${data.metrics_total ?? data.metrics.length})`,icon:TrendingUp},{id:'gates',label:`Gates (${data.gates_total ?? data.gates.length})`,icon:Sparkles}].map(t => {
+                const Icon = t.icon;
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-1 px-3 py-2 text-xs font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100'}`}>
+                    <Icon size={12} /> {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {tab === 'overview' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <KV k="Current Stage" v={STAGES.find(s => s.id === data.current_stage)?.label || data.current_stage} />
+                  <KV k="Sector" v={data.project.sector || '—'} />
+                  <KV k="Score" v={data.project.score != null ? `${data.project.score}/100` : '—'} />
+                  <KV k="Status" v={data.project.status} />
+                </div>
+                {canEdit && (
+                  <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+                    <div className="text-xs font-semibold text-violet-700 mb-2">Advance to Stage:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {STAGES.filter(s => s.id !== data.current_stage).map(s => (
+                        <button key={s.id} onClick={() => advance(s.id)} disabled={busy} className={`text-[10px] font-medium px-2 py-1 rounded ${s.color} hover:opacity-80 disabled:opacity-50`}>{s.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {data.project.problem_statement && (
+                  <div><div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Problem</div><p className="text-xs text-gray-700 dark:text-gray-300">{data.project.problem_statement}</p></div>
+                )}
+                {data.project.solution && (
+                  <div><div className="text-xs font-semibold text-gray-700 mb-1 dark:text-gray-300">Solution</div><p className="text-xs text-gray-700 dark:text-gray-300">{data.project.solution}</p></div>
+                )}
+                <div>
+                  <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Stage Timeline</div>
+                  <div className="space-y-1">
+                    {data.stages.map(s => (
+                      <div key={s.id} className="flex items-center justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                        <span className={`px-2 py-0.5 rounded text-[10px] ${STAGES.find(st => st.id === s.stage_name)?.color || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>{s.stage_name}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{s.status === 'active' ? '🟢 active' : new Date(s.end_date || s.start_date).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'tasks' && <TasksTab data={data} canEdit={canEdit} dealId={dealId} reload={load} report={setErr} />}
+            {tab === 'metrics' && <MetricsTab data={data} canEdit={canEdit} dealId={dealId} reload={load} report={setErr} />}
+            {tab === 'gates' && <GatesTab data={data} canEdit={canEdit} onDecide={decide} busy={busy} />}
+          </div>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function TasksTab({ data, canEdit, dealId, reload, report }) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '' });
+  const cols = { todo: data.tasks.filter(t => t.status === 'todo'), in_progress: data.tasks.filter(t => t.status === 'in_progress'), done: data.tasks.filter(t => t.status === 'done') };
+  const addTask = async () => {
+    if (!form.title) return;
+    try { await api.pipelineCreateTask({ deal_id: dealId, ...form }); }
+    catch { report('The task was not added. What you typed is still here, so try again.'); return; }
+    // Cleared only after the server took it.
+    report(''); setForm({ title: '', description: '' }); setAdding(false); reload();
+  };
+  const updateStatus = async (id, status) => {
+    try { await api.pipelineUpdateTask(id, { status }); }
+    catch { report('The task status did not change. Try again.'); return; }
+    report(''); reload();
+  };
+  return (
+    <div>
+      {canEdit && (adding ? (
+        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 space-y-2 dark:border-gray-800">
+          <input placeholder="Task title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className={inputCls} />
+          <textarea rows={2} placeholder="Description (optional)" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={inputCls} />
+          <div className="flex gap-2"><button onClick={addTask} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Add</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5 dark:text-gray-300">Cancel</button></div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="mb-3 text-xs flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded"><Plus size={12} /> Add Task</button>
+      ))}
+      <div className="grid grid-cols-3 gap-3">
+        {Object.entries(cols).map(([s, list]) => (
+          <div key={s}>
+            <div className="text-xs font-semibold text-gray-700 mb-2 uppercase dark:text-gray-300">{s.replace('_', ' ')} ({list.length})</div>
+            <div className="space-y-2">
+              {list.map(t => (
+                <div key={t.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
+                  <div className="flex items-start gap-1">
+                    {t.ai_generated && <Sparkles size={10} className="text-violet-500 flex-shrink-0 mt-0.5" />}
+                    <div className="font-medium text-gray-900 flex-1 dark:text-gray-100">{t.title}</div>
+                  </div>
+                  {t.description && <p className="text-gray-600 dark:text-gray-400 mt-1">{t.description}</p>}
+                  {canEdit && (
+                    <select value={t.status} onChange={e => updateStatus(t.id, e.target.value)} className="mt-2 text-[10px] bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-1 py-0.5 w-full dark:border-gray-800">
+                      <option value="todo">todo</option><option value="in_progress">in progress</option><option value="done">done</option>
+                    </select>
+                  )}
+                </div>
+              ))}
+              {list.length === 0 && <div className="text-[10px] text-gray-400 text-center py-3">Empty</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetricsTab({ data, canEdit, dealId, reload, report }) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ users: '', revenue: '', engagement: '', growth: '' });
+  const submit = async () => {
+    const km = {};
+    for (const k of ['users', 'revenue', 'engagement', 'growth']) {
+      const v = parseFloat(form[k]); if (!isNaN(v)) km[k] = v;
+    }
+    if (!Object.keys(km).length) return;
+    try { await api.pipelineSnapshot({ deal_id: dealId, key_metrics: km }); }
+    catch { report('The snapshot was not saved. What you typed is still here, so try again.'); return; }
+    report(''); setForm({ users: '', revenue: '', engagement: '', growth: '' }); setAdding(false); reload();
+  };
+  const series = data.metrics.slice().reverse();
+  const max = Math.max(1, ...series.map(s => s.traction_score || 0));
+  return (
+    <div>
+      {canEdit && (adding ? (
+        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 dark:border-gray-800">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Users / MAU"><input type="number" value={form.users} onChange={e => setForm({...form, users: e.target.value})} className={inputCls} /></Field>
+            <Field label="Revenue / MRR ($)"><input type="number" value={form.revenue} onChange={e => setForm({...form, revenue: e.target.value})} className={inputCls} /></Field>
+            <Field label="Engagement (0-100)"><input type="number" value={form.engagement} onChange={e => setForm({...form, engagement: e.target.value})} className={inputCls} /></Field>
+            <Field label="Growth Rate (%)"><input type="number" value={form.growth} onChange={e => setForm({...form, growth: e.target.value})} className={inputCls} /></Field>
+          </div>
+          <div className="flex gap-2 mt-2"><button onClick={submit} className="bg-violet-600 hover:bg-violet-700 text-white text-xs px-3 py-1.5 rounded">Capture Snapshot</button><button onClick={() => setAdding(false)} className="text-xs text-gray-700 px-2 py-1.5 dark:text-gray-300">Cancel</button></div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="mb-3 text-xs flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded"><Plus size={12} /> Record Metrics</button>
+      ))}
+
+      {series.length > 0 && (
+        <div className="bg-white border border-gray-200 dark:border-gray-700 rounded-lg p-3 mb-3 dark:bg-gray-900 dark:border-gray-800">
+          <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Traction Score History</div>
+          <div className="flex items-end gap-1 h-24 bg-gray-50 dark:bg-gray-900 rounded p-2">
+            {series.map((s, i) => (
+              <div key={i} className="flex-1 bg-violet-500 rounded-sm hover:bg-violet-700 transition-colors" style={{height: `${Math.max(2, ((s.traction_score || 0) / max) * 100)}%`}} title={`${new Date(s.snapshot_date).toLocaleDateString()}: ${s.traction_score}`} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.metrics_truncated && (
+        <div className="text-[11px] text-amber-700 mb-2" data-testid="pipeline-metrics-truncated">Showing the latest {data.metrics.length} of {data.metrics_total} snapshots.</div>
+      )}
+      <div className="space-y-2">
+        {data.metrics.length === 0 ? <Empty text="No snapshots yet." /> : data.metrics.map(m => (
+          <div key={m.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded p-2 text-xs dark:bg-gray-900 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-gray-500 dark:text-gray-400">{new Date(m.snapshot_date).toLocaleString()}</span>
+              <ScorePill score={m.traction_score} small />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(m.key_metrics).filter(([k]) => !k.startsWith('_')).map(([k, v]) => <span key={k} className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{k}: {String(v)}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GatesTab({ data, canEdit, onDecide, busy }) {
+  if (data.gates.length === 0) return <Empty text="No decision gates triggered yet. Capture metrics, then click 'Trigger AI Review'." />;
+  return (
+    <div className="space-y-3">
+      {data.gates_truncated && (
+        <div className="text-[11px] text-amber-700" data-testid="pipeline-gates-truncated">Showing the latest {data.gates.length} of {data.gates_total} gates.</div>
+      )}
+      {data.gates.map(g => (
+        <div key={g.id} className="bg-white border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="flex items-start justify-between mb-2">
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(g.created_at).toLocaleString()}</div>
+              <div className="font-semibold text-sm flex items-center gap-2 mt-1">
+                <Sparkles size={14} className="text-violet-500" /> AI: <span className="uppercase text-violet-700">{(g.ai_recommendation || '').replace('_', ' ')}</span>
+                {confidenceLine(g.ai_confidence) && <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{confidenceLine(g.ai_confidence)}</span>}
+              </div>
+            </div>
+            <span className={`text-[10px] px-2 py-1 rounded font-medium ${
+              g.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+              g.status === 'passed' ? 'bg-emerald-100 text-emerald-700' :
+              g.status === 'failed' ? 'bg-red-100 text-red-700' :
+              'bg-orange-100 text-orange-700'
+            }`}>{g.status.toUpperCase()}</span>
+          </div>
+          {g.ai_explanation && <p className="text-xs text-gray-700 italic bg-violet-50 border border-violet-100 rounded p-2 mb-3 dark:text-gray-300">{g.ai_explanation}</p>}
+          {g.status === 'pending' && canEdit && (
+            <div className="flex gap-2">
+              <button onClick={() => onDecide(g.id, 'passed')} disabled={busy} className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 rounded"><CheckCircle2 size={12} /> Spin-Out</button>
+              <button onClick={() => onDecide(g.id, 'iterate')} disabled={busy} className="flex items-center gap-1 text-xs bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-3 py-1.5 rounded"><RotateCcw size={12} /> Iterate</button>
+              <button onClick={() => onDecide(g.id, 'failed')} disabled={busy} className="flex items-center gap-1 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded"><AlertTriangle size={12} /> Kill</button>
+            </div>
+          )}
+          {g.final_decision && <div className="text-xs text-gray-700 mt-2 dark:text-gray-300">Final decision: <span className="font-bold uppercase">{g.final_decision}</span></div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CreateModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', sector: '', description: '', problem_statement: '', solution: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    if (!form.name) { setErr('Name required'); return; }
+    setBusy(true); setErr('');
+    try { await api.pipelineCreateProject(form); onCreated(); }
+    catch { setErr('The startup could not be created. Your entries are still here. Try again.'); setBusy(false); }
+  };
+  return (
+    <Sheet title="New Pipeline Startup" width={560} testId="pipeline-create-sheet" onClose={onClose}>
+        <div className="p-6 space-y-3">
+          <Field label="Name *"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
+          <Field label="Sector"><input value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className={inputCls} placeholder="fintech / saas / health / etc." /></Field>
+          <Field label="Description"><textarea rows={2} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={inputCls} /></Field>
+          <Field label="Problem"><textarea rows={2} value={form.problem_statement} onChange={e => setForm({...form, problem_statement: e.target.value})} className={inputCls} /></Field>
+          <Field label="Solution"><textarea rows={2} value={form.solution} onChange={e => setForm({...form, solution: e.target.value})} className={inputCls} /></Field>
+          {err && <div role="alert" className="text-xs text-red-600">{err}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
+            <button onClick={submit} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
+              {busy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Create
+            </button>
+          </div>
+        </div>
+    </Sheet>
+  );
+}
+
+const inputCls = 'w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
+function Field({ label, children }) { return <label className="block"><span className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</span>{children}</label>; }
+function KV({ k, v }) { return <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
+function Empty({ text }) { return <div className="text-xs text-gray-500 dark:text-gray-400 py-6 text-center">{text}</div>; }
+function Loading({ text }) { return <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>; }
+function ScorePill({ score, small }) {
+  const c = score >= 70 ? 'bg-emerald-100 text-emerald-700' : score >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400';
+  return <span className={`${small ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'} font-bold rounded ${c}`}>{Math.round(score)}</span>;
+}

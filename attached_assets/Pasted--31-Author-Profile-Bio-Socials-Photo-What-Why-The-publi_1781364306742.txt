@@ -1,0 +1,21 @@
+#31 - Author Profile: Bio, Socials, Photo
+What & Why
+The public AuthorProfilePage only shows an author's name, role, and external website. This is deferred scope from the original author profile work (Task #5): authors should also be able to present a short bio, social links (Twitter/X, LinkedIn), and a profile photo so their public byline page reads like a real profile rather than just a name and a link.
+Done looks like
+* The public author page renders, when present: a bio paragraph, social links (Twitter/X and LinkedIn), and a profile photo (with a graceful placeholder when no photo is set — the existing UserCircle avatar).
+* The GET /by-author/:user_id response includes the new fields (bio, twitter/x, linkedin, photo) alongside the existing author, author_role, and author_website.
+* Existing authors with no extra data still render exactly as before (no broken links, no empty sections).
+* Guillaume's existing seeded website continues to work unchanged.
+Out of scope
+* Any author-facing editor/UI for setting bio, socials, or uploading a photo (this task is display + data plumbing only; editing can be a follow-up).
+* Actual image upload/storage pipeline (R2). Use a photo_url text field; a placeholder is shown when empty.
+* Changing the article list/grid behavior or the article reader page.
+* Altering the users table (it is at D1's ALTER-rewrite column limit — see authorWebsites service note). New fields must live in a side table.
+Steps
+1. Extend author side-table storage — Add bio, twitter/x handle or URL, linkedin URL, and photo_url to the author profile data. Follow the existing lazy-bootstrap side-table pattern used for author_websites (extend that table with new columns via ALTER TABLE ... ADD COLUMN guarded for idempotency, or an adjacent side table) rather than touching users. Preserve the existing website seed/no-op behavior.
+2. Surface fields in the by-author endpoint — Join the new fields into the by-author query and include them in the public article shape so they flow through to the page. Keep all new fields nullable and defaulting to null so authors without data are unaffected. Apply the same join to the other author-website-joined queries if needed for consistency, without changing their existing output for current consumers.
+3. Render on AuthorProfilePage — Show the bio paragraph under the author header, render Twitter/X and LinkedIn as icon links (only when present), and use photo_url for the avatar with the existing UserCircle as the placeholder fallback. Honor the codebase's dark-mode dark: variant convention on any new hardcoded colors.
+Relevant files
+* frontend/src/pages/AuthorProfilePage.jsx:45-156
+* cloudflare-worker/src/routes/articles.ts:77-101,223-245
+* cloudflare-worker/src/services/authorWebsites.ts

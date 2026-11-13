@@ -1,0 +1,5692 @@
+FUNDRAISING · 10 SLIDES
+Y Combinator — Seed
+10 slides · YC seed style
+
+01 / 12
+THE FUTURE
+SEQUOIA · CLASSIC
+2035
+Every team will operate with a single source of truth.
+The work itself becomes the system of record — observable, audited, alive.
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+02 / 12
+THE SHIFT
+SEQUOIA · CLASSIC
+Three forces converging now.
+What was impossible last decade is now economical. What was acceptable last decade is now intolerable. The inflection is no longer ahead of us — it is here.
+Compute per dollar
+Tolerance for friction
+Capital available
+Compute per dollar
+Tolerance for friction
+Capital available
+Inflection
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+03 / 12
+THE BROKEN REALITY
+SEQUOIA · CLASSIC
+Today, this work is done by hand.
+01
+Fragmented stacks
+Teams stitch six or more tools to ship a single workflow.
+40% time lost
+02
+Spreadsheet truth
+The most important records still live in inboxes and tabs.
+Trust eroded
+03
+Manual reconciliation
+Every cycle ends in a fire drill across systems.
+2× errors
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+04 / 12
+THE INSIGHT
+SEQUOIA · CLASSIC
+WHAT EVERYONE ELSE MISSES
+The work itself is the data. The data itself becomes the moat.
+Every other approach treats the workflow and the database as separate concerns. We collapse them into one — turning ordinary daily activity into a compounding strategic asset.
+Pilot customers each generated 10× more structured records than competing tools.
+Every record we capture becomes training data for the next decision.
+The lock-in is not the product — it is the customer’s own history.
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+05 / 12
+THE OPPORTUNITY
+SEQUOIA · CLASSIC
+TOTAL
+$42,000,000,000
+SERVICEABLE
+$9,400,000,000
+OBTAINABLE
+$1,200,000,000
+A category measured in tens of billions.
+TAM
+$42,000,000,000
+SAM
+$9,400,000,000
+SOM
+$1,200,000,000
+CAGR
+28%
+2022
+2024
+2026
+2028
+2030
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+06 / 12
+THE SOLUTION
+SEQUOIA · CLASSIC
+Demo Co.
+A single workflow that replaces the patchwork — and produces the audit trail the platform itself needs.
+CATEGORY
+Frontier infrastructure
+BEFORE
+Six tools
+Manual sync
+Reconciled by hand
+Filed late
+AFTER
+One workflow
+Auto-synced
+Audited live
+Done in seconds
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+07 / 12
+THE PRODUCT
+SEQUOIA · CLASSIC
+CAPTURE
+Web
+API
+Mobile
+REASON
+Workflow
+Policy
+LLM
+ACT
+Integrations
+Records
+Audit
+Three layers. One platform.
+One source of truth
+Every record reconciled in real time.
+Reasoning layer
+Decisions explainable, audit-trailed.
+Open by design
+Plugs into the systems teams already use.
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+08 / 12
+WHY WE WIN
+SEQUOIA · CLASSIC
+REACH →
+DEPTH →
+NICHE
+LEADER
+GENERIC
+WEDGE
+Legacy A
+Legacy B
+Point Tool
+Us
+The moats compound.
+1
+Data
+Every customer makes the next prediction sharper.
+2
+Distribution
+Partner channels into the ICP, not around it.
+3
+Switching cost
+Embedded in the daily workflow of the team.
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+09 / 12
+TRACTION
+SEQUOIA · CLASSIC
+The numbers
+MRR
+$34,000
+PAYING CUSTOMERS
+64
+MOM GROWTH
+41%
+NRR
+122%
+REVENUE (K USD)
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+ACTIVE USERS
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+RETENTION BY COHORT
+0%
+25%
+50%
+75%
+100%
+M0
+M1
+M3
+M6
+M9
+M12
+SELECTED CUSTOMERS
+AC
+Acme Co.
+N
+Nimbus
+L
+Lattice
+N
+Northwind
+AL
+Atlas Labs
+V
+Verdant
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+10 / 12
+THE FLYWHEEL
+SEQUOIA · CLASSIC
+Each turn makes the next one easier.
+Every customer generates the data that improves the product, which expands the network, which acquires the next customer at lower cost.
+1
+Customers
+2
+Product
+3
+Data
+4
+Network
+5
+Revenue
+Customers
+use product
+Product
+learns from use
+Data
+compounds
+Network
+expands reach
+Revenue
+funds invention
+FLYWHEEL
+compounds
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+11 / 12
+THE TEAM
+SEQUOIA · CLASSIC
+Operators with scar tissue.
+AR
+Alex Rivera
+CEO · Co-founder
+Prior: led product at Stripe. Shipped infrastructure used by 4M+ businesses.
+SC
+Sam Chen
+CTO · Co-founder
+Prior: principal engineer at Linear. Designed core systems shipping to 50K+ teams.
+JOURNEY
+2014
+Met building open-source infrastructure
+2020
+Shipped a category-defining product together
+2025
+Founded this company
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+12 / 12
+THE VISION
+SEQUOIA · CLASSIC
+Raising $3.5M to build the company that defines this decade.
+In five years, every operating team in this category will route their work through one platform. We intend to be that platform — and to do it with discipline, not theatre.
+ROADMAP
+NOW
+Live · 60+ paying logos
++6 MO
+$1M ARR · 10× pipeline
++12 MO
+Second workflow live
++24 MO
+Category leader
+RAISING
+$3,500,000
+RUNWAY
+24 mo
+CONTACT
+founders@demoCo.example
+USE OF FUNDS
+Engineering
+45%
+GTM
+30%
+Operations + Infra
+15%
+Reserve
+10%
+If we get this right, the next generation of teams stops fighting their tools and starts shipping outcomes.
+DEMO CO.
+CONFIDENTIAL · INVESTOR MATERIAL
+
+Preview
+
+FUNDRAISING · 12 SLIDES
+Sequoia Classic — Narrative
+12 slides · narrative-driven
+
+01
+WHAT IS BROKEN?
+Teams stitch six tools to ship one workflow.
+Every cycle ends in a fire drill. The cost is enormous, hidden, and ignored.
+$1.2T
+wasted globally each year on duplicated work and reconciliation.
+DEMO CO.
+01 / 10
+02
+WHAT IS THE FIX?
+One workflow. Done.
+A single source of truth that replaces the patchwork — and pays for itself in the first month.
+One.
+Workflow.
+Done.
+DEMO CO.
+02 / 10
+03
+HOW DO WE EARN?
+Subscription. Per seat. Annual contracts.
+Customer
+Subscription
+Revenue
+pays
+monthly
+ACV
+$48K
+Gross margin
+82%
+Payback
+6 mo
+DEMO CO.
+03 / 10
+04
+WHY US, NOT THEM?
+A reasoning engine the incumbents can't copy.
+Every customer's daily work trains the next decision. Compounding moat by construction.
+CORE
+Engine
+Capture
+Reason
+Act
+DEMO CO.
+04 / 10
+05
+HOW DO WE REACH THEM?
+Inbound that compounds.
+Visitors
+12,000
+Signups
+2,100
+Activated
+860
+Paying
+220
+DEMO CO.
+05 / 10
+06
+WHO ELSE IS HERE?
+One axis wins. We pick the right one.
+REACH →
+DEPTH →
+NICHE
+LEADER
+GENERIC
+WEDGE
+Legacy A
+Legacy B
+Point Tool
+Us
+DEMO CO.
+06 / 10
+07
+WHO IS SHIPPING THIS?
+Operators with scar tissue.
+AR
+Alex Rivera
+CEO · Co-founder
+Built infra at Stripe used by 4M+ businesses.
+SC
+Sam Chen
+CTO · Co-founder
+Principal engineer at Linear. 50K+ teams in production.
+2014
+Met on open-source infrastructure
+2020
+Shipped a category-defining product
+2025
+Founded this company
+DEMO CO.
+07 / 10
+08
+WHERE ARE WE GOING?
+$42M ARR by 2028.
+2024
+2025
+2026
+2027
+2028
+2025
+First $1M ARR
+2026
+$10M ARR · category-leading NRR
+2027
+$50M ARR · expansion line live
+2028
+Series B · category leader
+DEMO CO.
+08 / 10
+09
+WHAT EVIDENCE EXISTS?
+Live. Growing 41% MoM.
+MRR
+$34K
+Paying
+64
+MoM
+41%
+NRR
+122%
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+DEMO CO.
+09 / 10
+10
+WHY INVEST NOW?
+RAISING
+$3.5M
+In five years, every operating team in this category runs through one workflow. We intend to be it.
+Runway
+24months
+Contact
+founders@demoCo.example
+USE OF FUNDS
+Engineering
+45%
+GTM
+30%
+Operations + Infra
+15%
+Reserve
+10%
+DEMO CO.
+10 / 10
+
+Preview
+
+FUNDRAISING · 10 SLIDES
+Kawasaki — 10 / 20 / 30
+10 slides · big type only
+
+01
+COMPANY
+01 / 06
+What are you building?
+[Company]
+company.com
+The default way operations teams ship cross-system workflows.
+Collapse six tools into one workflow with a built-in audit trail — without changing the systems you already run.
+SEED · 2026
++41%
+MRR
+$34K
+CUSTOMERS
+64
+[COMPANY]
+Confidential
+02
+PROBLEM
+02 / 06
+What painful problem exists?
+CRM
+Sheets
+Email
+Slack
+Drive
+PDF
+DB
+BI
+Teams stitch six tools to ship one workflow.
+Every cycle ends in a fire drill across systems. The cost is enormous, hidden, and almost universally ignored.
+QUANTIFIED IMPACT
+$1.2T
+lost annually to fragmented workflow.
+AFFECTED SEGMENT
+Operations & finance teams at $5M–$500M companies.
+[COMPANY]
+Confidential
+03
+SOLUTION
+03 / 06
+Why is your solution better?
+Replace the patchwork with one workflow.
+1
+2
+3
+4
+✓
+BEFORE
+Six tools
+Manual sync
+Reconciled by hand
+Filed late
+AFTER · DIFFERENTIATORS
+✓
+One source of truth
+✓
+Audit trail by design
+✓
+Open to the systems you already use
+[COMPANY]
+Confidential
+04
+TRACTION
+04 / 06
+What evidence exists?
+MRR
+$34K
+PAYING CUSTOMERS
+64
+MOM GROWTH
+41%
+NRR
+122%
+REVENUE ($K)
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+ACTIVE USERS
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+MILESTONES
+Q1
+10 design partners signed
+Q2
+Crossed $10K MRR
+Q3
+Enterprise tier shipped
+Q4
+First six-figure logo
+PARTNERS & CUSTOMERS
+AC
+Acme Co.
+N
+Nimbus
+L
+Lattice
+N
+Northwind
+AL
+Atlas Labs
+V
+Verdant
+[COMPANY]
+Confidential
+05
+TEAM
+05 / 06
+Why this team?
+Founder–market fit you can underwrite.
+F1
+Founder One
+CEO · Co-founder
+Prior: led product at Stripe. Shipped infrastructure used by 4M+ businesses. Forbes 30 Under 30.
+F2
+Founder Two
+CTO · Co-founder
+Prior: principal engineer at Linear. Designed systems shipping to 50K+ teams. ICPC world finalist.
+EXPERTISE MAP
+Product
+Engineering
+GTM
+Design
+Capital
+Ops
+JOURNEY
+2014
+Met building open-source infra
+2020
+Shipped a category-defining product
+2025
+Founded this company
+[COMPANY]
+Confidential
+06
+THE ASK
+06 / 06
+Why invest now?
+RAISING
+$3.5M
+If we get this right, the next generation of operating teams stops fighting their tools and starts shipping outcomes.
+RUNWAY
+24months
+MOMENTUM
+41%MoM
+CONTACT
+founders@company.com
+USE OF FUNDS
+Engineering
+45%
+GTM
+30%
+Operations + Infra
+15%
+Reserve
+10%
+ROADMAP
+NOW
+Live · 60+ paying logos
++6MO
+$1M ARR
++12MO
+Adjacent workflow live
++24MO
+Category leader
+[COMPANY]
+Confidential
+
+Preview
+
+FUNDRAISING · 6 SLIDES
+Minimal Seed — 6 slides
+6 slides · stripped to essentials
+
+01
+VISION
+What future are we building?
+01 / 15
+CATEGORY · WORKFLOW INFRASTRUCTURE
+The default platform every operating team routes their work through.
+The work itself becomes the system of record — observable, audited, alive.
+SERIES A · 2026
+THE NEW DEFAULT
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+02
+MARKET SHIFT
+Why now?
+02 / 15
+Three macro shifts collide. The window is now.
+◆
+Compute · 100×
+LLM cost down ~1000× in 24 months.
+§
+Audit Regulation
+New rules force end-to-end traceability.
+$
+Capital efficiency
+Investors want growth + margin together.
+◯
+Operator behavior
+Teams expect software to act for them.
+OLD WORLD VS NEW WORLD
+Capability per dollar of investment
+2020
+2022
+2024
+2026
+2028
+2030
+0
+55
+110
+165
+220
+Inflection
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+03
+PROBLEM
+What pain exists?
+03 / 15
+The cost of fragmented workflow is measured in trillions.
+$1.2T
+wasted globally on duplicated work each year.
+63%
+of operating teams cite tool sprawl as their #1 pain.
+7.4
+tools used on average to ship one cross-system workflow.
+WHAT OPERATORS ACTUALLY TELL US
+"
+Reconciliation eats 2 days/week per analyst.
+"
+No audit trail across systems — investigations take weeks.
+"
+Errors caught at month-end, not at occurrence.
+"
+Manual data entry as a full-time job.
+"
+Tribal knowledge concentrated in one or two operators.
+"
+Reporting requires custom builds every quarter.
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+04
+SOLUTION
+How do we solve it?
+04 / 15
+One unified workflow. End to end. Built for audit by default.
+1
+2
+3
+4
+5
+UNIFIED WORKFLOW
+One platform
+Audited · Reversible · Auto-synced
+Capture everything
+Every source of truth feeds one canonical record.
+Reason in place
+Policy + LLM + deterministic rules co-located.
+Act with audit
+Each action signed, replayable, reversible.
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+05
+PRODUCT
+What exactly have we built?
+05 / 15
+Three layers. One platform.
+PLATFORM ARCHITECTURE
+PLATFORM · API · INTEGRATIONS · SECURITY
+CAPTURE
+Web
+API
+Mobile
+Webhook
+REASON
+Workflow
+Policy
+LLM
+Tests
+ACT
+Integrations
+Records
+Audit
+Replay
+USER JOURNEY
+1
+Connect data
+2
+Map workflow
+3
+Run
+4
+Observe
+5
+Scale across teams
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+06
+MARKET OPPORTUNITY
+How large can this become?
+06 / 15
+TAM
+$42.0B
+SAM
+$9.4B
+SOM
+$1.2B
+A category measured in tens of billions.
+TAM
+$42.0B
+SAM
+$9.4B
+SOM
+$1.2B
+CAGR · 28%
+2024
+2026
+2028
+2030
+EXPANSION VECTORS
+Adjacent workflow (CRM, finance, ops)
+Vertical playbook (Healthcare, Fintech)
+Geographic (EU, JP, APAC)
+Platform / marketplace
+Embedded workflows for partners
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+07
+TRACTION
+What proof exists?
+07 / 15
+Investor KPI dashboard.
+ARR
+$4.18M
+▲ 412% YoY
+MRR
+$348K
+▲ 28% MoM
+PAYING CUSTOMERS
+64
+▲ +12 this q
+ACTIVE USERS
+12,400
+▲ +38% QoQ
+NRR
+132%
+▲ best-in-class
+GROSS MARGIN
+84%
+▲ +4 pts
+MONTHLY CHURN
+0.9%
+▲ -0.3 pts
+MAGIC NUMBER
+1.6
+▲ payback < 12 mo
+RULE OF 40
+86
+▲ growth + margin
+PAYBACK (MO)
+9
+▲ trending down
+LTV / CAC
+4.8
+▲ 3.0+ healthy
+LOGO RETENTION
+98%
+▲ last 12 months
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+08
+REVENUE GROWTH
+Is growth accelerating?
+08 / 15
+Twelve consecutive months of acceleration.
+ARR (THOUSANDS USD)
+28% MoM compounding
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Nov
+Dec
+0
+1500
+3000
+4500
+6000
+MRR (THOUSANDS USD)
+FORECAST · NEXT 12 MO
+Conservative band
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+09
+CUSTOMER ADOPTION
+Do customers love the product?
+09 / 15
+Customers stay. They use more. They bring more.
+LOGO RETENTION COHORT
+M0
+M1
+M2
+M3
+M6
+M9
+M12
+60
+70
+80
+100
+WEEKLY ACTIVE USAGE
+W1
+W2
+W3
+W4
+W5
+W6
+W7
+W8
+W9
+W10
+W11
+W12
+0
+2000
+4000
+8000
+CUSTOMERS
+ACME
+NIMBUS
+LATTIC
+ATLAS
+VERDAN
+HELIO
+COBALT
+QUANTA
+APEX
+PRISM
+VECTOR
+NORTH
+NET REVENUE RETENTION
+Gross + expansion
+Gross retention
+95%
+Expansion
+37%
+Net retention
+132%
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+10
+UNIT ECONOMICS
+Is growth efficient?
+10 / 15
+Healthy economics. Improving every quarter.
+CAC
+$1K
+▲ -12% QoQ
+LTV
+$6K
+▲ +28% YoY
+LTV / CAC
+4.8
+▲ target 3.0+
+CONTRIBUTION MARGIN
+72%
+▲ +4 pts
+GROSS MARGIN
+84%
+▲ best in class
+CAC PAYBACK CURVE
+9 months to recovery
+M1
+M3
+M6
+M9
+M12
+Payback
+0
+35
+70
+105
+140
+EFFICIENCY DASHBOARD
+Magic number
+1.6 · target 1
+Rule of 40
+86 · target 40
+NRR
+132% · target 110%
+Monthly churn
+0.9% · target 2%
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+11
+GO-TO-MARKET
+How do customers arrive?
+11 / 15
+Multi-channel motion. Increasing efficiency.
+ACQUISITION FUNNEL · LAST 90 DAYS
+Visitors
+24,000· 100%
+Signups
+4,800· 20%
+Activated
+1,920· 40%
+Qualified
+720· 38%
+Paying
+240· 33%
+Expanded
+96· 40%
+CHANNEL MIX & EFFICIENCY
+Inbound / SEO
+35% · CAC $520
+Founder network
+22% · CAC $0
+Partnerships
+18% · CAC $380
+Outbound
+15% · CAC $1K
+Community
+10% · CAC $220
+SALES MOTION
+1
+Self-serve to $20K ARR
+2
+Inside sales to $100K ARR
+3
+Enterprise AE > $100K ARR
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+12
+GROWTH ENGINE
+How does growth compound?
+12 / 15
+Each turn lowers the cost of the next.
+COMPOUND ADVANTAGES
+1
+Every workflow makes the next one cheaper to add.
+2
+Each customer contributes anonymized benchmarks.
+3
+New integrations create incoming partner demand.
+4
+Audit-trail data becomes an industry reference set.
+CUSTOMER
+uses product
+DATA
+compounds
+PRODUCT
+gets smarter
+NETWORK
+expands
+REVENUE
+funds invention
+FLYWHEEL
+compounds
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+13
+COMPETITION & MOAT
+Why do we win?
+13 / 15
+The only platform that does both.
+POSITIONING MAP
+REACH →
+DEPTH →
+Legacy A
+Legacy B
+Point Tool
+Open Source
+Us
+01 · MOAT
+Data flywheel
+Every workflow run improves the next prediction.
+02 · MOAT
+Switching cost
+Embedded in the daily operations of the customer.
+03 · MOAT
+Distribution
+Partner channel into the ICP, not around it.
+04 · MOAT
+Technology lead
+18-month head start on the architecture.
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+14
+TEAM
+Why this team?
+14 / 15
+Operators who shipped this before.
+F1
+Founder One
+CEO · Co-founder
+Prior: led product at Stripe. Shipped infrastructure used by 4M+ businesses. Forbes 30 Under 30.
+F2
+Founder Two
+CTO · Co-founder
+Prior: principal engineer at Linear. Designed core systems for 50K+ teams. ICPC world finalist.
+LEADERSHIP TEAM
+VE
+[VP Eng]
+ex-Datadog
+VS
+[VP Sales]
+ex-Snowflake
+HG
+[Head of GTM]
+ex-Stripe
+VP
+[VP Product]
+ex-Figma
+KEY HIRES PLANNED · NEXT 12 MO
++
+VP Engineering
++
+Director, Enterprise Sales
++
+Head of Customer Success
++
+Staff Designer
++
+8 × Software Engineer
++
+Data Scientist · Pricing
++
+GTM Operations
++
+Sales Engineer
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+15
+FUNDRAISE
+Why invest now?
+15 / 15
+RAISING SERIES A
+$15.00M
+In five years, every operating team in this category will route their work through one platform. We intend to be it.
+POST-RAISE RUNWAY
+28 mo
+CURRENT ARR
+$4.18M
+CONTACT
+founders@company.com
+MILESTONES POST-RAISE
+NOW
+Live · 60+ paying logos
+$4M ARR
++6 MO
+Repeatable sales motion
+$10M ARR
++12 MO
+Adjacent workflow shipped
+$22M ARR
++24 MO
+Category leader
+$60M ARR
+USE OF FUNDS
+Engineering
+45%
+GTM
+30%
+Operations + Infra
+15%
+Reserve
+10%
+HIRING PLAN · NEXT 12 MO
+0
+3
+6
+9
+12
+Engineering
+Sales
+CustomerSuccess
+Product /Design
+Ops + G&A
+[COMPANY] · SERIES A · CONFIDENTIAL
+May 2026
+
+Preview
+
+FUNDRAISING · 15 SLIDES
+Series A — Growth & GTM
+15 slides · metrics + GTM
+
+01
+I · OPPORTUNITY
+·
+VISION
+Future state · category · mission
+01 / 32
+CATEGORY · WORKFLOW INFRASTRUCTURE
+The default platform every operating team routes their work through.
+The work itself becomes the system of record — observable, audited, alive.
+STAGE
+Series B
+ROUND SIZE
+—
+CURRENT ARR
+—
+OPERATING SYSTEM FOR ITS CATEGORY
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+02
+I · OPPORTUNITY
+·
+MARKET TRANSFORMATION
+Why now — three converging forces
+02 / 32
+The window is open and closing.
+◆
+Compute · 1000×
+LLM cost down ~1000× in 24 months.
+↓ cost
+§
+Audit regulation
+New rules require traceability across systems.
+↑ scrutiny
+↻
+Operator behavior
+Teams now expect software to act for them.
+↑ demand
+OLD VS NEW WORLD
+Capability per dollar of investment
+2020
+2022
+2024
+2026
+2028
+2030
+0
+70
+140
+210
+280
+Inflection
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+03
+I · OPPORTUNITY
+·
+PROBLEM LANDSCAPE
+Inefficiencies · pain · economic consequences
+03 / 32
+A trillion-dollar friction tax that nobody charges for — but everyone pays.
+DRIVER · 01
+Fragmented data
+No single source of truth across operating systems.
+$1.2T waste/yr
+DRIVER · 02
+Manual reconciliation
+Operators spend 30%+ of their week stitching.
+63% of teams
+DRIVER · 03
+No audit
+Errors caught months after they occur.
+7.4 tools / workflow
+ECONOMIC CONSEQUENCES
+!
+Increased compliance exposure
+!
+Slower decision cycles
+!
+Hidden working capital trapped
+!
+Failed audits
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+04
+I · OPPORTUNITY
+·
+OPPORTUNITY SIZE
+TAM · SAM · SOM · expansion vectors
+04 / 32
+TAM
+$42.00B
+SAM
+—
+SOM
+—
+TAM
+$42.00B
+Total addressable
+SAM
+—
+Serviceable
+SOM
+—
+5-yr obtainable
+CATEGORY GROWTH · — CAGR
+2024
+2026
+2028
+2030
+EXPANSION VECTORS · TAM UNLOCK
+Adjacent workflow
+$8.00B · NOW
+Vertical playbook
+$6.00B · NEXT
+Geographic expansion
+$11.00B · NEXT
+Platform / marketplace
+$17.00B · FUTURE
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+05
+II · PRODUCT
+·
+PLATFORM OVERVIEW
+Architecture · workflows · value creation
+05 / 32
+Three layers. One platform. Customer-visible value at each.
+PLATFORM ARCHITECTURE
+PLATFORM · API · INTEGRATIONS · SECURITY · OBSERVABILITY
+CAPTURE
+Web
+API
+Mobile
+Webhook
+Batch
+REASON
+Workflow
+Policy
+LLM
+Tests
+Audit
+ACT
+Integrations
+Records
+Replay
+Reports
+Alerts
+WORKFLOW SHIP TIME
+94%
+faster vs. status quo
+RECONCILIATION EFFORT
+−82%
+measured on first cohort
+AUDIT COVERAGE
+100%
+system-wide trail
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+06
+II · PRODUCT
+·
+TECHNOLOGY STACK
+Infra · data · application · security · scalability
+06 / 32
+Built on edge primitives — designed for scale from day one.
+01
+INFRASTRUCTURE
+Cloudflare Workers
+D1
+R2
+Durable Objects
+Queues
+02
+DATA
+Vectorize
+Analytics Engine
+Streaming ingest
+03
+APPLICATION
+Workflow engine
+Policy DSL
+API SDK
+Integration bus
+04
+SECURITY
+SOC 2 Type II
+Cf Access
+Field-level encryption
+Audit log streaming
+05
+SCALABILITY
+Edge runtime
+Multi-region
+Async DLQ
+Smart placement
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+07
+II · PRODUCT
+·
+INNOVATION & IP
+Unique technology · IP · research advantages
+07 / 32
+Original research compounding into defensible IP.
+01
+Differential privacy by design
+Workflow data trained without leaking customer-specific records.
+02
+Deterministic LLM gating
+Symbolic policy layer blocks non-conforming model outputs.
+03
+Audit-trail compression
+Patent-pending storage format reduces audit size 18×.
+IP & RESEARCH ASSETS
+PATENTS FILED
+7
+3 granted
+PROVISIONAL PATENTS
+4
+priority dates secured
+TRADE SECRETS
+12
+core algorithms
+RESEARCH PAPERS
+5
+peer-reviewed
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+08
+II · PRODUCT
+·
+PRODUCT ROADMAP
+Past · current · next 12 months
+08 / 32
+Shipped reliably. Investing in the next platform layer.
+PAST 12 MO
+· DELIVERED
+Workflow v2
+Audit framework
+6 connector launches
+SOC 2 Type II
+NOW
+· LIVE
+Reasoning engine GA
+Enterprise tier
+Compliance API
+EU residency
+NEXT 12 MO
+· PLANNED
+Adjacent workflow
+Vertical playbook · Health
+Public marketplace
+Embedded distribution
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+09
+III · TRACTION
+·
+COMPANY GROWTH OVERVIEW
+Executive KPI dashboard
+09 / 32
+Growth + efficiency · best-in-class across the dashboard.
+ARR
+—
+▲ —% YoY
+MRR
+—
+▲ —% MoM
+CUSTOMERS
+—
+▲ +14 this q
+ACTIVE USERS
+—
+▲ +38% QoQ
+NRR
+—
+▲ best in class
+GRR
+—
+▲ durable
+GROSS MARGIN
+—
+▲ +4 pts
+MONTHLY CHURN
+—
+▲ -0.3 pts
+MAGIC NUMBER
+—
+▲ < 1y payback
+RULE OF 40
+—
+▲ growth + margin
+EBITDA MARGIN
+—
+▲ approaching profit
+BURN MULTIPLE
+—
+▲ best practice
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+10
+III · TRACTION
+·
+REVENUE GROWTH
+ARR · MRR · growth rate · forecast
+10 / 32
+Acceleration through scale — growth rate increasing with size.
+ARR · TRAILING + FORWARD (K USD)
+Actual solid; forecast dashed
+M1
+M2
+M3
+M4
+M5
+M6
+M7
+M8
+M9
+M10
+M12
+M14
+M16
+M18
+M20
+M22
+M24
+F1
+F2
+F3
+F4
+F5
+F6
+F7
+F8
+0
+4500
+9000
+13500
+18000
+GROWTH RATE TREND
+QoQ rolling growth
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+0
+70
+140
+ARR TODAY
+—
+▲ —% YoY
+MRR TODAY
+—
+▲ —% MoM
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+11
+III · TRACTION
+·
+CUSTOMER GROWTH
+Count · segments · expansion · geography
+11 / 32
+Layered customer base — increasingly enterprise-weighted.
+CUSTOMER COUNT BY SEGMENT
+EnterpriseMid-marketSMB
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+Q8
+0
+70
+140
+210
+280
+ARR MIX BY SEGMENT
+Enterprise
+24 · 52% ARR
+Mid-market
+88 · 33% ARR
+SMB
+248 · 15% ARR
+GEOGRAPHIC ARR SHARE
+NA
+EU
+APAC
+LATAM
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+12
+III · TRACTION
+·
+RETENTION
+Logo · gross · net · cohort
+12 / 32
+Cohorts expand. Logo retention durable. NRR best-in-class.
+LOGO RETENTION COHORT
+M0
+M3
+M6
+M9
+M12
+80
+85
+90
+95
+100
+NRR DECOMPOSITION
+Gross retention
+Expansion
+Churn
+Net retention
+NET REVENUE RETENTION BY COHORT
+Indexed to 100 at cohort start
+COHORT
+M0
+M3
+M6
+M9
+M12
+2024 Q1
+100%
+102%
+108%
+117%
+128%
+2024 Q2
+100%
+104%
+112%
+124%
+135%
+2024 Q3
+100%
+107%
+118%
+130%
+2024 Q4
+100%
+110%
+122%
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+13
+III · TRACTION
+·
+PRODUCT ENGAGEMENT
+Usage · activation · adoption · frequency
+13 / 32
+ACTIVATION
+76%
+▲ +8 pts QoQ
+TIME-TO-VALUE
+9 min
+median
+WAU / MAU
+0.74
+stickiness
+POWER USERS
+38%
+≥ 5 sessions / wk
+WEEKLY ACTIVE USERS
+W1
+W2
+W3
+W4
+W5
+W6
+W7
+W8
+W9
+W10
+W11
+W12
+W13
+W14
+W15
+W16
+0
+2500
+5000
+7500
+10000
+FEATURE ADOPTION (% OF ACTIVE)
+Workflow
+96%
+Audit
+88%
+Policy
+74%
+LLM gate
+62%
+Reports
+58%
+SESSION FREQUENCY
+Daily
+3-5/wk
+1-2/wk
+<1/wk
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+14
+IV · GTM
+·
+GO-TO-MARKET MODEL
+Motion · channels · funnel
+14 / 32
+Multi-tier motion · diversified channels · improving efficiency.
+SALES MOTION
+SMB
+< $20K ACV
+Self-serve · 1 PLG funnel
+Mid-market
+$20K–$100K ACV
+1 AE : 1 SDR : 1 CSM
+Enterprise
+$100K+ ACV
+1 AE : 2 SDR : 1 SE : 1 CSM
+CHANNEL MIX & EFFICIENCY
+Inbound
+38% · CAC $540 · 7mo
+Partner
+24% · CAC $420 · 5mo
+Outbound
+22% · CAC $1K · 12mo
+Community
+10% · CAC $220 · 4mo
+Events
+6% · CAC $980 · 9mo
+ACQUISITION FUNNEL · LAST 90 DAYS
+Visitors
+36,000· 100%
+MQL
+5,400· 15%
+SQL
+1,620· 30%
+Opp
+540· 33%
+Closed
+162· 30%
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+15
+IV · GTM
+·
+SALES EFFICIENCY
+CAC · payback · magic number · pipeline conversion
+15 / 32
+CAC
+—
+▲ -14% QoQ
+CAC PAYBACK
+— mo
+▲ −2 mo YoY
+MAGIC NUMBER
+—
+▲ >1.0 healthy
+PIPELINE COVERAGE
+4.2×
+▲ vs. 3.0× target
+WIN RATE
+32%
+▲ +5 pts
+CAC PAYBACK CURVE
+Cumulative gross-margin recovery
+M1
+M3
+M6
+M9
+M12
+Payback
+0
+40
+80
+120
+160
+ARR PER QUOTA REP ($K)
+Sales productivity trending up-and-to-the-right
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+0
+200
+400
+600
+800
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+16
+IV · GTM
+·
+CUSTOMER ECONOMICS
+LTV · margins · expansion · profitability
+16 / 32
+LTV
+—
+▲ +28% YoY
+LTV / CAC
+—
+▲ target 3+
+GROSS MARGIN
+—
+▲ +4 pts YoY
+CONTRIBUTION MARGIN
+72%
+▲ +8 pts YoY
+EBITDA MARGIN
+—
+▲ approaching positive
+MARGIN TREND · 6 QUARTERS
+Gross vs contribution margin
+Contribution marginGross margin
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+40
+55
+70
+85
+100
+EXPANSION-REVENUE COMPOSITION
+Seat expansion
+52%
+Module upsell
+28%
+Usage / consumption
+14%
+Enterprise upgrade
+6%
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+17
+V · DEFENSIBILITY
+·
+COMPETITION
+Market map · positioning · alternatives
+17 / 32
+The only platform delivering both depth and reach.
+POSITIONING MAP
+REACH →
+DEPTH →
+Legacy A
+Legacy B
+Point tool
+Open source
+Us
+COMPETITOR MATRIX
+NAME	PRODUCT	PRICING	SCALE	VERDICT
+Us	Unified workflow + audit	Per-seat + usage	Best in class	Win
+Legacy A	Workflow only · siloed	Per-seat	Mature	Niche
+Legacy B	Audit only · point solution	Enterprise	Mature	Adjacent
+Point tool	Single workflow	Per-user	SMB	Limited
+Open source	Self-host · DIY	Free	Small teams	Floor
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+18
+V · DEFENSIBILITY
+·
+MOAT ANALYSIS
+Technology · data · network · distribution · brand
+18 / 32
+Five moats compounding into a defensible platform.
+MOAT MAP
+Technology
+Data
+Network
+Distribution
+Brand
+MOAT
+01 · TECH
+Technology
+18-month head start on architecture.
+7 patents filed
+02 · DATA
+Data
+Each customer trains the next prediction.
+12B events
+03 · NETWORK
+Network
+Cross-customer benchmarks unique to platform.
+320+ logos
+04 · DISTRIBUTION
+Distribution
+Partner channel into the ICP.
+5 reseller deals
+05 · BRAND
+Brand
+Reference customer in every key vertical.
+NPS 72
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+19
+V · DEFENSIBILITY
+·
+STRATEGIC ADVANTAGES
+Partnerships · scale · execution
+19 / 32
+Advantages that compound — and that capital accelerates.
+01
+Distribution partnerships
+Channel relationships with two top-tier global SIs.
+02
+Scale advantages
+Edge runtime → marginal cost approaches zero.
+03
+Execution advantages
+Founding team has shipped this category before.
+04
+Capital efficiency
+Reached $4M ARR on a $3.5M seed round.
+STRATEGIC PARTNERSHIPS
+GSI Alpha
+CHANNEL
+GSI Beta
+CHANNEL
+Cloud A
+PLATFORM
+Cloud B
+PLATFORM
+Data X
+DATA
+Data Y
+DATA
+Reseller Z
+RESELLER
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+20
+VI · ORGANIZATION
+·
+TEAM
+Leadership · hiring · org structure
+20 / 32
+Operators who scaled comparable companies.
+LEADERSHIP TEAM
+CE
+CEO
+CO-FOUNDER
+Prior: led product at Stripe.
+CT
+CTO
+CO-FOUNDER
+Prior: principal eng at Linear.
+CR
+CRO
+SERIES A HIRE
+Built $0→$80M ARR at Snowflake.
+VE
+VP Eng
+EX-DATADOG
+Scaled infra to 100M+ events/day.
+VP
+VP Product
+EX-FIGMA
+Led 0→1 design systems platform.
+CF
+CFO
+EX-ATLASSIAN
+IPO + post-IPO operator.
+HIRING PLAN · 24 MO
+Engineering
+GTM
+Customer success
+Product / Design
+Ops + G&A
+0
+30
+60
+ORG MIX TODAY
+Customer successEngineeringGTMOps + G&AProduct / Design
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+21
+VI · ORGANIZATION
+·
+OPERATIONAL EXCELLENCE
+KPIs · processes · execution systems
+21 / 32
+Operating maturity ahead of stage.
+SLA UPTIME
+99.97%
+target 99.95%
+P95 LATENCY
+180 ms
+target < 250 ms
+SUPPORT RESPONSE (P1)
+12 min
+target < 30 min
+DEPLOY FREQUENCY
+14 / wk
+target > 10 / wk
+ONBOARDING TTV
+9 min
+target < 15 min
+NPS
+72
+target > 50
+WEEKLY BUSINESS REVIEW
+· Mon: pipeline · forecast call
+· Tue: product · platform review
+· Wed: customer · CS / churn
+· Thu: ops · KPIs · roadmap
+· Fri: cash · hiring · all-hands
+EXECUTION SYSTEMS
+· OKR cadence (quarterly)
+· Weekly executive scorecard
+· On-call rotation + DLQ ops
+· Quarterly board memo
+· Incident post-mortems <5 d
+DATA / DECISION STACK
+· Warehouse: native · stage-prod parity
+· Analytics: real-time KPI dashboard
+· Experimentation: weekly tests
+· Pricing committee monthly
+· Talent reviews biannual
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+22
+VII · INVESTMENT
+·
+FUNDRAISING
+Round · use of proceeds · milestones · return
+22 / 32
+RAISING SERIES B
+—
+One memorable closing line — the world that becomes true with this round.
+CURRENT ARR
+—
+POST-RAISE RUNWAY
+30 mo
+CONTACT
+founders@company.com
+MILESTONES POST-RAISE
+NOW
+Live · 320+ logos
+$8M ARR
++6 MO
+Repeatable enterprise motion
+$18M ARR
++12 MO
+Adjacent workflow shipped
+$40M ARR
++24 MO
+Category leader
+$90M ARR
+USE OF FUNDS
+Engineering
+38%
+GTM
+32%
+CS + Services
+12%
+Ops + Infra
+10%
+Reserve
+8%
+RETURN SCENARIOS · YEAR 3 ARR · TVPI
+BASE
+3.0×
+$60.00M ARR
+UPSIDE
+5.5×
+$110.00M ARR
+OUTLIER
+12.0×
+$220.00M ARR
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A1 · FINANCIAL STATEMENTS
+P&L · margins · cash
+23 / 32
+REVENUE BY QUARTER ($K)
+Non-recurringRecurring
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+Q8
+0
+750
+1500
+2250
+3000
+OPEX BY QUARTER ($K)
+G&AR&DS&M
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+Q8
+0
+750
+1500
+2250
+3000
+MARGINS (%)
+EBITDAGross
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+Q8
+-80
+-40
+0
+40
+80
+CASH POSITION ($K) + RUNWAY (MO)
+CashRunway (mo)
+Q1
+Q2
+Q3
+Q4
+Q5
+Q6
+Q7
+Q8
+0
+3000
+6000
+9000
+12000
+0
+6
+12
+18
+24
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A2 · REVENUE COHORTS
+Monthly cohorts · expansion · retention
+24 / 32
+REVENUE COHORT TABLE · INDEXED TO 100 AT M0
+COHORT
+M0
+M3
+M6
+M12
+M18
+M24
+2024 Q1
+100%
+108%
+124%
+152%
+174%
+198%
+2024 Q2
+100%
+110%
+128%
+158%
+184%
+2024 Q3
+100%
+112%
+134%
+162%
+2024 Q4
+100%
+114%
+138%
+2025 Q1
+100%
+116%
+140%
+2025 Q2
+100%
+118%
+OBSERVATION 01
+Every cohort has expanded net by ≥ 24% within 6 months — consistent across vintages.
+OBSERVATION 02
+Newer cohorts expand faster than older ones — proof of improving product / motion fit.
+OBSERVATION 03
+Mature cohorts (24 mo) approach 200% — long-tail NRR remains best-in-class.
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A3 · CUSTOMER SEGMENTATION
+Enterprise · mid-market · SMB · geography
+25 / 32
+ENTERPRISE
+24
+AVG ACV
+$248K
+LOGO RET
+98%
+NRR
+138%
+MID-MARKET
+88
+AVG ACV
+$56K
+LOGO RET
+96%
+NRR
+124%
+SMB
+248
+AVG ACV
+$12K
+LOGO RET
+92%
+NRR
+110%
+GEOGRAPHIC BREAKDOWN
+REGION	CUSTOMERS	ARR	SHARE
+United States	220	$4.80M	63%
+Europe	96	$1.95M	25%
+APAC	32	$720K	9%
+LATAM	12	$180K	2%
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A4 · SALES FUNNEL
+Lead → MQL → SQL → Opportunity → Closed
+26 / 32
+FULL FUNNEL · LAST 90 DAYS
+STAGE	VOLUME	CONVERSION	AVG CYCLE (DAYS)
+Lead	
+36,000
+100%	0
+MQL	
+5,400
+15%	14
+SQL	
+1,620
+30%	28
+Opportunity	
+540
+33%	52
+Closed Won	
+162
+30%	78
+MQL → SQL
+30%
+▲ +5 pts
+SQL → OPP
+33%
+▲ +3 pts
+WIN RATE
+30%
+▲ +5 pts
+CYCLE TIME
+78 d
+▲ -12 d
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A5 · PRICING
+Plans · packaging · expansion mechanics
+27 / 32
+TEAM
+$48 / seat / mo
+Seats 5–25 · SMB
+Workflow
+Audit
+BUSINESS
+$96 / seat / mo
+Seats 25–250 · Mid-market
+Workflow
+Audit
+Policy
+Integrations
+ENTERPRISE
+Custom · Annual
+Seats 250+ · Enterprise
+Everything
+SSO/SCIM
+Dedicated infra
+EU residency
+EXPANSION MECHANIC 01
+Seat expansion. Land single team → expand to 4× seats within 12 months on average.
+EXPANSION MECHANIC 02
+Module unlock. Audit and Policy each add ~30% ARR per customer.
+EXPANSION MECHANIC 03
+Usage tier. Volume-based pricing on workflow events captures peak demand without negotiation.
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A6 · TECHNOLOGY ARCHITECTURE
+Detailed infrastructure
+28 / 32
+ARCHITECTURE RACK
+EDGE
+Workers
+Smart placement
+Cf Access
+WAF
+APPLICATION
+Workflow engine
+Policy DSL
+LLM gateway
+API SDK
+DATA
+D1 (OLTP)
+R2 (objects)
+Vectorize (embeddings)
+Analytics Engine
+INTEGRATIONS
+CRM
+ERP
+Data warehouse
+Webhook bus
+OBSERVABILITY
+Tail Workers
+Logs to R2
+Tracing
+DLQ
+SCALABILITY
+· Edge runtime → no cold starts
+· Horizontal scaling in seconds
+· 99.97% uptime · multi-region
+· P95 latency < 200ms global
+EXTENSIBILITY
+· Plugin runtime per workspace
+· Public + private SDK
+· Connector framework
+· Custom workflow DSL
+RESILIENCE
+· Dead-letter queue on every job
+· Replayable audit trail
+· Backups · 7-year retention
+· Disaster recovery RTO < 4h
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A7 · SECURITY & COMPLIANCE
+Policies · frameworks · certifications
+29 / 32
+CERTIFICATIONS
+SOC 2 Type II
+ISO 27001
+GDPR
+CCPA
+HIPAA-ready
+FRAMEWORKS
+NIST 800-53
+CSA STAR
+OWASP ASVS L2
+IDENTITY
+✓
+SSO/SAML/SCIM
+✓
+Per-route Cf Access
+✓
+TOTP + Passkey + SMS
+✓
+Step-up auth on sensitive routes
+DATA
+✓
+Column-level AES-GCM
+✓
+R2 object lock · 7yr
+✓
+Per-tenant KEK rotation
+✓
+GDPR data export
+APPLICATION
+✓
+CSP + nonce
+✓
+HSTS preload
+✓
+CodeQL + Dependabot
+✓
+Gitleaks pre-commit
+OPERATIONS
+✓
+Audit log streaming to R2
+✓
+On-call rotation
+✓
+Incident playbook + post-mortems
+✓
+Quarterly tabletop
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A8 · RISK ANALYSIS
+Technical · market · operational · regulatory
+30 / 32
+RISK REGISTER
+CATEGORY	RISK	MITIGATION	SEVERITY
+TECHNICAL	Edge runtime ceiling	Hybrid placement option; gradual migration plan	LOW
+MARKET	Category compression	Two adjacent workflow expansions in roadmap	MED
+OPERATIONAL	Key-person dependency · CTO	Hiring VP Eng · co-deputy for critical decisions	MED
+REGULATORY	EU AI Act enforcement	EU residency live · DPIA on file · gating LLM outputs	LOW
+TECHNICAL	Third-party LLM cost spikes	Multi-provider router · prompt cache · budget caps	LOW
+MARKET	Hyperscaler enters category	Distribution moat · data moat · 18-mo head start	HIGH
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A9 · BOARD & GOVERNANCE
+Board · investors · advisors
+31 / 32
+BOARD OF DIRECTORS
+CE
+[CEO]
+FOUNDER · COMMON
+LI
+[Lead investor]
+BOARD MEMBER · SERIES A
+ID
+[Independent]
+BOARD MEMBER · INDEPENDENT
+NB
+[New BoD]
+SERIES B NOMINEE · NEW ROUND
+INVESTORS
+[Seed lead]
+SEED · 2024
+[Series A lead]
+SERIES A · 2025
+[Strategic]
+SERIES A · 2025
+[Series B lead]
+SERIES B · 2026
+ADVISORS
+[Advisor 1]
+GTM · enterprise sales
+[Advisor 2]
+Compliance · audit
+[Advisor 3]
+Platform · infra
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+A
+APPENDIX
+·
+A10 · THREE-YEAR OPERATING PLAN
+Revenue · headcount · capital allocation
+32 / 32
+REVENUE PLAN ($K)
+Y0
+Y1
+Y2
+Y3
+0
+25000
+50000
+75000
+100000
+HEADCOUNT PLAN
+Y0
+Y1
+Y2
+Y3
+0
+80
+160
+240
+320
+CAPITAL ALLOCATION ($K)
+Cash at year-endDeployed
+Y0
+Y1
+Y2
+Y3
+0
+8000
+16000
+24000
+32000
+[COMPANY] · SERIES B · CONFIDENTIAL — INVESTOR USE ONLY
+May 2026
+
+Preview
+
+FUNDRAISING · 32 SLIDES
+Series B — Diligence Pack
+22 main + 10 appendix · board-grade
+
+LOOPLINE
+01 / 12
+L
+Loopline
+YC DEMO DAY · S26
+Close 3× more deals — without adding reps.
+Loopline is the AI workspace that runs your pipeline, drafts your follow-ups, and tells your team what to do next.
+ARR
+$3.2M
+CUSTOMERS
+142
+GROWTH
+38% MoM
+NRR
+138%
+app.loopline.com/dashboard
+Loopline
+Overview
+Projects
+Pipeline
+Analytics
+Customers
+Settings
+Search…
+G
+ARR
+$3.2M
+▲ +38%
+Active users
+12,840
+▲ +22%
+NRR
+138%
+▲ +6pt
+NPS
+74
+▲ +8
+ARR — last 12 months
+Monthly recurring × 12, normalized
+Activity
+M
+Mia
+closed Acme — $48K
+J
+Jonas
+shipped v2.4
+P
+Priya
+invited 3 teammates
+W
+Wei
+completed onboarding
+A
+Aria
+approved a contract
+Pipeline
+ACCOUNT
+STAGE
+OWNER
+VALUE
+CLOSE
+Acme Corp
+Negotiation
+Mia
+$48K
+Jun 12
+Northwind
+Proposal
+Jonas
+$32K
+Jun 18
+Globex
+Discovery
+Priya
+$72K
+Jul 02
+THE PROBLEM
+02 / 12
+PROBLEM
+Revenue teams ship more tools than they ship deals.
+The average B2B seller works across 17 tools, switches context 1,200×/day, and spends 64% of their week on admin — not selling.
+1
+Pipeline is opaque.
+Forecasts are guesses. Slipped deals surface in QBRs, not in time to save.
+2
+Follow-up is manual.
+The best reps win on hustle. The rest forget to follow up.
+3
+Coaching does not scale.
+Leaders coach the top 20% and lose the middle 60%.
+status quo · 17 tools · 0 view
+Today — 17 tools, no view
+Copy / paste between products. Manual handoffs. Lost context.
+CRM
+Sheets
+Email
+Slack
+Notion
+Linear
+Docs
+Drive
+THE SOLUTION
+03 / 12
+SOLUTION
+One workspace. Every deal, surfaced. Every action, drafted.
+Loopline reads your pipeline, drafts the next move, and auto-routes the work — so every rep operates like your top rep.
+BEFORE
+17 tools, 0 view
+AFTER
+One connected workspace
+BEFORE
+Reps forget follow-ups
+AFTER
+Drafts ready, one click to send
+BEFORE
+Forecast = vibes
+AFTER
+Forecast = math + signal
+BEFORE
+Top-rep coaching only
+AFTER
+Every rep coached on every call
+one workflow · all your work
+With the platform — one connected surface
+Every step, one workflow. Auto-handoffs. Full context.
+Capture
+Enrich
+Decide
+Hand off
+Sign
+Track
+Live workspace
+Auto-handoff
+Auto-handoff
+Auto-handoff
+LIVE WALKTHROUGH
+04 / 12
+DEMO
+The flow we built for the world's best revenue teams.
+Three taps from new lead to closed deal.
+app.loopline.com
+Loopline
+Overview
+Projects
+Pipeline
+Analytics
+Customers
+Settings
+Search…
+G
+ARR
+$3.2M
+▲ +38%
+Active users
+12,840
+▲ +22%
+NRR
+138%
+▲ +6pt
+NPS
+74
+▲ +8
+ARR — last 12 months
+Monthly recurring × 12, normalized
+Activity
+M
+Mia
+closed Acme — $48K
+J
+Jonas
+shipped v2.4
+P
+Priya
+invited 3 teammates
+W
+Wei
+completed onboarding
+A
+Aria
+approved a contract
+Pipeline
+ACCOUNT
+STAGE
+OWNER
+VALUE
+CLOSE
+Acme Corp
+Negotiation
+Mia
+$48K
+Jun 12
+Northwind
+Proposal
+Jonas
+$32K
+Jun 18
+Globex
+Discovery
+Priya
+$72K
+Jul 02
+1
+See the deal
+Loopline pulls every signal — calls, emails, intent, usage — into one card.
+2
+Get the next move
+AI drafts the email, the call plan, the demo agenda. You approve.
+3
+Close the loop
+When the deal closes, onboarding fires automatically into your CS tool.
+4
+Coach the rep
+Every call scored against your playbook. Coaching surfaced in 1:1s.
+FEATURE 01
+05 / 12
+PIPELINE AI
+Your pipeline, but explained.
+Loopline reads every signal in the deal and writes a one-sentence story — what changed, why, what to do.
+Auto-summary on every account, every day.
+Slipping-deal alerts 14 days before quarter close.
+Forecast accuracy +28pt vs. CRM-only baseline.
++28pt
+avg. forecast accuracy lift
+app.loopline.com/pipeline-ai
+Pipeline AI
+Q3 GTM brief — final
+Updated 4 min ago · 3 collaborators
+AI
+Suggested edit
+"Tighten the lead with the customer outcome before the feature list."
+Apply
+Dismiss
+FEATURE 02
+06 / 12
+WORKFLOW STUDIO
+Move work like Linear moves issues.
+A kanban that knows your sales motion. Drop a deal into "negotiation" and the contract, redlines, and approval workflow fire automatically.
+Templated motions for SMB, mid-market, enterprise.
+Auto-handoff between sales, CS, finance.
+Zero-config integrations with your existing CRM.
+11h
+hours saved per rep per week
+app.loopline.com/workflow-studio
+Workflow Studio
+Drag, drop, automate.
+Backlog
+6
+In progress
+4
+In review
+3
+Shipped
+5
+FEATURE 03
+07 / 12
+COACHING INSIGHTS
+Coach every call. Not just the deals you lost.
+Loopline scores every call against your playbook and surfaces the 3 moments a rep can improve, with the clip and the script.
+Trained on your top 10% of calls, not generic models.
+Cohort heatmaps show where reps level up — and stall.
+Used by 80% of managers weekly in pilot accounts.
+−42%
+ramp time reduction
+app.loopline.com/coaching-insights
+Coaching Insights
+Insights — cohort 2026-Q1
+Activation — by cohort
+Retention heatmap
+TIME-TO-VALUE
+4.2 min
+vs. benchmark
+M3 RETENTION
+78%
+vs. benchmark
+DAU/WAU
+0.61
+vs. benchmark
+NPS
+74
+vs. benchmark
+WHY USERS LOVE IT
+08 / 12
+CUSTOMER LOVE
+The teams who use Loopline daily are growing 3× faster.
+74 NPS, 92% weekly retention, and word-of-mouth referrals drive 38% of new sign-ups.
+"
+Loopline is the first tool my reps actually open without being told. Forecast accuracy jumped 30 points in a quarter.
+MC
+Mia Chen
+VP Sales · Northwind
+"
+It replaced four tools, two spreadsheets, and one full-time ops hire.
+JB
+Jonas Becker
+CRO · Acme
+"
+My reps thank me for it. That has never happened with any sales tool, ever.
+PP
+Priya Patel
+Head of Revenue · Globex
+"
+I would pay 5× what they charge. Do not tell them.
+WZ
+Wei Zhang
+Founder & CEO · Initech
+DAU / WAU
+61%
+NPS
+74
+M6 RETENTION
+92%
+WEEKLY ACTIONS
+184K
+Good morning, Mia
+2 things waiting on you
+Today's brief
+3 deals to review · 1 sign-off
+Open
+09:30
+09:35
+09:40
+09:45
+Home
+Inbox
+Search
+You
+TRACTION
+09 / 12
+TRACTION
+$3.2M ARR, growing 38% MoM, with 138% net revenue retention.
+142 paying customers in 14 months. 92% gross retention. The fastest-growing cohort we have ever seen at this stage.
+ARR
++580% YOY
+$3.2M
+CUSTOMERS
++320% YOY
+142
+NRR
+BEST-IN-CLASS
+138%
+GROSS MARGIN
+SAAS GOLD
+84%
+ARR — last 12 months
+Monthly recurring revenue × 12
+▲ 580% YOY
+Apr
+Jun
+Aug
+Oct
+Dec
+Feb
+CUSTOMERS
+Northwind
+Acme
+Globex
+Initech
+Hooli
+Stark
+Wonka
+Soylent
+MARKET OPPORTUNITY
+10 / 12
+MARKET
+$84B and the entire revenue stack is up for rebuild.
+Sales tech is fragmented across 1,200 tools. AI is collapsing the stack into a single workspace — and the buyer is ready.
+Stack consolidation.
+CROs are cutting tool count 40% in 2026. Loopline replaces 4–6 tools per customer.
+AI-native buyers.
+New leadership is hired specifically to deploy AI in revenue. They write the cheques.
+Outcome-priced motion.
+Buyers want guaranteed lift. Our pricing maps to forecast accuracy gain.
+EXPANSION PATHS
+Customer Success · Marketing Ops · Partner Ops · International (UK/DE/FR)
+TAM
+$84B
+SAM · $18B
+SOM · $1.4B
+TEAM
+11 / 12
+TEAM
+Built by the operators who already did this once.
+Two co-founders, 18 years combined building and running revenue teams at category-defining companies.
+SM
+Sofia Marquez
+CEO & Co-founder
+Ran a 120-person revenue org through IPO. Built three of the top-five sales playbooks her industry now copies.
+PREVIOUSLY
+VP Revenue · Plaid
+DO
+Daniel Okafor
+CTO & Co-founder
+Shipped AI products to 40M users. First engineer at a unicorn; rebuilt Stripe's pipeline ML from scratch.
+PREVIOUSLY
+Staff Eng · Stripe
+HI
+Hana Ito
+Head of Design
+Designed the product surfaces investors keep showing other founders as the bar. Linear, Notion, now Loopline.
+PREVIOUSLY
+Design Lead · Linear
+ADVISORS
+Jeff Lawson (Twilio)
+Tracy Young (PlanGrid)
+Lenny Rachitsky (Lenny's Newsletter)
+FUNDRAISE · VISION
+12 / 12
+WE'RE RAISING
+$12M
+Series A Preferred · $80M pre · 24 months runway
+We are raising a $12M Series A to win the revenue stack — for good.
+USE OF FUNDS
+Engineering & AI
+55%
+GTM & Customer Success
+30%
+Brand, marketing, ops
+15%
+12-MONTH MILESTONES
+$12M ARR by Q4 2026
+500 customers across 3 verticals
+Two new product surfaces (CS, MarketingOps)
+EU expansion: UK + DE launched
+The revenue team you wish you had — built into one product. Come build it with us.
+sofia@loopline.ai
+loopline.com
+Loopline
+Overview
+Projects
+Pipeline
+Analytics
+Customers
+Settings
+Search…
+G
+ARR
+$3.2M
+▲ +38%
+Active users
+12,840
+▲ +22%
+NRR
+138%
+▲ +6pt
+NPS
+74
+▲ +8
+ARR — last 12 months
+Monthly recurring × 12, normalized
+Activity
+M
+Mia
+closed Acme — $48K
+J
+Jonas
+shipped v2.4
+P
+Priya
+invited 3 teammates
+W
+Wei
+completed onboarding
+A
+Aria
+approved a contract
+Pipeline
+ACCOUNT
+STAGE
+OWNER
+VALUE
+CLOSE
+Acme Corp
+Negotiation
+Mia
+$48K
+Jun 12
+Northwind
+Proposal
+Jonas
+$32K
+Jun 18
+Globex
+Discovery
+Priya
+$72K
+Jul 02
+
+Preview
+
+FUNDRAISING · 12 SLIDES
+Demo Day — Product-first
+12 slides · product-first · SVG mockups
+
+I · CUSTOMER CONTEXT
+01 / 18
+EXECUTIVE OVERVIEW
+A unified operations platform that delivers measurable cost-to-serve reduction in 120 days.
+Axal consolidates fragmented intake, approval, and provisioning workflows into a single, audit-grade platform — reducing cycle time, lowering cost-per-case, and surfacing risk before it materializes.
+OUTCOME 01
+−42%
+Cycle time
+Intake → fulfilment, blended.
+OUTCOME 02
+−38%
+Cost per case
+Year-1, attributable to platform.
+OUTCOME 03
+99.2%
+SLA adherence
+Across pilot scopes.
+ONE-SENTENCE VALUE
+One platform that runs your operations end-to-end, with the audit posture your regulators expect and the economics your CFO requires.
+PREPARED FOR
+Continental Bank — Office of the COO
+app.axal.com/dashboard
+Axal
+Overview
+Operations
+Customers
+Compliance
+Reports
+Admin
+Operations Console
+OPEN TICKETS
+142
+▼ −24 this wk
+AVG CYCLE TIME
+3.2d
+▼ −1.4d
+SLA ADHERENCE
+98.6%
+▼ +2.1pt
+COST / CASE
+$48
+▼ −18%
+Throughput · last 30 days
+Top exceptions
+SLA breach risk
+Missing approval
+Doc mismatch
+Region change
+Audit hold
+Active workflows
+CASE ID
+STAGE
+OWNER
+REGION
+DUE
+STATUS
+CASE-4812
+Review
+M. Chen
+EU
+Jun 02
+On track
+CASE-4811
+Approval
+J. Becker
+US
+Jun 03
+On track
+CASE-4805
+Intake
+P. Patel
+APAC
+Jun 05
+At risk
+Axal Customer Solutions Team
+May 2026
+Confidential — prepared for customer evaluation
+I · CUSTOMER CONTEXT
+I · CUSTOMER CONTEXT
+02 / 18
+INDUSTRY TRENDS
+Four converging pressures make the case for consolidation today.
+Across regulated industries, leaders are simplifying their operating stack to absorb regulatory load, cost discipline, and customer-experience expectations simultaneously.
+PRESSURE ON INCUMBENTS — INTENSITY INDEX
+78%
+Stack consolidation
+62%
+Regulatory load
+71%
+Customer experience
+84%
+AI-native ops
+Stack consolidation
+78
+Average IT footprint cut 40% by 2027.
+Regulatory load
+62
+New data-residency mandates in 14 markets.
+Customer experience
+71
+Time-to-resolution now a top NPS driver.
+AI-native ops
+84
+Embedded copilots reshape every workflow.
+WHY ACT NOW
+Budgeting window aligns with FY-27 IT planning starting Q4-26.
+Pilot capacity available before peak audit season.
+Two competitors have not yet productised a converged response.
+Confidential — prepared for customer evaluation
+I · CUSTOMER CONTEXT
+I · CUSTOMER CONTEXT
+03 / 18
+CUSTOMER CHALLENGES
+Six structural challenges identified from our discovery sessions with your operating leaders.
+These match what we hear across comparable institutions — and what we have proven we can address with measurable results.
+01
+FRAGMENTED INTAKE
+Customer requests span 11 systems with no canonical case record.
+~ 14 hrs/week per analyst on reconciliation.
+02
+MANUAL APPROVALS
+Approval routing requires email + spreadsheet with no SLA enforcement.
+~ 22% of cases miss SLA by ≥ 1 business day.
+03
+AUDIT POSTURE
+No unified evidence trail — audits require manual reconstruction.
+~ 6 weeks per audit cycle, $1.4M annual cost.
+04
+RISK BLIND SPOTS
+Compliance breaches surface only after escalation.
+~ 3 regulatory findings per year, materially.
+05
+CUSTOMER EXPERIENCE
+No real-time status visibility for customers; high inbound call volume.
+~ 38% of calls are status-only.
+06
+VENDOR SPRAWL
+7 overlapping tools across operations; license & integration burden.
+~ $3.8M annual run-rate avoidable.
+Confidential — prepared for customer evaluation
+I · CUSTOMER CONTEXT
+I · CUSTOMER CONTEXT
+04 / 18
+BUSINESS IMPACT
+The compound annual cost of inaction across these challenges is significant.
+Modelled from public benchmarks, our discovery sessions, and comparable Tier-1 customer deployments. Conservative base case shown.
+CURRENT VS. TARGET — KEY OPERATING METRICS
+Metric	Current	Target	Annual gap
+Cost per case	$78	$48	$5.4M
+Avg cycle time	5.6 days	3.2 days	$3.8M
+SLA adherence	88.4%	99.0%	$2.2M
+Audit prep hours / cycle	1,400 hrs	120 hrs	$1.4M
+License & integration	7 tools	1 platform	$3.8M
+Customer call volume	+38%	baseline	$1.9M
+ESTIMATED ANNUAL LOSS
+$19M
+Composed of margin leakage, FTE inefficiency, and risk-adjusted exposure across the metrics above.
+A coordinated rollout can recover roughly 70% of this within 18 months — modelled in section III.
+Confidential — prepared for customer evaluation
+I · CUSTOMER CONTEXT
+II · SOLUTION
+05 / 18
+SOLUTION OVERVIEW
+Axal is a single operations platform with embedded AI, native compliance, and out-of-box integration.
+Six capabilities consolidate today's seven-tool footprint into one auditable surface, deployable in 12 weeks.
+CAPABILITY 01
+Unified case record
+Canonical case object across intake channels with full lineage.
+CAPABILITY 02
+Workflow & SLA engine
+BPMN runtime with SLA-enforced routing and exception handling.
+CAPABILITY 03
+Embedded AI copilot
+Drafts responses, summarises calls, flags exceptions in real time.
+CAPABILITY 04
+Audit & evidence vault
+Immutable evidence trail with one-click regulator export.
+CAPABILITY 05
+Customer self-service
+Real-time status, document upload, in-app messaging.
+CAPABILITY 06
+Insights & reporting
+Operating KPIs, cohort analytics, regulator-ready packs.
+TRANSFORMATION
+FROM
+11 intake systems
+TO
+One canonical case record
+FROM
+Email-based approvals
+TO
+SLA-enforced routing
+FROM
+Manual audit prep
+TO
+One-click evidence export
+FROM
+Status-only calls
+TO
+Self-service customer portal
+Confidential — prepared for customer evaluation
+II · SOLUTION
+II · SOLUTION
+06 / 18
+HOW IT WORKS
+Cases flow through six steps with clear ownership and complete auditability.
+Every step is logged, time-stamped, and exportable. SLA exceptions auto-route to the right team without manual triage.
+app.axal.com/workflow/case-4812
+Case workflow · Tier-1 customer onboarding
+Automated routing · SLA enforced · audit-logged
+Intake
+STEP 1
+Verify
+STEP 2
+Approve
+STEP 3
+Provision
+STEP 4
+Notify
+STEP 5
+Live case · CASE-4812
+Submitted
+Self-service portal
+08:42
+Auto-verified KYC
+Platform
+08:43
+Routed to approver
+Mia Chen
+08:45
+Approval granted
+Mia Chen
+09:02
+Provisioned
+Platform
+09:03
+Customer notified
+Platform
+09:03
+1
+Intake
+CUSTOMER
+Customer submits via portal, email, or API; case auto-classified.
+2
+Verify
+PLATFORM
+KYC and document checks run automatically against your data sources.
+3
+Approve
+JOINT
+Routed to the right approver(s) with SLA timers and escalation.
+4
+Provision
+PLATFORM
+Downstream systems updated via your existing API/iPaaS.
+5
+Notify
+PLATFORM
+Customer notified across channels; in-app status updates live.
+6
+Evidence
+PLATFORM
+Full trail archived in the audit vault for regulator export.
+Confidential — prepared for customer evaluation
+II · SOLUTION
+II · SOLUTION
+07 / 18
+FEATURE OVERVIEW
+Nine modules covering the full operations lifecycle, modular by design.
+Activate what you need today; extend later without re-platforming.
+◆
+Cases
+·
+Canonical case object
+·
+Multi-channel intake
+·
+Lineage & timeline
+·
+Custom fields per LOB
+◇
+Workflows
+·
+Visual designer
+·
+SLA enforcement
+·
+Conditional routing
+·
+Versioned & auditable
+★
+AI Copilot
+·
+Drafts responses
+·
+Summarises calls
+·
+Detects exceptions
+·
+Human-in-the-loop
+▣
+Documents
+·
+Secure vault
+·
+OCR + classification
+·
+Redaction
+·
+Customer upload portal
+◉
+Self-service portal
+·
+Branded customer UX
+·
+Real-time status
+·
+Document upload
+·
+In-app messaging
+⛨
+Audit & evidence
+·
+Immutable log
+·
+One-click export
+·
+Regulator-friendly packs
+·
+Retention policies
+◐
+Insights
+·
+Operating KPIs
+·
+Cohort analysis
+·
+Forecast accuracy
+·
+Custom dashboards
+◈
+Identity & access
+·
+SSO
+·
+RBAC + ABAC
+·
+Just-in-time access
+·
+Audit log of admin actions
+✦
+Admin & ops
+·
+Tenant config
+·
+Policy management
+·
+Deployment slots
+·
+Health monitoring
+Confidential — prepared for customer evaluation
+II · SOLUTION
+II · SOLUTION
+08 / 18
+USE CASE 01
+Reduce Tier-1 onboarding cycle time from 6 days to under 36 hours.
+CUSTOMER ONBOARDING OPS
+A single workflow replaces 4 systems and 11 manual handoffs, with full KYC and provisioning automation.
+app.axal.com/onboarding
+Case workflow · Tier-1 customer onboarding
+Automated routing · SLA enforced · audit-logged
+Intake
+STEP 1
+Verify
+STEP 2
+Approve
+STEP 3
+Provision
+STEP 4
+Notify
+STEP 5
+Live case · CASE-4812
+Submitted
+Self-service portal
+08:42
+Auto-verified KYC
+Platform
+08:43
+Routed to approver
+Mia Chen
+08:45
+Approval granted
+Mia Chen
+09:02
+Provisioned
+Platform
+09:03
+Customer notified
+Platform
+09:03
+WHAT THE USER DOES
+·
+Customer submits once, in any channel.
+·
+KYC + identity verification runs automatically.
+·
+SLA-enforced approval routes to the right team.
+·
+Provisioning fires across downstream systems.
+MEASURED OUTCOME
+−76%
+cycle-time reduction
+Confidential — prepared for customer evaluation
+II · SOLUTION
+II · SOLUTION
+09 / 18
+USE CASE 02
+Cut servicing cost per case by 38% while improving customer NPS.
+SERVICING OPERATIONS
+Embedded AI drafts responses and surfaces exception cases before they breach SLA — agents focus only on judgment work.
+app.axal.com/servicing
+Axal
+Overview
+Operations
+Customers
+Compliance
+Reports
+Admin
+Operations Console
+OPEN TICKETS
+142
+▼ −24 this wk
+AVG CYCLE TIME
+3.2d
+▼ −1.4d
+SLA ADHERENCE
+98.6%
+▼ +2.1pt
+COST / CASE
+$48
+▼ −18%
+Throughput · last 30 days
+Top exceptions
+SLA breach risk
+Missing approval
+Doc mismatch
+Region change
+Audit hold
+Active workflows
+CASE ID
+STAGE
+OWNER
+REGION
+DUE
+STATUS
+CASE-4812
+Review
+M. Chen
+EU
+Jun 02
+On track
+CASE-4811
+Approval
+J. Becker
+US
+Jun 03
+On track
+CASE-4805
+Intake
+P. Patel
+APAC
+Jun 05
+At risk
+WHAT THE USER DOES
+·
+AI copilot drafts responses agents approve.
+·
+Real-time exception detection.
+·
+Self-service portal absorbs status-only calls.
+·
+Full conversation history with the customer.
+MEASURED OUTCOME
+−38%
+cost per case
+Confidential — prepared for customer evaluation
+II · SOLUTION
+II · SOLUTION
+10 / 18
+USE CASE 03
+Reduce audit preparation from six weeks to four days.
+COMPLIANCE & INTERNAL AUDIT
+Every action, decision, and document is captured in an immutable evidence vault, exportable in regulator-friendly format.
+app.axal.com/audit
+Cost-to-serve analytics
+Filter: last 90 days · all regions
+Cost per case · cohorts
+Platform cohort
+Hybrid
+Legacy
+Cost composition
+Labor 38%
+Vendor 24%
+Rework 18%
+Compliance 12%
+Other 8%
+YOY SAVINGS
+$4.8M
+vs. benchmark
+COST / CASE
+$42
+vs. benchmark
+PRODUCTIVITY
++34%
+vs. benchmark
+TIME SAVED / FTE
+11h/wk
+vs. benchmark
+WHAT THE USER DOES
+·
+Immutable evidence trail per case.
+·
+One-click regulator export.
+·
+Pre-built packs for common audits.
+·
+Continuous monitoring against policy.
+MEASURED OUTCOME
+−93%
+audit prep cycle
+Confidential — prepared for customer evaluation
+II · SOLUTION
+III · VALUE
+11 / 18
+ROI ANALYSIS
+Modelled three-year value of $42M against a $4.8M total investment.
+Base case uses your discovery numbers + comparable benchmarks. Sensitivity analysis available on request.
+VALUE COMPOSITION · YEAR 1 VS YEAR 3
+Cost-out (ops)
+$3.2M
+$14M
+Audit savings
+$900K
+$3.8M
+Vendor consolidation
+$2.1M
+$8.4M
+Risk avoidance
+$1.4M
+$5.6M
+Customer satisfacti…
+$1.8M
+$9.8M
+Year 1
+Year 3
+INVESTMENT
+$4.8M
+License + implementation
+PAYBACK
+11mo
+Modeled base case
+NPV (3YR)
+$28M
+10% discount rate
+IRR (3YR)
+142%
+Above hurdle
+Confidential — prepared for customer evaluation
+III · VALUE
+III · VALUE
+12 / 18
+CUSTOMER SUCCESS
+Comparable customers have delivered the outcomes we model for you.
+All three operate in regulated industries with directly comparable case volumes.
+BANKING
+CASE 01
+Northbridge Trust
+Consolidated 9 servicing systems on Axal in 14 weeks; reduced cost-to-serve by 41% and lifted NPS by 12 points.
+COST-TO-SERVE
+−41%
+HEALTHCARE
+CASE 02
+Atlas Health Group
+Deployed across 14 hospitals; clinician admin reduced by 4.2 hours/week. Audit prep cut from 5 weeks to 3 days.
+ADMIN SAVED
+4.2h/wk
+PUBLIC SECTOR
+CASE 03
+Ministry of Transport
+Replaced 11 legacy systems on a single platform under the Cloud-First mandate. 100% on-shore data residency maintained.
+SYSTEMS CONSOLIDATED
+11 → 1
+Confidential — prepared for customer evaluation
+III · VALUE
+III · VALUE
+13 / 18
+COMPETITIVE COMPARISON
+Axal leads on consolidation, audit posture, and time-to-value.
+Independent functional scoring across the criteria most often cited in your peer-group RFPs.
+Capability	Axal	Incumbent A	Incumbent B	Build in-house
+Time to first value	
+Audit & evidence posture	
+Embedded AI quality	
+Out-of-box integrations	
+Vendor consolidation	
+Total cost of ownership	
+Regulatory & residency	
+Customer experience	
+SCORING: ●●●● = LEADER · ●●●○ = STRONG · ●●○○ = ADEQUATE · ●○○○ = LIMITED
+Confidential — prepared for customer evaluation
+III · VALUE
+IV · IMPLEMENTATION
+14 / 18
+DEPLOYMENT PLAN
+A four-phase, 18-week plan from kickoff to full rollout — pilot live in 8 weeks.
+Phased delivery with clear ownership across both teams. Each phase has explicit exit criteria reviewed in joint steering.
+Phase 1 · Weeks 1–2
+Discover
+MILESTONES
+·
+Workshops with ops + IT
+·
+Tech baseline review
+·
+Joint OKRs
+Owner: Joint
+Phase 2 · Weeks 3–8
+Pilot
+MILESTONES
+·
+Pilot scope live
+·
+First 1,000 cases processed
+·
+KPI baseline established
+Owner: Axal lead
+Phase 3 · Weeks 9–14
+Scale
+MILESTONES
+·
+2 additional LOBs onboarded
+·
+Self-service portal live
+·
+Integrations completed
+Owner: Joint
+Phase 4 · Weeks 15–18
+Optimise
+MILESTONES
+·
+Audit pack delivered
+·
+Steady-state operations
+·
+Phase-2 backlog ratified
+Owner: Customer lead
+Confidential — prepared for customer evaluation
+IV · IMPLEMENTATION
+IV · IMPLEMENTATION
+15 / 18
+INTEGRATION ARCHITECTURE
+A composable architecture that plugs into your existing stack — no rip-and-replace.
+Five-layer reference architecture with out-of-box adapters for your current systems of record.
+REFERENCE ARCHITECTURE
+L1
+Experience layer
+Branded customer portal, agent console, mobile.
+L2
+Workflow & automation
+BPMN runtime, SLA engine, approval chains.
+L3
+AI & decision
+AI copilot, retrieval, evaluations, full audit log.
+L4
+Data & integration
+CDC pipelines, event streams, iPaaS-friendly.
+L5
+Identity & governance
+SSO, RBAC, audit log, data residency by tenant.
+OUT-OF-BOX INTEGRATIONS
+Salesforce
+REST + Connect
+SAP S/4HANA
+IDoc + OData
+ServiceNow
+REST + Webhook
+Workday
+REST + SCIM
+Snowflake
+JDBC + share
+Microsoft 365
+Graph API
+Active Directory
+SAML + SCIM
+Kafka
+Avro topics
+Confidential — prepared for customer evaluation
+IV · IMPLEMENTATION
+IV · IMPLEMENTATION
+16 / 18
+SECURITY & COMPLIANCE
+Enterprise-grade security and compliance baked into every layer.
+Audited against the controls your CISO and DPO will require. Single-tenant isolation available per workspace.
+✓
+SOC 2 II
+ISO 27001
+ISO 27701
+HIPAA
+PCI DSS
+GDPR
+UPTIME SLA
+99.95%
+RPO
+5m
+RTO
+60m
+DATA PROTECTION
+✓
+AES-256 at rest, TLS 1.3 in transit
+✓
+Per-tenant encryption keys
+✓
+Column-level encryption for PII
+✓
+Field-level redaction in logs
+IDENTITY & ACCESS
+✓
+SSO (SAML, OIDC)
+✓
+RBAC + ABAC
+✓
+Just-in-time access
+✓
+Privileged action approvals
+AUDIT & MONITORING
+✓
+Immutable activity log
+✓
+Real-time anomaly detection
+✓
+SIEM integration
+✓
+Regulator-ready export packs
+RESILIENCE
+✓
+Multi-AZ + multi-region
+✓
+Daily encrypted backups
+✓
+Disaster-recovery runbooks
+✓
+Quarterly DR tests
+Confidential — prepared for customer evaluation
+IV · IMPLEMENTATION
+V · COMMERCIALS
+17 / 18
+PRICING & COMMERCIAL MODEL
+Transparent, subscription-based pricing with predictable economics.
+Choose the package that matches your initial scope; expand modularly without re-contracting.
+Essential
+$180K
+/year
+UP TO 100 NAMED
+✓
+Core platform
+✓
+1 region
+✓
+Standard SLA
+✓
+Email support
+RECOMMENDED
+Professional
+$420K
+/year
+UP TO 500 NAMED
+✓
+Full platform
+✓
+2 regions
+✓
+Enhanced SLA
+✓
+24×5 support
+Enterprise
+$950K
+/year
+UP TO 2,500 NAMED
+✓
+All modules
+✓
+Global
+✓
+Premium SLA
+✓
+24×7 support
+✓
+Named CSM
+Strategic
+$1.8M
+/year
+UNLIMITED
+✓
+Single-tenant option
+✓
+Custom residency
+✓
+Premium SLA
+✓
+Co-dev backlog
+PROFESSIONAL SERVICES
+Implementation (pilot)
+$280K fixed
+Production rollout
+T&M, capped
+Training & enablement
+Included Tier 2+
+Premium support
+$120K / yr
+Embedded CSM
+$180K / yr
+Custom integrations
+SOW-based
+ENTERPRISE DISCOUNT
+Multi-year and prepay discounts available (5% / 12% / 18% for 1/2/3-year prepay). Enterprise+ qualifies for an additional 8% partner discount where applicable.
+Confidential — prepared for customer evaluation
+V · COMMERCIALS
+V · COMMERCIALS — NEXT STEPS
+18 / 18
+NEXT STEPS
+A 90-day path to a signed pilot, with three decisions in the next 14 days.
+We propose moving immediately to a contained pilot with documented success criteria — and an explicit decision point on full rollout.
+PILOT PROPOSAL
+Continental × Axal — Servicing Operations Pilot
+DURATION
+120 days
+INVESTMENT
+$280K
+SPONSOR
+Guillaume Lauzier — CEO, Axal
+SUCCESS CRITERIA
+·
+Cost per case reduced by ≥ 30% on pilot scope.
+·
+SLA adherence ≥ 98% on pilot LOB.
+·
+Audit pack delivered for pilot period.
+·
+Internal NPS ≥ 50 among pilot users.
+DECISION TIMELINE
+W1
+NDA + scope finalised
+Both
+W2
+Joint steering kickoff
+Both
+W3
+Pilot SOW signed
+Procurement
+W6
+Pilot configuration complete
+Axal
+W8
+Pilot go-live
+Both
+W14
+Go/no-go on Phase 2
+Steering
+A measurable pilot in 90 days. A consolidated operating platform in 18 weeks. Let's start the conversation that gets us there.
+Guillaume Lauzier — CEO, Axal · guillaume@axal.vc
+Confidential — prepared for customer evaluation
+NEXT STEPS
+
+Preview
+
+COMMERCIAL · 18 SLIDES
+Sales — Customer-facing
+18 slides · customer-facing · SVG product screens
+
+EXECUTIVE SUMMARY
+01 / 12
+STRATEGIC PARTNERSHIP PROPOSAL
+A joint operating model that unlocks $180M of value over three years across distribution, innovation, and operating leverage.
+A defined partnership between Axal and Northbridge to combine Axal's technology platform with Northbridge's enterprise distribution. Built to compound, governed for accountability, structured for clear economics on both sides.
+PILLAR 01
+Combined market access
+Northbridge channel + Axal product reaches 6× more enterprise buyers in the same fiscal year.
+PILLAR 02
+Operating leverage
+Shared platform reduces per-deal delivery cost by 38% within twelve months.
+PILLAR 03
+Defensible IP
+Co-developed reference architecture creates a category position neither party can match alone.
+$180M
+three-year joint value creation · 36-month horizon
+PREPARED FOR
+Northbridge Industries — Office of the COO
+A
+Operator
+N
+Partner
+Joint value
+Created
+Axal Partnerships Team
+May 2026
+Confidential · Prepared for executive review
+EXECUTIVE SUMMARY
+INDUSTRY CONTEXT
+02 / 12
+INDUSTRY CONTEXT
+The buyer is consolidating. The window to lead is 18 months.
+Across enterprise IT, three structural shifts are converging. Buyers expect fewer, deeper vendor relationships; AI is reshaping operating models; and regulators are codifying data-handling standards that favour integrated providers.
+01
+Vendor consolidation
+CIOs cutting 40% of vendors by 2027.
+02
+AI-native procurement
+AI capability now a top-3 RFP requirement.
+03
+Outcome-based pricing
+Buyers pay for measurable lift, not seats.
+04
+Regulatory tightening
+New data residency rules in 14 markets.
+CROSS-INDUSTRY GROWTH RATES · 3-YR CAGR
+Source: industry analysts, normalized
+0%
+25%
+50%
+75%
+100%
++78%
+Vendor consolidation
++64%
+AI-native procurement
++52%
+Outcome-based pricing
++41%
+Regulatory tightening
+WHY NOW
+Buying cycles align with FY-27 budget planning starting Q4-26.
+Competitive set has not yet productised a joint offering.
+Both organizations have available capacity in 2026 to execute.
+Confidential · Prepared for executive review
+INDUSTRY CONTEXT
+PARTNER CHALLENGES
+03 / 12
+CURRENT STATE
+Northbridge faces four structural challenges with quantifiable cost.
+These are the constraints we hear repeatedly from Northbridge field leadership and recent customer interviews.
+DISTRIBUTION
+Enterprise reps spend 64% of cycles on integration scoping, not selling.
+EST. ANNUAL COST
+$42M
+INNOVATION
+Average 18-month product cycle vs. 6-month buyer expectation.
+EST. ANNUAL COST
+$28M
+DELIVERY
+Fragmented implementation partners drive 22% project overrun.
+EST. ANNUAL COST
+$36M
+RETENTION
+Lack of platform telemetry leaves churn signals invisible until renewal.
+EST. ANNUAL COST
+$19M
+COMPOUNDED ANNUAL COST OF INACTION
+$125M
+Across the four challenge areas above.
+Without a structural change, these costs compound year-over-year and erode competitive position in adjacent markets. A coordinated partnership materially shifts the trajectory.
+Confidential · Prepared for executive review
+PARTNER CHALLENGES
+SHARED OPPORTUNITY
+04 / 12
+SHARED OPPORTUNITY
+Four prioritized opportunities map to immediate, joint-executable plays.
+Plotted on strategic value × ease of execution. Q1 and Q2 are the high-conviction starting points.
+Q1 · BUNDLED ENTERPRISE OFFER
+PARTNER GAIN
+Larger ACVs, fewer escalations.
+OUR GAIN
+Channel coverage in regulated industries.
+Q2 · JOINT REFERENCE ARCHITECTURE
+PARTNER GAIN
+Differentiated buyer narrative.
+OUR GAIN
+Reference proof-points across 6 sectors.
+Q3 · CO-DELIVERED IMPLEMENTATION
+PARTNER GAIN
+Lower delivery cost, higher NPS.
+OUR GAIN
+Faster customer time-to-value.
+Q4 · SHARED INSIGHT & TELEMETRY
+PARTNER GAIN
+Earlier renewal signals.
+OUR GAIN
+Better product roadmap signal loop.
+ADDRESSABLE JOINT VALUE
+$425M
+OPPORTUNITY PRIORITIZATION · 2×2
+Q1
+Bundled enterprise offer
+Q2
+Joint reference architecture
+Q3
+Co-delivered implementation
+Q4
+Shared insight & telemetry
+Strategic value →
+Ease of execution →
+Confidential · Prepared for executive review
+SHARED OPPORTUNITY
+SOLUTION OVERVIEW
+05 / 12
+SOLUTION OVERVIEW
+A two-party operating model with a clearly defined joint surface.
+Each party owns what it does best. The joint surface is governed by a steering committee with quarterly review.
+PARTNERSHIP OPERATING MODEL
+Joint roadmap & IP
+Customer access
+Distribution
+Platform
+Implementation
+A
+Operator
+N
+Partner
+Customers
+End demand
+Delivery
+Joint ops
+PARTNER RESPONSIBILITIES
+·
+Enterprise account ownership
+·
+First-line implementation delivery
+·
+Customer success motion
+·
+Regional regulatory liaison
+OUR RESPONSIBILITIES
+·
+Platform & product roadmap
+·
+Reference architecture & integration kits
+·
+Tier-2 technical support
+·
+Joint analytics & customer health
+JOINT RESPONSIBILITIES
+·
+Quarterly roadmap & joint OKRs
+·
+Co-marketing & analyst briefings
+·
+Pricing & packaging committee
+·
+Executive sponsor governance
+Confidential · Prepared for executive review
+SOLUTION OVERVIEW
+PRODUCT & PLATFORM
+06 / 12
+PRODUCT & PLATFORM
+A composable platform with documented integration points into Northbridge systems.
+Five-layer reference architecture, deployable in single-tenant or shared-tenant modes, designed for joint extensibility.
+REFERENCE ARCHITECTURE
+Experience layer
+Co-branded portals, embeddable widgets, mobile.
+Workflow & automation
+BPMN runtime, approval chains, SLA orchestration.
+AI & decision
+Dedicated AI gateway, retrieval, evaluations, audit.
+Data & integration
+CDC pipelines into Northbridge data lake, event streams.
+Identity & governance
+SSO, RBAC, audit log, data residency by tenant.
+INTEGRATIONS
+Salesforce CRM
+SAP S/4HANA
+ServiceNow
+Workday
+Snowflake
+Microsoft 365
+INTEGRATION PATTERNS
+Salesforce CRM
+REST + Connect
+SAP S/4HANA
+IDoc + OData
+ServiceNow
+REST + Webhook
+Workday
+REST + SCIM
+Snowflake
+JDBC + share
+Microsoft 365
+Graph API
+DESIGNED FOR ENTERPRISE
+Multi-region · SOC 2 Type II · audit logs · role-based access · single-tenant isolation optional per workspace.
+Confidential · Prepared for executive review
+PRODUCT & PLATFORM
+BUSINESS BENEFITS
+07 / 12
+QUANTIFIED OUTCOMES
+Quantified outcomes across four executive KPIs over a three-year horizon.
+Numbers grounded in comparable deployments (see Case Studies). Conservative assumptions in the base case.
+ANNUAL JOINT REVENUE
+$92M
++38% vs. baseline
+New + expand across 3 verticals.
+DELIVERY COST
+−38%
+per implementation
+Shared playbooks & tooling.
+WIN RATE
++24pt
+vs. solo bids
+On joint enterprise opportunities.
+NRR
+128%
++18pt YoY
+Cross-sell of joint modules.
+IMPACT BY CATEGORY · YEAR 1 VS YEAR 3
+$ value created · attributable to partnership
+New revenue
+$18M
+$92M
+Cost-out
+$8.0M
+$36M
+Risk reduction
+$4.0M
+$22M
+Retention uplift
+$6.0M
+$30M
+Year 1
+Year 3
+Confidential · Prepared for executive review
+BUSINESS BENEFITS
+IMPLEMENTATION ROADMAP
+08 / 12
+IMPLEMENTATION ROADMAP
+A three-phase, 18-month delivery plan with measurable exit criteria.
+Phase 1 is a contained, low-risk pilot. Phase 2 productizes. Phase 3 scales globally.
+PHASED DELIVERY
+Months 1–4
+Months 5–10
+Months 11–18
+Phase 1
+Pilot
+Pilot
+Phase 2
+Productize
+Productize
+Phase 3
+Scale
+Scale
+PHASE 1
+Months 1–4
+Pilot
+OBJECTIVES
+· Stand up joint architecture
+· Win 3 lighthouse accounts
+· Validate delivery playbook
+SUCCESS METRIC
+3 lighthouse customers live
+PHASE 2
+Months 5–10
+Productize
+OBJECTIVES
+· Codify offering
+· Train channel
+· Launch co-marketing
+SUCCESS METRIC
+$15M qualified pipeline
+PHASE 3
+Months 11–18
+Scale
+OBJECTIVES
+· Expand to 3 regions
+· Reach 50 customers
+· Cross-sell modules
+SUCCESS METRIC
+$92M ARR run-rate
+Confidential · Prepared for executive review
+IMPLEMENTATION ROADMAP
+VALIDATION
+09 / 12
+PROOF IN MARKET
+Comparable partnerships have delivered the outcomes we model.
+Selected from operating deployments across financial services, healthcare, and the public sector.
+FINANCIAL SERVICES
+CASE 01
+Continental Bank
+Migrated 4 in-house systems onto the joint platform in 9 months; cut compliance cycle time by 62%.
+COMPLIANCE CYCLE
+−62%
+HEALTHCARE
+CASE 02
+Atlas Health Group
+Deployed across 14 hospitals; reduced clinician admin by 4.2 hours/week; NPS 71.
+CLINICIAN HOURS SAVED
+4.2/wk
+PUBLIC SECTOR
+CASE 03
+Ministry of Transport
+Replaced 11 legacy systems on a single platform under Cloud-First mandate; 100% on-shore data residency.
+SYSTEMS CONSOLIDATED
+11 → 1
+180+
+ENTERPRISE CUSTOMERS
+24
+COUNTRIES DEPLOYED
+68
+AVG. CUSTOMER NPS
+< 90d
+JOINT GO-LIVE SLA
+Confidential · Prepared for executive review
+VALIDATION
+COMMERCIAL STRUCTURE
+10 / 12
+COMMERCIAL STRUCTURE
+A revenue-share model with predictable economics and aligned incentives.
+Designed so each party invests where it controls outcomes — and shares upside on the joint surface.
+REVENUE FLOW
+REVENUE SHARE + CO-SELL
+Customer
+revenue
+Northbridge — channel
+45% of net
+Axal — platform
+35% of net
+Joint — services
+15% of net
+Joint marketing fund
+5% of net
+Northbridge — channel: Recognized at deal-close, monthly settlement.
+Axal — platform: Subscription license, billed quarterly.
+Joint — services: Shared delivery margin, 50/50 split.
+Joint marketing fund: Reinvested in demand generation.
+PRICING TIERS
+Essential
+Core platform · 1 region
+$180K/yr
+Professional
+Full platform · 2 regions
+$420K/yr
+Enterprise
+All modules · global
+$950K/yr
+Strategic
+Custom · single-tenant
+$1.8M/yr
+KEY TERMS
+·
+3-year initial term, 2-year auto-renew with 12-month notice.
+·
+Exclusivity by named vertical, not geography.
+·
+Joint IP held in escrow; revert rights on termination.
+·
+Annual MDF: 5% of joint net revenue.
+Confidential · Prepared for executive review
+COMMERCIAL STRUCTURE
+GOVERNANCE & RISK
+11 / 12
+GOVERNANCE & RISK
+Governance and risk frameworks adapted from Northbridge operating standards.
+Decision rights are explicit. Escalation paths are short. Risk is reviewed quarterly against a shared register.
+GOVERNANCE BODIES
+Executive Steering
+Quarterly
+COO (NB) · CEO (Axal) · GC each side
+Strategy, P&L review, escalations, scope changes.
+Joint Operating Council
+Monthly
+VP Channel · VP Product · VP Delivery
+Roadmap, pipeline, customer health, pricing.
+Customer Council
+Semi-annual
+8 customer execs · both teams
+Voice-of-customer, feature priorities.
+Risk & Compliance Committee
+Monthly
+CISO each side · DPO · Legal
+Data, security, regulatory, incidents.
+COMPLIANCE & CERTIFICATIONS
+SOC 2 TYPE II
+ISO 27001
+ISO 27701
+HIPAA
+PCI DSS
+GDPR
+CLOUD-FIRST (PS)
+RISK REGISTER
+MED
+Channel conflict with existing Northbridge partners
+MED
+Data residency divergence across regions
+LOW
+Joint IP attribution disputes
+LOW
+Margin compression on co-delivered services
+Channel conflict with existing Northbridge partners: Named accounts list ratified at quarterly steering; conflict-resolution SLA of 5 business days.
+Data residency divergence across regions: Region-locked tenants; pre-approved residency matrix maintained jointly by both DPOs.
+Joint IP attribution disputes: Joint IP escrow; per-contribution attribution log; mediation clause before arbitration.
+Margin compression on co-delivered services: Floor margin set in MSA; semi-annual margin review with rebalancing mechanism.
+Confidential · Prepared for executive review
+GOVERNANCE & RISK
+NEXT STEPS
+12 / 12
+RECOMMENDED ACTIONS
+A 90-day path to a signed pilot, with three clear decisions in the next 14 days.
+We propose moving immediately to a contained pilot, with the option to expand based on documented success criteria.
+RECOMMENDED PILOT
+Northbridge × Axal — Financial Services Pilot
+DURATION
+120 days
+INVESTMENT
+$1.4M
+SPONSOR
+Guillaume Lauzier — CEO, Axal Ventures
+SUCCESS CRITERIA
+·
+Three lighthouse customers live and reference-able.
+·
+$15M qualified joint pipeline at end of pilot.
+·
+Delivery NPS ≥ 65 across pilot customers.
+·
+Joint operating playbook documented and ratified.
+DECISION TIMELINE
+W1
+NDA + scope
+W2
+Steering kickoff
+W4
+Pilot SOW signed
+W6
+First customer live
+W10
+Mid-pilot review
+W14
+Go/no-go on Phase 2
+Let's convert a $180M opportunity into a 90-day pilot — and a decade of joint advantage.
+Guillaume Lauzier — CEO, Axal Ventures · guillaume@axal.vc
+Confidential · Prepared for executive review
+NEXT STEPS
+
+Preview
+
+COMMERCIAL · 12 SLIDES
+Partnership / BD
+12 slides · executive consulting · SVG diagrams
+
+Demo Co.
+Teaser · 2026
+CONFIDENTIAL
+[Irresistible one-line hook]
+THE OPPORTUNITY
+[Market shift in one sentence]
+WHY US
+[Team line]
+TRACTION
+$48k MRR · 22% MoM · 312 paying.
+RAISING
+$2,500,000
+STAGE
+Seed
+hello@demoCo.example
+Full deck on request
+
+Preview
+
+COMMERCIAL · 1 SLIDES
+One-Pager Teaser
+1 page · cold outreach
+
+I · VISION
+01 / 42
+SERIES A · CATEGORY CREATION
+Every revenue team in the world will operate like the best one.
+We build the operating layer that turns scattered tools, dashboards and meetings into a single system of action — so every revenue team can compound performance the way category leaders do.
+CATEGORY WE ARE CREATING
+Revenue operating systems
+The CRM was the system of record. We are the system of action.
+SERIES A · MAY 2026
+Loopline
+The operating system for revenue teams.
+L
+Loopline, Inc.
+May 2026
+Confidential · Institutional distribution only
+01 / 42
+I · PROBLEM
+02 / 42
+THE PROBLEM
+Today's revenue teams ship more tools than they ship deals.
+The average B2B seller spans 17 SaaS tools, switches context 1,200×/day, and spends 64% of working time on administration. Leaders manage their teams from dashboards that lag reality by 24–48 hours.
+VISIBILITY
+Pipeline truth lives in spreadsheets and Slack, not in the CRM.
+24–48h lag · slipped deals surface in QBR
+EXECUTION
+Top reps win on hustle; the middle 60% forget to follow up.
+~ 32% of qualified pipeline ages out
+COACHING
+Leaders coach the top 20%; everyone else is invisible.
+~ 42% longer ramp · uneven quota attainment
+Confidential · Institutional distribution only
+02 / 42
+I · INSIGHT
+03 / 42
+OUR NON-CONSENSUS INSIGHT
+The next platform shift is from system of record to system of action.
+CRMs were built when sellers logged data. Today's sellers expect the platform to do the next action for them — and AI now makes that economical.
+01
+AI quality has crossed the threshold where every revenue team will adopt a copilot — not optional, not a tool, but the operating layer.
+02
+Buyers consolidated 40% of vendors since 2023. The winners absorb 4–6 tools into one workspace.
+03
+Outcome-priced commercials now align incentives: we win when forecast accuracy lifts.
+04
+Distribution is converging on a single platform per company; the operating layer wins the strategic seat.
+WHY NOW
+·
+AI quality finally cleared the production bar.
+·
+Buyers consolidating 40% of vendors.
+·
+Two incumbents distracted by post-IPO repricing.
+·
+Outcome-priced procurement validated.
+Confidential · Institutional distribution only
+03 / 42
+I · SOLUTION
+04 / 42
+OUR SOLUTION
+Loopline replaces the revenue tool stack with one operating layer.
+We unify pipeline, communication, content and coaching into a single system that drafts the next action — and learns from every call, every email, every deal.
+BEFORE
+·
+17 SaaS tools, no truth
+·
+Reps forget to follow up
+·
+Forecast = vibes
+·
+Top-rep-only coaching
+·
+CRM as a logging chore
+AFTER
+✓
+One workspace
+✓
+Drafts queued, one click
+✓
+Forecast = math + signal
+✓
+Every rep coached on every call
+✓
+CRM that does the next action
+Confidential · Institutional distribution only
+04 / 42
+I · PRODUCT
+05 / 42
+PRODUCT ARCHITECTURE
+A composable architecture that drops in around your CRM, not on top of it.
+Five layers, deployable in 14 days. Open APIs, transparent AI evaluations, audit posture from day one.
+L1
+Experience
+Workspaces, mobile, embeds, partner portals.
+L2
+Workflow
+Playbooks, motions, SLA enforcement.
+L3
+AI & decision
+Copilot, retrieval, evaluations, audit log.
+L4
+Data & integration
+CDC pipelines, event streams, CRM-in/out.
+L5
+Identity & governance
+SSO, RBAC, tenant-grade isolation.
+WORKFLOW
+1.
+Capture signals from calls, email, intent, usage.
+2.
+Synthesize the deal story in one paragraph.
+3.
+Draft the next move (email / agenda / clip).
+4.
+Rep approves; system fires action + logs evidence.
+5.
+Coach loop: every call scored against your playbook.
+Confidential · Institutional distribution only
+05 / 42
+I · MARKET
+06 / 42
+MARKET OPPORTUNITY
+$84B market, fragmented, ready for a platform shift.
+The combined revenue, sales-engagement, intelligence and enablement markets total $84B; we believe a single operating layer is in a position to absorb 12–15% of that pie within 8 years.
+TAM
+$84B
+SAM
+$18B
+SOM
+$1.4B
+CAGR 22%
+EXPANSION PATHS
+Customer Success · Marketing Ops · Partner Ops · International
+TAM · $84B
+SAM · $18B
+SOM · $1.4B
+Confidential · Institutional distribution only
+06 / 42
+I · TRACTION
+07 / 42
+TRACTION
+$3.2M ARR, 38% MoM growth, 138% NRR — the fastest cohort we have ever seen at this stage.
+142 paying customers in 14 months. 92% gross retention. 74 NPS.
+ARR
+$3.2M
++580% YoY
+CUSTOMERS
+142
+NRR
+138%
+best-in-class
+GROSS MARGIN
+84%
+ARR — last 14 months
+▲ 580% YOY
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Nov
+Dec
+Jan '27
+Feb '27
+$0
+$600K
+$1.2M
+$1.8M
+$2.4M
+CUSTOMERS
+Northwind
+Acme
+Globex
+Initech
+Hooli
+Stark
+Wonka
+Soylent
+Confidential · Institutional distribution only
+07 / 42
+I · BUSINESS MODEL
+08 / 42
+BUSINESS MODEL
+Per-seat subscription with usage upside; gross margin 84%, payback 8 months.
+Three tiers; consumption-priced AI usage above tier limit. Outcome credits available for enterprise buyers seeking guaranteed lift.
+REVENUE STREAMS
+Subscription
+78%
+Usage
+14%
+Services
+5%
+Partner
+3%
+TIERS · AVG ACV
+Team	$24K	38%
+Business	$72K	41%
+Enterprise	$220K	21%
+CAC
+$18K
+LTV
+$168K
+9.3× CAC
+PAYBACK
+8mo
+Confidential · Institutional distribution only
+08 / 42
+I · GO-TO-MARKET
+09 / 42
+GO-TO-MARKET
+Product-led entry, sales-led expansion, partner-led enterprise.
+Bottoms-up adoption inside revenue teams; AE motion expands to the org chart; partners unlock regulated enterprise.
+Channel performance
+Self-serve
+Outbound
+Partner
+Events
+0
+1500
+3000
+4500
+6000
+SALES MOTION
+1.
+Free workspace, real value in 10 min.
+2.
+Usage signal triggers team upgrade.
+3.
+AE engages on second team or +25 seats.
+4.
+CSM expands across the org chart.
+5.
+Partner overlay closes regulated enterprise.
+EXPANSION PLAYS
+·
+Adjacent surface (Customer Success).
+·
+Geographic expansion (UK / DE / FR).
+·
+Marketplace + ecosystem fees.
+·
+Outcome-priced enterprise tier.
+Confidential · Institutional distribution only
+09 / 42
+I · COMPETITION & MOAT
+10 / 42
+COMPETITION & MOAT
+Compounding moats: data network, workflow lock-in, distribution, AI-evaluation flywheel.
+Every customer makes the product better. Every workflow embedded creates switching cost. Every channel deepens our edge.
+MOAT PILLARS
+Data network
+Workflow
+Distribution
+AI evals
+Brand
+POSITIONING
+Breadth →
+Depth →
+Us
+Incumbent A
+Incumbent B
+Point tool C
+Build in-house
+Data network
+4/4
+Every call, deal, email improves models.
+Workflow
+4/4
+Embedded motions = high switching cost.
+Distribution
+3/4
+Self-serve + AE + partner overlay.
+AI evals
+3/4
+Proprietary evaluation harness.
+Brand
+2/4
+Top of mind in revenue-leader Slack.
+Confidential · Institutional distribution only
+10 / 42
+I · TEAM
+11 / 42
+TEAM
+Operators who have done this once — building it the way it should be done.
+Two co-founders with 18 years combined building and running revenue teams at category-defining companies.
+SM
+Sofia Marquez
+CEO & Co-founder
+Ran a 120-person revenue org through IPO. Built playbooks her industry now copies.
+PREVIOUSLY
+VP Revenue · Plaid
+DO
+Daniel Okafor
+CTO & Co-founder
+Shipped AI products to 40M users. First engineer at a unicorn; rebuilt Stripe pipeline ML.
+PREVIOUSLY
+Staff Eng · Stripe
+HI
+Hana Ito
+Head of Design
+Designed the product surfaces investors keep showing other founders as the bar.
+PREVIOUSLY
+Design Lead · Linear
+ADVISORS
+Jeff Lawson (Twilio) · Tracy Young (PlanGrid) · Lenny Rachitsky
+EXISTING INVESTORS
+Seed: Initialized Capital · Angels: Lawson, Young, Buchheit
+Confidential · Institutional distribution only
+11 / 42
+I · FUNDRAISE
+12 / 42
+WE ARE RAISING
+$12M
+Series A Preferred · $80M pre-money · 24-month runway
+A $12M Series A to win the operating layer for revenue.
+24 months runway. Capital deployed against engineering quality, GTM scale, and one adjacent product surface live in Year 1.
+The CRM was built when sellers logged data. We are built for what comes next. Come build it with us.
+sofia@loopline.ai
+USE OF FUNDS
+Engineering & AI
+55%
+GTM & Customer Success
+30%
+Brand, marketing, ops
+15%
+MILESTONES
+·
+$10M ARR by Q4 2026
+·
+500 customers, 3 verticals
+·
+EU launch live
+·
+Adjacent surface (CS) GA
+Confidential · Institutional distribution only
+12 / 42
+APPENDIX
+13 / 42
+SECTION A
+Market
+Confidential · Institutional distribution only
+13 / 42
+APPENDIX · A1
+A1
+A1
+Industry landscape
+CRM core
+Engagement
+Intelligence
+Enablement
+AI copilots
+$0
+$6.0B
+$12B
+$18B
+$24B
+GROWTH BY SEGMENT
+CRM core
++9%
+Engagement
++22%
+Intelligence
++26%
+Enablement
++19%
+AI copilots
++64%
+Confidential · Institutional distribution only
+14 / 42
+APPENDIX · A2
+A2
+A2
+Market segmentation
+Tier	Share	Avg ACV
+SMB (< 50)	48%	$14K
+Mid-market (50–500)	34%	$72K
+Enterprise (500+)	18%	$240K
+Confidential · Institutional distribution only
+15 / 42
+APPENDIX · A3
+A3
+A3
+Market growth drivers
+AI quality crossing threshold
+38%
+Production-grade reasoning at sub-$0.01 per request.
+Vendor consolidation
+24%
+CIOs cutting 40% of vendors by 2027.
+Outcome-priced procurement
+18%
+Buyers pay for measurable lift.
+Distributed teams default
+12%
+Async revenue motion is the new normal.
+Regulatory data localization
+8%
+Drives single-tenant deployments.
+Confidential · Institutional distribution only
+16 / 42
+APPENDIX · A4
+A4
+A4
+Geographic expansion opportunities
+Region	TAM	Status
+North America	$38B	LIVE
+EU	$24B	SCALING
+UK	$6.0B	LIVE
+APAC	$14B	ROADMAP
+LatAm	$2.0B	ROADMAP
+Confidential · Institutional distribution only
+17 / 42
+APPENDIX
+18 / 42
+SECTION B
+Product
+Confidential · Institutional distribution only
+18 / 42
+APPENDIX · A5
+A5
+A5
+Detailed product architecture
+L1
+Experience
+Workspaces · Mobile · Embeds · Partner portal
+L2
+Workflow
+Playbooks · Motions · SLA engine
+L3
+AI & decision
+Copilot · Retrieval · Evals · Audit log
+L4
+Data & integration
+CDC · Streams · CRM-in/out · Webhooks
+L5
+Identity & governance
+SSO · RBAC · Audit · Residency
+Confidential · Institutional distribution only
+19 / 42
+APPENDIX · A6
+A6
+A6
+Technology stack
+EDGE & RUNTIME
+Cloudflare Workers
+Durable Objects
+Hono
+DATA
+D1
+R2
+Vectorize
+Snowflake share
+AI
+Workers AI
+AI Gateway
+Llama 3.3 70B
+Llama Guard
+FRONTEND
+React
+TypeScript
+Tailwind
+Framer Motion
+OPS & SEC
+Cloudflare Access
+WAF
+Turnstile
+SOC 2
+COMMS
+Workers Email
+Twilio (fallback)
+Confidential · Institutional distribution only
+20 / 42
+APPENDIX · A7
+A7
+A7
+Data architecture
+1
+Ingest
+Workers + Queues
+80 ms
+2
+Enrich
+AI Gateway
+220 ms
+3
+Store
+D1 / Vectorize
+18 ms
+4
+Serve
+Cache + Workers
+35 ms
+5
+Audit
+R2 + ledger
+90 ms
+Confidential · Institutional distribution only
+21 / 42
+APPENDIX · A8
+A8
+A8
+Security architecture
+DATA PROTECTION
+✓
+AES-256 at rest
+✓
+TLS 1.3 in transit
+✓
+Per-tenant keys
+✓
+Field-level redaction
+IDENTITY & ACCESS
+✓
+SSO (SAML, OIDC)
+✓
+RBAC + ABAC
+✓
+JIT access
+✓
+Privileged action approvals
+AUDIT & MONITORING
+✓
+Immutable log
+✓
+SIEM export
+✓
+Anomaly detection
+RESILIENCE
+✓
+Multi-region
+✓
+Daily encrypted backups
+✓
+Quarterly DR tests
+Confidential · Institutional distribution only
+22 / 42
+APPENDIX · A9
+A9
+A9
+Product roadmap
+Q2 2026 · Foundations
+· Workspaces GA
+· Auto-handoff
+· Mobile beta
+Q3 2026 · Coaching
+· Call scoring
+· Cohort coaching dashboards
+Q4 2026 · CS surface
+· Health scoring
+· Renewal copilots
+· EU launch
+Q1 2027 · Ecosystem
+· Marketplace
+· Partner APIs
+· Outcome credits
+Confidential · Institutional distribution only
+23 / 42
+APPENDIX
+24 / 42
+SECTION C
+Traction
+Confidential · Institutional distribution only
+24 / 42
+APPENDIX · A10
+A10
+A10
+Revenue history
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Nov
+Dec
+Jan '27
+Feb '27
+Mar '27
+Apr '27
+May '27
+Jun '27
+$0
+$700K
+$1.4M
+$2.1M
+$2.8M
+Confidential · Institutional distribution only
+25 / 42
+APPENDIX · A11
+A11
+A11
+Revenue retention cohorts
+M0
+M1
+M2
+M3
+M4
+M5
+M6
+M7
+M8
+M9
+25-Q1
+100
+102
+106
+112
+118
+122
+128
+134
+138
+142
+25-Q2
+100
+104
+110
+116
+122
+128
+134
+140
+144
+0
+25-Q3
+100
+106
+112
+120
+128
+134
+140
+146
+0
+0
+25-Q4
+100
+108
+116
+124
+132
+140
+148
+0
+0
+0
+26-Q1
+100
+110
+120
+130
+140
+150
+0
+0
+0
+0
+26-Q2
+100
+112
+122
+134
+146
+0
+0
+0
+0
+0
+% OF M0 DOLLAR VALUE RETAINED · DARKER = STRONGER RETENTION
+Confidential · Institutional distribution only
+26 / 42
+APPENDIX · A12
+A12
+A12
+Customer growth
+Jan
+Feb
+Mar
+Apr
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Nov
+Dec
+0
+15
+30
+45
+60
+0
+85
+170
+255
+340
+Confidential · Institutional distribution only
+27 / 42
+APPENDIX · A13
+A13
+A13
+Customer segmentation
+SMB
+56% of logos · 28% of ARR
+Mid-market
+32% of logos · 44% of ARR
+Enterprise
+12% of logos · 28% of ARR
+Confidential · Institutional distribution only
+28 / 42
+APPENDIX · A14
+A14
+A14
+Pipeline development
+Stage	Count	Value	Shape
+New	240	$12M	
+Qualified	142	$8.6M	
+Demo	86	$5.4M	
+Proposal	48	$3.2M	
+Negotiation	22	$1.8M	
+Closing	11	$980K	
+Confidential · Institutional distribution only
+29 / 42
+APPENDIX · A15
+A15
+A15
+Product usage analytics
+WEEKLY ACTIVE USERS
+12,840
++24% MoM
+AI ACTIONS / USER / WK
+184
++38% MoM
+TIME-TO-VALUE
+4.2 min
+−18%
+DAU / WAU
+0.61
++0.04
+ACTIVATION @ D7
+78%
++9pt
+M6 RETENTION
+92%
++3pt
+Confidential · Institutional distribution only
+30 / 42
+APPENDIX
+31 / 42
+SECTION D
+Customer insights
+Confidential · Institutional distribution only
+31 / 42
+APPENDIX · A16
+A16
+A16
+Customer profiles
+MID-MARKET
+Revenue leader
+Predictable forecast, every quarter.
+SMB / MM
+Frontline AE
+Less admin, more selling time.
+ENTERPRISE
+CRO
+Operating leverage across the GTM org.
+Confidential · Institutional distribution only
+32 / 42
+APPENDIX · A17
+A17
+A17
+Customer journey
+1
+Discover
+Founder sees us in a peer's tool stack.
+< 2 WEEKS TO EVALUATION
+2
+Try
+Self-serve workspace, real value in 10 min.
+78% D7 ACTIVATION
+3
+Adopt
+Team upgrade, AE engages on second team.
+NPS 74 AT 30D
+4
+Expand
+CSM expands org-wide.
+NRR 138%
+5
+Advocate
+Referrals drive 38% of new sign-ups.
+$3.2M ARR, NO PAID ADS
+Confidential · Institutional distribution only
+33 / 42
+APPENDIX · A18
+A18
+A18
+Case studies
+SAAS · MM
+Northwind
++28pt forecast accuracy in 90 days.
+FORECAST ACCURACY
++28pt
+INDUSTRIAL · ENT
+Acme
+Replaced 4 tools + 2 spreadsheets + 1 FTE hire.
+TOOLS REPLACED
+4 → 1
+LOGISTICS · MM
+Globex
+Ramp time for new reps cut from 7 months to 4.
+RAMP
+−42%
+Confidential · Institutional distribution only
+34 / 42
+APPENDIX · A19
+A19
+A19
+Testimonials & references
+"
+Loopline is the first tool my reps actually open without being told.
+Mia Chen
+VP Sales · Northwind
+"
+Replaced 4 tools, 2 spreadsheets, and one full-time ops hire.
+Jonas Becker
+CRO · Acme
+"
+My reps thank me for it. That has never happened with any sales tool.
+Priya Patel
+Head of Revenue · Globex
+"
+I would pay 5× what they charge. Do not tell them.
+Wei Zhang
+Founder · Initech
+Confidential · Institutional distribution only
+35 / 42
+APPENDIX
+36 / 42
+SECTION E
+Unit economics
+Confidential · Institutional distribution only
+36 / 42
+APPENDIX · A20
+A20
+A20
+CAC analysis
+Self-serve
+Outbound
+Partner
+Events
+$0
+$7K
+$14K
+$21K
+$28K
+SHARE OF ACQUISITION
+Self-serve
+42%
+Outbound
+28%
+Partner
+18%
+Events
+12%
+Confidential · Institutional distribution only
+37 / 42
+APPENDIX · A21
+A21
+A21
+LTV analysis
+M0
+M1
+M2
+M3
+M4
+M5
+M6
+M7
+M8
+M9
+M10
+M11
+M12
+M13
+M14
+M15
+M16
+M17
+M18
+M19
+M20
+M21
+M22
+M23
+M24
+M25
+M26
+M27
+M28
+M29
+M30
+M31
+M32
+M33
+M34
+M35
+$0
+$45K
+$90K
+$135K
+$180K
+Confidential · Institutional distribution only
+38 / 42
+APPENDIX · A22
+A22
+A22
+Payback analysis
+0mo
+4mo
+8mo
+12mo
+16mo
+SMB
+Mid-market
+Enterprise
+Blended
+Confidential · Institutional distribution only
+39 / 42
+APPENDIX · A23
+A23
+A23
+Margin analysis
+Layer	Share of revenue
+Gross margin (84%)	84%
+Hosting & AI	9%
+Support	4%
+Other COGS	3%
+Confidential · Institutional distribution only
+40 / 42
+APPENDIX
+41 / 42
+SECTION F
+Go-to-market
+Confidential · Institutional distribution only
+41 / 42
+APPENDIX · A24
+A24
+A24
+Sales funnel
+Visits
+320K · 100%
+Trials
+28K · 8.8%
+Activated
+22K · 78%
+Paid
+4.2K · 19%
+Expanded
+1.4K · 33%
+Confidential · Institutional distribution only
+42 / 42
+APPENDIX · A25
+A25
+A25
+Channel strategy
+Channel	Share	CAC	Payback
+Self-serve	42%	$5K	5mo
+Outbound	28%	$22K	9mo
+Partner	18%	$12K	7mo
+Events	12%	$28K	12mo
+Confidential · Institutional distribution only
+43 / 42
+APPENDIX · A26
+A26
+A26
+Partnership strategy
+DISTRIBUTION
+Stripe
+LIVE
+MARKETPLACE
+Salesforce ISV
+IN FLIGHT
+IMPLEMENTATION
+Deloitte
+IN FLIGHT
+DISTRIBUTION
+AWS Marketplace
+ROADMAP
+INTEGRATION
+HubSpot
+LIVE
+INTEGRATION
+Notion
+LIVE
+Confidential · Institutional distribution only
+44 / 42
+APPENDIX
+45 / 42
+SECTION G
+Defensibility
+Confidential · Institutional distribution only
+45 / 42
+APPENDIX · A27
+A27
+A27
+Competitive matrix
+Capability	Us	Incumbent A	Incumbent B	Point tool C	Build
+AI quality	
+Time-to-value	
+Workflow depth	
+Self-serve PLG	
+Enterprise posture	
+Pricing alignment	
+Ecosystem leverage	
+Switching cost	
+Confidential · Institutional distribution only
+46 / 42
+APPENDIX · A28
+A28
+A28
+Moat analysis
+PILLAR 01
+Data network
+Every customer's workflows improve every other customer's evaluations — a true network effect, not a marketing claim.
+PILLAR 02
+Workflow lock-in
+Embedded motions create operational dependency. Customers tell us "we couldn't leave if we wanted to."
+PILLAR 03
+Distribution
+Self-serve + AE + partner overlay covers the entire SMB → enterprise spectrum.
+PILLAR 04
+AI evaluations
+Proprietary harness that grades every model output against your playbook. Competitors are a year behind.
+Confidential · Institutional distribution only
+47 / 42
+APPENDIX
+48 / 42
+SECTION H
+Team & operations
+Confidential · Institutional distribution only
+48 / 42
+APPENDIX · A29
+A29
+A29
+Organization plan
+Engineering
+GTM
+Customer Success
+Design
+Ops / G&A
+0
+25
+50
+75
+100
+LEADERSHIP GAPS TO CLOSE
+·
+VP Engineering (close Q3)
+·
+VP Marketing (close Q4)
+·
+CFO (close Q2)
+·
+Head of Security (close Q3)
+OPERATING PRINCIPLES
+1.
+Customer obsession beats product obsession.
+2.
+Default to evidence, not opinion.
+3.
+Velocity is a feature; ship weekly.
+4.
+Write to think, not to memo.
+5.
+The org chart is a graph, not a tree.
+Confidential · Institutional distribution only
+49 / 42
+APPENDIX
+50 / 42
+SECTION I
+Financials
+Confidential · Institutional distribution only
+50 / 42
+APPENDIX · A30
+A30
+A30
+Three-year financial model
+P&L SUMMARY
+Line	Y1	Y2	Y3
+Revenue	$9.8M	$28M	$72M
+Gross profit	$8.2M	$24M	$61M
+S&M	$5.2M	$12M	$26M
+R&D	$6.2M	$11M	$22M
+G&A	$1.4M	$3.2M	$7.4M
+Operating income	$-4600000	$-2700000	$5.8M
+CASH & BURN
+M1
+M2
+M3
+M4
+M5
+M6
+M7
+M8
+M9
+M10
+M12
+M14
+M16
+M18
+M20
+M22
+M24
+$0
+$3.5M
+$7.0M
+$11M
+$14M
+CAPITAL ALLOCATION
+Engineering & AI
+55%
+GTM & CS
+30%
+Brand & ops
+15%
+HIRING PLAN
+Function	Now	Y1	Y2	Y3
+Engineering	16	38	64	92
+GTM	12	32	56	84
+CS	6	18	32	48
+Design	4	9	14	18
+G&A	4	10	16	22
+Confidential · Institutional distribution only
+51 / 42
+
+Preview
+
+FUNDRAISING · 42 SLIDES
+Investor + Appendix
+12 core + 30 appendix (A–I) · editorial · with charts
+
+ACT I
+01 / 19
+ACT I
+The World
+Where we begin.
+LOOPLINE
+02 / 19
+A NEW CHAPTER FOR REVENUE TEAMS
+Somewhere along the way, work forgot the people doing it.
+This is the story of how we set out to remember.
+THE CHANGE
+03 / 19
+THE CHANGE
+The world of work is rewriting itself in real time.
+A new generation is no longer willing to be measured in dashboards they cannot move. They expect the tools they use to think with them, not for them — to make their best work easier and their hardest days kinder. That expectation is not a trend. It is the new floor.
+DISTRIBUTED
+ASYNC
+AI-NATIVE
+OUTCOME-PRICED
+HUMAN-FIRST
+now
+THE TENSION
+04 / 19
+THE TENSION
+And yet — most days at work still feel like running through wet sand.
+01
+Seventeen tabs and no idea what to do first.
+02
+A forecast that updates only after the deal has slipped.
+03
+Coaching reserved for the people who already win.
+04
+Late nights logging information for a system that gives nothing back.
+HUMAN IMPACT
+05 / 19
+HUMAN IMPACT
+Behind every metric is a person who deserved better tools.
+"
+I used to spend Sundays writing the same emails I had already sent. Loopline didn't just save me time. It gave me my weekends back.
+MIA C. · ACCOUNT EXECUTIVE · MID-MARKET
+"
+I coached the top performers because I had bandwidth for nothing else. The rest of my team grew alone, in silence.
+JONAS B. · VP SALES · CONTINENTAL EUROPE
+"
+I joined this company to build something. Instead I administer it. That has to change.
+PRIYA P. · HEAD OF REVENUE · GROWTH-STAGE SAAS
+ACT II
+06 / 19
+ACT II
+The Belief
+What we have come to believe.
+THE INSIGHT
+07 / 19
+THE INSIGHT
+The next platform shift is not a tool — it is a teammate.
+The CRM was built when the question was "where did the deal go?" We are building for a different question — "what should I do next, and who should I bring?" When software answers that question well, work stops being administration and starts being craft again.
+"
+A great teammate makes everyone around them better. Software should do the same.
+THE PHILOSOPHY
+08 / 19
+THE PHILOSOPHY
+What we believe — written down, on purpose.
+01
+Quiet craft
+The best work is unnoticeable. Tools should make people look brilliant, not busy.
+02
+Evidence over opinion
+Every claim earns its place with the data that justifies it.
+03
+Coaching for everyone
+Growth is not a reward for the top 20%. It is a default for everyone.
+04
+Trust the operator
+We build with founders and operators, not for some imagined buyer persona.
+THE MISSION
+09 / 19
+THE MISSION
+To make every revenue team in the world operate like the best one.
+Not by replacing people with software. By giving every person the same access to insight, action and improvement that today only the very few enjoy. We do not want to win an industry. We want to lift one.
+HORIZON · THE NEXT DECADE · TEN MILLION TEAMS
+THE MOVEMENT
+10 / 19
+THE MOVEMENT
+A community of people who refused to accept that work had to feel this way.
+Operators, founders, partners and customers building shoulder-to-shoulder. We make decisions in the open, share learnings publicly, and credit the people whose questions shape what we ship.
+FOUNDERS
+Sofia Marquez, Daniel Okafor
+OPERATORS
+142 active companies
+CUSTOMERS
+Northwind, Acme, Globex
+PARTNERS
+Stripe, Salesforce ISV, AWS
+ADVISORS
+Lawson, Young, Rachitsky
+COMMUNITY
+4,800 operators on Slack
+INVESTORS
+Initialized Capital + angels
+ALUMNI
+Plaid, Stripe, Linear
+ACT III
+11 / 19
+ACT III
+The Solution
+What we have built — together.
+THE PRODUCT
+12 / 19
+THE PRODUCT
+A teammate, not another tab.
+Loopline does the work between deals — the reading, the drafting, the routing, the remembering — so the people doing the work can do the part only they can do.
+Seventeen tabs
+→ One workspace, every signal
+Forgotten follow-up
+→ A draft, waiting for one click
+Forecast = vibes
+→ Forecast = math + signal
+Top-rep coaching
+→ Every rep, coached every call
+CRM as chore
+→ CRM as teammate
+THE EXPERIENCE
+13 / 19
+THE EXPERIENCE
+A day spent doing the work that mattered.
+CH. 01
+Morning brief
+The three deals that needed you, summarized over coffee.
+CH. 02
+First touch
+A draft email, in your voice, waiting for approval.
+CH. 03
+On the call
+A real-time prompt when the buyer signals the next objection.
+CH. 04
+After the call
+The follow-up plan written before you leave the room.
+CH. 05
+End of day
+A clean handoff to your CSM. Inbox at zero. Time to live.
+THE PROOF
+14 / 19
+THE PROOF
+People who would not let us go back.
+142
+PAYING COMPANIES
+92%
+SIX-MONTH RETENTION
+74
+NPS — TOP DECILE
+11h
+SAVED PER REP PER WEEK
+It replaced four tools, two spreadsheets, and one full-time ops hire. We will never go back.
+JONAS BECKER · CRO · ACME
+My team thanks me for it. That has never happened with any sales tool.
+PRIYA PATEL · HEAD OF REVENUE · GLOBEX
+I would pay five times what they charge. Please do not tell them.
+WEI ZHANG · FOUNDER & CEO · INITECH
+THE IMPACT
+15 / 19
+THE IMPACT
+Better work changes more than work.
+HUMAN
+Eleven hours back, every week.
+142 customers report a median 11h/wk recovered — time spent with family, on rest, on the work that matters.
+ENVIRONMENTAL
+Fewer flights. Less paper. Smaller footprint.
+Async-first defaults reduced customer business travel by 38% and printed proposals to near zero.
+ECONOMIC
+Compounding earnings for the people who do the work.
+Mid-tier reps now reach quota at 1.6× the historical rate — and we see it in their pay.
+ACT IV
+16 / 19
+ACT IV
+The Future
+Where we go from here.
+THE OPPORTUNITY
+17 / 19
+THE OPPORTUNITY
+A movement is not a market — but it does expand.
+What works for revenue teams works, in turn, for customer success, for marketing operations, for partner ecosystems. The same operating layer, the same philosophy, applied to every team whose work is too important to leave to spreadsheets.
+1
+From revenue to customer success — the renewal copilot, live in 2026.
+2
+From SMB to global enterprise — single-tenant, audit-grade, residency-aware.
+3
+From English-first to ten languages — the same craft, every market.
+4
+From product to ecosystem — a marketplace that lifts every operator in it.
+VISION
+18 / 19
+THE VISION
+Ten million teams. One quieter, kinder, better day at work.
+We do not need every team to become the same. We need every team to have the chance to become the best version of itself. That is the world we are building toward — and the one we are inviting you to build with us.
+THE INVITATION
+19 / 19
+THE INVITATION
+For the operator who refused to settle.
+For the team that wants to be better, not bigger.
+For the leader who measures success in people, not pipelines.
+This one is for you.
+Welcome to Loopline.
+Come build the next chapter with us.
+HELLO@LOOPLINE.AI · LOOPLINE.AI
+
+Preview
+
+COMMERCIAL · 19 SLIDES
+Narrative — Brand-led
+4 acts · 15 chapters + 4 dividers · cinematic · custom SVG artwork

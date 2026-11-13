@@ -1,0 +1,66 @@
+You are the senior backend + SDK engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (FastAPI with organized routers, event-driven architecture, async job queue, D1 with all tables, RBAC, Replit Auth, Partner Dashboard, Refer & Earn, etc.).
+
+Add complete **Partner-specific API endpoints + Python and JavaScript SDKs** for CRM/legal/data integrations.
+
+Exact requirements:
+
+1. **Database Models (D1)**
+   - Create `integrations` table:
+     • id (PK), partner_user_id (FK to users.id), integration_type (crm/legal_provider/data_feed/custom)
+     • provider_name (hubspot, salesforce, sumsub, stripe_atlas, cooley, custom, etc.)
+     • api_key (encrypted text), webhook_secret (encrypted text), config (json)
+     • status (active/paused/error), last_synced_at
+   - Create `integration_logs` table:
+     • id (PK), integration_id (FK), direction (inbound/outbound), event_type, payload (json), status, created_at
+   - Add proper indexes and encryption helpers using Web Crypto.
+
+2. **Backend API Endpoints (new router)**
+   - Create `backend/routers/integrations.py`
+   - Endpoints (all protected by RBAC — operators/admins + service_provider roles):
+     • GET /api/integrations/available → list of supported providers + docs
+     • POST /api/integrations/connect → connect new integration (API key or OAuth)
+     • POST /api/integrations/webhook/{provider} → public webhook receiver (validate secret)
+     • GET /api/integrations/sync → manual sync trigger (enqueue job)
+     • POST /api/integrations/push → push data to external system (CRM/legal)
+     • GET /api/integrations/logs → view integration logs (paginated)
+   - All heavy syncs must be enqueued via the existing job queue + emit events.
+
+3. **SDKs**
+   - Create `sdk/axal_sdk.py` (Python):
+     • AxalClient class (init with api_key)
+     • Methods: sync_deal(deal_id), push_legal_doc(doc_id), get_metrics_feed(), register_webhook(callback_url), list_integrations()
+   - Create `sdk/axal-sdk.js` (JavaScript/TypeScript):
+     • AxalClient class for browser/Node
+     • Same methods with async/await + fetch
+   - Include full README.md in sdk/ folder with examples and installation instructions.
+
+4. **Automation Logic**
+   - Use event-driven architecture: on new deal/spin-out → auto-push to connected CRM
+   - On document generation → auto-send to legal provider
+   - Inbound webhooks update metrics_snapshots or deal records in real-time
+   - Replit AI helper for field mapping between Axal and external providers
+   - All operations go through job queue for high throughput.
+
+5. **Frontend**
+   - Add “Integrations” tab in Partner Dashboard
+   - Marketplace UI with one-click connect buttons (HubSpot, Salesforce, Sumsub, Stripe Atlas, etc.)
+   - Connection status list + log viewer
+   - “Add Custom Webhook” form
+
+6. **Security & Best Practices**
+   - Encrypt all secrets in D1
+   - Validate every webhook with HMAC
+   - Rate-limit per-integration
+   - Full audit logging
+   - Use existing RBAC and job queue
+
+Build this step-by-step:
+1. First create the D1 tables + migration.
+2. Then implement backend/routers/integrations.py + webhook handlers.
+3. Then create the Python and JavaScript SDKs with examples.
+4. Then add automation logic and event integration.
+5. Finally build the frontend Integrations tab and connect everything.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

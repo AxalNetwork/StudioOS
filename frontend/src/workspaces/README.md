@@ -1,0 +1,123 @@
+# `frontend/src/workspaces/` — the chrome every workspace subpage sits in
+
+`PmfExplain.jsx` (D1147) is Fundraising readiness's input-only Eadwyn proposal
+band: transient explanations/questions, cited input rows, explicit Keep and
+question Copy/Dismiss. It uses the shared Lightbox and run-cost estimate.
+
+A **bucket** is a route prefix that owns a group of pages (`/validate`, `/deals`,
+`/practice`, `/offers`). A **zone** is one page inside it (`/build/this-week`).
+This folder holds the shell those pages share, and the four per-licence route
+modules that mount bodies into it. The pages themselves live in
+`frontend/src/pages/founder/`, `.../investor/`, `.../advisor/` and `.../partner/`.
+
+## What is here
+
+| File | Role |
+| --- | --- |
+| `shellConfig.js` | **The data.** Every bucket and zone for all five shells, in canvas order, with archetypes and per-role accents. The sidebar, the router and the guard tests all read it, so a row can never advertise a door that does not open. |
+| `WorkspaceShell.jsx` | The frame: crumb, `<h1>` with its archetype badge, then the zone's one filled primary and the gated Ask (D1424), the zone pill row, the page body, and the Worker AI rail as a slot. It is a `ZonePrimaryScope`, so a body's primary is portalled into its header. Also exports `NotRecorded` and `SeamChip`. |
+| `ZoneHeader.jsx` | **D1424 (#3700).** The same header for the investor pages that draw their own chrome (Portfolio's Positions, Reports and Value-add; Fund's LPs, Calls, Accounting and Reporting), in each bucket's own CSS family, with the shared tools cluster (primary slot, Ask, refresh). `ZoneHeaderTools` is that cluster alone, for the Portfolio and Fund roots. |
+| `ProfileHeaderAsk.jsx` | **D1424.** The header "Ask" on the three member licences, drawn with the shared `AskButtonView` (`frontend/src/ui/AskButton.jsx`). One gate: a member licence, a route with a rail (`NO_RAIL_ROUTES` and the rail map both read), no support session, and #3706's panel serving the licence. The last is false on `main`, so it draws nothing yet. D1443 part 5 (#3992): it now draws `../ui/HeaderAsk.jsx` (the page's one header Ask) once its gate passes; `profileAskAdapter.ASK_PANEL` says the panel serves these licences. |
+| `profileAskAdapter.js` | **D1424.** Whether the Ask panel (#3706, D1443) serves the three profile licences; it does since D1443 part 5. The "N waiting" count is not here: the header Ask is `HeaderAsk`, whose count is D1442's per-page read, and D4353 removed the unused placeholder for it. |
+| `ZoneNav.jsx` | The zone pill row. Each pill is a real link to its zone's route (a `LensNavLink`); the current one comes from the location `<Routes>` renders. `activeSlug={null}` is overview mode — a bucket root is above its zones and lights none of them. |
+| `lens.jsx` | **Phone lenses (D575, canvas M2).** Below 1024px a pill opens its zone in place: `LensProvider` holds a lens location that App's one `<Routes>` renders instead of the URL, so no route changes and no history entry is pushed. `LensNavLink` and `LensLink` are the pills; on a desktop they are a plain `NavLink` and `Link`. Any real navigation clears the lens. |
+| `ZoneActions.jsx` | The zone header's action row — what a reader can *do* on the page. Ghost items, plus one filled **primary** per zone in the licence's accent (D1424, owner B reversed the one-ghost rule): only a link or a page-supplied handler that a table marks `primary: true`. Inside a `ZonePrimaryScope` the primary is portalled into the header. An action with no live endpoint is a disabled ghost with its reason on hover. D1443 part 5 (#3992): the row carries the header Ask (`../ui/HeaderAsk.jsx`) beside the primary, drawn while the page's rail serves it. |
+| `ZoneToolbar.jsx` | The canvas's one rule-bordered header row: filters left, actions right. `ZoneActions` keeps its own signature, so the forty pages on the other three licences that mount it directly are untouched. |
+| `zoneFilterBuilder.js` | The filter half of D51. A filter that narrows real rows is a chip; one with no store is prose naming the missing record, because a dead filter returns an empty set and an empty set reads as an answer. |
+| `founderZoneFilters.js` | The founder profile's 26 zones — all of them; its `excluded` set in the guard is empty. Sample figures (`All 14`, `Aug 2026`) and sample names (`Backend`, `Agencies`) are never copied — the page supplies the real count or the stored names. Its Research entries are D53's exhibit: `/research/library` gives this licence one live chip out of five where the same component gives partner four. |
+| `investorZoneFilters.js` | The investor profile's Fund, Portfolio, Deals-pipeline and Research zones. D52's rule lives here: a label is not dead until the column, the write path, the client method and the writer's own vocabulary have each been looked for — three of `/deals/pipeline`'s five read fields the page had already loaded. Its remaining canvas routes are held in the guard's `excluded` set with a reason each. |
+| `advisorZoneFilters.js` | The advisor profile's Research zones. The licence the store serves best: every label on its `/research/library` canvas is live, because `research_documents.kind` happens to hold the axis that artboard asks for. |
+| `partnerZoneFilters.js` | The partner profile's Research zones. Its `/research/markets` age windows are its own artboard's (`STALE_AT = 90`) and differ from advisor's (`120`), which is why the number lives in each licence's table rather than in the shared body. |
+| `zoneFiltersByRole.js` | The dispatcher, mirroring `zoneActionsByRole.js`. An unknown role gets an empty list, never a default profile's: a founder's `Investors / Advisors` segmentation shown to an advisor would be a claim about how their relationships are classified, in the product's voice, over rows classified otherwise. |
+| `BucketOverview.jsx` | The body a bucket root renders when the canvas corpus draws **no root artboard** for it: the bucket's zones as cards. Advisor `/cohorts` and every founder and investor bucket. |
+| `BucketBoard.jsx` | The body a bucket root renders when the corpus **does** draw one: an h1, then one section per zone, each with a real count, a short table of real rows and a footnote. Partner ×5, advisor ×4. |
+| `AlsoIn.jsx` | The "Also in <row>" link list under a bucket root's board or cards, and on the founder Validate, Raise and Grow desks and the investor Portfolio canvas: the pages the row owns beyond its zones, read from `alsoInFor(role, row)` in `../lib/adminPlacement.js` (D563). Renders nothing for a row that owns none. |
+| `useBucketSources.js` | A board's parallel fetch, one state per source. It reads the endpoints the **zone pages already read**, so the overview's number is the zone's number by construction — and so the honest `*_note` beside a null figure travels with it instead of being re-copied. |
+| `NoStoreYet.jsx` | The honest state for a zone with no store: what it would hold, what would fill it, and the nearest live surface. Shared by the three route modules and by a gapped board section. |
+| `noStoreCopy.js` | The gap statements themselves, as plain data so `bucket_board.test.mjs` can load them in Node. A board section's `gap` is **imported from here**, never written inline — the same object the zone page renders — so a board can never be gentler about an absence than the page behind it. `BucketOverview` derives its "Not built" line from the same objects. |
+| `NetworkWorkspace.jsx` | `/network/*` for founder, advisor and partner — one shared path, one zone list. |
+| `ResearchWorkspace.jsx` | `/research/*`, shared path, per-role zone list. |
+| `bucketOverview.css` | The overview grid. `BucketBoard` has no stylesheet — its only dynamic value is a per-section `grid-template-columns` from the canvas, which is an inline style. |
+
+## Subfolders
+
+| Folder | Role |
+| --- | --- |
+| `founder/` | `InterviewRecording.jsx` (attach and transcribe a recording, used by the interview record and the Lab) and `ValidateDialogs.jsx` (New hypothesis and Link to a pain, used by Validate's sections in `../pages/cycles/ValidateSections.jsx`). The Validate zones' page was deleted by D704. |
+| `investor/` | `InvestorDealsRoutes.jsx` — the four `/deals/*` zones. |
+| `advisor/` | `AdvisorBucketRoutes.jsx` — `/practice/*`, `/cohorts/*`, `/expertise/*`. |
+| `partner/` | `PartnerBucketRoutes.jsx` — `/pipeline/*`, `/delivery/*`, `/offers/*`. |
+| `boards/` | One registry per composed bucket root, keyed `role:prefix` in `index.js`. Plain object literals, never JSX — `_codeOnly.mjs` cannot strip a JSX comment, so prose in a component file can match a ban before the code does. A section declares either a `source` or a `gap`, never both; `summary`, `rows` and `footnote` take the source payload as their **only** argument, which is why a gapped section cannot print a figure. |
+| `partner/OfferReadiness.jsx` | D4841 (#4841): the `/offers` root as an Offer Readiness dashboard (Offers V2 canvas OF-01, OF-09a), drawn from `boards/offerReadiness.js` over the Offers board's sources. The Offers bucket's `groups` in `shellConfig.js` are what `ZoneNav` draws as Sell · Prove · Target · Test. |
+
+## The rule for adding to it
+
+**A zone is a line in `shellConfig.js` plus a route in `App.jsx`, in the same
+change.** `frontend/test/workspace_shell_routes.test.mjs` reads this config as
+text and asserts every zone it names is registered in the router; a zone with no
+route fails the build rather than shipping a pill that 404s.
+
+**A route module that resolves a zone must opt out on the bucket root.**
+`zoneForPath` answers a root with its *first* zone — correct on a zone route,
+wrong on a root, where the reader is above the zones and on none of them. Every
+module here carries the same two lines:
+
+```js
+const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
+// … then, on the shell:
+title={isRoot ? bucketTitle(bucket) : undefined}   // the tagline, not the label
+activeSlug={isRoot ? null : undefined}
+```
+
+**Never mark a pill current by its position.** Four founder desk stylesheets did
+exactly that and lit the first pill on every overview; see `DECISIONS.md` D44 and
+`frontend/test/zone_pill_active_state.test.mjs`, which bans the selector shape.
+
+**One licence's chrome never renders on another's route.** The role decides,
+once, in `shellConfig.js` — which is the whole reason this folder replaced
+`FounderModuleBackLink`, `PartnerWorkspaceTabs`, `WorkspaceTabs` and three bespoke
+investor workspaces all solving the same problem four ways.
+
+**A zone header's actions come from the canvas, and each one is either wired or
+stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js`,
+`investorZoneActions.js`, `partnerZoneActions.js` and `advisorZoneActions.js`
+hold each profile's answers — sixty-seven zones and a hundred and ninety-six
+actions between them. The labels are copied from
+the `ops:` array of the zone's artboard, and each is an export that runs
+(`frontend/src/lib/csvExport.js`), a link to a route that performs it, or a
+`note` saying nothing does. `ZoneActions.jsx` renders a note as text and never as
+a button, because a button is a promise.
+`frontend/test/profile_zone_actions.test.mjs` re-derives the labels from the canvases and
+re-checks every link against `App.jsx`'s guards, for every profile.
+
+**The builder is shared and the tables are not, deliberately.** The rules are
+identical across licences and the answers are not: a route one licence may
+open can be closed to another, so an identical canvas label can be a link on
+one profile's zone and a stated gap on another's. ("Request an intro" was the
+example, a link to `/matches` for an investor only; that page was removed and
+the label is now a gap on both.) Four tables each
+carrying their own copy of "what an empty export says" is how this repo ended up
+with three CSV escapers that disagree.
+
+**Two of those checks exist because a source test cannot see the screen.** A row
+placed inside the Network zones' `{!embedded && <header>}` rendered nowhere —
+that guard is false on the only route that mounts them — and a page that names a
+variable it does not have throws at render while the bundle builds clean. Both
+shipped into this folder and both were found by a browser, so both now have an
+assertion.
+
+**A row goes where the rows are.** Three shapes are in use and the choice is not
+stylistic: a page that owns its list renders the row itself; seven partner zones
+pass it to `ZoneBody` (in `frontend/src/pages/advisor/expertise/kit.jsx`), which renders it
+above all four of its states; and two shared pages take it as a render prop
+called with the rows their tab loaded, so the caller decides and the page learns
+nothing about licences. Wiring from a bucket router instead would be one edit
+rather than ten — and would cost every export its rows, which is most of what
+this pass delivers.
+
+**A surface serving more than one licence asks `zoneActionsByRole.js`.**
+`/network/*` and `/research/*` are one component each answering four roles: the
+bodies are the same and the actions are not, so the body stays shared and the
+answers stay in each profile's table. An unknown role gets an empty list, never
+a default profile's. Six shared bodies take the row as a render prop called with
+the rows they loaded, which is what lets "export this view" mean anything there.

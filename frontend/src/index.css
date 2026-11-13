@@ -1,0 +1,761 @@
+@import "tailwindcss";
+
+@keyframes wsPulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.45)}50%{box-shadow:0 0 0 5px rgba(124,58,237,0)}}
+@keyframes wsGlow{0%,100%{box-shadow:0 0 0 1px rgba(124,58,237,.35),0 1px 2px rgba(24,24,27,.04)}50%{box-shadow:0 0 0 3px rgba(124,58,237,.18),0 1px 2px rgba(24,24,27,.04)}}
+@keyframes wsFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* Design-system utility: the workspace's active-week card glow (wsGlow above). */
+.ws-glow{animation:wsGlow 3s infinite}
+
+/* Tailwind 4 — opt the .dark class on <html> in as the activator for the
+   `dark:` variant. SettingsContext flips this class based on the user's
+   Light/Dark theme preference. Without this declaration
+   every `dark:` utility silently no-ops. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand: #8b5cf6;
+  --color-brand-light: #a78bfa;
+  /* Historical name. #7c3aed is the census's PRIMARY violet (73 canvases),
+     not a "dark" variant — `--color-axal-violet` below is the name to reach
+     for in new code. Kept as an alias because existing components use it. */
+  --color-brand-dark: #7c3aed;
+  --color-surface: #111827;
+  --color-surface-light: #1f2937;
+  --color-surface-lighter: #374151;
+
+  /* -----------------------------------------------------------------------
+     Axal design tokens — derived from the 107 Claude Design canvases.
+     Source of truth: design/tokens/tokens.json (frequency-counted census);
+     the resolution rule is DECISIONS.md D2 — the System Sheet spec palette
+     wins for BRAND colours, the corpus majority wins for NEUTRALS.
+
+     The brand violets cost nothing under that rule: they were already the
+     corpus majority (73 and 81 canvases of 107). The neutrals flipped, and
+     each carries the margin that decided it. Do not "correct" a neutral back
+     to the spec sheet without re-reading D2 — the spec value is recorded in
+     tokens.json under `spec` precisely so this stays reversible.
+
+     Tailwind v4 has no config file; this @theme block IS the theme. Adding a
+     token here mints the matching utilities (bg-/text-/border-/rounded-…).
+
+     GOTCHA: v4 tree-shakes @theme tokens — a token no utility references is
+     dropped from the built CSS entirely, so `var(--color-axal-violet)` in an
+     inline style silently resolves to nothing until some class uses it. Use
+     the utilities (bg-axal-violet), not raw var() in style attributes. If a
+     token ever genuinely needs to exist unreferenced, that is what
+     `@theme static` is for.
+     -------------------------------------------------------------------- */
+
+  /* Brand — spec palette (System Sheet.dc.html), already dominant. */
+  --color-axal-violet: #7c3aed;        /* 73 canvases */
+  --color-axal-violet-deep: #6d28d9;   /* 81 */
+  --color-axal-lavender: #f4f0fe;      /* violet tint — brand, stays on spec */
+  --color-axal-amber: #fcd34d;         /* 32 */
+  --color-axal-amber-deep: #92400e;    /* 67 */
+  --color-axal-lavender-edge: #ddd0fb; /* violet tint borders — spec */
+
+  /* Semantic — what a state MEANS, not which hue paints it (D424). The
+     System Sheet names these and the census confirms each; they are minted
+     where the proposal anatomy first needed them (the accepted mark, the
+     warning read, Eadwyn's mark on a claim), not all at once. Light values:
+     every call site pairs each one with its own `dark:` utility, because a
+     status colour is not a neutral and the dark skin does not flip it. */
+  --color-axal-positive: #047857;      /* cleared, accepted — spec */
+  --color-axal-destructive: #b91c1c;   /* failure, warning text — spec */
+  --color-axal-destructive-tint: #fef2f2; /* failure grounds — spec */
+  --color-axal-destructive-edge: #fecaca; /* error tint borders — 44 canvases */
+
+  /* Neutrals — corpus majority (D2). Margin = majority vs spec. */
+  --color-axal-ink: #18181b;           /* 80 vs 14 — spec was #241f38 */
+  --color-axal-hairline: #ececf1;      /* 91 vs 21 — spec was #e8e6ee */
+  --color-axal-faint: #a1a1aa;         /* 28 vs 13 — spec was #8b8798 */
+  /* Kept on the spec value: no clear majority. `muted` splits six ways with
+     the largest at 42/107; `ground` is near-tied 52/45. */
+  --color-axal-muted: #6b6577;
+  --color-axal-ground: #f4f3f7;
+
+  /* Type. Inter and Roboto Mono are loaded non-blocking in index.html.
+     --font-mono restyles every existing `font-mono` usage (233 in src/),
+     which is the point: they currently fall back to Tailwind's default. */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  /* The signed-in product's one type face — the investor Fund page's
+     (Space Grotesk for text, Roboto Mono for eyebrow labels). Applied to
+     every signed-in surface through `html.app-type` (ProtectedLayout sets
+     it); the public site keeps --font-sans. */
+  --font-app: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  /* The public site's two faces (D674), as the owner's website canvas names
+     them: Public Sans for text, Bricolage Grotesque for headings. Only
+     `components/site/site.css` uses them, under `.ax-site`; --font-sans
+     stays Inter for every page that has not moved to the new shell. */
+  --font-site: 'Public Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-site-display: 'Bricolage Grotesque', 'Public Sans', system-ui, sans-serif;
+
+  /* Radii — the spec scale, confirmed dominant across the corpus.
+     99px and 999px tie in practice (50 vs 57); both render as a pill. */
+  --radius-axal-xs: 7px;               /* 77 canvases */
+  --radius-axal-sm: 9px;               /* 91 */
+  --radius-axal-md: 10px;              /* 76 */
+  --radius-axal-lg: 12px;              /* 85 */
+  --radius-axal-xl: 16px;              /* 59 */
+  --radius-axal-pill: 999px;
+
+  /* The uppercase eyebrow label appears in 106 of 107 canvases at 10-11px.
+     Tracking splits: .07em leads on occurrences (175 vs 70) while .07 and
+     .09 tie on canvases (57 each); the spec's .11em is a distant 15. Both
+     shipped — `tracking-axal-label` is the default, `-wide` the spec's. */
+  --tracking-axal-label: 0.07em;
+  --tracking-axal-label-wide: 0.11em;
+  --tracking-axal-heading: -0.02em;    /* 96 canvases; 92 co-located w/ 800 */
+
+  /* GVPN brand tokens — used on the public marketing surface only. */
+  --color-gvpn-ink: #0B0B12;
+  --color-gvpn-paper: #F6F5F0;
+  --color-gvpn-violet: #6D5BFF;
+  --color-gvpn-mint: #5DE0B8;
+  --color-gvpn-amber: #F2B33D;
+}
+
+/* ---------------------------------------------------------------------------
+   Task #31 — Theme system.
+
+   Light + dark color tokens are exposed as CSS variables so the global shell
+   (body, inputs, scrollbars) flips automatically when SettingsContext sets
+   `<html data-theme="dark">` + `class="dark"`. Components that still use
+   hardcoded Tailwind colors (e.g. `bg-white`, `text-gray-900`) keep working
+   in light mode and are progressively converted to `dark:` variants where
+   the surface is most visible (App shell, Settings cards, inputs).
+   ------------------------------------------------------------------------ */
+:root {
+  --app-bg: #f9fafb;
+  --app-surface: #ffffff;
+  --app-surface-2: #f3f4f6;
+  --app-text: #111827;
+  --app-text-muted: #6b7280;
+  --app-border: #e5e7eb;
+  --app-input-bg: #ffffff;
+  --app-input-text: #111827;
+  --app-input-border: #d1d5db;
+  --app-scroll-track: #e5e7eb;
+  --app-scroll-thumb: #9ca3af;
+}
+
+[data-theme="dark"], .dark {
+  --app-bg: #0b1220;
+  --app-surface: #111827;
+  --app-surface-2: #1f2937;
+  --app-text: #e5e7eb;
+  --app-text-muted: #9ca3af;
+  --app-border: #374151;
+  --app-input-bg: #1f2937;
+  --app-input-text: #f3f4f6;
+  --app-input-border: #4b5563;
+  --app-scroll-track: #1f2937;
+  --app-scroll-thumb: #4b5563;
+  color-scheme: dark;
+}
+
+body {
+  /* One source of truth — the stack lives in the @theme block above so the
+     `font-sans` utility and the bare <body> can never drift apart. */
+  font-family: var(--font-sans);
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  /* D425 — the page tag asks for `viewport-fit=cover`, which lets content
+     reach under a phone's notch in landscape. These keep every page clear of
+     it on both sides; they are 0 on every screen without a notch. Horizontal
+     only, so no full-height container grows by an inset. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Mobile tap stability (#2656). Safari may magnify small editable controls
+   when they gain focus, then leave menus in that magnified viewport. Keep
+   these controls readable at rest, rather than changing scale on focus.
+   Unlayered !important beats compact component/Tailwind input typography.
+   The rem floor follows an enlarged root font; desktop typography stays put. */
+@media (max-width: 1023px) {
+  html.app-type {
+    /* Ordinary/rapid taps do not become smart zoom. Panning and deliberate
+       pinch zoom remain available; the viewport meta has no scale cap. */
+    touch-action: manipulation;
+  }
+
+  html.app-type :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]),
+    textarea,
+    select,
+    [contenteditable="true"]
+  ) {
+    font-size: max(16px, 1rem) !important;
+  }
+}
+
+/* Signed-in surfaces share one face (--font-app). Set on <html> rather than
+   on the shell element so portals — menus, modals, toasts mounted on <body>
+   — get it too. The public site never sets the class. */
+html.app-type body {
+  font-family: var(--font-app);
+}
+
+/* Force legible input text. We previously hardcoded white/black, which
+   prevented dark mode from ever skinning inputs. Now the values come from
+   the CSS variables above so light mode stays identical and dark mode
+   gets a matching dark control. Browser autofill is overridden inline
+   below so Chrome's yellow-on-white doesn't leak through. */
+input,
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+input[type='date'],
+input[type='tel'],
+input[type='search'],
+input[type='url'],
+select,
+textarea {
+  color: var(--app-input-text);
+  background-color: var(--app-input-bg);
+}
+
+:root input, :root select, :root textarea { color-scheme: light; }
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea { color-scheme: dark; }
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--app-input-text);
+  box-shadow: 0 0 0px 1000px var(--app-input-bg) inset;
+}
+
+/* Modernize every native <select> across the app:
+   - Strip OS-rendered chevrons (different on macOS/Win/Linux/iOS).
+   - Inline a single, consistent chevron SVG (gray-500).
+   - Normalize padding/border/font so dropdowns feel like the rest of the
+     form controls (inputs, textareas).
+   - Keep date/color/file inputs untouched: this rule only targets <select>.
+   Components can opt out by passing `appearance-auto` or by overriding
+   background-image on their own className. */
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  background-size: 0.75rem;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+
+select:not([multiple]):not([size]):disabled {
+  cursor: not-allowed;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d1d5db' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* Hide the legacy IE/Edge dropdown arrow if present. */
+select::-ms-expand { display: none; }
+
+/* The native dropdown panel inherits the page's color-scheme. In light mode
+   we force a white panel so menu items render with dark text even when the
+   OS is dark. In dark mode we let the panel inherit. */
+:root select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+[data-theme="dark"] select option {
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--app-scroll-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-scroll-thumb);
+  border-radius: 3px;
+}
+
+/* Hide scrollbars on horizontally-scrollable tab strips while keeping them
+   swipe/trackpad scrollable. This hides bars on BOTH axes, which also
+   suppresses the phantom vertical scrollbar an `overflow-x: auto` box gets
+   (per CSS spec its `overflow-y` computes to `auto`, and tab rows overflow
+   ~1px because active tabs use `border-b-2 -mb-px`). We intentionally do NOT
+   add `overflow-y: hidden` — that would clip the protruding 1px of the
+   active-tab underline. */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE / old Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;            /* Chrome / Safari / Edge */
+}
+
+[data-app-main].edge-to-edge-surface { padding: 0; }
+
+/* The top safe-area inset is reserved once, on the shell root (D504), so a
+   strip drawn above the header (a support session, an impersonation, the
+   admin's portal switcher) sits below the status bar. On a founder's phone the
+   band (ui/phone/PhoneHeader.jsx) takes the inset instead when it is the
+   root's first element, so its illustration runs up behind the clock rather
+   than the shell's grey; any strip above it keeps the root's inset. */
+.app-shell { padding-top: env(safe-area-inset-top, 0px); }
+.app-shell:has(> [data-phone-band]:first-child) { padding-top: 0; }
+.app-shell > [data-phone-band]:first-child { padding-top: env(safe-area-inset-top, 0px); }
+
+/* The role wizards (`/onboarding/founder|investor|partner`) are the body
+   under the sidebar and the header. The landscape has to live on the scroll
+   container: that box is already edge to edge, and `background-attachment:
+   scroll` (the initial value) keeps the image on the visible column while
+   the card scrolls. A background on the page itself stops at the page's
+   own height and leaves the shell's gray in the gap. */
+main[data-onboarding-canvas] {
+  background-color: #241f38;
+  background-image:
+    linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%),
+    url(/auth/login-background.webp);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* ---------------------------------------------------------------------------
+   Task #3 (IC) — Accessibility primitives.
+
+   1) Reduced-motion guard. When the OS advertises
+      `prefers-reduced-motion: reduce`, suppress every CSS transition,
+      animation, and smooth scroll across the app. Components that need
+      a *functional* animation (e.g. a progress indicator) must opt back
+      in with `motion-safe:` Tailwind variants.
+   2) Visible focus ring on keyboard-only focus. `:focus-visible` skips
+      the ring for click/touch focus and shows a 2px violet ring for
+      keyboard navigation — passes WCAG 2.4.7 without the visual noise
+      of a permanent outline on every clickable element.
+   3) Screen-reader-only utility — apply `.sr-only` on the live-region
+      announcement nodes the bell + toast system surface (Tailwind 4
+      ships its own .sr-only but we re-declare here so it's available
+      regardless of plugin order).
+   ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:where(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Task #17 — Dark-mode auto-skin for hardcoded Tailwind utilities.
+
+   Many pages still use bare `bg-white`, `text-gray-{700..900}`, and
+   `border-gray-{100..300}` without explicit `dark:` variants. Rather
+   than mechanically edit every file, we scope a low-specificity
+   override under `[data-app-main]` (the protected app shell wrapper
+   in App.jsx) so:
+     • Light mode is byte-identical (rules only fire under `.dark`).
+     • Public marketing pages (PublicLayout/GVPN palette) are NOT
+       affected because they do not render under `[data-app-main]`.
+     • Components that declare their OWN dark background keep it, but
+       only because each background rule below opts out of any element
+       whose class names a `dark:bg-` or `dark:hover:bg-` (D265). The
+       cascade alone would not do it — see the next comment.
+
+   Per-page exceptions can opt out by adding `data-keep-light` on a
+   wrapper — the `:not()` chain below skips any element inside such
+   a wrapper.
+   ------------------------------------------------------------------------ */
+/* D265 — WHY THE OPT-OUTS EXIST. This block is UNLAYERED, and every
+   Tailwind 4 utility sits inside `@layer utilities`. For normal
+   declarations an unlayered rule beats every layered one WHATEVER ITS
+   SPECIFICITY, so the zero-specificity `:where(...)` below does NOT let an
+   explicit `dark:bg-gray-800` win: without an opt-out the skin paints over
+   it. The block must stay unlayered — moved into `@layer base` (or any layer
+   below utilities) the bare `.bg-white` utility would win instead and every
+   token the skin exists for would paint its light value in dark mode.
+
+   So each background rule skips an element whose class names a `dark:bg-`
+   (it chose its own dark background) or a `dark:hover:bg-` while hovered
+   (it chose its own dark hover), and each hover rule skips an element whose
+   class names a `dark:hover:bg-`. Text and border rules have no opt-out yet;
+   D265 files them. `frontend/test/dark_skin_d265.test.mjs` compiles this
+   file and holds all of it.
+
+   `[data-keep-light]` opts a subtree out entirely (the selector requires
+   `:not([data-keep-light] *)`). Nothing uses it today. */
+:where(.dark [data-app-main] .bg-white:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
+  background-color: var(--app-surface);
+}
+:where(.dark [data-app-main] .bg-gray-50:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
+  background-color: var(--app-surface-2);
+}
+:where(.dark [data-app-main] .bg-gray-100:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
+  background-color: #1f2937;
+}
+:where(.dark [data-app-main] .text-gray-900:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-800:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-gray-700:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-600:not([data-keep-light] *):not([data-keep-light])) {
+  color: #cbd5e1;
+}
+:where(.dark [data-app-main] .text-gray-500:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .text-gray-400:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-gray-200:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .border-gray-100:not([data-keep-light] *):not([data-keep-light])),
+:where(.dark [data-app-main] .border-gray-300:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .divide-gray-100 > :not(:last-child), .dark [data-app-main] .divide-gray-200 > :not(:last-child)) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .hover\:bg-gray-50:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
+  background-color: #1f2937;
+}
+:where(.dark [data-app-main] .hover\:bg-gray-100:hover:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:hover:bg-"])) {
+  background-color: #374151;
+}
+
+/* The axal NEUTRALS get the same treatment as the greys above, and until now
+   they did not — which is how two HQ pages shipped unreadable.
+
+   `--color-axal-ink` is #18181b. `pages/hq/AccountsPage.jsx` and
+   `ContractsPage.jsx` carry zero `dark:` classes and head themselves with a
+   bare `text-axal-ink`, so on a dark surface that was near-black text on
+   #111827. Every other HQ page has some `dark:` coverage; those two had none,
+   and `pages/hq/README.md` says "Dark mode is not optional".
+
+   THE GUARD COULD NOT SEE IT. `scripts/check-dark-mode.mjs` pairs only
+   `bg-white`, `text-gray-700|800|900` and `border-gray-200|300`, and the skin
+   above rewrites only those same Tailwind greys. A token-based neutral was
+   outside both, so a near-black heading on a dark ground passed every check.
+
+   FIXED HERE RATHER THAN IN NINETY-ODD FILES, because that is what this block
+   is for. `text-axal-ink` appears in 59 files under pages/ and components/,
+   `border-axal-hairline` in 38, `bg-axal-ground` in 9; requiring an explicit
+   `dark:` beside each would be churn in place of a fix, and the next file to
+   use the token would be wrong again. `frontend/test/ui_design_tokens.test.mjs`
+   asserts that every declared axal neutral has a counterpart here, so a new one
+   cannot arrive without one.
+
+   ONLY THE NEUTRALS. The brand violets are legible on either ground and D2
+   keeps them at their spec values deliberately; a "dark variant" of a brand
+   colour would be a second palette, not a skin. Each mapping mirrors the grey
+   rule for the same role, so the two systems cannot drift into two different
+   dark greys. */
+:where(.dark [data-app-main] .text-axal-ink:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text);
+}
+:where(.dark [data-app-main] .text-axal-muted:not([data-keep-light] *):not([data-keep-light])) {
+  color: var(--app-text-muted);
+}
+:where(.dark [data-app-main] .text-axal-faint:not([data-keep-light] *):not([data-keep-light])) {
+  color: #94a3b8;
+}
+:where(.dark [data-app-main] .border-axal-hairline:not([data-keep-light] *):not([data-keep-light])) {
+  border-color: var(--app-border);
+}
+:where(.dark [data-app-main] .bg-axal-ground:not([data-keep-light] *):not([data-keep-light]):not([class*="dark:bg-"]):not([class*="dark:hover:bg-"]:hover)) {
+  background-color: var(--app-surface-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Task #8 — Article reader prose overrides.
+   Scoped under .article-prose so it only affects the reading column.
+   ------------------------------------------------------------------------ */
+.article-prose {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--app-text);
+}
+.article-prose p {
+  margin-bottom: 1.5em;
+}
+.article-prose h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-top: 3em;
+  margin-bottom: 0.6em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text);
+  line-height: 1.3;
+  scroll-margin-top: 6rem;
+}
+.article-prose h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  color: var(--app-text);
+  line-height: 1.35;
+  scroll-margin-top: 6rem;
+}
+.article-prose h4 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: var(--app-text);
+}
+.article-prose blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  border-left: 3px solid var(--color-brand);
+  background: var(--app-surface-2);
+  border-radius: 0 0.5rem 0.5rem 0;
+  font-style: italic;
+  color: var(--app-text-muted);
+}
+.article-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+.article-prose ul,
+.article-prose ol {
+  margin-bottom: 1.5em;
+  padding-left: 1.5em;
+}
+.article-prose li {
+  margin-bottom: 0.4em;
+}
+.article-prose pre {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.95em;
+  line-height: 1.6;
+}
+.article-prose code {
+  font-size: 0.9em;
+  padding: 0.15em 0.35em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-radius: 0.25rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+}
+.article-prose pre code {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: inherit;
+}
+.article-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 1.5em 0;
+}
+.article-prose figure {
+  margin: 1.5em 0;
+}
+.article-prose figcaption {
+  font-size: 0.875rem;
+  color: var(--app-text-muted);
+  text-align: center;
+  margin-top: 0.5em;
+}
+.article-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+}
+.article-prose th,
+.article-prose td {
+  padding: 0.6em 0.75em;
+  border: 1px solid var(--app-border);
+  text-align: left;
+}
+.article-prose th {
+  background: var(--app-surface-2);
+  font-weight: 600;
+}
+.article-prose hr {
+  margin: 2.5em 0;
+  border: none;
+  border-top: 1px solid var(--app-border);
+}
+.article-prose a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.article-prose a:hover {
+  color: var(--color-brand-dark);
+}
+.article-prose strong {
+  font-weight: 700;
+  color: var(--app-text);
+}
+.article-prose aside,
+.article-prose .callout {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border-radius: 0.5rem;
+  border: 1px solid var(--app-border);
+}
+.article-prose aside p:last-child,
+.article-prose .callout p:last-child {
+  margin-bottom: 0;
+}
+/* D1410 — the callout's kind, and the link card (never fetched: its stored
+   title and description, else the domain and the URL). Unscoped, so the
+   editor's preview draws them as the reader does. */
+.article-callout {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-left: 3px solid var(--color-brand);
+  border-radius: 0.5rem;
+}
+.article-callout[data-kind='tip'] { border-left-color: #16a34a; }
+.article-callout[data-kind='warning'] { border-left-color: #d97706; }
+.article-callout > p:last-child { margin-bottom: 0; }
+.article-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin: 1.5em 0;
+  padding: 0.9em 1.1em;
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  background: var(--app-surface);
+  color: var(--app-text);
+  text-decoration: none !important;
+}
+.article-card:hover { border-color: var(--color-brand); }
+.article-card-title { font-weight: 600; line-height: 1.35; }
+.article-card-description { font-size: 0.9em; color: var(--app-text-muted); overflow-wrap: anywhere; }
+.article-card-domain { font-size: 0.8em; color: var(--app-text-muted); }
+
+/* Rotate chevron when details is open */
+details[open] > summary .details-chevron {
+  transform: rotate(90deg);
+}
+details > summary .details-chevron {
+  transition: transform 0.2s ease;
+}
+
+/* Mobile responsive helpers — Task #3 (IC).
+   `data-table-cards` opt-in collapses a <table>-like grid into a card
+   stack below 768px. Pages that adopt it wrap rows with
+   `data-table-card-row` so the rule scopes precisely. */
+@media (max-width: 767px) {
+  [data-table-cards] [data-table-card-row] {
+    display: block !important;
+    grid-template-columns: none !important;
+    border: 1px solid var(--app-border);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+  }
+  [data-table-cards] [data-table-card-row] > * {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0 !important;
+    border-bottom: 1px dashed var(--app-border);
+  }
+  [data-table-cards] [data-table-card-row] > *:last-child { border-bottom: 0; }
+}
+
+/* Range inputs — Task #145.
+   `appearance-none` STRIPS the native widget, and with it everything
+   `accent-color` was doing. The onboarding sliders carried both: an
+   `accent-violet-600` that could no longer reach a thumb, over a track with
+   no filled portion, which is why the investor wizard's "What matters most
+   to you" step read as five empty pills and gave no clue what was selected.
+
+   Once the native widget is gone the fill and the thumb have to be drawn,
+   so: the fill is a hard-stop gradient at `--range-pct`, which React sets
+   from the value, and the thumb is styled per-engine because WebKit and
+   Gecko expose different pseudo-elements and a selector either engine
+   cannot parse invalidates the whole rule for BOTH. They stay in separate
+   blocks for that reason — do not merge them into one selector list.
+
+   #7c3aed is authV2.purple, written literally rather than as
+   var(--color-axal-violet): Tailwind v4 tree-shakes an @theme token that no
+   utility references, and a dropped token here would silently paint
+   nothing — which is the exact failure this rule exists to fix. */
+.axal-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #7c3aed 0%,
+    #7c3aed var(--range-pct, 50%),
+    #e4e4e7 var(--range-pct, 50%),
+    #e4e4e7 100%
+  );
+  cursor: pointer;
+  outline-offset: 3px;
+}
+
+.axal-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+.axal-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #7c3aed;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 31, 56, 0.35);
+  cursor: pointer;
+}
+
+/* Firefox paints its own track under the gradient; keep it transparent so
+   the one fill above is the only thing the reader sees. */
+.axal-range::-moz-range-track {
+  background: transparent;
+  height: 8px;
+}
+
+.axal-range:focus-visible {
+  outline: 2px solid #6d28d9;
+}

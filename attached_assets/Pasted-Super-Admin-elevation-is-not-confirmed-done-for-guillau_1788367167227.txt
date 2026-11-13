@@ -1,0 +1,109 @@
+Super Admin elevation is not confirmed done for guillaume.lauzier@axal.vc. I hit a hard blocker: no Cloudflare credentials are available anywhere this agent can reach.
+
+What I found
+1. Production D1 could not be queried from here
+
+No CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID in the cloud agent environment
+Wrangler OAuth login timed out
+Browser access to Cloudflare Dashboard and GitHub Actions login failed (no authenticated session)
+2. GitHub Actions repo secrets are missing The daily D1 backup workflow fails with:
+
+Required repo secret(s) are missing or empty: CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+So any prior attempt via GitHub Actions could not have worked until those secrets are added. Cloud Code/Replit would only have succeeded if someone ran wrangler locally with their own Cloudflare login.
+
+3. Infrastructure I added A workflow is now on main: .github/workflows/super-admin-setup.yml
+
+It supports:
+
+mode=check — inspect migration 199, target user(s), current super admins
+mode=elevate — grant role=admin + is_super_admin=1
+4. Email alias note The repo documents Guillaume Lauzier as user id 17 with gl@axal.vc, not guillaume.lauzier@axal.vc. These may be separate accounts — the check query covers both.
+
+What you need to do (pick one path)
+Option A — Wrangler on your machine (fastest if you have CF access)
+cd /path/to/StudioOS
+# Check current state
+npx wrangler d1 execute studioos-db --remote --env production --command \
+  "SELECT id, email, role, is_super_admin, is_active FROM users WHERE lower(email) IN ('guillaume.lauzier@axal.vc', 'gl@axal.vc');"
+# If not admin + super admin, elevate:
+npx wrangler d1 execute studioos-db --remote --env production --command \
+  "UPDATE users SET role = 'admin' WHERE lower(email) = 'guillaume.lauzier@axal.vc';"
+npx wrangler d1 execute studioos-db --remote --env production --command \
+  "UPDATE users SET is_super_admin = 1 WHERE lower(email) = 'guillaume.lauzier@axal.vc' AND lower(role) = 'admin';"
+Option B — GitHub Actions (after adding repo secrets)
+Go to GitHub → AxalNetwork/StudioOS → Settings → Secrets and variables → Actions
+Add CLOUDFLARE_API_TOKEN (D1:Edit) and CLOUDFLARE_ACCOUNT_ID
+Run Super Admin setup with mode=check, then mode=elevate if needed
+Option C — Cloud Agent secrets (so I can finish this)
+Add to your Cursor Cloud Agent environment:
+
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+Then ask me to retry — I already requested these via the environment setup flow.
+
+After elevation — verify
+Sign out everywhere at https://app.axal.vc
+Sign back in as guillaume.lauzier@axal.vc
+Confirm GET /api/auth/me returns "role": "admin", "is_super_admin": 1
+Sidebar should show the HQ group with Licences → /admin/licences
+Likely answer to “was it done earlier?”
+Probably not via automated/GitHub paths, because repo Cloudflare secrets are empty. If Cloud Code/Replit ran wrangler on a machine with personal CF auth, it may have worked — but only a D1 query (Option A or B above) can confirm.
+
+Once you add Cloudflare credentials (locally, in GitHub secrets, or to this cloud agent), I can run the check/elevate/verify steps and close this out completely.
+
+Replit has credential, give me Replit prompt to apply any changes on Cloudflare
+
+Here is a copy-paste prompt for Replit (Cloud Code). It assumes Replit already has CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Secrets.
+
+Replit prompt:
+
+Task: Grant Super Admin access in production D1 for guillaume.lauzier@axal.vc
+Context:
+- Production user store is Cloudflare D1 `studioos-db` (NOT the FastAPI SQLite in backend/).
+- Super Admin = users.role = 'admin' AND users.is_super_admin = 1 (migration 199).
+- There is NO API/UI to grant admin — direct D1 SQL only (see documentation/architecture/GOTCHAS.md).
+- The repo also documents Guillaume as gl@axal.vc (user id 17). Check BOTH emails before updating.
+Run from repo root. Use Node 22+ if wrangler complains.
+Step 1 — Verify Cloudflare creds and migration 199:
+  echo "TOKEN set: $([ -n "$CLOUDFLARE_API_TOKEN" ] && echo yes || echo NO)"
+  echo "ACCOUNT set: $([ -n "$CLOUDFLARE_ACCOUNT_ID" ] && echo yes || echo NO)"
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "SELECT filename FROM schema_migrations WHERE filename LIKE '%199_super_admin%';"
+Step 2 — Inspect target account(s):
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "SELECT id, email, role, is_super_admin, is_active FROM users WHERE lower(email) IN ('guillaume.lauzier@axal.vc', 'gl@axal.vc');"
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "SELECT id, email, role, is_super_admin FROM users WHERE is_super_admin = 1;"
+Step 3 — Only if guillaume.lauzier@axal.vc exists AND (role != 'admin' OR is_super_admin != 1), run:
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "UPDATE users SET role = 'admin' WHERE lower(email) = 'guillaume.lauzier@axal.vc';"
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "UPDATE users SET is_super_admin = 1 WHERE lower(email) = 'guillaume.lauzier@axal.vc' AND lower(role) = 'admin';"
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "UPDATE users SET is_active = 1 WHERE lower(email) = 'guillaume.lauzier@axal.vc' AND is_active = 0;"
+  If guillaume.lauzier@axal.vc does NOT exist, STOP and report that — user must register at https://app.axal.vc first via magic link.
+  If only gl@axal.vc exists and is already admin + is_super_admin=1, report that — user may be signing in with the wrong email.
+Step 4 — Confirm final state:
+  npx wrangler d1 execute studioos-db --remote --env production --command \
+    "SELECT id, email, role, is_super_admin, is_active FROM users WHERE lower(email) = 'guillaume.lauzier@axal.vc';"
+Step 5 — Report back with:
+  - Full output from every query above
+  - Whether elevation was applied or already done
+  - If gl@axal.vc and guillaume.lauzier@axal.vc are different rows, say so explicitly
+Do NOT change wrangler.toml, deploy the worker, or modify application code. This is D1 SQL only.
+Post-elevation verification (for me, not Replit):
+  Sign out everywhere at https://app.axal.vc, sign back in as guillaume.lauzier@axal.vc.
+  GET /api/auth/me should return role: "admin", is_super_admin: 1.
+  Sidebar should show HQ group with Licences → /admin/licences.
+What to expect back from Replit
+
+Result	Meaning
+role=admin, is_super_admin=1
+Done — sign out/in at app.axal.vc
+No row for guillaume.lauzier@axal.vc
+Register that email at app.axal.vc first, then re-run Step 3
+Only gl@axal.vc is elevated
+Sign in with gl@axal.vc, or elevate the other address too
+Migration 199 missing
+Run npm run deploy from repo root (applies pending D1 migrations via predeploy)
+Paste Replit’s query output here if you want me to confirm whether it worked.

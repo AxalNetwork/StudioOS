@@ -1,0 +1,24 @@
+#67 - Integrate Slide 10 deal-review card
+What & Why
+On the Axal VC Spin-Out pitch deck, Slide 10 ("Deal Readiness — Data room open. Ready to move.") is a dark slide. The share-mode "Want to review the deal?" card injected into it uses a light violet/white style with its own gradient, rounded box, and inner white icon chip. It reads as a pasted-on overlay that doesn't belong to the slide, and it overflows the bottom of the slide frame. Restyle this card so it visually belongs to the dark "Deal Readiness" template and fits cleanly within the slide.
+Done looks like
+* Opening a Spin-Out deck share link and viewing Slide 10 shows the "Want to review the deal?" card styled to match the dark slide: dark panel surface, subtle violet accent, white heading, muted body text, and an accent button consistent with the slide's existing diligence/next-steps treatment.
+* The card sits within the slide bounds — heading, body, button, and the "By continuing…" fine print are all fully visible and not clipped at the bottom edge.
+* The card no longer looks like a separate light overlay; it reads as part of the slide's design system.
+* The commercial (feedback) variant of the same card also remains legible and on-theme on the dark slide.
+* Editor preview, thumbnail, and PDF export are unchanged (the card is share-mode only and does not appear there).
+* The non-Spin-Out, end-of-deck version of this card (shown on its own light page for other deck templates) is unchanged.
+Out of scope
+* Changing the card's copy, the "Join & open the deal" flow, NDA/sign-up modal, or any backend behavior.
+* Redesigning the rest of Slide 10 or any other slide.
+* Changing when/where the card appears (still share-mode only, still on Slide 10 for Spin-Out).
+Steps
+1. Add a dark/on-slide treatment to the embedded card — Give the embedded variant of the share CTA a dark theme that matches the Deal Readiness slide's palette (dark panel background, line/violet accent border, white title, muted body, accent button), keeping both the fundraising (violet) and commercial (emerald/feedback) categories legible on the dark background. Keep the existing light styling for the non-embedded end-of-deck usage on other decks.
+2. Fit the card within the slide frame — Adjust the card's density/placement on Slide 10 so the full card (icon, heading, body, button, fine print) renders inside the slide bounds without clipping at the bottom, aligned with the slide's left column.
+3. Verify across surfaces — Confirm via a share link that Slide 10 looks integrated, and that editor preview, thumbnail, PDF export, and other decks' end-of-deck CTA are unaffected. Run typecheck and the drift check before merge.
+Relevant files
+* frontend/src/components/ShareDeckCTA.jsx
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:787-839
+* frontend/src/decks/templates/reviewDealSlot.ts
+* frontend/src/pages/PitchDeckPrintPage.jsx:717-724
+* frontend/src/decks/spinout/deckData.js:24-27

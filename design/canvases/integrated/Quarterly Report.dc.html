@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="./fund-model.js"></script>
+  <script src="./doc-page.js"></script>
+  <style>
+    doc-page:not(:defined){visibility:hidden}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .qr-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+  </style>
+</helmet>
+
+<doc-page size="letter">
+
+  <!-- ============ PAGE 1 · COVER + SUMMARY ============ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#fff">
+    <div style="color:#fff;padding:24px 44px 26px;position:relative;background-image:url('./uploads/axal-vc-future-66669dce.png');background-size:cover;background-position:center 38%;overflow:hidden">
+      <div style="position:absolute;inset:0;background:linear-gradient(100deg,rgba(20,12,38,.94) 0%,rgba(28,18,54,.9) 44%,rgba(38,22,74,.84) 100%);pointer-events:none"></div>
+      <div style="position:relative">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+          <img src="./uploads/axal01colourvar2.png" alt="Axal VC" style="width:26px;height:26px;object-fit:contain;flex:none;display:block">
+          <div style="font-size:21.4px;font-weight:800;letter-spacing:-.01em;color:#fff">Axal VC</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+          <div style="min-width:0">
+            <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.55)">Quarterly LP report · confidential</div>
+            <div style="font-size:32.2px;font-weight:800;letter-spacing:-.02em;margin-top:7px">{{ meta.period }} · Axal VC Spin-Out Fund I</div>
+            <div style="font-size:15.4px;color:rgba(255,255,255,.74);margin-top:4px">Reporting period {{ meta.range }} · issued {{ meta.issued }}</div>
+          </div>
+          <div style="text-align:right;flex:none">
+            <div style="display:inline-block;padding:4px 11px;border-radius:99px;font-size:12.7px;font-weight:700;background:rgba(196,181,253,.2);color:#ddd6fe">{{ meta.status }}</div>
+            <div class="qr-mono" style="font-size:12.7px;color:rgba(255,255,255,.82);margin-top:8px">Prepared for {{ meta.lp }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- headline metrics -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid #ececf1;background:#faf9fc">
+      <sc-for list="{{ headline }}" as="h" hint-placeholder-count="5">
+        <div style="padding:13px 16px;border-right:1px solid #f1f0f5">
+          <div style="font-size:11.4px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#a1a1aa">{{ h.k }}</div>
+          <div class="qr-mono" style="font-size:20.1px;font-weight:700;margin-top:4px;color:{{ h.tone }}">{{ h.v }}</div>
+          <div style="font-size:12.7px;color:#71717a;margin-top:2px;line-height:1.4">{{ h.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:20px 44px 0;flex:1;display:flex;flex-direction:column;gap:18px">
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Letter from the General Partner</div>
+        <div style="font-size:14.1px;line-height:1.7;color:#3f3f46;margin-top:9px">{{ letter.p1 }}</div>
+        <div style="font-size:14.1px;line-height:1.7;color:#3f3f46;margin-top:8px">{{ letter.p2 }}</div>
+        <div style="font-size:14.1px;line-height:1.7;color:#3f3f46;margin-top:8px">{{ letter.p3 }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Capital account · {{ meta.lp }}</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ capitalAccount }}" as="c" hint-placeholder-count="7">
+              <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dotted #ececf1">
+                <span style="font-size:13.4px;color:{{ c.labelInk }};font-weight:{{ c.weight }}">{{ c.k }}</span>
+                <span class="qr-mono" style="font-size:13.4px;font-weight:700;color:{{ c.ink }};text-align:right">{{ c.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Fund-level summary</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ fundSummary }}" as="f" hint-placeholder-count="7">
+              <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dotted #ececf1">
+                <span style="font-size:13.4px;color:#71717a">{{ f.k }}</span>
+                <span class="qr-mono" style="font-size:13.4px;font-weight:700;color:#18181b;text-align:right">{{ f.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Deployment by quarter</div>
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-top:12px;height:72px">
+          <sc-for list="{{ deployBars }}" as="b" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end">
+              <div class="qr-mono" style="font-size:12.7px;font-weight:700;color:{{ b.ink }}">{{ b.label }}</div>
+              <div style="width:100%;height:{{ b.h }};border-radius:5px 5px 2px 2px;background:{{ b.bar }}"></div>
+              <div style="font-size:12.1px;color:#71717a">{{ b.q }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:14px 44px 18px;margin-top:auto">
+      <div style="padding-top:10px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;gap:20px">
+        <div style="font-size:11px;color:#a1a1aa;line-height:1.55;max-width:70%">Confidential — prepared solely for the named limited partner. Unaudited figures except where stated. Valuations reflect the GP's good-faith estimate under the fund's valuation policy and are subject to revision. Past performance is not indicative of future results.</div>
+        <div class="qr-mono" style="font-size:11.4px;color:#a1a1aa;flex:none;text-align:right">Page 1 of 4</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 2 · PORTFOLIO ============ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#fff">
+    <div style="padding:22px 44px 0;flex:1;display:flex;flex-direction:column;gap:13px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:2px solid #18181b">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#a1a1aa">Section II</div>
+          <div style="font-size:24.1px;font-weight:800;letter-spacing:-.02em;margin-top:3px">Portfolio review</div>
+        </div>
+        <div class="qr-mono" style="font-size:12.7px;color:#a1a1aa">{{ meta.period }} · {{ meta.range }}</div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Active positions</div>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px">Company</th>
+              <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Cohort</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Invested</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Held value</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">MOIC</th>
+              <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ portfolio }}" as="p" hint-placeholder-count="11">
+              <tr style="border-top:1px solid #f4f4f5">
+                <td style="padding:3px 0">
+                  <div style="font-size:13.4px;font-weight:600;color:#18181b">{{ p.company }}</div>
+                  <div style="font-size:11.4px;color:#a1a1aa">{{ p.sector }}</div>
+                </td>
+                <td class="qr-mono" style="font-size:12.7px;color:#71717a;padding:3px 0 3px 8px">{{ p.cohort }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;color:#3f3f46;padding:3px 0 3px 8px">{{ p.invested }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;color:#18181b;padding:3px 0 3px 8px">{{ p.held }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;padding:3px 0 3px 8px;color:{{ p.moicTone }}">{{ p.moic }}</td>
+                <td style="padding:3px 0 3px 8px"><span style="{{ p.statusStyle }}">{{ p.status }}</span></td>
+              </tr>
+            </sc-for>
+            <tr style="border-top:1.5px solid #18181b;background:#faf9fc">
+              <td colspan="2" style="padding:5px 0;font-size:12.7px;font-weight:700;color:#18181b">Total · {{ portfolioTotals.count }} positions</td>
+              <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;padding:5px 0 5px 8px;color:#18181b">{{ portfolioTotals.invested }}</td>
+              <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;padding:5px 0 5px 8px;color:#18181b">{{ portfolioTotals.held }}</td>
+              <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;padding:5px 0 5px 8px;color:#15803d">{{ portfolioTotals.moic }}</td>
+              <td style="padding:5px 0 5px 8px"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px">
+          <div>
+            <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Material developments</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:9px">
+              <sc-for list="{{ developments }}" as="d" hint-placeholder-count="5">
+                <div style="display:flex;gap:9px">
+                  <div class="qr-mono" style="font-size:11.4px;font-weight:700;color:#c4b5fd;flex:none;padding-top:1px;width:44px">{{ d.date }}</div>
+                  <div style="min-width:0">
+                    <div style="font-size:13.4px;font-weight:700;color:#18181b">{{ d.title }}</div>
+                    <div style="font-size:12.7px;color:#71717a;line-height:1.5;margin-top:1px">{{ d.body }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Sector exposure</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:9px">
+              <sc-for list="{{ exposure }}" as="e" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                    <span style="font-size:12.7px;color:#3f3f46">{{ e.label }}</span>
+                    <span class="qr-mono" style="font-size:12.7px;font-weight:700;color:#18181b">{{ e.pct }}</span>
+                  </div>
+                  <div style="height:6px;border-radius:99px;background:#f1f0f5;overflow:hidden"><div style="height:100%;width:{{ e.pct }};border-radius:99px;background:{{ e.bar }}"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:14px 44px 18px;margin-top:auto">
+      <div style="padding-top:10px;border-top:1px solid #ececf1;display:flex;justify-content:space-between;gap:20px">
+        <div style="font-size:11px;color:#a1a1aa">Axal VC Spin-Out Fund I · {{ meta.period }} quarterly report · confidential</div>
+        <div class="qr-mono" style="font-size:11.4px;color:#a1a1aa;flex:none">Page 2 of 4</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 3 · PROGRAM + OUTLOOK ============ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#fff">
+    <div style="padding:16px 44px 0;flex:1;display:flex;flex-direction:column;gap:11px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:2px solid #18181b">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#a1a1aa">Section III</div>
+          <div style="font-size:24.1px;font-weight:800;letter-spacing:-.02em;margin-top:3px">Program telemetry &amp; outlook</div>
+        </div>
+        <div class="qr-mono" style="font-size:12.7px;color:#a1a1aa">Sourcing pipeline · Spin-Out Lab</div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Cohort performance</div>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px">Cohort</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Started</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Graduated</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Median readiness</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Invested</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Follow-on deployed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ cohorts }}" as="c" hint-placeholder-count="4">
+              <tr style="border-top:1px solid #f4f4f5;background:{{ c.bg }}">
+                <td style="padding:4px 0;font-size:13.4px;font-weight:600;color:#18181b">{{ c.name }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;color:#71717a;padding:4px 0 4px 8px">{{ c.started }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;color:#3f3f46;padding:4px 0 4px 8px">{{ c.graduated }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;font-weight:700;padding:4px 0 4px 8px;color:{{ c.readyTone }}">{{ c.readiness }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;color:#3f3f46;padding:4px 0 4px 8px">{{ c.invested }}</td>
+                <td class="qr-mono" style="text-align:right;font-size:12.7px;color:#3f3f46;padding:4px 0 4px 8px">{{ c.followOn }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Next quarter · planned activity</div>
+          <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
+            <sc-for list="{{ outlook }}" as="o" hint-placeholder-count="5">
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <div style="width:5px;height:5px;border-radius:50%;background:#7c3aed;flex:none;margin-top:5px"></div>
+                <span style="font-size:13.4px;color:#3f3f46;line-height:1.55">{{ o }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Fund administration</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ admin }}" as="a" hint-placeholder-count="6">
+              <div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dotted #ececf1">
+                <span style="font-size:12.7px;color:#71717a">{{ a.k }}</span>
+                <span style="font-size:12.7px;font-weight:600;color:#18181b;text-align:right">{{ a.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Reserve position</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ reserve }}" as="r" hint-placeholder-count="5">
+              <div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dotted #ececf1">
+                <span style="font-size:12.7px;color:#71717a">{{ r.k }}</span>
+                <span class="qr-mono" style="font-size:12.7px;font-weight:700;color:#18181b;text-align:right">{{ r.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Valuation basis &amp; notes</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:10px">
+          <sc-for list="{{ notes }}" as="n" hint-placeholder-count="4">
+            <div>
+              <div style="font-size:13.4px;font-weight:700;color:#18181b">{{ n.title }}</div>
+              <div style="font-size:12.7px;color:#71717a;line-height:1.6;margin-top:3px">{{ n.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#faf9fc;border:1px solid #ececf1;border-radius:10px;padding:11px 18px">
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;margin-bottom:7px">Key dates</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <sc-for list="{{ keyDates }}" as="d" hint-placeholder-count="4">
+            <div>
+              <div class="qr-mono" style="font-size:14.1px;font-weight:700;color:#18181b">{{ d.date }}</div>
+              <div style="font-size:12.1px;color:#71717a;line-height:1.4;margin-top:2px">{{ d.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:14px 44px 20px;margin-top:auto">
+      <div style="padding-top:12px;border-top:1px solid #ececf1;display:flex;align-items:flex-end;justify-content:space-between;gap:24px">
+        <div style="font-size:11px;color:#a1a1aa;line-height:1.55;max-width:62%">Questions regarding this report, your capital account, or the fund's valuation policy should be directed to the General Partner. Tax documents (Schedule K-1) are issued by March 15 annually.</div>
+        <div style="flex:none;text-align:right">
+          <div style="font-size:13.4px;font-weight:700;color:#18181b">Guillaume Lauzier · General Partner</div>
+          <div style="font-size:12.1px;color:#71717a;margin-top:2px">guillaume.lauzier@axal.vc</div>
+          <div class="qr-mono" style="font-size:11.4px;color:#a1a1aa;margin-top:4px">Page 3 of 4</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 4 · FINANCIAL STATEMENTS & DISCLOSURES ============ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#fff">
+    <div style="padding:16px 44px 0;flex:1;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:2px solid #18181b">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#a1a1aa">Section IV</div>
+          <div style="font-size:24.1px;font-weight:800;letter-spacing:-.02em;margin-top:3px">Financial statements &amp; disclosures</div>
+        </div>
+        <div class="qr-mono" style="font-size:12.7px;color:#a1a1aa">Unaudited · prepared by the GP</div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Performance progression · since inception</div>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px">Quarter</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Called</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Fund NAV</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">TVPI</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">DPI</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">RVPI</th>
+              <th style="text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 8px">Net IRR</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ progression }}" as="pr" hint-placeholder-count="4">
+              <tr style="border-top:1px solid #f4f4f5">
+                <td class="qr-mono" style="font-size:12.7px;font-weight:600;color:#18181b;padding:6px 0">{{ pr.q }}</td>
+                <td class="qr-mono" style="font-size:12.7px;color:#3f3f46;padding:6px 0 6px 8px;text-align:right">{{ pr.called }}</td>
+                <td class="qr-mono" style="font-size:12.7px;color:#3f3f46;padding:6px 0 6px 8px;text-align:right">{{ pr.nav }}</td>
+                <td class="qr-mono" style="font-size:12.7px;font-weight:600;color:#18181b;padding:6px 0 6px 8px;text-align:right">{{ pr.tvpi }}</td>
+                <td class="qr-mono" style="font-size:12.7px;color:#71717a;padding:6px 0 6px 8px;text-align:right">{{ pr.dpi }}</td>
+                <td class="qr-mono" style="font-size:12.7px;color:#3f3f46;padding:6px 0 6px 8px;text-align:right">{{ pr.rvpi }}</td>
+                <td class="qr-mono" style="font-size:12.7px;font-weight:700;color:{{ pr.tone }};padding:6px 0 6px 8px;text-align:right">{{ pr.irr }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="font-size:11px;color:#a1a1aa;line-height:1.5;margin-top:6px">Net IRR is calculated on quarterly LP cash flows after management fees and fund expenses, with no carried interest accrued to date. Early-stage IRR over short holding periods is not a reliable indicator of eventual returns and is presented for completeness only.</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px">
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Fees &amp; expenses</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ fees }}" as="fe" hint-placeholder-count="7">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #f4f4f5">
+                <span style="font-size:12.7px;color:{{ fe.labelInk }};font-weight:{{ fe.weight }}">{{ fe.k }}</span>
+                <span class="qr-mono" style="font-size:12.7px;font-weight:{{ fe.weight }};color:{{ fe.ink }};text-align:right">{{ fe.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Capital call history · {{ meta.lp }}</div>
+          <div style="display:flex;flex-direction:column;margin-top:9px">
+            <sc-for list="{{ calls }}" as="cl" hint-placeholder-count="5">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #f4f4f5">
+                <span style="font-size:12.7px;color:{{ cl.labelInk }};font-weight:{{ cl.weight }}">{{ cl.k }}</span>
+                <span class="qr-mono" style="font-size:12.7px;font-weight:{{ cl.weight }};color:{{ cl.ink }};text-align:right">{{ cl.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Concentration &amp; risk disclosure</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:10px">
+          <sc-for list="{{ concentration }}" as="cn" hint-placeholder-count="4">
+            <div>
+              <div class="qr-mono" style="font-size:15.4px;font-weight:700;color:{{ cn.tone }}">{{ cn.v }}</div>
+              <div style="font-size:11.4px;color:#71717a;line-height:1.45;margin-top:2px">{{ cn.k }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Subsequent events</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">
+          <sc-for list="{{ subsequent }}" as="se" hint-placeholder-count="3">
+            <div style="display:flex;gap:9px;align-items:flex-start">
+              <span class="qr-mono" style="flex:none;font-size:12.1px;font-weight:700;color:#a1a1aa;width:52px">{{ se.d }}</span>
+              <span style="font-size:12.7px;color:#3f3f46;line-height:1.55">{{ se.e }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#faf9fc;border:1px solid #ececf1;border-radius:10px;padding:11px 18px">
+        <div style="font-size:12.1px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;margin-bottom:6px">Basis of preparation</div>
+        <div style="font-size:11.4px;color:#71717a;line-height:1.6">These statements are unaudited and prepared by the General Partner on a fair-value basis consistent with the fund's stated valuation policy. The annual audited financial statements for the year ending December 31, 2026 will be issued by March 31, 2027 and will supersede the figures presented here. Percentages may not sum precisely due to rounding.</div>
+      </div>
+    </div>
+
+    <div style="padding:14px 44px 20px;margin-top:auto">
+      <div style="padding-top:12px;border-top:1px solid #ececf1;display:flex;align-items:flex-end;justify-content:space-between;gap:24px">
+        <div style="font-size:11px;color:#a1a1aa;line-height:1.55;max-width:62%">This report is confidential and provided solely for the use of the named limited partner. It is not an offer to sell or a solicitation to buy any security. Past performance is not indicative of future results.</div>
+        <div style="flex:none;text-align:right">
+          <div style="font-size:13.4px;font-weight:700;color:#18181b">Guillaume Lauzier · General Partner</div>
+          <div style="font-size:12.1px;color:#71717a;margin-top:2px">guillaume.lauzier@axal.vc</div>
+          <div class="qr-mono" style="font-size:11.4px;color:#a1a1aa;margin-top:4px">Page 4 of 4</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  // doc-page detects explicit pagination on its own sync pass; the DC streams the
+  // .page sections in after that pass, so nudge it once the template is mounted.
+  componentDidMount() { this._syncPages(); this._awaitModel(); }
+  // fund-model.js is a classic script in <helmet>, normally present on first paint.
+  // If the helmet script hasn't executed yet, poll briefly; the render below degrades
+  // to em-dashes rather than blanking, so a load failure is visibly partial.
+  _awaitModel(tries) {
+    const n = tries == null ? 40 : tries;
+    if (window.FundModel) { if (!this._m) { this._m = true; this.forceUpdate(); } return; }
+    if (n > 0) setTimeout(() => this._awaitModel(n - 1), 50);
+    else console.error('fund-model.js did not load — figures render as em-dashes.');
+  }
+  _model() {
+    if (window.FundModel) return window.FundModel();
+    const dash = { toFixed: () => '—' };
+    return { ok:false, positions:[], fund:{ target:'—', committed:'—', called:'—', softCircled:'—',
+      lpCount:'—', minTicketK:'—', allocThresholdK:'—', lpCommitK:0, reservePolicy:0 },
+      investedK:0, heldK:0, followOnK:0, followOnCount:'—', grossMoic:dash,
+      capacityRemainingM:dash, reserveOpenM:dash, reserveDrawM:dash, reserveCloseM:dash,
+      byCohort: () => 0 };
+  }
+  componentDidUpdate() { this._syncPages(); }
+  _syncPages(tries) {
+    const n = tries == null ? 24 : tries;
+    const dp = document.querySelector('doc-page');
+    const sheet = dp && dp.shadowRoot && dp.shadowRoot.querySelector('.sheet');
+    if (sheet && typeof dp._measure === 'function') {
+      dp._measure();
+      if (sheet.classList.contains('paginated')) return;
+    }
+    if (n > 0) setTimeout(() => this._syncPages(n - 1), 60);
+  }
+  renderVals() {
+    const st = (bg, fg) => 'display:inline-block;padding:2px 7px;border-radius:99px;font-size:11.4px;font-weight:700;background:'+bg+';color:'+fg;
+
+    const meta = {
+      period:'Q2 2026', range:'Apr 1 – Jun 30, 2026', issued:'Jul 15, 2026',
+      status:'Unaudited · GP-reviewed', lp:'Helena Kaur',
+    };
+
+    // ---- shared fund model (see fund-model.js — imported by the LP workspace too) ----
+    const M = this._model();
+    const raw = M.positions, FUND = M.fund;
+    const tInvK = M.investedK, tHeldK = M.heldK, grossMoic = M.grossMoic;
+    const followOnK = M.followOnK, followOnCount = M.followOnCount;
+    const reserveOpenM = M.reserveOpenM, reserveDrawM = M.reserveDrawM, reserveCloseM = M.reserveCloseM;
+    const capacityRemaining = M.capacityRemainingM.toFixed(1);
+    const F = window.FundMoney || {};
+    const dashIf = (fn) => (k) => M.ok ? fn(k) : '—';
+    const mm = dashIf(F.m || (k=>k)), mm2 = dashIf(F.m2 || (k=>k)), usd = dashIf(F.usd || (k=>k));
+    const newC3K = M.byCohort('C3','invested');
+    const newC3Count = raw.filter(p => p.cohort === 'C3').length;
+
+    const headline = [
+      { k:'Committed capital', v: mm(FUND.committed*1000), note:'31 accepted LPs', tone:'#18181b' },
+      { k:'Called to date', v: mm(FUND.called*1000), note: Math.round(FUND.called/FUND.committed*100) + '% of commitments', tone:'#18181b' },
+      { k:'Deployed', v: mm(tInvK), note: raw.length + ' positions', tone:'#6d28d9' },
+      { k:'Reserve held', v: mm(reserveCloseM * 1000), note:'For follow-ons', tone:'#18181b' },
+      { k:'Portfolio value', v: mm(tHeldK), note: grossMoic.toFixed(2) + '× gross MOIC', tone:'#15803d' },
+    ];
+
+    const letter = {
+      p1: 'The fund deployed $' + (newC3K + followOnK) + 'K this quarter — $' + newC3K + 'K across ' + newC3Count + ' new positions sourced from Cohort 3 graduates, and $' + followOnK + 'K in ' + followOnCount + ' follow-ons into earlier positions where post-program execution data justified additional exposure, consistent with the reserve policy described in the fund documents.',
+      p2: 'Underwriting continues to benefit from the observed-execution model: every company entering the portfolio arrived incorporated, 83(b)-filed, with a clean cap table and logged customer discovery. Median venture-readiness at graduation was 64 for Cohort 3, against 58 for Cohort 2. Three portfolio companies now report recurring revenue.',
+      p3: 'The fund remains open toward a $5M minimum first close on September 15, 2026, with $' + capacityRemaining + 'M of capacity remaining against the $' + FUND.target + 'M target. Cohort 4 demo day is August 21; LPs holding allocation rights will receive the allocation window notice separately.',
+    };
+
+    // LP economics prorate against CALLED capital; NAV = share of (marked portfolio + called-but-undeployed cash) less fees
+    const lpCalledK = Math.round(FUND.lpCommitK * (FUND.called / FUND.committed) * 10) / 10;
+    const undeployedCashK = FUND.called * 1000 - tInvK;
+    const lpShare = lpCalledK / (FUND.called * 1000);
+    const lpFeeK = 1.25;
+    const lpPortfolioK = Math.round((tHeldK + undeployedCashK) * lpShare * 10) / 10;
+    const lpNavK = Math.round((lpPortfolioK - lpFeeK) * 10) / 10;
+    const capitalAccount = [
+      { k:'Commitment', v: usd(FUND.lpCommitK), weight:'600', labelInk:'#3f3f46', ink:'#18181b' },
+      { k:'Capital called to date', v: usd(lpCalledK), weight:'400', labelInk:'#71717a', ink:'#18181b' },
+      { k:'Unfunded commitment', v: usd(FUND.lpCommitK - lpCalledK), weight:'400', labelInk:'#71717a', ink:'#18181b' },
+      { k:'Contributed this quarter', v:'$30,000', weight:'400', labelInk:'#71717a', ink:'#18181b' },
+      { k:'Allocated portfolio value', v: usd(lpPortfolioK), weight:'400', labelInk:'#71717a', ink:'#18181b' },
+      { k:'Management fee (period)', v:'(' + usd(lpFeeK) + ')', weight:'400', labelInk:'#71717a', ink:'#b91c1c' },
+      { k:'Distributions to date', v:'$0', weight:'400', labelInk:'#71717a', ink:'#71717a' },
+      { k:'Net asset value', v: usd(lpNavK), weight:'700', labelInk:'#18181b', ink:'#6d28d9' },
+    ];
+
+    const netTvpi = (lpNavK / lpCalledK);
+
+    // ---- Section IV · financial statements & disclosures ----
+    // Progression is fund-level; the terminal row must tie to the fund figures above.
+    const fundNavK = tHeldK + undeployedCashK;
+    const PROG = [
+      { q:'Q3 2025', calledM:0.35, navM:0.35, dpi:'0.00×', irr:'—', tone:'#71717a' },
+      { q:'Q4 2025', calledM:0.90, navM:0.94, dpi:'0.00×', irr:'+4.4%', tone:'#15803d' },
+      { q:'Q1 2026', calledM:1.60, navM:1.82, dpi:'0.00×', irr:'+11.2%', tone:'#15803d' },
+      { q:'Q2 2026', calledM:2.40, navM: fundNavK/1000, dpi:'0.00×', irr:'+18.6%', tone:'#15803d', current:true },
+    ];
+    const progression = PROG.map(p => {
+      const tv = p.navM / p.calledM;
+      return { q: p.current ? p.q + ' · current' : p.q,
+        called: M.ok ? '$' + p.calledM.toFixed(2) + 'M' : '—',
+        nav: M.ok ? '$' + p.navM.toFixed(2) + 'M' : '—',
+        tvpi: M.ok ? tv.toFixed(2) + '×' : '—',
+        dpi: p.dpi, rvpi: M.ok ? tv.toFixed(2) + '×' : '—', irr: p.irr, tone: p.tone };
+    });
+
+    const feeRow = (k, v, strong) => ({ k, v, weight: strong ? '700' : '400',
+      labelInk: strong ? '#18181b' : '#71717a', ink: strong ? '#18181b' : '#18181b' });
+    const mgmtPeriodM = 0.034, mgmtInceptM = 0.129, expPeriodM = 0.011, expInceptM = 0.048;
+    const fees = [
+      feeRow('Management fee · this period', '$' + (mgmtPeriodM*1000).toFixed(0) + 'K'),
+      feeRow('Management fee · since inception', '$' + (mgmtInceptM*1000).toFixed(0) + 'K'),
+      feeRow('Fund operating expenses · period', '$' + (expPeriodM*1000).toFixed(0) + 'K'),
+      feeRow('Fund operating expenses · inception', '$' + (expInceptM*1000).toFixed(0) + 'K'),
+      feeRow('Carried interest accrued', '$0'),
+      feeRow('Fee offsets / rebates', '$0'),
+      feeRow('Total fees & expenses to date', '$' + ((mgmtInceptM+expInceptM)*1000).toFixed(0) + 'K', true),
+    ];
+
+    const callRow = (k, v, strong) => ({ k, v, weight: strong ? '700' : '400',
+      labelInk: strong ? '#18181b' : '#71717a', ink: strong ? '#6d28d9' : '#18181b' });
+    const calls = [
+      callRow('Call 1 · Oct 15, 2025', usd(lpCalledK * 0.146)),
+      callRow('Call 2 · Jan 20, 2026', usd(lpCalledK * 0.229)),
+      callRow('Call 3 · Apr 18, 2026', usd(lpCalledK * 0.333)),
+      callRow('Call 4 · Jun 30, 2026', usd(lpCalledK * 0.292)),
+      callRow('Total called to date', usd(lpCalledK), true),
+    ];
+
+    const largestK = raw.length ? Math.max.apply(null, raw.map(p => p.held)) : 0;
+    const top3K = raw.map(p => p.held).sort((a,b) => b-a).slice(0,3).reduce((a,b) => a+b, 0);
+    const cohortCount = raw.length ? Object.keys(raw.reduce((a,p) => { a[p.cohort]=1; return a; }, {})).length : 0;
+    const pct = (n, d) => M.ok && d ? Math.round(n/d*100) + '%' : '—';
+    const concentration = [
+      { k:'Largest single position, as % of portfolio value', v: pct(largestK, tHeldK), tone:'#18181b' },
+      { k:'Top three positions, as % of portfolio value', v: pct(top3K, tHeldK), tone:'#18181b' },
+      { k:'Positions marked above cost', v: M.ok ? raw.filter(p => p.held > p.invested).length + ' of ' + raw.length : '—', tone:'#15803d' },
+      { k:'Cohort vintages represented', v: M.ok ? String(cohortCount) : '—', tone:'#18181b' },
+    ];
+
+    const subsequent = [
+      { d:'Jul 8', e:'Cohort 4 commenced with 9 companies; the fund holds no positions from this cohort as of the period end.' },
+      { d:'Jul 22', e:'Two additional LP subscriptions countersigned, bringing soft-circled capital to $1.4M. Not reflected in period-end committed capital.' },
+      { d:'Aug 1', e:'No material adverse events, write-downs, or portfolio company insolvencies have occurred between the period end and the issue date of this report.' },
+    ];
+    const fundSummary = [
+      { k:'Target / hard cap', v:'$' + FUND.target + 'M / $25M' },
+      { k:'Committed / capacity', v: mm(FUND.committed*1000) + ' / $' + capacityRemaining + 'M' },
+      { k:'Soft-circled', v:'$1.4M' },
+      { k:'Positions held', v: String(raw.length) },
+      { k:'Follow-ons completed', v: String(followOnCount) },
+      { k:'Gross MOIC', v: grossMoic.toFixed(2) + '×' },
+      { k:'Net TVPI', v: netTvpi.toFixed(2) + '×' },
+      { k:'DPI', v:'0.00×' },
+    ];
+
+    // later quarters are known; the earliest bar absorbs the residual so the series pins to cumulative deployment
+    const depLater = [ { q:'Q4 25', v:0.31 }, { q:'Q1 26', v:0.46 }, { q:'Q2 26', v:(newC3K + followOnK)/1000 } ];
+    const dep = [{ q:'Q3 25', v: Math.round((tInvK/1000 - depLater.reduce((a,d)=>a+d.v,0)) * 100)/100 }].concat(depLater);
+    const depMax = Math.max(...dep.map(d => d.v));
+    const deployBars = dep.map((d, i) => ({
+      q:d.q, label:'$' + d.v.toFixed(2).replace(/0$/,'') + 'M',
+      h: Math.round(14 + (d.v / depMax) * 40) + 'px',
+      bar: i === dep.length - 1 ? '#7c3aed' : (i === dep.length - 2 ? '#a78bfa' : '#ddd6fe'),
+      ink: i === dep.length - 1 ? '#6d28d9' : '#71717a',
+    }));
+
+    const statusTone = {
+      'On plan': st('#dcfce7','#15803d'),
+      'Outperforming': st('#dcfce7','#15803d'),
+      'Monitor': st('#fef3c7','#92400e'),
+      'Early': st('#f4f4f5','#52525b'),
+    };
+    const money = (n) => '$' + n + 'K';
+    const portfolio = raw.map(p => {
+      const moic = p.held / p.invested;
+      return {
+        company:p.company, sector:p.sector, cohort:p.cohort,
+        invested: money(p.invested), held: money(p.held),
+        moic: moic.toFixed(2) + '×',
+        moicTone: moic >= 1.3 ? '#15803d' : moic > 1 ? '#3f3f46' : '#71717a',
+        status:p.status, statusStyle: statusTone[p.status],
+      };
+    });
+    const portfolioTotals = {
+      count: String(raw.length),
+      invested: mm2(tInvK), held: mm2(tHeldK),
+      moic: grossMoic.toFixed(2) + '×',
+    };
+
+    const developments = [
+      { date:'Apr 18', title:'Cadence Robotics closed $1.2M seed', body:'Led by Foundry Ventures at a $9M post-money. Fund exercised pro-rata from reserve; position marked to round price.' },
+      { date:'May 07', title:'NovaCraft AI reached first recurring revenue', body:'Three paying customers at $600/mo average contract value, converted from logged discovery interviews.' },
+      { date:'May 29', title:'Arcline follow-on completed', body:'$100K additional deployed from reserve following two consecutive quarters of plan-beating pipeline conversion.' },
+      { date:'Jun 11', title:'Kelp Bio placed on monitor', body:'Technical milestone slipped one quarter; no change to carrying value. GP is engaged with the founding team on scope.' },
+      { date:'Jun 30', title:'Cohort 4 admitted · 8 companies', body:'Median incoming venture-readiness 41, tracking toward a 62–66 graduation band. Demo day scheduled for Aug 21.' },
+    ];
+
+    const expBar = ['#7c3aed','#8b5cf6','#a78bfa','#c4b5fd','#ddd6fe'];
+    const exposure = [
+      { label:'B2B SaaS / workflow', pct:'38%' },
+      { label:'Data & infrastructure', pct:'24%' },
+      { label:'Deep tech / materials', pct:'19%' },
+      { label:'Health & clinical', pct:'11%' },
+      { label:'Climate', pct:'8%' },
+    ].map((e,i) => Object.assign({}, e, { bar: expBar[i % 5] }));
+
+    const reserve = [
+      { k:'Reserve at period open', v:'$' + reserveOpenM.toFixed(2) + 'M' },
+      { k:'Deployed from reserve', v:'($' + reserveDrawM.toFixed(2) + 'M)' },
+      { k:'Reserve at period close', v:'$' + reserveCloseM.toFixed(2) + 'M' },
+      { k:'Reserve ratio (policy)', v: Math.round(reserveCloseM / FUND.committed * 100) + '% held · 30–40% policy' },
+      { k:'Positions flagged for follow-on', v:'3' },
+    ];
+
+    const byCohort = (code, field) => raw.filter(p => p.cohort === code).reduce((a,p) => a + (p[field] || 0), 0);
+    const kOrDash = (n) => n ? '$' + n + 'K' : '—';
+    const cohorts = [
+      { name:'Cohort 1', started:'Sep 2025', graduated:'9 of 10', readiness:'55', code:'C1' },
+      { name:'Cohort 2', started:'Jan 2026', graduated:'10 of 11', readiness:'58', code:'C2' },
+      { name:'Cohort 3', started:'Apr 2026', graduated:'8 of 9', readiness:'64', code:'C3' },
+      { name:'Cohort 4', started:'Jul 2026', graduated:'In program', readiness:'41 →', code:'C4' },
+    ].map((c,i) => Object.assign({}, c, {
+      invested: kOrDash(byCohort(c.code,'invested')),
+      followOn: kOrDash(byCohort(c.code,'followOn')),
+      bg: i === 3 ? '#faf9fc' : '#fff',
+      readyTone: i === 3 ? '#a1a1aa' : (parseInt(c.readiness) >= 60 ? '#15803d' : '#b45309'),
+    }));
+
+    const outlook = [
+      'Cohort 4 demo day on August 21 — allocation window opens to LPs at or above $250K.',
+      'First close targeted for September 15 against a $5M minimum; $' + capacityRemaining + 'M capacity remaining.',
+      'Two of the three flagged positions are under active follow-on evaluation.',
+      'Cohort 5 admissions open September; applications sourced from the public Spin-Out Lab pipeline.',
+      'Q3 report and capital account statement issue October 15.',
+    ];
+
+    const admin = [
+      { k:'Fund administrator', v:'Carta Fund Admin' },
+      { k:'Legal counsel', v:'Ashurst Perkins Coie' },
+      { k:'Auditor', v:'Deloitte LLP' },
+      { k:'Banking / custody', v:'Mercury · First Republic' },
+      { k:'Valuation policy', v:'ASC 820 · GP-reviewed quarterly' },
+      { k:'LPAC', v:'3 seats · seated at first close' },
+    ];
+
+    const keyDates = [
+      { date:'Aug 21, 2026', label:'Cohort 4 demo day · allocation window' },
+      { date:'Sep 15, 2026', label:'First close · $5M minimum' },
+      { date:'Oct 15, 2026', label:'Q3 report issued' },
+      { date:'Mar 15, 2027', label:'Schedule K-1 issued' },
+    ];
+
+    const notes = [
+      { title:'Valuation methodology', body:'Positions are carried at fair value under ASC 820 — marked to a priced round where one closed in-period, otherwise held at cost absent an impairment indicator.' },
+      { title:'Unrealised gains', body:'All appreciation this period is unrealised. No positions were sold and no distributions have been made since formation, so DPI remains 0.00\u00d7.' },
+      { title:'Concentration', body:'The largest single position is ' + Math.round(Math.max(...raw.map(p=>p.invested)) / tInvK * 100) + '% of deployed capital. Reserve policy of 30–40% constrains initial position size and caps portfolio-level concentration.' },
+    ];
+    return { meta, headline, letter, capitalAccount, fundSummary, deployBars, portfolio, portfolioTotals, developments, exposure, reserve, cohorts, outlook, admin, keyDates, notes,
+      progression, fees, calls, concentration, subsequent };
+  }
+}
+</script>
+</body>
+</html>

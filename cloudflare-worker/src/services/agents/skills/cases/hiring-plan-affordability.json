@@ -1,0 +1,58 @@
+{
+  "skill": "hiring-plan-affordability",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "team.roster": {
+        "record_id": "HIRING-Q4",
+        "currency": "USD",
+        "proposed_positions": [
+          {
+            "role": "Platform Engineer",
+            "start_date": "2026-11-01",
+            "annual_salary_cents": 12000000,
+            "employer_burden_percent": 25,
+            "one_off_recruitment_cents": 1000000
+          },
+          {
+            "role": "Data Analyst",
+            "start_date": "2026-11-01",
+            "annual_salary_cents": null,
+            "employer_burden_percent": 25,
+            "one_off_recruitment_cents": 0
+          }
+        ]
+      },
+      "grow.records": {
+        "record_id": "STAFF-BUDGET-Q4",
+        "period_start": "2026-10-01",
+        "period_end": "2026-12-31",
+        "currency": "USD",
+        "incremental_hiring_budget_cents": 3000000,
+        "cost_policy": {
+          "salary_periods_per_year": 12,
+          "burden_basis": "salary",
+          "full_months_for_start_on_first": true,
+          "recruitment_paid_in_start_month": true
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "USD 35,000.00",
+      "USD 5,000.00",
+      "Platform Engineer"
+    ],
+    "must_say_not_recorded": [
+      "Data Analyst",
+      "salary"
+    ],
+    "must_not_include": [
+      "I approved the hire",
+      "I confirm that all proposed hires are affordable"
+    ]
+  }
+}

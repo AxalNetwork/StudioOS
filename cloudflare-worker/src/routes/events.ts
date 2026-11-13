@@ -1,0 +1,1816 @@
+/**
+ * Task #39 — Event engine: authenticated routes (design §8.1).
+ *
+ * Mounted at /api/events. Every handler is behind requireAuth (wrapped so a
+ * missing session returns a clean 401 even when this router is exercised
+ * outside the app's global onError, e.g. in unit tests). Host/admin-only
+ * actions additionally check ownership via `canManage`.
+ *
+ * Scope note (Task #39): paid tickets are minimal hooks only — a paid, non-comp
+ * registration lands as `payment_status='pending'` and the response carries
+ * `needs_payment: true`; the Stripe PaymentIntent + webhook confirmation is a
+ * downstream task. No charge is created here.
+ */
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import type { User } from '../types';
+import { getCurrentUser, requireAuth } from '../auth';
+import { EVENT_COVER, coverAsk, coverRunOptions, drawCover, quoteCover, readCover } from '../services/coverDraws';
+import {
+  COVER_ALT_MAX, MAX_COVER_BYTES, UPLOAD_MESSAGES, VARIANTS_PER_DRAW, brandColours, coverUploadAsk, drawVariants,
+  focalAsk, quoteVariants, readCoverUpload, rectsAsk, storeCoverUpload, variantsRunOptions,
+} from '../services/eventCovers';
+import { QUOTE_TTL_MS, quoteHolds, quoteUidOf, type QuotePlan } from '../services/decks/areas';
+import { runHash } from '../services/decks/runQuotes';
+import { logAdminAction } from '../services/adminAudit';
+import { agendaLocation, registrationEligibility, registrationRulesFromStore, AudienceSegmentsUnreadable } from '../services/eventOrganiser';
+import { notify } from '../services/notify';
+import { ensureEventsSchema } from '../services/eventsSchema';
+import { EventTimeError, eventTimeFields, eventTimeMessage, sameEventInstant } from '../services/eventTimes';
+import {
+  classifyNewSeat,
+  ensureCheckinCode,
+  isCapacityFull,
+  nextWaitlistPosition,
+  promoteWaitlist,
+  seatsTaken,
+  SEAT_FREE_PREDICATE,
+  type EventSeatRow,
+} from '../services/eventCapacity';
+import {
+  compSourceOf,
+  isPrincipalCompEligible,
+  mintCompInvitations,
+  parseAudienceRules,
+  type AudienceRules,
+} from '../services/eventAudience';
+import { validEventTopics } from '../services/eventTopics';
+import { isEventType } from '../services/eventTypes';
+import { deliverEventInvite } from '../services/eventMessaging';
+import { createEventTicketPaymentIntent } from '../services/eventTickets';
+import {
+  buildEventIcs,
+  EVENT_VISIBILITIES,
+  LOCATION_KINDS,
+  ensureUniqueEventSlug,
+  shapeAgendaItem,
+  shapeEvent,
+  hasConfirmedEventSeat,
+  isInPersonEvent,
+} from '../services/eventsCommon';
+import {
+  loadUserVectors,
+  confidenceAdjustedAlignment,
+  skillComplementarity,
+} from '../services/matchingVectors';
+import {
+  awardCheckinBadges,
+  awardAgendaSpeakerBadge,
+} from '../services/eventBadges';
+import { archetypeAccess } from '../services/archetypeEntitlement';
+import { refuse } from '../util/refusal';
+import { scheduleCalendarCancellation } from './_eventCalendar';
+import { memberEventLink } from '../services/eventLinks';
+import { onEventCancelled, onEventEdited } from '../services/eventSyndication/hooks';
+
+const events = new Hono<{ Bindings: Env }>();
+
+const ACTIVE_REG = ['registered', 'confirmed', 'attended', 'waitlisted'];
+
+async function auth(c: any): Promise<User | Response> {
+  try {
+    return await requireAuth(c);
+  } catch {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+}
+
+/** The host or an admin. D1490's per-event syndication routes (`event_syndication.ts`) gate on it too. */
+export function canManage(event: any, user: User): boolean {
+  return user.role === 'admin' || Number(event.host_user_id) === Number(user.id);
+}
+
+// Can this authenticated principal SEE this event? Managers (admin/host) always
+// can. Otherwise the event must be in a viewable published state — unlisted is
+// reachable by anyone holding the link; public only after an admin publishes it
+// (§1.3) — or the caller must hold a non-revoked invitation. Gate EVERY read
+// surface (detail, agenda, ics, eligibility) with this so a guessed event id
+// can't leak a private/draft/pending event.
+export async function canViewEvent(env: Env, event: any, user: User): Promise<boolean> {
+  if (canManage(event, user)) return true;
+  const published = event.status === 'published' && (
+    event.visibility === 'unlisted' ||
+    (event.visibility === 'public' && Number(event.admin_published) === 1)
+  );
+  if (published) return true;
+  // D1031 (#2872): a member who holds a registration may read the event their
+  // notices point at, also once it is cancelled or back to draft. They get no
+  // private fields, and the join link still needs a confirmed seat.
+  const reg = await env.DB.prepare(
+    `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
+  ).bind(event.id, user.id).first();
+  if (reg) return true;
+  const inv = await env.DB.prepare(
+    `SELECT id FROM event_invitations
+       WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
+         AND status != 'revoked' LIMIT 1`,
+  ).bind(event.id, user.id, user.email).first();
+  return !!inv;
+}
+
+// This lookup is always for the authenticated member, never an email supplied
+// by a public caller or an invitation token.
+async function canReadJoinLink(env: Env, event: any, user: User): Promise<boolean> {
+  if (canManage(event, user) || isInPersonEvent(event)) return true;
+  const registration = await env.DB.prepare(
+    `SELECT status, payment_status FROM event_registrations WHERE event_id = ? AND user_id = ?`,
+  ).bind(event.id, user.id).first();
+  return hasConfirmedEventSeat(registration);
+}
+
+async function loadEvent(env: Env, id: number): Promise<any | null> {
+  return env.DB.prepare(`SELECT * FROM events WHERE id = ?`).bind(id).first();
+}
+
+function intParam(v: string | undefined): number | null {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+// Task #7 — light track→event-type affinity for /suggested. The assessment
+// `track` is a game slug (e.g. 'founder_origin_v1'); we key off its prefix so
+// new tracks degrade gracefully to the default set.
+export function preferredEventTypes(track: string | null | undefined): Set<string> {
+  const t = String(track || '').toLowerCase();
+  if (t.startsWith('founder')) return new Set(['demo_day', 'workshop', 'office_hours']);
+  // 'lp_briefing' joins this set with the type itself — an LP briefing is the
+  // event an investor most wants suggested, and until now there was no type
+  // for one. See services/eventTypes.ts.
+  // D256 — the investor/LP assessment track's own game slug is
+  // 'thesis_lab_v1' (assessmentSchema.ts's INVESTOR_TRACK), not
+  // 'investor_*'; this prefix matched nothing for it and it fell to the
+  // default set until this line was added.
+  if (t.startsWith('investor') || t.startsWith('thesis')) {
+    return new Set(['demo_day', 'lp_briefing', 'conference', 'webinar']);
+  }
+  if (t.startsWith('partner')) return new Set(['conference', 'meetup', 'social']);
+  if (t.startsWith('operator')) return new Set(['workshop', 'webinar', 'office_hours']);
+  return new Set(['demo_day', 'workshop', 'meetup']);
+}
+
+// Task #7 — the 8 canonical radar axes → display labels (seeded in migration
+// 090). Used to phrase invite-suggestion reasons WITHOUT leaking raw skill
+// levels (e.g. "Complementary GTM / Sales strength", never "you 1.0, them 4.0").
+const AXIS_LABELS: Record<string, string> = {
+  product: 'Product',
+  engineering: 'Engineering',
+  design: 'Design',
+  gtm_sales: 'GTM / Sales',
+  marketing_brand: 'Marketing / Brand',
+  finance_ops: 'Finance / Ops',
+  legal_compliance: 'Legal / Compliance',
+  capital_network: 'Capital / Network',
+};
+
+// The single axis where the candidate most fills a gap the host has (host weak,
+// candidate strong). Returns a human label, never a number.
+function topComplementAxisLabel(
+  hostSkills: Record<string, number>,
+  candSkills: Record<string, number>,
+): string | null {
+  let best: { axis: string; gap: number } | null = null;
+  for (const axis of Object.keys(candSkills)) {
+    const h = hostSkills[axis] || 0;
+    const c = candSkills[axis] || 0;
+    if (h < 2.5 && c > 3) {
+      const gap = c - h;
+      if (!best || gap > best.gap) best = { axis, gap };
+    }
+  }
+  if (!best) return null;
+  return AXIS_LABELS[best.axis] || best.axis.replace(/_/g, ' ');
+}
+
+events.use('*', async (c, next) => {
+  await ensureEventsSchema(c.env);
+  await next();
+});
+
+// D1032 (#2873): where a free seat came from. D1131 (migration 611): the seat
+// records it (`event_registrations.comp_source`, written with the seat) in the
+// invitation sources' words; a seat written before 611 falls back to its comp
+// invitation's source, and with neither its source is null, not a guess.
+const COMP_SOURCE_OF_INVITATION: Record<string, string> = {
+  manual: 'invitation',
+  auto_partner: 'official_partner',
+  auto_lp: 'invested_lp',
+  auto_investor: 'investor',
+  auto_founder: 'startup_founder',
+  auto_connection: 'host_contact',
+};
+
+// The registration fields My events reads (D1032), shared by Upcoming and Past.
+// Every field is the row's own; nothing missing is drawn as 0.
+function placeFields(r: any) {
+  const fromSeat = r.comp === 1 && r.reg_comp_source ? COMP_SOURCE_OF_INVITATION[String(r.reg_comp_source)] ?? null : null;
+  const fromInvitation = fromSeat ?? (r.comp === 1 && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null);
+  return {
+    registration_id: Number(r.reg_id),
+    reg_status: r.reg_status,
+    payment_status: r.reg_payment_status ?? null,
+    amount_cents: r.reg_amount_cents != null ? Number(r.reg_amount_cents) : null,
+    comp: r.comp === 1,
+    comp_source: fromInvitation,
+    comp_source_recorded: r.comp === 1 ? fromInvitation !== null : null,
+    checked_in_at: r.checked_in_at ?? null,
+    // D1131: when this place came off the waitlist; null before migration 611, or never promoted.
+    promoted_at: r.reg_promoted_at ?? null,
+    decision_reason: r.decision_reason ?? null,
+    is_speaker: Number(r.is_speaker) === 1,
+  };
+}
+
+
+
+function pastOutcome(r: any): 'cancelled' | 'declined' | 'event_cancelled' | 'attended' | 'ended' {
+  if (r.reg_status === 'cancelled') return 'cancelled';
+  if (r.reg_status === 'declined') return 'declined';
+  if (r.status === 'cancelled') return 'event_cancelled';
+  if (r.reg_status === 'attended' || r.checked_in_at) return 'attended';
+  return 'ended';
+}
+
+function pageParam(v: string | undefined, def: number, max: number): number {
+  if (v === undefined || v === '') return def;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, max) : def;
+}
+
+// ── GET / — the caller's events (hosting + attending + past) ───────────────
+// D1032 (#2873): each place carries its registration, payment, comp source,
+// check-in and decision. Past is every place whose event has ended or been
+// cancelled, or that was itself cancelled or declined, newest first, paged
+// (`past_limit`, `past_offset`) with an exact total. Each hosted event carries
+// its counts. A read that fails throws, so no list is drawn empty unread. The
+// place columns are written out in each statement rather than shared through
+// a template: `check-sql-prepare` allows no new interpolation.
+events.get('/', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const pastLimit = pageParam(c.req.query('past_limit'), 20, 100);
+  const pastOffset = pageParam(c.req.query('past_offset'), 0, 100000);
+  const hosting = await c.env.DB.prepare(
+    `SELECT * FROM events WHERE host_user_id = ? ORDER BY starts_at DESC`,
+  ).bind(u.id).all();
+  const attending = await c.env.DB.prepare(
+    `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
+            r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.comp_source AS reg_comp_source, r.promoted_at AS reg_promoted_at,
+            r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
+            EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker, ch.code AS checkin_code
+       FROM events e
+       JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_invitations inv ON inv.id = r.invitation_id
+       LEFT JOIN event_checkins cx ON cx.event_id = e.id AND cx.registration_id = r.id
+       LEFT JOIN event_checkins ch ON ch.event_id = e.id AND ch.registration_id = r.id
+         AND r.status != 'waitlisted' AND r.payment_status != 'pending'
+      WHERE r.user_id = ? AND r.status IN ('registered','confirmed','attended','waitlisted')
+      ORDER BY e.starts_at ASC`,
+  ).bind(u.id).all();
+  const past = await c.env.DB.prepare(
+    `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
+            r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.comp_source AS reg_comp_source, r.promoted_at AS reg_promoted_at,
+            r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
+            EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker
+       FROM events e
+       JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_invitations inv ON inv.id = r.invitation_id
+       LEFT JOIN event_checkins cx ON cx.event_id = e.id AND cx.registration_id = r.id
+      WHERE r.user_id = ? AND (r.status IN ('cancelled','declined') OR e.status = 'cancelled'
+         OR datetime(COALESCE(e.ends_at, e.starts_at)) < datetime('now'))
+      ORDER BY e.starts_at DESC, r.id DESC LIMIT ? OFFSET ?`,
+  ).bind(u.id, pastLimit, pastOffset).all();
+  const pastTotal: any = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM events e JOIN event_registrations r ON r.event_id = e.id
+      WHERE r.user_id = ? AND (r.status IN ('cancelled','declined') OR e.status = 'cancelled'
+         OR datetime(COALESCE(e.ends_at, e.starts_at)) < datetime('now'))`,
+  ).bind(u.id).first();
+  // Counts per hosted event, in three grouped reads. An event with no row in a
+  // read has none of that thing: the read succeeded, so its 0 is a count.
+  const regCounts = await c.env.DB.prepare(
+    `SELECT r.event_id,
+            SUM(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 ELSE 0 END) AS seats_taken,
+            SUM(CASE WHEN r.status = 'waitlisted' THEN 1 ELSE 0 END) AS waitlisted,
+            SUM(CASE WHEN r.status = 'registered' THEN 1 ELSE 0 END) AS pending_approvals
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+      WHERE e.host_user_id = ? GROUP BY r.event_id`,
+  ).bind(u.id).all();
+  const checkinCounts = await c.env.DB.prepare(
+    `SELECT ch.event_id, COUNT(*) AS n FROM event_checkins ch JOIN events e ON e.id = ch.event_id
+      WHERE e.host_user_id = ? AND ch.checked_in_at IS NOT NULL GROUP BY ch.event_id`,
+  ).bind(u.id).all();
+  const inviteCounts = await c.env.DB.prepare(
+    `SELECT i.event_id, COUNT(*) AS n FROM event_invitations i JOIN events e ON e.id = i.event_id
+      WHERE e.host_user_id = ? AND i.status = 'pending' GROUP BY i.event_id`,
+  ).bind(u.id).all();
+  const byEvent = (rows: any[], key: string) => new Map(rows.map((r: any) => [Number(r.event_id), Number(r[key])]));
+  const regs = new Map((regCounts.results || []).map((r: any) => [Number(r.event_id), r]));
+  const checkins = byEvent(checkinCounts.results || [], 'n');
+  const invites = byEvent(inviteCounts.results || [], 'n');
+  const joinLink = (r: any) => canManage(r, u) || hasConfirmedEventSeat({ status: r.reg_status, payment_status: r.reg_payment_status });
+  return c.json({
+    hosting: (hosting.results || []).map((r: any) => {
+      const reg: any = regs.get(Number(r.id));
+      return {
+        ...shapeEvent(r, { includePrivate: true }),
+        counts: {
+          seats_taken: Number(reg?.seats_taken ?? 0),
+          waitlisted: Number(reg?.waitlisted ?? 0),
+          pending_approvals: Number(reg?.pending_approvals ?? 0),
+          checked_in: checkins.get(Number(r.id)) ?? 0,
+          invitations_open: invites.get(Number(r.id)) ?? 0,
+        },
+      };
+    }),
+    attending: (attending.results || []).map((r: any) => ({
+      ...shapeEvent(r, { includeJoinLink: joinLink(r) }),
+      ...placeFields(r),
+      reg_waitlist_position: r.reg_waitlist_position ?? null,
+      checkin_code: r.checkin_code ?? null,
+    })),
+    past: {
+      places: (past.results || []).map((r: any) => ({
+        ...shapeEvent(r, { includeJoinLink: joinLink(r) }),
+        ...placeFields(r),
+        outcome: pastOutcome(r),
+      })),
+      total: Number(pastTotal?.n ?? 0),
+      limit: pastLimit,
+      offset: pastOffset,
+    },
+  });
+});
+
+// ── GET /invitations — the caller's pending invitations, signed in ─────────
+// D1032 (#2873). By user id or email, for events not cancelled and not ended.
+// The RSVP token never travels: a signed-in answer needs none.
+events.get('/invitations', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const rows = await c.env.DB.prepare(
+    `SELECT e.*, i.id AS invitation_id, i.comp AS inv_comp, i.personal_message, i.created_at AS invited_at,
+            host.name AS host_name
+       FROM event_invitations i
+       JOIN events e ON e.id = i.event_id
+       LEFT JOIN users host ON host.id = e.host_user_id
+      WHERE (i.invited_user_id = ? OR lower(i.invited_email) = lower(?))
+        AND i.status = 'pending' AND e.status != 'cancelled'
+        AND datetime(COALESCE(e.ends_at, e.starts_at)) >= datetime('now')
+      ORDER BY e.starts_at ASC, i.id ASC`,
+  ).bind(u.id, u.email).all();
+  return c.json({
+    invitations: (rows.results || []).map((r: any) => ({
+      invitation_id: Number(r.invitation_id),
+      comp: r.inv_comp === 1,
+      personal_message: r.personal_message ?? null,
+      invited_at: r.invited_at,
+      host_name: r.host_name ?? null,
+      event: shapeEvent(r),
+    })),
+  });
+});
+
+// ── POST / — create a draft event ──────────────────────────────────────────
+events.post('/', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const body = await c.req.json().catch(() => ({} as any));
+  const title = String(body.title || '').trim();
+  if (!title) return c.json({ error: 'title_required' }, 400);
+  if (!body.starts_at) return c.json({ error: 'starts_at_required' }, 400);
+  try { Object.assign(body, eventTimeFields(body)); }
+  catch (error) { if (error instanceof EventTimeError) return refuse(c, 400, { code: error.code, message: eventTimeMessage(error.code) }); throw error; }
+
+  if (body.topics !== undefined && !validEventTopics(body.topics)) return c.json({ error: 'bad_topic' }, 400);
+  const type = isEventType(body.type) ? body.type : 'meetup';
+  const visibility = EVENT_VISIBILITIES.includes(body.visibility) ? body.visibility : 'private';
+  const locationKind = LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : 'virtual';
+  const slug = await ensureUniqueEventSlug(c.env, title);
+  let audienceRules;
+  try { audienceRules = JSON.stringify(await registrationRulesFromStore(c.env, body.audience_rules_json ?? body.audience_rules ?? {})); }
+  catch (error) { return error instanceof AudienceSegmentsUnreadable
+      ? c.json({ error: 'segments_unreadable', detail: 'Segment choices could not be read. Try again.' }, 503)
+      : c.json({ error: 'invalid_audience_rules' }, 400); }
+
+  const ins: any = await c.env.DB.prepare(
+    `INSERT INTO events
+       (slug, host_user_id, project_id, type, title, summary, description, cover_url,
+        starts_at, ends_at, timezone, location_kind, location_text, location_url,
+        capacity, waitlist_enabled, approval_required, visibility, status,
+        audience_rules_json, price_cents, currency, topics_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+  ).bind(
+    slug,
+    u.id,
+    body.project_id ?? null,
+    type,
+    title,
+    body.summary ?? null,
+    body.description ?? null,
+    body.cover_url ?? null,
+    body.starts_at,
+    body.ends_at ?? null,
+    body.timezone ?? 'UTC',
+    locationKind,
+    body.location_text ?? null,
+    body.location_url ?? null,
+    body.capacity != null ? Number(body.capacity) : null,
+    body.waitlist_enabled === false ? 0 : 1,
+    body.approval_required ? 1 : 0,
+    visibility,
+    audienceRules,
+    body.price_cents != null ? Number(body.price_cents) : 0,
+    body.currency || 'usd',
+    JSON.stringify(body.topics ?? []),
+  ).run();
+
+  const created = await loadEvent(c.env, Number(ins?.meta?.last_row_id));
+  return c.json({ event: shapeEvent(created, { includePrivate: true }) }, 201);
+});
+
+// ── GET /suggested — archetype/track-aware upcoming event suggestions ───────
+// Registered BEFORE GET /:id so the static segment isn't captured by the :id
+// param route. Upcoming public+admin-published events the caller hasn't
+// registered for (and isn't hosting), lightly boosted by a track→type affinity
+// map; the caller's published archetype rides along for framing. Defensive
+// against a cold assessment schema (→ no personalization, chronological order).
+// #3938 part 2 (D1478 task 4, job LE10): the member's press orders the suggested events
+// by fit: retrieve (bge-m3), rank (the reranker), then one line each on why
+// (`services/ai/matchRows.ts`), charged to the member on My events. The plain read
+// below stays free and rule-based; nothing here runs without the press.
+events.post('/suggested/rank', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const extra = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  let track: string | null = null;
+  try {
+    const r: any = await c.env.DB.prepare('SELECT track FROM assessment_results WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1').bind(u.id).first();
+    track = r?.track || null;
+  } catch { /* cold assessment schema: no track */ }
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM events e
+      WHERE e.visibility = 'public' AND e.status = 'published' AND e.admin_published = 1
+        AND datetime(e.starts_at) >= datetime('now')
+        AND e.host_user_id != ?
+        AND NOT EXISTS (
+          SELECT 1 FROM event_registrations r
+           WHERE r.event_id = e.id AND r.user_id = ?
+             AND r.status IN ('registered','confirmed','attended','waitlisted')
+        )
+      ORDER BY e.starts_at ASC
+      LIMIT 50`,
+  ).bind(u.id, u.id).all();
+  const query = [extra, track ? `Events for a member on the ${track} track` : 'Events for a member of a venture studio'].filter(Boolean).join('. ');
+  const candidates = (rows.results || []).map((e: any) => ({
+    key: String(e.id),
+    text: [e.title, e.type ? `A ${String(e.type).replace(/_/g, ' ')}` : null, typeof e.description === 'string' ? e.description.slice(0, 400) : null].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: 'Member · My events', option: null });
+  const deps = MATCH_DEPS.make(c.env, { userId: Number(u.id), surface: AI_SURFACE.eventSyndication, rail, guardText: query }, 'LE10');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 8 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'LE10', steps: res.steps, rows: res.rows.map((r) => ({ event_id: Number(r.key), position: r.position, line: r.line })) });
+});
+
+events.get('/suggested', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+
+  let track: string | null = null;
+  let archetype: { slug: string; label: string | null } | null = null;
+  try {
+    const r: any = await c.env.DB.prepare(
+      `SELECT track, archetype_slug, archetype_label
+         FROM assessment_results WHERE user_id = ?
+        ORDER BY updated_at DESC LIMIT 1`,
+    ).bind(u.id).first();
+    if (r) {
+      track = r.track || null;
+      if (r.archetype_slug) archetype = { slug: r.archetype_slug, label: r.archetype_label || null };
+    }
+  } catch { /* cold assessment schema → no personalization */ }
+  // D594: a free plan does not see its own archetype here either; the track still personalises.
+  if (archetype && (await archetypeAccess(c.env, u as any)).locked) archetype = null;
+
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM events e
+      WHERE e.visibility = 'public' AND e.status = 'published' AND e.admin_published = 1
+        AND datetime(e.starts_at) >= datetime('now')
+        AND e.host_user_id != ?
+        AND NOT EXISTS (
+          SELECT 1 FROM event_registrations r
+           WHERE r.event_id = e.id AND r.user_id = ?
+             AND r.status IN ('registered','confirmed','attended','waitlisted')
+        )
+      ORDER BY e.starts_at ASC
+      LIMIT 50`,
+  ).bind(u.id, u.id).all();
+
+  const prefer = preferredEventTypes(track);
+  const scored = (rows.results || []).map((e: any) => {
+    let score = 0;
+    if (prefer.has(e.type)) score += 10;
+    if (Number(e.featured) === 1) score += 3;
+    return { e, score };
+  });
+  scored.sort((a, b) => (b.score - a.score) || String(a.e.starts_at).localeCompare(String(b.e.starts_at)));
+
+  return c.json({
+    archetype,
+    track,
+    events: await Promise.all(scored.slice(0, 8).map(async (s) => ({
+      ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
+      registration_eligible: (await registrationEligibility(c.env, s.e, u.id, u.email)).eligible,
+      suggestion_reason: u.role === 'exploring' ? 'Popular with new members' : prefer.has(s.e.type)
+        ? (archetype?.label ? `Suits ${archetype.label}` : 'Matches your track')
+        : null,
+    }))),
+  });
+});
+
+// ── GET /:id/invite-suggestions — matching-ranked people to invite (host) ───
+// Host/admin only. CONSENT-SCOPED candidate pool: active non-admin members who
+// have PUBLISHED an assessment result (published = 1 — the same opt-in that
+// surfaces their archetype on rosters/network), minus the host and anyone
+// already on the roster or invited. This keeps the feature open to non-admin
+// hosts without letting them enumerate the names/roles of members who never
+// consented to being publicly visible (full user enumeration stays admin-only
+// via GET /users). Scored by confidence-adjusted value alignment + skill
+// complementarity vs the host. Reasons are coarse labels only — never raw
+// value/skill vectors or unpublished archetype detail.
+events.get('/:id/invite-suggestions', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  let candidates: any[] = [];
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT DISTINCT uv.user_id AS id, u.name AS name, u.role AS role
+         FROM user_values uv
+         JOIN users u ON u.id = uv.user_id
+        WHERE u.is_active = 1 AND u.role != 'admin'
+          AND u.id != ? AND u.id != ?
+          AND EXISTS (
+            SELECT 1 FROM assessment_results ar
+             WHERE ar.user_id = uv.user_id AND ar.published = 1
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM event_registrations r
+             WHERE r.event_id = ? AND r.user_id = uv.user_id
+               AND r.status IN ('registered','confirmed','attended','waitlisted')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM event_invitations iv
+             WHERE iv.event_id = ? AND iv.invited_user_id = uv.user_id AND iv.status != 'revoked'
+          )
+        LIMIT 100`,
+    ).bind(event.host_user_id, u.id, id, id).all();
+    candidates = rows.results || [];
+  } catch { candidates = []; }
+  if (!candidates.length) return c.json({ suggestions: [] });
+
+  const host = await loadUserVectors(c.env, Number(event.host_user_id));
+
+  const vectors = await Promise.all(
+    candidates.map((cand) => loadUserVectors(c.env, Number(cand.id))),
+  );
+  const scored: Array<{ user_id: number; name: string | null; role: string | null; score: number; reason: string }> = [];
+  candidates.forEach((cand, i) => {
+    const cv = vectors[i];
+    // Confidence-adjusted cosine over value dimensions (−1..1) → floor at 0.
+    const alignment = Math.max(0, confidenceAdjustedAlignment(host.values, cv.values).score);
+    const complement = skillComplementarity(host.skills, cv.skills); // {score 0..100}
+    const score = Math.round(alignment * 60 + complement.score * 0.4);
+    if (score <= 0) return;
+    const compAxis = topComplementAxisLabel(host.skills, cv.skills);
+    const reason = compAxis
+      ? `Complementary ${compAxis} strength`
+      : alignment > 0.4
+        ? 'Strong values alignment'
+        : 'Suggested match';
+    scored.push({
+      user_id: Number(cand.id),
+      name: cand.name || null,
+      role: cand.role || null,
+      score,
+      reason,
+    });
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return c.json({ suggestions: scored.slice(0, 8) });
+});
+
+// ── GET /:id — event detail ────────────────────────────────────────────────
+events.get('/:id', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const manage = canManage(event, u);
+  if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
+  const agenda = await c.env.DB.prepare(
+    `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
+  ).bind(id).all();
+  const registration = await c.env.DB.prepare(`SELECT id, status, payment_status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
+  // D967 (#3350): the host's name for the ticket drawer, as /invitations reads it.
+  // The name only, nothing else from the host's account; null with no host.
+  const host = await c.env.DB.prepare(
+    `SELECT host.name AS host_name FROM events e LEFT JOIN users host ON host.id = e.host_user_id WHERE e.id = ?`,
+  ).bind(id).first<{ host_name: string | null }>();
+  return c.json({
+    registration,
+    host_name: host?.host_name ?? null,
+    event: shapeEvent(event, { includePrivate: manage, includeJoinLink: hasConfirmedEventSeat(registration) }),
+    agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: manage || isInPersonEvent(event) || hasConfirmedEventSeat(registration) })),
+  });
+});
+
+// ── PATCH /:id — update event fields (host/admin) ──────────────────────────
+events.patch('/:id', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  try { Object.assign(body, eventTimeFields(body, event)); }
+  catch (error) { if (error instanceof EventTimeError) return refuse(c, 400, { code: error.code, message: eventTimeMessage(error.code) }); throw error; }
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  const reviewValues = new Map<string, unknown>();
+  const str = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); reviewValues.set(k, body[k] ?? null); } };
+  const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); const value = body[k] != null ? Number(body[k]) : null; binds.push(value); reviewValues.set(k, value); } };
+  const bool = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ? 1 : 0); } };
+
+  if ('topics' in body) {
+    if (!validEventTopics(body.topics)) return c.json({ error: 'bad_topic' }, 400);
+    sets.push('topics_json = ?'); binds.push(JSON.stringify(body.topics));
+  }
+  str('title'); str('summary'); str('description'); str('cover_url');
+  // #5309 (D5309, D3724 §gaps 8 and 11): the cover's own fields. The upload and
+  // the draw both only PROPOSE a cover; this Save is what writes one. `cover_alt`
+  // is cleared with null and never with '' — an empty string would read as "this
+  // image needs no description", which no cover of an event's does.
+  if ('cover_alt' in body) {
+    const alt = body.cover_alt == null ? null : String(body.cover_alt).trim();
+    if (alt !== null && (!alt || alt.length > COVER_ALT_MAX)) return refuse(c, 400, { code: alt ? 'alt_too_long' : 'alt_required', message: alt ? UPLOAD_MESSAGES.alt_too_long : UPLOAD_MESSAGES.alt_required });
+    sets.push('cover_alt = ?'); binds.push(alt);
+  }
+  if ('cover_source' in body) {
+    const source = body.cover_source == null ? null : String(body.cover_source);
+    if (source !== null && source !== 'uploaded' && source !== 'generated') return refuse(c, 400, { code: 'bad_cover_source', message: 'A cover is either uploaded or generated.' });
+    sets.push('cover_source = ?'); binds.push(source);
+  }
+  if ('cover_focal' in body) {
+    if (body.cover_focal == null) { sets.push('cover_focal_json = ?'); binds.push(null); }
+    else {
+      const focal = focalAsk(body.cover_focal);
+      if (!focal.ok) return refuse(c, 400, { code: focal.code, message: focal.message });
+      sets.push('cover_focal_json = ?'); binds.push(JSON.stringify(focal.focal));
+    }
+  }
+  if ('cover_crops' in body) {
+    if (body.cover_crops == null) { sets.push('cover_crops_json = ?'); binds.push(null); }
+    else {
+      // The upload already checked each crop's shape against the real image;
+      // this Save carries no image, so it checks the rectangles only.
+      const crops = rectsAsk(body.cover_crops);
+      if (!crops.ok) return refuse(c, 400, { code: crops.code, message: crops.message });
+      sets.push('cover_crops_json = ?'); binds.push(JSON.stringify(crops.crops));
+    }
+  }
+  str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
+  if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }
+  if ('visibility' in body && EVENT_VISIBILITIES.includes(body.visibility)) { sets.push('visibility = ?'); binds.push(body.visibility); }
+  if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); reviewValues.set('location_kind', body.location_kind); }
+  num('capacity'); num('price_cents'); num('project_id');
+  if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); reviewValues.set('currency', body.currency || 'usd'); }
+  bool('waitlist_enabled'); bool('approval_required');
+  if ('audience_rules' in body || 'audience_rules_json' in body) {
+    let rules;
+    try { rules = await registrationRulesFromStore(c.env, body.audience_rules_json ?? body.audience_rules); }
+    catch (error) { return error instanceof AudienceSegmentsUnreadable
+      ? c.json({ error: 'segments_unreadable', detail: 'Segment choices could not be read. Try again.' }, 503)
+      : c.json({ error: 'invalid_audience_rules' }, 400); }
+    sets.push('audience_rules_json = ?');
+    binds.push(JSON.stringify(rules));
+  }
+
+  if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+  // D917: material host edits flag an approved event; its status stays as it is.
+  const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
+  const changed = reviewFields.some((key) => reviewValues.has(key) && (key === 'price_cents'
+    ? reviewValues.get(key) !== (event[key] != null ? Number(event[key]) : null)
+    : key === 'starts_at' || key === 'ends_at'
+      ? !sameEventInstant(reviewValues.get(key), event[key])
+      : reviewValues.get(key) !== (event[key] ?? null)));
+  if (Number(event.host_user_id) === u.id && changed) {
+    sets.push('changed_after_approval_at = CASE WHEN approved_at IS NOT NULL OR admin_published = 1 THEN ? ELSE changed_after_approval_at END');
+    binds.push(new Date().toISOString());
+  }
+  sets.push(`updated_at = datetime('now')`);
+  binds.push(id);
+  await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+
+  // Switching an already self-published event to `public` must re-enter the
+  // admin review queue — it can never sit at status='published' without the
+  // admin gate, which would bypass §1.3 for authenticated viewers.
+  if ('visibility' in body && body.visibility === 'public') {
+    const cur = await loadEvent(c.env, id);
+    if (Number(cur.admin_published) !== 1 && cur.status === 'published') {
+      await c.env.DB.prepare(
+        `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now')
+           WHERE id = ? AND status = 'published' AND admin_published = 0`,
+      ).bind(new Date().toISOString(), id).run();
+    }
+  }
+
+  // Raising capacity may free seats — drain the waitlist.
+  const updated = await loadEvent(c.env, id);
+  // D1490: a posted listing whose sent content changed is updated, by host or admin. Never fails the edit.
+  await onEventEdited(c.env, updated);
+  if ('capacity' in body || 'waitlist_enabled' in body) {
+    const promoted = await promoteWaitlist(c.env, updated as EventSeatRow);
+    for (const p of promoted) {
+      if (p.user_id) {
+        await notify(c.env, {
+          userId: p.user_id, type: 'event_promoted', category: 'events',
+          title: `You're off the waitlist: ${updated.title}`,
+          link: memberEventLink(id), payload: { event_id: id },
+        }).catch(() => {});
+      }
+    }
+  }
+  await logAdminAction(c.env, u.id, u.email, 'event_updated', { event_id: id, fields: Object.keys(body) });
+  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/submit-review — host publish action (design §1.2) ─────────────
+// Public events go to the admin queue (pending_review). Unlisted/private
+// events self-publish immediately.
+events.post('/:id/submit-review', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  // Repeated submissions must not reset queue age or revive a cancelled event.
+  if (event.status === 'pending_review' || (event.status === 'published'
+      && Number(event.admin_published) !== 1 && event.visibility !== 'public')) {
+    return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+  }
+  if (!['draft', 'rejected'].includes(event.status)) return c.json({ error: 'not_submittable' }, 409);
+
+  let submitted: unknown;
+  if (event.visibility === 'public') {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(new Date().toISOString(), id).first();
+  } else {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(id).first();
+  }
+  if (!submitted) return c.json({ error: 'not_submittable' }, 409);
+  await logAdminAction(c.env, u.id, u.email, 'event_submitted', { event_id: id });
+  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/cancel — the host cancels their event ────────────────────────
+// D1032 (#2873). The desk's cancel (`routes/admin_events.ts`) for whoever
+// `canManage`: the event closes and leaves the public feed, the change is
+// audited, every place holder is told (with the host's note, if any). A ticket
+// is a platform charge, never paid to the host (`services/eventTickets.ts`),
+// so the paid tickets are counted, read before anything changes, and handed
+// to the Events desk, which refunds them (#2368).
+events.post('/:id/cancel', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const event = await loadEvent(c.env, id);
+  if (!event) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  if (!canManage(event, u)) return refuse(c, 403, { code: 'forbidden', message: 'Only the host can cancel this event.' });
+  if (event.status === 'cancelled') return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  // Read before changing state: an unreadable payment ledger must not look like zero.
+  const paid = await c.env.DB.prepare(
+    `SELECT e.currency, COUNT(*) AS count, SUM(r.amount_cents) AS amount_cents
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = ? AND r.payment_status = 'paid'
+       GROUP BY e.currency ORDER BY e.currency`,
+  ).bind(id).all<{ currency: string; count: number; amount_cents: number }>();
+  const paidRows = paid.results || [];
+  const cancelled = await c.env.DB.prepare(
+    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now')
+       WHERE id = ? AND status != 'cancelled' RETURNING id`,
+  ).bind(id).first();
+  if (!cancelled) return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
+  const paidCount = paidRows.reduce((total, row) => total + Number(row.count), 0);
+  await logAdminAction(c.env, u.id, u.email, 'event_cancelled_by_host', { event_id: id, paid_tickets: paidCount });
+  await scheduleCalendarCancellation(c, 'event', id);
+  await onEventCancelled(c.env, id); // D1490: posted listings are cancelled on their channel
+  const seated = await c.env.DB.prepare(
+    `SELECT DISTINCT user_id FROM event_registrations
+       WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,
+  ).bind(id).all();
+  for (const r of (seated.results || []) as any[]) {
+    await notify(c.env, {
+      userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    paid_tickets: {
+      count: paidCount,
+      by_currency: paidRows.map((row) => ({ currency: row.currency, amount_cents: Number(row.amount_cents) })),
+      refunds_by: 'events_desk',
+    },
+  });
+});
+
+// ── POST /:id/invitation — answer my invitation, signed in ─────────────────
+// D1032 (#2873). `{ action: 'accept' | 'decline' }`, no token: the caller's
+// own non-revoked invitation, by user id or email. Accept registers through
+// `registerPrincipal`, as `/register` does (an audience rule may also make the
+// seat free), and records the acceptance only once the seat is held.
+events.post('/:id/invitation', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const action = String(body.action || '').toLowerCase();
+  if (action !== 'accept' && action !== 'decline') {
+    return refuse(c, 400, { code: 'invalid_action', message: 'Choose accept or decline.' });
+  }
+  const event = await loadEvent(c.env, id);
+  if (!event) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const inv: any = await c.env.DB.prepare(
+    `SELECT * FROM event_invitations
+       WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
+       ORDER BY (status = 'revoked') ASC, id DESC LIMIT 1`,
+  ).bind(id, u.id, u.email).first();
+  if (!inv) return refuse(c, 404, { code: 'no_invitation', message: 'You have no invitation to this event.' });
+  if (inv.status === 'revoked') return refuse(c, 409, { code: 'invite_revoked', message: 'The host withdrew this invitation.' });
+
+  if (action === 'decline') {
+    await c.env.DB.prepare(
+      `UPDATE event_invitations SET status = 'declined', responded_at = datetime('now') WHERE id = ?`,
+    ).bind(inv.id).run();
+    return c.json({ ok: true, status: 'declined' });
+  }
+
+  if (event.status !== 'published') return refuse(c, 400, { code: 'not_open', message: 'This event is not open for registration.' });
+  const rules: AudienceRules = parseAudienceRules(event.audience_rules_json);
+  const compRule = await isPrincipalCompEligible(c.env, rules, { userId: u.id, email: u.email }, event.host_user_id ?? null);
+  const comp = compRule.eligible || inv.comp === 1;
+  const paid = Number(event.price_cents || 0) > 0 && !comp;
+  const res = await registerPrincipal(c, event, {
+    userId: u.id, email: u.email, name: u.name,
+    comp, paid, source: 'invite', invitationId: Number(inv.id), answers: body.answers ?? null,
+    // The caller is the signed-in invitee, so a paid ticket may mint its PaymentIntent.
+    selfPay: true,
+    compSource: compSourceOf(compRule, inv),
+  });
+  if (res.status < 400) {
+    await c.env.DB.prepare(
+      `UPDATE event_invitations SET status = 'accepted', responded_at = datetime('now') WHERE id = ? AND status != 'revoked'`,
+    ).bind(inv.id).run();
+  }
+  return res;
+});
+
+// ── POST /:id/invitations — send manual invites (+ mint comp) ──────────────
+events.post('/:id/invitations', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const message = body.message ? String(body.message).slice(0, 2000) : null;
+  const userIds: number[] = Array.isArray(body.user_ids) ? body.user_ids.map(Number).filter(Boolean) : [];
+  const emails: Array<{ email: string; name?: string }> = Array.isArray(body.emails)
+    ? body.emails.map((e: any) => (typeof e === 'string' ? { email: e } : e)).filter((e: any) => e && e.email)
+    : [];
+
+  const newInvites: Array<{ userId: number | null; email: string | null; name: string | null; token: string }> = [];
+  const createInvite = async (
+    invitedUserId: number | null, email: string | null, name: string | null,
+  ) => {
+    let exists: any = null;
+    if (invitedUserId) {
+      exists = await c.env.DB.prepare(
+        `SELECT id FROM event_invitations WHERE event_id = ? AND invited_user_id = ? LIMIT 1`,
+      ).bind(id, invitedUserId).first();
+    }
+    if (!exists && email) {
+      exists = await c.env.DB.prepare(
+        `SELECT id FROM event_invitations WHERE event_id = ? AND lower(invited_email) = lower(?) LIMIT 1`,
+      ).bind(id, email).first();
+    }
+    if (exists) return;
+    const token = crypto.randomUUID().replace(/-/g, '');
+    await c.env.DB.prepare(
+      `INSERT INTO event_invitations
+         (event_id, token, invited_user_id, invited_email, invited_name, source, comp, status, personal_message, invited_by)
+       VALUES (?, ?, ?, ?, ?, 'manual', 0, 'pending', ?, ?)`,
+    ).bind(id, token, invitedUserId, email, name, message, u.id).run();
+    newInvites.push({ userId: invitedUserId, email, name, token });
+  };
+
+  for (const uid of userIds) {
+    const target: any = await c.env.DB.prepare(`SELECT id, email, name FROM users WHERE id = ?`).bind(uid).first();
+    if (target) await createInvite(Number(target.id), target.email ?? null, target.name ?? null);
+  }
+  for (const e of emails) {
+    const target: any = await c.env.DB.prepare(`SELECT id, name FROM users WHERE lower(email) = lower(?)`).bind(e.email).first();
+    await createInvite(target ? Number(target.id) : null, e.email, e.name ?? target?.name ?? null);
+  }
+
+  // Deliver each NEW manual invite: in-app inbox + email-with-.ics (design §6).
+  for (const inv of newInvites) {
+    await deliverEventInvite(c.env, event, {
+      userId: inv.userId, email: inv.email, name: inv.name, token: inv.token,
+      message, comp: false,
+    }).catch(() => {});
+  }
+
+  // Auto-mint comp invites for partners/LPs per the event's audience rules
+  // (design §7.3 — minted on the host's "send invites" action), then deliver
+  // only the newly minted ones the same way.
+  const rules = parseAudienceRules(event.audience_rules_json);
+  const comp = await mintCompInvitations(c.env, id, rules, event.host_user_id ?? null, u.id);
+  for (const inv of comp.created) {
+    await deliverEventInvite(c.env, event, {
+      userId: inv.invited_user_id, email: inv.invited_email,
+      name: inv.invited_name, token: inv.token, comp: true,
+    }).catch(() => {});
+  }
+
+  return c.json({ created: newInvites.length, comp_minted: comp.minted });
+});
+
+// ── GET /:id/roster — registrations + invitations (host/admin) ─────────────
+events.get('/:id/roster', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+
+  const regs = await c.env.DB.prepare(
+    `SELECT r.*, ch.code AS checkin_code, ch.checked_in_at AS checked_in_at, decider.name AS decided_by_name, member.role AS member_role
+       FROM event_registrations r
+       LEFT JOIN event_checkins ch ON ch.registration_id = r.id
+       LEFT JOIN users decider ON decider.id = r.decided_by_user_id
+       LEFT JOIN users member ON member.id = r.user_id
+      WHERE r.event_id = ?
+      ORDER BY CASE r.status WHEN 'waitlisted' THEN 1 ELSE 0 END, r.waitlist_position ASC, r.registered_at ASC`,
+  ).bind(id).all();
+  const invites = await c.env.DB.prepare(
+    `SELECT id, invited_user_id, invited_email, invited_name, source, comp, status, created_at, responded_at
+       FROM event_invitations WHERE event_id = ? ORDER BY created_at ASC`,
+  ).bind(id).all();
+  const taken = await seatsTaken(c.env, id);
+
+  const registrations = (regs.results || []).map((r: any) => ({
+    id: r.id,
+    user_id: r.user_id ?? null,
+    email: r.email ?? null,
+    name: r.name ?? null,
+    status: r.status,
+    source: r.source,
+    comp: r.comp === 1,
+    waitlist_position: r.waitlist_position ?? null,
+    payment_status: r.payment_status,
+    amount_cents: Number(r.amount_cents || 0),
+    checkin_code: r.checkin_code ?? null,
+    checked_in_at: r.checked_in_at ?? null,
+    registered_at: r.registered_at,
+    role: r.member_role ?? null,
+    decision_reason: r.decision_reason ?? null,
+    decided_by_name: r.decided_by_name ?? null,
+    decided_at: r.decided_at ?? null,
+  }));
+
+  return c.json({
+    event: shapeEvent(event, { includePrivate: true }),
+    registrations,
+    invitations: (invites.results || []).map((r: any) => ({ ...r, comp: r.comp === 1 })),
+    counts: {
+      seats_taken: taken,
+      capacity: event.capacity != null ? Number(event.capacity) : null,
+      waitlisted: registrations.filter((r) => r.status === 'waitlisted').length,
+      confirmed: registrations.filter((r) => r.status === 'confirmed').length,
+      attended: registrations.filter((r) => r.status === 'attended').length,
+    },
+  });
+});
+
+// ── Host/admin registration actions ────────────────────────────────────────
+async function loadReg(env: Env, eventId: number, regId: number): Promise<any | null> {
+  return env.DB.prepare(`SELECT * FROM event_registrations WHERE id = ? AND event_id = ?`).bind(regId, eventId).first();
+}
+
+events.post('/:id/registrations/:rid/approve', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  const rid = intParam(c.req.param('rid'));
+  if (!id || !rid) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const reg = await loadReg(c.env, id, rid);
+  if (!reg) return c.json({ error: 'not_found' }, 404);
+
+  if (reg.status === 'waitlisted') {
+    // Promoting a waitlisted row adds a seat → capacity-guard it atomically.
+    const cap = event.capacity != null ? Number(event.capacity) : null;
+    const upd: any = await c.env.DB.prepare(
+      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, promoted_at = datetime('now'), decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
+         WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
+    ).bind(u.id, rid, cap, id, cap).run();
+    if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
+  } else {
+    // 'registered' already holds a seat (approval-pending) → no capacity change.
+    await c.env.DB.prepare(
+      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+    ).bind(u.id, rid).run();
+  }
+  // Paid registrations stay code-less until payment settles (fulfillEventTicket
+  // mints the code) — approving an unpaid paid registration must not issue one.
+  if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_approve', { event_id: id, registration_id: rid });
+  if (reg.user_id) {
+    await notify(c.env, {
+      userId: reg.user_id, type: 'event_confirmed', category: 'events',
+      title: `You're confirmed: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
+});
+
+events.post('/:id/registrations/:rid/decline', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  const rid = intParam(c.req.param('rid'));
+  if (!id || !rid) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const reg = await loadReg(c.env, id, rid);
+  if (!reg) return c.json({ error: 'not_found' }, 404);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  if (body.reason != null && typeof body.reason !== 'string') return c.json({ error: 'invalid_reason' }, 400);
+  const reason = body.reason?.trim() || null;
+  if (reason && reason.length > 1000) return c.json({ error: 'reason_too_long' }, 400);
+  const heldSeat = ['registered', 'confirmed', 'attended'].includes(reg.status);
+  await c.env.DB.prepare(
+    `UPDATE event_registrations SET status = 'declined', waitlist_position = NULL, decision_reason = ?, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+  ).bind(reason, u.id, rid).run();
+  if (heldSeat) {
+    const promoted = await promoteWaitlist(c.env, event as EventSeatRow);
+    for (const p of promoted) {
+      if (p.user_id) {
+        await notify(c.env, {
+          userId: p.user_id, type: 'event_promoted', category: 'events',
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
+        }).catch(() => {});
+      }
+    }
+  }
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_decline', { event_id: id, registration_id: rid });
+  if (reg.user_id) {
+    await notify(c.env, {
+      userId: reg.user_id, type: 'event_declined', category: 'events',
+      title: `Registration update: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
+});
+
+events.post('/:id/registrations/:rid/promote', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  const rid = intParam(c.req.param('rid'));
+  if (!id || !rid) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const reg = await loadReg(c.env, id, rid);
+  if (!reg) return c.json({ error: 'not_found' }, 404);
+  if (reg.status !== 'waitlisted') return c.json({ error: 'not_waitlisted' }, 400);
+
+  const cap = event.capacity != null ? Number(event.capacity) : null;
+  const target = (event.approval_required && !reg.comp) ? 'registered' : 'confirmed';
+  // Capacity-guarded compare-and-set: 0 changes means the seat is gone (filled
+  // concurrently) or the row was already promoted — either way, refuse.
+  const upd: any = await c.env.DB.prepare(
+    `UPDATE event_registrations SET status = ?, waitlist_position = NULL, promoted_at = datetime('now'), decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
+       WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
+  ).bind(target, u.id, rid, cap, id, cap).run();
+  if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
+  // Paid registrations stay code-less until payment settles (fulfillEventTicket
+  // mints the code) — manually promoting an unpaid paid row must not issue one.
+  if (reg.payment_status !== 'pending') await ensureCheckinCode(c.env, id, rid);
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_promote', { event_id: id, registration_id: rid });
+  if (reg.user_id) {
+    await notify(c.env, {
+      userId: reg.user_id, type: 'event_promoted', category: 'events',
+      title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
+});
+
+// ── GET /:id/eligibility — comp / capacity preview for the caller ──────────
+events.get('/:id/eligibility', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
+  const rules: AudienceRules = parseAudienceRules(event.audience_rules_json);
+  const comp = await isPrincipalCompEligible(c.env, rules, { userId: u.id, email: u.email }, event.host_user_id ?? null);
+  const taken = await seatsTaken(c.env, id);
+  return c.json({
+    ...(await registrationEligibility(c.env, event, u.id, u.email)),
+    comp_eligible: comp.eligible,
+    comp_source: comp.source,
+    price_cents: Number(event.price_cents || 0),
+    currency: event.currency || 'usd',
+    requires_approval: event.approval_required === 1,
+    capacity: event.capacity != null ? Number(event.capacity) : null,
+    seats_taken: taken,
+    is_full: isCapacityFull(event as EventSeatRow, taken),
+    waitlist_enabled: event.waitlist_enabled === 1,
+  });
+});
+
+// ── POST /:id/register — the caller registers themselves ────────────────────
+events.post('/:id/register', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const manage = canManage(event, u);
+  if (!manage) {
+    if (event.status !== 'published') return c.json({ error: 'not_open' }, 400);
+    // A public event isn't open for registration until an admin approves it (§1.3).
+    if (event.visibility === 'public' && Number(event.admin_published) !== 1) {
+      return c.json({ error: 'not_open' }, 400);
+    }
+  }
+
+  // A (non-revoked) invitation for this principal — required for private
+  // events, and carries a comp grant for any visibility.
+  const invitation: any = await c.env.DB.prepare(
+    `SELECT * FROM event_invitations
+       WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
+         AND status != 'revoked'
+       ORDER BY id DESC LIMIT 1`,
+  ).bind(id, u.id, u.email).first();
+  if (event.visibility === 'private' && !manage && !invitation) {
+    return c.json({ error: 'invite_required' }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const rules: AudienceRules = parseAudienceRules(event.audience_rules_json);
+  const compRule = await isPrincipalCompEligible(c.env, rules, { userId: u.id, email: u.email }, event.host_user_id ?? null);
+  const comp = compRule.eligible || invitation?.comp === 1;
+  const paid = Number(event.price_cents || 0) > 0 && !comp;
+
+  return registerPrincipal(c, event, {
+    userId: u.id, email: u.email, name: u.name,
+    comp, paid, source: 'self', invitationId: invitation?.id ?? null,
+    answers: body.answers ?? null,
+    compSource: compSourceOf(compRule, invitation),
+  });
+});
+
+// ── DELETE /:id/registration — the caller cancels their seat ───────────────
+events.delete('/:id/registration', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const reg: any = await c.env.DB.prepare(
+    `SELECT * FROM event_registrations WHERE event_id = ? AND user_id = ?`,
+  ).bind(id, u.id).first();
+  if (!reg) return c.json({ error: 'not_found' }, 404);
+  const heldSeat = ['registered', 'confirmed', 'attended'].includes(reg.status);
+  await c.env.DB.prepare(
+    `UPDATE event_registrations SET status = 'cancelled', waitlist_position = NULL, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(reg.id).run();
+  if (heldSeat) {
+    const promoted = await promoteWaitlist(c.env, event as EventSeatRow);
+    for (const p of promoted) {
+      if (p.user_id) {
+        await notify(c.env, {
+          userId: p.user_id, type: 'event_promoted', category: 'events',
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
+        }).catch(() => {});
+      }
+    }
+  }
+  await logAdminAction(c.env, u.id, u.email, 'event_registration_cancelled', { event_id: id, registration_id: reg.id });
+  await scheduleCalendarCancellation(c, 'ticket', Number(reg.id));
+  return c.json({ ok: true });
+});
+
+// ── POST /:id/checkin/:code — scan a check-in code (host/admin) ─────────────
+events.post('/:id/checkin/:code', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const code = String(c.req.param('code') || '');
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const ch: any = await c.env.DB.prepare(
+    `SELECT * FROM event_checkins WHERE event_id = ? AND code = ?`,
+  ).bind(id, code).first();
+  if (!ch) return c.json({ error: 'invalid_code' }, 404);
+
+  // Defensive: a paid ticket whose PaymentIntent hasn't settled must not be
+  // admitted. Check-in codes for paid registrations are only minted by the
+  // webhook on `payment_status='paid'`, but we guard here too so a stale or
+  // out-of-band code can never wave an unpaid attendee in.
+  const regPay: any = await c.env.DB.prepare(
+    `SELECT payment_status FROM event_registrations WHERE id = ?`,
+  ).bind(ch.registration_id).first();
+  if (regPay && regPay.payment_status === 'pending') {
+    return c.json({ error: 'payment_pending', code: 'payment_pending' }, 402);
+  }
+
+  const already = !!ch.checked_in_at;
+  if (!already) {
+    await c.env.DB.prepare(
+      `UPDATE event_checkins SET checked_in_at = datetime('now'), checked_in_by = ? WHERE id = ?`,
+    ).bind(u.id, ch.id).run();
+    await c.env.DB.prepare(
+      `UPDATE event_registrations SET status = 'attended', updated_at = datetime('now') WHERE id = ?`,
+    ).bind(ch.registration_id).run();
+  }
+  const reg = await loadReg(c.env, id, Number(ch.registration_id));
+  // Task #7 — first check-in flips the reg to 'attended'; award the event
+  // participation badges (idempotent, best-effort, never throws).
+  if (!already && reg?.user_id) await awardCheckinBadges(c.env, Number(reg.user_id));
+  return c.json({ ok: true, already_checked_in: already, registration: reg });
+});
+
+// ── GET /:id/ics — calendar file for one event ─────────────────────────────
+events.get('/:id/ics', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
+  const ics = buildEventIcs(shapeEvent(event, { includeJoinLink: await canReadJoinLink(c.env, event, u) }));
+  return new Response(ics, {
+    headers: {
+      'content-type': 'text/calendar; charset=utf-8',
+      'content-disposition': `attachment; filename="${event.slug}.ics"`,
+    },
+  });
+});
+
+// ── GET /:id/export — roster CSV (host/admin) ──────────────────────────────
+events.get('/:id/export', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const regs = await c.env.DB.prepare(
+    `SELECT name, email, status, comp, waitlist_position, payment_status, registered_at
+       FROM event_registrations WHERE event_id = ? ORDER BY registered_at ASC`,
+  ).bind(id).all();
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = 'name,email,status,comp,waitlist_position,payment_status,registered_at';
+  const rows = (regs.results || []).map((r: any) =>
+    [r.name, r.email, r.status, r.comp === 1 ? 'yes' : 'no', r.waitlist_position, r.payment_status, r.registered_at].map(esc).join(','));
+  const csv = [header, ...rows].join('\n') + '\n';
+  return new Response(csv, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="${event.slug}-roster.csv"`,
+    },
+  });
+});
+
+// ── Agenda CRUD (host/admin) ───────────────────────────────────────────────
+events.get('/:id/agenda', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
+  ).bind(id).all();
+  const includeJoinLink = await canReadJoinLink(c.env, event, u);
+  return c.json({ agenda: (rows.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink })) });
+});
+
+events.post('/:id/agenda', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  let location;
+  try { location = agendaLocation(body); } catch { return c.json({ error: 'invalid_location' }, 400); }
+  const title = String(body.title || '').trim();
+  if (!title) return c.json({ error: 'title_required' }, 400);
+  const ins: any = await c.env.DB.prepare(
+    `INSERT INTO event_agenda_items
+       (event_id, slug, title, description, starts_at, ends_at, speaker_user_id, speaker_name, speaker_title, display_order, location_text, location_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    id, body.slug ?? null, title, body.description ?? null, body.starts_at ?? null, body.ends_at ?? null,
+    body.speaker_user_id ?? null, body.speaker_name ?? null, body.speaker_title ?? null,
+    body.display_order != null ? Number(body.display_order) : 0, location.location_text ?? null, location.location_url ?? null,
+  ).run();
+  const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ?`).bind(Number(ins?.meta?.last_row_id)).first();
+  // Task #7 — a founder speaker on a Demo Day agenda earns Demo Day Presenter.
+  if (body.speaker_user_id) await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_created', { event_id: id, agenda_item_id: row?.id });
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) }, 201);
+});
+
+events.post('/:id/agenda/reorder', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const ids = body.item_ids;
+  if (!Array.isArray(ids) || ids.some(v => !Number.isSafeInteger(v) || v <= 0)) return c.json({ error: 'invalid_order' }, 400);
+  const rows = await c.env.DB.prepare(`SELECT id FROM event_agenda_items WHERE event_id = ?`).bind(id).all<{ id: number }>();
+  if (ids.length !== (rows.results || []).length || (rows.results || []).some(r => !ids.includes(r.id))) return c.json({ error: 'invalid_order' }, 400);
+  if (ids.length) await c.env.DB.batch(ids.map((aid, index) => c.env.DB.prepare(`UPDATE event_agenda_items SET display_order = ?, updated_at = datetime('now') WHERE id = ? AND event_id = ?`).bind(index, aid, id)));
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_reordered', { event_id: id, item_ids: ids });
+  return c.json({ ok: true });
+});
+
+events.patch('/:id/agenda/:aid', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  const aid = intParam(c.req.param('aid'));
+  if (!id || !aid) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  const existing = await c.env.DB.prepare(`SELECT id FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).first();
+  if (!existing) return c.json({ error: 'not_found' }, 404);
+  let location;
+  try { location = agendaLocation(body); } catch { return c.json({ error: 'invalid_location' }, 400); }
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const k of ['slug', 'title', 'description', 'starts_at', 'ends_at', 'speaker_user_id', 'speaker_name', 'speaker_title', 'display_order']) {
+    if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); }
+  }
+  for (const [key, value] of Object.entries(location)) { sets.push(`${key} = ?`); binds.push(value); }
+  if (!sets.length) return c.json({ error: 'no_fields' }, 400);
+  sets.push(`updated_at = datetime('now')`);
+  binds.push(aid, id);
+  await c.env.DB.prepare(`UPDATE event_agenda_items SET ${sets.join(', ')} WHERE id = ? AND event_id = ?`).bind(...binds).run();
+  const row = await c.env.DB.prepare(`SELECT * FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).first();
+  // Task #7 — setting/changing a founder speaker on a Demo Day item earns the badge.
+  if ('speaker_user_id' in body && body.speaker_user_id) {
+    await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
+  }
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_updated', { event_id: id, agenda_item_id: aid });
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) });
+});
+
+events.delete('/:id/agenda/:aid', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  const aid = intParam(c.req.param('aid'));
+  if (!id || !aid) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  await c.env.DB.prepare(`DELETE FROM event_agenda_items WHERE id = ? AND event_id = ?`).bind(aid, id).run();
+  await logAdminAction(c.env, u.id, u.email, 'event_agenda_deleted', { event_id: id, agenda_item_id: aid });
+  return c.json({ ok: true });
+});
+
+/**
+ * Shared registration upsert used by self-register (here) and the public
+ * invite-accept / public-register flows. Idempotent per (event, principal):
+ * an already-active registration is returned unchanged.
+ */
+export async function registerPrincipal(
+  c: any,
+  event: any,
+  p: {
+    userId: number | null;
+    email: string | null;
+    name: string | null;
+    comp: boolean;
+    paid: boolean;
+    source: string;
+    invitationId: number | null;
+    answers: unknown;
+    /** D1032: `userId` is the signed-in caller, so a paid seat may mint its PaymentIntent (as `source: 'self'` may). */
+    selfPay?: boolean;
+    /**
+     * D1131 (migration 611): where the free seat came from (`compSourceOf`), written with the seat.
+     * Ignored when the seat is not free.
+     */
+    compSource?: string | null;
+  },
+): Promise<Response> {
+  const env: Env = c.env;
+  const eventId = Number(event.id);
+  const eligibility = await registrationEligibility(env, event, p.userId, p.email);
+  if (!eligibility.eligible) return c.json({ error: 'audience_ineligible', reason: eligibility.reason }, 403);
+
+  // Idempotency: find an existing registration for this principal.
+  let existing: any = null;
+  if (p.userId) {
+    existing = await env.DB.prepare(`SELECT * FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(eventId, p.userId).first();
+  }
+  if (!existing && p.email) {
+    existing = await env.DB.prepare(`SELECT * FROM event_registrations WHERE event_id = ? AND lower(email) = lower(?)`).bind(eventId, p.email).first();
+  }
+  if (existing && ACTIVE_REG.includes(existing.status)) {
+    const seated = ['registered', 'confirmed', 'attended'].includes(existing.status);
+    // A paid registration still awaiting settlement must NEVER receive a
+    // check-in code while unpaid (regardless of caller). The authenticated
+    // self-register path (where userId IS the logged-in caller) can resume
+    // payment with a (idempotent) client_secret; public/invite callers just get
+    // needs_payment and must sign in to pay.
+    if (seated && existing.payment_status === 'pending') {
+      let clientSecret: string | null = null;
+      if ((p.source === 'self' || p.selfPay) && p.userId) {
+        try {
+          const payer: any = await env.DB.prepare(
+            `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,
+          ).bind(p.userId).first();
+          if (payer) {
+            const pi = await createEventTicketPaymentIntent(
+              env, event, { id: Number(existing.id), user_id: p.userId, email: p.email }, payer,
+            );
+            clientSecret = pi.client_secret;
+          }
+        } catch (e) {
+          console.warn('[events] resume event ticket PaymentIntent failed:', (e as Error).message);
+        }
+      }
+      return c.json({
+        already_registered: true, registration: existing, comp: existing.comp === 1,
+        needs_payment: true, client_secret: clientSecret,
+      });
+    }
+    const code = seated ? await ensureCheckinCode(env, eventId, Number(existing.id)) : null;
+    return c.json({ already_registered: true, registration: existing, checkin_code: code, comp: existing.comp === 1 });
+  }
+
+  const decision = await classifyNewSeat(env, event as EventSeatRow, { comp: p.comp });
+  if ('full' in decision) return c.json({ error: 'full', full: true }, 409);
+
+  const paymentStatus = p.paid ? 'pending' : 'none';
+  const amountCents = p.paid ? Number(event.price_cents || 0) : 0;
+  const answersJson = p.answers ? JSON.stringify(p.answers) : '{}';
+  const cap = event.capacity != null ? Number(event.capacity) : null;
+  // D1131: the comp's source is recorded with the seat, and a reused row starts
+  // a new lifecycle, so an earlier promotion never reads as this one's.
+  const compSource = p.comp ? (p.compSource ?? null) : null;
+
+  // classifyNewSeat read the seat count a moment ago; the actual seat claim is
+  // capacity-guarded in the SAME statement (SEAT_FREE_PREDICATE) so two
+  // concurrent registrations can't both land a seat on a capacity-1 event. If
+  // the seat vanished under us, fall back to the waitlist (or refuse, §3).
+  let landed: 'registered' | 'confirmed' | 'waitlisted' = decision.status;
+  let waitlistPosition: number | null = decision.waitlistPosition;
+  let regId = existing ? Number(existing.id) : 0;
+
+  if (landed !== 'waitlisted') {
+    if (existing) {
+      const upd: any = await env.DB.prepare(
+        `UPDATE event_registrations
+            SET status = ?, comp = ?, comp_source = ?, promoted_at = NULL, source = ?, invitation_id = ?, waitlist_position = NULL,
+                payment_status = ?, amount_cents = ?, answers_json = ?, updated_at = datetime('now')
+          WHERE id = ? AND ${SEAT_FREE_PREDICATE}`,
+      ).bind(landed, p.comp ? 1 : 0, compSource, p.source, p.invitationId, paymentStatus, amountCents, answersJson, existing.id, cap, eventId, cap).run();
+      if (!upd?.meta?.changes) { landed = 'waitlisted'; waitlistPosition = await nextWaitlistPosition(env, eventId); }
+    } else {
+      const ins: any = await env.DB.prepare(
+        `INSERT INTO event_registrations
+           (event_id, user_id, email, name, status, source, comp, comp_source, invitation_id, waitlist_position,
+            payment_status, amount_cents, answers_json)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?
+          WHERE ${SEAT_FREE_PREDICATE}`,
+      ).bind(eventId, p.userId, p.email, p.name, landed, p.source, p.comp ? 1 : 0, compSource, p.invitationId, paymentStatus, amountCents, answersJson, cap, eventId, cap).run();
+      if (ins?.meta?.changes) regId = Number(ins?.meta?.last_row_id);
+      else { landed = 'waitlisted'; waitlistPosition = await nextWaitlistPosition(env, eventId); }
+    }
+  }
+
+  if (landed === 'waitlisted') {
+    // No free seat: waitlist if enabled, otherwise refuse (race-safe path too).
+    if (!event.waitlist_enabled) return c.json({ error: 'full', full: true }, 409);
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE event_registrations
+            SET status = 'waitlisted', comp = ?, comp_source = ?, promoted_at = NULL, source = ?, invitation_id = ?, waitlist_position = ?,
+                payment_status = ?, amount_cents = ?, answers_json = ?, updated_at = datetime('now')
+          WHERE id = ?`,
+      ).bind(p.comp ? 1 : 0, compSource, p.source, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson, existing.id).run();
+    } else {
+      const ins: any = await env.DB.prepare(
+        `INSERT INTO event_registrations
+           (event_id, user_id, email, name, status, source, comp, comp_source, invitation_id, waitlist_position,
+            payment_status, amount_cents, answers_json)
+         VALUES (?, ?, ?, ?, 'waitlisted', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(eventId, p.userId, p.email, p.name, p.source, p.comp ? 1 : 0, compSource, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson).run();
+      regId = Number(ins?.meta?.last_row_id);
+    }
+  }
+
+  // Paid (non-comp) registrations do NOT get a check-in code at registration
+  // time — the webhook mints it once `payment_status='paid'` (fulfillEventTicket)
+  // so an unpaid registrant can never be admitted. Free/comp seated rows get
+  // their code immediately.
+  let code: string | null = null;
+  if (landed !== 'waitlisted' && !p.paid) code = await ensureCheckinCode(env, eventId, regId);
+
+  // Paid, non-comp, seated registrations get a Stripe PaymentIntent so the
+  // registrant can pay via the embedded terminal. The seat is already held (we
+  // reserved it above regardless of payment), and the webhook flips the row to
+  // paid/confirmed. Best-effort: a PI failure leaves the row pending so the
+  // caller can retry; we never block the seat on Stripe. Only the authenticated
+  // self-register path (source='self', where userId IS the logged-in caller)
+  // may mint a PaymentIntent — public/invite callers resolve userId by submitted
+  // email, so minting a PI there would let anyone create charges against another
+  // member's customer. Those surface needs_payment WITHOUT a client_secret and
+  // the SPA gates them behind login.
+  let clientSecret: string | null = null;
+  if (p.paid && landed !== 'waitlisted' && p.userId && (p.source === 'self' || p.selfPay)) {
+    try {
+      const payer: any = await env.DB.prepare(
+        `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,
+      ).bind(p.userId).first();
+      if (payer) {
+        const pi = await createEventTicketPaymentIntent(
+          env, event,
+          { id: regId, user_id: p.userId, email: p.email },
+          payer,
+        );
+        clientSecret = pi.client_secret;
+      }
+    } catch (e) {
+      console.warn('[events] event ticket PaymentIntent failed:', (e as Error).message);
+    }
+  }
+
+  const reg = await env.DB.prepare(`SELECT * FROM event_registrations WHERE id = ?`).bind(regId).first();
+  return c.json({
+    registration: reg,
+    status: landed,
+    waitlisted: landed === 'waitlisted',
+    waitlist_position: landed === 'waitlisted' ? waitlistPosition : null,
+    comp: p.comp,
+    needs_payment: p.paid && landed !== 'waitlisted',
+    client_secret: clientSecret,
+    checkin_code: code,
+  }, 201);
+}
+
+// ── #3935 (D1478 task 1, EV2): the drawn cover ─────────────────────────────
+// The host (or an admin) describes a cover; Eadwyn quotes the draw and its three
+// checks in one figure, draws on the job's model, checks the image, and stores
+// it under the event. The answer fills the editor's cover field; the host's own
+// Save (`PATCH /:id`) writes it. Nothing here writes the event. No rail page
+// carries a host's event editor yet, so the runs carry no rail context.
+const coverPrefix = (id: number) => `events/${id}/covers/`;
+
+async function coverGate(c: any): Promise<{ id: number; user: User } | Response> {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  return { id, user: u };
+}
+
+events.post('/:id/cover/quote', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const q = await quoteCover(c.env, coverRunOptions(EVENT_COVER, Number(g.user.id) || 0, ask.prompt));
+  if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+  return c.json(q);
+});
+
+events.post('/:id/cover/draw', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const opts = coverRunOptions(EVENT_COVER, Number(g.user.id) || 0, ask.prompt);
+  const r = await drawCover(c.env, opts, coverPrefix(g.id));
+  if (!r.ok) return refuse(c, r.status, { code: r.code, message: r.message });
+  return c.json({ ...r, key: undefined, url: new URL(`/api/events/${g.id}/cover/${r.filename}`, c.req.url).toString() });
+});
+
+// ── #5309 (D5309, D3724 §gaps 8 to 11): the uploaded cover, and four variants ─
+//
+// UPLOAD. One multipart press: the image, its alt text, its focal point and the
+// three crops. Everything is checked before a byte is stored (`coverUploadAsk`),
+// and the bytes themselves decide the type and the size — never the browser's
+// claim. The answer PROPOSES a cover; the member's own Save (`PATCH /:id`)
+// writes `cover_url`, `cover_alt`, `cover_source`, the focal point and the
+// crops, so nothing is placed without the member's accept.
+//
+// VARIANTS. One quote covers four draws and their checks; the balance covers
+// the whole figure or nothing runs. The quote's uid keys each draw, so the same
+// press retried replays and charges nothing again (#3846). "More like this one"
+// is this press with the chosen variant's own prompt.
+events.post('/:id/cover/upload', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) {
+    return refuse(c, 400, { code: 'multipart_required', message: UPLOAD_MESSAGES.multipart_required });
+  }
+  let form: FormData;
+  try { form = await c.req.formData(); } catch { return refuse(c, 400, { code: 'file_required', message: UPLOAD_MESSAGES.file_required }); }
+  const file = form.get('file') as unknown as { type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+  if (!file || typeof file !== 'object' || typeof file.arrayBuffer !== 'function') {
+    return refuse(c, 400, { code: 'file_required', message: UPLOAD_MESSAGES.file_required });
+  }
+  if (typeof file.size === 'number' && file.size > MAX_COVER_BYTES) {
+    return refuse(c, 413, { code: 'file_too_large', message: UPLOAD_MESSAGES.file_too_large });
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const ask = coverUploadAsk({
+    file, bytes,
+    alt: form.get('alt'),
+    focal: form.get('focal'),
+    crops: form.get('crops'),
+  });
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const stored = await storeCoverUpload(c.env, coverPrefix(g.id), ask, Number(g.user.id) || 0);
+  if (!stored.ok) return refuse(c, stored.status, { code: stored.code, message: stored.message });
+  return c.json({
+    filename: stored.filename,
+    url: new URL(`/api/events/${g.id}/cover/${stored.filename}`, c.req.url).toString(),
+    alt: ask.alt,
+    focal: ask.focal,
+    crops: ask.crops,
+    image: { width: ask.width, height: ask.height, ratio: ask.width / ask.height, content_type: ask.mime },
+    source: 'uploaded',
+    saved: false,
+  }, 201);
+});
+
+/** The quote plan four variants are bound to: the model, the prompt and the member, for ten minutes. */
+async function variantsPlan(userId: number, id: number, opts: Parameters<typeof quoteVariants>[1], model: string, microusd: number): Promise<QuotePlan> {
+  return { cls: 'event_cover_variants', areas: [{
+    card_uid: 'member:' + userId, area_id: 'event:' + id, element: 'image', model, refusal: null,
+    payload: { instruction_sha256: await runHash(opts) }, lines: [{ quote_microusd: microusd }],
+  }] };
+}
+
+async function variantsPress(c: any, quoteOnly: boolean) {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const body = await c.req.json().catch(() => ({} as any));
+  const ask = coverAsk(body);
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const event = await loadEvent(c.env, g.id);
+  // §gap 10: the venture's own palette, when one is recorded. Never a guess.
+  const brand = await brandColours(c.env, event?.project_id);
+  const userId = Number(g.user.id) || 0;
+  const opts = variantsRunOptions(userId, ask.prompt, brand.colours);
+  const q = await quoteVariants(c.env, opts);
+  if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+  const now = Date.now();
+  if (quoteOnly) {
+    const expires = now + QUOTE_TTL_MS;
+    return c.json({
+      ...q,
+      brand_colours: brand.colours,
+      brand_colours_recorded: brand.recorded,
+      quote_uid: await quoteUidOf(await variantsPlan(userId, g.id, opts, q.model, q.hold_microusd), expires),
+      expires_at: new Date(expires).toISOString(),
+    });
+  }
+  const quoteUid = typeof body?.quote_uid === 'string' ? body.quote_uid : '';
+  if (!(await quoteHolds(quoteUid, await variantsPlan(userId, g.id, opts, q.model, q.hold_microusd), now))) {
+    return refuse(c, 409, { code: 'quote_stale', message: 'This price has expired. Get a new quote.' });
+  }
+  const drawn = await drawVariants(c.env, opts, coverPrefix(g.id), quoteUid);
+  if (!drawn.ok) return refuse(c, drawn.status, { code: drawn.code, message: drawn.message });
+  return c.json({
+    variants: drawn.variants.map((v) => ({ ...v, url: new URL(`/api/events/${g.id}/cover/${v.filename}`, c.req.url).toString() })),
+    refused: drawn.refused,
+    asked: VARIANTS_PER_DRAW,
+    model: drawn.model,
+    brand_colours: brand.colours,
+    brand_colours_recorded: brand.recorded,
+    source: 'generated',
+    saved: false,
+  });
+}
+
+events.post('/:id/cover/variants/quote', (c) => variantsPress(c, true));
+events.post('/:id/cover/variants', (c) => variantsPress(c, false));
+
+// The stored cover: anyone who may see the event (a published one, to anyone).
+events.get('/:id/cover/:filename', async (c) => {
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const published = event.status === 'published' && (event.visibility === 'unlisted' || (event.visibility === 'public' && Number(event.admin_published) === 1));
+  if (!published) {
+    const u = await getCurrentUser(c).catch(() => null);
+    if (!u || !(await canViewEvent(c.env, event, u))) return c.json({ error: 'not_found' }, 404);
+  }
+  const filename = String(c.req.param('filename') || '');
+  // #5309: a drawn cover (`cover-<uuid>`) and an uploaded one (`upload-<uuid>`)
+  // share this prefix and this gate; each name pattern reads only its own files.
+  const cover = await readCover(c.env, coverPrefix(id), filename)
+    || await readCoverUpload(c.env, coverPrefix(id), filename);
+  if (!cover) return c.json({ error: 'not_found' }, 404);
+  return new Response(cover.body, { headers: { 'content-type': cover.mime, 'cache-control': published ? 'public, max-age=86400' : 'private, no-store', 'x-content-type-options': 'nosniff' } });
+});
+
+export default events;

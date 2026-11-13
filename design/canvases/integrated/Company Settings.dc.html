@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f8f8fa;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}
+    .cs-num{font-variant-numeric:tabular-nums}
+    .cs-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#615c6e}
+    .cs-link{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#7c3aed;white-space:nowrap;cursor:pointer}
+    .cs-link:hover{color:#6d28d9}
+    .cs-row:hover{background:#fcfcfd}
+    .cs-in{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:9px 12px;border:1px solid #e2e1e8;border-radius:9px;background:#fff;color:#18181b}
+    .cs-in:focus{outline:none;border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    .cs-in::placeholder{color:#a8a4b4}
+    .cs-in:disabled{background:#f8f8fa;color:#7d7889;cursor:not-allowed}
+    .cs-btn{font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #e2e1e8;background:#fff;color:#18181b;cursor:pointer;white-space:nowrap}
+    .cs-btn:hover{border-color:#d4d2dc;background:#fbfbfc}
+    .cs-btnp{font:inherit;font-size:12.5px;font-weight:700;padding:9px 15px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer;white-space:nowrap}
+    .cs-btnp:hover{background:#6d28d9;border-color:#6d28d9}
+    .cs-dead{font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px dashed #e2c9c9;background:#fdf8f8;color:#c08a8a;cursor:not-allowed;white-space:nowrap}
+    .cs-root.cs-embedded{min-height:0!important}
+    @media (max-width:980px){
+      .cs-head{flex-direction:column!important;align-items:flex-start!important;gap:16px!important}
+      .cs-2{grid-template-columns:1fr!important}
+      .cs-3{grid-template-columns:1fr!important}
+      .cs-row{flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
+      .cs-rowr{width:100%!important;justify-content:flex-start!important;flex-wrap:wrap}
+      .cs-logo{flex-direction:column!important;align-items:flex-start!important}
+    }
+  </style>
+</helmet>
+
+<div class="cs-root {{ embeddedClass }}" style="min-height:100vh;padding:0 0 80px">
+
+  <!-- ============ EMPTY STATE — the on-ramp ============ -->
+  <sc-if value="{{ isEmpty }}">
+    <div style="max-width:720px;margin:0 auto;padding:70px 28px 0;text-align:center">
+      <div style="width:56px;height:56px;border-radius:15px;background:#f5f2ff;color:#6d28d9;display:flex;align-items:center;justify-content:center;margin:0 auto;padding:14px;box-sizing:border-box" dangerouslySetInnerHTML="{{ buildingIcon }}"></div>
+      <h1 style="margin:20px 0 0;font-size:26px;font-weight:800;letter-spacing:-.025em">Create your company</h1>
+      <div style="font-size:14px;color:#4a4553;margin-top:9px;line-height:1.6">A company workspace is what the rest of the sidebar runs on — every tool below is scoped to one company, so nothing opens until there's one to point at.</div>
+      <div style="display:grid;gap:10px;margin-top:26px;text-align:left">
+        <sc-for list="{{ unlocks }}" as="u" hint-placeholder-count="4">
+          <div style="display:flex;align-items:flex-start;gap:12px;background:#fff;border:1px solid #ececf1;border-radius:13px;padding:15px 17px">
+            <div style="width:30px;height:30px;border-radius:9px;background:#f5f2ff;color:#6d28d9;display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ u.icon }}"></div>
+            <div style="min-width:0">
+              <div style="font-size:13.5px;font-weight:700">{{ u.title }}</div>
+              <div style="font-size:12px;color:#615c6e;margin-top:4px;line-height:1.55">{{ u.body }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:26px;flex-wrap:wrap">
+        <div onClick="{{ exitEmpty }}" class="cs-btnp" style="font-size:13.5px;padding:11px 20px">Create your company</div>
+        <div class="cs-btn" style="font-size:13.5px;padding:11px 18px">Join an existing one</div>
+      </div>
+      <div style="font-size:11.5px;color:#7d7889;margin-top:16px;line-height:1.55">Joining needs an invite from that company's primary admin. Ask them to add your email under Members &amp; access.</div>
+      <div onClick="{{ exitEmpty }}" class="cs-link" style="margin-top:22px;justify-content:center;width:100%">← Back to a company with settings</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hasCompany }}" hint-placeholder-val="{{ true }}">
+
+  <!-- ============ HEADER ============ -->
+  <div style="background:#fff;border-bottom:1px solid #ececf1;padding:26px 28px 22px">
+    <div style="max-width:1040px;margin:0 auto">
+      <div class="cs-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+        <div style="display:flex;align-items:flex-start;gap:14px;min-width:0">
+          <div style="width:46px;height:46px;border-radius:12px;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex:none">{{ initials }}</div>
+          <div style="min-width:0">
+            <h1 style="margin:0;font-size:25px;font-weight:800;letter-spacing:-.025em;line-height:1.15">Company Settings</h1>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:700">{{ companyName }}</span>
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6d28d9;background:#f5f2ff;border:1px solid #e6dcff;border-radius:5px;padding:3px 7px">{{ stage }}</span>
+            </div>
+            <div style="font-size:12px;color:#615c6e;margin-top:6px;line-height:1.5">{{ bindingLine }}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex:none">
+          <span style="{{ rolePill }}">{{ roleLabel }}</span>
+          <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+            <sc-for list="{{ roleViews }}" as="r" hint-placeholder-count="2">
+              <div onClick="{{ r.go }}" style="{{ r.style }}">{{ r.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:11px;background:#faf9fc;border:1px solid #ececf1;border-radius:11px;padding:11px 15px;margin-top:18px;flex-wrap:wrap">
+        <span style="width:14px;height:14px;display:block;flex:none;color:#6d28d9" dangerouslySetInnerHTML="{{ switchIcon }}"></span>
+        <span style="font-size:12.5px;color:#3f3a49;line-height:1.5;flex:1;min-width:220px">{{ scopeLine }}</span>
+        <span class="cs-link">Switch company ↑</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1040px;margin:0 auto;padding:22px 28px 0;display:grid;gap:16px">
+
+    <!-- ============ 1 · PUBLIC PROFILE ============ -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+      <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div>
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+            <span style="font-size:16px;font-weight:800;letter-spacing:-.015em">Profile</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:5px;padding:3px 8px">
+              <span style="width:11px;height:11px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>Public profile
+            </span>
+          </div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">Visible to every Axal VC user — founders, investors, advisors and partners.</div>
+        </div>
+        <div style="font-size:11.5px;color:#7d7889;text-align:right;line-height:1.5">{{ saveModeNote }}</div>
+      </div>
+
+      <div style="padding:20px 22px">
+        <!-- LOGO -->
+        <div class="cs-logo" style="display:flex;align-items:flex-start;gap:18px;padding-bottom:20px;border-bottom:1px solid #f6f5f9">
+          <div style="width:74px;height:74px;border-radius:14px;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex:none">{{ initials }}</div>
+          <div style="flex:1;min-width:220px">
+            <div class="cs-lbl" style="margin-bottom:7px">Logo</div>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <div style="{{ editableBtn }}">Upload image</div>
+              <div onClick="{{ toggleLogoUrl }}" class="cs-link" style="align-self:center">{{ logoUrlLabel }}</div>
+            </div>
+            <sc-if value="{{ logoUrlOpen }}">
+              <div style="margin-top:11px">
+                <input class="cs-in" value="{{ f.logo.value }}" onBlur="{{ f.logo.blur }}" disabled="{{ readOnly }}" placeholder="https://…/logo.svg" />
+                <div style="{{ f.logo.ackStyle }}">{{ f.logo.ack }}</div>
+              </div>
+            </sc-if>
+            <div style="font-size:11.5px;color:#7d7889;margin-top:10px;line-height:1.55">PNG or SVG, square, at least 256px. {{ brandCrossLink }}</div>
+          </div>
+        </div>
+
+        <div class="cs-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px">
+          <sc-for list="{{ publicFields }}" as="p" hint-placeholder-count="5">
+            <div>
+              <div class="cs-lbl" style="margin-bottom:6px">{{ p.label }}</div>
+              <input class="cs-in" value="{{ p.value }}" onBlur="{{ p.blur }}" disabled="{{ readOnly }}" placeholder="{{ p.ph }}" />
+              <div style="{{ p.ackStyle }}">{{ p.ack }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="cs-lbl" style="margin-bottom:6px">Description</div>
+          <textarea class="cs-in" rows="3" disabled="{{ readOnly }}" onBlur="{{ f.description.blur }}" defaultValue="{{ descriptionValue }}" placeholder="One paragraph on what the company does and who it serves."></textarea>
+          <div style="{{ f.description.ackStyle }}">{{ f.description.ack }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 2 · GROWTH DETAILS ============ -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+      <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="font-size:16px;font-weight:800;letter-spacing:-.015em">Growth details</span>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:3px 8px">
+            <span style="width:11px;height:11px;display:block;flex:none" dangerouslySetInnerHTML="{{ lockIcon }}"></span>Members only
+          </span>
+        </div>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">Never shown on your public profile. Readable only by the {{ memberCount }} people listed under Members &amp; access — and used to rank investor matches and inform deal analysis.</div>
+      </div>
+      <div style="padding:20px 22px">
+        <div class="cs-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <sc-for list="{{ growthFields }}" as="g" hint-placeholder-count="4">
+            <div>
+              <div class="cs-lbl" style="margin-bottom:6px">{{ g.label }}</div>
+              <input class="cs-in" value="{{ g.value }}" onBlur="{{ g.blur }}" disabled="{{ readOnly }}" placeholder="{{ g.ph }}" />
+              <div style="{{ g.ackStyle }}">{{ g.ack }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3 · MEMBERS & ACCESS ============ -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+      <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Members &amp; access</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">{{ membersSub }}</div>
+        </div>
+        <sc-if value="{{ canEdit }}"><div onClick="{{ toggleAdd }}" class="cs-btnp">{{ addLabel }}</div></sc-if>
+        <sc-if value="{{ readOnly }}">
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8">
+            <span style="width:12px;height:12px;display:block;flex:none" dangerouslySetInnerHTML="{{ eyeIcon }}"></span>Read-only
+          </span>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{ addOpen }}">
+        <div style="padding:17px 22px;background:#faf9fc;border-bottom:1px solid #f2f1f5">
+          <div class="cs-3" style="display:grid;grid-template-columns:1.6fr 1fr auto;gap:11px;align-items:end">
+            <div>
+              <div class="cs-lbl" style="margin-bottom:6px">Email</div>
+              <input class="cs-in" placeholder="name@company.com" />
+            </div>
+            <div>
+              <div class="cs-lbl" style="margin-bottom:6px">Role</div>
+              <input class="cs-in" value="Founder" />
+            </div>
+            <div style="display:flex;gap:9px">
+              <div class="cs-btnp">Send invite</div>
+              <div onClick="{{ toggleAdd }}" class="cs-btn">Cancel</div>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:#7d7889;margin-top:11px;line-height:1.5">They'll get an email invite. Until they accept they appear as Invited and can't read Growth details.</div>
+        </div>
+      </sc-if>
+
+      <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+        <div>
+          <div class="cs-row" style="{{ m.rowStyle }}">
+            <div style="display:flex;align-items:flex-start;gap:13px;min-width:0;flex:1">
+              <div style="width:34px;height:34px;border-radius:10px;background:{{ m.avBg }};color:{{ m.avInk }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">{{ m.initials }}</div>
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ m.name }}</span>
+                  <sc-if value="{{ m.isPrimary }}"><span style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6d28d9;background:#f5f2ff;border:1px solid #e6dcff;border-radius:5px;padding:3px 7px">Primary admin</span></sc-if>
+                  <sc-if value="{{ m.isYou }}"><span style="font-size:10px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:5px;padding:3px 7px">You</span></sc-if>
+                </div>
+                <div style="font-size:12.5px;color:#4a4553;margin-top:4px">{{ m.email }}</div>
+                <div class="cs-num" style="font-size:11.5px;color:#7d7889;margin-top:4px">{{ m.joined }}</div>
+              </div>
+            </div>
+            <div class="cs-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+              <span style="{{ m.roleStyle }}">{{ m.role }}</span>
+              <sc-if value="{{ m.canChange }}"><span class="cs-link">Change role</span></sc-if>
+              <sc-if value="{{ m.canRemove }}"><span onClick="{{ m.confirmRemove }}" class="cs-link" style="color:#b91c1c">Remove</span></sc-if>
+            </div>
+          </div>
+          <sc-if value="{{ m.removing }}">
+            <div style="padding:15px 22px 17px 69px;background:#fffbfb;border-top:1px solid #fecaca;border-left:3px solid #ef4444">
+              <div style="font-size:13px;font-weight:700;color:#991b1b">Remove {{ m.name }} from {{ companyNameShort }}?</div>
+              <div style="font-size:12px;color:#7f1d1d;margin-top:6px;line-height:1.55">{{ m.removeConsequence }}</div>
+              <div style="display:flex;gap:9px;margin-top:13px;flex-wrap:wrap">
+                <div style="font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #dc2626;background:#dc2626;color:#fff;cursor:pointer">Remove member</div>
+                <div onClick="{{ m.cancelRemove }}" class="cs-btn">Keep them</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <div style="padding:14px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;font-size:11.5px;color:#615c6e;line-height:1.55">{{ roleFootnote }}</div>
+    </div>
+
+    <!-- ============ 4 · WORKSPACE & LIFECYCLE ============ -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+      <div style="padding:19px 22px 17px;border-bottom:1px solid #f2f1f5">
+        <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Workspace</div>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:6px;line-height:1.5">{{ workspaceLine }}</div>
+      </div>
+      <div style="padding:18px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="cs-btn">Create another company</div>
+        <div class="cs-btn">Jump to the switcher</div>
+        <span style="font-size:11.5px;color:#7d7889;line-height:1.5">{{ multiCoNote }}</span>
+      </div>
+    </div>
+
+    <!-- DANGER ZONE — net-new, deliberately not wired -->
+    <div style="border:1px solid #f3d9d9;border-radius:16px;overflow:hidden;background:#fffdfd">
+      <div style="padding:18px 22px 15px;border-bottom:1px solid #f7e4e4;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div>
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:800;letter-spacing:-.015em;color:#8a1c1c">Danger zone</span>
+            <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;background:#f4f4f6;border:1px solid #e4e4e8;border-radius:5px;padding:3px 7px">Coming soon</span>
+          </div>
+          <div style="font-size:12px;color:#8a6a6a;margin-top:6px;line-height:1.55">Designed, not yet live — these three actions have no backend behind them, so the controls are inert.</div>
+        </div>
+      </div>
+      <sc-for list="{{ dangers }}" as="d" hint-placeholder-count="3">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f7e4e4;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13.5px;font-weight:700;color:#7a2a2a">{{ d.title }}</div>
+            <div style="font-size:12px;color:#8a6a6a;margin-top:5px;line-height:1.55">{{ d.body }}</div>
+            <sc-if value="{{ d.typeToConfirm }}">
+              <div style="margin-top:11px;max-width:320px">
+                <div class="cs-lbl" style="margin-bottom:6px;color:#8a6a6a">Type {{ companyNameShort }} to confirm</div>
+                <input class="cs-in" disabled="{{ true }}" placeholder="{{ companyNameShort }}" style="border-color:#e2c9c9;background:#fdf8f8" />
+              </div>
+            </sc-if>
+          </div>
+          <div class="cs-dead" style="flex:none">{{ d.action }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="background:#faf9fc;border:1px solid #ececf1;border-radius:14px;padding:17px 20px">
+      <div class="cs-lbl">Not managed here</div>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:8px;line-height:1.6">{{ boundaryLine }}</div>
+    </div>
+
+    <div style="margin-top:8px;padding-top:18px;border-top:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:#7d7889">© Copyright 2026, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.</div>
+      <div style="display:flex;gap:18px;font-size:11.5px"><a href="#terms">Terms of service</a><a href="#privacy">Privacy policy</a></div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;emptyState&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { empty:false, view:'admin', add:false, logoUrl:false, removing:null,
+            acks:{}, vals:{} };
+
+  ic(p, sw){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const S = this.state;
+    // Empty state is reachable from the prop OR the header switcher, so it can be reviewed.
+    const empty = S.empty != null && S.empty !== false ? true : !!this.props.emptyState;
+    const I = {
+      building: this.ic('<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>'),
+      globe:    this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      lock:     this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      eye:      this.ic('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6"/>'),
+      swap:     this.ic('<path d="M4 8h13l-3-3M20 16H7l3 3"/>'),
+      users:    this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/><circle cx="17.5" cy="8.5" r="2.4"/>'),
+      chart:    this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>'),
+      spark:    this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>')
+    };
+
+    const COMPANY = 'Novacraft Labs, Inc.';
+    const SHORT = 'Novacraft Labs';
+    const initials = 'NL';
+
+    // ---- ONE viewer role drives every permission on the page ----
+    const isAdmin = S.view === 'admin';
+    const readOnly = !isAdmin;
+    const viewerEmail = isAdmin ? 'guillaume.lauzier@axal.vc' : 'dmitri@novacraft.ai';
+
+    // ---- fields: value + per-field save acknowledgment on blur ----
+    const FIELD_DEFS = {
+      name:        { label:'Company name', seed:COMPANY, ph:'Legal or trading name', pub:true },
+      stage:       { label:'Stage', seed:'Pre-seed', ph:'Select a stage', pub:true, select:true },
+      website:     { label:'Website', seed:'https://novacraft.ai', ph:'https://', pub:true },
+      linkedin:    { label:'LinkedIn URL', seed:'linkedin.com/company/novacraft-labs', ph:'linkedin.com/company/…', pub:true },
+      presence:    { label:'International presence', seed:'US, EU', ph:'e.g. US, EU, APAC', pub:true },
+      logo:        { label:'Logo URL', seed:'', ph:'https://…/logo.svg', pub:true },
+      description: { label:'Description', seed:'Async workflow automation for distributed engineering teams.', ph:'', pub:true },
+      revenue:     { label:'Revenue range', seed:'$0–$100k ARR', ph:'e.g. $0–$100k ARR', pub:false },
+      employees:   { label:'Employee count', seed:'4', ph:'Headcount today', pub:false },
+      products:    { label:'Current products', seed:'Novacraft Threads (beta)', ph:'What ships today', pub:false },
+      expansion:   { label:'Expansion goals', seed:'EU self-serve in H1 2027', ph:'Where you intend to grow', pub:false }
+    };
+    const mk = (k) => {
+      const d = FIELD_DEFS[k];
+      const ackState = S.acks[k];
+      return {
+        label:d.label, ph:d.ph,
+        value: S.vals[k] != null ? S.vals[k] : d.seed,
+        blur: readOnly ? (() => {}) : ((e) => {
+          const v = e && e.target ? e.target.value : '';
+          const nv = Object.assign({}, S.vals); nv[k] = v;
+          const na = Object.assign({}, S.acks); na[k] = v.trim() === '' && k === 'name' ? 'error' : 'saved';
+          this.setState({ vals:nv, acks:na });
+        }),
+        ack: ackState === 'saved' ? 'Saved' : (ackState === 'error' ? 'Company name can\u2019t be empty — not saved' : ''),
+        ackStyle: 'font-size:11px;font-weight:600;margin-top:5px;min-height:15px;color:'
+          + (ackState === 'error' ? '#b91c1c' : '#047857')
+      };
+    };
+    const F = {};
+    Object.keys(FIELD_DEFS).forEach(k => { F[k] = mk(k); });
+
+    // ---- members ----
+    const MEMBERS = [
+      { key:'gl', name:'Guillaume Lauzier', email:'guillaume.lauzier@axal.vc', role:'Owner',
+        joined:'Joined Mar 12, 2026', primary:true },
+      { key:'ao', name:'Amara Osei', email:'amara@novacraft.ai', role:'Admin',
+        joined:'Joined Mar 12, 2026', primary:false },
+      { key:'dv', name:'Dmitri Volkov', email:'dmitri@novacraft.ai', role:'CTO',
+        joined:'Joined May 4, 2026', primary:false },
+      { key:'rt', name:'Rin Takahashi', email:'rin@takahashi.design', role:'Invited',
+        joined:'Invited Jun 15, 2026 · not accepted', primary:false }
+    ];
+    const EDIT_ROLES = ['Owner','Admin','Founder'];
+    const roleChip = (r) => {
+      const granting = EDIT_ROLES.indexOf(r) >= 0;
+      const invited = r === 'Invited';
+      return 'font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;white-space:nowrap;'
+        + (granting ? 'background:#f5f2ff;color:#6d28d9;border:1px solid #d8c9ff'
+            : (invited ? 'background:#fffbeb;color:#92400e;border:1px solid #fde68a'
+                       : 'background:#f4f4f6;color:#4a4553;border:1px solid #e4e4e8'));
+    };
+    const accepted = MEMBERS.filter(m => m.role !== 'Invited').length;
+    const invitedN = MEMBERS.length - accepted;
+
+    const consequenceFor = (m) => m.role === 'Invited'
+      ? 'Cancels the invite. They never had access, so nothing they own is affected.'
+      : 'They immediately lose access to every workspace scoped to ' + SHORT
+        + ', including Growth details, the cap table and the data room. Equity already granted is unaffected — settle that in Cap Table separately.';
+
+    return {
+      isEmpty: empty, hasCompany: !empty,
+      exitEmpty: () => this.setState({ empty:false }),
+      descriptionValue: F.description.value,
+      embeddedClass: this.props.embedded ? 'cs-embedded' : '',
+      buildingIcon: I.building, globeIcon: I.globe, lockIcon: I.lock, eyeIcon: I.eye, switchIcon: I.swap,
+      unlocks: [
+        { icon:I.users, title:'A team, with roles', body:'Invite co-founders and hires, set who can edit what, and track equity and paperwork per person.' },
+        { icon:I.chart, title:'Metrics and investor matching', body:'Growth details you enter here feed investor matching and deal analysis — nothing runs without a company to attach them to.' },
+        { icon:I.spark, title:'Every workspace in the sidebar', body:'Spin-Out Lab, Brand & Landing, Customer Discovery and the rest are all scoped to one company.' },
+        { icon:I.building, title:'More than one company', body:'Founders often run two. Each gets its own sidebar, its own settings and its own KYB state.' }
+      ],
+
+      initials, companyName: COMPANY, companyNameShort: SHORT, stage: F.stage.value,
+      bindingLine: 'You are editing ' + COMPANY + ' · Delaware C-Corp · created Mar 12, 2026',
+      scopeLine: 'This sidebar is scoped to ' + SHORT + '. Everything you change here affects this company only — your other companies are untouched.',
+
+      roleViews: [{ k:'admin', label:'Admin' }, { k:'member', label:'Member' }, { k:'none', label:'No company' }].map(v => ({
+        label:v.label,
+        go: v.k === 'none'
+          ? (() => this.setState({ empty:true, add:false, removing:null }))
+          : (() => this.setState({ view:v.k, empty:false, add:false, removing:null })),
+        style:'font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;'
+          + (S.view === v.k && !empty ? 'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(24,24,27,.07)' : 'color:#4a4553')
+      })),
+      rolePill: roleChip(isAdmin ? 'Owner' : 'CTO'),
+      roleLabel: isAdmin ? 'Your role: Owner' : 'Your role: CTO',
+
+      readOnly, canEdit: isAdmin,
+      editableBtn: readOnly
+        ? 'font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #ececf1;background:#f8f8fa;color:#a8a4b4;cursor:not-allowed;white-space:nowrap'
+        : 'font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #e2e1e8;background:#fff;color:#18181b;cursor:pointer;white-space:nowrap',
+      saveModeNote: readOnly
+        ? 'Read-only — only Owner, Admin and Founder roles can edit.'
+        : 'Each field saves when you leave it.',
+
+      f: F,
+      publicFields: ['name','stage','website','linkedin','presence'].map(k => F[k]),
+      growthFields: ['revenue','employees','products','expansion'].map(k => F[k]),
+      logoUrlOpen: S.logoUrl,
+      logoUrlLabel: S.logoUrl ? 'Hide URL field' : 'Or paste a URL',
+      toggleLogoUrl: () => this.setState({ logoUrl: !S.logoUrl }),
+      brandCrossLink: 'The logo and name set here are used across Brand & Landing.',
+
+      memberCount: String(accepted),
+      membersSub: accepted + ' ' + (accepted === 1 ? 'member' : 'members')
+        + (invitedN ? ' · ' + invitedN + ' invite pending' : '')
+        + ' · ' + (isAdmin ? 'you can invite, change roles and remove people.' : 'only Owner, Admin and Founder roles can change this list.'),
+      addOpen: S.add && isAdmin,
+      addLabel: S.add ? 'Close' : '+ Add member',
+      toggleAdd: () => this.setState({ add: !S.add }),
+
+      members: MEMBERS.map(m => {
+        const isYou = m.email === viewerEmail;
+        const removing = S.removing === m.key;
+        return {
+          initials: m.name.split(' ').map(x => x[0]).join(''),
+          name:m.name, email:m.email, role:m.role, joined:m.joined,
+          isPrimary:m.primary, isYou,
+          avBg: m.role === 'Invited' ? '#f4f4f6' : '#ede9fe',
+          avInk: m.role === 'Invited' ? '#a8a4b4' : '#6d28d9',
+          roleStyle: roleChip(m.role),
+          canChange: isAdmin && !m.primary,
+          canRemove: isAdmin && !m.primary,
+          removing,
+          removeConsequence: consequenceFor(m),
+          confirmRemove: () => this.setState({ removing:m.key }),
+          cancelRemove: () => this.setState({ removing:null }),
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:16px 22px;border-top:1px solid #f2f1f5;'
+            + (removing ? 'background:#fffbfb;' : '')
+        };
+      }),
+      roleFootnote: 'Owner, Admin and Founder can edit settings and manage members — shown in violet. Any other title, like CTO, is a label only and grants no edit rights. The primary admin can\u2019t be removed; transfer the role first.',
+
+      workspaceLine: 'Every tool in the sidebar reads from whichever company is selected at the top. Settings is the only administrative page — the rest stay workspaces.',
+      multiCoNote: 'You have 3 companies on this account.',
+
+      dangers: [
+        { title:'Transfer primary admin', body:'Hand the primary admin role to another Owner or Admin. You keep your seat; they take over billing, invites and lifecycle actions.', action:'Transfer', typeToConfirm:false },
+        { title:'Leave company', body:'Removes your own access to ' + SHORT + '. Not available to the primary admin until the role is transferred.', action:'Leave', typeToConfirm:false },
+        { title:'Delete company', body:'Permanently deletes ' + SHORT + ' and every workspace scoped to it — metrics, cap table, data room, landing pages. This cannot be undone.', action:'Delete company', typeToConfirm:true }
+      ],
+
+      boundaryLine: 'Team recruiting (advisors, co-founders, open roles) lives in Team. Landing pages live in Brand & Landing, which consumes the logo and name set above. Your personal name, email, identity documents and security live in Account — not here.'
+    };
+  }
+}
+</script>
+</body>
+</html>

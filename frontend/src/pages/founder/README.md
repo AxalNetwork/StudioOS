@@ -1,0 +1,123 @@
+# Founder workspaces
+
+`MeetingBotConsentNotice.jsx` (D886 B9) supplies the visible-bot sentence beside B7’s existing recording-consent control. The wording comes from the shared `meeting-bot/notice.mjs` module. It does not dispatch a bot or replace the server consent gate.
+
+This folder contains the founder-specific workspace shell and the dedicated canvas landing pages that replace generic route wrappers for active Founder View.
+
+- `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
+- `FounderModuleBackLink.jsx` gives older editor pages one quiet return to their cycle module. `../cycles/founderToolNavigation.js` is the shared map for module doors and editor returns (#1539). The old sibling-tool tab sets and wrapper are removed.
+- Investor match is Capital relationships › Match (D1194, #3128): the old Investor match page is deleted, and `/raise/capital-match` and `/grow/capital-match` forward to `/raise/capital-relationships/match` with the venture, the hash and the moved notice.
+- The Validate, Build, Raise and Grow landings are the cycle pages in `../cycles/` (D661, #1474); the four desks that held them here are retired, with their own stylesheets. A founder's bare `/build/discovery` still redirects to `/validate` and bare `/execution` to `/build`, and `?mode=workspace` mounts the Discovery and Execution editors at those routes (D422). `founderGrowDesk.css` stays: the six `/grow/*` zone pages draw their header from it, and `BrandPagesSection` (Grow's Brand read, on the builder at `/build/brand` since #2343) its cards.
+- `ShareUpdateSheet.jsx` is Grow's "Share an update" sheet (D654), drawn as an `ActionSheet` in the tall cycle lightbox by `ShareUpdateLightbox.jsx` (D686 §5.8, #1599), opened from the Grow cycle overview's primary action: Period, Metrics, Highlights, Asks, Audience and Preview, plus the `nometrics` and `nothing` states of `Cycle Action.dc.html` (`action=update`). It writes the founder's `portfolio_updates` row through `../../lib/api/shareUpdate.js`. D686 §5.8 (#1599): the period is This month, Last month or Custom (dates in UTC, a reversed range refused), `periodTitle` names the update ("October 2026 update"), a removed metric can be restored, lines have Edit and Done with Add a highlight and Add a lowlight always offered, the audiences show On/Off pills and Send says why it is off, and `sendShareUpdate` creates the draft once so a retry never leaves an orphan.
+- `SentUpdatePage.jsx` is `/updates/:uid` (D654): the author sees replies to each ask and the module each became an item in (Team expansion, Distribution, Partner network, Capital relationships, Market expansion), who opened it, and "Ask again" after 14 days with no reply; D686 §5.8 (#1599) titles it by its period and adds search, All / Replies / Opened, latest first, 1–25 of N paging and reply pills; a recipient sees what their audience may read and replies in place.
+- `FounderTeamPage.jsx` owns the Team workspace at `/build/team` (D435; the bare route was the Grow desk until D661): the company's roster, advisors, hiring and coverage from migration 326's stores, with the advisor directory, Co-founder Match and the jobs list opening inside the tab that owns each. It replaced the retired Team Building page (D435); the founder redirects `?tab=advisor|cofounder|jobs` land here.
+- `FounderNetworkDesk.jsx` owns the A6 Network overview at `/network` for founders. It reads records only and hands off to the three zones — `/network/relationships`, `/network/introductions`, `/network/organizations` — flagging going-cold contacts with `frontend/src/lib/networkBook.js`, the definition those zones share. Workspace mode and `tab`/`intro` deep links still reach `NetworkPage` until the legacy mounts retire.
+- `FounderResearchDesk.jsx` owns the A7 Research overview for founders. It reads market, signal, company, fund-research and library sources and hands off to the `/research/*` zones; its question box asks `/research/ask` only when the founder presses Ask, answering from their own library.
+- `FounderStudioHome.jsx` is the founder's `/studio`, built to `Founder Studio.dc.html` (D564): there is no separate home. It makes the page's reads, each settled on its own, and mounts Eadwyn (`StudioInterview`) and the archetype card (`ProfileFitSection compact`). The zones live in `FounderStudioBody.jsx`, apart from the home so a Node test can render them (the home mounts PersonalAdvisor, whose imports reach Worker modules), and `founderStudioModel.js` turns each read into a zone that is loading, unreadable, not recorded, empty or ready. A zone with no store says so; nothing missing is drawn as zero. D701 (#1663): the home reads Eadwyn's panel tab from `?tab=` and opens the ticket form at `/studio/tickets/new` (on Task with `?type=task`), at every width, and every link it writes keeps the page's `project_id`. Below 1024px it renders `StudioPhone.jsx` in place of `FounderStudioBody.jsx`, handing either the same `StudioInterview` element: Studio on a phone is Eadwyn, and no zone is drawn.
+- `StudioPhone.jsx` (D701) is the Studio Mobile Page canvas's page: the Eadwyn bar with the tab's label and the menu button, its own no-advisor line, the Conversations list (`StudioConversations`, from `GET /api/eadwyn/conversations/mine`) and the read-only transcript sheet. It imports none of the modules a Node test cannot import.
+- `EadwynMenu.jsx` (D701) is the Eadwyn menu drawer: Open a ticket, Conversations, Tasks and My tickets, then Your profile's five rows: You, Your venture, Archetype card, What others see and Visibility. D702 (#1664) set `PROFILE_ROWS_LIVE` with their routes. Its venture rows keep the page's `project_id`.
+- `studioPhoneModel.js` (D701) reads the founder's Studio from its URL, purely: `studioTabOf` (`?tab=` to a `PANEL_TABS` id), `ticketTypeOf` (`?type=`, or null), `withProjectId` (a link with the page's `project_id` added) and `searchWithTab` (a tab change that keeps every other parameter). It also holds the stored-time helpers (`storedDate`, `dayText`, read as UTC, shown as the viewer's day) and `conversationRows`, the Conversations list's lines.
+- The CSS files beside those components are intentionally route-scoped so the dense canvas layouts do not leak into legacy tools.
+
+**Chrome rule:** the app `SidebarNav` owns licence navigation. Canvas pages here
+render **main column + `WorkerRail` only** — never the design's `.side` column.
+Horizontal zone pills on each desk replace in-page `#anchors`. See
+[`documentation/architecture/SHELL_MIGRATION.md`](../../../documentation/architecture/SHELL_MIGRATION.md).
+
+**Rail rule (D424):** a desk with proposal bands (Validate, Build, Raise, Grow)
+passes `fills` to its `WorkerRail` and its own sentence from
+`ASSIST_SURFACES.workspace.desks` as `note`; a desk with none (Network,
+Research) passes that map's `none` sentence and no switch. Every band on a
+desk takes the desk's `useAiSpend()` result as `ai`, so it quotes the cost
+before a run. `validate_fills_the_blanks.test.mjs` holds each sentence to the
+bands its desk mounts.
+D548 wires the stored Review status into Build's counts/filter/card rows. Grow's
+monthly headline uses only a target explicitly marked as the focus; the existing
+Focus card sets/clears it through the scoped targets route. Unknown focus remains
+unselected, and an unreadable target source is reported as Unreadable.
+- `RecordLightbox.jsx` is Validate's "Record a session" setup lightbox (D685, #1587), at `/validate/record`: Who, How (with provider chips), Talking points, Transcript with its estimate, and Consent, to `Cycle Overview.dc.html` (`lbOpen`). It sits on `../../ui/Lightbox.jsx`. `recordSetup.js` is its model: the canvas's copy, the chip statuses, the estimate priced from `GET /sessions/models`, the consent gate, and `SETUP_FIELDS`, which says which fields the Worker stores (all of them, since `POST /sessions`). Start is that one setup call, through `../../lib/api/interviewSessions.js` (`open`); Who can be picked from the recruiting pipeline, and a Text chat imports a waiting WhatsApp or Telegram chat in place. `RecordSessionSheet.jsx` is what is left of the D660 side sheet it replaced: `ModelList`, `AUDIO` and the helpers the session page shares.
+- `channelOrigin.js` and `ChannelOriginBadge.jsx` badge a session that came from a connected channel (D684); `channelCopy.js` is the inbox's reply-window wording.
+- `chatConsent.js` (D754, #1980) is a chat's recording consent where the founder sees it, from the Worker's `consent` (#1893): Record a Session's "Ask <Name> in WhatsApp" or "<Name> already agreed" before Start, the session page's consent line (`InterviewSessionPage.jsx`'s `ChatConsentLine`, with "Discard this chat's recording" once consent is withdrawn), and the inbox's Ask for consent and the member's word (`ChannelsInbox.jsx`'s `ThreadConsent`). A chat that asks no consent is drawn as before. Telegram's variant (D756, #1981): the five states (not asked, asked at, YES at, NO, stopped), "Ask for consent in Telegram" while the bot may reply inside the window, otherwise the reason and "Copy the notice" (only with the Worker's `notice_text`), Start waiting for a YES, and never the member's word.
+- `AssistantEntry.jsx` and `assistantSession.js` (D668) are "From an AI assistant" (D665): the sheet's three steps, the starter prompt the founder copies, the badge on a session an assistant submitted, and the "Proposed by …" label on each placement. Since #1497 merged, the badge and the labels are mounted: `InterviewReview.jsx` labels each placement and heads each compare column by its source, and `InterviewSessionPage.jsx` shows the badge and opens an assistant's session on review. Since #1496 merged, the sheet offers it as "From an AI assistant".
+- `InterviewSessionPage.jsx` is `/validate/session/:id` (D660): the start step (consent, and the Worker's 409 in its own words), the Recording View while recording, and the review step with one-tap speaker assignment, beside a rail with the models, the cost receipt and the meter.
+- `RecordingView.jsx` is the Recording View (D685 §5.7, #1588), full screen at `/validate/record/live` (`RecordLivePage.jsx`): the top bar with the call's pill and the offline pill, the timer in the ring, four 68px controls, the talking-points drawer, the stop confirm with "Discard this recording", the video tiles, and every state as an independent layer (`layers`). Its ring is `../../components/discovery/RingViz.jsx` on `../../lib/ringViz.js`, and capture (live 16 kHz PCM, chunk upload, the IndexedDB queue, the call tab's audio mix) is `../../lib/interviewCapture.js`. The recording itself lives above the routes in `../../lib/activeRecording.js`, bound to React by `../../contexts/ActiveRecordingContext.jsx`; `RecordingPill.jsx` keeps it in the corner of every route after "Exit full screen". The stop confirm asks "Summarise and place with Eadwyn", off by default, with the reader's own average for the two runs as its quote (`stopSheet.js`, D770 #2095): that choice is the only source of `auto`, never the rail's mode, and off, Stop saves the recording and its transcript only. Stop and process (§5.9, #1589) is the recorder's: stop, flush, `finish` with the last seq recorded, then the Worker's stages read every 2 seconds; the ring shows a percentage only for Uploading and Transcribing (the Worker's counts) and an indeterminate arc otherwise, the chips follow the stage, a failure prints the Worker's sentence with Retry, and the live view lands on `/validate/interviews/:id` when done. The drawer lists the session's own talking points (the Worker's rows, from the create answer or `GET /sessions/:id`) and saves each tick with `PUT /sessions/:id/points/:pointId` (#1591).
+
+D653: `RoundCallSheet.jsx` is Raise’s Call for Capital, five steps (D686 §5.6, #1598: the round as read-only rows with Edit, the current deck and the data room preselected, matches previewed on entering Audience, Send anyway as the acknowledgement, and a draft resumed instead of duplicated — an open call shows its notice instead); Since S19-A (#1594) The round takes the instrument's own structured terms seeded from `term_seeds`, Audience names sector, stage and cheque range or the reason no match can be made, and Send requests counsel review (`requestCounsel(uid, revision)`). Its frame is the tall cycle lightbox around an `ActionSheet` (`ui/`, #1596), and it reads availability first: while round calls are off it says Coming soon and makes no other call. `roundCallParts.jsx` handles shared reads and money. `RaiseCallPage.jsx` is a founder's call inside the Raise shell at `/raise/capital-relationships/calls/:uid` (D686 §3.1 item 14, D1221; the old `/raise/calls/:uid` forwards there, counted, D1227), drawn to CLS8–CLS11 and CLS14 by D1225: the state and line, the strip, the funnel, the responses and the questions, from `raiseCallModel.js` (pure; amounts are Indicated, a matching investor nameless until they respond); `CallDialogs.jsx` holds Extend, Close and Answer, each in the page; `CallRecipientDrawer.jsx` is one recipient, with delivery. `RoundCallPage.jsx` serves the private list, drafts, counsel review and verified recipient views, and sends a founder's sent call to the Raise page. Disabled reads say Coming soon; missing records and failed reads stay distinct. Canvas: Cycle Action (`action=call`).
+- D684 (#1578), interview channels. `ChannelsInbox.jsx` is `/validate/inbox`, Conversations: customer chats from the member's business Telegram and WhatsApp, waiting until each is assigned to an interview (or one is created from it), or ignored; the thread view and the reply composer, which says why it cannot send outside the 24-hour rule and never calls a Telegram message delivered. `InterviewChannels.jsx` holds an interview's Connect panel ("From Telegram or WhatsApp" in Record a session), its Schedule a call panel (Zoom or Google Meet, with each call's status in plain words), and the waiting panel a channel session shows on its page until its messages or transcript arrive. `channelThreads.js` is their rules, among them a waiting note said as the kind it is (D756 §1.12, #1981: Voice note, Audio file or Round video, from the thread read's `media`) and WhatsApp's "Add this chat to an interview by <date> to keep its voice notes", once per waiting chat (`voiceKeepBy`, D754 §5, #1980: from `voice_fetch_by`, which the Worker never sends for Telegram). `assistantSession.js` tells a channel session (`submitted_via` is the provider key) from an assistant's: "From Telegram" gets the channel badge, never the assistant's, and opens on the transcript.
+- `InterviewReviewPage.jsx` is Customer research's record (D697, #1659; its default export is `InterviewRecord`), drawn by `../cycles/CycleRoute.jsx` in record mode at `/validate/customer-research/:id`, inside the cycle. It draws what the record read sends (#1692): the facts, What it fed, Session and Activity for every reader, and for a writer only, Transcript (the session switcher, `?session=`, the summary, the passages with their start times, Search, the player), Eadwyn's placements (`InterviewSessionPage`'s `ReviewStep`), Cost (the chosen session's receipt lines) and the interview's tools. Edit details writes only the name and company through the record's `edit-details`; Delete keeps its confirm. The session routes are called only when the read sends Transcript, and every dialog goes through `CycleRoute`'s `openDialog`. Its rules are `interviewReviewModel.js`, `recordParts` among them. `SessionSummary.jsx` is the summary (§5.10): StudioOS's own, each sentence linked to the passages it cites, the model named, "Not recorded" with none, and Summarise when there is a transcript and no summary. Since D757 (#1927) it also holds the digest (`DigestView`: a writer's draft, "Draft · written by <model>", with Keep and Edit, which removes a key quote but never rewrites one; a kept digest for anyone else), the engine's state in the Worker's words (`EngineLine`, Add tokens on a budget refusal) and the source badge. `InterviewReview.jsx`'s `ModuleSuggestions` lists the session's suggestions under all seven Validate modules, each with "Heard in <name> · time · speaker" linking its line, and Accept all for a module. Their rules are `sessionDigestModel.js`; the Record finish line ("Summary drafted · n suggestions to review", linking to the session) is `../../lib/activeRecording.js`'s `finishLine`. An assigned chat's Inbox row says the same ("Summary drafted · n suggestions", `channelThreads.js`'s `threadEngineLine`), from the thread read's `digest_status` and `pending_suggestions` (#1930).
+- `InterviewReview.jsx` is the review step of `/validate/session/:id` (D660 part 2): placements by module with accept, edit and discard, compare, "Ask the transcript" with citations, and the structuring receipt. It takes data as props; `InterviewSessionPage`'s `ReviewStep` mounts it once a session is transcribed, on #1494's routes (D660 part 3).
+
+### Meeting bot controls — D886 B7 (#2585)
+
+`RecordLightbox.jsx` makes Send Eadwyn AI the primary action for a supported
+call link, alongside an explicit Record this device action. Consent is saved
+before dispatch; B9's `MeetingBotConsentNotice.jsx` is shown before the press.
+A refusal neither retries nor opens a microphone. The bot's setup excludes the
+plain meeting URL; B1 stores it encrypted. Device and bot setup use distinct
+idempotency keys so an explicit fallback creates its own recording.
+
+`meetingBotSession.js` supplies the state/actions, with authored refusal and
+failure sentences. `MeetingBotPanel.jsx` binds it to the real session API,
+polls while moving, stops polling on completion/unmount, and draws status,
+approximate run time, Stop and the latest saved participants. `InterviewSessionPage.jsx`
+keeps bot sessions out of device recovery and preserves named transcript labels.
+`InterviewChannels.jsx` defaults auto-send on when scheduling; the Worker queues
+it after creating the call. Each scheduled row can cancel/re-enable that send.
+Call cancellation stops the bot's alarm first. A queued run is the stored choice;
+no browser timer or local-only preference dispatches a call.
+
+D1455 (#3710, REC1, REC2, REC5): `sessionLifecycle.js` (pure) merges the bot
+state and the processing state into one stepper (`lifecycle`, `stepLine`), says
+a failure in plain words with its causes and the right Try again
+(`failureView`), and writes money in two decimals (`money`).
+`SessionLifecycle.jsx` draws the stepper and the one failure panel on
+`/validate/session/:id`; `MeetingBotPanel.jsx` hands the page its bot read
+(`onRead`) and leaves the failure to that panel (`hideFailure`).
+`ParticipantsTimeline.jsx` and `participantsTimeline.js` (#4018, REC3) draw who
+was on a bot call and when, with each speaker's share once transcribed; the
+panel hands the page the roster (`onParticipants`) and drops its own list
+(`hideParticipants`) there.
+`sessionPlayer.js` gained `seek(ms)` and `setRate` for D1454's tap-to-play and
+1×, 1.5×, 2×.
+
+The participants read is separate from status: creator-only, latest encrypted
+roster, display names and offsets without platform IDs. Missing is Not recorded;
+failed reads are Unreadable. B6 still owns final speaker mapping/transcription;
+B7 reads the stored speaker labels as they arrive. Runtime wiring and rollout
+remain B8/B9's gates. S1 authorized the existing screen look without a new canvas.
+
+`RecordChannelPage.jsx` is Record a session › WhatsApp, Telegram and Calls at
+`/validate/record/<channel>` (D1309); the channels and addresses are
+`recordChannels.js`'s.
+
+WhatsApp's boards (WA1–WA13, D862, #2507) are built. `RecordWhatsAppTool.jsx`
+draws its tabs as paths under `/validate/record/whatsapp` (Inbox, Sessions,
+Analytics, Proposals, Connection). `ChannelSessionParts.jsx` holds the parts
+Telegram (#2515) and Calls (#2525) reuse: the inbox, the transcript, the
+analytics, the proposals, the guided connect and the four states.
+`channelSessionModel.js` holds their rules, which are pure.
+
+Telegram's boards (TG1–TG7, D869, #2515) are built on the same tool.
+`RecordChatTool.jsx` is the chat tool with the channel as its argument
+(`CHAT_TOOLS` in `channelSessionModel.js`); `RecordWhatsAppTool.jsx` re-exports
+WhatsApp's, and `RecordTelegramTool.jsx` adds Telegram's own tabs (Send to
+Axal, Connection, MCP access) under `/validate/record/telegram`.
+
+Calls' boards (MC1–MC7, D878, #2525) are `RecordCallsTool.jsx`, with its
+rules in `callsModel.js` (pure): Upcoming, Calls (`/all`), Upload, Proposals,
+Connection and Retention, as paths under `/validate/record/calls`. It reuses
+the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`), and reads
+`GET /meetings`. One venture's calls are also `GET /meetings/calls`, and
+`PATCH /sessions/:id/speakers` renames one speaker in every passage. With all
+three channels built, D1309's "Today" panel is gone.
+
+- `FounderCoMarketingPage.jsx` reuses the published feed in Grow › Partner network; `CoMarketingFounderRedirect.jsx` counts only the founder’s legacy forward, retaining query and hash (D4439, #4439).
+- `recordingClock.js` (#4574 H4) holds the recording timer (`clock`, `short`) and `useDarkTheme`, apart from `RecordingView.jsx` so that `RecordingPill.jsx`, mounted on every signed-in route, does not load the whole view. `RecordingView.jsx` re-exports all three.
+For D4587 (#4587), `InterviewReviewPage.jsx` keys list/detail/receipt state to
+the originating interview and selected-session request generation. Only a
+detail that names the visible session enables review actions. `sessionPlayer.js`
+also discards and revokes audio that finishes loading after a session switch.
+
+D4619 (#4619): `useFounderCycleReads.js` is the founder Studio's per-cycle overview read, out of `FounderStudioHome.jsx`. Each answer is kept and committed under the full venture + cycle key, so a late answer for another venture is dropped and A → B → A asks again for A. A `project_id` the member cannot open settles as an unavailable venture (`unavailableProject` in `founderStudioModel.js`), and `FounderStudioBody.jsx` says so; the first venture is chosen only when no ID was supplied.
+
+`GrowOverviewLink.jsx` is the project-aware return to the Grow overview from Focus, Customers, Talent, Partnerships and Launch (#4862).

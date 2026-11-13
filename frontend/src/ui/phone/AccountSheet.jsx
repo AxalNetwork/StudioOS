@@ -1,0 +1,73 @@
+import { useLocation } from 'react-router-dom';
+import { isMyEventsPath } from '../../pages/events/myEventsModel';
+import React, { useEffect, useState } from 'react';
+import { api } from '../../lib/api.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
+import { CheckInStatus } from '../../components/FounderWellbeingMenu.jsx';
+import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
+import { resolveHeldLicences } from '../../lib/activeRole.js';
+
+// Messages is here because a founder's phone draws the band, not the top bar
+// that carries the Messages door (D284); the More page that carried it was
+// removed (#2297).
+const ACCOUNT_ROWS = [
+  ['Email', '/email'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
+  ['Connectors', '/account/connectors'], ['Trust Center', '/trust/me'],
+  // D4152 (#4152 §2): Billing lives in the Account menu, on a phone too. D4473: `accountRowsFor` relabels and adds here.
+  ['Portfolio', '/account/portfolio'], ['Billing', '/account/billing'], ['Perks', '/perks'],
+  ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
+  ['Help Center', '/help'], ['Pricing', '/pricing'],
+];
+
+/**
+ * D4473 (#4473): the sheet's rows for this account, the same three as the desktop Account menu. Account Portfolio
+ * reads "Companies" when Investor is held, followed by the investment holdings "Portfolio"; "Licences" for every
+ * member account (not an admin's).
+ */
+export function accountRowsFor(user) {
+  const held = resolveHeldLicences({ user });
+  const investor = held.includes('investor');
+  return ACCOUNT_ROWS.flatMap(([title, to]) => {
+    if (to !== '/account/portfolio') return [[title, to]];
+    return [[investor ? 'Companies' : 'Portfolio', to],
+      ...(investor ? [['Portfolio', '/portfolio']] : []),
+      ...(user?.role === 'admin' ? [] : [['Licences', '/account/licences']])];
+  });
+}
+
+/** The first letters of the first two words of the name, or the email's first letter. */
+export function initialsOf(user) {
+  const words = (user?.name || '').trim().split(/\s+/).filter(Boolean);
+  return (words.length ? words.slice(0, 2).map(word => word[0]).join('') : (user?.email || '?')[0]).toUpperCase();
+}
+
+export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
+  const { company } = useActiveCompany();
+  const eventsCurrent = isMyEventsPath(useLocation().pathname);
+  const [check, setCheck] = useState({ status: 'loading', submittedToday: false });
+  useEffect(() => {
+    let alive = true;
+    api.wellbeingDaily(1).then(data => { if (alive) setCheck({ status: 'ready', submittedToday: !!data?.submitted_today }); })
+      .catch(() => { if (alive) setCheck({ status: 'unreadable', submittedToday: false }); });
+    return () => { alive = false; };
+  }, []);
+  const initials = initialsOf(user);
+  return <PhoneSheet label="Account" onClose={onClose} opener={opener}>
+    <div className="flex min-h-[72px] items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-3">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40 font-bold text-violet-700 dark:text-violet-300">{initials}</span>
+      <div><p className="font-bold text-gray-900 dark:text-gray-100">{user?.name || user?.email}</p>
+        <p className="text-xs text-gray-600 dark:text-gray-400">Founder · {company?.company_name || 'No company'}</p>
+        {branchFact && <p className="text-xs text-gray-600 dark:text-gray-400">{branchFact.name || branchFact.code}
+          {(branchFact.territories || []).length > 0 && ` · ${branchFact.territories.join(' · ')}`} · BRANCH
+          {branchFact.status && branchFact.status !== 'active' && ` · ${String(branchFact.status).toUpperCase()}`}</p>}
+      </div>
+    </div>
+    {accountRowsFor(user).map(([title, to]) => <SheetRow key={to} title={title} right={to === '/my/events' && eventsCurrent ? 'Current' : undefined} to={to} onClose={onClose} />)}
+    <SheetRow title="Founder Wellbeing" to="/wellbeing" onClose={onClose}
+      description={check.status === 'unreadable' ? 'Unreadable' : <CheckInStatus {...check} />} />
+    <SheetRow title="Refer & Earn" to="/referrals" onClose={onClose} />
+    <div className="mt-2 border-t border-gray-200 dark:border-gray-800">
+      <SheetRow title="Log Out" danger onClick={() => { onClose(); onLogout?.(); }} />
+    </div>
+  </PhoneSheet>;
+}

@@ -1,0 +1,45 @@
+{
+  "skill": "crm-pipeline-hygiene-audit",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "records": [
+          {
+            "id": "A1",
+            "company": "Harbor",
+            "domain": "harbor.test"
+          },
+          {
+            "id": "A2",
+            "company": "Harbor",
+            "domain": "different.test"
+          }
+        ],
+        "owner": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "A1",
+      "A2",
+      "review"
+    ],
+    "must_say_not_recorded": [
+      "owner"
+    ],
+    "must_not_include": [
+      "merge automatically"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why owner is missing rather than inventing it.",
+    "Do not assert: merge automatically.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "A1; A2; review. owner: Not recorded. Human review required."
+}

@@ -1,0 +1,251 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { routeBlock } from './_routes.mjs';
+import { codeOnly } from './_codeOnly.mjs';
+import { DEAL_STAGES, dealStage } from '../src/lib/dealFlow.js';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const app = read('frontend/src/App.jsx');
+const page = read('frontend/src/pages/investor/InvestorWorkspacePage.jsx');
+const styles = read('frontend/src/pages/investor/investorWorkspace.css');
+const deals = read('frontend/src/pages/investor/InvestorDealsWorkspace.jsx');
+const research = read('frontend/src/pages/investor/InvestorResearchWorkspace.jsx');
+
+test('investor workspace routes branch on the active role', () => {
+  assert.match(app, /effectiveRole === 'investor'[\s\S]{0,160}<InvestorWorkspacePage page=\{page\}/);
+  for (const [path, key] of [
+    ['/pipeline', 'deals'],
+    ['/portfolio/health', 'portfolio'],
+    ['/trust/me', 'trust'],
+  ]) {
+    // routeBlock + `includes` rather than a hand-escaped constructed regex.
+    // Escaping `/` does nothing inside `new RegExp` — the delimiter only
+    // matters in `/literal/` syntax — so the escape was ineffective while `.`
+    // and the rest stayed live, which is exactly the shape CodeQL flags. The
+    // block is bounded by the next <Route, so reading a window instead of one
+    // line cannot let a neighbour satisfy this.
+    assert.ok(routeBlock(app, path)?.includes(`investorWorkspace('${key}'`),
+      `${path} does not mount the ${key} investor workspace`);
+  }
+  assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
+  // /market-intel rendered the investor Research workspace too; D670 retired
+  // it, and /research is that workspace's one address.
+  assert.doesNotMatch(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
+  assert.match(routeBlock(app, '/research'), /researchRole === 'investor'[\s\S]{0,120}<InvestorResearchWorkspace \/>/);
+});
+
+test('investor Research implements I8 without fabricated diligence claims', () => {
+  // Each label is the exact text the workspace renders, so each is checked
+  // with a plain `includes`. Two earlier forms are worth not going back to.
+  //
+  // It began as `new RegExp(label.replace('&', '&amp;|&'))`, which put the
+  // alternation at TOP level: 'Fund & manager benchmarking' compiled to
+  // `Fund &amp;|& manager benchmarking` and was satisfied by EITHER HALF —
+  // 'Fund &amp;' alone passed it.
+  //
+  // Replacing that with `includes(label) || includes(label.replaceAll('&',
+  // '&amp;'))` fixed the halves but kept a transformation to serve a single
+  // string: exactly one of these seven labels contains `&`, and the source
+  // spells it `&amp;`. Semgrep read that replaceAll as hand-rolled HTML
+  // escaping (detect-replaceall-sanitization). Its premise does not hold here
+  // — these are literal needles in a source-text assertion, with no untrusted
+  // input and no HTML sink — but the rule pointed at something true anyway:
+  // the transformation was doing no work that writing the entity could not.
+  //
+  // So the entity is written out. This pins the encoding that actually ships;
+  // if the JSX ever switches to a bare `&`, this failing is the right outcome
+  // rather than something a tolerant matcher should absorb silently.
+  // "Worker AI · Research" is no longer a literal here — the shared rail
+  // composes that heading from `workspace`, so the mount is asserted below.
+  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund &amp; manager benchmarking', 'Market deep-dives', 'Company profiles']) {
+    assert.ok(research.includes(label), `investor Research is missing "${label}"`);
+  }
+  assert.match(research, /<WorkerRail[\s\S]*?workspace="Research"[\s\S]*?role="investor"/,
+    'investor Research must mount the shared Worker AI rail');
+  assert.match(research, /api\.miSources\(\)/);
+  // The sector watchlist read left with the digest it fed (D670).
+  assert.doesNotMatch(research, /miWatchlistList|watchlist/);
+  assert.match(research, /computed_at/);
+  assert.match(research, /sources\.map\(\(source\)/);
+  assert.match(research, /source\.live[\s\S]{0,180}source\.paid/);
+  assert.doesNotMatch(research, /Novacraft|74,000|DeepSeek|\$0\.0344|Founder-shared data room/);
+  assert.match(research, /api\.research\.ask\(/, 'the question desk posts to /research/ask — the scoped service exists and the box is wired to it');
+});
+
+test('investor-owned deep links keep the investor workspace shell', () => {
+  // Each of these reads the route's own block, bounded by the next <Route, so
+  // it cannot be satisfied by a neighbouring route's markup. The last two used
+  // `[^\n]+` and a single flat ternary against the whole file: `724dfc9f`
+  // wrapped /raise/data-room across six lines and both stopped matching, with
+  // nothing about the routing having changed. The branch order they were
+  // pinning — investor first, founder second — is still exactly what ships.
+  assert.match(
+    routeBlock(app, '/deals/:dealId'),
+    /investorWorkspace\('deals', <DealRoomPage \/>/,
+  );
+  // Re-aimed by D372: /lp-portal retired into the LP workspace's My-commitment
+  // section. The old path is a redirect to that anchor, and the destination
+  // keeps the same investor shell the portal page had.
+  assert.match(routeBlock(app, '/lp-portal'), /<LpPortalRedirect \/>/);
+  assert.match(app, /function LpPortalRedirect\(\)[\s\S]{0,240}?pathname: '\/spinout-lab\/investor-workspace'[\s\S]{0,80}?'#my-commitment'/);
+  assert.match(
+    routeBlock(app, '/spinout-lab/investor-workspace'),
+    /investorWorkspace\('axal-vc-fund', null\)/,
+  );
+  // D311 — the investor's rooms are read by grant under Research · Diligence,
+  // so the investor arm of /raise/data-room is a redirect there, still FIRST,
+  // still ahead of any founder shell. A bookmark lands on the list; it never
+  // renders the founder's room or its tab bar for an investor.
+  const dataRoom = routeBlock(app, '/raise/data-room');
+  assert.match(
+    dataRoom,
+    // D4473: a member who also holds Founder is served the founder's room.
+    /effectiveRole === 'investor' && !holds\('founder'\)\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/,
+    'the investor branch must be the first arm, ahead of any founder shell',
+  );
+  assert.doesNotMatch(dataRoom, /investorWorkspace\('deals', <DataRoomPage/,
+    'the retired investor drawer is mounted again');
+  // D1109 (#2989): the founder's files tool is retired; the founder arm is the
+  // Data room tool (CycleRoute), and the old modes only forward.
+  assert.match(dataRoom, /<CycleRoute cycle="raise" slug="data-room" \/>/, 'the founder arm is the Data room tool');
+  assert.doesNotMatch(dataRoom, /DataRoomPage|FounderRaiseDataRoom/, 'a retired data room page is mounted again');
+  // And the room the redirect's list links into keeps the investor shell.
+  assert.match(
+    routeBlock(app, '/research/diligence/:grantUid'),
+    /guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceRoom /,
+  );
+});
+
+test('the reusable surface covers every requested investor workspace', () => {
+  for (const key of ['deals', 'portfolio', 'axal-vc-fund', 'fund', 'network', 'research', 'trust']) {
+    assert.match(page, new RegExp(`['\"]?${key}['\"]?:?`));
+  }
+  assert.match(page, /data-testid=\{`investor-workspace-\$\{key\}`\}/);
+  assert.match(page, /Data shown is governed by your existing access and permissions/);
+});
+
+test('Axal VC Fund preserves the live LP access implementation', () => {
+  assert.match(page, /<SpinoutLabLpWorkspacePage embedded \/>/);
+});
+
+test('Fund preserves its institutional entitlement and honest locked state', () => {
+  // D1160: an admin's /funds and /funds/performance forward to Fund admin; an investor's are unchanged.
+  assert.match(app, /holds\('investor'\) \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>/);
+  assert.match(app, /path="\/funds\/performance"[^\n]+holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>/);
+});
+
+test('investor visual system includes source provenance, responsive layout, and dark mode', () => {
+  assert.match(styles, /--inv-seam:/);
+  assert.match(styles, /\.dark \.investor-workspace/);
+  assert.match(styles, /@media \(max-width: 767px\)/);
+});
+
+test('investor Deals implements the I3 hierarchy with live sources', () => {
+  // THE HIERARCHY IS NO LONGER IN THIS FILE, AND THAT IS THE FIX RATHER THAN
+  // THE BREAKAGE. It used to be a `STAGES` const beside a bucket tagline, both
+  // typed here; ID1-ID4 moved the four zones into the shell config (where
+  // `ZoneNav` composes their routes, so a label cannot drift from where it
+  // points) and the five FUNNEL stages into `lib/dealFlow.js` (so four zones
+  // cannot disagree about where a deal is). Asserted where each now lives.
+  const SHELL = read('frontend/src/workspaces/shellConfig.js');
+  const bucket = SHELL.slice(SHELL.indexOf("prefix: '/deals'"), SHELL.indexOf("prefix: '/portfolio'"));
+  assert.match(bucket, /tagline: 'Find and close investments'/);
+  for (const label of ['Screening', 'Commit', 'Closing']) {
+    assert.match(bucket, new RegExp(`label: '${label}'`), `the Deals bucket lost its ${label} zone`);
+  }
+  // D1243 (#3256): Pipeline retired into Deal flow's table; `/deals/pipeline` forwards there.
+  assert.doesNotMatch(bucket, /label: 'Pipeline'/, 'the retired Pipeline zone is back in the Deals bucket');
+  // And the workspace renders that config rather than a second copy of it.
+  assert.match(deals, /<ZoneNav bucket=\{bucket\}/, 'the bucket root stopped rendering its zone row');
+  // The heading here read "Deals AI" — one of four different headings across
+  // twelve bespoke investor rails, and the only one that did not say "Worker
+  // AI" at all. It now comes from the shared component, so every licence and
+  // every workspace says the same thing.
+  assert.match(deals, /<WorkerRail[\s\S]*?workspace="Deals"[\s\S]*?role="investor"/,
+    'investor Deals must mount the shared Worker AI rail');
+  assert.ok(!deals.includes('Deals AI'), 'the bespoke "Deals AI" heading is back');
+  // The five funnel stages, in `lib/dealFlow.js` where ID1 put them. Driven as
+  // BEHAVIOUR rather than matched as text — a source assertion cannot tell a
+  // correct branch from one that merely contains the right words.
+  assert.deepEqual(DEAL_STAGES.map((s2) => s2.id),
+    ['sourcing', 'screening', 'diligence', 'commit', 'closing'],
+    'the funnel vocabulary changed');
+  assert.match(deals, /api\.listDeals\(undefined, 'mine'\)/);
+  assert.match(deals, /api\.myDealInvitations\(\)/);
+  assert.match(deals, /api\.respondDealInvitation/);
+  assert.doesNotMatch(deals, /api\.pipelineActive\(\)/, 'investors must not consume the studio-wide pipeline source');
+  // WAS two source matches in this file — `committed > 0 … 'commit'` and
+  // `Total committed to deal`. What they were FOR is that committed capital is
+  // a LIVE figure this product reads and shows, and both halves survive; they
+  // just live in two other files now.
+  //
+  //   read  — `dealStage`, driven here with real rows rather than regexed.
+  //   shown — `DealRoomPage`, which draws it against the target with a
+  //           percentage and owns the figure.
+  //
+  assert.equal(dealStage({ status: 'active', capital_committed: 1 }), 'commit',
+    'committed capital no longer separates commit from diligence');
+  assert.equal(dealStage({ status: 'active' }), 'diligence');
+  assert.equal(dealStage({ status: 'rejected', capital_committed: 900 }), null,
+    'a passed deal with money against it is back in the funnel');
+  //
+  // The Commit zone deliberately does NOT restate it. Its subject is the
+  // committee — votes and the reasons behind them — and a second copy of a
+  // money figure under a vote ledger is a number that can drift from the one
+  // that owns it. So the zone links to the deal room instead, and this asks
+  // for exactly that: the figure has a home, and the zone reaches it rather
+  // than reprinting it.
+  // D1152: the committed figure is the key strip's, drawn from `deal/dealFrameModel.js`.
+  const DEAL_ROOM = read('frontend/src/pages/DealRoomPage.jsx') + read('frontend/src/pages/deal/dealFrameModel.js');
+  assert.match(DEAL_ROOM, /capital_committed/,
+    'the deal room stopped showing committed capital, so nothing shows it');
+  const COMMIT_ZONE = read('frontend/src/pages/investor/deals/CommitZone.jsx');
+  assert.match(COMMIT_ZONE, /`\/deals\/\$\{id\}`/,
+    'the commit zone no longer reaches the deal room that owns the figure');
+  assert.ok(!codeOnly(COMMIT_ZONE).includes('Total committed'),
+    'the commit zone reprints a money figure the deal room owns');
+});
+
+test('investor Deals does not ship illustrative canvas data as live data', () => {
+  for (const sample of ['Novacraft', 'Meridian Labs', 'Halverton', 'DeepSeek', 'Llama 3.3', '$0.0149', '$4.2M allocated']) {
+    // Literal, so `$` needs no escaping and `.` cannot wildcard: the old form
+    // escaped only the FIRST `$` and left every `.` live, so '$0.0149' would
+    // have been satisfied by '$0X0149'.
+    assert.ok(!deals.includes(sample), `investor Deals still ships the sample value ${sample}`);
+  }
+  assert.match(deals, /never invents a memo, cost, model, or result/);
+});
+
+test('investor Deals exposes only canonical deal-room IDs and partial source failures', () => {
+  // WAS `navigate(`/deals/${id}`)` — the DealCard's own handler, which went to
+  // `pages/investor/deals/PipelineZone.jsx` with the rest of canvas ID1, and
+  // retired with that zone (D1243). What the assertion is FOR survives: a deal
+  // room is reached by the record's own id and never by a slug, a name or a
+  // sample. So the workspace is asked the question — every `/deals/…`
+  // destination interpolates an expression — and must have at least one,
+  // which is what stops this passing vacuously on a page that stopped linking
+  // to deal rooms at all.
+  for (const [what, src] of [['the workspace', deals]]) {
+    const links = [...src.matchAll(/`\/deals\/\$\{([^}]+)\}`/g)].map((m) => m[1].trim());
+    assert.ok(links.length > 0, `${what} no longer links to a deal room at all`);
+    for (const expr of links) {
+      assert.match(expr, /^[A-Za-z_$][\w$]*(\.[\w$]+)*$/,
+        `${what} builds a deal-room URL from ${expr}, which is not a record id`);
+    }
+  }
+  assert.match(deals, /invitations could not be loaded/);
+  assert.match(deals, /if \(dealsResult\.status === 'rejected'\)/);
+  // A real Link, not an imperative navigate: it is middle-clickable and
+  // copyable, which a button calling navigate() is not.
+  assert.match(deals, /<Link to="\/research\/diligence"/);
+});
+
+test('only canonical investor deal routes replace their child with I3', () => {
+  assert.match(page, /pathname === '\/deals'/);
+  assert.match(page, /pathname === '\/pipeline\/screening'/);
+  assert.match(page, /if \(ownsDealsRoute\)/);
+  assert.match(page, /<InvestorDealsWorkspace \/>/);
+  assert.doesNotMatch(page, /pathname === '\/deals\/:dealId'/);
+});

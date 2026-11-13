@@ -1,0 +1,150 @@
+
+Select alert #62
+Unused import
+Note
+#62 opened 5 days ago • Detected by CodeQL in backend/.../routes/email.py :21
+main
+
+Select alert #61
+Unused import
+Note
+#61 opened 5 days ago • Detected by CodeQL in backend/.../api/deps.py :2
+main
+
+Select alert #60
+Unused import
+Note
+#60 opened 5 days ago • Detected by CodeQL in backend/.../routes/csp_report.py :24
+main
+
+Select alert #59
+Unused import
+Note
+#59 opened 5 days ago • Detected by CodeQL in backend/.../routes/csp_report.py :22
+main
+
+Select alert #58
+Unused import
+Note
+#58 opened 5 days ago • Detected by CodeQL in backend/.../routes/comarketing.py :28
+main
+
+Select alert #57
+Unused import
+Note
+#57 opened 5 days ago • Detected by CodeQL in backend/.../routes/comarketing.py :27
+main
+
+Select alert #56
+Unused import
+Note
+#56 opened 5 days ago • Detected by CodeQL in backend/.../routes/cofounder.py :31
+main
+
+Select alert #55
+Unused import
+Note
+#55 opened 5 days ago • Detected by CodeQL in backend/.../services/captable.py :26
+main
+
+Select alert #54
+Unused import
+Note
+#54 opened 5 days ago • Detected by CodeQL in backend/.../services/calendar_unified.py :38
+main
+
+Select alert #53
+Unused import
+Note
+#53 opened 5 days ago • Detected by CodeQL in backend/.../routes/brand.py :27
+main
+
+Select alert #52
+Unused import
+Note
+#52 opened 5 days ago • Detected by CodeQL in backend/.../routes/advisory.py :2
+main
+
+Select alert #51
+Unused import
+Note
+#51 opened 5 days ago • Detected by CodeQL in backend/.../routes/admin_contracts.py :20
+main
+
+Select alert #50
+Unused import
+Note
+#50 opened 5 days ago • Detected by CodeQL in backend/.../routes/admin_contracts.py :16
+main
+
+Select alert #49
+Unused import
+Note
+#49 opened 5 days ago • Detected by CodeQL in backend/.../routes/admin.py :1
+main
+
+Select alert #48
+Unused import
+Note
+#48 opened 5 days ago • Detected by CodeQL in backend/.../services/access_policy.py :82
+main
+
+Select alert #38
+Unused local variable
+Note
+#38 opened 5 days ago • Detected by CodeQL in backend/.../services/calendar_unified.py :473
+main
+
+Select alert #37
+Unused local variable
+Note
+#37 opened 5 days ago • Detected by CodeQL in backend/.../routes/brand.py :354
+main
+
+Select alert #36
+Unused local variable
+Note
+#36 opened 5 days ago • Detected by CodeQL in backend/.../services/audit.py :76
+main
+
+Select alert #35
+Unused local variable
+Note
+#35 opened 5 days ago • Detected by CodeQL in backend/.../routes/advisory.py :103
+main
+
+Select alert #243
+Empty except
+Note
+#243 opened 7 hours ago • Detected by CodeQL in backend/.../routes/trust.py :355
+main
+
+Select alert #242
+Cyclic import
+Note
+#242 opened 7 hours ago • Detected by CodeQL in backend/.../routes/auth.py :680
+main
+
+Select alert #218
+Unused global variable
+Note
+#218 opened yesterday • Detected by CodeQL in backend/.../routes/settings.py :1499
+main
+
+Select alert #217
+Unused global variable
+Note
+#217 opened yesterday • Detected by CodeQL in backend/.../routes/investor_signals.py :65
+main
+
+Select alert #216
+Empty except
+Note
+#216 opened yesterday • Detected by CodeQL in backend/.../routes/auth.py :226
+main
+
+Select alert #215
+Empty except
+Note
+#215 opened yesterday • Detected by CodeQL in backend/.../routes/auth.py :184
+main

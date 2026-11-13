@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Grow › Reporting · Portfolio › Reports</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Reporting</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The founder’s Reporting desk in Grow and the investor’s portfolio company page. Each signed term becomes a duty to one investor; each report assembles from the Grow modules with every figure’s source. Lateness is a record, never a public mark. Sample today is [5 Nov 2026]. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Reporting Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['RPT1', 'Reporting desk · Founder · desktop 1440 · light', 'Due next, what needs the founder, the calendar of every duty for twelve months, and every report and update sent.', [D('RPT1')]],
+      ['RPT2', 'Duties · Founder', 'One row per duty, each from a signed document. A row opens the duty.', [D('RPT2')]],
+      ['RPT3', 'Report builder · step 1 · Figures', 'Figures read from the seven Grow modules with their sources. A required figure left out asks for a reason the investor sees.', [D('RPT3')]],
+      ['RPT4', 'Report builder · step 2 · Narrative and documents', 'Eadwyn’s proposed lines sit on lavender until accepted; a line with no source cannot be accepted.', [D('RPT4')]],
+      ['RPT5', 'Report builder · steps 3 and 4 · Recipients and Preview', 'Who receives the report, and exactly what each recipient reads. The second frame is the Send dialog.', [D('RPT5'), D('RPT5d', 'Send dialog', 680)]],
+      ['RPT6', 'Sent report · Founder', 'Who received it and who opened it, the revision strip, and the report as it was frozen.', [D('RPT6')]],
+      ['RPT7', 'Late, reminders and expected date', 'A late cell selected on the calendar, then the expected-date dialog and reminder settings.', [D('RPT7', 'Calendar with a late cell selected', 1440), D('RPT7a', 'Give an expected date', 680), D('RPT7b', 'Reminder settings', 680)]],
+      ['RPT8', 'Duty · lightbox over Duties', 'The clause, its terms and its record.', [D('RPT8')]],
+      ['RPT9', 'Portfolio › Reports · Investor', 'What each company owes this investor and what it sent. Only companies they signed into.', [D('RPT9')]],
+      ['RPT10', 'Portfolio company page · Investor · light', 'Figures as reported, by period, with honest gaps; then the Reports and Terms tabs.', [D('RPT10', 'Figures'), D('RPT10r', 'Reports tab'), D('RPT10t', 'Terms tab', 1440, 640)]],
+      ['RPT11', 'Report reader · lightbox over the company page', 'A sent report with every figure’s source; then a late period with Ask and Waive.', [D('RPT11'), D('RPT11l', 'A late period, before and after asking', 760), D('RPT11w', 'Waive this period', 680)]],
+      ['RPT12', 'Portfolio company page · dark', 'RPT10’s Figures tab in the dark colours.', [D('RPT12')]],
+      ['RPT13', 'Holding variants · Investor', 'A syndicate member, the fund’s GP team, and an LP of the fund.', [D('RPT13a', 'Syndicate member', 1440, 760), D('RPT13b', 'The fund’s GP team'), D('RPT13c', 'An LP of [Axal VC Fund I]', 760)]],
+      ['RPT14', 'Desk · Advisor and Operating Partner', 'The calendar and what was sent, read only. Team-only figures read Team only.', [D('RPT14', 'Advisor'), D('RPT14b', 'Operating Partner')]],
+      ['RPT15', 'Desk · Admin and Super Admin', 'Calendar and history, read only.', [D('RPT15', 'Admin'), D('RPT15b', 'Super Admin')]],
+      ['RPT16', 'No permission · Explorer', 'Nothing to show before a profile and a signed deal.', [D('RPT16', false, 1440, 620)]],
+      ['RPT17', 'Empty states', 'A founder with no signed deal, and an investor whose company owes nothing yet.', [D('RPT17a', 'Founder · no signed deal', 1440, 760), D('RPT17b', 'Investor · nothing due yet', 1440, 700)]],
+      ['RPT18', 'Loading', 'The header first; the calendar and counts as skeletons; the rail spine reads.', [D('RPT18')]],
+      ['RPT19', 'Error and partial', 'One Grow module unreadable in the builder, and the reports source down for an investor.', [D('RPT19a', 'Builder · one module unreadable'), D('RPT19b', 'Portfolio · reports could not be loaded', 1440, 640)]],
+      ['RPT20', 'Phone · Founder · 390', 'The desk, a builder step, and Send as a bottom sheet.', [P('RPT20a', 'Desk'), P('RPT20b', 'Builder · Figures'), P('RPT20c', 'Send')]],
+      ['RPT21', 'Phone · Investor · 390', 'The figures one per screen width, the reports, and a late period with Ask pinned.', [P('RPT21a', 'Figures'), P('RPT21b', 'Reports'), P('RPT21c', 'A late period')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

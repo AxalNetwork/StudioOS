@@ -1,0 +1,223 @@
+/**
+ * D767 (#2096) PR 2 — the deck draft and the slide fill run through the
+ * router's `run()`: Workers AI, held, guarded and charged to the founder who
+ * pressed, with Raise › Pitch deck's page and option on the usage row. Neither
+ * reaches OpenAI.
+ *
+ *  - A fill makes one `rail_write` run (D1478; it was `rail_vision`) and writes one usage row naming the
+ *    founder, `/raise/pitch` (surface and rail page), the option and the
+ *    project; its answer fills the AI-only fields.
+ *  - The draft does the same with option `deck_draft`.
+ *  - A refused run (no funds) charges nothing and leaves the AI fields as
+ *    placeholders, as a missing key did; the fill still answers.
+ *  - Source pins: no `api.openai.com` and no `OPENAI_API_KEY` in either path.
+ *
+ * `env.AI` is stubbed; `fetch` throws if anything reaches the network.
+ *
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/deck_router_d767.test.ts
+ */
+import test from 'node:test';
+import { FAST_PATH_AUDIENCE } from '../src/services/decks/newDeck.ts';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+
+import { autofillDeck } from '../src/services/decks/autofill.ts';
+import { getMethod } from '../src/services/decks/methods.ts';
+import { __resetForTest } from '../src/services/aiRouter.ts';
+import decks from '../src/routes/decks.ts';
+import deckNew from '../src/routes/deck_new.ts';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const JWT_SECRET = 'unit-test-jwt-secret-d767-router-0123456789';
+const PROJECT = {
+  id: 1, founder_id: null, company_id: null, name: 'Acme AI', sector: 'B2B SaaS', stage: 'Seed',
+  description: 'Agentic CRM.', problem_statement: 'Data entry.', solution: 'An agent.',
+};
+
+function fixture({ funded = true } = {}) {
+  __resetForTest();
+  const f = aiBudgetFixture();
+  f.db.exec('ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
+  f.db.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, name TEXT, sector TEXT, stage TEXT,
+    description TEXT, problem_statement TEXT, solution TEXT);
+    CREATE TABLE financial_models (project_id INTEGER, computed_json TEXT, assumptions_json TEXT);
+    CREATE TABLE cap_table_holders (project_id INTEGER, name TEXT, shares INTEGER, kind TEXT);
+    CREATE TABLE score_snapshots (id INTEGER PRIMARY KEY, project_id INTEGER, total_score REAL, created_at TEXT);
+    CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);
+    CREATE TABLE integrations (id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, status TEXT);`);
+  // D1503 (#3754): /generate reads the deck's element model picks (migration 717).
+  f.db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/717_deck_model_picks.sql'), 'utf8'));
+  // D4597 (#4597): a metered build names a pinned quote (D1540, migration 733).
+  f.db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/733_deck_proposal_reports.sql'), 'utf8'));
+  f.db.prepare('INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(PROJECT.id, PROJECT.name, PROJECT.sector, PROJECT.stage, PROJECT.description, PROJECT.problem_statement, PROJECT.solution);
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
+  if (funded) f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
+  const calls: Array<{ model: string; prompt: string }> = [];
+  const AI = withGuard({
+    run: async (model: string, input: any) => {
+      const prompt = (input?.messages || []).map((m: any) => (typeof m?.content === 'string' ? m.content : '')).join('\n');
+      calls.push({ model, prompt });
+      const hints = JSON.parse(prompt.match(/Hints:\s*(\[[^\]]+\])/)?.[1] || '[]') as string[];
+      const response = hints.length
+        ? JSON.stringify(Object.fromEntries(hints.map((h) => [h, `AI wrote ${h}`])))
+        : JSON.stringify({ slides: [{ title: 'problem', subtitle: 'Pain', body: 'AI drafted this.', bullets: ['one', 'two'] }, { title: 'Ask', body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }, ...['The Ask', 'Ask & Use of Funds', 'ask'].map(title => ({ title, body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }))] });
+      return { response, usage: { prompt_tokens: 40, completion_tokens: 20 } };
+    },
+  });
+  const env: any = { DB: f.DB, ENVIRONMENT: 'development', JWT_SECRET, AI };
+  // The run's own rows; the guard's (`guard_for` set) are D763's to test.
+  const rows = () => (f.db.prepare('SELECT user_id, task, surface, rail_page, rail_option, record_ref, charged_microusd FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id').all() as any[]).map((r) => ({ ...r }));
+  return { ...f, env, calls, rows };
+}
+
+function noNetwork() {
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error('no network in this test'); }) as any;
+  return () => { globalThis.fetch = real; };
+}
+
+// D1478 (#3721): the fill is text-only, so it runs and records the write task.
+const ROW = (option: string) => ({ user_id: 2, task: 'rail_write', surface: '/raise/pitch', rail_page: '/raise/pitch', rail_option: option, record_ref: 'project:1' });
+
+test('a fill is one router run, charged to the founder, with the page and the option on its one usage row', async () => {
+  const f = fixture();
+  const restore = noNetwork();
+  try {
+    const method = getMethod('yc_seed')!;
+    const filled = await autofillDeck(f.env, method, 1, { userId: 2, railOption: 'fill_from_project', projectId: 1 });
+    const rows = f.rows();
+    assert.equal(rows.length, 1, 'one usage row for the fill');
+    const { charged_microusd, ...who } = rows[0];
+    assert.deepEqual(who, ROW('fill_from_project'));
+    assert.ok(charged_microusd > 0, 'the founder is charged for the run');
+    assert.equal(f.calls.filter((c) => !/llama-guard/.test(c.model)).length, 1, 'one model call');
+    const guarded = f.db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs WHERE guard_for IS NOT NULL').get() as any;
+    assert.ok(guarded.n >= 1, 'the run is guarded (D763 writes the guard\'s row)');
+    const values = JSON.stringify(filled.slides);
+    assert.match(values, /AI wrote /, 'the run\'s answer fills the AI-only fields');
+  } finally { restore(); f.db.close(); }
+});
+
+test('a refused run (nothing to charge it to) charges nothing and leaves the AI fields as placeholders', async () => {
+  const f = fixture({ funded: false });
+  const restore = noNetwork();
+  try {
+    const filled = await autofillDeck(f.env, getMethod('yc_seed')!, 1, { userId: 2, railOption: 'fill_from_project', projectId: 1 });
+    assert.equal(filled.slides.length, getMethod('yc_seed')!.slides.length, 'the fill still answers');
+    assert.doesNotMatch(JSON.stringify(filled.slides), /AI wrote /);
+    assert.equal(f.calls.filter((c) => !/llama-guard/.test(c.model)).length, 0, 'no model call');
+    assert.ok(f.rows().every((r) => !r.charged_microusd), 'nothing charged');
+  } finally { restore(); f.db.close(); }
+});
+
+test('with no founder to charge, the fill makes no run at all', async () => {
+  const f = fixture();
+  const restore = noNetwork();
+  try {
+    await autofillDeck(f.env, getMethod('yc_seed')!, 1);
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.rows().length, 0);
+  } finally { restore(); f.db.close(); }
+});
+
+test('D897: the deck build is one router run with option deck:build, and no invented figure reaches the cards', async () => {
+  const f = fixture();
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'owner.d767@example.test','Owner','founder','studio')").run();
+  f.db.exec('UPDATE users SET founder_id = 500 WHERE id = 500; UPDATE projects SET founder_id = 500 WHERE id = 1');
+  const restore = noNetwork();
+  try {
+    // D897 (#2677): /generate moved to routes/deck_new.ts and builds a proposal; mounted before `decks` as index.ts does.
+    const app = new Hono<any>();
+    app.route('/api/decks', deckNew);
+    app.route('/api/decks', decks);
+    f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
+    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+    const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+      .sign(new TextEncoder().encode(JWT_SECRET));
+    // D4597 (#4597): a metered build names the quote it was shown.
+    const inputs = { project_id: 1, audience: FAST_PATH_AUDIENCE, length: 'standard' };
+    const quoted = await app.request('/api/decks/new/quote', {
+      method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...inputs, step: 'build' }),
+    }, f.env);
+    const quote = await quoted.json() as any;
+    const res = await app.request('/api/decks/generate', {
+      method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...inputs, quote_uid: quote.quote_uid }),
+    }, f.env);
+    const text = await res.text();
+    assert.equal(res.status, 201, text);
+    const rows = f.rows();
+    assert.equal(rows.length, 1, `one usage row: ${JSON.stringify(rows)}`);
+    const { charged_microusd, ...who } = rows[0];
+    assert.deepEqual(who, { user_id: 500, task: 'rail_write', surface: '/raise/pitch', rail_page: 'Founder · Raise · Pitch deck', rail_option: 'deck:build', record_ref: 'project:1' });
+    const body = JSON.parse(text);
+    assert.ok(body.proposal?.id, 'a proposal, not a version');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM pitch_decks').get().n, 0, 'no version is written until the founder keeps cards');
+    assert.doesNotMatch(text, /Invented|18–24|24\+/, 'the stub\'s invented runway never reaches a card');
+    assert.equal(body.proposal.slides.length, 12, 'the standard deck: twelve cards');
+  } finally { restore(); f.db.close(); }
+});
+
+test('"Fill from project" through its route is one run with D771\'s page and option form:deck (D778 part 5), charged to who pressed', async () => {
+  const f = fixture();
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'owner.d767@example.test','Owner','founder','studio')").run();
+  f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
+  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  f.db.exec('UPDATE users SET founder_id = 500 WHERE id = 500; UPDATE projects SET founder_id = 500 WHERE id = 1');
+  const restore = noNetwork();
+  try {
+    const app = new Hono<any>();
+    app.route('/api/decks', decks);
+    const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+      .sign(new TextEncoder().encode(JWT_SECRET));
+    const headers = { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
+    // A deck on the yc_seed template (its slides carry the method stamp the fill reads).
+    await app.request('/api/decks/by-project/1', { headers }, f.env); // creates the deck tables
+    f.db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 1, ?, 'Seed deck', 1, 500)`)
+      .run(JSON.stringify([{ title: 'Problem', method_id: 'yc_seed', spec_id: 'problem', fields: [] }]));
+    const res = await app.request('/api/decks/10/autofill', { method: 'POST', headers, body: '{}' }, f.env);
+    assert.equal(res.status, 200, await res.text());
+    const rows = f.rows();
+    assert.equal(rows.length, 1, `one usage row: ${JSON.stringify(rows)}`);
+    const { charged_microusd, ...who } = rows[0];
+    assert.deepEqual(who, { ...ROW('form:deck'), rail_page: 'Founder · Raise · Pitch deck', user_id: 500 });
+  } finally { restore(); f.db.close(); }
+});
+
+test('both runs use Raise › Pitch deck\'s row in D764\'s matrix', () => {
+  const matrix = JSON.parse(readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/ai/railMatrix.json'), 'utf8'));
+  const row = matrix.rows.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck');
+  assert.ok(row, 'the matrix has the page\'s row');
+  assert.deepEqual([row.kind, row.routeTask], ['vision', 'rail_vision']);
+  const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
+  // D1478 (#3721): the fill is text-only work on the `form:deck` option, a write option, so it runs that option's task.
+  const fill = matrix.options.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck' && r.optionKey === 'form:deck');
+  assert.deepEqual([fill.kind, fill.routeTask], ['write', 'rail_write']);
+  assert.equal((autofill.match(new RegExp(`task: '${fill.routeTask}'`, 'g')) || []).length, 1, 'the fill runs its option\'s task');
+  assert.doesNotMatch(autofill, /task: 'rail_vision'/);
+  // D897: the New deck's two runs are writing work, each on its own option row.
+  const fresh = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/deck_new.ts'), 'utf8');
+  assert.equal((fresh.match(/task: 'rail_write'/g) || []).length, 1, 'deck_new.ts runs one task');
+  for (const option of ['deck:outline', 'deck:build']) {
+    const opt = matrix.options.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck' && r.optionKey === option);
+    assert.ok(opt, `the matrix has ${option}`);
+    assert.equal(opt.routeTask, 'rail_write', option);
+  }
+  for (const src of [autofill, fresh]) assert.doesNotMatch(src, /task: 'dd_synthesis'/);
+});
+
+test('neither path reaches OpenAI', () => {
+  const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
+  assert.doesNotMatch(autofill, /api\.openai\.com|OPENAI_API_KEY/);
+  // D897: the draft is now deck_new.ts's build, through the router's `run()`.
+  const route = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/deck_new.ts'), 'utf8');
+  assert.doesNotMatch(route, /api\.openai\.com|OPENAI_API_KEY/);
+  assert.match(route, /import \{[^}]*\brun\b[^}]*\} from '\.\.\/services\/aiRouter'/);
+});

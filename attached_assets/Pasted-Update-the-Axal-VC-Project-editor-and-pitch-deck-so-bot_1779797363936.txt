@@ -1,0 +1,79 @@
+Update the Axal VC Project editor and pitch deck so both Problem and Solution have clear recommended lengths, live validation, and a compact visual progress bar.
+
+Context:
+- The Project edit modal contains both “Problem Statement” and “Solution”.
+- The same content is later used in the Spin-Out deck.
+- Both fields should stay concise enough for a pitch-deck slide header and should not become long body copy.
+- The deck examples in the screenshots show that these sections need to feel sharp, readable, and premium.
+
+Length rules:
+
+Problem Statement:
+- Minimum: 25 words.
+- Ideal: 35–60 words.
+- Maximum: 75 words.
+- Under 25 words = too short.
+- 25–60 words = good.
+- 61–75 words = acceptable but approaching long.
+- Over 75 words = too long.
+
+Solution:
+- Minimum: 25 words.
+- Ideal: 35–50 words.
+- Maximum: 70 words.
+- Under 25 words = too short.
+- 25–50 words = ideal.
+- 51–70 words = acceptable.
+- Over 70 words = too long.
+
+UI requirement:
+- Under each textarea, add a slim horizontal bar / progress indicator.
+- The bar should update live as the user types.
+- Use word count, not character count.
+- Show a small label such as:
+  - “Too short”
+  - “Good length”
+  - “Acceptable”
+  - “Too long”
+- Show subtle word count text like “43 words”.
+- Keep the design minimal and aligned with Axal’s modal styling.
+
+Behavior:
+- Empty fields should be neutral, not error states.
+- Short entries should be amber/orange.
+- Ideal entries should be green.
+- Overlong entries should be red.
+- The progress bar should reflect progress toward the ideal range, not just total length.
+- The same helper logic must be used in the Project page and in the deck rendering.
+- If the text is too long, the deck should either trim it or clearly warn so it does not render as a large paragraph.
+
+Implementation:
+- Find the Project edit modal fields for Problem Statement and Solution.
+- Add a reusable helper such as `getPitchCopyLengthStatus(text, fieldType)`.
+- The helper should return:
+  - wordCount
+  - status
+  - label
+  - progressPercent
+- Reuse the same helper anywhere Problem or Solution is displayed in the deck.
+- Add the progress bar directly below each field with compact spacing.
+- Ensure the deck’s Problem slide header and Solution slide header use the validated copy.
+- If needed, add a lightweight trimming or suggestion function to keep the copy slide-friendly.
+
+Design:
+- Keep the bar thin and subtle.
+- Do not make it feel like a form error widget.
+- The UI should feel premium, editorial, and consistent with the rest of Axal.
+- Avoid bulky helper text or clutter.
+
+Acceptance criteria:
+- Problem Statement and Solution both show live length guidance.
+- The same word-count rules are enforced in both the Project modal and the deck.
+- Users can immediately see whether the text is in range for a pitch deck.
+- The slides do not render long paragraph blocks anymore.
+- The UI remains clean and polished.
+
+Output:
+- List the files changed.
+- Explain the final word ranges used for Problem and Solution.
+- Confirm the bar and validation work for both fields in the Project editor and the pitch deck.

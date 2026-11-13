@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="./doc-page.js"></script>
+  <style>
+    doc-page:not(:defined){visibility:hidden}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;color:#1A202C;-webkit-font-smoothing:antialiased}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .fb-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  </style>
+</helmet>
+
+<doc-page>
+  <section class="page" style="display:flex;flex-direction:column;font-family:Inter,system-ui,sans-serif;color:#1A202C;background:#fff">
+
+    <!-- MASTHEAD -->
+    <div style="color:#fff;padding:22px 42px 24px;position:relative;background-image:url('./uploads/axal-vc-future-66669dce.png');background-size:cover;background-position:center 38%;overflow:hidden">
+      <div style="position:absolute;inset:0;background:linear-gradient(100deg,rgba(20,12,38,.94) 0%,rgba(28,18,54,.9) 42%,rgba(38,22,74,.84) 100%);pointer-events:none"></div>
+      <div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+            <img src="./uploads/axal01colourvar2.png" alt="Axal VC" style="width:26px;height:26px;object-fit:contain;flex:none;display:block">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.01em;color:#fff">Axal VC</div>
+          </div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:rgba(255,255,255,.5)">Fund brief · confidential</div>
+          <div style="font-size:23px;font-weight:800;letter-spacing:-.02em;margin-top:7px">Axal VC Spin-Out Fund I</div>
+          <div style="font-size:11.5px;color:rgba(255,255,255,.72);margin-top:4px">Pre-seed · Vintage 2026 · Delaware LP</div>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div style="display:inline-block;padding:4px 11px;border-radius:99px;font-size:9.5px;font-weight:700;background:rgba(134,239,172,.16);color:#86efac">Open · raising toward first close</div>
+          <div class="fb-mono" style="font-size:9.5px;color:rgba(255,255,255,.82);margin-top:8px">Generated Aug 4, 2026</div>
+        </div>
+      </div>
+      <div style="position:relative;font-size:13px;line-height:1.6;color:rgba(255,255,255,.86);margin-top:16px;max-width:600px;font-weight:500">Back companies at the moment they become companies. The fund invests exclusively in Spin-Out Lab graduates — incorporated, 83(b)-filed, cap-table-clean, with verified customer discovery and revenue proof.</div>
+    </div>
+
+    <!-- RAISE STRIP -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid #ececf1;background:#faf9fc">
+      <sc-for list="{{ raise }}" as="r" hint-placeholder-count="5">
+        <div style="padding:13px 16px;border-right:1px solid #f1f0f5">
+          <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#a1a1aa">{{ r.k }}</div>
+          <div class="fb-mono" style="font-size:15px;font-weight:700;margin-top:4px;color:{{ r.tone }}">{{ r.v }}</div>
+          <div style="font-size:9.5px;color:#71717a;margin-top:2px;line-height:1.4">{{ r.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:14px 42px 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px;flex:1">
+      <!-- LEFT -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Thesis</div>
+          <div style="font-size:11px;line-height:1.65;color:#3f3f46;margin-top:9px">Every investment is underwritten by 28 days of observed execution data, not a pitch. The Spin-Out Lab runs founders through structured customer discovery, incorporation, cap-table formation, and first revenue — producing a verified evidence base before any check is written. The fund sees the work, not the narrative.</div>
+        </div>
+
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Fund structure</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin-top:9px">
+            <sc-for list="{{ terms }}" as="t" hint-placeholder-count="10">
+              <div style="display:flex;justify-content:space-between;gap:8px;padding-bottom:5px;border-bottom:1px dotted #ececf1">
+                <span style="font-size:10px;color:#71717a">{{ t.k }}</span>
+                <span class="fb-mono" style="font-size:10px;font-weight:700;color:#18181b;text-align:right">{{ t.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Participation tiers</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:9px">
+            <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="4">
+              <div style="{{ t.wrap }}">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <span style="font-size:10.5px;font-weight:700;color:#18181b">{{ t.name }}</span>
+                    <span class="fb-mono" style="font-size:10px;font-weight:700;color:#6d28d9">{{ t.amount }}</span>
+                  </div>
+                  <div style="font-size:9.5px;color:#71717a;line-height:1.45;margin-top:2px">{{ t.rights }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Track record</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px">
+            <sc-for list="{{ record }}" as="r" hint-placeholder-count="6">
+              <div style="background:#faf9fc;border:1px solid #f1f0f5;border-radius:9px;padding:9px 10px">
+                <div class="fb-mono" style="font-size:14px;font-weight:700;color:#18181b;letter-spacing:-.02em">{{ r.v }}</div>
+                <div style="font-size:8.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-top:3px;line-height:1.35">{{ r.k }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9">Current pipeline · Cohort 4</div>
+            <span style="font-size:8.5px;color:#a1a1aa">Demo day Aug 21, 2026</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;margin-top:8px">
+            <thead>
+              <tr>
+                <th style="text-align:left;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px">Company</th>
+                <th style="text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 6px">Ready</th>
+                <th style="text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 6px">Revenue</th>
+                <th style="text-align:right;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 0 5px 6px">IC</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="6">
+                <tr style="border-top:1px solid #f4f4f5">
+                  <td style="padding:5px 0">
+                    <div style="font-size:10px;font-weight:600;color:#18181b">{{ p.company }}</div>
+                    <div style="font-size:8.5px;color:#a1a1aa">{{ p.sector }}</div>
+                  </td>
+                  <td class="fb-mono" style="text-align:right;font-size:10px;font-weight:700;padding:5px 0 5px 6px;color:{{ p.scoreTone }}">{{ p.score }}</td>
+                  <td class="fb-mono" style="text-align:right;font-size:10px;padding:5px 0 5px 6px;color:#3f3f46">{{ p.revenue }}</td>
+                  <td style="text-align:right;padding:5px 0 5px 6px"><span style="{{ p.icStyle }}">{{ p.ic }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Governance &amp; service providers</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:9px">
+            <sc-for list="{{ providers }}" as="p" hint-placeholder-count="5">
+              <div style="display:flex;justify-content:space-between;gap:8px">
+                <span style="font-size:9.5px;color:#71717a">{{ p.k }}</span>
+                <span style="font-size:9.5px;font-weight:600;color:#18181b;text-align:right">{{ p.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROCESS + FOOTER -->
+    <div style="padding:10px 42px 0">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#6d28d9;padding-bottom:6px;border-bottom:1.5px solid #ede9fe">Commitment process</div>
+      <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:7px">
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="8">
+          <div style="border:1px solid #ececf1;border-radius:7px;padding:7px 8px;background:#fff">
+            <div class="fb-mono" style="font-size:8px;font-weight:700;color:#c4b5fd">{{ s.n }}</div>
+            <div style="font-size:9px;font-weight:700;color:#18181b;line-height:1.25;margin-top:2px">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="margin-top:auto;padding:10px 42px 16px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding-top:10px;border-top:1px solid #ececf1">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:8px;color:#a1a1aa;line-height:1.55">Confidential — prepared for curated investors only. Indicative and qualified in its entirety by the fund's legal documents. Participation is limited to accredited investors under Rule 501 of Regulation D; KYC/AML verification is required before any capital transfer. Nothing herein is an offer to sell securities; any offering is made solely through the fund's subscription documents and private placement memorandum.</div>
+        </div>
+        <div style="flex:none;text-align:right">
+          <div style="font-size:10px;font-weight:700;color:#18181b">Guillaume Lauzier · General Partner</div>
+          <div style="font-size:9px;color:#71717a;margin-top:2px">guillaume.lauzier@axal.vc · Responds within one business day</div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const tag = (bg, fg) => 'display:inline-block;padding:2px 7px;border-radius:99px;font-size:8.5px;font-weight:700;background:'+bg+';color:'+fg;
+
+    // ---- single source of truth: fund facts ----
+    const F = {
+      target: 20, hardCap: 25, committed: 6.8, softCircled: 1.4,
+      lps: 31, medianTicket: 150, minTicket: 50, allocThreshold: 250,
+      firstClose: 'Sep 15, 2026', minClose: 5,
+      checkLow: 100, checkHigh: 150, convictionCheck: 250,
+      reserveLow: 30, reserveHigh: 40, companiesLow: 25, companiesHigh: 40,
+      graduates: 37, onTimeIncorp: 86, alumniFollowOn: 2.4,
+      cohortSize: 8, deployed: 1.9, reserveHeld: 2.7, followOns: 2,
+      cohortRevenue: 38.4, medianReadiness: 64, demoDay: 'Aug 21, 2026',
+    };
+    const m = (n) => '$' + n + 'M';
+    const k = (n) => '$' + n + 'K';
+    const pctRaised = Math.round(F.committed / F.target * 100);
+    const capacity = (F.target - F.committed).toFixed(1);
+
+    const raise = [
+      { k:'Target / hard cap', v: m(F.target) + ' / ' + m(F.hardCap), note:'Delaware LP · 10-yr term', tone:'#18181b' },
+      { k:'Committed', v: m(F.committed), note: pctRaised + '% of target · ' + F.lps + ' LPs', tone:'#6d28d9' },
+      { k:'Soft-circled', v: m(F.softCircled), note:'Indications, not commitments', tone:'#18181b' },
+      { k:'Capacity remaining', v: m(capacity), note:'Median ticket ' + k(F.medianTicket), tone:'#18181b' },
+      { k:'First close', v: F.firstClose, note: m(F.minClose) + ' minimum · rolling after', tone:'#18181b' },
+    ];
+
+    const terms = [
+      { k:'Stage', v:'Pre-seed' },
+      { k:'Sourcing', v:'Lab graduates only' },
+      { k:'Portfolio', v: F.companiesLow + '–' + F.companiesHigh + ' companies' },
+      { k:'Initial check', v: k(F.checkLow) + '–' + k(F.checkHigh) },
+      { k:'High conviction', v:'up to ' + k(F.convictionCheck) },
+      { k:'Reserve policy', v: F.reserveLow + '–' + F.reserveHigh + '%' },
+      { k:'Minimum ticket', v: k(F.minTicket) },
+      { k:'Allocation rights', v:'from ' + k(F.allocThreshold) },
+      { k:'Management fee', v:'2%' },
+      { k:'Carried interest', v:'20%' },
+      { k:'Reporting', v:'Quarterly' },
+      { k:'Audit', v:'Annual · Mar 31' },
+    ];
+
+    const tiers = [
+      { name:'Supporter', amount: k(50), rights:'Quarterly reports, audited statement, cohort dashboard, demo-day livestream.' },
+      { name:'Member', amount: k(100), rights:'Adds in-person demo day, portfolio deep-dives, founder introductions.' },
+      { name:'Allocator', amount: k(250), rights:'Adds commitment-weighted allocation preferences, voting, follow-on co-invest.', hl:true },
+      { name:'Anchor', amount: k(500) + '+', rights:'Adds co-invest priority and LPAC seat eligibility. Terms by discussion.' },
+    ].map((t, i) => ({
+      name:t.name, amount:t.amount, rights:t.rights,
+      wrap:'display:flex;gap:10px;padding:8px 10px;border-radius:8px;'
+        + (t.hl ? 'background:#faf7ff;border:1px solid #e9e4fb;' : 'border:1px solid transparent;')
+        + (i < 3 ? 'margin-bottom:4px' : ''),
+    }));
+
+    const record = [
+      { k:'Graduates to date', v: String(F.graduates) },
+      { k:'Incorporated on time', v: F.onTimeIncorp + '%' },
+      { k:'Alumni follow-on raised', v: m(F.alumniFollowOn) },
+      { k:'Capital deployed', v: m(F.deployed) },
+      { k:'Reserve held', v: m(F.reserveHeld) },
+      { k:'Follow-ons completed', v: String(F.followOns) },
+    ];
+
+    const icPill = { Advance: tag('#dcfce7','#15803d'), Watch: tag('#fef3c7','#92400e'), Track: tag('#f4f4f5','#52525b') };
+    const pipeline = [
+      { company:'NovaCraft AI', sector:'Async workflow automation', score:71, revenue:'$12.8K', ic:'Advance' },
+      { company:'MeridianIQ', sector:'Deal intelligence', score:68, revenue:'$9.2K', ic:'Advance' },
+      { company:'LoopSense', sector:'Sensor analytics', score:62, revenue:'$6.1K', ic:'Watch' },
+      { company:'Foundry Legal', sector:'Contract operations', score:59, revenue:'$4.9K', ic:'Watch' },
+      { company:'Arcline', sector:'Financial infrastructure', score:49, revenue:'$5.4K', ic:'Track' },
+      { company:'Kelp Bio', sector:'Materials science', score:51, revenue:'—', ic:'Track' },
+    ].map(p => ({
+      company:p.company, sector:p.sector, score:p.score, revenue:p.revenue, ic:p.ic,
+      icStyle:icPill[p.ic],
+      scoreTone: p.score >= 70 ? '#15803d' : p.score >= 55 ? '#b45309' : '#71717a',
+    }));
+
+    const providers = [
+      { k:'Fund administrator', v:'Carta Fund Admin' },
+      { k:'Legal counsel', v:'Ashurst Perkins Coie' },
+      { k:'Auditor', v:'Deloitte LLP' },
+      { k:'Custody / banking', v:'Mercury · First Republic' },
+      { k:'Governance', v:'LPAC · 3 seats at first close' },
+      { k:'Tax documents', v:'K-1 issued by Mar 15' },
+    ];
+
+    const steps = ['Invited','Applied','Under review','Accepted','KYC / AML','Soft commit','Legal docs','Funded']
+      .map((label, i) => ({ n: '0' + (i+1), label }));
+
+    return { raise, terms, tiers, record, pipeline, providers, steps };
+  }
+}
+</script>
+</body>
+</html>

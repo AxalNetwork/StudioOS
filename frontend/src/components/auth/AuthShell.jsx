@@ -1,0 +1,148 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+import AxalLogo from '../AxalLogo';
+
+/**
+ * Auth & Onboarding v2 — shared chrome for sign-in, register, and onboarding
+ * steps that sit outside the main app shell (A1, A2, wizards).
+ */
+export default function AuthShell({
+  children,
+  email,
+  platformNote = 'Platform sign-in',
+  showApplyCard = false,
+  applyHref = '/register',
+  applyLabel = 'Create an account →',
+  compact = false,
+  /** Full-page background image (e.g. /auth/login-background.webp on /login). */
+  backgroundSrc = null,
+  /**
+   * Sign-in and register are single-column forms, and 404px is the right
+   * measure for those — a wider column would just stretch one input. A page
+   * that lays choices out side by side is a different shape: at 404px the
+   * licence picker's four cards stack into one long strip and a desktop
+   * viewport shows a ribbon of white either side of it, which is what "it
+   * looks mobile-only" means. `wide` opts a page into a measure that can
+   * hold two columns; the default is unchanged, so /login and /register
+   * keep the column they were designed for.
+   */
+  wide = false,
+  /**
+   * The role wizards render inside the app shell, which already has the
+   * header logo and the sidebar. A second header here is the duplicate
+   * "Axal VC" in the body. `embedded` drops that chrome and fills the main
+   * column instead of the viewport, so the background can run edge to edge
+   * under the header. Sign-in, register, and `/onboarding` leave this off
+   * and keep their own logo.
+   */
+  embedded = false,
+  /**
+   * No paint of its own. The app shell puts the onboarding landscape on
+   * `<main>`, which is the only box that is the whole body. Painting it
+   * again here would be a second image, centred on a shorter box, with a
+   * seam where the two meet.
+   */
+  plain = false,
+}) {
+  const shellStyle = plain
+    ? undefined
+    : backgroundSrc
+    ? {
+        backgroundImage:
+          'linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%), '
+          + `url(${backgroundSrc})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }
+    : {
+        background:
+          'linear-gradient(104deg, rgba(244,240,254,.97) 0%, rgba(244,240,254,.9) 34%, rgba(36,31,56,.32) 68%, rgba(36,31,56,.5) 100%), '
+          + 'linear-gradient(135deg, #241f38 0%, #4c1d95 100%)',
+      };
+
+  return (
+    <div className={embedded ? 'flex min-h-full w-full flex-1 flex-col' : 'min-h-screen flex flex-col'} style={shellStyle}>
+      {!embedded && (
+      <header className="flex items-center justify-between gap-3 px-6 py-5 sm:px-8">
+        {/* Clickable: this is a signed-out page, and `/` is where PublicNav's
+            logo goes, so the destination is the same wherever you meet it.
+            The link lives here rather than inside AxalLogo because PublicNav
+            already wraps it — a link inside a link is invalid HTML. */}
+        <Link to="/" aria-label="Axal VC home" className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
+          <AxalLogo size="sm" onDark={!!backgroundSrc} />
+        </Link>
+        {email ? (
+          <span className="font-mono text-[11px] text-white/80 truncate max-w-[220px]">{email}</span>
+        ) : (
+          <span className="font-mono text-[10px] uppercase tracking-widest text-white/80">{platformNote}</span>
+        )}
+      </header>
+      )}
+
+      <div className={`flex flex-1 justify-center px-4 ${embedded ? 'py-10 sm:py-14' : `pb-12 ${compact ? 'pt-4' : 'pt-6 sm:pt-10'}`}`}>
+        <div className={`w-full ${wide ? 'max-w-[840px]' : 'max-w-[404px]'}`}>
+          {children}
+          {showApplyCard && (
+            <div
+              className="mt-3 rounded-[14px] border px-5 py-4"
+              style={{ background: '#fff', borderColor: '#e8e6ee' }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-[13px] font-bold text-[#241f38]">New to Axal VC?</div>
+                  {/* #4578: this creates an account; membership is a later, reviewed step. */}
+                  <div className="mt-0.5 text-[12px] text-[#6b6680]" data-testid="auth-apply-note">Free. Your membership is reviewed after you sign up.</div>
+                </div>
+                <Link
+                  to={applyHref}
+                  className="text-[13px] font-bold whitespace-nowrap flex-none no-underline hover:underline"
+                  style={{ color: '#6d28d9' }}
+                >
+                  {applyLabel}
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The founder, investor and partner wizards, once a licence is chosen.
+ * Same landscape as `/onboarding`, with no second logo: the app header
+ * already carries one, and this surface is the body under that header.
+ */
+export function OnboardingCanvas({ children }) {
+  return (
+    <AuthShell embedded wide plain>
+      {children}
+    </AuthShell>
+  );
+}
+
+export function AuthCard({ children, className = '' }) {
+  return (
+    <div
+      className={`rounded-[14px] border px-7 py-7 sm:px-8 ${className}`}
+      style={{ background: '#fff', borderColor: '#e8e6ee', boxShadow: '0 2px 14px rgba(36,31,56,.07)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export const authV2 = {
+  purple: '#7c3aed',
+  purpleDark: '#6d28d9',
+  purpleTint: '#f4f0fe',
+  ink: '#241f38',
+  muted: '#6b6577',
+  hair: '#e8e6ee',
+  label: 'font-mono text-[10px] font-medium uppercase tracking-[0.11em] text-[#6b6577]',
+  input: 'w-full box-border rounded-[10px] border px-3.5 py-3 text-sm text-[#241f38] bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30',
+  btnPrimary: 'block w-full rounded-[10px] border px-4 py-3 text-sm font-bold text-white cursor-pointer disabled:opacity-60',
+  btnSecondary: 'flex w-full items-center justify-center gap-2 rounded-[10px] border px-4 py-2.5 text-[13.5px] font-semibold cursor-pointer disabled:opacity-60',
+};

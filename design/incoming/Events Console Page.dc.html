@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ v.ptopS }}">
+        <button type="button" aria-label="Menu" style="{{ v.picoS }}">☰</button>
+        <span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span>
+        <span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+      </div>
+    </sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="No subsidiary is deployed yet, so these are the accounts HQ holds directly." style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><div style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <div role="tablist" aria-label="Events" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a role="tab" aria-selected="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tabNS }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  </main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="Eadwyn reads the events listed here. An event is approved or published only when you do it." style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;EV1&quot;,&quot;options&quot;:[&quot;EV1&quot;,&quot;EV2&quot;,&quot;EV3&quot;,&quot;EV4&quot;,&quot;EV4b&quot;,&quot;EV5&quot;,&quot;EV6&quot;,&quot;EV7&quot;,&quot;EV7g&quot;,&quot;EV8&quot;,&quot;EV8w&quot;,&quot;EV9a&quot;,&quot;EV9b&quot;,&quot;EV9c&quot;,&quot;EV10&quot;,&quot;EV11a&quot;,&quot;EV11b&quot;,&quot;EV12&quot;,&quot;EV13a&quot;,&quot;EV13b&quot;,&quot;EV14&quot;,&quot;EV15a&quot;,&quot;EV15b&quot;,&quot;EV15c&quot;,&quot;EV16&quot;,&quot;EV17a&quot;,&quot;EV17b&quot;,&quot;EV17c&quot;,&quot;EV17d&quot;,&quot;EV17e&quot;,&quot;EV17f&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'EV1';
+    const dark = B === 'EV2', phone = B.indexOf('EV17') === 0;
+    const crop = ['EV5', 'EV7g', 'EV8w', 'EV9a', 'EV9b', 'EV9c', 'EV10', 'EV11a', 'EV11b', 'EV12', 'EV15c'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnDF = BTN + 'border:1px solid ' + c.neg + ';background:' + c.neg + ';color:#fff';
+    const btnX = BTN + 'border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';cursor:not-allowed';
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const SPM = { Draft: ['✎', 'n'], 'Waiting for review': ['◷', 'a'], Published: ['✓', 'g'], 'Sent back': ['↩', 'n'], Cancelled: ['✕', 'r'] };
+    const sp = (st) => pl(SPM[st][0], st, SPM[st][1]);
+    const typ = (t) => ({ t, s: 'display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font:600 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair });
+    const word = (t, col) => ({ t, s: 'font-size:12px;white-space:nowrap;color:' + (col || c.mu) });
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = (cur) => seg(['Chart', 'Table'], cur || 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: 'font:600 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 92px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || 4) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + (x[4] === 'r' ? c.neg : c.pos), fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (phone ? 20 : 24) + 'px ' + MO + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu };
+    const NH = { ts: 'font-family:' + MO + ';color:' + c.mu, tip: 'Not held yet' };
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const TRKD = 'position:relative;display:block;height:14px;border-radius:4px;border:1.5px dashed ' + c.mu + ';box-sizing:border-box';
+    const BAR = (l, val, w, tip, o) => Object.assign({ l, v: val, tip: tip || l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const RBAR = (w, t, wait, nocap) => ({ trs: nocap ? 'display:none' : 'display:block;width:150px;height:8px;border-radius:999px;background:' + c.raised + ';border:1px solid ' + c.hair + ';overflow:hidden', fs: FILL(w), t, w: wait || false });
+    const STK = (lab, parts, sum) => { const tot = parts.reduce((a, p) => a + p[1], 0); return { lab, sum, leg: parts.map((p, i) => ({ t: p[0] + ' ' + Math.round(p[1] / tot * 100) + '%', sw: dotSw(S[i]) })), segs: parts.map((p, i) => ({ tip: p[0] + ' · [' + p[1] + '] · ' + Math.round(p[1] / tot * 100) + '%', s: 'display:block;height:100%;flex:' + p[1] + ';background:' + S[i] })) }; };
+    const lineSvg = (o) => { const W = o.w, H = o.h, L = 44, Rt = o.rp, T = 22, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + o.sum + '" style="display:block;overflow:visible;font-family:Roboto Mono,monospace">';
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="10" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach(([i, t]) => { s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      if (o.cap != null) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(o.cap) + '" y2="' + Y(o.cap) + '" stroke="' + c.mu + '" stroke-width="1.5" stroke-dasharray="5 4"/><text x="' + (L + iw + 8) + '" y="' + (Y(o.cap) + 4) + '" font-size="11" fill="' + c.mu + '">Capacity [60]</text>';
+      if (o.today != null) s += '<line x1="' + X(o.today) + '" x2="' + X(o.today) + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="' + c.mu + '" stroke-width="1"/><text x="' + (X(o.today) + 5) + '" y="' + (T + 10) + '" font-size="11" fill="' + c.mu + '">Today</text>';
+      o.series.forEach(se => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        if (o.dots) se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === se.vals.length - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"/>'; });
+        if (se.lab) s += '<circle cx="' + (L + iw + 14) + '" cy="' + (Y(se.vals[li]) + (se.dy || 0)) + '" r="4" fill="' + se.col + '"/><text x="' + (L + iw + 23) + '" y="' + (Y(se.vals[li]) + (se.dy || 0) + 4) + '" font-size="11.5" fill="' + c.ink + '">' + se.lab + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      if (o.tip) { const tx = X(o.tip.i); s += '<line x1="' + tx + '" x2="' + tx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="' + c.mu + '" stroke-dasharray="2 3"/><rect x="' + (tx - 190) + '" y="' + (T + 6) + '" width="180" height="' + (18 + o.tip.lines.length * 17) + '" rx="8" fill="' + c.card + '" stroke="' + c.hair + '"/>'; o.tip.lines.forEach((t, j) => { s += '<text x="' + (tx - 178) + '" y="' + (T + 24 + j * 17) + '" font-size="11.5" fill="' + (j ? c.ink : c.mu) + '">' + t + '</text>'; }); }
+      return { __html: s + '</svg>' }; };
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:560px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5', sub: sub || false });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+
+    // ---------- Overview ----------
+    const REG = [38, 44, 41, 52, 49, 58, 55, 63, 60, 71, 68, 41], CHK = [24, 27, 22, 33, null, 35, 31, 40, 36, 44, 41, 12];
+    const WK = ['3 Aug', '10 Aug', '17 Aug', '24 Aug', '31 Aug', '7 Sep', '14 Sep', '21 Sep', '28 Sep', '5 Oct', '12 Oct', '19 Oct'];
+    const weekly = (w) => lineSvg({ w: w || 1080, h: 270, rp: 190, n: 12, ymax: 80, ystep: 20, yl: 'people per week', dots: true, soFar: true, xl: WK.map((t, i) => [i, '[' + t + ']']), sum: 'Registrations and check-ins per week for twelve weeks. Registrations peaked at 71 in the week of 5 Oct; check-ins for the week of 31 Aug were not recorded.', series: [{ vals: REG, col: S[0], lab: 'Registrations · [41] so far', dy: 0 }, { vals: CHK, col: S[1], lab: 'Check-ins · [12] so far', dy: 0 }], tip: { i: 10, lines: ['Week of [12 Oct]', 'Registrations [68]', 'Check-ins [41]'] } });
+    const lineK = (tbl, w) => tbl ? TB({ title: 'Registrations and check-ins by week', tog: TOG('Table'), gc: '1fr 1fr 1fr', minW: 0, pager: false, cols: ['Week', 'Registrations', 'Check-ins'], rows: WK.map((t, i) => [CL('[' + t + ']' + (i === 11 ? ' · so far' : ''), MN), CL('[' + REG[i] + ']', MN), CHK[i] == null ? CL('—', { ts: 'font-family:' + MO + ';color:' + c.mu, tip: 'No value recorded for this week' }) : CL('[' + CHK[i] + ']', MN)]), foot: 'The current week is not finished, so its row says so far. A week with no value shows a dash, never zero.' })
+      : K({ title: 'Registrations and check-ins by week', tog: TOG('Chart'), legend: LEG(['Registrations · by the date each person registered', 'Check-ins · by the date each ticket was scanned at the door']), svg: weekly(w), foot: 'Registrations rose [12]% on the period before. [61]% of people who took a seat came.', fs: 'margin:0;font-size:13px;color:' + c.ink + ';line-height:1.55;font-weight:500' });
+    const RP = { Overdue: ['!', 'a'], Full: ['■', 'n'], 'Low sign-ups': ['↓', 'n'], Clash: ['⇄', 'a'], 'Changed after approval': ['↻', 'a'], 'Paid tickets': ['$', 'r'] };
+    const att = (reason, t, act) => R({ pill: pl(RP[reason][0], reason, RP[reason][1]), t, ts: 'font-size:13px;font-weight:500;line-height:1.5', act });
+    const needsK = (n) => K({ title: 'Needs attention', meta: '[9] items', rows: [
+      att('Overdue', '[LP Briefing · Fund I] has waited [3 days].', 'Review'),
+      att('Full', '[Founder Breakfast · Lisbon]: [60] of [60], [6] waiting.', 'Change capacity'),
+      att('Low sign-ups', '[Pricing Workshop] starts in [4 days], [3] of [40] seats taken.', 'Open'),
+      att('Clash', '[Climate Founders Roundtable] and [Operators Social · Berlin] overlap on [14 Nov].', 'See calendar'),
+      att('Changed after approval', '[Demo Day Rehearsal]’s date changed after approval.', 'Open'),
+      att('Paid tickets', '[Operators Social · Berlin] was cancelled by its host with [5] paid tickets to refund.', 'Open')].slice(0, n || 6), btns: [{ t: '[9] items · See all', s: btnG }] });
+    const nx = (m, d, w, t, ty, fmt, bar, st) => R({ db: { m, d, w }, t, ts: 'font-size:13px;font-weight:700;line-height:1.4', tags: [typ(ty), word(fmt)].concat(st ? [sp(st)] : []), bar });
+    const nextK = K({ title: 'Next up', meta: 'Next five events', rows: [
+      nx('OCT', '28', 'WED', '[Pricing Workshop]', 'Workshop', 'Online', RBAR('8%', '[3] / [40]')),
+      nx('NOV', '05', 'THU', '[Founder Breakfast · Lisbon]', 'Networking', 'In person', RBAR('100%', '[60] / [60]', '+[6] waiting')),
+      nx('NOV', '10', 'TUE', '[Office Hours · Legal]', 'Office Hours', 'Online', RBAR('0', 'No cap · [9] taken', false, true)),
+      nx('NOV', '12', 'THU', '[Demo Day Rehearsal]', 'Demo Day', 'In person', RBAR('70%', '[42] / [60]', '+[6] waiting')),
+      nx('NOV', '14', 'THU', '[LP Briefing · Fund I]', 'LP Briefing', 'In person', RBAR('0', 'Sign-ups open once approved', false, true), 'Waiting for review')] });
+    const TYPES = [['Workshop', 7], ['Networking', 5], ['Office Hours', 4], ['Demo Day', 3], ['LP Briefing', 3], ['Roundtable', 2], ['Webinar', 2], ['Fireside', 1], ['Social', 1]];
+    const typesK = K({ title: 'Events by type', tog: TOG(), note: 'Workshops lead the period.', sum: 'Events starting in the period by type: workshop 7, networking 5, office hours 4, demo day 3, LP briefing 3, roundtable 2, webinar 2, fireside 1, social 1.', bgs: 'display:grid;grid-template-columns:96px minmax(0,1fr) 36px;gap:9px;align-items:center;font-size:12.5px', bars: TYPES.map(([l, n]) => BAR(l, '[' + n + ']', (n / 7 * 100) + '%')), btns: [{ t: 'Show all (3 more with none)', s: btnG }] });
+    const SHOW = [['[Founder Breakfast · Porto]', 24, 38], ['[LP Briefing · Q3]', 21, 26], ['[Demo Day · Cohort 4]', 64, 92], ['[Climate Roundtable · Sep]', 12, 16], ['[Pricing Workshop · Sep]', 18, 30], ['[Operators Social · Lisbon]', 30, 55], ['[Webinar · SAFE basics]', 33, 71], ['[Office Hours · Tax]', 9, 20]];
+    const showK = K({ title: 'Show-up by event', tog: TOG(), note: 'Last eight events that ended. The line marks all events this period.', refL: 'All events [61]%', sum: 'Show-up rate for the last eight events that ended, from 45% to 81%, against 61% for all events.', bgs: 'display:grid;grid-template-columns:118px minmax(0,1fr) 70px;gap:9px;align-items:center;font-size:12px', refS: 'position:absolute;top:-4px;bottom:-4px;left:61%;width:0;border-left:1.5px solid ' + c.mu, bars: SHOW.map(([l, a, b]) => BAR(l, '[' + a + '] of [' + b + ']', Math.round(a / b * 100) + '%', l + ' · show-up ' + Math.round(a / b * 100) + '% · [' + a + '] of [' + b + ']')) });
+    const whoK = K({ title: 'Who comes', tog: TOG(), stacks: [STK('By profile', [['Founder', 58], ['Investor', 17], ['Advisor', 9], ['Operating Partner', 6], ['Other', 10]], 'Registrations this period by profile: founders 58%, investors 17%, advisors 9%, operating partners 6%, other 10%.'), STK('How they got a seat', [['Signed up', 71], ['Invitation', 15], ['Free seat', 8], ['Added by an admin', 6]], 'Seats this period: signed up 71%, invitation 15%, free seat 8%, added by an admin 6%.')], foot: 'Founders took [58]% of seats this period. Other is explorers and guests with no account.' });
+    const statusK = K({ title: 'Every event by status', tags: [['Draft', '[5]'], ['Waiting for review', '[3]'], ['Published', '[21]'], ['Sent back', '[2]'], ['Cancelled', '[4]']].map(([s, n]) => { const p = sp(s); return { t: p.t + ' · ' + n, s: p.s + ';min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;font-size:12px;cursor:pointer;box-sizing:border-box' }; }) });
+    const NR = (title, why) => K({ cs: CARD + ';border-style:dashed', title, meta: 'Not recorded', ms: 'font:700 11px ' + MO + ';color:' + c.mu + ';letter-spacing:.05em;text-transform:uppercase', note: why });
+    const T1 = [['Waiting for review', '[3]', 'oldest [3 days]', false, false, '! Overdue'], ['Next 30 days', '[8]', 'events · [214] seats taken · [2] full'], ['Registrations', '[640]', 'this period', '+[12]%'], ['Show-up rate', '[61]%', '[9] events ended this period']];
+    const T2 = [['On waitlists', '[37]', 'people, upcoming events'], ['Paid tickets', '[$2,480]', '[31] paid · [4] payment pending'], ['Free seats given', '[52]', 'From audience rules and free invitations'], ['Cancelled', '[2]', 'this period · [1] had paid tickets']];
+    const overview = () => [col([TL(T1, 4)]), col([TL(T2, 4)]), col([lineK()]), col([needsK()], 3), col([nextK], 3), col([typesK], 2), col([showK], 2), col([whoK], 2), col([statusK]), col([NR('Page views', 'No store counts views of an event page, so the funnel starts at registration.')], 3), col([NR('Feedback', 'Events have no feedback form yet.')], 3)];
+
+    // ---------- Review ----------
+    const QUEUE = [
+      { t: '[LP Briefing · Fund I]', ty: 'LP Briefing', h: '[Name] · Founder · [Northwind Labs]', when: 'Thu [14 Nov] · 18:30', wait: 'waiting [3 days]', over: true, fl: ['Free seats', 'Clash', 'Sent back once'] },
+      { t: '[Pricing Workshop]', ty: 'Workshop', h: '[Name] · Advisor', when: 'Wed [18 Nov] · 10:00', wait: 'waiting [1 day]', over: false, fl: ['Paid [$40]'] },
+      { t: '[Bluefern Health · Open Lab]', ty: 'Meetup', h: '[Name] · Founder · [Bluefern Health]', when: 'Fri [20 Nov] · 17:00', wait: 'waiting [5 hours]', over: false, fl: [] }];
+    const qRow = (q, sel) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:12px 12px 12px ' + (sel ? 10 : 12) + 'px;border-radius:10px;cursor:pointer;' + (sel ? 'background:' + c.lav + ';border:1px solid ' + c.lavE + ';border-left:3px solid #7c3aed' : 'border:1px solid transparent;border-top-color:' + c.hair), t: q.t, ts: 'font-size:13.5px;font-weight:700;line-height:1.4', sub: q.h, tags: [typ(q.ty), word(q.when, c.ink)].concat(q.fl.map(f => pl('', f, f.indexOf('Clash') === 0 ? 'a' : 'n'))), v: (q.over ? '● ' : '') + q.wait, vs: 'font:600 11.5px ' + MO + ';white-space:nowrap;color:' + (q.over ? c.amT : c.mu) });
+    const queueK = (rows, top) => K({ title: 'Waiting for review · [' + rows.length + ']', tbar: { search: 'Search title, host or venture', chips: [tag('Type ▾'), tag('Host role ▾'), tag('Free or Paid ▾'), tag('Starts ▾'), tag('Sort: Waiting longest ▾')] }, rows: (top ? [R({ rs: NOTE('v') + ';margin-bottom:6px', lead: '✓', ls: 'color:' + c.pos + ';font-weight:800', t: top, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: 'Open event', as: btnG })] : []).concat(rows.map((q, i) => qRow(q, !top && i === 0))), rowsS: 'display:flex;flex-direction:column;gap:4px', foot: 'J and K, or the arrow keys, move through the queue.' });
+    const preview = K({ cover: 'height:120px;border-radius:10px;display:grid;place-items:center;background:repeating-linear-gradient(135deg,' + c.raised + ' 0 10px,' + c.card + ' 10px 20px);border:1px solid ' + c.hair, eye: 'PREVIEW ON THE PUBLIC CALENDAR', title: false, rows: [R({ rs: 'display:flex;gap:12px;align-items:flex-start', db: { m: 'NOV', d: '14', w: 'THU' }, t: '[LP Briefing · Fund I]', ts: 'font-size:16px;font-weight:800;letter-spacing:-.01em', tags: [typ('LP Briefing'), word('In person · [Rua Exemplo 10, Lisbon]')], sub: '[How Fund I invests, what LPs receive each quarter, and questions from the room.] Hosted by [Name].' })], foot: 'This is how it will look once approved.' });
+    const factsK = K({ title: 'Facts', facts: [
+      { k: 'Type', v: 'LP Briefing' }, { k: 'Visibility', v: 'Public', sub: 'This is why it needs review.' },
+      { k: 'Format and place', v: 'In person · [Rua Exemplo 10, Lisbon]' }, { k: 'Starts and ends', v: 'Thu [14 Nov] · 18:30–21:00, Lisbon time', sub: 'Your time 18:30' },
+      { k: 'Capacity', v: '[60] seats · waitlist on' }, { k: 'Registration', v: 'The host approves each registration' },
+      { k: 'Price', v: 'Free' }, { k: 'Who may register', v: 'Selected roles: Founder, Investor' },
+      { k: 'Free seats for', v: 'Official partners, invested LPs' }, { k: 'Agenda', v: '[4] items · [3] speakers', sub: 'Show agenda ▾' },
+      { k: 'Venture', v: '[Northwind Labs]' }, { k: 'Created · Submitted', v: '[3 Oct] · [11 Oct]' }], rows: [R({ eye: 'DESCRIPTION', t: '[Fund I’s partners walk invested and prospective LPs through the portfolio, the last quarter’s marks and the capital still to call. The second half is open questions from the room, followed by drinks. Seats are held for official partners and invested LPs, who receive their invitation as soon as the event is approved.]', ts: 'font-size:13px;font-weight:500;line-height:1.55;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden', btns: [{ t: 'Show all', s: btnG }] })] });
+    const approveLines = [bul('Puts the event on the public calendar at axal.vc/events.'), bul('Tells the host it is live.'), bul('Emails [12] free-seat invitations: [8] official partners, [4] invested LPs.')];
+    const doesK = K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, title: 'What approving does', rows: approveLines });
+    const clashK = K({ cs: CARD + ';background:' + c.amBg + ';border-color:' + c.amE, title: 'Clashes', rows: [R({ rs: 'display:flex;gap:10px;padding:2px 0', lead: '⇄', ls: 'color:' + c.amT + ';font-weight:800', t: '[Operators Social · Berlin] starts 30 minutes earlier the same evening.', ts: 'font-size:13px;font-weight:500;line-height:1.5', btns: [{ t: 'Open [Operators Social · Berlin] ›', s: btnG }] })] });
+    const histK = K({ title: 'History', rows: [R({ lead: '↩', t: 'Sent back on [9 Oct] by an admin: ‘Add the venue address.’' }), R({ lead: '↑', t: 'Submitted again on [11 Oct].' })] });
+    const actBar = (refused) => K({ cs: CARD + ';position:sticky;bottom:0;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;box-shadow:0 -8px 24px rgba(24,24,27,.06)', tags: [{ t: 'Open as host', s: 'font-size:13px;font-weight:700;color:' + c.vt + ';cursor:pointer' }], btns: [{ t: 'Send back', s: btnS }, refused ? { t: 'Approve and publish', s: btnX } : { t: 'Approve and publish', s: btnP }], foot: refused || false, fs: 'margin:0;width:100%;font-size:12.5px;color:' + c.neg + ';line-height:1.5' });
+    const review = (top) => [col([queueK(top ? QUEUE.slice(1) : QUEUE, top)]), col(top ? [K({ cs: CARD + ';border-style:dashed;align-items:center;text-align:center;padding:30px', title: 'Select an event to review it.', ths: 'display:flex;justify-content:center', note: '[Pricing Workshop] is next in the queue.' })] : [preview, factsK, doesK, clashK, histK, actBar()])];
+
+    // ---------- All events ----------
+    const EVS = [
+      ['[Pricing Workshop]', false, 'Studio team', 'Workshop', '[28 Oct] 18:00', 'WET', 'Published', 'Public', 'Online', '[40]', '[3]', '0', null, '[8]%', null, 'Free'],
+      ['[Founder Breakfast · Lisbon]', true, '[Name] · [Northwind Labs]', 'Networking', '[5 Nov] 08:30', 'WET', 'Published', 'Public', 'In person', '[60]', '[60]', '[6]', null, '[100]%', null, '[$15]'],
+      ['[Office Hours · Legal]', false, 'Studio team', 'Office Hours', '[10 Nov] 17:00', 'WET', 'Published', 'Unlisted', 'Online', 'No cap', '[9]', '—', null, 'No cap', null, 'Free'],
+      ['[Demo Day Rehearsal]', true, '[Name] · [Northwind Labs]', 'Demo Day', '[12 Nov] 18:30', 'WET', 'Published', 'Public', 'In person', '[60]', '[42]', '[6]', null, '[70]%', null, '[$40]'],
+      ['[LP Briefing · Fund I]', false, '[Name] · [Northwind Labs]', 'LP Briefing', '[14 Nov] 18:30', 'WET', 'Waiting for review', 'Public', 'In person', '[60]', '0', '0', null, '0%', null, 'Free'],
+      ['[Climate Founders Roundtable]', false, '[Name] · [Bluefern Health]', 'Roundtable', '[14 Nov] 18:30', 'CET', 'Published', 'Public', 'In person', '[20]', '[12]', '0', null, '[60]%', null, 'Free'],
+      ['[Operators Social · Berlin]', false, '[Name]', 'Social', '[14 Nov] 18:00', 'CET', 'Cancelled', 'Public', 'In person', '[80]', '[48]', '[6]', null, '[60]%', null, '[$40]'],
+      ['[Webinar · Cap tables]', false, '[Name] · [Bluefern Health]', 'Webinar', '[19 Nov] 10:00', 'WET', 'Sent back', 'Public', 'Online', 'No cap', '0', '—', null, 'No cap', null, 'Free'],
+      ['[Founder Breakfast · Porto]', false, 'Studio team', 'Networking', '[22 Oct] 08:30', 'WET', 'Published', 'Public', 'In person', '[40]', '[38]', '0', '[24]', '[95]%', '[63]%', '[$15]'],
+      ['[LP Briefing · Q3]', false, 'Studio team', 'LP Briefing', '[8 Oct] 18:00', 'WET', 'Published', 'Private', 'Hybrid', '[30]', '[26]', '0', '[21]', '[87]%', '[81]%', 'Free']];
+    const FEAT = { t: '★ Featured', s: 'font:700 10.5px ' + SG + ';color:' + c.vt };
+    const allT = () => TB({ title: false, tbar: { search: 'Search title, host or venture', chips: [tag('Status: All ▾'), tag('Type ▾'), tag('Visibility ▾'), tag('Format ▾'), tag('When: Upcoming ▾'), tag('Price ▾'), tag('Featured ▾'), tag('Host ▾'), tag('Sort: Starts ▾')], views: [tag('Needs attention'), tag('This week'), tag('Full'), tag('Cancelled with paid tickets')] }, gc: '2.1fr .95fr 1.05fr 1.35fr .7fr .72fr .62fr .5fr .62fr .6fr .5fr .62fr .5fr .26fr', minW: 1090, cols: ['Event', 'Type', 'Starts', 'Status', 'Visibility', 'Format', 'Capacity', 'Taken', 'Waitlisted', 'Attended', 'Fill', 'Show-up', 'Price', ''], rows: EVS.map(e => [CL(e[0], { ts: 'font-weight:700;line-height:1.35', pill: e[1] ? FEAT : false, sub: e[2] }), e[3], CL(e[4], { ts: 'font-family:' + MO + ';font-weight:600;font-size:11.5px', sub: e[5] }), CL('', { pill: sp(e[6]) }), e[7], e[8], CL(e[9], MN), CL(e[10], MN), CL(e[11], MN), e[12] ? CL(e[12], MN) : CL('—', NH), CL(e[13], MN), e[14] ? CL(e[14], MN) : CL('—', NH), CL(e[15], MN), CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer' })]), count: '1–25 of [35]', foot: 'Download table (CSV) · counts only, no attendee names. Ten of the first twenty-five rows are drawn.' });
+    const allCols = () => [col([allT()])];
+
+    // ---------- One event ----------
+    const DAYS = [];
+    for (let i = 0; i < 40; i++) DAYS.push(i);
+    const CUM = [2, 5, 7, 9, 10, 12, 15, 17, 19, 20, 22, 24, 27, 29, 31, 33, 36, 39, 42];
+    const cumSvg = lineSvg({ w: 700, h: 250, rp: 100, n: 38, ymax: 70, ystep: 10, yl: 'seats taken', dots: false, cap: 60, today: 18, xl: [[0, '[6 Oct]'], [7, '[13 Oct]'], [14, '[20 Oct]'], [25, '[31 Oct]'], [37, '[12 Nov]']], sum: 'Seats taken grew from 2 on 6 October to 42 today, against a capacity of 60.', series: [{ vals: CUM.concat(new Array(19).fill(null)), col: S[0], lab: '[42] today', dy: 0 }] });
+    const evTiles = (failPaid) => TL([['Capacity', '[60]', 'seats'], ['Seats taken', '[42]', '[70]% full'], ['On the waitlist', '[6]', 'oldest first'], ['Attended', '—', 'Not held yet', false, false, false, c.mu], ['Show-up', '—', 'Not held yet', false, false, false, c.mu], failPaid ? ['Paid tickets', '—', 'Ticket payments could not be read. That is not the same as none.', false, false, false, c.mu] : ['Paid tickets', '[12]', '[$480]'], ['Free seats', '[9]', 'from audience rules'], ['Invitations', '[40]', 'sent · [22] accepted']], 4);
+    const chartA = K({ title: 'Seats taken over time', tog: TOG(), note: 'Cumulative, from the first registration to the event.', svg: cumSvg });
+    const chartB = K({ title: 'From sign-up to the door', tog: TOG(), sum: 'Registered 42, confirmed 38, attended not yet recorded because the event has not been held.', bgs: 'display:grid;grid-template-columns:88px minmax(0,1fr) 82px;gap:9px;align-items:center;font-size:12.5px', bars: [BAR('Registered', '[42]', '100%'), BAR('Confirmed', '[38]', '90%'), BAR('Attended', '— Not held yet', '0', 'Attended · not held yet', { trs: TRKD, vs: 'font:600 11.5px ' + MO + ';color:' + c.mu })], tags: [word('Waitlisted [6]'), word('Cancelled [3]'), word('Declined [1]')] });
+    const PROF = [['Founder', 22], ['Investor', 9], ['Advisor', 4], ['Operating Partner', 3], ['Explorer', 2], ['Guest (no account)', 2]];
+    const SEAT = [['Signed up', 18], ['Invitation', 13], ['Free seat', 9], ['Added by an admin', 2]];
+    const whoReg = K({ title: 'Who registered', tog: TOG(), bgs: 'display:grid;grid-template-columns:112px minmax(0,1fr) 36px;gap:9px;align-items:center;font-size:12px', sum: 'Registrations by profile and by how the seat was taken.', bars: PROF.map(([l, n]) => BAR(l, '[' + n + ']', (n / 22 * 100) + '%')).concat([BAR('How they got a seat', '', '0', 'Seat source', { ls: eyeS + ';padding-top:8px', trs: 'display:none', vs: 'display:none' })]).concat(SEAT.map(([l, n]) => BAR(l, '[' + n + ']', (n / 22 * 100) + '%'))) });
+    const invK = TB({ title: 'Invitations', pager: false, gc: '1.3fr .5fr', cols: ['By status', 'Count'], rows: [['Pending', CL('[14]', MN)], ['Accepted', CL('[22]', MN)], ['Declined', CL('[3]', MN)], ['Revoked', CL('[1]', MN)], [CL('By source', { ts: eyeS }), ''], ['Sent by the host', CL('[16]', MN)], ['Official partners', CL('[8]', MN)], ['Invested LPs', CL('[4]', MN)], ['Investors', CL('[6]', MN)], ['Founders', CL('[4]', MN)], ['Host’s contacts', CL('[2]', MN)]] });
+    const payK = (fail) => fail ? K({ title: 'Payments', rows: [R({ rs: NOTE('a'), lead: '!', ls: 'color:' + c.amT + ';font-weight:800', t: 'Ticket payments could not be read. That is not the same as none.', ts: 'font-size:13px;font-weight:600;line-height:1.5', btns: [{ t: 'Try again', s: btnS }] })] })
+      : K({ title: 'Payments', rows: [R({ t: 'Price', v: '[$40]' }), R({ t: 'Paid', v: '[12] · [$480]' }), R({ t: 'Payment pending', v: '[2]' }), R({ t: 'Refunds', sub: 'A refunded ticket is not marked here. HQ refunds a ticket’s payment in Revenue › Billing.', v: 'Not recorded', vs: 'font:700 10.5px ' + MO + ';color:' + c.mu + ';text-transform:uppercase;letter-spacing:.05em' })] });
+    const remK = K({ title: 'Reminders', rows: [R({ lead: '✓', ls: 'color:' + c.pos + ';font-weight:800', t: '24-hour reminder', sub: 'Not sent yet · due [11 Nov 18:30]' }), R({ lead: '◷', t: '1-hour reminder', sub: 'Not sent yet · due [12 Nov 17:30]' })] });
+    const agK = K({ title: 'Agenda', rows: [['18:30', 'Doors and coffee', 'Room [A]'], ['18:45', '[Pitch run-through]', '[Name], [Founder] · Room [A]'], ['19:30', '[Investor feedback panel]', '[Name], [Partner] · Room [A]'], ['20:30', '[Close]', 'Room [A]']].map(([tm, t, s]) => R({ lead: tm, ls: 'font:700 12px ' + MO + ';color:' + c.ink + ';width:42px;flex:none', t, sub: s })), btns: [{ t: 'Edit as host ›', s: btnG }] });
+    const hiK = K({ title: 'History', rows: [R({ rs: RS + ';background:' + c.amBg + ';padding:10px', lead: '↻', ls: 'color:' + c.amT + ';font-weight:800', t: 'Host changed the date after approval · [12 Oct]', sub: 'Was Thu [19 Nov] 18:30 · now Thu [12 Nov] 18:30' }), R({ lead: '↑', t: 'Capacity 40 → 60 by an admin · [6] moved off the waitlist · [10 Oct]' }), R({ lead: '✓', t: 'Approved by an admin · [8 Oct]' }), R({ lead: '↩', t: 'Sent back by an admin: ‘Add the venue address.’ · [6 Oct]' }), R({ lead: '+', t: 'Created by the host · [3 Oct]' })] });
+    const rosterK = K({ cs: PLAIN, rows: [R({ rs: 'display:flex;gap:10px;align-items:center', t: 'Names and emails are on the host’s roster.', ts: 'font-size:12.5px;color:' + c.mu, act: 'Open roster as host', as: btnG })] });
+    const eventCols = (fail) => [col([evTiles(fail)]), col([rosterK]), col([chartA], 4), col([chartB], 2), col([whoReg], 2), col([invK], 2), col([payK(fail)], 2), col([remK], 2), col([agK], 2), col([hiK], 2)];
+    const GATES = { ok: [['✓', 'Public'], ['✓', 'Published'], ['✓', 'Approved by an admin'], ['→', 'On the public calendar']], wait: [['✓', 'Public'], ['◷', 'Waiting for review'], ['○', 'Not approved yet'], ['→', 'Not on the public calendar']], priv: [['🔒', 'Private'], ['✓', 'Published'], ['→', 'Reached by invitation only. Private and unlisted events publish without review.']] };
+    const gate = (k) => GATES[k].map(([ic, t], i, a) => ({ t: (ic === '🔒' ? '' : ic + ' ') + t, s: 'font-size:12.5px;font-weight:' + (i === a.length - 1 ? 700 : 600) + ';color:' + (ic === '◷' || ic === '○' ? c.amT : i === a.length - 1 ? c.ink : ic === '✓' ? c.pos : c.mu) }));
+
+    // ---------- Calendar ----------
+    const CH = (t, st) => { const base = 'display:block;padding:2px 6px;border-radius:6px;font:600 10.5px ' + SG + ';line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'; const m = { p: [c.card, '1px solid ' + c.hair, c.ink, ''], r: [c.amBg, '1px dashed ' + c.amE, c.amT, ' · Review'], d: [c.raised, '1px solid ' + c.hair, c.mu, ' · Draft'], b: [c.raised, '1px solid ' + c.hair, c.mu, ' · Sent back'], x: [c.card, '1px solid ' + c.hair, c.mu, ' · Cancelled'] }[st]; return { t: t + m[3], s: base + 'background:' + m[0] + ';border:' + m[1] + ';color:' + m[2] + (st === 'x' ? ';text-decoration:line-through' : '') }; };
+    const CALD = { '28': [['18:00 [Pricing Workshop]', 'p']], '5': [['08:30 [Founder Breakfast · Lisbon]', 'p']], '10': [['17:00 [Office Hours · Legal]', 'p']], '12': [['09:00 [Investor Coffee]', 'p'], ['12:00 [Seed Pricing Clinic]', 'd'], ['18:30 [Demo Day Rehearsal]', 'p']], '14': [['18:00 [Operators Social · Berlin]', 'p'], ['18:30 [Climate Founders Roundtable]', 'p'], ['18:30 [LP Briefing · Fund I]', 'r']], '18': [['19:00 [Founder Social · Porto]', 'x']], '19': [['10:00 [Webinar · Cap tables]', 'b']], '20': [['17:00 [Bluefern Health · Open Lab]', 'r']], '24': [['18:30 [Investor Fireside]', 'p']], '26': [['08:30 [Founder Breakfast · Lisbon]', 'p']] };
+    const calDays = []; const seq = [26, 27, 28, 29, 30, 31].concat(Array.from({ length: 30 }, (_, i) => i + 1)).concat([1, 2, 3, 4, 5, 6]);
+    seq.forEach((n, i) => { const inM = i >= 6 && i < 36; const key = (inM || (i < 6 && n === 28)) ? String(n) : ''; const chips = (CALD[key] || []).map(x => CH(x[0], x[1]));
+      calDays.push({ n: String(n), ns: 'font:700 11px ' + MO + ';color:' + (inM ? c.ink : c.fa), s: 'position:relative;display:flex;flex-direction:column;gap:3px;min-height:104px;padding:6px;box-sizing:border-box;min-width:0;border-right:1px solid ' + c.hair + ';border-bottom:1px solid ' + c.hair + ';background:' + (inM ? c.card : c.raised), chips, ov: inM && n === 14 ? '[2] overlap' : false, more: inM && n === 12 ? '+2 more' : false, pop: inM && n === 14 && B === 'EV8' ? { t: '[Climate Founders Roundtable]', lines: [{ t: 'Sat [14 Nov] · 18:30–20:30 CET' }, { t: 'Roundtable · In person' }, { t: 'Seats [12] / [20]' }], st: sp('Published') } : false }); });
+    const calK = K({ title: 'November 2026', meta: '‹ ›  Today', tog: seg(['Month', 'Week', 'List'], 'Month'), tbar: { search: false, chips: [tag('Status ▾'), tag('Type ▾'), tag('Visibility ▾'), tag('Format ▾'), tag('Price ▾'), tag('Host ▾')] }, cal: { head: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(t => ({ t })), days: calDays }, tags: [CH('Published', 'p'), CH('Waiting for review', 'r'), CH('Draft or Sent back', 'd'), CH('Cancelled', 'x'), { t: '● Overlap', s: 'font:700 11px ' + SG + ';color:' + c.amT }].map(x => Object.assign({}, x, { s: x.s + ';display:inline-block' })) });
+    const weekSvg = () => { const W = 1080, H = 330, L = 50, T = 34, cw = (W - L) / 7, hh = 46; let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Week of 9 November: events by hour. On Saturday 14 November two events overlap and sit side by side." style="display:block;font-family:Space Grotesk,sans-serif">';
+      ['Mon 9', 'Tue 10', 'Wed 11', 'Thu 12', 'Fri 13', 'Sat 14', 'Sun 15'].forEach((d, i) => { s += '<text x="' + (L + i * cw + 8) + '" y="20" font-size="12" font-weight="700" fill="' + c.ink + '">' + d + '</text><line x1="' + (L + i * cw) + '" x2="' + (L + i * cw) + '" y1="' + T + '" y2="' + H + '" stroke="' + c.hair + '"/>'; });
+      for (let h = 0; h <= 6; h++) s += '<line x1="' + L + '" x2="' + W + '" y1="' + (T + h * hh) + '" y2="' + (T + h * hh) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (T + h * hh + 4) + '" text-anchor="end" font-family="Roboto Mono,monospace" font-size="11" fill="' + c.mu + '">' + (16 + h) + ':00</text>';
+      const blk = (day, st, en, t, part, of, amber) => { const x = L + day * cw + 4 + part * (cw - 8) / of, w = (cw - 8) / of - 3, y = T + (st - 16) * hh, hgt = (en - st) * hh; s += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + hgt + '" rx="6" fill="' + (amber ? c.amBg : c.card) + '" stroke="' + (amber ? '#fcd34d' : c.hair) + '"' + (amber ? ' stroke-dasharray="4 3"' : '') + '/><text x="' + (x + 6) + '" y="' + (y + 15) + '" font-size="10.5" font-weight="700" fill="' + (amber ? c.amT : c.ink) + '">' + t + '</text>'; };
+      blk(1, 17, 18, '[Office Hours · Legal]', 0, 1); blk(3, 18.5, 21, '[Demo Day Rehearsal]', 0, 1); blk(5, 18, 20, '[Operators Social]', 0, 3); blk(5, 18.5, 20.5, '[Climate Roundtable]', 1, 3); blk(5, 18.5, 21, '[LP Briefing] · Review', 2, 3, true);
+      return { __html: s + '</svg>' }; };
+
+    // ---------- Dialogs ----------
+    const approveDlg = dlg('Approve [LP Briefing · Fund I]?', false, [K({ cs: SEC, rows: approveLines }), K({ cs: SEC, rows: [R({ rs: 'display:flex;gap:11px;align-items:flex-start', t: 'Also feature it', sub: 'Featured events rank higher in members’ suggested events. They are not pinned on the public calendar.', tg: TGS(false), tk: TKS(false), on: 'false' })] })], [{ t: 'Back', s: btnS }, { t: 'Approve and publish', s: btnP }]);
+    const sendDlg = dlg('Send [Pricing Workshop] back to the host?', 'The host sees your reason and can edit and submit again. The event stays off the public calendar.', [K({ cs: SEC, eye: 'QUICK REASONS', title: false, tags: [tag('Add the venue', true), tag('Fix the date or time'), tag('Say who it is for'), tag('Not right for the public calendar')] }), K({ cs: SEC, rows: [field('REASON FOR THE HOST · REQUIRED', 'Add the venue address so people know where to go.', { ts: FIN + ';min-height:84px;font-weight:500', sub: '[42] / 1000', ss: 'font:500 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end' })] })], [{ t: 'Back', s: btnS }, { t: 'Send back', s: btnP }]);
+    const capDlg = (val, line, err) => dlg('Change capacity · [Founder Breakfast · Lisbon]', 'Now: [60] seats · [60] taken · [6] waiting.', [K({ cs: SEC, rows: [field('NEW CAPACITY', val, { ts: FIN + ';font-family:' + MO + (err ? ';border-color:' + c.neg : ''), sub: err || line, ss: err ? 'font-size:12.5px;color:' + c.neg + ';font-weight:600' : 'font-size:12.5px;color:' + c.ink + ';line-height:1.5' }), R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding-top:8px', t: 'No cap', sub: 'Anyone eligible can register.', tg: TGS(false), tk: TKS(false), on: 'false' })] })], [{ t: 'Back', s: btnS }, err ? { t: 'Save capacity', s: btnX } : { t: 'Save capacity', s: btnP }]);
+    const cancelDlg = dlg('Cancel [Operators Social · Berlin]?', 'This cannot be undone.', [K({ cs: SEC, eye: 'WHAT HAPPENS', title: false, rows: [bul('It leaves every calendar.'), bul('[48] registered and [6] waitlisted people get a notice.')] }), K({ cs: SEC, rows: [R({ rs: NOTE('a') + ';flex-direction:column;gap:8px', t: '[5] paid tickets ([$200]) are not refunded automatically. HQ refunds them in Revenue › Billing.', ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + c.amT }), R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:4px 0', lead: '☑', ls: 'font-size:16px;line-height:1.1;color:' + c.vt, t: 'I understand these tickets need a refund' }), field('NOTE TO REGISTRANTS · OPTIONAL', 'Write a note…', { ts: FIN + ';min-height:64px;color:' + c.fa + ';font-weight:500' })] })], [{ t: 'Keep event', s: btnS }, { t: 'Cancel event', s: btnDF }]);
+    const unpubDlg = dlg('Take [Demo Day Rehearsal] off the calendar?', 'It goes back to the host as a draft. Registrations stay. The host is told, with your note.', [K({ cs: SEC, rows: [field('NOTE TO THE HOST · OPTIONAL', 'Write a note…', { ts: FIN + ';min-height:64px;color:' + c.fa + ';font-weight:500' })] })], [{ t: 'Back', s: btnS }, { t: 'Unpublish', s: btnP }]);
+    const featDlg = dlg('Feature [Founder Breakfast · Lisbon]?', 'Featured events rank higher in members’ suggested events. They are not pinned on the public calendar.', [K({ cs: SEC, note: 'Unfeature uses the same dialog, with the button Stop featuring.' })], [{ t: 'Back', s: btnS }, { t: 'Feature', s: btnP }]);
+
+    // ---------- Board assembly ----------
+    let shell = 'admin', head = true, tabs = 'Overview', period = true, title = 'Events', crumb = 'Community › Events', crumbHref = '/admin/community', hlines = [{ t: 'Approve public events, keep the calendar healthy and see how events perform.' }], hpills = false, hbtns = 'list', scope = 'HQ-held accounts · axal.vc', gateV = false, grid = G6, cols = [], banner = false, pbar = false;
+    const LIST_BTNS = [{ t: 'New studio event', s: btnS, btn: true, txt: false, al: 'New studio event' }, { t: 'Updated [10:42]', s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true }, { t: '↻', s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al: 'Refresh' }];
+    const EV_BTNS = [{ t: 'Change capacity', s: btnS }, { t: 'Unfeature', s: btnS }, { t: 'Unpublish', s: btnS }, { t: 'Cancel event', s: btnD }, { t: '⋯', s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, al: 'More: Open as host, Download roster (CSV), Open public page, Add to calendar' }].map(b => Object.assign({ btn: true, txt: false, al: b.t }, b));
+    const eventHead = () => { tabs = false; period = false; scope = false; title = '[Demo Day Rehearsal]'; crumb = '‹ All events'; crumbHref = '/admin/events/all'; hpills = [sp('Published'), pl('', 'Public', 'n'), typ('Demo Day'), pl('★', 'Featured', 'v')]; hbtns = EV_BTNS; hlines = [{ t: 'Hosted by [Name] · Founder · [Northwind Labs]' }, { t: 'Thu [12 Nov 2026] · 18:30–21:00 · Lisbon time (your time 18:30) · In person · [Rua Exemplo 10, Lisbon]' }]; gateV = gate('ok'); };
+    if (B === 'EV1' || B === 'EV2') cols = overview();
+    else if (B === 'EV3') { tabs = 'Review'; period = false; grid = 'display:grid;grid-template-columns:420px minmax(0,1fr);gap:14px;align-items:start'; cols = review(); }
+    else if (B === 'EV4') { tabs = 'Review'; period = false; grid = 'display:grid;grid-template-columns:420px minmax(0,1fr);gap:14px;align-items:start'; cols = review().concat([DIMC, dlgCol(approveDlg, true)]); }
+    else if (B === 'EV4b') { tabs = 'Review'; period = false; grid = 'display:grid;grid-template-columns:420px minmax(0,1fr);gap:14px;align-items:start'; cols = review('Approved. [LP Briefing · Fund I] is on the public calendar.'); }
+    else if (B === 'EV6') { tabs = 'All events'; period = false; grid = G6; cols = allCols(); }
+    else if (B === 'EV7') { eventHead(); cols = eventCols(false); }
+    else if (B === 'EV15a') { eventHead(); cols = eventCols(true); }
+    else if (B === 'EV8') { tabs = 'Calendar'; period = false; cols = [col([calK])]; }
+    else if (B === 'EV13a') { period = true; hlines = hlines.concat([{ t: 'No events yet. Members create events from Events › New; public ones come here for review.', s: 'margin:0;font-size:13px;font-weight:600;color:' + c.ink }]); hbtns = [{ t: 'New studio event', s: btnS, btn: true, txt: false, al: 'New studio event' }, { t: 'See the public calendar', s: btnS, btn: true, txt: false, al: 'See the public calendar' }];
+      const z = (t) => K({ title: t, rows: [R({ rs: 'display:flex;padding:24px 0;justify-content:center', t: 'No registrations in this period.', ts: 'font-size:13px;color:' + c.mu })] });
+      cols = [col([TL([['Waiting for review', '0', 'nothing waits'], ['Next 30 days', '0', 'events'], ['Registrations', '0', 'this period'], ['Show-up rate', '—', 'No event has ended yet', false, false, false, c.mu]], 4)]), col([z('Registrations and check-ins by week')]), col([z('Events by type')], 2), col([z('Show-up by event')], 2), col([z('Who comes')], 2)]; }
+    else if (B === 'EV13b') { tabs = 'Review'; period = false; cols = [col([K({ cs: CARD + ';align-items:center;text-align:center;padding:40px 26px', glyph: '✓', title: 'Nothing is waiting.', ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800', note: 'A public event lands here when its host submits it.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center' })])]; }
+    else if (B === 'EV14') { const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(w => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w })) });
+      cols = [col([TL(T1.map(x => [x[0], '', 'Reading…']), 4)]), col([TL(T2.map(x => [x[0], '', 'Reading…']), 4)]), col([sk(5)]), col([sk(4)], 3), col([sk(5)], 3)]; }
+    else if (B === 'EV15b') { banner = 'Events could not be read. Nothing here is a zero.';
+      const ur = (t) => K({ cs: CARD + ';border-style:dashed', title: t, meta: 'Could not be read', ms: 'font:700 10.5px ' + MO + ';color:' + c.mu + ';text-transform:uppercase;letter-spacing:.05em' });
+      cols = [col([TL(T1.map(x => [x[0], '—', 'Could not be read', false, false, false, c.mu]), 4)]), col([ur('Registrations and check-ins by week')]), col([ur('Needs attention')], 3), col([ur('Next up')], 3)]; }
+    else if (B === 'EV16') { shell = 'member'; tabs = false; period = false; scope = false; head = false; cols = [col([K({ cs: CARD + ';align-items:center;text-align:center;padding:40px 30px;max-width:520px;margin:120px auto 0;width:100%', glyph: '⊘', title: 'This page is for studio admins.', ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:17px;font-weight:800', note: 'Public events are on the calendar.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center', btns: [{ t: 'See events', s: btnP }, { t: 'Go to your home', s: btnS }], bs: 'display:flex;gap:7px;justify-content:center' })])]; }
+    else if (crop) { head = false; tabs = false; period = false; grid = 'display:flex;flex-direction:column;gap:14px';
+      if (B === 'EV5') cols = [dlgCol(sendDlg)];
+      else if (B === 'EV9a') cols = [dlgCol(capDlg('[66]', '[6] people move off the waitlist, oldest first. Each gets an email.'))];
+      else if (B === 'EV9b') cols = [dlgCol(capDlg('[50]', '[60] seats are already taken. No one loses a seat. New sign-ups join the waitlist.'))];
+      else if (B === 'EV9c') cols = [dlgCol(capDlg('-5', '', 'Use a whole number, 0 or more.'))];
+      else if (B === 'EV10') cols = [dlgCol(cancelDlg)];
+      else if (B === 'EV11a') cols = [dlgCol(unpubDlg)];
+      else if (B === 'EV11b') cols = [dlgCol(featDlg)];
+      else if (B === 'EV12') cols = [col([lineK(true)])];
+      else if (B === 'EV8w') cols = [col([K({ title: 'Week of [9 Nov]', tog: seg(['Month', 'Week', 'List'], 'Week'), note: 'Overlapping events sit side by side.', svg: weekSvg() })])];
+      else if (B === 'EV7g') cols = [col(['ok', 'wait', 'priv'].map((g, i) => K({ eye: ['APPROVED PUBLIC EVENT', 'WAITING FOR REVIEW', 'PRIVATE EVENT'][i], title: false, tags: gate(g) })))];
+      else if (B === 'EV15c') cols = [col([actBar('This studio’s licence is suspended, so approving and featuring are paused until HQ lifts it.'), actBar('This event changed while you were reading it. Reload to see the latest.')])]; }
+    else if (phone) { grid = 'display:flex;flex-direction:column;gap:12px'; period = false; const PG = (blocks) => [{ s: 'display:flex;flex-direction:column;gap:12px;min-width:0', blocks }];
+      if (B === 'EV17a') { period = true; cols = PG([TL(T1.concat(T2), 2), lineK(false, 640), needsK(3)]); }
+      else if (B === 'EV17b') { tabs = 'Review'; cols = PG([K({ title: 'Waiting for review · [3]', tbar: { search: 'Search', chips: [tag('Filters · [0]')] }, rows: QUEUE.map(q => qRow(q, false)), rowsS: 'display:flex;flex-direction:column;gap:4px' })]); }
+      else if (B === 'EV17c') { tabs = false; scope = false; title = '[LP Briefing · Fund I]'; crumb = '‹ Review'; crumbHref = '/admin/events/review'; hlines = []; hpills = [sp('Waiting for review'), typ('LP Briefing')]; hbtns = []; cols = PG([preview, factsK, doesK, clashK]); pbar = [{ t: 'Send back', s: btnS + ';flex:1' }, { t: 'Approve and publish', s: btnP + ';flex:1.4' }]; }
+      else if (B === 'EV17d' || B === 'EV17f') { tabs = 'All events'; cols = PG([K({ cs: PLAIN, tbar: { search: 'Search events', chips: [tag('Filters · [1]')] } }), K({ title: false, rows: EVS.slice(0, 6).map(e => R({ t: e[0], ts: 'font-size:13.5px;font-weight:700', sub: e[4] + ' ' + e[5], ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, tags: [sp(e[6]), word(e[10] + ' / ' + e[9])], act: '⋯', as: BTN + 'width:44px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink })) })]);
+        if (B === 'EV17f') cols = cols.concat([{ s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] }, { s: DLGS + 'position:absolute;left:0;right:0;bottom:0;border-radius:16px 16px 0 0;z-index:4', blocks: capDlg('[66]', '[6] people move off the waitlist, oldest first. Each gets an email.') }]); }
+      else if (B === 'EV17e') { tabs = 'Calendar'; cols = PG([K({ cs: PLAIN, tog: seg(['Month', 'Week', 'List'], 'List'), title: 'November 2026', ths: 'display:flex;justify-content:space-between;align-items:center' }), K({ title: false, rows: [['NOV', '05', 'THU', '[Founder Breakfast · Lisbon]', '08:30 · Networking', 'Published'], ['NOV', '10', 'TUE', '[Office Hours · Legal]', '17:00 · Office Hours', 'Published'], ['NOV', '12', 'THU', '[Demo Day Rehearsal]', '18:30 · Demo Day', 'Published'], ['NOV', '14', 'SAT', '[LP Briefing · Fund I]', '18:30 · LP Briefing · [2] overlap', 'Waiting for review'], ['NOV', '18', 'WED', '[Founder Social · Porto]', '19:00 · Social', 'Cancelled']].map(([m, d, w, t, s, st]) => R({ db: { m, d, w }, t, ts: 'font-size:13.5px;font-weight:700', sub: s, tags: [sp(st)] })) })]); } }
+
+    const SIDES = { admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], member: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'] };
+    const rows = SIDES[shell].map(t => ({ t, href: (shell === 'admin' ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (shell === 'admin' && t === 'Community' ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const TABS = [['Overview', '/admin/events', false], ['Review', '/admin/events/review', '[3]'], ['All events', '/admin/events/all', false], ['Calendar', '/admin/events/calendar', false]];
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) 44px;min-height:900px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed', group: shell === 'admin' ? 'Admin' : '', groupS: 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: shell === 'admin' ? 'HQ-held · axal.vc' : '[Northwind Labs]', badgeS: 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + (shell === 'admin' ? '#334155' : '#7c3aed'),
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:' + c.ink + ';font-size:18px;cursor:pointer',
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills,
+      hbtns: hbtns === 'list' ? (phone ? [] : LIST_BTNS) : hbtns, hlines: hlines.map(l => ({ t: l.t, s: l.s || 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope, scopeS: 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 11px ' + MO + ';color:' + c.mu,
+      gate: gateV, gateS: 'display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:9px 12px;border-radius:10px;background:' + c.card + ';border:1px solid ' + c.hair,
+      tabs: tabs ? TABS.map(([t, href, n]) => ({ t, href, n, sel: t === tabs ? 'true' : 'false', s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabs ? c.vi : 'transparent') + ';color:' + (t === tabs ? c.ink : c.mu) + ';font-weight:' + (t === tabs ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''), tabNS: 'display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE,
+      period: period ? seg(['4 weeks', '12 weeks', '52 weeks'], '12 weeks') : false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner, bannerS: 'display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:10px;background:' + c.negBg + ';border:1px solid ' + c.negE + ';font-size:13px;font-weight:600;color:' + c.neg, bannerI: 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:' + c.neg + ';color:#fff;font:800 11px ' + SG,
+      gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      spine: isShell, spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: 'font:600 11px ' + MO + ';color:' + c.mu, stackS: 'display:flex;gap:2px;height:16px;border-radius:5px;overflow:hidden',
+      factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu,
+      calS: 'display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid ' + c.hair + ';border-left:1px solid ' + c.hair, calH: 'padding:7px 8px;border-right:1px solid ' + c.hair + ';border-bottom:1px solid ' + c.hair + ';background:' + c.raised + ';' + eyeS,
+      ovS: 'display:inline-flex;align-items:center;gap:4px;font:700 10px ' + MO + ';color:' + c.amT, ovD: 'width:7px;height:7px;border-radius:999px;background:#fcd34d;border:1px solid ' + c.amT, moreS: 'font:700 10.5px ' + SG + ';color:' + c.vt,
+      popS: 'position:absolute;top:72px;left:-40px;width:240px;z-index:5;display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:' + c.card + ';border:1px solid ' + c.hair + ';box-shadow:0 16px 40px rgba(24,24,27,.18)', popL: 'font-size:12px;color:' + c.mu,
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT,
+      countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box'
+    };
+    return { v };
+  }
+}
+</script>
+</body>
+</html>

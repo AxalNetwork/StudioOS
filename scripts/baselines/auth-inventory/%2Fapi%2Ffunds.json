@@ -1,0 +1,9 @@
+{
+  "POST /api/funds/lps/:lpId/sign-lpa": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "The LP whose record it is (user_id = caller), KYC approved, records the signature; an admin may too, by design. Another LP in the same fund, a founder, a partner, a revoked advisor and an investor with no LP record get 403; the LP without approved KYC gets 403; nothing is signed; no credentials or a disabled LP get 401. See D4570-p6, hardening items 1 and 2."
+  }
+}

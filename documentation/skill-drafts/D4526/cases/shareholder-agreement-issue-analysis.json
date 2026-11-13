@@ -1,0 +1,42 @@
+{
+  "skill": "shareholder-agreement-issue-analysis",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "document": "SHA-v3",
+        "clauses": {
+          "4": "Transfers require board approval",
+          "9": "Transfers are unrestricted"
+        },
+        "governing_law": null
+      },
+      "cap_table.read": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "SHA-v3",
+      "4",
+      "9"
+    ],
+    "must_say_not_recorded": [
+      "governing law"
+    ],
+    "must_not_include": [
+      "agreement enforceable"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why governing law is missing rather than inventing it.",
+    "Do not assert: agreement enforceable.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "SHA-v3; 4; 9. governing law: Not recorded. Human review required."
+}

@@ -1,0 +1,34 @@
+{
+  "skill": "design-implementation-qa",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Design Implementation QA",
+        "task_scope": "Compares implemented interfaces with approved specifications and records reproducible visual and interaction defects.",
+        "evidence": [
+          "implementation deviation evidence"
+        ],
+        "omitted_field": "viewport evidence"
+      },
+      "github.repos": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for implementation deviation evidence."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "implementation deviation evidence"
+    ],
+    "must_say_not_recorded": [
+      "viewport evidence"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

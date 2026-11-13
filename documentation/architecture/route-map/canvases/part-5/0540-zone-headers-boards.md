@@ -1,0 +1,1 @@
+| Zone Headers · Boards | investor, advisor, partner | — (the board grid: Page, PH0–PH22) | — | as Zone Headers Page | UPGRADE | D1424. The grid imports `Zone Headers Page` by name; its captions and notes are inline in `B(...)` (no `RENAME` or `NOTES` map). Its board → component map is D1424 §4. |

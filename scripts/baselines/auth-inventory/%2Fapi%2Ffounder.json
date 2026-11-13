@@ -1,0 +1,7 @@
+{
+  "GET /api/founder/cadence/starters": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

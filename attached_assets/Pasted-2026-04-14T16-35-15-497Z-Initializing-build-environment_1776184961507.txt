@@ -1,0 +1,311 @@
+2026-04-14T16:35:15.497Z	Initializing build environment...
+2026-04-14T16:36:53.032Z	Success: Finished initializing build environment
+2026-04-14T16:36:53.548Z	Cloning repository...
+2026-04-14T16:36:56.313Z	Restoring from dependencies cache
+2026-04-14T16:36:56.318Z	Restoring from build output cache
+2026-04-14T16:36:57.842Z	Detected the following tools from environment: python@3.11.15, npm@10.9.2, nodejs@22.16.0
+2026-04-14T16:36:57.843Z	Installing python 3.11.15
+2026-04-14T16:36:59.983Z	Success: Dependencies restored from build cache.
+2026-04-14T16:35:15.497Z	Initializing build environment...
+2026-04-14T16:36:53.032Z	Success: Finished initializing build environment
+2026-04-14T16:36:53.548Z	Cloning repository...
+2026-04-14T16:36:56.313Z	Restoring from dependencies cache
+2026-04-14T16:36:56.318Z	Restoring from build output cache
+2026-04-14T16:36:57.842Z	Detected the following tools from environment: python@3.11.15, npm@10.9.2, nodejs@22.16.0
+2026-04-14T16:36:57.843Z	Installing python 3.11.15
+2026-04-14T16:36:59.983Z	Success: Dependencies restored from build cache.
+2026-04-14T16:39:35.952Z	Installing project dependencies: npm clean-install --progress=false
+2026-04-14T16:39:44.555Z	
+2026-04-14T16:39:44.556Z	added 161 packages, and audited 162 packages in 8s
+2026-04-14T16:39:44.556Z	
+2026-04-14T16:39:44.557Z	28 packages are looking for funding
+2026-04-14T16:39:44.557Z	  run `npm fund` for details
+2026-04-14T16:39:44.558Z	
+2026-04-14T16:39:44.558Z	found 0 vulnerabilities
+2026-04-14T16:39:44.658Z	Installing project dependencies: pip install -r requirements.txt
+2026-04-14T16:39:45.557Z	Collecting aiohappyeyeballs==2.6.1 (from -r requirements.txt (line 1))
+2026-04-14T16:39:45.596Z	  Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+2026-04-14T16:39:46.317Z	Collecting aiohttp==3.13.4 (from -r requirements.txt (line 2))
+2026-04-14T16:39:46.324Z	  Downloading aiohttp-3.13.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2026-04-14T16:39:46.357Z	Collecting aiohttp-retry==2.9.1 (from -r requirements.txt (line 3))
+2026-04-14T16:39:46.364Z	  Downloading aiohttp_retry-2.9.1-py3-none-any.whl.metadata (8.8 kB)
+2026-04-14T16:39:46.392Z	Collecting aiosignal==1.4.0 (from -r requirements.txt (line 4))
+2026-04-14T16:39:46.397Z	  Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+2026-04-14T16:39:46.453Z	Collecting alembic==1.18.4 (from -r requirements.txt (line 5))
+2026-04-14T16:39:46.458Z	  Downloading alembic-1.18.4-py3-none-any.whl.metadata (7.2 kB)
+2026-04-14T16:39:46.478Z	Collecting annotated-doc==0.0.4 (from -r requirements.txt (line 6))
+2026-04-14T16:39:46.483Z	  Downloading annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+2026-04-14T16:39:46.503Z	Collecting annotated-types==0.7.0 (from -r requirements.txt (line 7))
+2026-04-14T16:39:46.557Z	  Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-04-14T16:39:46.708Z	Collecting anyio==4.13.0 (from -r requirements.txt (line 8))
+2026-04-14T16:39:46.710Z	  Using cached anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+2026-04-14T16:39:46.746Z	Collecting argon2-cffi==25.1.0 (from -r requirements.txt (line 9))
+2026-04-14T16:39:46.751Z	  Downloading argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)
+2026-04-14T16:39:46.776Z	Collecting argon2-cffi-bindings==25.1.0 (from -r requirements.txt (line 10))
+2026-04-14T16:39:46.780Z	  Downloading argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.4 kB)
+2026-04-14T16:39:46.807Z	Collecting attrs==26.1.0 (from -r requirements.txt (line 11))
+2026-04-14T16:39:46.810Z	  Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-04-14T16:39:46.831Z	Collecting blinker==1.9.0 (from -r requirements.txt (line 12))
+2026-04-14T16:39:46.837Z	  Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+2026-04-14T16:39:46.881Z	Collecting certifi==2026.2.25 (from -r requirements.txt (line 13))
+2026-04-14T16:39:46.885Z	  Using cached certifi-2026.2.25-py3-none-any.whl.metadata (2.5 kB)
+2026-04-14T16:39:47.062Z	Collecting cffi==2.0.0 (from -r requirements.txt (line 14))
+2026-04-14T16:39:47.067Z	  Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+2026-04-14T16:39:47.261Z	Collecting charset-normalizer==3.4.6 (from -r requirements.txt (line 15))
+2026-04-14T16:39:47.268Z	  Downloading charset_normalizer-3.4.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+2026-04-14T16:39:47.274Z	     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40.6/40.6 kB 12.7 MB/s eta 0:00:00
+2026-04-14T16:39:47.435Z	Collecting click==8.3.1 (from -r requirements.txt (line 16))
+2026-04-14T16:39:47.440Z	  Downloading click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+2026-04-14T16:39:47.739Z	Collecting cryptography==46.0.6 (from -r requirements.txt (line 17))
+2026-04-14T16:39:47.744Z	  Downloading cryptography-46.0.6-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (5.7 kB)
+2026-04-14T16:39:47.843Z	Collecting fastapi==0.135.2 (from -r requirements.txt (line 18))
+2026-04-14T16:39:47.847Z	  Downloading fastapi-0.135.2-py3-none-any.whl.metadata (28 kB)
+2026-04-14T16:39:47.886Z	Collecting Flask==3.1.3 (from -r requirements.txt (line 19))
+2026-04-14T16:39:47.891Z	  Downloading flask-3.1.3-py3-none-any.whl.metadata (3.2 kB)
+2026-04-14T16:39:47.988Z	Collecting frozenlist==1.8.0 (from -r requirements.txt (line 20))
+2026-04-14T16:39:47.993Z	  Downloading frozenlist-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+2026-04-14T16:39:48.145Z	Collecting google-api-core==2.30.0 (from -r requirements.txt (line 21))
+2026-04-14T16:39:48.150Z	  Downloading google_api_core-2.30.0-py3-none-any.whl.metadata (3.1 kB)
+2026-04-14T16:39:48.260Z	Collecting google-api-python-client==2.193.0 (from -r requirements.txt (line 22))
+2026-04-14T16:39:48.265Z	  Downloading google_api_python_client-2.193.0-py3-none-any.whl.metadata (7.0 kB)
+2026-04-14T16:39:48.363Z	Collecting google-auth==2.49.1 (from -r requirements.txt (line 23))
+2026-04-14T16:39:48.368Z	  Downloading google_auth-2.49.1-py3-none-any.whl.metadata (6.2 kB)
+2026-04-14T16:39:48.395Z	Collecting google-auth-httplib2==0.3.0 (from -r requirements.txt (line 24))
+2026-04-14T16:39:48.400Z	  Downloading google_auth_httplib2-0.3.0-py3-none-any.whl.metadata (3.1 kB)
+2026-04-14T16:39:48.431Z	Collecting google-auth-oauthlib==1.3.0 (from -r requirements.txt (line 25))
+2026-04-14T16:39:48.437Z	  Downloading google_auth_oauthlib-1.3.0-py3-none-any.whl.metadata (2.9 kB)
+2026-04-14T16:39:48.482Z	Collecting googleapis-common-protos==1.73.1 (from -r requirements.txt (line 26))
+2026-04-14T16:39:48.488Z	  Downloading googleapis_common_protos-1.73.1-py3-none-any.whl.metadata (9.2 kB)
+2026-04-14T16:39:48.689Z	Collecting greenlet==3.3.2 (from -r requirements.txt (line 27))
+2026-04-14T16:39:48.695Z	  Downloading greenlet-3.3.2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+2026-04-14T16:39:48.730Z	Collecting h11==0.16.0 (from -r requirements.txt (line 28))
+2026-04-14T16:39:48.734Z	  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-04-14T16:39:48.784Z	Collecting httpcore==1.0.9 (from -r requirements.txt (line 29))
+2026-04-14T16:39:48.787Z	  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-04-14T16:39:48.820Z	Collecting httplib2==0.31.2 (from -r requirements.txt (line 30))
+2026-04-14T16:39:48.825Z	  Downloading httplib2-0.31.2-py3-none-any.whl.metadata (2.2 kB)
+2026-04-14T16:39:48.875Z	Collecting httpx==0.28.1 (from -r requirements.txt (line 31))
+2026-04-14T16:39:48.881Z	  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-04-14T16:39:48.910Z	Collecting idna==3.11 (from -r requirements.txt (line 32))
+2026-04-14T16:39:48.914Z	  Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+2026-04-14T16:39:48.943Z	Collecting iso8601==2.1.0 (from -r requirements.txt (line 33))
+2026-04-14T16:39:48.948Z	  Downloading iso8601-2.1.0-py3-none-any.whl.metadata (3.7 kB)
+2026-04-14T16:39:48.976Z	Collecting itsdangerous==2.2.0 (from -r requirements.txt (line 34))
+2026-04-14T16:39:48.981Z	  Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+2026-04-14T16:39:49.018Z	Collecting Jinja2==3.1.6 (from -r requirements.txt (line 35))
+2026-04-14T16:39:49.023Z	  Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2026-04-14T16:39:49.058Z	Collecting Mako==1.3.10 (from -r requirements.txt (line 36))
+2026-04-14T16:39:49.065Z	  Downloading mako-1.3.10-py3-none-any.whl.metadata (2.9 kB)
+2026-04-14T16:39:49.164Z	Collecting MarkupSafe==3.0.3 (from -r requirements.txt (line 37))
+2026-04-14T16:39:49.170Z	  Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+2026-04-14T16:39:49.639Z	Collecting multidict==6.7.1 (from -r requirements.txt (line 38))
+2026-04-14T16:39:49.646Z	  Downloading multidict-6.7.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2026-04-14T16:39:49.674Z	Collecting oauthlib==3.3.1 (from -r requirements.txt (line 39))
+2026-04-14T16:39:49.679Z	  Downloading oauthlib-3.3.1-py3-none-any.whl.metadata (7.9 kB)
+2026-04-14T16:39:49.772Z	Collecting propcache==0.4.1 (from -r requirements.txt (line 40))
+2026-04-14T16:39:49.778Z	  Downloading propcache-0.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (13 kB)
+2026-04-14T16:39:49.818Z	Collecting proto-plus==1.27.2 (from -r requirements.txt (line 41))
+2026-04-14T16:39:49.823Z	  Downloading proto_plus-1.27.2-py3-none-any.whl.metadata (2.2 kB)
+2026-04-14T16:39:50.084Z	Collecting protobuf==4.25.9 (from -r requirements.txt (line 42))
+2026-04-14T16:39:50.090Z	  Downloading protobuf-4.25.9-cp37-abi3-manylinux2014_x86_64.whl.metadata (541 bytes)
+2026-04-14T16:39:50.310Z	Collecting psycopg2-binary==2.9.11 (from -r requirements.txt (line 43))
+2026-04-14T16:39:50.315Z	  Downloading psycopg2_binary-2.9.11-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+2026-04-14T16:39:50.352Z	Collecting pyasn1==0.6.3 (from -r requirements.txt (line 44))
+2026-04-14T16:39:50.356Z	  Downloading pyasn1-0.6.3-py3-none-any.whl.metadata (8.4 kB)
+2026-04-14T16:39:50.387Z	Collecting pyasn1_modules==0.4.2 (from -r requirements.txt (line 45))
+2026-04-14T16:39:50.392Z	  Downloading pyasn1_modules-0.4.2-py3-none-any.whl.metadata (3.5 kB)
+2026-04-14T16:39:50.420Z	Collecting pycparser==3.0 (from -r requirements.txt (line 46))
+2026-04-14T16:39:50.422Z	  Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+2026-04-14T16:39:50.633Z	Collecting pycryptodomex==3.23.0 (from -r requirements.txt (line 47))
+2026-04-14T16:39:50.808Z	  Downloading pycryptodomex-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.4 kB)
+2026-04-14T16:39:51.000Z	Collecting pydantic==2.12.5 (from -r requirements.txt (line 48))
+2026-04-14T16:39:51.007Z	  Downloading pydantic-2.12.5-py3-none-any.whl.metadata (90 kB)
+2026-04-14T16:39:51.013Z	     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.6/90.6 kB 23.5 MB/s eta 0:00:00
+2026-04-14T16:39:52.118Z	Collecting pydantic_core==2.41.5 (from -r requirements.txt (line 49))
+2026-04-14T16:39:52.124Z	  Downloading pydantic_core-2.41.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.3 kB)
+2026-04-14T16:39:52.153Z	Collecting PyJWT==2.12.1 (from -r requirements.txt (line 50))
+2026-04-14T16:39:52.158Z	  Downloading pyjwt-2.12.1-py3-none-any.whl.metadata (4.1 kB)
+2026-04-14T16:39:52.178Z	Collecting pyotp==2.9.0 (from -r requirements.txt (line 51))
+2026-04-14T16:39:52.181Z	  Downloading pyotp-2.9.0-py3-none-any.whl.metadata (9.8 kB)
+2026-04-14T16:39:52.230Z	Collecting pyparsing==3.3.2 (from -r requirements.txt (line 52))
+2026-04-14T16:39:52.236Z	  Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+2026-04-14T16:39:52.272Z	Collecting pyseto==1.9.1 (from -r requirements.txt (line 53))
+2026-04-14T16:39:52.276Z	  Downloading pyseto-1.9.1-py3-none-any.whl.metadata (18 kB)
+2026-04-14T16:39:52.304Z	Collecting python-dotenv==1.2.2 (from -r requirements.txt (line 54))
+2026-04-14T16:39:52.309Z	  Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+2026-04-14T16:39:52.335Z	Collecting qrcode==8.2 (from -r requirements.txt (line 55))
+2026-04-14T16:39:52.339Z	  Downloading qrcode-8.2-py3-none-any.whl.metadata (17 kB)
+2026-04-14T16:39:52.375Z	Collecting replit==4.1.2 (from -r requirements.txt (line 56))
+2026-04-14T16:39:52.384Z	  Downloading replit-4.1.2-py3-none-any.whl.metadata (2.6 kB)
+2026-04-14T16:39:52.436Z	Collecting requests==2.33.0 (from -r requirements.txt (line 57))
+2026-04-14T16:39:52.441Z	  Downloading requests-2.33.0-py3-none-any.whl.metadata (5.1 kB)
+2026-04-14T16:39:52.467Z	Collecting requests-oauthlib==2.0.0 (from -r requirements.txt (line 58))
+2026-04-14T16:39:52.473Z	  Downloading requests_oauthlib-2.0.0-py2.py3-none-any.whl.metadata (11 kB)
+2026-04-14T16:39:53.060Z	Collecting SQLAlchemy==2.0.48 (from -r requirements.txt (line 59))
+2026-04-14T16:39:53.066Z	  Downloading sqlalchemy-2.0.48-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-04-14T16:39:53.102Z	Collecting sqlmodel==0.0.37 (from -r requirements.txt (line 60))
+2026-04-14T16:39:53.109Z	  Downloading sqlmodel-0.0.37-py3-none-any.whl.metadata (10 kB)
+2026-04-14T16:39:53.175Z	Collecting starlette==1.0.0 (from -r requirements.txt (line 61))
+2026-04-14T16:39:53.180Z	  Downloading starlette-1.0.0-py3-none-any.whl.metadata (6.3 kB)
+2026-04-14T16:39:53.200Z	Collecting typing-inspection==0.4.2 (from -r requirements.txt (line 62))
+2026-04-14T16:39:53.205Z	  Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-04-14T16:39:53.239Z	Collecting typing_extensions==4.15.0 (from -r requirements.txt (line 63))
+2026-04-14T16:39:53.243Z	  Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-04-14T16:39:53.266Z	Collecting uritemplate==4.2.0 (from -r requirements.txt (line 64))
+2026-04-14T16:39:53.272Z	  Downloading uritemplate-4.2.0-py3-none-any.whl.metadata (2.6 kB)
+2026-04-14T16:39:53.331Z	Collecting urllib3==2.6.3 (from -r requirements.txt (line 65))
+2026-04-14T16:39:53.334Z	  Using cached urllib3-2.6.3-py3-none-any.whl.metadata (6.9 kB)
+2026-04-14T16:39:53.380Z	Collecting uvicorn==0.42.0 (from -r requirements.txt (line 66))
+2026-04-14T16:39:53.384Z	  Downloading uvicorn-0.42.0-py3-none-any.whl.metadata (6.7 kB)
+2026-04-14T16:39:53.427Z	Collecting Werkzeug==3.1.7 (from -r requirements.txt (line 67))
+2026-04-14T16:39:53.433Z	  Downloading werkzeug-3.1.7-py3-none-any.whl.metadata (4.0 kB)
+2026-04-14T16:39:53.805Z	Collecting yarl==1.23.0 (from -r requirements.txt (line 68))
+2026-04-14T16:39:53.809Z	  Downloading yarl-1.23.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+2026-04-14T16:39:53.817Z	     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.6/79.6 kB 23.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.144Z	Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
+2026-04-14T16:39:55.154Z	Downloading aiohttp-3.13.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
+2026-04-14T16:39:55.187Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 61.3 MB/s eta 0:00:00
+2026-04-14T16:39:55.190Z	Downloading aiohttp_retry-2.9.1-py3-none-any.whl (10.0 kB)
+2026-04-14T16:39:55.196Z	Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+2026-04-14T16:39:55.202Z	Downloading alembic-1.18.4-py3-none-any.whl (263 kB)
+2026-04-14T16:39:55.211Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 263.9/263.9 kB 63.8 MB/s eta 0:00:00
+2026-04-14T16:39:55.215Z	Downloading annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+2026-04-14T16:39:55.225Z	Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-04-14T16:39:55.231Z	Using cached anyio-4.13.0-py3-none-any.whl (114 kB)
+2026-04-14T16:39:55.238Z	Downloading argon2_cffi-25.1.0-py3-none-any.whl (14 kB)
+2026-04-14T16:39:55.249Z	Downloading argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (87 kB)
+2026-04-14T16:39:55.257Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 87.1/87.1 kB 24.9 MB/s eta 0:00:00
+2026-04-14T16:39:55.260Z	Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-04-14T16:39:55.265Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 67.5/67.5 kB 27.2 MB/s eta 0:00:00
+2026-04-14T16:39:55.270Z	Downloading blinker-1.9.0-py3-none-any.whl (8.5 kB)
+2026-04-14T16:39:55.274Z	Using cached certifi-2026.2.25-py3-none-any.whl (153 kB)
+2026-04-14T16:39:55.280Z	Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
+2026-04-14T16:39:55.286Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 215.6/215.6 kB 59.7 MB/s eta 0:00:00
+2026-04-14T16:39:55.290Z	Downloading charset_normalizer-3.4.6-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (204 kB)
+2026-04-14T16:39:55.297Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 204.7/204.7 kB 40.7 MB/s eta 0:00:00
+2026-04-14T16:39:55.302Z	Downloading click-8.3.1-py3-none-any.whl (108 kB)
+2026-04-14T16:39:55.308Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 108.3/108.3 kB 34.1 MB/s eta 0:00:00
+2026-04-14T16:39:55.311Z	Downloading cryptography-46.0.6-cp311-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+2026-04-14T16:39:55.397Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 53.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.403Z	Downloading fastapi-0.135.2-py3-none-any.whl (117 kB)
+2026-04-14T16:39:55.410Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 117.4/117.4 kB 27.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.414Z	Downloading flask-3.1.3-py3-none-any.whl (103 kB)
+2026-04-14T16:39:55.421Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 103.4/103.4 kB 26.4 MB/s eta 0:00:00
+2026-04-14T16:39:55.425Z	Downloading frozenlist-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (231 kB)
+2026-04-14T16:39:55.431Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 231.1/231.1 kB 54.0 MB/s eta 0:00:00
+2026-04-14T16:39:55.435Z	Downloading google_api_core-2.30.0-py3-none-any.whl (173 kB)
+2026-04-14T16:39:55.441Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 173.3/173.3 kB 53.2 MB/s eta 0:00:00
+2026-04-14T16:39:55.445Z	Downloading google_api_python_client-2.193.0-py3-none-any.whl (14.9 MB)
+2026-04-14T16:39:55.717Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.9/14.9 MB 51.1 MB/s eta 0:00:00
+2026-04-14T16:39:55.722Z	Downloading google_auth-2.49.1-py3-none-any.whl (240 kB)
+2026-04-14T16:39:55.730Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 240.7/240.7 kB 43.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.735Z	Downloading google_auth_httplib2-0.3.0-py3-none-any.whl (9.5 kB)
+2026-04-14T16:39:55.743Z	Downloading google_auth_oauthlib-1.3.0-py3-none-any.whl (19 kB)
+2026-04-14T16:39:55.750Z	Downloading googleapis_common_protos-1.73.1-py3-none-any.whl (297 kB)
+2026-04-14T16:39:55.757Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 297.6/297.6 kB 63.7 MB/s eta 0:00:00
+2026-04-14T16:39:55.761Z	Downloading greenlet-3.3.2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (594 kB)
+2026-04-14T16:39:55.772Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 594.2/594.2 kB 69.9 MB/s eta 0:00:00
+2026-04-14T16:39:55.774Z	Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-04-14T16:39:55.777Z	Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-04-14T16:39:55.782Z	Downloading httplib2-0.31.2-py3-none-any.whl (91 kB)
+2026-04-14T16:39:55.786Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.1/91.1 kB 33.0 MB/s eta 0:00:00
+2026-04-14T16:39:55.788Z	Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-04-14T16:39:55.791Z	Using cached idna-3.11-py3-none-any.whl (71 kB)
+2026-04-14T16:39:55.799Z	Downloading iso8601-2.1.0-py3-none-any.whl (7.5 kB)
+2026-04-14T16:39:55.806Z	Downloading itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+2026-04-14T16:39:55.812Z	Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+2026-04-14T16:39:55.820Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 134.9/134.9 kB 23.6 MB/s eta 0:00:00
+2026-04-14T16:39:55.825Z	Downloading mako-1.3.10-py3-none-any.whl (78 kB)
+2026-04-14T16:39:55.830Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 78.5/78.5 kB 26.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.834Z	Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+2026-04-14T16:39:55.840Z	Downloading multidict-6.7.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (246 kB)
+2026-04-14T16:39:55.846Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 246.3/246.3 kB 61.2 MB/s eta 0:00:00
+2026-04-14T16:39:55.851Z	Downloading oauthlib-3.3.1-py3-none-any.whl (160 kB)
+2026-04-14T16:39:55.856Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 160.1/160.1 kB 43.2 MB/s eta 0:00:00
+2026-04-14T16:39:55.864Z	Downloading propcache-0.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (210 kB)
+2026-04-14T16:39:55.873Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 210.0/210.0 kB 45.7 MB/s eta 0:00:00
+2026-04-14T16:39:55.878Z	Downloading proto_plus-1.27.2-py3-none-any.whl (50 kB)
+2026-04-14T16:39:55.884Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.5/50.5 kB 15.5 MB/s eta 0:00:00
+2026-04-14T16:39:55.889Z	Downloading protobuf-4.25.9-cp37-abi3-manylinux2014_x86_64.whl (295 kB)
+2026-04-14T16:39:55.899Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 295.2/295.2 kB 39.4 MB/s eta 0:00:00
+2026-04-14T16:39:55.905Z	Downloading psycopg2_binary-2.9.11-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.2 MB)
+2026-04-14T16:39:55.982Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.2/4.2 MB 56.4 MB/s eta 0:00:00
+2026-04-14T16:39:55.987Z	Downloading pyasn1-0.6.3-py3-none-any.whl (83 kB)
+2026-04-14T16:39:55.993Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 84.0/84.0 kB 25.3 MB/s eta 0:00:00
+2026-04-14T16:39:55.999Z	Downloading pyasn1_modules-0.4.2-py3-none-any.whl (181 kB)
+2026-04-14T16:39:56.005Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 181.3/181.3 kB 49.6 MB/s eta 0:00:00
+2026-04-14T16:39:56.006Z	Using cached pycparser-3.0-py3-none-any.whl (48 kB)
+2026-04-14T16:39:56.011Z	Downloading pycryptodomex-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.3 MB)
+2026-04-14T16:39:56.054Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.3/2.3 MB 59.8 MB/s eta 0:00:00
+2026-04-14T16:39:56.059Z	Downloading pydantic-2.12.5-py3-none-any.whl (463 kB)
+2026-04-14T16:39:56.067Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 463.6/463.6 kB 77.2 MB/s eta 0:00:00
+2026-04-14T16:39:56.072Z	Downloading pydantic_core-2.41.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-04-14T16:39:56.111Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 58.6 MB/s eta 0:00:00
+2026-04-14T16:39:56.116Z	Downloading pyjwt-2.12.1-py3-none-any.whl (29 kB)
+2026-04-14T16:39:56.129Z	Downloading pyotp-2.9.0-py3-none-any.whl (13 kB)
+2026-04-14T16:39:56.141Z	Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+2026-04-14T16:39:56.157Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 122.8/122.8 kB 18.5 MB/s eta 0:00:00
+2026-04-14T16:39:56.164Z	Downloading pyseto-1.9.1-py3-none-any.whl (30 kB)
+2026-04-14T16:39:56.176Z	Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+2026-04-14T16:39:56.184Z	Downloading qrcode-8.2-py3-none-any.whl (45 kB)
+2026-04-14T16:39:56.193Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.0/46.0 kB 7.7 MB/s eta 0:00:00
+2026-04-14T16:39:56.200Z	Downloading replit-4.1.2-py3-none-any.whl (30 kB)
+2026-04-14T16:39:56.209Z	Downloading requests-2.33.0-py3-none-any.whl (65 kB)
+2026-04-14T16:39:56.218Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 65.0/65.0 kB 9.4 MB/s eta 0:00:00
+2026-04-14T16:39:56.225Z	Downloading requests_oauthlib-2.0.0-py2.py3-none-any.whl (24 kB)
+2026-04-14T16:39:56.234Z	Downloading sqlalchemy-2.0.48-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (3.3 MB)
+2026-04-14T16:39:56.294Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.3/3.3 MB 58.8 MB/s eta 0:00:00
+2026-04-14T16:39:56.300Z	Downloading sqlmodel-0.0.37-py3-none-any.whl (27 kB)
+2026-04-14T16:39:56.307Z	Downloading starlette-1.0.0-py3-none-any.whl (72 kB)
+2026-04-14T16:39:56.315Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 72.7/72.7 kB 17.3 MB/s eta 0:00:00
+2026-04-14T16:39:56.319Z	Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-04-14T16:39:56.325Z	Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-04-14T16:39:56.330Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 44.6/44.6 kB 13.4 MB/s eta 0:00:00
+2026-04-14T16:39:56.334Z	Downloading uritemplate-4.2.0-py3-none-any.whl (11 kB)
+2026-04-14T16:39:56.339Z	Using cached urllib3-2.6.3-py3-none-any.whl (131 kB)
+2026-04-14T16:39:56.345Z	Downloading uvicorn-0.42.0-py3-none-any.whl (68 kB)
+2026-04-14T16:39:56.350Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 68.8/68.8 kB 23.7 MB/s eta 0:00:00
+2026-04-14T16:39:56.354Z	Downloading werkzeug-3.1.7-py3-none-any.whl (226 kB)
+2026-04-14T16:39:56.360Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 226.3/226.3 kB 55.8 MB/s eta 0:00:00
+2026-04-14T16:39:56.364Z	Downloading yarl-1.23.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (102 kB)
+2026-04-14T16:39:56.370Z	   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 102.7/102.7 kB 27.9 MB/s eta 0:00:00
+2026-04-14T16:39:56.827Z	Installing collected packages: urllib3, uritemplate, typing_extensions, qrcode, python-dotenv, pyparsing, pyotp, PyJWT, pycryptodomex, pycparser, pyasn1, psycopg2-binary, protobuf, propcache, oauthlib, multidict, MarkupSafe, itsdangerous, iso8601, idna, h11, greenlet, frozenlist, click, charset-normalizer, certifi, blinker, attrs, annotated-types, annotated-doc, aiohappyeyeballs, yarl, Werkzeug, uvicorn, typing-inspection, SQLAlchemy, requests, pydantic_core, pyasn1_modules, proto-plus, Mako, Jinja2, httplib2, httpcore, googleapis-common-protos, cffi, anyio, aiosignal, starlette, requests-oauthlib, pydantic, httpx, Flask, cryptography, argon2-cffi-bindings, alembic, aiohttp, sqlmodel, google-auth, fastapi, argon2-cffi, aiohttp-retry, pyseto, google-auth-oauthlib, google-auth-httplib2, google-api-core, replit, google-api-python-client
+2026-04-14T16:40:04.232Z	Successfully installed Flask-3.1.3 Jinja2-3.1.6 Mako-1.3.10 MarkupSafe-3.0.3 PyJWT-2.12.1 SQLAlchemy-2.0.48 Werkzeug-3.1.7 aiohappyeyeballs-2.6.1 aiohttp-3.13.4 aiohttp-retry-2.9.1 aiosignal-1.4.0 alembic-1.18.4 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.13.0 argon2-cffi-25.1.0 argon2-cffi-bindings-25.1.0 attrs-26.1.0 blinker-1.9.0 certifi-2026.2.25 cffi-2.0.0 charset-normalizer-3.4.6 click-8.3.1 cryptography-46.0.6 fastapi-0.135.2 frozenlist-1.8.0 google-api-core-2.30.0 google-api-python-client-2.193.0 google-auth-2.49.1 google-auth-httplib2-0.3.0 google-auth-oauthlib-1.3.0 googleapis-common-protos-1.73.1 greenlet-3.3.2 h11-0.16.0 httpcore-1.0.9 httplib2-0.31.2 httpx-0.28.1 idna-3.11 iso8601-2.1.0 itsdangerous-2.2.0 multidict-6.7.1 oauthlib-3.3.1 propcache-0.4.1 proto-plus-1.27.2 protobuf-4.25.9 psycopg2-binary-2.9.11 pyasn1-0.6.3 pyasn1_modules-0.4.2 pycparser-3.0 pycryptodomex-3.23.0 pydantic-2.12.5 pydantic_core-2.41.5 pyotp-2.9.0 pyparsing-3.3.2 pyseto-1.9.1 python-dotenv-1.2.2 qrcode-8.2 replit-4.1.2 requests-2.33.0 requests-oauthlib-2.0.0 sqlmodel-0.0.37 starlette-1.0.0 typing-inspection-0.4.2 typing_extensions-4.15.0 uritemplate-4.2.0 urllib3-2.6.3 uvicorn-0.42.0 yarl-1.23.0
+2026-04-14T16:40:04.389Z	
+2026-04-14T16:40:04.389Z	[notice] A new release of pip is available: 24.0 -> 26.0.1
+2026-04-14T16:40:04.389Z	[notice] To update, run: pip3 install --upgrade pip
+2026-04-14T16:40:06.421Z	Reshimming asdf python...
+2026-04-14T16:40:07.922Z	Executing user build command: cd cloudflare-worker && npm install
+2026-04-14T16:40:12.999Z	
+2026-04-14T16:40:12.999Z	added 86 packages, and audited 87 packages in 5s
+2026-04-14T16:40:12.999Z	
+2026-04-14T16:40:12.999Z	16 packages are looking for funding
+2026-04-14T16:40:12.999Z	  run `npm fund` for details
+2026-04-14T16:40:13.000Z	
+2026-04-14T16:40:13.000Z	found 0 vulnerabilities
+2026-04-14T16:40:13.036Z	Success: Build command completed
+2026-04-14T16:40:13.204Z	Executing user deploy command: cd cloudflare-worker && npx wrangler deploy
+2026-04-14T16:40:15.245Z	
+2026-04-14T16:40:15.246Z	 ⛅️ wrangler 4.81.1 (update available 4.82.2)
+2026-04-14T16:40:15.246Z	─────────────────────────────────────────────
+2026-04-14T16:40:16.168Z	Total Upload: 641.73 KiB / gzip: 111.22 KiB
+2026-04-14T16:40:18.480Z	Worker Startup Time: 31 ms
+2026-04-14T16:40:18.481Z	Your Worker has access to the following bindings:
+2026-04-14T16:40:18.481Z	Binding                                                       Resource                  
+2026-04-14T16:40:18.481Z	env.TOKENS (8dc26ed83d154d0ebbfcbc51f592d67c)                 KV Namespace              
+2026-04-14T16:40:18.482Z	env.RATE_LIMITS (be811f14b6f342be961b8daa4513fb5b)            KV Namespace              
+2026-04-14T16:40:18.482Z	env.SEND_EMAIL (unrestricted)                                 Send Email                
+2026-04-14T16:40:18.482Z	env.DB (studioos-db)                                          D1 Database               
+2026-04-14T16:40:18.482Z	env.APP_URL ("https://axal.vc")                               Environment Variable      
+2026-04-14T16:40:18.482Z	env.GITHUB_REPO_OWNER ("AxalNetwork")                         Environment Variable      
+2026-04-14T16:40:18.483Z	env.GITHUB_REPO_NAME ("StudioOS")                             Environment Variable      
+2026-04-14T16:40:18.484Z	
+2026-04-14T16:40:18.485Z	Uploaded studioos (2.77 sec)
+2026-04-14T16:40:19.751Z	Deployed studioos triggers (1.27 sec)
+2026-04-14T16:40:19.751Z	  https://studioos.guillaumelauzier.workers.dev
+2026-04-14T16:40:19.751Z	Current Version ID: 76ad991e-3730-4049-9873-48d25abf0dc3
+2026-04-14T16:40:19.755Z	
+2026-04-14T16:40:19.756Z	Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
+2026-04-14T16:40:19.873Z	Success: Deploy command completed
+2026-04-14T16:40:19.876Z	Skipping build output cache as it's not supported for your project
+2026-04-14T16:40:20.037Z	✨ Success! Build completed.

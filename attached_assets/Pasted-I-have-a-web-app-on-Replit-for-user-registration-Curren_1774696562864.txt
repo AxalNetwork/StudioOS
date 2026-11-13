@@ -1,0 +1,33 @@
+I have a web app on Replit for user registration. Currently, users fill in Full Name, Email, and Role on a form, click Continue, and it goes straight to a TOTP authenticator setup screen (QR code + secret key). The whole app is passwordless and uses TOTP for secure login.
+
+I want to add an email verification step to prevent someone from using someone else's email address. 
+
+Please modify the registration flow like this:
+
+1. After the user submits the form (name, email, role), create a pending user in the database.
+2. Generate a secure, time-limited verification token (e.g. random UUID or crypto-secure string, expires in 24 hours).
+3. Send an email to the provided address with a clickable verification link like: https://your-replit-app-url/verify-email?token=SECURE_TOKEN
+4. Show a nice screen saying: "We've sent a confirmation email to [email]. Please click the link inside to verify your email and continue."
+5. When the user clicks the link:
+   - Verify the token on the backend.
+   - If valid, mark the email as verified.
+   - Redirect the user to the existing TOTP setup page (QR code screen).
+   - If invalid or expired, show an error and option to resend.
+
+Keep the app fully passwordless. Do not add passwords.
+
+Use a good email sending method that works well on Replit (like Resend, SendGrid, or Replit's built-in options). Add the necessary environment variables for the API key.
+
+Also add:
+- A resend verification email button on the pending screen.
+- Basic rate limiting (max 3 resends per hour per email).
+- Store emailVerified boolean and verification token (hashed) in the user model.
+- Protect the TOTP setup route so it only shows after email verification.
+
+Please generate the updated code files, including routes, database schema changes (if using something like SQLite, Prisma, or Mongo), email template, and any new frontend screens.
+
+My current tech stack is: [tell Replit what you're using, e.g. Node.js + Express + EJS, or Python + Flask, etc.]
+
+Make it clean, secure, and match the existing Axal Ventures design (purple buttons, clean UI).
+
+Start by showing me the new flow step-by-step, then provide the code changes.

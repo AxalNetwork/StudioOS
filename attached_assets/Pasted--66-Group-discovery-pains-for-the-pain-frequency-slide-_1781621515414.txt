@@ -1,0 +1,40 @@
+#66 - Group discovery pains for the pain-frequency slide
+What & Why
+In the Pitch Deck builder, the Axal VC Spin-Out deck's Slide 2 ("PAIN FREQUENCY ACROSS INTERVIEWS") shows ranked pain rows — each with a title, a frequency percentage, and an interview count (e.g. "Stale data at decision time — 86% — 36 / 42"). The founder expects these titles, percentages, and counts to come automatically from their logged Customer Discovery pain points, grouped into meaningful themes, with the system suggesting consistent pain titles while they log interviews — and with the ability to enter or override pains manually.
+Today three gaps break this:
+1. Builder preview shows placeholder data. The builder renders the deck with the template's static BASEPOINT sample (the exact "Stale data at decision time / 86% / 36 / 42" rows the founder is looking at), not their real logged pains. The exported/print deck already derives pains from real interviews, but the founder never sees their true numbers while editing.
+2. Grouping is naive. Pains are clustered only by exact normalized-string match, so "stale data at decision time" and "data is stale when we decide" count as two separate one-mention themes. Free-text pains entered per interview almost never match exactly, so the chart fragments into many low-count rows instead of a few high-frequency grouped pains.
+3. No suggestions and no manual control. When logging an interview's pains, the founder gets no suggestions, so they type inconsistent labels (which defeats grouping). There is no way to manually define, rename, merge, or override the pain groups/titles that drive the slide.
+Done looks like
+* Opening the Spin-Out deck in the builder shows Slide 2 pain rows derived from the founder's real logged discovery pains — titles, percentages, and "n / total" counts reflect actual data and update as more interviews are logged. A founder with no logged pains sees an honest empty/placeholder state, not the BASEPOINT sample.
+* Similar pains logged across interviews are grouped under a single shared pain title, so the chart shows a few meaningful high-frequency themes rather than many fragmented one-off rows.
+* While logging an interview's pains in Customer Discovery, the founder is offered auto-suggested pain titles (drawn from already-used pain groups for the project) so they can reuse a consistent label with one tap instead of retyping.
+* The founder can still enter a brand-new pain freely, and can manually adjust the grouping — rename a pain group, or correct which group a pain belongs to — so the slide reflects their intended framing rather than only the automatic clustering.
+* Exported PPTX/PDF and the share/print view show the same grouped, live pain data as the builder (no regression).
+Out of scope
+* Other slides' data (cover validation-signal chart is its own effort; only touch the problem/pain slide here). Reuse — do not duplicate — any live-data merge the cover-chart effort introduces.
+* Redesigning the Slide 2 layout or visual style — keep the existing bar look and the "PAIN FREQUENCY ACROSS INTERVIEWS" label.
+* AI/semantic clustering of pains is optional; a deterministic normalized-match + founder-curated grouping is sufficient. Do not add a paid AI dependency just for this.
+* Changing the rest of the Customer Discovery interview model beyond what pain grouping/suggestions require.
+Steps
+1. Group pains into themes properly. Replace the exact-string-only clustering with a grouping layer that maps each logged pain to a shared pain group/title, so the slide's pain rows are a few meaningful high-frequency themes. Persist group assignments per project so grouping is stable and editable rather than recomputed blindly each time.
+2. Suggest pain titles while logging. In the Customer Discovery interview-logging UI, offer typeahead/suggestion of existing pain group titles for the project as the founder enters pains, while still allowing a new free-text pain. Reusing a suggestion assigns the pain to that group.
+3. Manual grouping control. Give the founder a way to rename a pain group and reassign a pain to a different (or new) group, so they can override the automatic grouping that feeds the slide.
+4. Bind the slide to live grouped data in the builder. Make the builder's Slide 2 render the live grouped pain rows (titles, percentages, "n / total" counts) instead of the static sample, mirroring how the export/print path already consumes the live bundle. Show an honest empty state when there are no pains yet.
+5. Keep export/share/print consistent and checks green. Confirm the exported PPTX/PDF and share/print view render the same grouped live data. This is a data-binding + grouping change, not a deck-copy change — keep the visible template strings and any drift/copy assertions in sync, and run the drift check. Update both changelogs for this user-facing change.
+Relevant files
+* frontend/src/pages/CustomerDiscoveryPage.jsx
+* frontend/src/pages/DiscoveryPage.jsx
+* frontend/src/lib/api.js
+* frontend/src/pages/PitchDeckPage.jsx:197-225
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:387-419
+* frontend/src/decks/spinout/deckData.js:96-109
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:656-698,869-885,1076
+* cloudflare-worker/src/services/decks/spinoutDeckData.ts:270-312
+* cloudflare-worker/src/routes/progress.ts
+* cloudflare-worker/src/services/discoveryInterviewSchema.ts
+* backend/app/api/routes/projects.py
+Dependencies
+Make the Spin-Out cover chart show real logged discovery interviews
+
+Open task

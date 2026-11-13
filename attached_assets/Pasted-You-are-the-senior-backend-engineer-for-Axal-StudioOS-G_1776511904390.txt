@@ -1,0 +1,63 @@
+You are the senior backend engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (D1 database with all tables, async job queue + background workers, Replit Auth, RBAC middleware, Partner Dashboard, Refer & Earn, Pipeline Board, decision gates, spin-out automation, Legal/Capital Engine, VC Fund core, liquidity/exits, integrations, monitoring, etc.).
+
+The current main.py is still a minimal stub. Replace it completely with a proper **FastAPI application using organized routers + full event-driven architecture**.
+
+Exact requirements:
+
+1. **Project Structure**
+   - Create folder `backend/routers/` (if not exists)
+   - Move or create dedicated router files:
+     - auth.py
+     - pipeline.py
+     - spinout.py
+     - capital.py
+     - liquidity.py
+     - referral.py
+     - fund.py
+     - integrations.py
+     - monitoring.py
+     - dashboard.py (for aggregated data)
+     - admin.py
+   - Keep models/ and jobs/ folders as they are.
+
+2. **main.py (complete replacement)**
+   - Create a production-ready FastAPI app:
+     - FastAPI(title="Axal StudioOS", version="1.0")
+     - Include all routers with proper prefixes (/api/auth, /api/pipeline, etc.)
+     - Add CORS middleware (allow axal.vc and localhost)
+     - Add existing RateLimitMiddleware and ObservabilityMiddleware
+     - Add startup event: initialize job queue worker and any background tasks
+     - Add shutdown event: graceful cleanup
+     - Mount Replit Auth callback route
+     - Global exception handler with structured JSON errors
+
+3. **Event-Driven Architecture**
+   - Create `backend/events.py` with an event bus (simple pub/sub using Python’s asyncio or a lightweight dispatcher).
+   - Define key domain events:
+     - DecisionGatePassed, SpinoutReady, MetricsUpdated, SyndicateCreated, LiquidityListed, ExitExecuted, etc.
+   - On key events (e.g. after a decision gate is approved), automatically:
+     - Enqueue the corresponding job via the existing job queue (spinout_execute, capital_call, liquidity_match, returns_distribution, etc.)
+     - Trigger any side effects (notifications, activity log, AI scoring)
+   - Update all routers to emit events instead of doing work synchronously (use the enqueue_job helper).
+
+4. **Router Best Practices**
+   - Every router uses APIRouter()
+   - Proper dependency injection for current_user (RBAC)
+   - All heavy operations delegate to the job queue (non-blocking)
+   - Consistent response models with Pydantic
+   - Clear tags for Swagger docs
+
+5. **Security & Production**
+   - Keep all existing middleware (RBAC, rate limiting, observability)
+   - Add trusted-hosts and security headers
+   - Use lifespan for startup/shutdown instead of deprecated @app.on_event
+
+Build this step-by-step:
+1. First create the backend/routers/ folder structure and move/create all individual routers.
+2. Then completely replace main.py with the full FastAPI app + middleware + events.
+3. Then implement backend/events.py and wire up event-driven job enqueuing in all routers.
+4. Finally test all existing endpoints still work and that events trigger jobs correctly.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

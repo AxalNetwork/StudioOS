@@ -1,0 +1,86 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, D1 tables for users (with roles/kyc_status), referrals, commissions, payouts, deals/projects, user_preferences, and match_scores from previous builds. We also have RBAC middleware and Replit AI integration.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete **Studio Ops / Shared Services Automation** covering strategic oversight, finance, HR, legal, and compliance workflows with these exact requirements:
+
+1. **Database Models (new D1 tables)**  
+   Create these tables (with proper indexes, foreign keys, and timestamps):
+   - `workflows`
+     • id (PK)
+     • type (text: 'strategic', 'finance', 'hr', 'legal', 'compliance')
+     • title (text)
+     • description (text)
+     • status (text: 'draft', 'active', 'completed', 'archived')
+     • project_id (FK to deals.id, optional)
+     • owner_user_id (FK to users.id)
+     • created_at, updated_at
+   - `workflow_tasks`
+     • id (PK)
+     • workflow_id (FK)
+     • title (text)
+     • description (text)
+     • assigned_to (FK to users.id, optional)
+     • status (text: 'todo', 'in_progress', 'review', 'done')
+     • due_date (timestamp)
+     • ai_assisted (boolean)
+     • metadata (json)
+   - `shared_services_log`
+     • id (PK)
+     • workflow_id (FK)
+     • action_type (text)
+     • details (json)
+     • performed_by (FK to users.id)
+     • created_at
+
+2. **Workflow Templates**  
+   Pre-seed these Studio Ops templates on first run:
+   - Strategic Oversight: Decision Gate Review, Traction & Metrics Review
+   - Finance: Budget Allocation, Cap Table Update, Invoice Generation
+   - HR: Team Onboarding, Performance Review
+   - Legal: IP Licensing/Transfer, Equity Allocation, SAFE Contract
+   - Compliance: KYC Reminder, Audit Trail Export
+
+3. **Automation & AI Features (use existing Replit AI)**  
+   - When a deal reaches 'traction_review' or 'spinout_ready', auto-create relevant workflows (e.g. legal + finance).
+   - Use Replit AI helper to:
+     • Generate strategic recommendations (e.g. "Based on metrics, recommend continue/iterate/spin-out")
+     • Auto-fill task descriptions or compliance checklists
+     • Summarize finance/HR reports
+   - Trigger automations via backend events (simple polling or on-demand endpoints).
+
+4. **Backend Endpoints (add to main.py)**  
+   - GET /api/studioops/workflows (filter by type, status, project_id)
+   - POST /api/studioops/workflows (create new workflow, RBAC: operator/advisor/admin only)
+   - POST /api/studioops/tasks (add/update task)
+   - GET /api/studioops/strategic-review (AI-powered metrics summary + recommendation for a deal)
+   - POST /api/studioops/execute-template (e.g. /legal/ip-transfer)
+   - All endpoints protected by existing RBAC middleware (different roles see different views).
+
+5. **Frontend**  
+   - New page /studio-ops.html (main Studio Ops dashboard)
+   - Kanban-style board with columns by workflow type (Strategic | Finance | HR | Legal | Compliance)
+   - Clickable cards that open task lists + AI assistant sidebar
+   - Strategic Oversight tab: live metrics from deals table + AI-generated recommendation button
+   - Shared Services portal: quick actions for common tasks (e.g. “Generate Equity Split”)
+   - Use fetch() and dynamic updates; reuse existing UI components where possible.
+
+6. **Security & Best Practices**  
+   - RBAC: Only 'operator', 'advisor', or 'admin' can create/edit workflows; all KYC-approved users can view shared services.
+   - Audit logging via shared_services_log.
+   - Rate limit AI calls.
+   - Use Replit Secrets for any future external service keys.
+   - Keep workflows lightweight (no heavy BPMN yet).
+
+Build this step-by-step:  
+1. First create the new D1 tables and run a migration/seed script for templates.  
+2. Then implement the core workflow + task CRUD endpoints.  
+3. Then add the Replit AI automation helpers and strategic review logic.  
+4. Then build the frontend Studio Ops dashboard and Kanban view.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

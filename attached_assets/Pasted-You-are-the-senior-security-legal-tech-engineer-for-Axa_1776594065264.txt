@@ -1,0 +1,46 @@
+You are the senior security + legal-tech engineer for Axal StudioOS. Implement a complete, highly secure, private DocuSign-like e-signature system using only the current infrastructure (R2, D1, Workers, Durable Objects, KV).
+
+Exact requirements:
+
+1. **R2 Integration**
+   - Use the existing R2 bucket (axal-kyc-documents or create axal-legal-docs if needed).
+   - Store original PDFs and final signed PDFs (with embedded signatures).
+
+2. **Database**
+   - Create / update table `esign_documents`:
+     - id, deal_id or subsidiary_id, document_type (SAFE, IP_License, Equity_Agreement, etc.)
+     - original_r2_key, signed_r2_key
+     - status (draft, sent, partially_signed, completed, rejected)
+     - audit_log (json array of {timestamp, signer_id, action, ip})
+     - created_at, completed_at
+
+3. **Signing Flow**
+   - Backend endpoint: POST /api/legal/esign/send → generate short-lived signed URLs for each recipient
+   - Recipient opens link → sees document → click-to-sign or draw signature (HTML Canvas)
+   - On completion: merge signatures into PDF, save final version to R2, update status in D1, trigger returns/capital events if applicable
+
+4. **Real-time (Durable Objects)**
+   - Use existing Durable Objects (or create a new SigningSession) for live multi-signer coordination if needed.
+
+5. **Frontend**
+   - Add e-signature modal in Legal & Capital and Spin-Out flows.
+   - Show document preview + signature pad.
+   - Add "View Signed Document" button with temporary signed URL.
+
+6. **Security & Compliance**
+   - All access via short-lived signed R2 URLs (15 minutes max).
+   - Full immutable audit trail in D1.
+   - Zero Trust protection on all /api/legal/esign routes.
+   - Log every access attempt to activity_logs.
+   - Include IP address, timestamp, and signer identity in audit log.
+
+Build this step-by-step:
+1. First update wrangler.toml (if needed) and create the esign_documents D1 table.
+2. Then create backend/legal_esign.py with all helpers (send, sign, audit).
+3. Then add the necessary API endpoints in the legal router.
+4. Then build the frontend signature modal and integrate it into Legal & Capital / Spin-Out pages.
+5. Finally test end-to-end (generate a SAFE → send for signature → complete signing → verify final PDF in R2).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

@@ -1,0 +1,33 @@
+#19 - Resolve open Dependabot PRs
+What & Why
+There are 7 open Dependabot dependency-bump PRs (#61–#67) on AxalNetwork/StudioOS, all targeting main. All are currently mergeable with no conflicts and no blocking CI checks. They are minor/patch bumps across the monorepo's four package manifests. Resolve them so the repo's dependencies are current and the PR queue is clear.
+The PRs
+* #61 frontend (react group): react/react-dom 19.2.6→19.2.7, react-router-dom 7.15.1→7.16.0
+* #62 cloudflare-worker (worker group): @cloudflare/workers-types 4.20260525.1→4.20260601.1, wrangler 4.94.0→4.96.0
+* #63 frontend (build group): vite 8.0.14→8.0.16
+* #64 frontend (runtime group): fuse.js 7.3.0→7.4.0, lucide-react 1.16.0→1.17.0
+* #65 frontend: react-is 19.2.6→19.2.7
+* #66 root (root-npm group, 8 updates): aggregate of the frontend + worker bumps above, applied to the root package.json/package-lock.json
+* #67 backend (python group): idna 3.16→3.17, starlette 1.1.0→1.2.1
+Done looks like
+* All four package manifests on main carry the bumped versions: root package.json/package-lock.json, frontend/package.json/package-lock.json, cloudflare-worker/package.json/package-lock.json, and requirements.txt.
+* npm run typecheck, npm run build, and npm run test:drift all pass.
+* npm audit --omit=dev --audit-level=high (frontend + worker) and pip-audit (backend) report no new high/critical CVEs.
+* All 7 PRs are closed or merged on GitHub (none left open).
+Out of scope
+* Major-version upgrades or any dependency not already proposed by these PRs.
+* Refactors to accommodate new APIs unless a bump breaks the build (in which case, fix the minimal call sites or hold that single bump back and note it).
+Steps
+1. Apply the bumps locally — Because #61/#63/#64/#65/#66 all touch overlapping frontend/root lockfiles, don't merge them one-by-one (each merge breaks the next). Instead bring main up to all the target versions in one pass: update each package.json / requirements.txt to the versions listed above and regenerate the three package-lock.json files plus the python deps so the lockfiles are internally consistent.
+2. Verify green — Run npm run typecheck, npm run build, npm run test:drift, the frontend + worker npm audit, and pip-audit. If any single bump breaks the build/typecheck, fix the minimal call site; if it can't be made green cheaply, hold that one bump back at its current version and call it out explicitly rather than shipping red.
+3. Close out the PRs — Once main carries the new versions and is green, merge or close all 7 Dependabot PRs so the queue is empty. If merging directly, expect to merge one and let the rest auto-close as their changes become redundant, or close them as superseded by the consolidated update.
+4. Changelog — These are dependency-only bumps with no user-facing behavior change, so no CHANGELOG-user.md entry is needed; add a one-line technical note to CHANGELOG.md if that's the repo convention.
+Relevant files
+* package.json
+* package-lock.json
+* frontend/package.json
+* frontend/package-lock.json
+* cloudflare-worker/package.json
+* cloudflare-worker/package-lock.json
+* requirements.txt
+* CHANGELOG.md

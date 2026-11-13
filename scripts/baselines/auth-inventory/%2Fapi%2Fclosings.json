@@ -1,0 +1,16 @@
+{
+  "GET /api/closings/company-receiving-accounts/:projectId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "The company's primary-admin founder and an invited investor with a live commitment of their own on the venture read the masked instructions (scopeFor, bound to the caller). Another venture's founder or investor, a co-founder who does not administer the company, an investor whose commitment was withdrawn, an admin and the Super Admin get the same 404 a missing venture gets; a support session gets 403; no credentials or a disabled party get 401."
+  },
+  "POST /api/closings/company-receiving-accounts/:projectId/reveal": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Only an investor whose own line on the open closing has a completed envelope they signed sees the full number, and the reveal row is written before it is shown. A non-party, a withdrawn investor, an admin and the Super Admin get the 404 a missing venture gets; a party naming another investor's line, their own unsigned line or a line on another deal, and the founder, get 403 with no row written; a support session gets 403; no credentials or a disabled party get 401."
+  }
+}

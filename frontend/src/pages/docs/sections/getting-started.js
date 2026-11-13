@@ -1,0 +1,219 @@
+export default {
+  id: 'getting-started',
+  title: 'Getting Started',
+  icon: 'Compass',
+  subsections: [
+    {
+      id: 'what-is-studioos',
+      title: 'What is StudioOS',
+      overview:
+        "StudioOS is the operating system Axal VC uses to take a startup from a rough idea to an incorporated, funded company. You'll find every tool you need — discovery, roadmap, brand, deck, cap table, capital, legal, and the network — under one roof, organized by what you're trying to do this week.",
+      howto: [
+        'Sign in and pick the role that fits you (Founder, Investor, Partner, or Advisor).',
+        'Use the left sidebar groups to find features by phase: Build, Validate & Grow, Capital & Finance, Legal, Network.',
+        'Open the Quick Search at the top of the sidebar (or press Ctrl/Cmd-K) to jump anywhere in the app.',
+      ],
+      tips: [
+        'You can change your role view later in Settings → Profile if you wear more than one hat.',
+        'The dashboard widgets re-order based on the role and tier you’re on, so your first-screen experience is tailored.',
+      ],
+      pitfalls: [
+        'Bookmarking a deep link before signing in lands you on the login page; sign in first, then re-open the link.',
+        'If the sidebar looks shorter than expected, you may be in a “View as” mode — exit it from the violet bar at the top.',
+      ],
+      related: [
+        { label: 'Account roles explained', href: '#getting-started/roles' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
+      ],
+    },
+    {
+      id: 'choosing-path',
+      title: 'Choosing your path: Spin-Out Lab vs. Existing Company',
+      overview:
+        "If you're starting from a hypothesis or a partner-supplied idea, the 28-day Spin-Out Lab walks you through validation, design, and incorporation in four guided weeks. If you already have a company and just want to use the tooling (cap table, fundraising, partner network, advisors), pick the Existing Company path instead.",
+      howto: [
+        'On first sign-in, the Onboarding wizard asks where you are in your journey.',
+        'Pick "Spin-Out Lab" to enter the 4-week sprint with a locked, week-by-week feature tree.',
+        'Pick "Existing Company" to land in Studio with full founder tooling.',
+        'You can re-enter the lab any time from Studio → Spin-Out Lab.',
+      ],
+      tips: [
+        'The lab gates features per week to keep you focused; Studio is open-ended.',
+        'You can graduate the lab early by completing each week’s milestones — the system auto-exits when Week 4 is done.',
+      ],
+      pitfalls: [
+        'Starting the lab with an already-incorporated company can confuse the cap-table seeding step — pick the Existing Company path instead.',
+        'Switching paths mid-flight preserves your data but the sidebar will reshape; finish the current week before changing.',
+      ],
+      related: [
+        { label: 'Spin-Out Lab overview', href: '#spin-out-lab/overview' },
+        { label: 'Spin-Out Lab', href: '#spin-out-lab/overview' },
+      ],
+    },
+    {
+      id: 'roles',
+      title: 'Account roles explained',
+      overview:
+        "Every account has one of five roles: Founder, Investor, Partner (service provider), Advisor, or Admin. Your role decides which sidebar groups you see, which dashboards open by default, and which features are gated to you.",
+      howto: [
+        'Founder — applying or running a startup; full access to Build, Validate & Grow, and Capital tools.',
+        'Investor — limited partner or co-investor; sees the Investor Portal, Pipeline, and Portfolio Health.',
+        'Partner — service provider; lists services in the Marketplace, responds to Needs Board RFPs, runs Office Hours.',
+        'Advisor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
+        'Admin — studio operator; sees everything plus the admin pages and a “View as” role switcher.',
+      ],
+      tips: [
+        'A role change requires admin approval today — open a support ticket if you need one.',
+        'Admins can impersonate any user from All accounts, under Accounts, for support and debugging.',
+      ],
+      pitfalls: [
+        'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',
+        'Investor accounts cannot create startups — only Founder and Admin roles can.',
+      ],
+      related: [
+        { label: 'Settings → Profile', href: '#account/settings-overview' },
+        { label: 'Settings', href: '#account/settings-overview' },
+      ],
+    },
+    {
+      id: 'personas',
+      title: 'Personas (New Founder, Existing Company, Investor, Advisor)',
+      overview:
+        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors have six segments: LP — Individual, LP — Institutional, GP — External Fund, Angel / Scout, Corporate VC, and Sovereign / Family Office. Advisors can choose Operator / Advisor; Service Provider maps to Operating Partner, and Academic / Lab and Press / Analyst map to Explorer. A segment does not change your account profile.",
+      howto: [
+        'During onboarding, pick the persona that matches what you’re doing this quarter.',
+        'Re-open Settings → Profile → Re-run onboarding to switch personas later.',
+        'Your persona is what the Personal Advisor uses to pick its opening question bank.',
+      ],
+      tips: [
+        'Persona is independent of subscription tier — switching personas does not change your billing.',
+        'New Founder persona unlocks Spin-Out Lab nudges; Existing Company hides them.',
+      ],
+      pitfalls: [
+        'If the Advisor opens with the wrong question set, your persona is the likely cause — switch in Settings.',
+        'Switching personas does not retroactively change quick-action history; only the next session is affected.',
+      ],
+      related: [
+        { label: 'Personal Advisor', href: '#getting-started/personal-advisor' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
+      ],
+    },
+    {
+      id: 'onboarding',
+      title: 'Onboarding walkthrough',
+      overview:
+        "Onboarding takes 4–8 questions tailored to your role. Your answers seed your dashboard, scoring inputs (founders), commitment terms (investors), or service catalog entries (partners). You can skip optional steps and return later.",
+      howto: [
+        'Pick your persona — the wizard branches based on the answer.',
+        'Answer the 4–8 role-specific questions (industry, stage, goals, time commitment).',
+        'Confirm your timezone and preferred locale.',
+        'Land on your role’s dashboard with personalized cards and a “Next steps” checklist.',
+      ],
+      tips: [
+        'You can re-run onboarding any time from Settings → Profile → Re-run onboarding.',
+        'Onboarding answers also drive the Advisor Match and Partner Match algorithms.',
+      ],
+      pitfalls: [
+        'Skipping the timezone step makes calendar invites land in UTC — set it before booking your first session.',
+        'Partial onboarding leaves your dashboard generic; finish the wizard for the personalized layout.',
+      ],
+      related: [
+        { label: 'Inviting your team', href: '#getting-started/invite-team' },
+        { label: 'Settings overview', href: '#account/settings-overview' },
+      ],
+    },
+    {
+      id: 'invite-team',
+      title: 'Inviting your team',
+      overview:
+        "Bring co-founders, advisors, and team members into your startup so they can collaborate on the cap table, roadmap, and customer discovery.",
+      howto: [
+        'Open Startups, choose your startup, and go to the Members tab.',
+        'Click "Invite member", enter their email, and pick their role on the startup.',
+        'They receive an email invite valid for 7 days; accepting it creates their account if they don’t have one yet.',
+      ],
+      tips: [
+        'Co-founder invites should use the Cofounder Match → Cofounder Agreement flow rather than a plain invite — it captures equity split and vesting at the same time.',
+        'Advisor invites can be limited to read-only access to the deck, financial model, and metrics.',
+      ],
+      pitfalls: [
+        'Invites expire after 7 days — re-send if it’s been longer.',
+        'Adding a co-founder via plain invite skips the equity-split capture; back-fill it on the cap table or via the Cofounder Agreement.',
+      ],
+      related: [
+        { label: 'Co-founder Match', href: '#validate-grow/cofounder-match' },
+        { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
+      ],
+    },
+    {
+      id: 'help-and-shortcuts',
+      title: 'Getting help & keyboard shortcuts',
+      overview:
+        "Need a hand? Open Eadwyn in the product to ask questions and reach the right workflow. Eadwyn does not receive blanket access to private startup records: the context available depends on the connected surface, your current company, permissions and any records explicitly shared. Ctrl/Cmd-K opens the navigation search.",
+      howto: [
+        'Open Eadwyn from the supported product surface and check which company, record or connected source is currently in scope.',
+        'For tracked support, use Help → Your tickets; do not include private records or security vulnerabilities in ordinary tickets.',
+        'Press Ctrl/Cmd-K to open the command palette from any page.',
+        'Start typing — results group by pages, recent activity, doc anchors, and quick actions; Enter jumps to the highlighted result, Esc closes the palette.',
+      ],
+      tips: [
+        'The palette remembers your recent activity for five minutes, so the latest thing you touched is usually one or two keystrokes away.',
+        'Press "?" anywhere outside an input field to open the keyboard-shortcuts overlay without reaching for the mouse.',
+      ],
+      pitfalls: [
+        'The palette searches documentation by title and content — niche features are easier to find by their docs anchor than by guessing the page name.',
+        'Eadwyn can help with supported workflows, but an action that changes a record still follows that surface’s authorization and review controls.',
+      ],
+      related: [
+        { label: 'Notifications', href: '#account/notifications' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
+    {
+      id: 'pricing-demo',
+      title: 'Pricing & demo',
+      overview:
+        "Anyone — including visitors who haven't signed up yet — can compare subscription tiers and book a demo. These pages live on the public site and link straight into sign-up when a visitor is ready.",
+      howto: [
+        'Open /pricing?for=founder to compare Free, Validate + Build and Raise + Grow. The prices and AI inclusions come from the live catalogue.',
+        'Open /demo to book a walkthrough with the studio team.',
+        'Share any of these links externally — they require no account.',
+      ],
+      tips: [
+        'If a feature is missing, request it from the demo form and we will consider it.',
+        'Pricing changes show on this page first; bookmark it if you want to track tier-by-tier inclusions over time.',
+      ],
+      pitfalls: [
+        'Deep-links into in-app features still require sign-in — bookmark the relevant /docs anchor instead if you want a public-friendly reference.',
+        'Demo bookings land on the studio calendar in UTC — make sure you check your local time before confirming.',
+      ],
+      related: [
+        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
+        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
+      ],
+    },
+    {
+      id: 'personal-advisor',
+      title: 'Eadwyn — AI assistant',
+      overview:
+        "Eadwyn helps navigate supported Axal VC tasks and offers contextual assistance. Its available data depends on the specific surface, active company, connected permissions and the records shared with it; it is not a general grant to read every startup or private note. It does not give legal, tax or investment advice.",
+      howto: [
+        'Open Eadwyn in the available product surface and confirm the company or data context before sharing anything.',
+        'Choose a suggested task or ask a question; inspect what Eadwyn proposes before acting on a record.',
+        'Use the links to the relevant product page or Help guide and review any requested write or external action on its own confirmation screen.',
+      ],
+      tips: [
+        'Assistant access and connected accounts can be inspected and revoked from the applicable account and connector controls.',
+        'Use Account → Usage → AI tokens to check the allowance or balance for billable AI tasks.',
+      ],
+      pitfalls: [
+        'Eadwyn is not an independent decision-maker; verify important outputs with a qualified professional.',
+        'Do not assume Eadwyn can see all private data or none: access is surface- and permission-specific; always review the current scope.',
+      ],
+      related: [
+        { label: 'Personas', href: '#getting-started/personas' },
+        { label: 'Onboarding walkthrough', href: '#getting-started/onboarding' },
+      ],
+    },
+  ],
+};

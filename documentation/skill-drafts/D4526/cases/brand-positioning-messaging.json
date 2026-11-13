@@ -1,0 +1,44 @@
+{
+  "skill": "brand-positioning-messaging",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "product": "Batch Ledger",
+        "capability": "Reconciles uploaded CSV files",
+        "audience": "Small finance teams",
+        "competitor_benchmark": null
+      },
+      "grow.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      },
+      "validate.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Batch Ledger",
+      "CSV",
+      "Small finance teams"
+    ],
+    "must_say_not_recorded": [
+      "competitor benchmark"
+    ],
+    "must_not_include": [
+      "fastest on the market"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why competitor benchmark is missing rather than inventing it.",
+    "Do not assert: fastest on the market.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Batch Ledger; CSV; Small finance teams. competitor benchmark: Not recorded. Human review required."
+}

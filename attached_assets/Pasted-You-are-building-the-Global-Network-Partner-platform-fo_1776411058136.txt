@@ -1,0 +1,73 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, D1 tables for users, deals, project_stages, decision_gates, legal_documents, subsidiaries, capital_calls, diligence_checklists, compliance_records, workflows, and all other tables from previous builds. We also have the Partner Dashboard, Pipeline Board, and Legal/Capital Engine.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete **Spin-Out Subsidiary Automation** (IP licensing/transfer logic, equity allocation, independent scaling, Stripe Atlas integration) with these exact requirements:
+
+1. **Database Models (extend existing tables)**  
+   - Extend the existing `subsidiaries` table with these new columns:
+     • spinout_status (text: 'pending', 'ip_transferred', 'equity_allocated', 'incorporated', 'independent')
+     • ip_license_doc_id (FK to legal_documents.id)
+     • equity_allocation_json (json) → founder/holding/studio splits
+     • stripe_atlas_id (text)
+     • independent_scaling_enabled (boolean, default false)
+     • post_spinout_dashboard_url (text, optional)
+   - Create one new table:
+     - `spinout_events`
+       • id (PK)
+       • subsidiary_id (FK)
+       • event_type (text: 'ip_transfer', 'equity_allocation', 'stripe_atlas_start', 'stripe_atlas_complete', 'independent_scale')
+       • details (json)
+       • performed_by (FK to users.id)
+       • created_at
+
+2. **Automation Logic**  
+   - Trigger automatically when a `decision_gate` status becomes 'spinout_ready':
+     • Run Legal Engine IP licensing/transfer (generate + sign placeholder)
+     • Calculate and allocate equity (studio 10-20%, founder 60-80%, option pool, etc. — use Replit AI for fair split recommendation)
+     • Start Stripe Atlas incorporation flow (use env var STRIPE_ATLAS_API_KEY)
+     • Create spinout_events log for full audit trail
+   - Post-spinout: set `independent_scaling_enabled = true`, move project out of main pipeline, and provide independent dashboard link.
+   - Support "Continue / Iterate" path as fallback (no spin-out).
+
+3. **Backend Endpoints (add to main.py)**  
+   - POST /api/spinout/execute (one-click from spinout_ready deal — protected for operators/admins)
+   - GET /api/spinout/status/{deal_id}
+   - POST /api/spinout/ip-transfer
+   - POST /api/spinout/equity-allocate (uses Replit AI for recommendation)
+   - POST /api/spinout/stripe-atlas (placeholder flow with status updates)
+   - GET /api/spinout/independent (list all independent subsidiaries for scaling partners)
+   - All endpoints protected by RBAC; investors see read-only status.
+
+4. **Frontend**  
+   - Add a **Spin-Out Wizard** modal + dedicated tab in /pipeline.html and /legal-capital.html
+   - One-click "Execute Spin-Out" button on any 'spinout_ready' project card
+   - Step-by-step wizard UI:
+     1. IP Licensing/Transfer review
+     2. AI-recommended Equity Allocation (editable)
+     3. Stripe Atlas incorporation progress
+     4. Confirmation + "Go Independent" button
+   - New "Independent Subsidiaries" section in Partner Dashboard showing post-spinout companies with scaling metrics placeholder.
+   - Use fetch() for real-time status updates and Replit AI results.
+   - Reuse existing dashboard styling, badges, and charts.
+
+5. **Security & Best Practices**  
+   - RBAC: Only operators/admins can trigger spin-out; all KYC-approved partners can view status.
+   - Full audit via spinout_events + activity_logs.
+   - Use Replit Secrets for STRIPE_ATLAS_API_KEY.
+   - Mock Stripe Atlas responses first (log steps, update status); ready for real API calls.
+   - Prevent duplicate spin-outs.
+   - Rate limit AI equity recommendations.
+
+Build this step-by-step:  
+1. First extend the D1 tables and create the new spinout_events table + migration.  
+2. Then implement the core spin-out automation logic (trigger from decision_gate + IP/equity/Stripe Atlas).  
+3. Then add all backend endpoints.  
+4. Finally build the frontend Spin-Out Wizard and integrate it into the Pipeline Board + Partner Dashboard.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

@@ -1,0 +1,40 @@
+#16 - Profile expansion (corporate + identity)
+What & Why
+Settings → Profile is missing fields that contracts between Axal VC and the user need (country, city, address, legal entity name, registration number, UBOs, etc.). Add structured personal + corporate identity blocks, encrypt PII, and thread these into every contract template so they auto-fill. Required before Task T (anti-cheat scoring), which leans on tax/identity.
+
+Done looks like
+Profile page shows 3 sub-tabs: Personal / Corporate / Verification.
+Saving a Corporate profile with valid data persists and survives reload.
+Country/postal validation blocks bad input with field-level errors.
+Trying to send a contract without required profile fields surfaces a missing_profile_fields: [...] list and a "Complete profile" deep link.
+Every contract template auto-fills the documented merge fields from the profile blocks.
+PII (tax IDs, phone, DOB) stored encrypted at rest; only last4 visible by default.
+Profile completeness ring updates live as fields are filled.
+High-risk jurisdiction selection triggers an async sanctions check; matched results create a dd_findings row.
+Out of scope
+Document upload UI (passport / proof-of-address) — that's KYC's job, not profile.
+Live address verification via third-party API (use static country/postal regex).
+Multi-entity per user (one corporate profile per user; founders with multiple companies use separate accounts).
+Building new contract templates — only auto-fill existing ones.
+Steps
+Schema (personal) — Extend users with full_legal_name, date_of_birth, nationality, tax_residency_country, tax_id_number_ciphertext + tax_id_last4, phone_e164_ciphertext + phone_last4, address_line1/2, city, state_or_region, postal_code, country (ISO alpha-2), profile_completion_pct. PII columns use services/columnCipher.ts v1.
+Schema (corporate) — New corporate_profiles table (one per user) with the full set of legal-entity fields including UBO/director JSON arrays, signing authority, insurance carriers, and aml_high_risk_jurisdiction flag. Ship as migration 015_profile_expansion.sql.
+Worker routes — GET/PUT /api/settings/profile/personal, GET/PUT /api/settings/profile/corporate, POST/DELETE /api/settings/profile/ubo[/:id]. All Zod-validated: country must be ISO alpha-2, postal validated per country with a light regex map, DOB ≥18yo, registration_number required when entity_type set, ≥1 UBO with ownership_pct ≥ 25% to flip ubo_disclosed=1.
+Frontend ProfileSection — Sub-tabs Personal / Corporate / Verification. Use existing react-hook-form. Static country + state pickers (no external API). Profile completeness ring at top with copy like "78% — add registered address to unlock contract auto-fill."
+Contract auto-fill — Update services/contractTemplates.ts (and any per-doc helpers) so envelope creation populates merge fields: {{counterparty.full_legal_name}}, {{counterparty.address_block}}, {{counterparty.entity_name}}, {{counterparty.entity_type}}, {{counterparty.registration_number}}, {{counterparty.signing_authority_name}}, {{counterparty.signing_authority_title}}, {{counterparty.tax_id_last4}}, {{counterparty.country}}. Block sending with 422 + missing_profile_fields when required fields are blank.
+Sanctions/PEP recheck — When country, registered_country, or entity_type changes, enqueue an async job hitting the Due Diligence sanctions connector. Update aml_high_risk_jurisdiction; insert a dd_findings row on hit.
+Audit — Every corporate-field change writes an activity_logs row with before/after JSON (PII redacted). Use the hashed-actor pattern (T22.1).
+Critical constraints
+PII encryption uses the existing services/columnCipher.ts v1 pipeline (already used by dd_cases.subject_email_enc etc). Do NOT introduce a parallel cipher.
+Hashed-actor pattern (T22.1) applies: every activity_logs write here MUST use util/hashEmail.ts.
+Reuse the dd_findings table from the Due Diligence module (Task #3 / 2026-05-09) for sanctions hits — do not create a parallel findings table.
+react-hook-form is already in frontend/package.json; don't add a new form library.
+Relevant files
+cloudflare-worker/src/routes/settings.ts
+cloudflare-worker/src/services/userSettings.ts
+cloudflare-worker/src/services/columnCipher.ts
+cloudflare-worker/src/services/contractTemplates.ts
+cloudflare-worker/src/services/dueDiligence.ts
+cloudflare-worker/src/util/hashEmail.ts
+cloudflare-worker/sql/migrations/008_due_diligence.sql
+frontend/src/pages/SettingsPage.jsx
