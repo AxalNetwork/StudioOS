@@ -24,7 +24,7 @@ page. Nothing here fetches except through the callbacks the host passes.
 
 Tested by `frontend/test/hq_revenue_v2_5039.test.mjs` (the cockpit),
 `frontend/test/hq_revenue_receivable_actions_5039.test.mjs` (the governed
-actions) and the
+actions), `frontend/test/hq_revenue_receivables_5083.test.mjs` (the mounted page: sections apart, no Draw, the drawer's edits) and the
 older revenue tests, which read every file here through
 `frontend/test/_revenuePage.mjs`; the Worker's `?period=` by
 `cloudflare-worker/test/admin_revenue_period_5039.test.ts`; the actions and
@@ -43,6 +43,8 @@ the picker by `cloudflare-worker/test/statement_actions_5039.test.ts`.
 - **A new part is a new file here**, rendered by `../RevenuePage.jsx`; its
   pure rules go in `revenueModel.js`, or in the part's own model file when
   they are a flow of their own (`statementActionModel.js`). Type is 12px or more.
+- **An empty state is one operator line** (D5083): “No statements yet”, “No Q4 2026 statements yet”, “No billing exceptions”. The window and the reason stay on the figures' labels and in the coverage drawer.
+- **No Draw action while D514 holds drawing**, and no edit on a receivable row: the edits open in its drawer (D5083).
 - **A write that moves money is governed:** a reason, the revision read, a
   client idempotency key, the step-up, and an outcome that is never drawn as
   success unless the Worker said so. No `window.confirm`.

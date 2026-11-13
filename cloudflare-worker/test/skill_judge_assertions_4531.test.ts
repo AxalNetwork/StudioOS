@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillLifecycle.ts';
 import { JUDGE_VERSION, missingDataMiss, numberMiss, statements } from '../src/services/agents/skillAssertions.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 
 const BOARD = SKILL_LIBRARY.find((e) => e.slug === 'board-meeting-brief')!.cases[0].expect as unknown as CaseExpect;
 const verdict = (e: CaseExpect, out: string) => judge(e, out).result;

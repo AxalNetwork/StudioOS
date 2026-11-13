@@ -11,6 +11,8 @@
 //   8. The diff, and bulk actions that are done or refused one by one.
 //   9. D4533 step 5: an approval releases one version; a restore is a new reviewed version that moves no
 //      version row, pointer or pin; the pins view; a draft save is audited.
+//  10. D4533 A3: a decision whose counted results a published version already counted says so
+//      (`freshness.evaluation.reused`): which version, and how many of the counted cells.
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/hq_skill_lifecycle_d4160.test.ts
@@ -715,6 +717,55 @@ test('D4533 step 5: restore keeps unpublished edits unless told to discard them,
   assert.equal((await call(w, SUPER, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE, discard_draft: true })).body.error, 'retired');
   const p = (await call(w, SUPER, 'GET', `${HQ}/${uid}/pins`)).body;
   assert.deepEqual([p.agents[0].pinned_version, p.agents[0].update_available], [1, false]);
+});
+
+test('D4533 A3: a restore onto an old version\'s evidence reuses its results, and the decision says from which version', async () => {
+  const w = world();
+  stubRun();
+  const models = offered(w).slice(0, 2);
+  assert.equal(models.length, 2, 'the fixture offers two models');
+  const uid = await newSkill(w, {}, models);
+  await setCases(w, uid, ['MRR 41,200', 'MRR 41,200 again']);
+  await approve(w, uid);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  const reused = async () => (await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness.evaluation.reused;
+  // Fresh runs that no version has counted yet: nothing is reused.
+  assert.equal(await reused(), null);
+  const v1 = await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`);
+  assert.equal(v1.status, 200, v1.text);
+  assert.equal(v1.body.freshness.evaluation.reused, null, 'the decision v1 was let through on predates v1');
+  // The unchanged draft now stands on the results v1 counted: all four cells.
+  // Mutation checked: `reusedFrom` always null → this fails.
+  assert.deepEqual(await reused(), { version: 1, results: 4 });
+  // A new definition is new evidence: v1's results do not count for it, and none is reused.
+  await call(w, SUPER, 'PATCH', `/api/teams/skills/${uid}`, { steps: ['Read the recorded metrics', 'Write the highlights', 'Guess next quarter'] });
+  assert.equal(await reused(), null);
+  await approve(w, uid);
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, {});
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+
+  // Restore v1: v1's evidence again, so v1's four results count, and the reviewer is told they are v1's.
+  const r = await call(w, SUPER3, 'POST', `${HQ}/${uid}/restore`, { from_version: 1, reason: RESTORE });
+  assert.equal(r.status, 200, r.text);
+  // Mutation checked: the `results > 0` check dropped → a version naming none of these rows answers, and this or a
+  // later assertion fails. Dropping the query's evidence filter is an equivalent mutation, and survives: a result row
+  // is bound to one evidence hash, so a manifest on other evidence can never name it. The filter only narrows the read.
+  assert.deepEqual(r.body.freshness.evaluation.reused, { version: 1, results: 4 });
+  assert.deepEqual([r.body.freshness.blocking, r.body.freshness.evaluation.not_evaluated], [['needs_approval'], 0]);
+  assert.deepEqual((await call(w, SUPER, 'GET', `${HQ}/${uid}`)).body.freshness, r.body.freshness, 'the restore and GET /:uid answer one decision');
+
+  // A new run on one required model supersedes those two cells; the other two are still v1's.
+  // Mutation checked: counting every counted cell instead of the ones v1 named → 4, and this fails.
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [models[0]] });
+  assert.deepEqual(await reused(), { version: 1, results: 2 });
+  await call(w, SUPER, 'POST', `${HQ}/${uid}/evals`, { models: [models[1]] });
+  assert.equal(await reused(), null, 'every counted cell was run again');
+
+  // Published as v3 on the new runs: the latest version that counted them is the one named.
+  assert.equal((await call(w, SUPER3, 'POST', `${HQ}/${uid}/review`, { reviewer_uid: 'u-super2' })).status, 201);
+  assert.equal((await call(w, SUPER2, 'POST', `${HQ}/${uid}/review/approve`, { comment: 'v1 again, as v3.' })).status, 200);
+  assert.equal((await call(w, SUPER, 'POST', `/api/teams/skills/${uid}/publish`)).status, 200);
+  assert.deepEqual(await reused(), { version: 3, results: 4 });
 });
 
 test('D4533 (F1): a draft save is audited with its definition hash before and after; a save that changes nothing is not', async () => {

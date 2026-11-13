@@ -5,7 +5,7 @@
  *            administrators about the Admin product; the tenant × queue matrix;
  *            and the ticket→GitHub mirror strip.
  *   GET /local   D5031 (#5031) — the same payload's HQ-local half only: the
- *            escalation board, HQ's ticket queues, the mirror strip, the SLA
+ *            escalation board, recent decisions, HQ's ticket queues, the mirror strip, the SLA
  *            policy and the taxonomy. It never waits on a branch, so the page
  *            draws HQ's actionable desk first and the branch hosts beside it.
  *   PUT /sla-tiers   HQ sets the P1/P2/P3 ticket hours (D482), audited; since
@@ -17,7 +17,7 @@
  * D132 stated and D133 applied — and on a branch there is no elevation at all,
  * so it answers "HQ only" (D106).
  *
- * EVERY READ ANSWERS FOR ITSELF. Six reads, each with its own failure: an
+ * EVERY READ ANSWERS FOR ITSELF. Each read has its own failure: an
  * unreadable escalation board costs the escalation queue and the matrix's
  * escalation cells, never the ticket queues beside them. A read that failed is
  * `available: false` with its reason; a read that hit its ceiling is
@@ -280,11 +280,34 @@ export const BRANCHES_READ_SEPARATELY =
   'Branch hosts are read separately, and their administrators’ tickets are part of the total, so this HQ-only read has none.';
 
 /**
+ * One current decision per escalation. Migration 259 stores the decision and
+ * migration 288 stores the latest branch push. A resend updates only the
+ * latter. A NULL outcome stays unreported, including rows predating 288 and
+ * HQ-tier requests, whose bell notice is a separate operation.
+ * The D5035 index supplies decision order. The board's status index would
+ * read and sort every decided row before applying the limit.
+ */
+async function readRecentDecisions(env: Env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT uid, branch_code, kind, subject, status, answer, answered_by_name, answered_at,
+              push_ok, push_reason, push_at
+         FROM hq_escalations INDEXED BY idx_hq_escalations_recent_decisions
+        WHERE status IN ('answered', 'declined') AND answer IS NOT NULL AND answer <> ''
+        ORDER BY answered_at DESC, uid DESC LIMIT ?`,
+    ).bind(SUPPORT_LIST_LIMIT).all();
+    return { available: true as const, items: rows.results };
+  } catch {
+    return { available: false as const, reason: 'HQ could not read the stored decisions and their delivery outcomes.' };
+  }
+}
+
+/**
  * Every HQ-local read, in parallel (D5031). Each catches its own failure and
  * answers `available: false`, so the parallel read cannot reject as a whole.
  */
 async function readLocal(env: Env, nowMs: number) {
-  const [ticketsRead, licences, deployments, sync, taxonomy, tiersRead, versionRead, escalationsRead] = await Promise.all([
+  const [ticketsRead, licences, deployments, sync, taxonomy, tiersRead, versionRead, escalationsRead, recentDecisions] = await Promise.all([
     readOpenTickets(env),
     readSupportLicences(env),
     readSupportDeployments(env),
@@ -296,12 +319,13 @@ async function readLocal(env: Env, nowMs: number) {
       (x): EscalationsRead => ({ available: true, ...x }),
       (): EscalationsRead => ({ available: false, reason: ESCALATIONS_UNREADABLE }),
     ),
+    readRecentDecisions(env),
   ]);
   const escalations = escalationQueue(escalationsRead, nowMs);
   const tickets = ticketsRead.available
     ? { available: true as const, ...summariseTickets(ticketsRead, nowMs, tiersRead.available ? tiersRead.hours : null) }
     : { available: false as const, reason: ticketsRead.reason };
-  return { ticketsRead, licences, deployments, sync, taxonomy, tiersRead, versionRead, escalationsRead, escalations, tickets };
+  return { ticketsRead, licences, deployments, sync, taxonomy, tiersRead, versionRead, escalationsRead, escalations, tickets, recentDecisions };
 }
 
 /** D5031 — HQ's own desk, never waiting on a branch. */
@@ -320,6 +344,7 @@ r.get('/local', async (c) => {
     list_limit: SUPPORT_LIST_LIMIT,
     total: totalOf(l.escalations, l.tickets, [], branchesNotRead),
     escalations: l.escalations,
+    recent_decisions: l.recentDecisions,
     tickets: l.tickets,
     sync: l.sync,
     sla_policy: slaPolicyBody(l.tiersRead, l.versionRead, null),
@@ -381,6 +406,7 @@ r.get('/', async (c) => {
     // so the total is withheld rather than summed over the ones that answered.
     total: totalOf(escalations, tickets, branchLines, deployments.available ? null : deployments.reason),
     escalations,
+    recent_decisions: l.recentDecisions,
     tickets,
     branch_tickets: {
       lines: branchLines,

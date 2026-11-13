@@ -1,7 +1,9 @@
 /**
  * D4225 (#4225): seed the "From Axal" skill library into H2's lifecycle
- * (D4160). Each library skill (`skillLibrary.generated.ts`, built from
- * `skills/<slug>.md` and `skills/cases/<slug>.json`) becomes an Axal draft
+ * (D4160). Each library skill (built from `skills/<slug>.md` and
+ * `skills/cases/<slug>.json`; since D4574 H3 its entries are a static asset
+ * the caller reads with `skillLibraryAsset.loadSkillLibrary` and passes in,
+ * never part of the Worker script) becomes an Axal draft
  * with its golden cases; a second admin reviews it, its cases run on each
  * model, and only then is it published, through H2's routes. Nothing here
  * publishes, and no row is written as published.
@@ -25,7 +27,7 @@ import { ROLES } from './catalogue';
 import { checkDraft, type SkillDraft } from './skills';
 import { CASES_MAX, checkCase } from './skillLifecycle';
 import { caseIdentity, goldenName, storedCaseIdentity, type CaseIdentity } from './skillCaseIdentity';
-import { SKILL_LIBRARY, type LibraryEntry } from './skillLibrary.generated';
+import type { LibraryEntry } from './skillLibrary.generated';
 import { aiAdminAuditStatement } from './adminAudit';
 import { RADAR_AXES } from '../skillsTaxonomySchema';
 
@@ -84,7 +86,7 @@ export function areaOf(tags: ReadonlyArray<{ slug: string; level: string }>, cat
 export type SeedLine = { slug: string; outcome: 'created' | 'cases_added' | 'present' | 'refused'; code?: string; message?: string; cases?: number };
 
 /** Every library skill checked against today's taxonomy and roles, without writing anything. */
-export function checkLibrary(taxonomy: ReadonlySet<string>, entries: readonly LibraryEntry[] = SKILL_LIBRARY) {
+export function checkLibrary(taxonomy: ReadonlySet<string>, entries: readonly LibraryEntry[]) {
   return entries.map((e) => {
     const raw = readLibrarySkill(e.skill_md);
     if (!raw) return { entry: e, ok: false as const, code: 'skill_md_invalid', message: `${e.slug}.md is not in the library format.` };
@@ -115,7 +117,7 @@ const uid = () => { const b = new Uint8Array(16); crypto.getRandomValues(b); ret
  * with its golden cases, by `adminId`, and audit the run (H5's admin audit).
  * Returns one line per skill. Nothing is published.
  */
-export async function seedLibrary(env: Env, adminId: number, reason: string, entries: readonly LibraryEntry[] = SKILL_LIBRARY): Promise<SeedLine[]> {
+export async function seedLibrary(env: Env, adminId: number, reason: string, entries: readonly LibraryEntry[]): Promise<SeedLine[]> {
   const tax = ((await env.DB.prepare('SELECT slug FROM skills WHERE is_active = 1').all<{ slug: string }>()).results ?? []).map((r) => r.slug);
   const checked = checkLibrary(new Set(tax), entries);
   const lines: SeedLine[] = [];

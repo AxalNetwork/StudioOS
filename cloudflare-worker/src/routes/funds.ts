@@ -14,7 +14,7 @@ import type { Env } from '../types';
 import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
-import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
+import { requireFundGp, requireFundCreator, fundManageScope } from '../services/fundGpAccess';
 import { assertFundAct, assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
 import { DISTRIBUTION_LPS_SQL, splitDistribution } from '../services/fundDistributionSplit';
 import { Funds, LPs } from '../models/funds';
@@ -24,12 +24,11 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
-import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../services/tenancyScope';
+import { lpMembershipScope, lpSelfScope, fundGpScope } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
 import { CommsInputError, addCommunication, listCommunications, parseCommInput, parseLpType } from '../services/fundLpComms';
 import { claimLpRowsByEmail, claimLpRowsForAddress } from '../services/lpClaim';
 import { userMeetsInvestorTier, investorUpsell } from '../middleware/requireInvestorTier';
-import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { splitCall } from '../services/fundCallSplit';
 import {
   issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
@@ -89,11 +88,8 @@ function visibleFundsScope(user: any, opts: { includeLp: boolean }): { sql: stri
  * operate, and a fund they run under another company is not in either.
  */
 async function manageScope(c: any, user: any): Promise<{ sql: string; binds: Array<string | number> }> {
-  if (user?.role === 'admin') return fundGpScope(user, null, 'f');
-  if (!userMeetsInvestorTier(user as any, 'institutional')) return NO_ROWS;
-  const companyId = await resolveActiveCompany(c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
-  if (companyId !== null) await ensureFundGpColumns(c.env);
-  return fundGpScope(user as any, companyId, 'f');
+  // D4636 part 2: the scope lives beside `requireFundGp`, so `lp_reports` reads the same one.
+  return fundManageScope(c, user);
 }
 
 /**

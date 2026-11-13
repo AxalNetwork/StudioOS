@@ -23,6 +23,7 @@ import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../services/skillsTaxono
 import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { projectInActiveCompany } from '../services/tenancyScope';
+import { requireFundGp } from '../services/fundGpAccess';
 import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -295,7 +296,8 @@ r.post('/health/recompute/:uid', async (c) => {
 // Task #18 — Partner Coverage Analytics.
 //
 // GET /coverage[?fund_id=N]
-//   Admin/partner-only portfolio-wide skill-gap dashboard. Composes a per-
+//   Admin/partner-only portfolio-wide skill-gap dashboard; `fund_id` narrows
+//   to one fund only through the fund operating gate (D4636 part 2). Composes a per-
 //   company 8-axis radar (from the radar service, built on each company's
 //   founding team) plus a portfolio-level aggregate.
 //
@@ -505,10 +507,13 @@ r.get('/coverage', async (c) => {
     let projects: { id: number; uid: string; name: string; sector: string | null; stage: string | null; founder_id: number | null }[];
 
     if (fundId) {
-      const f = await c.env.DB.prepare('SELECT id, name FROM vc_funds WHERE id = ?')
-        .bind(fundId).first<{ id: number; name: string }>();
-      if (!f) return c.json({ detail: 'Fund not found' }, 404);
-      fund = { id: f.id, name: f.name };
+      // D4636 part 2: narrowing to one fund reads that fund's reserve plan,
+      // which is the fund's own data. It goes through the fund operating gate
+      // (`requireFundGp`): an admin, or the fund's GP of record at the
+      // institutional tier under the active company; otherwise 402 below the
+      // tier, else 404, the same answers as `GET /api/funds/:id`.
+      const { fund: f } = await requireFundGp(c, fundId);
+      fund = { id: Number(f.id), name: String(f.name) };
       const rows = await c.env.DB.prepare(
         `SELECT DISTINCT p.id, p.uid, p.name, p.sector, p.stage, p.founder_id
          FROM projects p

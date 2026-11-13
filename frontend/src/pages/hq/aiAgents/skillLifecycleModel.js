@@ -153,6 +153,19 @@ export function releaseNotePayload(text) {
 export const releaseNoteText = (version) => (typeof version?.release_note === 'string' && version.release_note.trim() ? version.release_note : NOT_RECORDED);
 
 /**
+ * D4533 A3: when the results the decision counts are the ones a published version was released on (a restore onto that
+ * version's evidence, or an unchanged draft), say so: those runs were not made again. Null when none are reused, or no
+ * decision was read: never a guess.
+ */
+export function reusedLine(freshness) {
+  const r = freshness?.evaluation?.reused;
+  if (!r || !Number.isInteger(r.version) || !Number.isInteger(r.results) || r.results < 1) return null;
+  const total = Number.isInteger(freshness.evaluation.total) ? freshness.evaluation.total : null;
+  const runs = total != null ? `${r.results} of ${total}` : `${r.results}`;
+  return `Results reused from v${r.version}: ${runs} required runs were recorded for v${r.version}’s release and were not run again.`;
+}
+
+/**
  * What the server's release decision (`freshness`, D4533 §4) says about publishing now: ready, or
  * the first blocking reason in the refusal's own sentence. No decision read is "unknown", never
  * "ready": the button stays and the Worker decides.

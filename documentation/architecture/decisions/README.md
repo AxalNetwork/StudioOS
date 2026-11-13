@@ -67,6 +67,7 @@ and citations by number keep working.
 | `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D4618.md` | Account regressions: an interaction or concurrency test for each #4615–#4617 repair, each mutation-checked (part of #4618). |
 | `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
 | `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
@@ -109,3 +110,4 @@ and citations by number keep working.
 | `D5680.md` | Restricted operational security triage without public disclosure. |
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
 | `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
+| `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |

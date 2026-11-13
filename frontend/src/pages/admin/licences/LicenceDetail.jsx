@@ -33,6 +33,7 @@ import { CountryPricing } from './CountryPricing';
 import { Exclusivity } from './Exclusivity';
 import TermsWorkspace from './TermsWorkspace';
 import { ContractStep } from './ContractStep';
+import LicenceAgreements from './LicenceAgreements';
 import { DeployStep } from './DeployStep';
 import { NoticesEditor } from './NoticesEditor';
 import { LicenceSyncStrip } from './LicenceSyncStrip';
@@ -403,6 +404,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {/* D5017 — the country-pricing recommendation, under the core terms it can change. */}
         {step === 4 && <CountryPricing licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
+        {/* D5051 (L33): the package and program agreements, package readiness and legal Needs HQ, after the master. */}
+        {step === 5 && <LicenceAgreements licence={d} />}
         {step === 6 && (
           <div>
             <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip" />
