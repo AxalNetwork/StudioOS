@@ -130,6 +130,10 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
           <LensNavLink
             key={zone.slug}
             to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
+            // D4817 part 3: the root item matches its own address only. Without
+            // `end`, NavLink also matched it under every route of the bucket and
+            // set aria-current="page" on Overview beside the current item.
+            end={Boolean(zone.root)}
             aria-current={on ? 'page' : undefined}
             data-testid={`link-zone-${zone.slug}`}
             // HOVER AND FOCUS (D403). The colours used to be inline `color` /

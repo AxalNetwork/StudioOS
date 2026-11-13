@@ -7,10 +7,16 @@
  *
  * Every state is a word and a shape, never colour alone, and none of them
  * renders a zero or a bare dash for a value the platform does not have.
+ *
+ * D4817 part 3 (PF-03) moved two pieces here from the boards that drew them:
+ * `Skeleton` (the Overview and Positions each had a copy) and
+ * `PerformanceSummary`, the Overview's NAV, multiples and basis strip, which
+ * Performance draws above its quarter-end series (canvas `perf()` on both).
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { CircleAlert, CircleCheck, CircleDashed, Clock, Diamond, RefreshCw, SquareSlash, TriangleAlert } from 'lucide-react';
+import { NOT_RECORDED } from '../../lib/absence';
 
 const HEALTH_LOOK = {
   Healthy: ['is-healthy', CircleCheck],
@@ -100,13 +106,56 @@ export function FinancialMetric({ metric, onRetry }) {
   );
 }
 
-/** The basis strip: gross, as-of, the mark rule, the at-cost rule, and a door to the methodology. */
+/** The basis strip: gross, as-of, the mark rule, the at-cost rule, and a door to the methodology (a route, or `#id` on the same page). */
 export function BasisStrip({ items, methodologyTo }) {
   return (
     <div className="pf-basis" data-testid="portfolio-basis">
       {items.map((t) => <span key={t}>{t}</span>)}
-      {methodologyTo ? <Link to={methodologyTo} data-testid="link-portfolio-methodology">Methodology</Link> : null}
+      {methodologyTo && methodologyTo.startsWith('#') ? <a href={methodologyTo} data-testid="link-portfolio-methodology">Methodology</a> : null}
+      {methodologyTo && !methodologyTo.startsWith('#') ? <Link to={methodologyTo} data-testid="link-portfolio-methodology">Methodology</Link> : null}
     </div>
+  );
+}
+
+/** A reading placeholder: `rows` grey bars, announced as busy. */
+export function Skeleton({ rows = 3 }) {
+  return <div className="pf-skeleton" aria-busy="true" aria-label="Reading">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>;
+}
+
+/**
+ * The performance summary (`performanceOf`): NAV with mark coverage, the
+ * multiples and flows with their definitions, the companies count, and the
+ * basis strip. `methodologyTo` is where the strip's Methodology goes.
+ */
+export function PerformanceSummary({ perf, onRetry, loading, methodologyTo = '/portfolio/performance' }) {
+  if (loading) return <section className="pf-card"><Skeleton rows={2} /></section>;
+  const failed = perf.nav.state === 'unreadable';
+  return (
+    <section className="pf-perf" aria-labelledby="pf-perf-title" data-testid="portfolio-performance">
+      <div className="pf-hero">
+        <span className="pf-eyebrow" id="pf-perf-title">Net asset value · gross</span>
+        <b data-testid="metric-nav"><MetricValue metric={perf.nav} /></b>
+        {failed ? (
+          <SourceFailure what="Performance" claim="No figure is shown in its place." onRetry={onRetry} testid="status-portfolio-performance-unreadable" retryTestid="button-retry-portfolio-performance" />
+        ) : (
+          <>
+            {perf.nav.state === 'not_recorded' ? <span className="pf-sub">{perf.nav.reason}</span> : null}
+            {perf.coverage ? <span className="pf-sub" data-testid="portfolio-mark-coverage">{perf.coverage}</span> : null}
+            {perf.atCost.map((t) => <span key={t} className="pf-sub">{t}.</span>)}
+          </>
+        )}
+      </div>
+      <div className="pf-mults">
+        {perf.multiples.map((m) => <FinancialMetric key={m.key} metric={m} />)}
+        {perf.flows.map((m) => <FinancialMetric key={m.key} metric={m} />)}
+        <div className="pf-metric" data-testid="metric-companies">
+          <small>Companies</small>
+          <b>{perf.companies ? perf.companies.value : <MetricValue metric={{ state: failed ? 'unreadable' : 'not_recorded', value: NOT_RECORDED }} />}</b>
+          {perf.companies?.note ? <em>{perf.companies.note}</em> : null}
+        </div>
+      </div>
+      <BasisStrip items={perf.basis} methodologyTo={methodologyTo} />
+    </section>
   );
 }
 

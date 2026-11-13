@@ -71,7 +71,7 @@ export const INVESTOR_BOARD_FILES = Object.freeze([
   'pages/investor/deals/ScreeningZone.jsx',
   'pages/investor/deals/CommitZone.jsx', 'pages/investor/deals/ClosingZone.jsx',
   'pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioPositions.jsx',
-  'pages/PortfolioPerformancePage.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
+  'pages/PortfolioPerformancePage.jsx', 'pages/investor/InvestorPortfolioPerformance.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
   'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/SpinoutLabLpWorkspacePage.jsx',
   'pages/investor/InvestorFundLanding.jsx', 'pages/investor/InvestorFundLPs.jsx',
   'pages/investor/InvestorFundCalls.jsx', 'pages/investor/InvestorFundAccounting.jsx',
