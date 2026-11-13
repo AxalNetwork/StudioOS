@@ -40,7 +40,7 @@ import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import { hydrate, type LicenceRow } from './admin_licences';
 import { mapError, nowIso } from './_t13t14t15_helpers';
-import { esignEnvelopeScope } from '../services/tenancyScope';
+import { ALL_ROWS, esignEnvelopeScope } from '../services/tenancyScope';
 import { readLicenceLegal } from '../services/agreementPolicies';
 // D197 — the host the licence's own admin binds. The validator, the two
 // records and the resolver check all live in the service so this router and
@@ -1185,8 +1185,13 @@ r.get('/mine/program-agreements', async (c) => {
     const signedEnvelopes = signedUuids.length ? await c.env.DB.prepare(
       `SELECT e.id, e.envelope_uuid FROM esign_envelopes e
         WHERE e.envelope_uuid IN (SELECT value FROM json_each(?))
-          AND e.status = 'completed' AND e.signed_r2_key LIKE 'esign/signed/%' AND ${scope.sql}`,
-    ).bind(JSON.stringify(signedUuids), ...scope.binds).all<{ id: number; envelope_uuid: string }>() : null;
+          AND e.status = 'completed' AND e.signed_r2_key LIKE 'esign/signed/%'
+          AND (? = 1 OR e.created_by = ? OR e.user_id = ? OR EXISTS (
+            SELECT 1 FROM esign_recipients r WHERE r.envelope_id = e.id AND r.user_id = ?
+          ))`,
+    ).bind(JSON.stringify(signedUuids), scope === ALL_ROWS ? 1 : 0, ...(
+      scope.binds.length === 3 ? scope.binds : [null, null, null]
+    )).all<{ id: number; envelope_uuid: string }>() : null;
     const downloadIds = new Map(signedEnvelopes?.results.map(({ envelope_uuid, id }) => [envelope_uuid, id]));
     return c.json({
       programs: legal.programs
