@@ -351,7 +351,7 @@ test('by hand, npm run deploy dispatches the verified HQ release', () => {
 
 // ── 4 · what writes to Cloudflare, and what Access guards ───────────────────
 
-test('the screens that write Worker secrets are the three setSecret callers, and none deploys', () => {
+test('Worker secret writers remain declared and deployment inventory is read-only', () => {
   const SCREEN_OF: Record<string, string> = {
     'routes/admin_integration_keys.ts': 'Integration keys',
     'routes/admin_github.ts': 'GitHub Sync',
@@ -360,9 +360,14 @@ test('the screens that write Worker secrets are the three setSecret callers, and
   const callers = [...new Set(callSites('setSecret').map((s) => s.file))].sort();
   assert.deepEqual(callers, Object.keys(SCREEN_OF).sort(), 'a new setSecret caller is a new screen that writes to Cloudflare');
   assert.deepEqual(SECRET_WRITERS.map((s) => s.screen).sort(), Object.values(SCREEN_OF).sort());
-  // The Cloudflare API calls this Worker makes: the secrets endpoint and the AE
-  // SQL API. Neither is a deployment, a version or a rollback.
+  // D5673 reads deployment/version inventory through its GET-only adapter.
+  // Other Worker sources still cannot call the publish/rollback API paths.
   for (const { file, code } of CODE) {
+    if (file === 'services/cloudflareDeployments.ts') {
+      assert.match(code, /\btransport\(url,\s*\{\s*method:\s*['"]GET['"]/, 'the source adapter explicitly reads with GET');
+      assert.doesNotMatch(code, /\bmethod\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/, 'the source adapter cannot mutate Cloudflare');
+      continue;
+    }
     assert.doesNotMatch(code, /\/workers\/scripts\/[^'"`\n]*\/(?:deployments|versions)\b/, `${file} calls the Cloudflare deployments API`);
   }
 });

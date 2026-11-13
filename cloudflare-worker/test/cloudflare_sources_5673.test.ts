@@ -65,7 +65,7 @@ test('stale active deployment is still observed; capped, reordered, missing or f
 });
 
 test('API transport is read-only, script scoped, bounded and does not follow redirects',async()=>{
-  let called=0;const api=cfReadApi('a'.repeat(32),'synthetic-token',(async(_url:any,init:any)=>{called++;assert.equal(init.redirect,'error');assert.equal(init.method,undefined);return Response.json({success:true,result:{items:[]}});}) as typeof fetch);
+  let called=0;const api=cfReadApi('a'.repeat(32),'synthetic-token',(async(_url:any,init:any)=>{called++;assert.equal(init.redirect,'error');assert.equal(init.method,'GET');return Response.json({success:true,result:{items:[]}});}) as typeof fetch);
   await api('/workers/scripts/studioos/versions',{});assert.equal(called,1);await assert.rejects(api('/workers/scripts/other/deployments',{}));assert.equal(called,1);
   const bad=cfReadApi('a'.repeat(32),'synthetic-token',async()=>new Response(null,{status:302,headers:{location:'https://private.invalid'}}));await assert.rejects(bad('/workers/scripts/studioos/deployments',{}));
 });

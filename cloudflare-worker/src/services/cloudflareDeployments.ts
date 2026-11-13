@@ -15,7 +15,7 @@ export function cfReadApi(account: string, token: string, transport: typeof fetc
     if (!/^\/workers\/scripts\/(studioos|studioos-meeting-bot|studioos-meeting-bot-preview|studioos-tail)\/(deployments|versions)$/.test(path)) throw Error('cf_source_not_allowed');
     const url=new URL(`https://api.cloudflare.com/client/v4/accounts/${account}${path}`);
     for(const [k,v] of Object.entries(query))url.searchParams.set(k,String(v));
-    const response=await transport(url,{headers:{authorization:`Bearer ${token}`},redirect:'error',signal:AbortSignal.timeout(10000)});
+    const response=await transport(url,{method:'GET',headers:{authorization:`Bearer ${token}`},redirect:'error',signal:AbortSignal.timeout(10000)});
     if(!response.ok||!response.body)throw Error('cf_source_unavailable');
     const reader=response.body.getReader(),chunks:Uint8Array[]=[];let length=0;
     try { for(;;){const r=await reader.read();if(r.done)break;length+=r.value.byteLength;if(length>1024*1024){await reader.cancel();throw Error('cf_source_limit');}chunks.push(r.value);} }
