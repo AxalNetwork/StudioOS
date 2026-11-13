@@ -77,9 +77,10 @@ function AgreementAction({ document, licenceUid, packageOfferUid, onChanged }) {
   const [stage, setStage] = useState(null);
   const [preview, setPreview] = useState(null);
   const [failure, setFailure] = useState(null);
-  const row = document.row;
+  const row = document.inFlightRow || document.row;
   const reviewable = row && ['draft', 'ready'].includes(row.status);
-  const preparable = document.kind !== 'program_schedule' && document.state === 'not_prepared';
+  const preparable = document.kind !== 'program_schedule' && (document.state === 'not_prepared'
+    || (document.state === 'replacement_required' && !document.inFlightRow));
   if (!reviewable && !preparable) return null;
 
   async function review() {
@@ -99,7 +100,7 @@ function AgreementAction({ document, licenceUid, packageOfferUid, onChanged }) {
     const template = items.find((item) => item.kinds.includes(document.kind)
       && (document.package_key ? item.package_key === document.package_key : item.program_key === document.program_key));
     if (!template?.authored) throw new Error(template?.refusal || 'No template is available for this agreement.');
-    const out = await adminLicenceAgreementsApi.draft(licenceUid, {
+    return adminLicenceAgreementsApi.draft(licenceUid, {
       agreement_kind: document.kind,
       program_key: document.kind.startsWith('program_') ? document.program_key : undefined,
       package_key: document.package_key,
@@ -108,7 +109,6 @@ function AgreementAction({ document, licenceUid, packageOfferUid, onChanged }) {
       template_slug: template.slug,
       reason,
     });
-    return out;
   }
 
   function changed() {
@@ -351,7 +351,7 @@ export default function LicenceAgreements({ licence }) {
   const pkg = useMemo(() => (legal ? packageReadiness(legal, ctx) : { recorded: false }), [legal, agreementsRead.data, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const signals = useMemo(() => (legal ? legalSignals(legal, ctx) : []), [legal, agreementsRead.data, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const action = (document) => agreementsRead.status === 'ready' ? (
-    <AgreementAction key={document.row?.uid ?? document.slot_key ?? document.kind} document={document} licenceUid={uid}
+    <AgreementAction key={document.inFlightRow?.uid ?? document.row?.uid ?? document.slot_key ?? document.kind} document={document} licenceUid={uid}
       packageOfferUid={legal?.holdings?.find((h) => h.scope_kind === 'package' && h.scope_key === document.package_key && h.current)?.package_offer_uid}
       onChanged={() => { retryAgreements(); retryLegal(); }} />
   ) : null;

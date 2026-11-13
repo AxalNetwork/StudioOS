@@ -451,7 +451,10 @@ test('the studio agreement read is scoped and exposes a completed PDF through th
   assert.equal(prepared.status, 201);
   assert.deepEqual((await read()).body.agreements, [], 'the studio cannot read an HQ draft');
 
-  const { uid, revision } = prepared.body.agreement;
+  const replacement = await draft(db, LEARNING_LICENCE);
+  assert.equal(replacement.status, 201);
+  assert.deepEqual((await read()).body.agreements, [], 'the studio cannot read a superseded draft that was never sent');
+  const { uid, revision } = replacement.body.agreement;
   assert.equal((await send(db, uid, revision)).status, 200);
   const awaiting = await read();
   assert.equal(awaiting.status, 200);

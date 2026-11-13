@@ -1178,7 +1178,8 @@ r.get('/mine/program-agreements', async (c) => {
     if ('refusal' in own) return own.refusal;
     if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
     const legal = await readLicenceLegal(c.env, own.licence, nowIso().slice(0, 10));
-    const visibleRows = legal.rows.filter((row) => ['sent', 'partially_signed', 'executed', 'superseded'].includes(row.status));
+    const visibleRows = legal.rows.filter((row) => ['sent', 'partially_signed', 'executed'].includes(row.status)
+      || (row.status === 'superseded' && (row.sent_at || row.signed_at)));
     const signedUuids = visibleRows.filter((row) => row.signed_at && row.envelope_uuid).map((row) => row.envelope_uuid);
     const scope = esignEnvelopeScope(own.user);
     const signedEnvelopes = signedUuids.length ? await c.env.DB.prepare(

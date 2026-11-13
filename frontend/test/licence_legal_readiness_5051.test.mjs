@@ -165,9 +165,9 @@ test('mounted: the Agreement section shows package, program agreements, readines
     assert.ok(byTestId(view, 'licence-legal-signal-stale'));
     assert.ok(byTestId(view, 'licence-legal-signal-missing_fields'));
     assert.match(text, /Perks is a standalone extra, outside this package\./);
-    // Nothing on the page creates or sends a document.
+    // Opening the page does not create or send a document.
     assert.equal(view.calls.filter((c) => /drafts|\/send|\/void|package-acceptances/.test(c)).length, 0);
-    for (const b of view.nodes().filter((n) => n.tagName === 'BUTTON')) assert.doesNotMatch(String(view.props(b)?.children), /Prepare|Send|Draft/);
+    assert.ok(view.nodes().some((n) => n.tagName === 'BUTTON' && view.props(n)?.children === 'Prepare agreement'));
   } finally { await view.unmount(); }
 });
 
