@@ -10,8 +10,9 @@
 export const GOVERNANCE_ACTIONS = Object.freeze([
   'governance_document_created', 'governance_document_viewed', 'governance_document_updated', 'governance_document_status',
   'governance_version_uploaded', 'governance_file_previewed', 'governance_file_downloaded',
-  'governance_relation_added', 'governance_relation_reviewed',
+  'governance_relation_added', 'governance_relation_reviewed', 'governance_relation_unlinked',
 ] as const);
+const UNLINKED_WORDS: Record<string, string> = { template: 'Unlinked a template it governed', agreement: 'Unlinked an agreement it governed' };
 
 const STATUS_WORDS: Record<string, string> = { draft: 'Draft', review: 'In review', approved: 'Approved', executed: 'Executed', archived: 'Archived' };
 const word = (s: unknown) => (typeof s === 'string' && STATUS_WORDS[s]) || null;
@@ -42,6 +43,8 @@ export function eventOf(row: { action: string; details: unknown; created_at: str
     // D4811 part 8: links to related documents, and a dependant checked against a version.
     case 'governance_relation_added': line = d.kind === 'template' ? 'Linked a template it governs' : 'Linked a record it governs'; break;
     case 'governance_relation_reviewed': line = version != null ? `Marked a related document reviewed against v${version}` : 'Marked a related document reviewed'; break;
+    // D4811 part 21: a link removed. Neither document changed; the reason stays in the audit row, not on this line.
+    case 'governance_relation_unlinked': line = UNLINKED_WORDS[d.kind] || 'Unlinked a record it governed'; break;
     default: return null;
   }
   return { action: row.action, line, at: row.created_at ?? null, actor: row.actor_name || null, version };

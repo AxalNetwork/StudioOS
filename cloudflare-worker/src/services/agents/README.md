@@ -76,3 +76,4 @@ A1 (#3951) seeds them into `agent_skills` and `agent_skill_versions`.
 | `workspaceSpec.ts` | D5565: closed broker-created workspace specification, executor interface, typed capability refusals and normalized transition rules. |
 | `runnerProtocol.ts` | D5565: host-independent per-run lease/heartbeat/fencing/completion protocol over an injected atomic store; no mount or task dispatch. |
 | `workspaceSecurity.ts` | D5567: broker-only scope/image/provider gates, audience/generation/nonce grants and server-mediated tenant-bound AES-GCM artifacts; unmounted. |
+| `ventureGitInstallation.ts` | D5569: credential-free GitHub App registration lookup scoped to the authorized venture. Every inspection refuses publishing. |

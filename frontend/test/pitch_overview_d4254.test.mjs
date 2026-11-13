@@ -71,7 +71,8 @@ test('the latest HQ note is an admin’s or the Super Admin’s, never a founder
 });
 
 test('no deck: only the ways in that exist on main are drawn', () => {
-  assert.deepEqual(NO_DECK_ITEMS.map((i) => i.id), ['records', 'template']);
+  // D4599 (#4599): the import is the third, gated on importDocument (pitch_overview_reads_4599).
+  assert.deepEqual(NO_DECK_ITEMS.map((i) => i.id), ['records', 'template', 'import']);
 });
 
 test('the routes: Overview at /raise/pitch, the new tiles, and the old addresses redirect with the query', () => {

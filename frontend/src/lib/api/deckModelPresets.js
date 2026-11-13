@@ -6,9 +6,10 @@
 //        locks: [{ group, label, model, name, line }] }
 //   PUT /api/decks/:id/model-presets { preset: 'fast' | 'balanced' | 'best' | 'custom' } → the same answer, read again.
 // No client mirror of the presets: every model is the Worker's answer.
-import { request } from '../api.js';
+import { request, sharedRead } from '../api.js';
 
 export const deckModelPresetsApi = {
-  read: (deckId) => request(`/decks/${encodeURIComponent(deckId)}/model-presets`),
+  // D4599: the rail's presets and HQ's locks read the same reply at once; they share one in-flight read.
+  read: (deckId) => sharedRead(`deck:model-presets:${deckId}`, () => request(`/decks/${encodeURIComponent(deckId)}/model-presets`)),
   set: (deckId, preset) => request(`/decks/${encodeURIComponent(deckId)}/model-presets`, { method: 'PUT', body: JSON.stringify({ preset }) }),
 };

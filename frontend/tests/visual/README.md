@@ -47,6 +47,7 @@ and StudioHome at `/raise/pitch`).
 | `pitch_draft_recovery_5349.spec.mjs` | D5349: draft autosave, reload, offline recovery, stale revisions and storage refusal in Chromium at 1440 and 390 px, using a synthetic Worker-backed deck |
 | `security.a11y.spec.mjs` | D4803 (#4803, #4800 §7): HQ › Security's seven workspaces at 1440, 768 and 390, light and dark — zero serious or critical axe violations, no page wider than its viewport; the workspace keys, the phone select and findings at 44 px, the revoke sheet's focus on a phone, and Eadwyn's security prompts; no screenshots |
 | `_security_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as a Super Admin: a failed restore drill, administrators without MFA, sessions, a deletion request near its date, ledger rows, a Trust Center draft, the backup heartbeats; made-up names |
+| `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 
 ### Run it
 
