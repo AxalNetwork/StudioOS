@@ -46,7 +46,7 @@ test('the rules: age from the recorded send only; stalled past 30 days; each rep
   assert.equal(stalledItem({ ...fresh, sent_at: daysAgo(31) }, NOW).stalled, true);
   assert.equal(stalledItem(nosend, NOW).stalled, false);
   assert.equal(stalledItem(old, NOW).party, 'Unlinked recipient · Norman Laudini');
-  assert.deepEqual(repairOf(bare), { kind: 'evidence', problem: 'Marked signed · no execution evidence', action: { kind: 'attach', label: 'Attach evidence' } }, 'D4811 part 18: a legacy agreement takes an attached copy');
+  assert.deepEqual(repairOf(bare), { kind: 'evidence', problem: 'Marked executed · no execution evidence', action: { kind: 'attach', label: 'Attach evidence' } }, 'D4811 part 18: a legacy agreement takes an attached copy');
   assert.equal(repairOf({ ...bare, source: 'esign' }).action.kind, 'open', 'an envelope keeps its own signing record');
   assert.equal(repairOf(old).action.kind, 'link');
   assert.equal(repairOf({ ...bare, project_name: null }).kind, 'evidence', 'a contradiction comes before a missing link');
@@ -90,7 +90,7 @@ test('mounted: three queues under the strip; Link goes Choose → Review → Res
     assert.match(stalledText, /Service Agreement.*send not recorded/);
     assert.doesNotMatch(stalledText, /Service Agreement[^·]*· 0 d/, 'an unrecorded send never reads as 0 days');
     const repairText = nodeText(q('queue-repair'));
-    assert.match(repairText, /Marked signed · no execution evidence.*Attach evidence/);
+    assert.match(repairText, /Marked executed · no execution evidence.*Attach evidence/);
     assert.match(repairText, /Recipient not linked to a company.*⚭ Link recipient/);
     assert.match(nodeText(q('queue-review')), /Operating Agreement \(A&R draft\).*Axal VC GP LLC · v3/);
     // The table's row repair (CT-02): a quiet dashed Link where a company link can be made, none on an NDA.

@@ -22,6 +22,7 @@ import { Unreadable, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN } from '../account/AccountCenter';
 import { closingHrefFor, moneyCents } from './deskModel';
 import { SyndicatePanel } from './RoutePanels';
+import PaperState from './PaperState';
 import { CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
 import {
   NO_ACCESS, ROOM_FAILED, ROOM_WAITS, STEPS, captableView, dutyRows, liveEnvelope, matchesFor, needsYou, roomLines, roomTiles, stepStrip,
@@ -128,7 +129,7 @@ function Tile({ label, value, sub, testId }) {
   );
 }
 
-const signedValue = (t) => (t.signed ?? (t.signedRead === 'reading' ? 'Reading…' : <Unrecorded reason="A line’s paper could not be read, so the signed count is not shown." />));
+const signedValue = (t) => (t.signed ?? (t.signedRead === 'reading' ? 'Reading…' : <Unrecorded reason="A line’s paper could not be read, so the executed count is not shown." />));
 
 function NextWords({ next }) {
   return <span className={next.you ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-gray-600 dark:text-gray-400'}>{next.text}</span>;
@@ -150,7 +151,7 @@ function LinesBlock({ rows, phone, onReceipt, onSign }) {
         {rows.map((r) => (
           <article key={r.uid} className={box} data-testid={`closing-line-card-${r.uid}`}>
             <div className="flex items-baseline justify-between gap-2"><span className="font-bold">{r.investor}</span><Money text={r.amount} reason="No amount is recorded on this line." /></div>
-            <p className={mutedText}>{r.route || 'No route set'} · {r.paper} · {r.status}</p>
+            <p className={mutedText}>{r.route || 'No route set'} · <PaperState state={r.paperState} text={r.paper} /> · {r.status}</p>
             <NextWords next={r.next} />
             <div className="flex flex-col gap-2">
               {r.commitmentId != null ? <button type="button" className={`${BTN.ghost} min-h-[44px] w-full`} onClick={() => onSign(r)}>Signing order</button> : null}
@@ -172,7 +173,7 @@ function LinesBlock({ rows, phone, onReceipt, onSign }) {
               <td className="py-2 font-semibold">{r.investor}</td>
               <td>{r.route || <span className="text-gray-500 dark:text-gray-400">No route set</span>}</td>
               <td><Money text={r.amount} reason="No amount is recorded on this line." /></td>
-              <td>{r.commitmentId != null ? <button type="button" className={BTN.link} onClick={() => onSign(r)} data-testid={`closing-line-paper-${r.uid}`}>{r.paper}</button> : r.paper}</td>
+              <td>{r.commitmentId != null ? <button type="button" className={BTN.link} onClick={() => onSign(r)} data-testid={`closing-line-paper-${r.uid}`}><PaperState state={r.paperState} text={r.paper} /></button> : r.paper}</td>
               <td><button type="button" className={BTN.link} onClick={() => onReceipt(r)} data-testid={`closing-line-money-${r.uid}`}>{r.status}</button></td>
               <td><NextWords next={r.next} /></td>
             </tr>
@@ -287,7 +288,7 @@ function InvestorLine({ closing, rows, tiles, phone, onSign, onPay, onReceipt })
       </div>
       {mine.length === 0 ? <p className={mutedText}>Your line in this round was withdrawn.</p> : (
         <div className={`grid gap-2 ${phone ? 'grid-cols-1' : 'grid-cols-3'}`}>
-          {[['Paper', first.paper], ['Money', first.status], ['Route', first.route || 'No route set']].map(([k, v]) => (
+          {[['Paper', <PaperState key="paper" state={first.paperState} text={first.paper} />], ['Money', first.status], ['Route', first.route || 'No route set']].map(([k, v]) => (
             <div key={k} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 dark:border-gray-800" data-testid={`closing-your-${k.toLowerCase()}`}>
               <span className="text-[11px] font-bold uppercase text-gray-500 dark:text-gray-400">{k}</span>
               <span className="text-[13px] font-semibold">{v}</span>
@@ -410,7 +411,7 @@ export default function RecordRoom({ entry, viewer, deal }) {
           <div className="flex min-w-0 flex-col gap-4">
             <div className={`grid gap-3 ${phone ? 'grid-cols-2' : 'grid-cols-4'}`} data-testid="closing-tiles">
               <Tile label="Committed" value={<Money text={tiles.committed} reason="The round’s total was not returned." />} sub={`${tiles.lineCount} ${tiles.lineCount === 1 ? 'line' : 'lines'}`} testId="closing-tile-committed" />
-              <Tile label="Signed" value={signedValue(tiles)} sub="lines" testId="closing-tile-signed" />
+              <Tile label="Executed" value={signedValue(tiles)} sub="lines" testId="closing-tile-signed" />
               <Tile label="Received" value={<Money text={tiles.received} />} sub={tiles.receivedOf} testId="closing-tile-received" />
               <Tile label="Closing deadline" value={tiles.deadline || <Unrecorded reason="No deadline is recorded on this closing." />} sub={tiles.left} testId="closing-tile-deadline" />
             </div>

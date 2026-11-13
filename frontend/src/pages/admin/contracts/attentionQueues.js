@@ -5,7 +5,9 @@
  * `AttentionQueues.jsx` reads and draws, this file says what a row means.
  * A send that was never recorded has no age, never 0 days.
  */
-import { agreementRowSemantics, canLinkCompany, governanceLifecycle, hasExecutionEvidence, templateLifecycle, templateOverlays } from '../../../lib/contractLifecycle';
+import {
+  NO_EVIDENCE_WARNING, agreementRowSemantics, canLinkCompany, governanceLifecycle, hasExecutionEvidence, templateLifecycle, templateOverlays,
+} from '../../../lib/contractLifecycle';
 
 export const STALLED_DAYS = 30; // the Worker's `STALLED_DAYS` (services/contractAttention.ts)
 export const QUEUE_ROWS = 3;
@@ -49,7 +51,7 @@ export function repairOf(row) {
   if (row?.status === 'signed' && !hasExecutionEvidence(row)) {
     // D4811 part 18: a legacy agreement takes an attached signed copy; another store keeps its own signing record.
     const attach = row?.source === 'documents';
-    return { kind: 'evidence', problem: 'Marked signed · no execution evidence', action: attach ? { kind: 'attach', label: 'Attach evidence' } : { kind: 'open', label: 'Open the record' } };
+    return { kind: 'evidence', problem: NO_EVIDENCE_WARNING, action: attach ? { kind: 'attach', label: 'Attach evidence' } : { kind: 'open', label: 'Open the record' } };
   }
   if (canLinkCompany(row) && row?.status !== 'void' && row?.status !== 'draft' && !row?.project_name) {
     return { kind: 'unlinked', problem: 'Recipient not linked to a company', action: { kind: 'link', label: '⚭ Link recipient' } };

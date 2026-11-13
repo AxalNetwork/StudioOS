@@ -114,11 +114,12 @@ test('a line’s words: Received only on received; the paper from its staged env
   const voided = { ...waiting, uid: 'e0', voided: true };
   assert.deepEqual(awaitingRelease([waiting, voided, { uid: 'e2', stages: [{ role: 'axal', state: 'waiting' }] }]).map((e) => e.uid), ['e1']);
   assert.equal(paperWord([]), 'No paper sent');
-  assert.equal(paperWord([waiting]), 'Waiting for Axal’s countersign');
-  assert.equal(paperWord([{ complete: true, stages: [] }]), 'Signed');
-  assert.equal(paperWord([{ stages: [{ state: 'signed' }, { state: 'sent' }] }]), 'Signing · 1 of 2 signed');
+  // D4811 part 22: the paper reads in the agreement lifecycle's words (contracts_executed_closings_4811 holds each state).
+  assert.equal(paperWord([waiting]), 'Sent · awaiting signature · waiting for Axal’s countersign');
+  assert.equal(paperWord([{ complete: true, stages: [] }]), 'Executed');
+  assert.equal(paperWord([{ stages: [{ state: 'signed' }, { state: 'sent' }] }]), 'Sent · awaiting signature · 1 of 2 signed');
   assert.equal(paperWord([{ stages: [{ state: 'declined' }] }]), 'Declined');
-  assert.equal(paperWord([voided]), 'No paper sent', 'a void envelope is no paper');
+  assert.equal(paperWord([voided]), 'Voided', 'a paper that was only ever voided reads Voided, not as no paper');
 });
 
 test('one closing’s figures: received lines only; withdrawn counts nowhere; Mark Closed waits for the founder', () => {
@@ -308,7 +309,7 @@ test('one closing as an Admin: lines, routes, paper per line, and no Super Admin
     assert.ok(!v.asked.some((a) => a.path.startsWith('/legal/esign/staged/line/') && !/\/(31|32)$/.test(a.path)));
     assert.ok(v.has('closing-detail'));
     assert.match(v.text('closing-line-route-l1'), /No route chosen/);
-    assert.match(v.text('closing-line-paper-l1'), /Waiting for Axal’s countersign/);
+    assert.match(v.text('closing-line-paper-l1'), /➤ Sent · awaiting signature waiting for Axal’s countersign/);
     assert.match(v.text('closing-line-paper-l2'), /Unreadable/, 'one failed paper read blanks only its cell');
     assert.match(v.text('closing-line-status-l2'), /Sent, not yet confirmed/);
     assert.match(v.text('closing-tile-committed'), /\$650,000\.00/);
@@ -349,7 +350,9 @@ test('CP5: the route dialog lists each route’s needs and sets a syndicate by i
   try {
     await v.click('closing-line-route-btn-l1');
     assert.ok(v.has('closing-route-dialog'));
-    assert.match(v.text('closing-route-direct-paper'), /Waiting for Axal’s countersign/);
+    assert.match(v.text('closing-route-direct-paper'), /Sent · awaiting signature · waiting for Axal’s countersign/);
+    assert.match(v.text('closing-route-dialog'), /Paper\s*Sent · awaiting signature/, 'D4811 part 22: the row is the paper, not "Signed paper"');
+    assert.doesNotMatch(v.text('closing-route-dialog'), /Signed paper/);
     assert.match(v.text('closing-route-syndicate'), /Not read here yet/);
     await v.click('closing-route-save');
     assert.match(v.text('closing-route-error'), /Choose a route|not named/);

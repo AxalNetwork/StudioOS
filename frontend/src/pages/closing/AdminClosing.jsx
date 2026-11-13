@@ -20,10 +20,12 @@ import { BTN } from '../account/AccountCenter';
 import ActivityDrawer, { ActivityRow } from './ActivityDrawer';
 import { CompleteDialog, CountersignDialog, RouteDialog, WithdrawLineDialog } from './ClosingDialogs';
 import PaperDrawer from './PaperDrawer';
+import PaperState from './PaperState';
 import { FundCard, SyndicatePanel, ThirdPartyDrawer } from './RoutePanels';
 import {
-  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, lineStatus, moneyCents, paperWord, routeWord,
+  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, lineStatus, moneyCents, routeWord,
 } from './deskModel';
+import { closingPaperLifecycle } from '../../lib/contractLifecycle';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const Money = ({ cents, currency, reason }) => {
@@ -176,7 +178,7 @@ export default function AdminClosing({ summary, onChanged }) {
                       <td className="py-1.5 font-semibold">{l.investor_name || 'Name not recorded'}</td>
                       <td><Money cents={l.amount_cents} currency={l.currency || currency} reason="No amount is recorded on this line." /></td>
                       <td data-testid={`closing-line-route-${l.uid}`}>{routeWord(l.route) || <Unrecorded reason="No capital route is chosen for this line.">No route chosen</Unrecorded>}{l.vehicle_ref && l.route !== 'direct' ? <span className="block text-[11px] text-gray-500 dark:text-gray-400">{l.vehicle_ref}</span> : null}</td>
-                      <td data-testid={`closing-line-paper-${l.uid}`}>{p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : paperWord(p.envelopes)}</td>
+                      <td data-testid={`closing-line-paper-${l.uid}`}>{p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : <PaperState state={closingPaperLifecycle(p.envelopes)} />}</td>
                       <td data-testid={`closing-line-status-${l.uid}`}>{lineStatus(l.status)}</td>
                       <td className="flex flex-wrap justify-end gap-1.5 py-1">
                         {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'route', line: l })} data-testid={`closing-line-route-btn-${l.uid}`}>Choose the route</button>}
