@@ -27,8 +27,13 @@ build_context = "./meeting-bot"
 
 [env.preview]
 name = "studioos-meeting-bot-preview"
+workers_dev = true
 
 [env.preview.vars]
+CF_BOT_AUDIENCE = "preview"
+PREVIEW_CANARY_ENABLED = "off"
+# Owner supplies this exact preview script workers.dev origin after private receiver/signing preflight.
+PREVIEW_CANARY_ORIGIN = ""
 APP_URL = "https://studioos-preview.guillaumelauzier.workers.dev"
 
 [[env.preview.durable_objects.bindings]]
@@ -46,3 +51,22 @@ scheduling_policy = "durable_object"
 [env.preview.containers.images.runtime]
 dockerfile = "./meeting-bot/Dockerfile"
 build_context = "./meeting-bot"
+
+# D5674: private host evidence. No tail consumer, so these logs cannot feed the archive recursively.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
+
+[env.preview.observability]
+enabled = true
+[env.preview.observability.logs]
+enabled = true
+head_sampling_rate = 1
+[env.preview.observability.traces]
+enabled = true
+head_sampling_rate = 0.01

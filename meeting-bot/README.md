@@ -299,3 +299,5 @@ control boundary. `wrangler.meeting-bot.toml` and `meeting-bot-deploy.yml` own
 the image release independently of the site. `container-entry.sh` supplies
 Xvfb/PulseAudio for the SDK sidecar. The packaged factory now connects Teams
 and Zoom; no real-platform measurement or publication is implied.
+
+D5675: `src/previewCanary.ts` sends only the signed synthetic callback from the runtime image; `worker/previewCanary.ts` validates its isolated recipient and cleanup receipt.

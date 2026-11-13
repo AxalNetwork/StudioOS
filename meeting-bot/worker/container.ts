@@ -1,4 +1,5 @@
 /** D886 B8: private container host. B1 alone owns consent, billing and status. */
+import { preparePreviewCanary, reconcilePreviewCanaryAlarm, type CanaryEnv } from './previewCanary';
 import type { Env } from '../../cloudflare-worker/src/types';
 import { runtimeHeaders, runtimeKey, runtimeOrigin, runtimeUid, type RuntimeStart } from '../../cloudflare-worker/src/services/meetingBotRuntime';
 import { HOST_COMMAND_MS, HOST_READY_MS, logRuntimeStage, runtimeVersion, type MeetingBotRuntimeStage, type RuntimeErrorCode } from '../../cloudflare-worker/src/services/meetingBotStartup';
@@ -24,6 +25,7 @@ export class MeetingBotContainer implements DurableObject {
         // D5153: an older site Worker reads `container_unavailable`; a current one reads the code and stage too.
         if (!container) return Response.json({ok:false,code:'container_unavailable',stage:'container_starting',runtime_version:null},{status:503});
         const path=new URL(request.url).pathname;
+        if(path==='/canary/run'||/^\/canary\/[a-f0-9-]{36}\/callback$/.test(path))return preparePreviewCanary(request,this.env as Env&CanaryEnv,this.state);
         // #3708: the deployed commit answers the owner's diagnostic (`--var` in meeting-bot-deploy.yml).
         if (request.method==='GET' && path==='/health') return Response.json({running:container.running,version:/^[a-f0-9]{7,40}$/.test(this.env.MEETING_BOT_VERSION ?? '') ? this.env.MEETING_BOT_VERSION : null});
         if (request.method!=='POST' || !['/start','/stop','/heartbeat','/diagnose'].includes(path)) return reply(404,'not_found');
@@ -223,6 +225,7 @@ export class MeetingBotContainer implements DurableObject {
   }
   async alarm() {
     await this.state.blockConcurrencyWhile(async()=>{
+      if(await reconcilePreviewCanaryAlarm(this.state))return;
       const lease=await this.state.storage.get<Lease>('lease');
       if (!lease) return;
       if (lease.stopped || Date.now()>=Math.min(lease.deadline,lease.funded)+30_000) await this.destroy(lease);

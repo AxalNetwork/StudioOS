@@ -292,6 +292,9 @@ binding targets and branch isolation.
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
 
+D5676: `check-tail-archive.mjs` is an external authenticated metadata-only observer check; query/process fallback belongs to the shared independent monitor owner.
+
+D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt before normal production promotion, retaining sanitized stage evidence.
 | `scan-fingerprints.py` | D5602: bounded opaque Semgrep fingerprints using its existing Python runtime; parity-checked against the Node contract. |
 | `notification-routing-context.mjs` | D5666: GET-only GitHub PR/ruleset/linked-issue/claim metadata adapter. |
 | `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |

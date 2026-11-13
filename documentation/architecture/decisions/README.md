@@ -98,6 +98,12 @@ and citations by number keep working.
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
+- [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
+
+- [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
+- [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
+
+- [D5675](D5675.md) — Isolated synthetic preview callback, normal promotion gate and urgent rollback handling (#5675).
 | `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
 | `D5666.md` | Observational session attribution and persistent PR/incident routing. |
 | `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
