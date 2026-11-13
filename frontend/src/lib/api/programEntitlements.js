@@ -15,6 +15,7 @@ const enc = encodeURIComponent;
 const BASE = '/admin/program-entitlements';
 
 export const programEntitlementsApi = {
+  mine: () => request('/member/program-entitlements'),
   /** Program access by user licence. `filters`: { licence_type, holder, program, q, limit }; empty values are left out. */
   list: (filters = {}) => {
     const q = new URLSearchParams();

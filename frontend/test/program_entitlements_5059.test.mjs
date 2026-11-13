@@ -14,6 +14,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { programEntitlementsApi } from '../src/lib/api/programEntitlements.js';
 import { filterQuery, inForceWord, sourceWords } from '../src/pages/admin/grants/entitlementsModel.js';
 import { viewOf } from '../src/pages/admin/grants/grantsModel.js';
+import AccountProgramAccess from '../src/pages/account/AccountProgramAccess.jsx';
 import ProgramGrants from '../src/pages/admin/grants/ProgramGrants.jsx';
 import { UserLicenceEntitlements } from '../src/pages/admin/grants/EntitlementViews.jsx';
 
@@ -177,4 +178,19 @@ test('mounted Program access › User licences: filter by licence type and by ho
     await v.click('holder-search-clear');
     assert.equal(v.rows().length, 2);
   } finally { await v.unmount(); s.restore(); }
+});
+
+test('mounted Account program access shows the member’s status, source licences and blockers', async () => {
+  const s = stub({
+    '/api/member/program-entitlements': () => json({ programs: [LEARNING, MENTOR] }),
+  });
+  const view = await render(h(AccountProgramAccess), '/account');
+  try {
+    assert.deepEqual(s.seen, ['GET /api/member/program-entitlements']);
+    assert.match(view.of('account-program-access'), /Learning.*In force.*Advisor · UL-ADV-0031/);
+    assert.match(view.of('account-program-access'), /Mentor cohort access.*Granted · not in force.*needs an executed program licence agreement/);
+  } finally {
+    await view.unmount();
+    s.restore();
+  }
 });

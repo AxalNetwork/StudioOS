@@ -27,6 +27,7 @@ import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switc
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
+import AccountProgramAccess from './account/AccountProgramAccess';
 import AccountNewsletters from './account/AccountNewsletters';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
@@ -499,6 +500,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           {/* D1140 (#3020, CMP19b): Your companies moved to Companies and projects; this line says so once. */}
           <ProfileMovedNotice />
           <RolesAccessCard data={data} onJump={() => onSelect('billing')} />
+          <AccountProgramAccess />
           <DocumentsAgreementsSection />
           <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
         </>
