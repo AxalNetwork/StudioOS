@@ -6,8 +6,7 @@
  * HONEST STATES. A read is loading, unreadable or ok, and an unreadable read
  * is never an empty list. Counts here are counts of stored links, so zero is a
  * recorded zero ("No evidence yet"). What no store holds yet (key questions,
- * comparisons, the brief) reads Not recorded with its reason, never
- * a zero or a sample.
+ * the brief) reads Not recorded with its reason, never a zero or a sample.
  */
 import { NOT_RECORDED, answerabilityOf, indexStateOf } from './researchStates.js';
 
@@ -21,12 +20,12 @@ export const PROJECT_STATUS = {
 };
 export const statusOf = (p) => PROJECT_STATUS[p?.status] || { label: NOT_RECORDED, tone: 'neutral' };
 
-/** The workspace's tabs. Overview, Evidence and (part 2) Findings have a store behind them. */
+/** The workspace's tabs. Overview, Evidence, (part 2) Findings and (part 3) Comparisons have a store behind them. */
 export const PROJECT_TABS = [
   { slug: 'overview', label: 'Overview', built: true },
   { slug: 'evidence', label: 'Evidence', built: true },
   { slug: 'findings', label: 'Findings', built: true },
-  { slug: 'comparisons', label: 'Comparisons', built: false },
+  { slug: 'comparisons', label: 'Comparisons', built: true },
   { slug: 'brief', label: 'Brief', built: false },
 ];
 

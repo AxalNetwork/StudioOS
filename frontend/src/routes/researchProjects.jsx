@@ -25,6 +25,7 @@ export default function researchProjectsRoutes({ guard, labRoles, effectiveRole 
       <Route path="/research/projects/:uid" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="overview" />)} />
       <Route path="/research/projects/:uid/evidence" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="evidence" />)} />
       <Route path="/research/projects/:uid/findings" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="findings" />)} />
+      <Route path="/research/projects/:uid/comparisons" element={guard(labRoles(['admin', 'founder']), <ResearchProject role={researchRole} tab="comparisons" />)} />
     </>
   );
 }
