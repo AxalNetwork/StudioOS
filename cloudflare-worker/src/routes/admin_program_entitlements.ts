@@ -5,6 +5,7 @@
  *   GET  /                               Program access by user licence: one row per account and program
  *                                        (?licence_type=all|founder|investor|operating_partner|advisor
  *                                         &holder=user:<id>&program=&q=&limit=)
+ *   GET  /reconciliation                  read-only legacy evidence and grant review queue (?program=&after=&limit=)
  *   GET  /rules                          every rule version, and the one in force per program and licence type
  *   POST /rules                          { program_key, licence_type, eligible, agreement_required?, effective_from, reason }
  *                                        the pair's next version
@@ -25,6 +26,7 @@ import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
+import { programGrantReconciliation } from '../services/programGrantReconciliation';
 import { isRegistryKey } from '../services/programRegistry';
 import {
   EntitlementError, GRANT_ACTIONS, REASON_MIN, accessQuery, addRuleVersion, changeGrant, entitlementsOfAccount,
@@ -49,6 +51,21 @@ function accountId(raw: string | undefined): number {
 r.get('/', async (c) => {
   await requireSuperAdmin(c);
   return c.json(await programAccessByHolder(c.env, accessQuery(c.req.query())));
+});
+
+r.get('/reconciliation', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    return c.json(await programGrantReconciliation(c.env, c.req.query()));
+  } catch (error) {
+    if (error instanceof EntitlementError) throw error;
+    return refuse(c, 503, {
+      code: 'reconciliation_unavailable',
+      message: 'The reconciliation report could not be read. Try again before reviewing grants.',
+      raw: error,
+    });
+  }
 });
 
 r.get('/rules', async (c) => {
