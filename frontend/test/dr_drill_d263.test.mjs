@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { bsdShellTools } from './_dr_fakes.mjs';
 
 const SCRIPT = resolve(process.cwd(), 'scripts/dr-drill.sh');
 const SRC = readFileSync(SCRIPT, 'utf8');
@@ -175,6 +176,7 @@ function drill(env = {}) {
   env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
   fakeWrangler(dir);
+  bsdShellTools(dir);
   // Real curl reads the `--header @-` the drill pipes in. A fake that exits
   // without reading it races the writer into SIGPIPE, and under pipefail the
   // retention list then reads as unreadable (the D5317 test failed under load).
