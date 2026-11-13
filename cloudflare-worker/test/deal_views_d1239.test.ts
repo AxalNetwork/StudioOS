@@ -241,6 +241,27 @@ test('fit no longer becomes available through a saved view, a room or a primary 
  }finally{w.db.close();}
 });
 
+test('fit follows the current founder relationship for an investor with both licences', async () => {
+  const w = world();
+  try {
+    w.db.exec(read('../sql/migrations/202611041822_account_licences.sql'));
+    w.db.exec(`
+      UPDATE projects SET founder_id = 70 WHERE id = 10;
+      UPDATE users SET founder_id = 70 WHERE id = 1;
+      INSERT INTO account_licences (user_id, licence, source) VALUES (1, 'founder', 'test');
+      DELETE FROM deal_invitations WHERE deal_id = 1 AND investor_user_id = 1;
+    `);
+    const fit = () => call(w, 1, 'GET', '/api/deals/fit?ids=1');
+    assert.equal((await fit()).body.items[0].score, 100);
+    w.db.exec("UPDATE account_licences SET revoked_at = datetime('now') WHERE user_id = 1 AND licence = 'founder'");
+    assert.deepEqual((await fit()).body.items[0], {
+      deal_id: 1, state: 'unavailable', label: 'Deal unavailable', score: null, confidence: null,
+    });
+  } finally {
+    w.db.close();
+  }
+});
+
 test('ticket fit uses the minimum cheque floor, never the round target or an invented allocation',async()=>{
  const w=world();try {
   w.db.exec('UPDATE deals SET target_raise=2000000,amount=9999999,minimum_check=20000 WHERE id=1');
