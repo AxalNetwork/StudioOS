@@ -7,7 +7,7 @@
  *     its state, band and confidence word (`stripView`, D1256): never a value.
  *     A venture whose founder has not shared the scorecard is "locked" and
  *     carries no scope. Every picked deal must be one the investor may read
- *     (`userReadableDealIds`); one that is not refuses the whole draft.
+ *     (the shared deal audience); an unavailable deal refuses the whole draft.
  *   - THE DRAFT says how the bands compare and which scores have low
  *     confidence. It is checked before it is shown: no number above the count
  *     of scopes (so never a score), and none of the words of advice. A draft
@@ -19,7 +19,7 @@
  *     with one activity row of ids only. Discard writes nothing.
  */
 import type { Env, User } from '../types';
-import { userReadableDealIds } from '../routes/deals';
+import { readableWorkspaceDealIds } from './dealAccess';
 import { SCOPE_ORDER, VENTURE_MODEL_V1 } from './ventureScoring/model';
 import { dealProject, investorsMaySee, stripView } from './ventureScoring/access';
 import { storedScorecard, type StoredScope } from './ventureScoring/store';
@@ -59,8 +59,7 @@ export const scopeKey = (ids: readonly number[]) => `deals:${[...ids].sort((a, b
 /** Each venture's name and bands. A deal the investor may not read refuses the draft. */
 export async function noteMaterial(env: Env, user: User, ids: readonly number[],
   scorecard: (env: Env, projectId: number) => Promise<StoredScope[]> = storedScorecard): Promise<NoteVenture[]> {
-  const readable = await userReadableDealIds(env, user, [...ids]);
-  if (ids.some((id) => !readable.has(id))) throw new NoteError('not_shared', 404, 'A venture you picked is not shared with you, so Eadwyn cannot compare it.');
+  await requireComparableDeals(env, user, ids);
   const names = new Map(((await env.DB.prepare(
     `SELECT d.id, p.name FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id IN (SELECT value FROM json_each(?))`,
   ).bind(JSON.stringify(ids)).all<{ id: number; name: string | null }>()).results || []).map((r) => [Number(r.id), r.name || 'Unnamed venture']));
@@ -77,6 +76,11 @@ export async function noteMaterial(env: Env, user: User, ids: readonly number[],
 
 /** Enough to compare: at least two ventures with a band on at least one scope. */
 export const comparable = (m: readonly NoteVenture[]) => m.filter((v) => v.scopes.some((s) => s.band)).length >= COMPARE_MIN;
+
+async function requireComparableDeals(env: Env, user: User, ids: readonly number[]): Promise<void> {
+  const readable = await readableWorkspaceDealIds(env, user, ids);
+  if (ids.some((id) => !readable.has(id))) throw new NoteError('not_shared', 404, 'A venture you picked is not shared with you, so Eadwyn cannot compare it.');
+}
 
 export function notePrompt(m: readonly NoteVenture[]): string {
   return [
@@ -128,6 +132,7 @@ export async function keepNote(env: Env, user: User, raw: unknown): Promise<Note
   if (p.user !== user.id || !Array.isArray(p.deal_ids) || typeof p.text !== 'string' || !Number.isFinite(p.expires) || p.expires < Date.now()) {
     throw new NoteError('note_expired', 409, 'This draft is too old to save. Draft it again.');
   }
+  await requireComparableDeals(env, user, p.deal_ids);
   const body = JSON.stringify({ payload: r.payload, signature: r.signature });
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body, cost_micro_usd, accepted_at)
@@ -145,6 +150,9 @@ export async function savedNotes(env: Env, user: User, ids: readonly number[]) {
   const rows = (await env.DB.prepare(`SELECT body FROM research_zone_drafts WHERE owner_user_id = ? AND surface = ? AND scope_key = ? AND accepted_at IS NOT NULL
     ORDER BY id DESC LIMIT 20`).bind(user.id, NOTE_SURFACE, scopeKey(ids)).all<{ body: string }>()).results || [];
   const items: Array<Pick<NotePayload, 'uid' | 'text' | 'deal_ids' | 'captured_at'>> = [];
+  if (!rows.length) return { items, unreadable: 0 };
+  const readable = await readableWorkspaceDealIds(env, user, ids);
+  if (ids.some((id) => !readable.has(id))) return { items, unreadable: 0 };
   let unreadable = 0;
   for (const row of rows) {
     try {

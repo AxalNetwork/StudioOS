@@ -311,6 +311,19 @@ test('only the owner answers: a co-founder gets 403, an investor or another foun
  * The founder's NDA
  * ------------------------------------------------------------------ */
 
+test('sending an NDA uses the same active venture agreement as the room', async () => {
+  const db = freshDb();
+  try {
+    db.prepare("INSERT INTO users (id, role, founder_id, name, email) VALUES (8, 'founder', 100, 'Another founder account', 'founder8@example.test')").run();
+    db.prepare("INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status) VALUES (8, ?, 'active')").run(HOLDER);
+    const result = await call(db, FOUNDER, 'POST', '/p-room/grants/g-holder/nda');
+    assert.deepEqual([result.status, result.body.code], [409, 'nda_active']);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pairwise_ndas').get().n, 1);
+  } finally {
+    db.close();
+  }
+});
+
 test('the founder\'s NDA is refused when one is in force or out for signature, for a grant that is not live, and to anyone but the venture\'s founder', async () => {
   const db = freshDb();
   // Live NDA → 409 nda_active.

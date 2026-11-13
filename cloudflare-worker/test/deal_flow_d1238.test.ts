@@ -123,6 +123,24 @@ test('a row opens its deal only where DEAL\'s rule holds: Ivy is invited to Acme
   assert.equal((await call(f, '', 1, 'POST', { deal_id: 101 })).status, 409, 'already in the flow');
 });
 
+test('the flow and inbox apply the current deal audience for a combined-licence investor', async () => {
+  const f = fixture();
+  f.db.exec(readFileSync('cloudflare-worker/sql/migrations/202611041822_account_licences.sql', 'utf8'));
+  f.db.exec(`
+    UPDATE users SET founder_id = 40 WHERE id = 1;
+    INSERT INTO account_licences (user_id, licence, source) VALUES (1, 'founder', 'test');
+  `);
+  const ownerItem = (result: any) => result.body.items.find((row: any) => row.deal_id === 105);
+  assert.equal(ownerItem(await call(f, '/inbox')).can_open, true);
+  const added = await call(f, '', 1, 'POST', { deal_id: 105 });
+  assert.equal(added.status, 201);
+  assert.equal(added.body.can_open, true);
+  assert.equal(ownerItem(await call(f, '')).can_open, true);
+  f.db.exec("UPDATE account_licences SET revoked_at = datetime('now') WHERE user_id = 1 AND licence = 'founder'");
+  assert.equal(ownerItem(await call(f, '')).can_open, false);
+  assert.equal(ownerItem(await call(f, '', 2)).can_open, false);
+});
+
 // ---------------------------------------------------------------- moves
 
 test('Closing only after a commitment: refused for Bluefern; allowed for Acme, where a seat of the firm committed', async () => {

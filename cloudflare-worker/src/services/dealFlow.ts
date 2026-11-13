@@ -10,12 +10,12 @@
  * WHAT IT NEVER DOES:
  *   · write `deals.status`: an investor's pass is theirs alone, and the round
  *     stays open for every other investor;
- *   · grant a deal read: a row's `can_open` is DEAL's rule (invited or
- *     committed, `deals.ts` canReadDeal), and nothing else opens a deal;
+ *   · grant a deal read: `can_open` follows the shared deal audience;
  *   · move to Closing without a commitment.
  */
 import type { Env, User } from '../types';
 import { PASS_REASON_KEYS } from './dealPassTaxonomy';
+import { dealAudience, dealAudiences } from './dealAccess';
 
 export const STAGES = ['sourcing', 'screening', 'diligence', 'commit', 'closing', 'passed'] as const;
 export type Stage = typeof STAGES[number];
@@ -63,10 +63,6 @@ const textOrNull = (v: unknown, max: number, code: string) => {
   return v.trim() || null;
 };
 
-// The relationship that opens a deal: the same two EXISTS as investorHasDealRelationship.
-const CAN_OPEN = `(EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
-   OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))`;
-
 /** A deal an investor can add: it exists and its venture is not deleted. */
 async function liveDeal(env: Env, dealId: number) {
   const row = await env.DB.prepare('SELECT d.id FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND p.deleted_at IS NULL')
@@ -98,10 +94,10 @@ async function validOwner(env: Env, scope: Scope, ownerId: unknown): Promise<num
 const ROW_SELECT = `SELECT f.uid, f.deal_id, f.stage, f.owner_user_id, o.name AS owner_name, f.entered_via, f.entered_at,
     f.stage_changed_at, f.pass_reason, f.passed_at, f.revisit, f.revisit_at, f.note,
     d.status AS round_status, d.amount, d.target_raise, p.name AS project_name, p.sector AS sector,
-    ` + CAN_OPEN + ` AS can_open
+    p.founder_id, p.deleted_at
   FROM deal_flow_entries f JOIN deals d ON d.id = f.deal_id JOIN projects p ON p.id = d.project_id LEFT JOIN users o ON o.id = f.owner_user_id`;
 
-function shape(r: any, nowMs: number) {
+function shape(r: any, nowMs: number, canOpen: boolean) {
   const ask = r.target_raise ?? r.amount;
   return {
     uid: r.uid, deal_id: Number(r.deal_id), venture: r.project_name ?? null, sector: r.sector ?? null,
@@ -113,23 +109,27 @@ function shape(r: any, nowMs: number) {
     pass: r.stage === 'passed' ? { reason: r.pass_reason, passed_at: r.passed_at, revisit: r.revisit ?? null, revisit_at: r.revisit_at ?? null } : null,
     note: r.note ?? null,
     // A door only where DEAL's rule holds; a flow row never opens a deal by itself.
-    can_open: Number(r.can_open) === 1,
+    can_open: canOpen,
   };
 }
 
 /** The flow, every stage, newest move first. */
 export async function readFlow(env: Env, scope: Scope, nowMs = Date.now()) {
   const rows = await env.DB.prepare(ROW_SELECT + ' WHERE f.scope_key = ? AND p.deleted_at IS NULL ORDER BY f.stage_changed_at DESC, f.id DESC')
-    .bind(scope.user.id, scope.user.id, scope.key).all<any>();
-  const items = (rows.results || []).map((r) => shape(r, nowMs));
+    .bind(scope.key).all<any>();
+  const candidates = rows.results || [];
+  const audiences = await dealAudiences(env, scope.user, candidates.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
+  const items = candidates.map((r) => shape(r, nowMs, (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none'));
   const by_stage = Object.fromEntries(STAGES.map((s) => [s, items.filter((i) => i.stage === s).length]));
   return { scope: scope.companyId != null ? 'firm' : 'you', items, by_stage };
 }
 
 async function readOne(env: Env, scope: Scope, dealId: number, nowMs = Date.now()) {
-  const r = await env.DB.prepare(ROW_SELECT + ' WHERE f.scope_key = ? AND f.deal_id = ?').bind(scope.user.id, scope.user.id, scope.key, dealId).first<any>();
+  const r = await env.DB.prepare(ROW_SELECT + ' WHERE f.scope_key = ? AND f.deal_id = ?')
+    .bind(scope.key, dealId).first<any>();
   if (!r) throw new FlowError('not_in_flow', 404, 'This deal is not in your deal flow.');
-  return shape(r, nowMs);
+  const canOpen = r.deleted_at == null && await dealAudience(env, scope.user, dealId, r.founder_id) !== 'none';
+  return shape(r, nowMs, canOpen);
 }
 
 type Entry = { id: number; uid: string; stage: Stage; stage_changed_at: string | null };
@@ -321,14 +321,15 @@ export async function inboxItems(env: Env, scope: Scope) {
   for (const [name, spec] of Object.entries(SOURCES)) {
     try {
       const binds = spec.binds(scope);
-      const q = `SELECT s.item_key, s.deal_id, s.at, s.message, d.status AS round_status, p.name AS venture, p.sector AS sector, ` + CAN_OPEN + ` AS can_open
+      const q = `SELECT s.item_key, s.deal_id, s.at, s.message, d.status AS round_status, p.name AS venture, p.sector AS sector, p.founder_id
         FROM (` + spec.sql + `) s JOIN deals d ON d.id = s.deal_id JOIN projects p ON p.id = d.project_id WHERE p.deleted_at IS NULL`;
-      const rows = await env.DB.prepare(q).bind(scope.user.id, scope.user.id, ...binds).all<any>();
+      const rows = await env.DB.prepare(q).bind(...binds).all<any>();
+      const candidates = (rows.results || []).filter((row) => !inFlow.has(Number(row.deal_id)) && !dismissed.has(String(row.item_key)));
+      const audiences = await dealAudiences(env, scope.user, candidates.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
       sources[name] = { available: true };
-      for (const r of rows.results || []) {
-        if (inFlow.has(Number(r.deal_id)) || dismissed.has(String(r.item_key))) continue;
+      for (const r of candidates) {
         items.push({ key: String(r.item_key), source: name, entered_via: spec.via, deal_id: Number(r.deal_id), venture: r.venture ?? null, sector: r.sector ?? null,
-          round_status: r.round_status, at: r.at ?? null, message: r.message ?? null, can_open: Number(r.can_open) === 1 });
+          round_status: r.round_status, at: r.at ?? null, message: r.message ?? null, can_open: (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none' });
       }
     } catch (e) {
       console.error('[deal-flow] inbox source unreadable', name);
