@@ -265,6 +265,12 @@ export function agreementRowSemantics(row) {
  * The closing's own Open / Closed / Cancelled is the round's state, not a
  * document's, and is not read here.
  *
+ * D4811 part 24: what the read cannot say is not drawn as a lifecycle state.
+ * A list that is not a list (a failed or malformed read) and a live paper with
+ * a stage state the Worker never writes read "Unreadable"; a live paper with
+ * no stage recorded reads "Not recorded". None of them is "No paper sent" or
+ * "Ready for signature".
+ *
  * Returns `{ key, badge, detail, text }`; `text` is the badge's words and the detail, as one line.
  */
 export const CLOSING_PAPER_UNMAPPED = Object.freeze({
@@ -272,21 +278,30 @@ export const CLOSING_PAPER_UNMAPPED = Object.freeze({
   stage_void: 'A signer’s envelope was voided',
 });
 
+/** What a closing paper reads where the record cannot say (D4811 part 24). */
+export const CLOSING_PAPER_HONESTY = Object.freeze({ unreadable: 'Unreadable', unrecorded: 'Not recorded' });
+
+/** The stage states `readStaged` writes (`services/stagedSigning.ts` `StageView`); any other is unreadable. */
+export const CLOSING_STAGE_STATES = Object.freeze(['waiting', 'awaiting_release', 'sent', 'signed', 'declined', 'void']);
+
 export function closingPaperLifecycle(envelopes) {
-  const list = Array.isArray(envelopes) ? envelopes.filter(Boolean) : [];
   const out = (key, badge, detail = null) => ({ key, badge, detail, text: [badge?.label, detail].filter(Boolean).join(' · ') });
+  if (!Array.isArray(envelopes)) return out('unreadable', null, CLOSING_PAPER_HONESTY.unreadable);
+  const list = envelopes.filter(Boolean);
   const live = list.find((e) => !e.voided);
   if (!live) return list.length ? out('voided', lifecycleBadge('agreement', 'voided')) : out('none', null, 'No paper sent');
-  const stages = Array.isArray(live.stages) ? live.stages : [];
   // `complete` is the Worker's own reading: every stage, Axal's countersign included, has a signature recorded.
   if (live.complete === true) {
     return out('executed', lifecycleBadge('agreement', 'executed'), live.countersign ? 'countersigned for Axal' : null);
   }
+  if (!Array.isArray(live.stages) || !live.stages.length) return out('unrecorded', null, CLOSING_PAPER_HONESTY.unrecorded);
+  const stages = live.stages;
+  if (stages.some((s) => !CLOSING_STAGE_STATES.includes(s?.state))) return out('unreadable', null, CLOSING_PAPER_HONESTY.unreadable);
   if (stages.some((s) => s?.state === 'declined')) return out('declined', null, CLOSING_PAPER_UNMAPPED.declined);
   if (stages.some((s) => s?.state === 'void')) return out('stage_void', null, CLOSING_PAPER_UNMAPPED.stage_void);
   const signed = stages.filter((s) => s?.state === 'signed').length;
   const moving = stages.some((s) => s?.state === 'sent' || s?.state === 'awaiting_release') || signed > 0;
-  if (!moving) return out('ready', lifecycleBadge('agreement', 'ready'), stages.length ? 'not sent yet' : null);
+  if (!moving) return out('ready', lifecycleBadge('agreement', 'ready'), 'not sent yet');
   const detail = stages.some((s) => s?.state === 'awaiting_release') ? 'waiting for Axal’s countersign' : `${signed} of ${stages.length} signed`;
   return out('sent', lifecycleBadge('agreement', 'sent'), detail);
 }
