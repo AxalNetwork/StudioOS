@@ -39,7 +39,9 @@
   "POST /api/advisors/bookings/:id/pay": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Only the booking's founder (founder_user_id = caller) reaches the billing checks. A co-founder, the session's own advisor, every non-party, an admin and the Super Admin get the same 404 a missing booking gets, with charging switched on, and no payment provider is called; no credentials or a disabled founder get 401."
   },
   "POST /api/advisors/me/cohort/:cycleId/guidance": {
     "review": "record_without_ownership_check",
