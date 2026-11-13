@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
@@ -11,7 +11,7 @@ import deletion from '../src/routes/meta_data_deletion.ts';
 import { fakeMetaGraph } from './_meta_graph_fake.mjs';
 import type { Env } from '../src/types.ts';
 
-const env = { WHATSAPP_APP_ID: '123', WHATSAPP_APP_SECRET: 'fixture', FACEBOOK_LOGIN_CONFIG_ID: '456', FACEBOOK_APP_APPROVED: '1', JWT_SECRET: 'synthetic-test-secret-used-only-in-tests' } as Env;
+const env = { WHATSAPP_APP_ID: '123', WHATSAPP_APP_SECRET: randomBytes(32).toString('hex'), FACEBOOK_LOGIN_CONFIG_ID: '456', FACEBOOK_APP_APPROVED: '1', JWT_SECRET: 'synthetic-test-secret-used-only-in-tests' } as Env;
 const scopes = ['pages_show_list', 'pages_read_engagement', 'read_insights'];
 
 test('Facebook waits for App Review and uses the separate Business Login configuration', async () => {
@@ -55,7 +55,7 @@ test('Meta deletion requires a signed request and deletes only matching Facebook
   assert.equal((await post('bad')).status, 400);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM integrations').get()?.n, 3);
   const data = Buffer.from(JSON.stringify({ algorithm: 'HMAC-SHA256', issued_at: now / 1000, user_id: '123' })).toString('base64url');
-  const signature = createHmac('sha256', 'fixture').update(data).digest('base64url');
+  const signature = createHmac('sha256', env.WHATSAPP_APP_SECRET!).update(data).digest('base64url');
   const result = await post(`${signature}.${data}`);
   assert.equal(result.status, 200);
   const { url, confirmation_code } = await result.json() as { url: string; confirmation_code: string };
