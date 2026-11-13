@@ -85,6 +85,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `VentureContext.jsx` | D5074 (#5074): `VentureProvider`, which `CycleRoute` puts around its page with the venture `useProject` resolved, and `useVenture()`, the one way a tool asks for `projectId`, `projectUid`, the record and the company; the record is read from the projects list only once a tool asks. |
 | `progressiveList.js` | D5076 (#5076): progressive complexity on Build's six module pages: `listStage` (zero / few / many; list controls from `LIST_CONTROLS_FROM` = 10), each module's zero-state copy and dominant action (`PROGRESSIVE`), the few-records count. `CycleModulePage` and `PhoneModulePage` draw by it. |
 | `defs/` | D5615 (#5615): each cycle's entry in `CycleRoute`'s table (`CYCLE_DEFS`), one file per cycle: `validate.jsx`, `build.jsx`, `raise.jsx`, `grow.jsx`. Each holds that cycle's modules, action and the `*Mount` lightbox it opens (Validate's `RecordMount` too), tools, Add, fill and AI bands, the parts under each module, record pages and the lazy steps only it draws, and default-exports the entry; `CycleRoute.jsx` imports the four. A cycle's new part, band or tool goes here, not in `CycleRoute.jsx` (`documentation/architecture/HUBS.md`). |
+| `GrowOverview.jsx` | #4862: GR-01/02/13/16 focus-first overview, ranked attention, setup facts and compact domains on desktop and phone. |
+| `growOverviewModel.js` | #4862: canonical Grow labels over existing routes, action gating and focus-value formatting. |
 
 ## Rules
 

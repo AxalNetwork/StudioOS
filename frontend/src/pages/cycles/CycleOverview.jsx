@@ -5,6 +5,7 @@ import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, l
 import { MODULES } from './modules';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { growTabs, reportingHref, growArea } from './growOverviewModel';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -75,28 +76,31 @@ export const CARD_CHART_LIMIT = 2;
 export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
-  const tabs = cycleTabs(meta.key, cards, active, search);
+  const legacyTabs = cycleTabs(meta.key, cards, active, search);
+  const tabs = meta.key === 'grow' ? growTabs(search, active) : legacyTabs;
   const current = tabs.find((t) => t.active) || tabs[0];
-  const backHref = record ? (tabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
+  const backHref = record ? (legacyTabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
+  const displayTitle = meta.key === 'grow' && !record && active ? growArea(active)?.name || title : title;
   const label = action?.label || meta.action;
   const href = safeHref(action?.href);
-  const btn = 'inline-flex items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
+  const btn = 'inline-flex items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep' + (meta.key === 'grow' ? ' min-h-[44px] dark:bg-violet-600 dark:hover:bg-violet-500' : '');
   return (
     <header className="flex flex-col gap-1.5" data-testid="cycle-header">
       {record && <Link to={backHref} className="w-fit text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="record-back">‹ {moduleName}</Link>}
-      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.question}</span>
+      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.key === 'grow' ? growArea(active || '')?.name || 'Overview' : meta.question}</span>
       <div className={`flex flex-wrap justify-between gap-3 ${record ? 'items-start' : 'items-end'}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
+          <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{displayTitle || meta.name}</h1>
           {/* D1146 (#3032): a header chip, such as Validate's Product-market fit (RD12). */}
           {chip}
           {record && slots && <span ref={slots.pills} className="flex flex-wrap items-center gap-2" data-testid="record-header-pills" />}
         </div>
         {/* D1060 (#2930): `more` sits beside the action, as the Reporting desk's More menu. */}
-        <div className="flex items-center gap-2">
+        <div className={meta.key === 'grow' ? 'flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 sm:w-auto' : 'flex items-center gap-2'}>
           {!record && action?.onClick
             ? <button type="button" className={btn} onClick={action.onClick} disabled={!!action.disabled} data-testid="cycle-action">{label}</button>
             : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
+          {meta.key === 'grow' && !record ? <Link className="inline-flex min-h-[44px] items-center rounded-[9px] border border-axal-hairline px-3 py-2 text-[12px] font-bold text-axal-violet-deep dark:border-gray-700 dark:text-violet-300" to={reportingHref(search)} aria-label="Reporting utility">Reporting</Link> : null}
           {more}
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
@@ -123,7 +127,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
   );
 }
 
-export function FigureTile({ fig }) {
+export function FigureTile({ fig, details = null }) {
   const value = figureValue(fig);
   const delta = figureDelta(fig);
   const unreadable = fig?.state === 'unreadable';
@@ -141,6 +145,7 @@ export function FigureTile({ fig }) {
         <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
+      {details}
     </div>
   );
 }

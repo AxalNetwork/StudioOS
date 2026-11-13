@@ -41,6 +41,8 @@ import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import ValidateNextAction from './ValidateNextAction';
+import GrowOverview from './GrowOverview';
+import { growArea } from './growOverviewModel';
 import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
@@ -410,7 +412,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (creates && searchParams.get('new') === '1') setCreating(true);
   }, [creates, searchParams]);
   const name = cycleOf(cycle)?.name || 'Validate';
-  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
+  const moduleName = slug ? (cycle === 'grow' ? growArea(slug)?.name : null) || (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
@@ -843,7 +845,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // D703 decision 1: below 1024px the root is the phone page, in place of
     // the overview and `AlsoIn`, never beside them. Both read the same overview.
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
-    body = phone ? (
+    body = cycle === 'grow' ? <GrowOverview raw={rawOverview} data={overview} status={overviewState} search={q} action={action} message={overviewMessage} readOnly={Boolean(narrativeAdmin || supportOpen)} onRetry={() => setReload((n) => n + 1)} /> : phone ? (
       <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId} message={overviewMessage}
         openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
     ) : (

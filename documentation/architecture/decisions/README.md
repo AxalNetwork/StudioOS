@@ -119,3 +119,4 @@ and citations by number keep working.
 | `D4557-p2.md` | Bounded general compute host with canonical grants; hosted activation remains owner-gated. |
 | `D5720.md` | Static notification test Worker, data bindings and scanner-clean policy locals. |
 | `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |
+| `D4862-p2.md` | Focus-first Grow overview, recorded attention and one taxonomy over existing routes (#4862). |
