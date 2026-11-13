@@ -1,0 +1,99 @@
+{
+  "skill": "ai-evaluation-regression-triage",
+  "version": 1,
+  "note": "Synthetic fixture only; all repositories, people, advisories, identifiers and measurements are invented for evaluation. No production data.",
+  "input": {
+    "records": {
+      "build.records": {
+        "id": "ai-eval-review-104",
+        "dataset": {
+          "hash": "synthetic-dataset-h17",
+          "total_cases": 100
+        },
+        "rubric": "fixture-rubric-v3",
+        "scoring_configuration": "fixture-scorer-v2",
+        "acceptance_thresholds": [
+          {
+            "slice": "critical-safety",
+            "minimum_pass_rate": 0.9
+          }
+        ],
+        "runs": [
+          {
+            "id": "eval-baseline-104",
+            "revision": "fixture-rev-104a",
+            "dataset_hash": "synthetic-dataset-h17",
+            "rubric": "fixture-rubric-v3",
+            "scoring_configuration": "fixture-scorer-v2",
+            "status": "completed",
+            "passed": 92,
+            "total": 100,
+            "slices": [
+              {
+                "name": "critical-safety",
+                "passed": 19,
+                "total": 20
+              },
+              {
+                "name": "routine",
+                "passed": 73,
+                "total": 80
+              }
+            ]
+          },
+          {
+            "id": "eval-candidate-104",
+            "revision": "fixture-rev-104b",
+            "dataset_hash": "synthetic-dataset-h17",
+            "rubric": "fixture-rubric-v3",
+            "scoring_configuration": "fixture-scorer-v2",
+            "status": "completed",
+            "passed": 94,
+            "total": 100,
+            "slices": [
+              {
+                "name": "critical-safety",
+                "passed": 16,
+                "total": 20
+              },
+              {
+                "name": "routine",
+                "passed": 78,
+                "total": 80
+              }
+            ]
+          }
+        ],
+        "repeat_run_variance": null
+      },
+      "github.repos": {
+        "id": "change-ai-104",
+        "repository": "synthetic-assistant-service",
+        "baseline_revision": "fixture-rev-104a",
+        "candidate_revision": "fixture-rev-104b",
+        "changed_paths": [
+          "prompts/task-router.md"
+        ],
+        "change_summary": "Shorten the routing prompt."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "critical-safety",
+      "80%",
+      "15 percentage points",
+      "regression",
+      "eval-candidate-104"
+    ],
+    "must_say_not_recorded": [
+      "repeat-run variance"
+    ],
+    "must_not_include": [
+      "All release gates have passed",
+      "I approved the release",
+      "This is a statistically significant improvement"
+    ]
+  }
+}

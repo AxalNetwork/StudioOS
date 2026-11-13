@@ -1,0 +1,41 @@
+Use this prompt in Replit:
+
+> Analyze this entire codebase and act like a senior product engineer, staff security engineer, and technical architect. First, identify the **major feature improvements** that would most increase product value, usability, reliability, performance, and scalability. Then perform a **security review** covering auth, authorization, secrets handling, input validation, data exposure, dependency risk, unsafe file or network access, workflow/config risks, and deployment security. After that, convert everything into a prioritized implementation plan with concrete tasks. Group tasks by epic, label each as feature, security, infra, or refactor, assign severity/priority, estimate impact vs effort, identify dependencies, and break large work into small executable tasks Replit can complete one by one. Show quick wins first, then major projects, and end with the top 10 next tasks.[1][2][3]
+
+A stronger version for better output:
+
+> Perform a full product, architecture, and security audit of this repo without making changes yet. Infer the stack from the codebase. Deliver:
+> 1. A concise summary of what the app does.
+> 2. The top major feature improvements that would materially improve the product.
+> 3. The top security and privacy risks, with exploitability and business impact.
+> 4. A prioritized roadmap split into epics and tasks.
+> 5. For each task: title, why it matters, files likely affected, implementation steps, risk level, impact, effort, and whether Replit can do it autonomously.
+> 6. A recommended execution order for the next 2 weeks.
+> Focus on actionable findings, avoid generic advice, and prefer repo-specific recommendations over boilerplate. If something is uncertain, say what evidence would confirm it.[2][4][5]
+
+If you want it to immediately turn findings into an actionable backlog:
+
+> Review this codebase for major feature opportunities, security issues, and technical debt. Then create a backlog I can execute in Replit. Organize the backlog into: Quick wins, High-impact features, Security fixes, Reliability improvements, and Nice-to-have ideas. For each item, include a short description, acceptance criteria, priority, estimated complexity, and the exact first step. Make the recommendations specific to this repository, not generic SaaS advice.[6][7][8]
+
+Best short version:
+
+> Audit this repo for major feature improvements and security risks, then turn the findings into a prioritized task list with epics, acceptance criteria, and recommended execution order.[3][1]
+
+If you want, I can make a version specifically for a **SaaS app**, **marketing site**, or **API/backend** repo.
+
+Sources
+[1] Efficient Prompting - Replit Docs https://docs.replit.com/core-concepts/agent/best-practices
+[2] Project Security Center - Replit Docs https://docs.replit.com/core-concepts/security/project-security-center
+[3] Meet Replit Security Agent https://blog.replit.com/meet-replit-security-agent
+[4] Efficient prompting with Replit AI https://docs.replit.com/tutorials/effective-prompting
+[5] How to Prompt LLMs for Better, Faster Security Reviews https://crashoverride.com/blog/prompting-llm-security-reviews
+[6] 10 AI prompts to speed your team's software delivery - GitLab https://about.gitlab.com/blog/10-ai-prompts-to-speed-your-teams-software-delivery/
+[7] Code review & security/audit tools - any recommendations? - Page 2 https://replit.discourse.group/t/code-review-security-audit-tools-any-recommendations/7833?page=2
+[8] AI Prompts for Code Review Every Developer Should Use in 2026 https://5ly.co/blog/ai-prompts-for-code-review/
+[9] Suggested next tasks andfeatures : r/replit - Reddit https://www.reddit.com/r/replit/comments/1sq0cid/suggested_next_tasks_andfeatures/
+[10] Decision-Time Guidance: Keeping Replit Agent Reliable https://blog.replit.com/decision-time-guidance
+[11] How to Run a 5-Minute Security Audit on Your Replit App (2026) https://rafter.so/blog/replit-security-audit
+[12] Using Replit agent 3 for a security review https://theaidya.com/using-replit-agent-3-for-a-security-review
+[13] MR Security and Functional Review - AI Prompt - DocsBot AI https://docsbot.ai/prompts/technical/mr-security-and-functional-review
+[14] Introducing Dynamic Intelligence for Replit Agent https://blog.replit.com/dynamic-intelligence
+[15] A better way to work with Agent: plan first, then code - Tips & Tricks https://replit.discourse.group/t/a-better-way-to-work-with-agent-plan-first-then-code/6413

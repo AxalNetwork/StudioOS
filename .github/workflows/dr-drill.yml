@@ -1,0 +1,109 @@
+name: Monthly DR Drill
+
+# Task #5 (IE) — Monthly disaster-recovery drill.
+# Reads the latest backup's key from the export's heartbeat, restores it
+# into a throwaway EU D1 database, smoke-checks the restored rows and
+# tables, and pages on-call on failure. Every run writes drill-d1.json
+# to the backups bucket, pass or fail, which HQ's Security page reads
+# (D263).
+#
+# Schedule: 1st of the month at 06:00 UTC. Also runnable on demand.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Non-secret config only. Secrets are scoped to the specific steps that
+# consume them (see the drill + notify steps below) so they aren't exposed
+# to every step in the job.
+env:
+  BACKUP_BUCKET: studioos-backups
+  # D263 — 4d in scripts/dr-drill.sh (deploy a preview worker bound to the
+  # restored database and HTTP-smoke it) is OFF until the preview env has real
+  # ids: wrangler.toml's [env.preview] KV ids are placeholders, and the probe
+  # URL it builds lacks the account's workers.dev subdomain. Switched on with
+  # this '0' changed to '1' once both are real.
+  DR_DRILL_PREVIEW: '0'
+  DRILL_SOURCE: gha
+  # D4558: with the independent copy on, the drill also fails when its heartbeat is missing or stale.
+  DR_SECOND_COPY_ENABLED: ${{ vars.DR_SECOND_COPY_ENABLED }}
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # D263 — a step's `if:` cannot see that step's own `env:`, so "Notify on
+    # failure" used to test a variable that was always empty there, and it was
+    # skipped on every failed run. This exposes only WHETHER a pager is
+    # configured (a boolean, never the URL) at job level, where `if:` can see it.
+    env:
+      PAGER_CONFIGURED: ${{ secrets.PAGER_WEBHOOK_URL != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Preflight — assert required secrets are set
+        # Runs BEFORE wrangler install so failures are instant and actionable.
+        # Secrets are scoped to this step's env: (not hoisted to job level).
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            MISSING+=("CLOUDFLARE_API_TOKEN")
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo ""
+            echo "These must be set as REPOSITORY secrets (not environment-scoped):"
+            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "Required token scopes: D1 export/read + R2 object write."
+            echo "See .github/workflows/README.md for the full triage guide."
+            exit 1
+          fi
+          # Non-blocking sanity check: account ID should be 32 lowercase hex chars.
+          if ! [[ "${CLOUDFLARE_ACCOUNT_ID}" =~ ^[0-9a-f]{32}$ ]]; then
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID does not look like a 32-char hex string ('${CLOUDFLARE_ACCOUNT_ID:0:6}…'). Wrangler may reject it. Verify the value in repo Settings → Secrets."
+          fi
+          echo "Preflight OK — both secrets are present."
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+
+      - name: Install wrangler + jq
+        run: |
+          npm i -g wrangler@latest
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run DR drill
+        id: drill
+        # Cloudflare creds + optional pager are consumed by scripts/dr-drill.sh
+        # (it runs wrangler and posts its own failure page), so scope them here.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
+        run: bash scripts/dr-drill.sh
+
+      # The drill script pages from its own EXIT trap when it fails, so this
+      # step pages only for a failure BEFORE the drill ran (preflight, install).
+      - name: Notify on failure
+        if: failure() && steps.drill.outcome != 'failure' && env.PAGER_CONFIGURED == 'true'
+        env:
+          PAGER_WEBHOOK_URL: ${{ secrets.PAGER_WEBHOOK_URL }}
+          # Pass GitHub-context values via env (never interpolate them
+          # directly into the run: shell — that's a command-injection footgun).
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          curl -fsS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"🚨 DR DRILL FAILED — investigate immediately. See run #${RUN_ID}.\"}" \
+            "${PAGER_WEBHOOK_URL}" || true

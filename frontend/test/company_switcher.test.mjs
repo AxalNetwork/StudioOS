@@ -1,0 +1,201 @@
+/**
+ * CompanySwitcher — creation works, and the switcher does not overclaim.
+ *
+ * Two separate facts are pinned here because they failed together in the
+ * product: "Add a new company" was hardcoded `disabled` with the title
+ * "Creating additional companies is coming soon", while `POST /company/create`
+ * on the worker had been complete the whole time — it inserts the
+ * `company_profiles` row AND the `user_company_links` row that makes the
+ * creator its primary admin. The feature read as unbuilt because of one
+ * attribute.
+ *
+ * The second fact is the one that matters more. Enabling creation is only safe
+ * while the UI is honest about what selecting a company does. When this file
+ * was written that was "almost nothing": no business table carried a
+ * `company_id` at all, so a second company showed the first one's rows, which
+ * reads as data loss. Migration 189 and `companyScope` started closing that,
+ * but starting is not finishing — most route files still ignore the active
+ * company, so the notice still has to stand.
+ *
+ * The notice and the ROLLOUT are therefore asserted as one coupled fact, and
+ * the coupling is measured rather than declared. The first version asked a
+ * yes/no question — "does any company scoping exist?" — and went red the
+ * moment the first route adopted it, demanding the notice be deleted while 50
+ * of 51 route files still ignored the active company. The last test now counts
+ * the route files that read `projects` and narrow through `companyScope`, and
+ * requires the notice gone only when every one of them does.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+import { VENTURE_PARAM, ventureRef } from '../src/pages/cycles/ventureQuery.js';
+
+const root = resolve(process.cwd());
+const read = (p) => readFileSync(resolve(root, p), 'utf8');
+
+const switcher = read('frontend/src/ui/CompanySwitcher.jsx');
+const api = read('frontend/src/lib/api.js');
+
+test('the add-company control is not disabled', () => {
+  assert.ok(
+    !/Creating additional companies is coming soon/.test(switcher),
+    'the "coming soon" title is gone',
+  );
+  // `disabled` on the SUBMIT button is correct (empty name / in-flight save).
+  // What must not come back is a bare `disabled` with no expression, which is
+  // how the add button was switched off.
+  assert.ok(
+    !/^\s*disabled\s*$/m.test(switcher),
+    'no unconditionally-disabled button remains',
+  );
+});
+
+test('creating a company posts to the endpoint that also links the creator', () => {
+  assert.match(switcher, /api\.createCompany\(/, 'the switcher calls createCompany');
+  assert.match(
+    api, /createCompany:\s*\(data\)\s*=>\s*request\('\/company\/create'/,
+    'createCompany targets /company/create',
+  );
+});
+
+test('the new company becomes the active one', () => {
+  // Creating a company and leaving the previous one selected would look like
+  // the create silently failed.
+  assert.match(switcher, /setCompany\(created\)/);
+  assert.match(switcher, /setCompanies\(\[\.\.\.companies, created\]\)/);
+});
+
+/**
+ * Route files that read `projects`, filter on FOUNDER OWNERSHIP, and are still
+ * allowed not to narrow — each with the reason it is exempt.
+ *
+ * The list is deliberately tiny and every entry was checked by reading the
+ * file. An allowlist that grows is a rollout going backwards, so adding to it
+ * should feel like a decision rather than a formality.
+ */
+const WIDE_ON_PURPOSE = {
+  'account_companies.ts': 'Account › Companies and projects (D1136) lists every company and venture the member holds, across companies by design; each read is the caller\'s own (owned or seated), never another founder\'s',
+  'account_portfolio.ts': 'D1415: the Portfolio switcher, settings scope and address resolution are the reads that CHOOSE a company, so they list every company and project the member holds, across companies by design; each project is the caller\'s own (owned or seated) or in a company they belong to, never another founder\'s',
+  // 'calendar.ts' stood here: D1384 (#3692) narrows its compliance source by the active company.
+  'capital.ts': 'the project read sits inside an admin-only handler',
+  'deal_insights.ts': 'D1151 reads a named deal through userMayReadDeal, not a founder venture list; founder_id resolves its published team and canonical NDA party. The company switcher neither selects that deal nor grants access to it',
+  'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
+  'public.ts': 'the unauthenticated public profile facade — there is no active company to scope by, and the profile is the person\'s',
+  'project_lifecycle.ts': 'D1137: a write to ONE named venture, gated to its owner by isProjectManager; `founder_id = ?` only finds the owner\'s account, and a move must reach a company other than the active one',
+};
+
+test('the scope notice stands exactly as long as scoping is incomplete', () => {
+  // THIS GUARD HAS BEEN WRONG TWICE, in opposite directions, and both
+  // corrections are the reason it looks like this.
+  //
+  // First it asked a yes/no question — "does any company scoping exist?" — and
+  // went red the moment the first route adopted it, demanding the notice be
+  // deleted while 50 of 51 route files still ignored the active company.
+  //
+  // Then it measured `companyScope` SPECIFICALLY. But the rollout narrowed
+  // through `projectInActiveCompany`, `activeCompanyFor`, `resolveActiveCompany`
+  // and the investor helpers instead, so the guard could never go green no
+  // matter how complete the scoping became — it would have kept a true-sounding
+  // but false notice on screen forever. A guard that cannot be satisfied is not
+  // a strict guard, it is a broken one.
+  //
+  // It now measures two things that are actually true of a finished rollout:
+  // the real vocabulary, and only the files where company scoping is even the
+  // right question. A file that reads `projects` but never filters on founder
+  // ownership is not a founder-ownership surface — it reaches projects through
+  // a share token, a public listing, an admin console or an investor
+  // relationship — so it is not evidence of an unfinished rollout.
+  const SCOPED = /companyScope|projectInActiveCompany|activeCompanyFor|resolveActiveCompany|investorActiveCompany|investorProjectIds/;
+  const FOUNDER_OWNED = /founder_id\s*=\s*[?$]|user\.founder_id/;
+
+  const routes = readdirSync(resolve(root, 'cloudflare-worker/src/routes'))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => {
+      let src = codeOnly(read(`cloudflare-worker/src/routes/${f}`));
+      // #2435 moves the real request-aware gate into shared middleware.
+      // Follow its import and call; an unscoped router gains no exemption.
+      if (f === 'decks.ts') {
+        // D4595 moves the deck role matrix into services/decks/access.ts,
+        // which delegates company scope to the same shared gate. Follow both hops.
+        assert.match(src, /import \{ projectOwned \} from '\.\.\/services\/decks\/access'/, `${f} must import its deck gate`);
+        assert.match(src, /await projectOwned\(c, user,/, `${f} must call its deck gate`);
+        const deckAccess = codeOnly(read('cloudflare-worker/src/services/decks/access.ts'));
+        assert.match(deckAccess, /import \{ projectOwned as sharedProjectOwned \} from '\.\.\/\.\.\/middleware\/projectContentAccess'/, 'the deck gate must import the shared gate');
+        assert.match(deckAccess, /await sharedProjectOwned\(c, user, projectId, opts\)/, 'the deck gate must delegate every scoped option');
+        src += deckAccess + codeOnly(read('cloudflare-worker/src/middleware/projectContentAccess.ts'));
+      }
+      if (f === 'brand.ts') {
+        assert.match(src, /import \{ projectOwned(?: as sharedProjectOwned)? \} from '\.\.\/middleware\/projectContentAccess'/, `${f} must import its shared gate`);
+        assert.match(src, /await projectOwned\(c, user,/, `${f} must call its shared gate`);
+        if (src.includes('projectOwned as sharedProjectOwned')) assert.match(src, /await sharedProjectOwned\(c, user, projectId, opts\)/, `${f} must delegate every scoped option`);
+        src += codeOnly(read('cloudflare-worker/src/middleware/projectContentAccess.ts'));
+      }
+      return { f, src };
+    });
+  const queriesProjects = routes.filter(({ src }) => /\b(FROM|JOIN)\s+projects\b/.test(src));
+  const founderOwned = queriesProjects.filter(({ src }) => FOUNDER_OWNED.test(src));
+  const unscoped = founderOwned
+    .filter(({ src }) => !SCOPED.test(src))
+    .filter(({ f }) => !(f in WIDE_ON_PURPOSE));
+
+  assert.ok(queriesProjects.length > 0, 'sanity: some route reads projects');
+  assert.ok(founderOwned.length > 0, 'sanity: some route filters projects by founder ownership');
+
+  // The allowlist must not rot: an entry for a file that has since started
+  // narrowing, or stopped reading projects at all, is a stale claim.
+  for (const [f, why] of Object.entries(WIDE_ON_PURPOSE)) {
+    const row = queriesProjects.find((r) => r.f === f);
+    assert.ok(row, `${f} is allowlisted but no longer reads projects — drop the entry (${why})`);
+    assert.ok(!SCOPED.test(row.src), `${f} now narrows by company — drop it from WIDE_ON_PURPOSE`);
+  }
+
+  const hasNotice = /SCOPE_NOTICE|SHARED_NOTICE/.test(switcher);
+  if (unscoped.length === 0) {
+    assert.equal(
+      /SCOPE_NOTICE/.test(switcher), false,
+      'every founder-ownership surface now narrows by company — the "still rolling out" ' +
+      'notice is no longer true and must be replaced (not simply deleted: shared ' +
+      'marketplaces and account-level data stay the same in every company by design, ' +
+      'and the advisor Practice/Expertise rows really are unseparated because they run ' +
+      'on frozen code — task #124, UNRESOLVED_ITEMS.md U4)',
+    );
+    assert.ok(hasNotice, 'the switcher must still say what does NOT move between companies');
+  } else {
+    assert.ok(
+      /SCOPE_NOTICE/.test(switcher),
+      `${unscoped.map((r) => r.f).join(', ')} filter projects by founder ownership and ` +
+      'still ignore the active company, so the switcher must keep saying separation ' +
+      'is incomplete',
+    );
+  }
+});
+
+test('no founder landing offers its own startup picker', () => {
+  // CompanySwitcher is the one control that changes which company a reader is
+  // looking at. /validate and /build each carried a second one — a project
+  // <select> in the hero — so the same page had two ways to change what it was
+  // showing, and only one of them told the rest of the app.
+  //
+  // A project still reaches these pages by `?project_id=`, which every cycle
+  // landing reads; what is gone is the in-page control that competed with the
+  // switcher. The desks are retired (D661, #1474), and the cycle pages that
+  // replaced them are held to the same rule.
+  for (const file of [
+    'frontend/src/pages/cycles/CycleRoute.jsx',
+    'frontend/src/pages/cycles/CycleOverview.jsx',
+    'frontend/src/pages/cycles/CycleModulePage.jsx',
+  ]) {
+    const src = codeOnly(read(file));
+    assert.doesNotMatch(src, /<select[^>]*data-testid="select-[a-z]+-project"/,
+      `${file} must not render its own startup picker — CompanySwitcher owns that`);
+    assert.doesNotMatch(src, /projects\.map\(\(project\) => <option/,
+      `${file} must not build a project option list`);
+  }
+  // D5074 (#5074): CycleRoute reads the venture through the shared helper, which reads `?project_id=`.
+  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /ventureRef\(searchParams\)/,
+    'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
+  assert.equal(VENTURE_PARAM, 'project_id');
+  assert.equal(ventureRef('?project_id=7')?.id, 7, 'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
+});

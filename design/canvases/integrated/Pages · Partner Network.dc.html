@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#92400e;background:#fffbf2;border-color:#fde68a;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#fffbf2;border-color:#fde68a;color:#92400e;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .ours{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#92400e;background:#fffbf2;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .gate{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .orph{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#615c6e;margin-top:12px}
+    .step{display:flex;align-items:center;gap:7px}
+    .sd{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex:none}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="3">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /network</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#92400e;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Network</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">Studio Vireo <span style="color:#615c6e;font-weight:600">· firm book</span></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="3">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE — primary composition where the product has no backing -->
+        <sc-if value="{{ p.empty }}">
+          <div class="card" style="padding:26px 28px;margin-top:14px;border-style:dashed;background:#fbfbfc">
+            <div style="max-width:620px">
+              <span class="lbl" style="color:#92400e">Nothing to roll up yet</span>
+              <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:9px">{{ p.empty.h }}</div>
+              <div style="font-size:12.5px;color:#4a4553;line-height:1.65;margin-top:8px">{{ p.empty.body }}</div>
+              <div style="display:flex;gap:8px;margin-top:15px;flex-wrap:wrap">
+                <span class="acc">{{ p.empty.cta }}</span><span class="gho">{{ p.empty.cta2 }}</span>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:13px;line-height:1.6">{{ p.empty.honest }}</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:{{ p.addsTop }}">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="legend">
+          <span style="display:inline-flex;align-items:center;gap:6px"><span class="seam">Platform</span>came in through the platform — read-only to the firm</span>
+          <span style="display:inline-flex;align-items:center;gap:6px"><span class="ours">Ours</span>the firm’s own outreach, editable</span>
+        </div>
+
+        <sc-if value="{{ p.steps }}">
+          <div class="card" style="padding:14px 17px;margin-top:13px">
+            <span class="lbl">Double opt-in · a state cannot be entered without its consent record</span>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:11px;flex-wrap:wrap">
+              <sc-for list="{{ p.steps }}" as="s" hint-placeholder-count="5">
+                <span class="step"><span class="sd" style="{{ s.style }}">{{ s.n }}</span><span style="font-size:11.5px;font-weight:700;color:#3f3a49">{{ s.t }}</span><sc-if value="{{ s.gate }}"><span class="gate">{{ s.gate }}</span></sc-if><sc-if value="{{ s.arrow }}"><span style="color:#c9c5d1">→</span></sc-if></span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.ours }}"><span class="ours">{{ c.ours }}</span></sc-if>
+                  <sc-if value="{{ c.orph }}"><span class="orph">{{ c.orph }}</span></sc-if>
+                  <sc-if value="{{ c.gate }}"><span class="gate">{{ c.gate }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.sub }}"><span style="display:block;font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ c.sub }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="amber" page="Network" hint-size="100%,700px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const A = { ink:'#b45309', deep:'#92400e', tint:'#fffbf2' };
+    const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Network' ? 'nav on' : 'nav',
+      style: label === 'Network' ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Relationships','Introductions','Organizations'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Introductions' }));
+
+    const pill = (t) => {
+      const M = { 'Made':['#ecfdf5','#047857','#a7f3d0'], 'Both agreed':['#ecfdf5','#047857','#a7f3d0'],
+        'Client':['#ecfdf5','#047857','#a7f3d0'],
+        'One side':['#fffbeb','#92400e','#fde68a'], 'Requested':['#fffbeb','#92400e','#fde68a'],
+        'Prospect':['#fffbeb','#92400e','#fde68a'], 'Going cold':['#fffbeb','#92400e','#fde68a'],
+        'Declined':['#fef2f2','#b91c1c','#fecaca'], 'Orphaned':['#fef2f2','#b91c1c','#fecaca'],
+        'Referral source':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Favour':['#f6f5f8','#615c6e','#e2e1e8'], 'Referral fee':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, pill:null, seam:null, ours:null, orph:null, gate:null, nr:false, sub:null, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine'][n] || String(n);
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+
+    const N_IN = 0.351, N_OUT = 0.555; // Mistral Small 3.1 — the Network curation, as the rail declares
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * N_IN + tout / 1e6 * N_OUT;
+
+    // ══ ONE firm book. A contact belongs to the firm; someone at the firm owns it. ══
+    // Strength is derived from recorded interaction count + recency, and the row shows the
+    // derivation rather than presenting a warmth score as a fact.
+    const TODAY = 'Sep 1, 2026';
+    const BOOK = [
+      { name:'Ines Marchetti', org:'Meridian Robotics', role:'Co-founder', owner:'Nadia Okonkwo',
+        last:'Aug 26, 2026', days:6, n:14, src:'platform', srcT:'Marketplace need' },
+      { name:'Rowan Whitfield', org:'Halverton', role:'CEO', owner:'Tomás Ferreira',
+        last:'Aug 28, 2026', days:4, n:31, src:'ours' },
+      { name:'Aoife Brennan', org:'Thornbury Capital', role:'Partner', owner:null,
+        last:'Jun 12, 2026', days:81, n:5, src:'platform', srcT:'Portfolio value-add' },
+      { name:'Dev Raghunathan', org:'Novacraft Labs', role:'Founder', owner:'Sena Adeyemi',
+        last:'Aug 28, 2026', days:4, n:9, src:'platform', srcT:'Lab cohort 4' },
+      { name:'Marta Kowalczyk', org:'Verwood', role:'Head of Design', owner:'Nadia Okonkwo',
+        last:'Aug 14, 2026', days:18, n:22, src:'ours' },
+      { name:'Callum Ferris', org:'Thornfield', role:'COO', owner:'Sena Adeyemi',
+        last:'Aug 27, 2026', days:5, n:11, src:'ours' },
+      { name:'Yusuf Demir', org:'Ostara Studio', role:'Principal', owner:null,
+        last:'Not recorded', days:null, n:2, src:'ours' }
+    ];
+    const owned = BOOK.filter(c => c.owner);
+    const orphans = BOOK.filter(c => !c.owner);
+    const seamBook = BOOK.filter(c => c.src === 'platform');
+    const cold = BOOK.filter(c => c.days !== null && c.days > 60);
+    const strength = (c) => {
+      if (c.days === null) return { t:'Not recorded', nr:true, sub:null };
+      const label = c.n >= 20 && c.days <= 30 ? 'Strong' : (c.n >= 8 && c.days <= 60 ? 'Working' : 'Thin');
+      return { t:label, nr:false, sub: c.n + ' recorded interactions · last ' + c.days + ' d ago' };
+    };
+    const bookRows = BOOK.slice().sort((a, b) => (a.owner ? 1 : 0) - (b.owner ? 1 : 0) || (b.days || 999) - (a.days || 999))
+      .map(c => {
+        const s = strength(c);
+        return { rowStyle: c.owner ? '' : 'background:#fffafa', cells:[
+          cell(c.name, { sub: c.role }),
+          cell(c.org, c.src === 'platform' ? { seam: c.srcT } : { ours:'Ours' }),
+          c.owner ? cell(c.owner) : cell('Unassigned', { orph:'Orphaned' }),
+          cell(c.last, c.days !== null && c.days > 60 ? { pill:'Going cold' } : {}),
+          s.nr ? cell('', { nr:true }) : cell(s.t, { sub: s.sub })
+        ]};
+      });
+
+    // ══ ONE introduction pipeline. Consent is a gate: a state cannot be entered without it. ══
+    const STATES = ['Requested','One side','Both agreed','Made','Outcome'];
+    const INTRO = [
+      { who:'Ines Marchetti → Ostara Studio', state:'Made', kind:'Referral fee',
+        consent:'Both recorded Aug 20', outcome:'Engaged Ostara for native mobile — 8% referral fee agreed.', src:'ours' },
+      { who:'Rowan Whitfield → Aoife Brennan', state:'Both agreed', kind:'Favour',
+        consent:'Both recorded Aug 29', outcome:'Scheduling. No economics attached.', src:'ours' },
+      { who:'Dev Raghunathan → Verwood', state:'One side', kind:'Favour',
+        consent:'Dev agreed Aug 27 · Verwood not recorded', outcome:'Held at the gate until the second consent lands.', src:'platform', srcT:'Lab cohort 4' },
+      { who:'Callum Ferris → Meridian Robotics', state:'Requested', kind:'Referral fee',
+        consent:'Neither recorded', outcome:'Asked Aug 30. Cannot advance.', src:'ours' },
+      { who:'Marta Kowalczyk → Thornbury Capital', state:'Declined', kind:'Favour',
+        consent:'Marta declined Aug 22', outcome:'Terminal. Not re-asked.', src:'ours' }
+    ];
+    const made = INTRO.filter(i => i.state === 'Made');
+    const gated = INTRO.filter(i => i.state === 'One side' || i.state === 'Requested');
+    const declined = INTRO.filter(i => i.state === 'Declined');
+    const withFee = INTRO.filter(i => i.kind === 'Referral fee');
+    const introRows = INTRO.map(i => ({
+      rowStyle: i.state === 'Declined' ? 'opacity:.68' : (i.state === 'Requested' || i.state === 'One side' ? 'background:#fffcf5' : ''),
+      cells:[
+        cell(i.who, i.src === 'platform' ? { seam: i.srcT } : { ours:'Ours' }),
+        cell('', { pill: i.state }),
+        cell('', { pill: i.kind }),
+        cell(i.consent, i.state === 'One side' || i.state === 'Requested' ? { gate:'Gated' } : {}),
+        cell(i.outcome)
+      ]}));
+    const stepRow = STATES.map((t, idx) => ({ n:String(idx + 1), t,
+      gate: idx === 1 || idx === 2 ? 'consent required' : null,
+      arrow: idx < STATES.length - 1,
+      style: idx <= 2 ? 'background:#fdf4ff;color:#86198f;border:1px solid #f5d0fe' : 'background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' }));
+
+    // ══ Organizations — no aggregation exists in the product today, so the EMPTY state leads. ══
+    const ORG = [
+      { org:'Meridian Robotics', kind:'Client', people:1, eng:'Sprint 2 — signed off', src:'platform', srcT:'Marketplace need' },
+      { org:'Halverton', kind:'Client', people:1, eng:'Fractional HoP seat', src:'ours' },
+      { org:'Novacraft Labs', kind:'Client', people:1, eng:'Interim RevOps seat', src:'platform', srcT:'Lab cohort 4' },
+      { org:'Thornfield', kind:'Client', people:1, eng:'Brand refresh — blocked', src:'ours' },
+      { org:'Verwood', kind:'Client', people:1, eng:'Design system v2', src:'ours' },
+      { org:'Thornbury Capital', kind:'Referral source', people:1, eng:null, src:'platform', srcT:'Portfolio value-add' },
+      { org:'Ostara Studio', kind:'Prospect', people:1, eng:null, src:'ours' }
+    ];
+    const clients = ORG.filter(o => o.kind === 'Client');
+    const orgRows = ORG.map(o => ({ rowStyle:'', cells:[
+      cell(o.org, o.src === 'platform' ? { seam: o.srcT } : { ours:'Ours' }),
+      cell('', { pill: o.kind }),
+      cell(o.people + ' ' + plural(o.people, 'person', 'people')),
+      o.eng ? cell(o.eng) : cell('', { nr:true }),
+      cell('', { nr:true })
+    ]}));
+
+    const PAGES = [
+      { id:'pn1', badge:'PN1', route:'/network/relationships', zone:'Relationships', arch:'COLLECTION',
+        title:'Network · Relationships', h1:'Firm relationship book', addsTop:'14px',
+        blurb:'A firm book, not a personal one: every contact belongs to Studio Vireo and someone at the firm owns it. The failure mode this page exists to surface is an owned relationship with no owner — so unassigned rows sort to the top and read in red rather than sitting quietly in alphabetical order.',
+        sub:'Contacts, their firm owner, and recorded last interaction.',
+        cmpTitle:'Relationships · ' + BOOK.length + ' contacts',
+        cmpBody: owned.length + ' owned, ' + orphans.length + ' unassigned. ' + cap(nWord(cold.length)) + ' going cold past 60 days.',
+        viewMore:'View more · ' + BOOK.length + ' contacts, ' + orphans.length + ' orphaned →',
+        filters: fil(['Unassigned first','All','By owner','Going cold'], 0), ops:['Assign owner','Log interaction','Export'],
+        adds:[ { label:'Contacts', value:String(BOOK.length), note:'across ' + new Set(BOOK.map(c => c.org)).size + ' organizations' },
+          { label:'Unassigned', value:String(orphans.length), note:'no one at the firm owns these' },
+          { label:'Platform-sourced', value:String(seamBook.length), note:'read-only to the firm' },
+          { label:'Firm-wide warmth score', nr:true, note:'no such score exists — strength is per-row and shows its derivation' } ],
+        instTitle:'Contacts', instMeta:'Unassigned first, then coldest',
+        cols:'1.3fr 1.5fr 1.1fr 1.1fr 1.2fr',
+        head:['Contact','Organization','Firm owner','Last interaction','Strength'],
+        rows: bookRows,
+        instNote:'Yusuf Demir has no owner and no recorded interaction date, so both columns read honestly rather than guessing — and his strength is "Not recorded" instead of "Thin", because two logged touches and no dates is not enough to call anything. Aoife Brennan is the worse case: a platform-sourced investor relationship, 81 days cold, with nobody at the firm responsible for it. Strength is never a warmth number presented as fact; each row states the interaction count and recency it was derived from.',
+        aiLabel:'Draft · orphan reassignment', aiCost:c4(runCost(7600, 640)),
+        aiBody:'Points to the ' + nWord(orphans.length) + ' unassigned contacts and, for each, who at the firm has the most recorded interactions with that organization — Aoife Brennan sits against Thornbury Capital, where nobody does, which is itself the finding.',
+        aiAccept:'Accept draft', aiFoot:'Derived from logged interactions only.' },
+
+      { id:'pn2', badge:'PN2', route:'/network/introductions', zone:'Introductions', arch:'MATCH ENGINE',
+        title:'Network · Introductions', h1:'Double opt-in introductions', addsTop:'14px',
+        blurb:'A pipeline where consent is structural: an introduction cannot enter a state whose consent is unrecorded, and the UI shows that as a gate rather than a warning. For a partner firm an introduction often carries economics, so every row states whether it is a favour or a referral with a fee attached.',
+        sub:'Requested → one side → both agreed → made → outcome.',
+        cmpTitle:'Introductions · ' + made.length + ' made',
+        cmpBody: gated.length + ' held at a consent gate, ' + declined.length + ' declined. ' + withFee.length + ' carry a referral fee.',
+        viewMore:'View more · ' + INTRO.length + ' introductions, consent trail →',
+        filters: fil(['All','Gated','Made','Declined'], 0), ops:['New introduction','Consent log','Export'],
+        adds:[ { label:'Made', value:String(made.length), note:'outcome recorded' },
+          { label:'At a gate', value:String(gated.length), note:'cannot advance without consent' },
+          { label:'Declined', value:String(declined.length), note:'terminal, not re-asked' },
+          { label:'With economics', value:String(withFee.length), note:'referral fee stated on the row' } ],
+        steps: stepRow,
+        instTitle:'Introduction pipeline', instMeta:'Consent is a gate, not a warning',
+        cols:'1.7fr .9fr 1fr 1.6fr 1.8fr',
+        head:['Introduction','State','Kind','Consent record','Where it stands'],
+        rows: introRows,
+        instNote:'Dev Raghunathan\u2019s introduction has one consent and stops there — the row shows the missing half by name rather than flagging a risk, because the state simply is not reachable yet. Marta\u2019s declined introduction stays visible as a terminal state: a decline is a normal outcome, and deleting it would only invite the same ask again. The Ostara introduction states its 8% fee on the row, so a favour and a referral are never read as the same act.',
+        aiLabel:'Suggested match · possible paths', aiCost:c4(runCost(8200, 780)),
+        aiBody:'Points to ' + nWord(2) + ' possible paths from the book: Rowan Whitfield has 31 recorded interactions and knows two of the firm\u2019s prospects. Every suggestion arrives as a draft ask requiring both consents before it can move — nothing is introduced by the draft itself.',
+        aiAccept:'Accept as drafts', aiFoot:'Consent still collected from both sides.' },
+
+      { id:'pn3', badge:'PN3', route:'/network/organizations', zone:'Organizations', arch:'COLLECTION',
+        title:'Network · Organizations', h1:'Organizations', addsTop:'13px',
+        blurb:'Client companies, prospects and referral sources rolled up from the book. Being honest about the backing: no aggregation over the relationship book exists in the product today, so the empty state is the primary composition here and the populated table below it is what the roll-up would look like once built.',
+        sub:'Organizations, the people known inside them, and engagements sourced.',
+        empty:{ h:'The roll-up is not built yet.',
+          body:'Organizations would aggregate from the ' + BOOK.length + ' contacts in the relationship book — grouping people by employer, attaching the engagements each company produced, and marking which arrived through the platform. None of that aggregation runs today: the book stores a company name per contact as text, with no organization record behind it.',
+          cta:'Build organization records', cta2:'View the book instead',
+          honest:'What follows is the shape the roll-up would take, rendered from the same ' + BOOK.length + ' contacts. Headcount, sector and revenue columns are absent rather than estimated — the book holds none of them.' },
+        cmpTitle:'Organizations · not built',
+        cmpBody:'Would roll up from ' + BOOK.length + ' contacts across ' + ORG.length + ' companies. No organization records exist yet.',
+        viewMore:'View more · empty state and intended shape →',
+        filters: fil(['All','Clients','Prospects','Referral sources'], 0), ops:['Build records','Import','Export'],
+        adds:[ { label:'Companies in the book', value:String(ORG.length), note:'as text on contacts, not records' },
+          { label:'Clients', value:String(clients.length), note:'each with a live engagement' },
+          { label:'Organization records', value:'0', note:'nothing to aggregate over yet' },
+          { label:'Headcount, sector', nr:true, note:'the book holds neither — never estimated' } ],
+        instTitle:'Intended shape', instMeta:'Rendered from contacts · not a live roll-up',
+        cols:'1.6fr 1.1fr .9fr 1.6fr 1fr',
+        head:['Organization','Relationship','People known','Engagement sourced','Headcount'],
+        rows: orgRows,
+        instNote:'Every row knows exactly ' + nWord(1) + ' person, which is the roll-up\u2019s real finding rather than a display artefact: the firm\u2019s relationship with each client rests on a single contact, so losing that person loses the account. Headcount reads "Not recorded" on all ' + ORG.length + ' rows because the book stores no such field, and an estimate here would be the first invented number in the firm\u2019s own record of who it knows.',
+        aiLabel:'Draft · single-contact exposure', aiCost:c4(runCost(6400, 590)),
+        aiBody:'Points to every client resting on one known contact, and to which engagement each of those relationships carries — Thornfield\u2019s blocked brand refresh depends on Callum Ferris alone. Names the exposure; the second contact is a person\u2019s job to make.',
+        aiAccept:'Accept draft', aiFoot:'Counted from book contacts.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ empty:null, steps:null }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

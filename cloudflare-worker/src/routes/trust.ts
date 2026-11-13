@@ -1,0 +1,1038 @@
+import { heldLicences, holdsLicence } from '../services/accountLicences';
+import { mayReadTrustScores } from '../services/scoreAccess';
+/**
+ * Trust Center routes — Task #3 (Y-1).
+ *
+ *   GET    /api/trust/me               — obligations + summary for caller
+ *   GET    /api/trust/agreements       — signed + pending NDAs touching caller
+ *   GET    /api/trust/agreements/:envelope_uuid/history
+ *                                      — that envelope's Sent/Viewed/Signed
+ *                                        trail, recipients only
+ *   POST   /api/trust/intro/request    — investor → founder; auto-issues NDA
+ *   GET    /api/trust/intro/status     — pair NDA status check
+ *   POST   /api/trust/obligation/:key/start
+ *                                      — retired: authenticated 410; no write
+ *   GET    /api/trust/sanctions        — admin-only (stub for X-1)
+ *   POST   /api/trust/sanctions/:id/review — admin, step-up: who reviewed a match, when, and their notes (D1230)
+ *
+ * The 3-way NDA flow lives in `services/trust.ts` + reuses the existing
+ * `esign` envelope/recipients tables (one envelope, three recipient rows).
+ */
+import { Hono } from 'hono';
+import { stripTrailingSlashes } from '../util/url';
+import type { Env } from '../types';
+import { requireAuth, requireAdmin, requireBranchNotSuspended, requireStepUp } from '../auth';
+import { hashEmail } from '../util/hashEmail';
+import {
+  ensureTrustSchema,
+  seedObligations,
+  obligationsForRole,
+  getPairwiseNda,
+  hasActivePairwiseNda,
+  upsertPairwiseNda,
+  obligationSource,
+  trustScoreOf,
+  recordAndCompareScore,
+  envelopeHistory,
+  latestAcceptances,
+} from '../services/trust';
+import { getSQL } from '../db';
+import { branchOf } from '../util/branch';
+import { companyKybScope } from '../services/tenancyScope';
+import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
+import { refusalBody, refuse } from '../util/refusal';
+
+const trust = new Hono<{ Bindings: Env }>();
+
+// ---------------------------------------------------------------------------
+// GET /me — caller's obligations + a derived summary.
+// ---------------------------------------------------------------------------
+trust.get('/me', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  // Self-heal: if the user is missing rows for their role (signup
+  // pre-dates the seeder), top them up before responding.
+  await seedObligations(c.env, user.id, user.role);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid,
+            evidence_meta, updated_at, created_at
+       FROM legal_obligations WHERE user_id = ? ORDER BY required DESC, obligation_key`,
+  ).bind(user.id).all();
+  const obligations = ((rows?.results || []) as any[]).map(o => ({
+    ...o,
+    // PROVENANCE, which Trust Center v2 draws under every obligation row as
+    // "Synced from …" / "From envelope …". The fact was already in the table —
+    // `evidence_meta` has carried `{"source":"kyc_provider",…}` since the KYC
+    // sync landed — it simply never left the worker, so the page had nothing to
+    // render and drew the row bare. Derived here rather than in the client
+    // because `evidence_meta` is an opaque JSON blob whose shape is this
+    // module's business, and shipping the raw blob would make every consumer
+    // re-learn it.
+    source: obligationSource(o),
+  }));
+  const requiredOpen = obligations.filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived');
+
+  // The score, and what it was the last month we have on record.
+  //
+  // Computed HERE and not read back from the client: this value is written to
+  // `trust_score_snapshots`, and a history a caller can set is not a history.
+  // `trustScoreOf` is the worker's copy of the frontend's `computeTrustScore`;
+  // `cloudflare-worker/test/trust_score_parity.test.ts` runs both over the
+  // same fixtures and fails if they ever disagree.
+  const score = trustScoreOf(obligations);
+  const history = await recordAndCompareScore(c.env, user.id, score);
+  // D1074 (#2966): what the member accepted, when, where, and which version;
+  // `newer_document` when the page has changed since. Null when unreadable.
+  const acceptances = await latestAcceptances(c.env, user.id);
+
+  return c.json({
+    role: user.role,
+    obligations,
+    required_open_count: requiredOpen.length,
+    fully_compliant: requiredOpen.length === 0,
+    score,
+    // null when this is the first month on record. The page states that
+    // absence instead of rendering a zero delta — an account with no prior
+    // month has not "held steady", it has no comparison (D56/D68).
+    previous_score: history.previousScore,
+    previous_month: history.previousMonth,
+    acceptances,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /agreements — every NDA / contract touching the caller, drawn from
+// three sources and unioned client-side:
+//   1. `pairwise_ndas`       — mutual NDA pairs (both signed → active),
+//   2. `esign_envelopes`     — pending envelopes the caller is a recipient on,
+//   3. `documents`           — legacy signed contracts referencing the caller.
+// Each source is wrapped in try/catch so a missing/legacy table on a stale
+// D1 (e.g. envelopes / documents not yet provisioned) never blocks the
+// canonical pairwise list. Only the caller's own pairs, for every role.
+// ---------------------------------------------------------------------------
+trust.get('/agreements', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  // Make sure pairwise_ndas has the post-035 columns before we SELECT them.
+  // On a stale D1 (pre-task-AH) the SELECT below would otherwise raise
+  // "no such column: signers_json" and the .catch() would silently
+  // swallow every pairwise row — hiding NDAs from the UI.
+  const { ensurePairwiseNdaColumns } = await import('../services/sanctions');
+  await ensurePairwiseNdaColumns(c.env);
+
+  const pairwiseRows: any = await c.env.DB.prepare(
+    `SELECT id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
+            status, valid_until, signers_json, voided_at, voided_reason,
+            created_at, updated_at
+       FROM pairwise_ndas
+      WHERE party_a_user_id = ? OR party_b_user_id = ?
+      ORDER BY updated_at DESC LIMIT 200`,
+  ).bind(user.id, user.id).all().catch(() => ({ results: [] }));
+
+  // Pending envelopes the caller is a recipient on (joins esign_recipients
+  // by email — `recipient_user_id` is not always set on legacy rows).
+  let pending: any[] = [];
+  try {
+    const env: any = await c.env.DB.prepare(
+      // `document_type` — there is no `agreement_type` column on
+      // esign_envelopes, so this whole select threw.
+      `SELECT e.envelope_uuid, e.document_type, e.status, e.created_at, e.completed_at,
+              r.recipient_email, r.signed_at
+         FROM esign_envelopes e
+         JOIN esign_recipients r ON r.envelope_id = e.id
+        WHERE LOWER(r.recipient_email) = LOWER(?)
+          AND e.status IN ('sent','viewed','partial')
+        ORDER BY e.created_at DESC LIMIT 100`,
+    ).bind(user.email).all();
+    pending = env?.results || [];
+  } catch { pending = []; }
+
+  // Legacy signed contracts referencing the caller (best-effort — schema
+  // varies across deploys, so a single LIKE on `signed_by` is the lowest
+  // common denominator).
+  let documents: any[] = [];
+  try {
+    const docs: any = await c.env.DB.prepare(
+      `SELECT id, uid, title, doc_type, status, signed_by, signed_at, created_at
+         FROM documents
+        WHERE status = 'signed' AND LOWER(IFNULL(signed_by,'')) LIKE ?
+        ORDER BY signed_at DESC LIMIT 100`,
+    ).bind('%' + (user.email || '').toLowerCase() + '%').all();
+    documents = docs?.results || [];
+  } catch { documents = []; }
+
+  return c.json({
+    agreements: pairwiseRows?.results || [],
+    pending_envelopes: pending,
+    documents,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /score/:userId — Task #4 (Y-2), scoped by D1074 (#2966).
+// Returns {score, missing[]}. Readable by the member, an admin of this
+// territory, and a counterparty in an open intro or deal (`mayReadTrustScores`);
+// D1254 requires a shared open deal for investor callers, not just an intro.
+// anyone else is 403, whatever their role. Only the member and an admin get the
+// missing items. A member with no obligation rows reads `not_recorded`, never 100.
+// ---------------------------------------------------------------------------
+const NOT_RECORDED = { status: 'not_recorded', reason: 'No trust obligations recorded' } as const;
+
+trust.get('/score/:userId', async (c) => {
+  const caller = await requireAuth(c);
+  const target = Number(c.req.param('userId'));
+  if (!Number.isInteger(target) || target <= 0) return c.json({ error: 'invalid_user' }, 400);
+  const isSelf = caller.id === target;
+  await ensureTrustSchema(c.env);
+  const allowed = await mayReadTrustScores(c.env, caller, [target]);
+  if (!allowed) return c.json({ error: 'forbidden' }, 403);
+  // Self-heal: seed any missing rows for the target's role so a
+  // legacy unseeded user doesn't return an optimistic 100. Mirrors
+  // the behaviour of /trust/me.
+  const targetRow: any = await c.env.DB.prepare(
+    `SELECT role FROM users WHERE id = ? LIMIT 1`,
+  ).bind(target).first();
+  if (targetRow?.role) {
+    await seedObligations(c.env, target, targetRow.role);
+  }
+  const rows: any = await c.env.DB.prepare(
+    `SELECT obligation_key, required, status FROM legal_obligations WHERE user_id = ?`,
+  ).bind(target).all();
+  const obligations = (rows?.results || []) as any[];
+  const required = obligations.filter(o => o.required);
+  const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
+  const score = obligations.length === 0 ? null : required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+  const missing = required
+    .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
+    .map(o => o.obligation_key);
+  const recorded = score == null ? NOT_RECORDED : { status: 'recorded' };
+  return c.json(isSelf || caller.role === 'admin'
+    ? { user_id: target, score, ...recorded, missing, required_total: required.length }
+    : { user_id: target, score, ...recorded });
+});
+
+// ---------------------------------------------------------------------------
+// POST /score/batch — Task #40.
+// Body: { user_ids: number[] }
+// Returns: { scores: [{ user_id, score, missing[], required_total }] }
+//
+// Collapses N sequential GET /score/:userId calls (one per visible row in
+// AdminPage Users / DealsPage pipeline) into a single round-trip + two
+// SQL queries. D1074: auth is the single-user route's rule for every id
+// (`mayReadTrustScores`), so no role reads a list of strangers.
+//
+// Performance notes:
+//   - Batch does not seed legacy members; members with no stored obligations
+//     return null with a reason until the single-user self-heal runs.
+//   - Batch is capped at 200 user_ids per call (worker request body is
+//     1MB; this is well under the practical bound but stops accidental
+//     "send me every user" calls).
+// ---------------------------------------------------------------------------
+trust.post('/score/batch', async (c) => {
+  const caller = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const raw = Array.isArray(body?.user_ids) ? body.user_ids : [];
+  const ids: number[] = Array.from(new Set(
+    raw.map((v: any) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0),
+  )).slice(0, 200) as number[];
+  if (ids.length === 0) return c.json({ scores: [] });
+  await ensureTrustSchema(c.env);
+  // D1074: the single read's rule, for every id; one the caller may not read refuses the batch.
+  if (!await mayReadTrustScores(c.env, caller, ids)) return c.json({ error: 'forbidden' }, 403);
+  const placeholders = ids.map(() => '?').join(',');
+  const rows: any = await c.env.DB.prepare(
+    `SELECT user_id, obligation_key, required, status
+       FROM legal_obligations
+      WHERE user_id IN (${placeholders})`,
+  ).bind(...ids).all();
+  const grouped = new Map<number, any[]>();
+  for (const id of ids) grouped.set(id, []);
+  for (const r of (rows?.results || []) as any[]) {
+    const arr = grouped.get(Number(r.user_id));
+    if (arr) arr.push(r);
+  }
+  const scores = ids.map((id) => {
+    const obligations = grouped.get(id) || [];
+    const required = obligations.filter((o: any) => o.required);
+    const satisfied = required.filter(
+      (o: any) => o.status === 'satisfied' || o.status === 'waived',
+    ).length;
+    const score = obligations.length === 0 ? null : required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+    const missing = required
+      .filter((o: any) => o.status !== 'satisfied' && o.status !== 'waived')
+      .map((o: any) => o.obligation_key);
+    const recorded = score == null ? NOT_RECORDED : { status: 'recorded', reason: null };
+    return caller.role === 'admin' || caller.id === id
+      ? { user_id: id, score, ...recorded, missing, required_total: required.length }
+      : { user_id: id, score, ...recorded };
+  });
+  return c.json({ scores });
+});
+
+// ---------------------------------------------------------------------------
+// GET /agreements/:envelope_uuid/my_signing_url — Task #4 (Y-2).
+// Returns the CALLER's own signing URL for an esign envelope they're a
+// recipient of. Used by the Trust Center "Sign" CTA so a founder/investor
+// can resume a pending pairwise NDA from inside the app instead of
+// hunting through email. SECURITY: only ever returns the caller's own
+// token — never another recipient's — and only while the caller's
+// recipient row is `pending` and the token is not expired. 404 in any
+// other case (including caller-not-a-recipient) so we don't leak the
+// existence of the envelope.
+// ---------------------------------------------------------------------------
+trust.get('/agreements/:envelope_uuid/my_signing_url', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) {
+    return c.json({ error: 'invalid_envelope' }, 400);
+  }
+  const row: any = await c.env.DB.prepare(
+    `SELECT r.signing_token, r.token_expires_at, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.user_id = ?
+      LIMIT 1`,
+  ).bind(envelopeUuid, user.id).first();
+  if (!row) return c.json({ error: 'not_a_recipient' }, 404);
+  if (row.status === 'signed') return c.json({ status: 'signed' });
+  const exp = Date.parse(row.token_expires_at);
+  if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
+  return c.json({
+    status: 'pending',
+    signing_url: `${appUrl}/esign/${row.signing_token}`,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /agreements/:envelope_uuid/history — Trust Center v2's timeline.
+//
+// The per-agreement Sent / Viewed / Signed trail the canvas draws when a row
+// is expanded. Fetched on expand rather than folded into /agreements: that
+// endpoint already returns up to 200 pairwise rows, 100 pending envelopes and
+// 100 documents, and almost none of them are ever opened.
+//
+// SECURITY: `envelopeHistory` returns null unless the caller is a recipient,
+// and strips `ip` / `ua` / `signer_email` / `meta` from every event. 404 on
+// not-a-recipient, matching /my_signing_url — this must not become the oracle
+// that confirms an envelope exists.
+// ---------------------------------------------------------------------------
+trust.get('/agreements/:envelope_uuid/history', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) {
+    return c.json({ error: 'invalid_envelope' }, 400);
+  }
+  const history = await envelopeHistory(c.env, envelopeUuid, user);
+  if (history === null) return c.json({ error: 'not_a_recipient' }, 404);
+  // An empty array is a real answer — a legacy envelope with no recorded
+  // events — and the page says so rather than drawing an empty box.
+  return c.json({ history });
+});
+
+// ---------------------------------------------------------------------------
+// POST /intro/request — investor asks for an intro to a founder.
+// Body: { founder_user_id }
+// Behaviour:
+//   1. Caller must be an investor (admins permitted for testing).
+//   2. If a valid pairwise NDA already exists -> return it.
+//   3. Otherwise create a 3-way envelope (Founder + Investor + Axal
+//      counter-signer) from the nda_3way_founder_investor_axal library row
+//      (D758), persist a row in
+//      `pairwise_ndas`, and return the envelope_uuid so the UI can
+//      route to the signing pages.
+//
+// Task #17 — the body of this handler is extracted into the pure
+// `requestIntroLogic` function below so that worker tests can drive
+// every branch (founder-not-found, target-is-not-a-founder,
+// cannot-intro-self, already-active short-circuit, and the
+// notifications_inbox write) with a fully mocked dependency surface.
+// The Hono wrapper here is the only piece that touches `requireAuth`
+// + dynamic provider imports.
+// ---------------------------------------------------------------------------
+trust.post('/intro/request', async (c) => {
+  const investor = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as any));
+  // Dynamic-import the heavy provider modules (envelope + notify) to
+  // avoid pulling them into the cold-start graph of the trust router
+  // — they are only needed by this single route. Note: these imports
+  // run before validation, so a fast-fail branch (cannot_intro_self /
+  // bad founder id) still pays the import cost; that's an acceptable
+  // tradeoff vs. the cold-start savings on every other trust route.
+  const { createThreeWayNdaEnvelope } = await import('../services/trustEnvelope');
+  const { notify } = await import('../services/notify');
+  const result = await requestIntroLogic(c.env, investor, body, {
+    lookupFounder: async (env, id) => {
+      const sql = getSQL(env);
+      const rows: any = await sql`SELECT id, email, name, role FROM users WHERE id = ${id} LIMIT 1`;
+      await sql.end();
+      if (!rows.length) return null;
+      return { ...rows[0], licences: await heldLicences(env.DB, rows[0]) };
+    },
+    getPairwise: getPairwiseNda,
+    isPairwiseActive: hasActivePairwiseNda,
+    upsertPairwise: upsertPairwiseNda,
+    createEnvelope: createThreeWayNdaEnvelope,
+    notify,
+  });
+  return c.json(result.body, result.status as any);
+});
+
+/**
+ * Pure logic for POST /intro/request, lifted out so the worker test
+ * suite can drive every branch with mocked deps. The five branches
+ * the test file exercises:
+ *
+ *   1. cannot_intro_self     — investor.id === founder_user_id  → 400
+ *   2. founder_not_found     — lookupFounder returns null        → 404
+ *   3. target_is_not_a_founder — looked-up user.role !== founder → 400
+ *   4. already_active short-circuit — existing pairwise NDA + active → 200
+ *   5. happy path            — envelope created + founder receives a
+ *                              `contract_sign_request` notify call
+ *                              (which lands in notifications_inbox).
+ *
+ * SECURITY: never leak founder/Axal signing tokens back to the
+ * requesting investor — they would be able to sign as all three
+ * parties via the public /api/legal/esign/sign/:token endpoint and
+ * fraudulently activate the pairwise NDA. The investor receives
+ * ONLY their own signing URL here (the others are emailed by
+ * createThreeWayNdaEnvelope).
+ */
+export interface IntroDeps {
+  lookupFounder: (env: any, id: number) => Promise<{ id: number; email: string; name: string | null; role: string } | null>;
+  getPairwise: (env: any, fid: number, iid: number) => Promise<any | null>;
+  isPairwiseActive: (env: any, fid: number, iid: number) => Promise<boolean>;
+  upsertPairwise: (env: any, fid: number, iid: number, uuid: string) => Promise<void>;
+  createEnvelope: (env: any, args: { founder: any; investor: any; appUrl: string }) => Promise<{ envelope_uuid: string; signing_urls: { investor: string; founder?: string; axal?: string } }>;
+  // notify returns the inserted notifications_inbox row id (or null if
+  // it was suppressed). We don't care about the value here — the test
+  // file just spies on the call shape — so the contract is `Promise<any>`.
+  notify: (env: any, args: any) => Promise<any>;
+}
+
+// Note: we deliberately omit the explicit return-type annotation on
+// `requestIntroLogic` so the TS-source slicer in
+// `cloudflare-worker/test/trust_intro.test.mjs` can isolate the
+// function body via plain brace-balancing without having to track
+// generic angle brackets (`Promise<{...}>` confuses naive walkers).
+// TS infers the same `{ status: number; body: any }` shape from the
+// return statements below.
+export async function requestIntroLogic(
+  env: any,
+  investor: { id: number; role: string; email: string; name?: string | null },
+  body: { founder_user_id?: any },
+  deps: IntroDeps,
+) {
+  if (!holdsLicence(investor, 'investor') && investor.role !== 'admin') {
+    return { status: 403, body: { error: 'investor_role_required' } };
+  }
+  const founderUserId = Number(body?.founder_user_id);
+  if (!Number.isInteger(founderUserId) || founderUserId <= 0) {
+    return { status: 400, body: { error: 'founder_user_id required' } };
+  }
+  if (founderUserId === investor.id) {
+    return { status: 400, body: { error: 'cannot_intro_self' } };
+  }
+
+  const founder = await deps.lookupFounder(env, founderUserId);
+  if (!founder) return { status: 404, body: { error: 'founder_not_found' } };
+  if (!holdsLicence(founder, 'founder')) return { status: 400, body: { error: 'target_is_not_a_founder' } };
+
+  const existing = await deps.getPairwise(env, founderUserId, investor.id);
+  if (existing && await deps.isPairwiseActive(env, founderUserId, investor.id)) {
+    return {
+      status: 200,
+      body: {
+        status: 'already_active',
+        envelope_uuid: existing.nda_envelope_uuid,
+        valid_until: existing.valid_until,
+      },
+    };
+  }
+
+  let envelope;
+  try {
+    envelope = await deps.createEnvelope(env, {
+      founder: { user_id: founder.id, email: founder.email, name: founder.name || founder.email },
+      investor: { user_id: investor.id, email: investor.email, name: investor.name || investor.email },
+      appUrl: env.APP_URL || 'https://axal.vc',
+    });
+  } catch (e) {
+    // D758 — the library row still has a field nobody filled. Compared by
+    // message, not instanceof: trust_intro.test.mjs runs this function sliced
+    // out of the source.
+    if ((e as Error)?.message === 'unfilled_fields') {
+      return {
+        status: 409,
+        body: refusalBody({
+          code: 'template_fields_unfilled',
+          message: 'The NDA is not ready to send yet: Axal VC still has to complete it. Nothing was sent.',
+          raw: e,
+        }),
+      };
+    }
+    // D278 — DocuSign's text goes to the log; the member reads our sentence.
+    return {
+      status: 500,
+      body: refusalBody({
+        code: 'envelope_creation_failed',
+        message: 'The NDA could not be sent for signature. Nothing was sent; try again in a moment.',
+        raw: e,
+      }),
+    };
+  }
+  await deps.upsertPairwise(env, founderUserId, investor.id, envelope.envelope_uuid);
+
+  // Task #4 (Y-2) — in-app notification to the founder so the
+  // pending NDA appears in their bell inbox + Trust Center
+  // immediately, not just via email. `contract_sign_request` is
+  // listed in CRITICAL_CATEGORIES so it bypasses quiet hours.
+  try {
+    await deps.notify(env, {
+      userId: founderUserId,
+      type: 'contract_sign_request',
+      title: 'New investor intro request',
+      body: `${investor.name || investor.email} has requested an introduction. Please review and sign the mutual NDA in your Trust Center.`,
+      link: '/trust',
+      category: 'contract_sign_request',
+      payload: { envelope_uuid: envelope.envelope_uuid, investor_user_id: investor.id },
+    });
+  } catch (e) {
+    console.error('[trust] founder intro notify failed', e);
+  }
+
+  return {
+    status: 200,
+    body: {
+      status: 'envelope_issued',
+      envelope_uuid: envelope.envelope_uuid,
+      signing_url: envelope.signing_urls.investor,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GET /intro/status?founder=<id> — pair status check (mask gate consults this).
+// ---------------------------------------------------------------------------
+trust.get('/intro/status', async (c) => {
+  const investor = await requireAuth(c);
+  if (!holdsLicence(investor, 'investor') && investor.role !== 'admin') {
+    return c.json({ error: 'investor_role_required' }, 403);
+  }
+  const founderId = Number(c.req.query('founder'));
+  if (!Number.isInteger(founderId) || founderId <= 0) {
+    return c.json({ error: 'founder query param required' }, 400);
+  }
+  const row = await getPairwiseNda(c.env, founderId, investor.id);
+  const active = await hasActivePairwiseNda(c.env, founderId, investor.id);
+  return c.json({
+    founder_user_id: founderId,
+    investor_user_id: investor.id,
+    status: row?.status || 'none',
+    valid_until: row?.valid_until || null,
+    active,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /obligation/:key/start — retired (D1073). A click is not evidence.
+// ---------------------------------------------------------------------------
+trust.post('/obligation/:key/start', async (c) => {
+  await requireAuth(c);
+  return refuse(c, 410, {
+    code: 'obligation_start_retired',
+    message: 'Starting a requirement here is no longer supported. Open its signing or verification flow; the status changes after a real submission.',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /sanctions — admin-only Trust Center sanctions tab. Returns the most
+// recent screening rows from `sanctions_screenings` (newest first), with
+// optional `?user_id=` and `?only_hits=true` filters. Task AH lights up the
+// matcher behind POST /sanctions/screen/:user_id; this read endpoint is
+// purely a history view.
+// ---------------------------------------------------------------------------
+trust.get('/sanctions', async (c) => {
+  await requireAdmin(c);
+  const { listScreenings } = await import('../services/sanctions');
+  const userId = Number(c.req.query('user_id'));
+  const onlyHits = c.req.query('only_hits') === 'true';
+  const items = await listScreenings(c.env, {
+    user_id: Number.isInteger(userId) && userId > 0 ? userId : undefined,
+    only_hits: onlyHits,
+    limit: Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200),
+  });
+  // Frontend (TrustCenterPage SanctionsTab) reads `screenings`; alias
+  // `items` is preserved for backward compat with any older callers.
+  return c.json({ screenings: items, items, provider: 'aggregate' });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sanctions/screen/:user_id — admin trigger. Body may carry overrides
+// (full_legal_name, date_of_birth, nationality); otherwise we read the
+// subject from the user row + corporate_profiles.
+// ---------------------------------------------------------------------------
+trust.post('/sanctions/screen/:user_id', async (c) => {
+  const admin = await requireAdmin(c);
+  const userId = Number(c.req.param('user_id'));
+  if (!Number.isInteger(userId) || userId <= 0) return c.json({ error: 'invalid_user' }, 400);
+  const body = await c.req.json().catch(() => ({} as any));
+  // Read the canonical user row first so a missing/legacy corporate_profiles
+  // row never collapses the whole lookup into a 404. The corporate join is
+  // best-effort — if the table or columns are missing on the local D1
+  // we fall back to the users row alone.
+  const userRow: any = await c.env.DB.prepare(
+    `SELECT id, email, name FROM users WHERE id = ? LIMIT 1`,
+  ).bind(userId).first().catch(() => null);
+  if (!userRow) return c.json({ error: 'user_not_found' }, 404);
+  let corp: any = null;
+  try {
+    corp = await c.env.DB.prepare(
+      `SELECT entity_name, registered_country
+         FROM corporate_profiles WHERE user_id = ? LIMIT 1`,
+    ).bind(userId).first();
+  } catch { corp = null; }
+  const subject = {
+    full_legal_name: String(body?.full_legal_name || corp?.entity_name || userRow.name || userRow.email || '').trim(),
+    date_of_birth: body?.date_of_birth || null,
+    nationality: body?.nationality || corp?.registered_country || null,
+  };
+  if (!subject.full_legal_name) return c.json({ error: 'missing_subject_name' }, 400);
+  const { screenUser, IncompleteSanctionsScreeningError } = await import('../services/sanctions');
+  try {
+    const result = await screenUser(c.env, userId, subject, {
+      admin_user_id: admin.id,
+      reason: body?.reason || 'admin_triggered',
+    });
+    return c.json(result);
+  } catch (e) {
+    if (e instanceof IncompleteSanctionsScreeningError) {
+      return refuse(c, 503, {
+        code: 'screening_incomplete',
+        message: `Screening not completed: ${e.missingLists.join(', ')} sanctions lists are unavailable or empty. No result was recorded. Try again later.`,
+        extra: { code: 'screening_incomplete', missing_lists: e.missingLists },
+      });
+    }
+    throw e;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /sanctions/:id/review — D1230 (#3238). An admin records that they
+// reviewed a possible match: who, when, and their notes (5 to 2000
+// characters). Only a match is reviewed, and only once; the write is a
+// compliance verdict, so it keeps the KYC verdicts' gates (branch not
+// suspended, recent TOTP step-up). The log names the screening, never the
+// notes or the match.
+// ---------------------------------------------------------------------------
+const REVIEW_NOTES_MIN = 5;
+const REVIEW_NOTES_MAX = 2000;
+trust.post('/sanctions/:id/review', async (c) => {
+  const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  await requireStepUp(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_screening', message: 'That is not a screening.', audience: 'admin' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
+  if (notes.length < REVIEW_NOTES_MIN || notes.length > REVIEW_NOTES_MAX) {
+    return refuse(c, 400, { code: 'notes_required', message: `Say what you checked, in ${REVIEW_NOTES_MIN} to ${REVIEW_NOTES_MAX} characters.`, audience: 'admin' });
+  }
+  const row: any = await c.env.DB.prepare(
+    `SELECT s.id, s.user_id, s.hit, s.reviewed_at, s.reviewed_by, u.name AS reviewer_name
+       FROM sanctions_screenings s LEFT JOIN users u ON u.id = s.reviewed_by WHERE s.id = ?`,
+  ).bind(id).first();
+  if (!row) return refuse(c, 404, { code: 'screening_not_found', message: 'This screening does not exist. Nothing was recorded.', audience: 'admin' });
+  if (Number(row.hit) !== 1) return refuse(c, 409, { code: 'not_a_match', message: 'This screening found no match, so there is nothing to review.', audience: 'admin' });
+  const already = () => refuse(c, 409, {
+    code: 'already_reviewed',
+    message: 'This match was already reviewed.',
+    audience: 'admin',
+    extra: { reviewed_at: row.reviewed_at, reviewed_by: row.reviewed_by ? { id: Number(row.reviewed_by), name: row.reviewer_name || null } : null },
+  });
+  const upd: any = await c.env.DB.prepare(
+    `UPDATE sanctions_screenings SET reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_notes = ?
+      WHERE id = ? AND reviewed_at IS NULL RETURNING reviewed_at`,
+  ).bind(admin.id, notes, id).first();
+  if (!upd) return already();
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('sanctions_match_reviewed', `Admin reviewed sanctions screening #${id} for user_id=${row.user_id}`, await hashEmail(admin.email), admin.id).run();
+  return c.json({ id, user_id: Number(row.user_id), reviewed_by: { id: admin.id, name: admin.name || null }, reviewed_at: upd.reviewed_at, notes });
+});
+
+// ---------------------------------------------------------------------------
+// GET /summary IS GONE (D432). It was the single-call payload of the first
+// Trust Center; every field it returned had been repointed — role, score and
+// obligations to /trust/me, the NDA card to /nda/required — and its `kyb` and
+// `accreditation` were literal nulls. The SPA stopped calling it, `api.js`'s
+// `getTrustSummary` had no caller, and it still cost requireAuth,
+// ensureTrustSchema, seedObligations and two D1 reads per hit. Retired with
+// its client method, on D304's rule: nothing in the tree called the route.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// GET /nda/required — the per-role NDA obligation set the caller still
+// needs to sign. Drives the "Sign Founder NDA" CTA on the Trust Center.
+// ---------------------------------------------------------------------------
+trust.get('/nda/required', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  await seedObligations(c.env, user.id, user.role);
+  const ndaKeys = new Set(['founder_nda_v1','investor_nda_v1','mentor_nda_v1']);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT obligation_key, required, status, expires_at, evidence_envelope_uuid
+       FROM legal_obligations WHERE user_id = ?`,
+  ).bind(user.id).all();
+  const items = ((rows?.results || []) as any[])
+    .filter(r => ndaKeys.has(r.obligation_key))
+    .map(r => ({
+      ...r,
+      open: r.required === 1 && r.status !== 'satisfied' && r.status !== 'waived',
+    }));
+  return c.json({ items });
+});
+
+// ---------------------------------------------------------------------------
+// POST /nda/sign/:envelope_uuid — convenience: returns the caller's own
+// signing URL for an outstanding NDA envelope. Same auth/security guards
+// as GET /agreements/:envelope_uuid/my_signing_url.
+// ---------------------------------------------------------------------------
+trust.post('/nda/sign/:envelope_uuid', async (c) => {
+  const user = await requireAuth(c);
+  const envelopeUuid = c.req.param('envelope_uuid');
+  if (!envelopeUuid || envelopeUuid.length > 64) return c.json({ error: 'invalid_envelope' }, 400);
+  const row: any = await c.env.DB.prepare(
+    `SELECT r.signing_token, r.token_expires_at, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.user_id = ?
+      LIMIT 1`,
+  ).bind(envelopeUuid, user.id).first();
+  if (!row) return c.json({ error: 'not_a_recipient' }, 404);
+  if (row.status === 'signed') return c.json({ status: 'signed' });
+  const exp = Date.parse(row.token_expires_at);
+  if (Number.isFinite(exp) && exp < Date.now()) return c.json({ status: 'expired' });
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
+  return c.json({ status: 'pending', signing_url: `${appUrl}/esign/${row.signing_token}` });
+});
+
+// ---------------------------------------------------------------------------
+// GET /pairwise-ndas — the pairwise NDAs the caller is a party to, and only
+// those, whatever their role. D1074 (#2966, finding 5): an admin no longer gets
+// every pair on the platform here; the platform's pairs are read in Contracts
+// (`/api/admin/contracts/pairwise-ndas`). A signer who is not one of the two
+// parties (Axal's own countersigner) is named without an address.
+// ---------------------------------------------------------------------------
+trust.get('/pairwise-ndas', async (c) => {
+  const user = await requireAuth(c);
+  await ensureTrustSchema(c.env);
+  const { ensurePairwiseNdaColumns } = await import('../services/sanctions');
+  await ensurePairwiseNdaColumns(c.env);
+  const rows: any = await c.env.DB.prepare(
+    `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+            p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
+            p.signers_json, p.voided_at, p.voided_reason,
+            ua.email AS party_a_email, ub.email AS party_b_email,
+            ua.name AS party_a_name, ub.name AS party_b_name,
+            e.status AS envelope_status
+       FROM pairwise_ndas p
+       LEFT JOIN users ua ON ua.id = p.party_a_user_id
+       LEFT JOIN users ub ON ub.id = p.party_b_user_id
+       LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+      WHERE p.party_a_user_id = ?1 OR p.party_b_user_id = ?1
+      ORDER BY p.created_at DESC LIMIT 200`,
+  ).bind(user.id).all();
+
+  // Enrich with computed signer list. We don't trust `signers_json` to
+  // be populated retroactively for envelopes that completed before this
+  // task shipped, so the canonical source is `esign_recipients` joined
+  // by envelope_uuid. Each item ships a fresh `signers: [{name,email,
+  // signed_at}]` array that the UI renders directly; we keep
+  // `signers_json` for any caller relying on the legacy field.
+  const items = (rows?.results || []) as any[];
+  const uuids = items.map(i => i.nda_envelope_uuid).filter(Boolean);
+  if (uuids.length > 0) {
+    try {
+      const placeholders = uuids.map(() => '?').join(',');
+      const recRows: any = await c.env.DB.prepare(
+        `SELECT e.envelope_uuid, r.recipient_email, r.recipient_name,
+                r.status, r.signed_at
+           FROM esign_recipients r
+           JOIN esign_envelopes e ON e.id = r.envelope_id
+          WHERE e.envelope_uuid IN (${placeholders})
+          ORDER BY r.signed_at`,
+      ).bind(...uuids).all();
+      const byUuid: Record<string, any[]> = {};
+      for (const r of (recRows?.results || []) as any[]) {
+        const k = r.envelope_uuid;
+        (byUuid[k] = byUuid[k] || []).push({
+          email: r.recipient_email,
+          name: r.recipient_name || r.recipient_email,
+          status: r.status,
+          signed_at: r.signed_at || null,
+        });
+      }
+      for (const it of items) {
+        const parties = new Set([it.party_a_email, it.party_b_email].filter(Boolean).map((e: string) => e.toLowerCase()));
+        const all = (byUuid[it.nda_envelope_uuid] || []).map((r: any) => (
+          r.email && parties.has(String(r.email).toLowerCase()) ? r : { ...r, email: null }
+        ));
+        it.signers = all.filter(s => s.status === 'signed' || !!s.signed_at);
+        it.recipients = all;
+      }
+    } catch { /* best-effort enrichment — UI degrades gracefully */ }
+  }
+  return c.json({ items });
+});
+
+// ---------------------------------------------------------------------------
+// POST /pairwise-ndas/:id/resend — admin resends signing emails to any
+// recipient still in `pending`. Returns the count of emails resent.
+// ---------------------------------------------------------------------------
+trust.post('/pairwise-ndas/:id/resend', async (c) => {
+  await requireAdmin(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid_id' }, 400);
+  const pair: any = await c.env.DB.prepare(
+    `SELECT id, nda_envelope_uuid, status FROM pairwise_ndas WHERE id = ? LIMIT 1`,
+  ).bind(id).first();
+  if (!pair) return c.json({ error: 'not_found' }, 404);
+  if (pair.status === 'active' || pair.status === 'revoked' || pair.status === 'expired') {
+    return c.json({ error: 'not_resendable', status: pair.status }, 409);
+  }
+  // The canonical e-sign schema (cloudflare-worker/src/routes/esign.ts)
+  // uses `recipient_email` / `recipient_name`. Earlier draft selected
+  // `signer_email` / `signer_name` (audit-event columns) which broke
+  // the SQL outright on real D1 — fixed here.
+  const recipients: any = await c.env.DB.prepare(
+    `SELECT r.id, r.recipient_email, r.recipient_name, r.signing_token, r.status
+       FROM esign_recipients r
+       JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE e.envelope_uuid = ? AND r.status = 'pending'`,
+  ).bind(pair.nda_envelope_uuid).all();
+  const pending = (recipients?.results || []) as any[];
+  const appUrl = stripTrailingSlashes(c.env.APP_URL || 'https://axal.vc');
+  let sent = 0;
+  try {
+    const { sendAgreementAssignedEmail } = await import('../services/email');
+    for (const r of pending) {
+      try {
+        await sendAgreementAssignedEmail(
+          c.env,
+          r.recipient_email,
+          r.recipient_name || r.recipient_email,
+          '3-Way Mutual NDA — please sign',
+          `${appUrl}/esign/${r.signing_token}`,
+          'Axal Admin',
+        );
+        sent += 1;
+      } catch (e) { console.warn('[trust] resend email failed', r.recipient_email, (e as Error).message); }
+    }
+  } catch (e) { console.warn('[trust] email module unavailable', (e as Error).message); }
+  await c.env.DB.prepare(
+    `UPDATE pairwise_ndas SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(id).run();
+  // Return both `sent` (frontend reads this) and `resent` (legacy alias).
+  return c.json({ ok: true, sent, resent: sent, pending: pending.length });
+});
+
+// ---------------------------------------------------------------------------
+// POST /pairwise-ndas/:id/void — admin revokes a pairwise NDA. Flips the
+// row to `revoked`, stamps `voided_at` + `voided_reason`, and (if the
+// underlying envelope hasn't completed) marks the envelope `cancelled`
+// so the signing tokens stop working.
+// ---------------------------------------------------------------------------
+trust.post('/pairwise-ndas/:id/void', async (c) => {
+  await requireAdmin(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid_id' }, 400);
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = String(body?.reason || '').slice(0, 500) || 'admin_voided';
+  const pair: any = await c.env.DB.prepare(
+    `SELECT id, nda_envelope_uuid, status FROM pairwise_ndas WHERE id = ? LIMIT 1`,
+  ).bind(id).first();
+  if (!pair) return c.json({ error: 'not_found' }, 404);
+  if (pair.status === 'revoked') return c.json({ ok: true, already: true });
+  // Defensive — schema upgrade may not have run yet on dev D1.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE pairwise_ndas SET status = 'revoked', voided_at = CURRENT_TIMESTAMP,
+              voided_reason = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+    ).bind(reason, id).run();
+  } catch {
+    await c.env.DB.prepare(
+      `UPDATE pairwise_ndas SET status = 'revoked', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    ).bind(id).run();
+  }
+  try {
+    await c.env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'cancelled' WHERE envelope_uuid = ? AND status NOT IN ('completed','cancelled')`,
+    ).bind(pair.nda_envelope_uuid).run();
+  } catch {}
+  return c.json({ ok: true, status: 'revoked', reason });
+});
+
+// ---------------------------------------------------------------------------
+// POST /kyb/start IS GONE (D432). It was a facade that upserted a minimal
+// `corporate_profiles` row and flipped `kyb_v1` to `in_review`, and it was
+// orphaned on both sides: `api.startKyb` had no caller under `frontend/src`,
+// and the page's Start action goes through POST /obligation/:key/start
+// instead. Retired with its client method, on D304's rule: nothing in the
+// tree called the route.
+//
+// What it did NOT fix stays recorded: a partner seeded a REQUIRED `kyb_v1` at
+// deal signature (`services/partnerDeals.ts`) presses Start, lands on
+// `in_review`, and `ObligationList` renders no action for `in_review` while
+// `lib/trustCenter.js` classes it as waiting on us. `kyb_v1` has no working
+// satisfier either — `resyncKycKyb` reads a column no table defines. Both are
+// held, with the rest of the obligation gap, in
+// `cloudflare-worker/test/obligation_satisfiable.test.ts`.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// The company's own KYB — task #108, migration 220.
+//
+// The ACCOUNT's entity is `corporate_profiles`, whose `user_id` is the primary
+// key — one row per account — and D40/D42 argue twice that the account's
+// entity and the company's are different objects that "must not drift into
+// each other". These two endpoints are the second object, not a replacement
+// for the first.
+//
+// WHAT THEY MAKE POSSIBLE. `TrustCenterPage`'s Entity tab carries a comment
+// saying the v2 canvas draws a "Your companies" card, one row per company with
+// its own KYB pill, and that the page states the model instead of drawing a
+// selector that "would have changed nothing when clicked". It can be drawn now.
+//
+// THE COMPANY COMES FROM THE VERIFIED HEADER, NOT FROM THE BODY OR THE PATH.
+// `resolveActiveCompany` rejects anything that is not 1-15 digits and then
+// checks `user_company_links` for a real membership, returning null for every
+// uncertain case. Taking a company id from the request body would be an
+// ownership claim the caller makes about themselves.
+// ---------------------------------------------------------------------------
+
+/** Every company the caller belongs to, each with its KYB record or null. */
+trust.get('/companies/kyb', async (c) => {
+  const user = await requireAuth(c);
+  // `companyKybScope` is NOT used here, and the reason is the LEFT JOIN. The
+  // scope reads `EXISTS(... ucl.company_id = k.company_id)`, and for a company
+  // with no KYB row `k.company_id` is NULL — so applying it would silently drop
+  // exactly the companies this card exists to show as "not started". The
+  // membership predicate is therefore expressed once, directly, on the links
+  // table that is the query's own root. Every read that touches a KYB ROW —
+  // the write's read-back below — goes through the scope.
+  //
+  // LEFT JOIN, because a company with no KYB row is the common case and the
+  // card has to show it rather than omit the company.
+  //
+  // D432 — A FAILED READ IS A REFUSAL, NOT AN EMPTY LIST. This used to catch
+  // every error into `{ results: [] }`, so a database that could not be read
+  // answered exactly like an account with no companies, and the card drew
+  // nothing. The page now gets a refusal body (D278: our sentence, the raw
+  // text in the log) and draws "Unreadable" with a retry.
+  let rows: { results?: any[] };
+  try {
+    rows = await c.env.DB.prepare(
+      `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
+              ucl.role_in_company, ucl.is_primary_admin,
+              COALESCE(k.uid, CASE WHEN reviewed.version > 0 THEN reviewed.uid END) AS kyb_uid, reviewed.status,
+              COALESCE(k.entity_name, reviewed.entity_name) AS entity_name, k.entity_type,
+              k.jurisdiction, k.registration_number, k.submitted_at, reviewed.reviewed_at
+         FROM user_company_links ucl
+         JOIN company_profiles cp ON cp.id = ucl.company_id
+         LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
+         LEFT JOIN kyb_businesses reviewed ON reviewed.uid = 'company-' || cp.id
+        WHERE ucl.user_id = ? AND (reviewed.studio_code IS NULL OR reviewed.studio_code = ?)
+        ORDER BY cp.company_name`,
+    ).bind(user.id, branchOf(c.env) || 'hq').all<any>();
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'company_kyb_unreadable',
+      message: 'Your companies’ entity records could not be read just now. Try again in a moment.',
+      raw: e,
+    });
+  }
+
+  return c.json({
+    items: (rows.results || []).map((r: any) => ({
+      company_id: r.company_id,
+      company_uid: r.company_uid,
+      company_name: r.company_name,
+      role_in_company: r.role_in_company,
+      is_primary_admin: !!r.is_primary_admin,
+      kyb: r.kyb_uid ? {
+        uid: r.kyb_uid, status: r.status, entity_name: r.entity_name,
+        entity_type: r.entity_type, jurisdiction: r.jurisdiction,
+        registration_number: r.registration_number,
+        submitted_at: r.submitted_at, reviewed_at: r.reviewed_at,
+      } : null,
+    })),
+    // Said out loud so a reader of the card knows which entity they are looking
+    // at. The account's own KYB is a different record on a different tab.
+    note: 'This is each company\u2019s own entity record. Your account\u2019s entity is separate '
+      + 'and lives under Settings \u2192 Corporate.',
+  });
+});
+
+/** Start or update the ACTIVE company's KYB record. */
+trust.post('/companies/kyb', async (c) => {
+  const user = await requireAuth(c);
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (companyId === null) {
+    return c.json({
+      detail: 'No company selected. A company KYB record belongs to one company, so the '
+        + 'request must name which — send X-Company-Id for a company you belong to.',
+    }, 400);
+  }
+  const body = await c.req.json<any>().catch(() => ({}));
+  const str = (v: unknown, max: number) => {
+    const out = String(v ?? '').trim().slice(0, max);
+    return out || null;
+  };
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  await c.env.DB.prepare(
+    `INSERT INTO company_kyb_records
+       (uid, company_id, started_by_user_id, status, entity_name, entity_type,
+        jurisdiction, registration_number, registered_address, submitted_at, updated_at)
+     VALUES (?, ?, ?, 'in_review', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT (company_id) DO UPDATE SET
+       status = 'in_review',
+       entity_name = COALESCE(excluded.entity_name, company_kyb_records.entity_name),
+       entity_type = COALESCE(excluded.entity_type, company_kyb_records.entity_type),
+       jurisdiction = COALESCE(excluded.jurisdiction, company_kyb_records.jurisdiction),
+       registration_number = COALESCE(excluded.registration_number, company_kyb_records.registration_number),
+       registered_address = COALESCE(excluded.registered_address, company_kyb_records.registered_address),
+       submitted_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+  ).bind(
+    uid, companyId, user.id,
+    str(body.entity_name ?? body.legal_name, 255),
+    str(body.entity_type, 64),
+    str(body.jurisdiction ?? body.country ?? body.country_code, 64),
+    str(body.registration_number ?? body.business_id, 120),
+    str(body.registered_address, 500),
+  ).run();
+
+  const scope = companyKybScope(user, 'k');
+  // Read back THROUGH the scope rather than by the id we just wrote. If the two
+  // ever disagree the write was reachable and the read is not, which is a bug
+  // worth finding here rather than in a support ticket.
+  const row = await c.env.DB.prepare(
+    `SELECT k.uid, k.status, k.entity_name, k.entity_type, k.jurisdiction,
+            k.registration_number, k.submitted_at
+       FROM company_kyb_records k
+      WHERE k.company_id = ? AND ${scope.sql}`,
+  ).bind(companyId, ...scope.binds).first<any>();
+  return c.json({ ok: true, company_id: companyId, kyb: row }, 201);
+});
+
+// Ensure obligations exist for a list of role-defaults exposed for
+// admin/debug use. Returns the canonical matrix the worker is using.
+trust.get('/matrix', async (c) => {
+  await requireAuth(c);
+  const role = c.req.query('role') || 'founder';
+  return c.json({ role, obligations: obligationsForRole(role) });
+});
+
+export default trust;

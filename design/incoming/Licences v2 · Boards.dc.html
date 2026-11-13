@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Licences · v2 · #4819</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Licences — what is true now, what needs HQ, what happens if I act</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">L0 is the real production state: no licences issued, with Issue first licence as the dominant action, a compact territory summary and seat utilisation shown as Not recorded in operator language. The populated ledger adds a Needs HQ summary whose items are real filters. Each licence shows separate facts for licence, agreement, commercial, access, branch, billing and requests, never one badge. Terms changes are an amendment session with a diff, consequences and a reason. Agreements are lifecycle objects with readiness checks and the frozen document shown before sending. Branch sync is a first-class state with retry and reconcile. Consequential actions answer the same four questions, and a partial success never looks complete. Eadwyn is a compact launcher with licence-specific prompts.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026, 14:30 UTC · production has 0 licences (L0); populated boards use the brief’s France example and sample licences</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Licences v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['L0', 'Ledger · true zero state', 'No invented subsidiaries. “No licences have been issued” and Issue first licence lead the page; Why is this empty? is a disclosure; territory coverage is one line; seat utilisation is Not recorded in plain language; no search, filters or sort.', [F('L00', false, 820)]],
+      ['L1', 'Ledger · healthy', '12 licences with the status split, a Needs HQ summary whose chips filter the table, freshness and Refresh, filters, and a compact nine-column ledger with one primary state per cell.', [F('L01', false, 900)]],
+      ['L2', 'Ledger · needs attention', 'The “1 branch out of sync” chip and the Attention filter applied: 3 of 12 licences, each with its attention count.', [F('L02', false, 760)]],
+      ['L3', 'Licence overview · active healthy', 'A strong identity header, seven separate facts and a Sources card (HQ ledger current, France branch responded 4 min ago). Eadwyn is open with its trust copy and four licence prompts; model and usage fold away.', [F('L03', false, 760)]],
+      ['L4', 'Licence overview · operational problems', 'Active, with the agreement differing from v4, the branch on revision 142 of 143, an overdue invoice and 2 requests waiting — all at once, never collapsed. The strip lists the 3 items that need HQ.', [F('L04', false, 800)]],
+      ['L5', 'Terms · read', 'A contractual schedule grouped as the brief asks, with agreement section references and Not recorded where nothing is set. Amend terms starts an edit session.', [F('L05', false, 1050)]],
+      ['L6', 'Terms · amendment', 'The amendment banner, inline before → after values, then Review 2 changes: the diff, what else it affects (ledger, branch revision, agreement mismatch, replacement needed) and a required reason.', [F('L06', false, 1150)]],
+      ['L7', 'Terms · conflict', 'Another admin changed revenue share mid-edit. Nothing was saved; a table shows start / now / your change, with Reapply on current terms (backend required).', [F('L07', false, 820)]],
+      ['L8', 'Agreement · executed', 'The current executed agreement leads, with its template version, hash and version list.', [F('L08', false, 780)]],
+      ['L9', 'Agreement · replacement draft incomplete', 'Terms differ from v4, so a replacement is prepared. Four lifecycle cards (ledger terms, draft, sent, executed) and a readiness preflight whose missing fields link to Terms.', [F('L09', false, 1120)]],
+      ['L10', 'Agreement · ready to send', 'The frozen exact document beside Send for signature, with signatories; v4 stays executed until v5 is signed.', [F('L10', false, 900)]],
+      ['L11', 'Access', 'Administrators with account state, licensed seats by profile, utilisation Not recorded with operator copy, and a note that Add administrator is hidden for incompatible states.', [F('L11', false, 820)]],
+      ['L12', 'Operations · requests and compliance', 'Studio requests with age and Approve / Decline. Compliance notices are kept separate from suspension reasons.', [F('L12', false, 760)]],
+      ['L13', 'Operations · billing', 'Annual licence-fee invoices with state, PDF and Void (reason required); the amended fee applies from the next licence year.', [F('L13', false, 720)]],
+      ['L14', 'Operations · deployment healthy', 'Synced with HQ · revision 143 · 4 min ago, with sources shown separately.', [F('L14', false, 700)]],
+      ['L15', 'Operations · deployment failed', 'Update pending: HQ 143 vs branch 142, last attempt failed, the effect in plain words, Retry sync and Reconcile deployment (branch revision acknowledgement is backend required).', [F('L15', false, 820)]],
+      ['L16', 'History', 'An attributable timeline: actor, time, before → after, reason and the branch outcome, with Load older. No raw event keys.', [F('L16', false, 1000)]],
+      ['L17', 'Terminate licence sheet', 'The four questions as headings: what happens, what else is affected, the reason recorded, and that it can’t be reversed here. Only the final button is destructive.', [F('L17', false, 900)]],
+      ['L18', 'Mutation outcomes', 'Pending, completed, partially completed (suspended at HQ; France hasn’t acknowledged 144; Retry branch sync), refused and outcome unknown.', [C('L18', false, 1400, 240)]],
+      ['L19', 'None / Not recorded / Unavailable', 'Three meanings, three treatments; never zero.', [C('L19', false, 1100, 240)]],
+      ['L20', 'Phone · licence triage', 'Search, identity, primary status, items that need HQ and the next decision; agreement and history as rows. No terms editor.', [P('L20', false)]],
+      ['L21', 'New licence · territory step', 'Step 2 of 6. The overlap rule appears where it matters, with the conflicting holder named.', [F('L21', false, 640)]],
+      ['L22', 'Backend fit and handoff', 'What today’s routes support, and what needs backend work: terms concurrency, per-licence revision and branch acknowledgement.', [W('L22')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

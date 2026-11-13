@@ -1,0 +1,22 @@
+{
+  "$id": "deckButtonClicks",
+  "title": "GET /api/decks/:id/button-clicks (D1545, #3788)",
+  "description": "The reply the deck v2 adapter's `buttonClicks` method passes through: each pressed button by card uid and block id, its clicks and the views it was pressed in (`routes/deck_media.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["buttons"],
+  "properties": {
+    "buttons": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["card_uid", "block_id", "clicks", "viewers"],
+        "properties": {
+          "card_uid": { "type": ["string", "null"] },
+          "block_id": { "type": ["string", "null"] },
+          "clicks": { "type": "integer", "minimum": 0 },
+          "viewers": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

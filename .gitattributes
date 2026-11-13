@@ -1,0 +1,177 @@
+# =============================================================================
+# Axal StudioOS — Git LFS tracking
+# =============================================================================
+# Strategy (see MIGRATION_LFS_AUDIT.md):
+#   - LFS: versioned source artifacts that belong with the codebase
+#     (design sources, ML weights, fixture archives, deck-template PSDs).
+#   - R2:  runtime-served traffic (uploads, signed contracts, deck exports,
+#          backups, KYC docs). NOT in this file.
+#   - GH Releases: public point-in-time artifacts (sector reports, public DD
+#                  summaries, quarterly Investor Signals PDFs).
+#   - Worker bundle: tiny atomic assets (favicons, OG fallback, regexes).
+#
+# History is NOT rewritten — these rules apply to NEW and RE-ADDED files only.
+# Existing in-tree blobs stay where they are until they are rotated.
+
+# ---- Design sources ----------------------------------------------------------
+*.psd     filter=lfs diff=lfs merge=lfs -text
+*.psb     filter=lfs diff=lfs merge=lfs -text
+*.ai      filter=lfs diff=lfs merge=lfs -text
+*.xd      filter=lfs diff=lfs merge=lfs -text
+*.fig     filter=lfs diff=lfs merge=lfs -text
+*.sketch  filter=lfs diff=lfs merge=lfs -text
+
+# ---- ML weights / model artifacts -------------------------------------------
+*.onnx        filter=lfs diff=lfs merge=lfs -text
+*.safetensors filter=lfs diff=lfs merge=lfs -text
+*.pt          filter=lfs diff=lfs merge=lfs -text
+*.pth         filter=lfs diff=lfs merge=lfs -text
+*.gguf        filter=lfs diff=lfs merge=lfs -text
+
+# ---- Tabular fixtures / data snapshots --------------------------------------
+*.parquet filter=lfs diff=lfs merge=lfs -text
+
+# ---- Archives (sample fixtures, audit snapshots) ----------------------------
+*.zip     filter=lfs diff=lfs merge=lfs -text
+*.tar.gz  filter=lfs diff=lfs merge=lfs -text
+*.tgz     filter=lfs diff=lfs merge=lfs -text
+
+# ---- Video (demo reels, marketing source clips) -----------------------------
+*.mp4     filter=lfs diff=lfs merge=lfs -text
+*.webm    filter=lfs diff=lfs merge=lfs -text
+*.mov     filter=lfs diff=lfs merge=lfs -text
+
+# ---- Audio masters (podcast / sound design) ---------------------------------
+*.wav     filter=lfs diff=lfs merge=lfs -text
+*.flac    filter=lfs diff=lfs merge=lfs -text
+
+# ---- PDFs / raster images ---------------------------------------------------
+# Size-gated by scripts/lfs-size-gate.mjs (rejects > 500 KB without LFS).
+# Not auto-tracked here because small inline diagrams + the existing in-tree
+# screenshots under attached_assets/ would otherwise rewrite history.
+# New > 500 KB PDFs / PNGs MUST be added with `git lfs track` first.
+
+# ---- Office documents (legal templates, decks) ------------------------------
+*.docx  filter=lfs diff=lfs merge=lfs -text
+*.doc   filter=lfs diff=lfs merge=lfs -text
+*.pptx  filter=lfs diff=lfs merge=lfs -text
+*.ppt   filter=lfs diff=lfs merge=lfs -text
+*.xlsx  filter=lfs diff=lfs merge=lfs -text
+*.xls   filter=lfs diff=lfs merge=lfs -text
+
+# ---- Additional ML / data formats -------------------------------------------
+*.h5      filter=lfs diff=lfs merge=lfs -text
+*.hdf5    filter=lfs diff=lfs merge=lfs -text
+*.pkl     filter=lfs diff=lfs merge=lfs -text
+*.ckpt    filter=lfs diff=lfs merge=lfs -text
+*.npy     filter=lfs diff=lfs merge=lfs -text
+*.npz     filter=lfs diff=lfs merge=lfs -text
+*.pb      filter=lfs diff=lfs merge=lfs -text
+*.bin     filter=lfs diff=lfs merge=lfs -text
+
+# ---- Database snapshots / fixtures ------------------------------------------
+*.duckdb     filter=lfs diff=lfs merge=lfs -text
+*.sqlite     filter=lfs diff=lfs merge=lfs -text
+*.sqlite3    filter=lfs diff=lfs merge=lfs -text
+
+# ---- Additional archives ----------------------------------------------------
+*.7z   filter=lfs diff=lfs merge=lfs -text
+*.rar  filter=lfs diff=lfs merge=lfs -text
+*.bz2  filter=lfs diff=lfs merge=lfs -text
+*.xz   filter=lfs diff=lfs merge=lfs -text
+
+# ---- Fonts ------------------------------------------------------------------
+*.woff2  filter=lfs diff=lfs merge=lfs -text
+
+# ---- The build stamp -------------------------------------------------------
+# `docs/.build-source` is one line: a SHA-256 of `frontend/src` that the build
+# writes last (D103). Because it is a tracked file whose single line changes
+# whenever the source does, ANY two branches that touch `frontend/src` conflict
+# on it — always, by construction. That happened five times in one day.
+#
+# `union` is a BUILT-IN driver, which is the whole reason it is the one used: a
+# custom driver needs repo-local `git config merge.<name>.driver`, and this repo
+# has no postinstall, no prepare and no hooks path to install one — and the
+# check that actually goes red runs against GitHub's own server-side merge,
+# where no local config exists at all.
+#
+# The merged result is two hashes and is meaningless. That is fine and is the
+# point: the correct value is a pure function of the merged source, so it can
+# only ever come from re-running `npm run build`. What this buys is that the
+# rebuild is prompted by a CI message instead of a conflict marker.
+# `scripts/check-docs-fresh.mjs` refuses a two-line stamp under `--strict`
+# rather than falling through to the timestamp proxy, so the union merge cannot
+# pass unnoticed. See D113.
+docs/.build-source merge=union
+
+# ---- Line endings ----------------------------------------------------------
+* text=auto eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+
+# The OG card generator inlines this font's BYTES into each card's HTML and
+# fingerprints the result (scripts/generate-og-images.mjs). Under the *.woff2
+# rule above it becomes a 130-byte LFS pointer for anyone without git-lfs —
+# including actions/checkout, which does not fetch LFS by default — so every
+# card fingerprints against the pointer and the "Card images are current" gate
+# fails on all 13. It has always been a full blob in git for that reason; the
+# exception is pinned here so a repo-wide re-tracking sweep cannot silently
+# undo it again. (.agents/memory/font-lfs-attribute-quirk.md has the history.)
+scripts/og-assets/SpaceGrotesk-Variable.woff2 -filter -diff -merge -text
+
+# D711 (#1776): the legal paper's faces are inlined byte-for-byte as data: URIs
+# into every legal PDF and preview (services/legalPaperCss.ts), and the tests
+# check each starts `wOF2`. As LFS pointers, CI — which fetches no LFS — would
+# inline 130 bytes of pointer text and every paper would draw the fallback
+# sans. Seven subset files, 108 KB together (paper/README.md).
+cloudflare-worker/src/templates/legal/paper/bricolage-grotesque-800.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-400.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-400-italic.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-700.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/roboto-mono-400.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/roboto-mono-700.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/space-grotesk-700.woff2 -filter -diff -merge -text
+
+# D1511 (#3762): the editor's visual suite serves these faces in place of Google
+# Fonts (frontend/tests/visual/_editor.mjs). As LFS pointers, the CI checkout —
+# which fetches no LFS — would serve 130 bytes of pointer text, every screen
+# would draw a fallback face, and every baseline would differ. Three variable
+# latin files, 103 KB together.
+frontend/tests/visual/fonts/*.woff2 -filter -diff -merge -text
+
+# ---- Generated and pasted trees: linguist-generated ---------------------------
+# Not hand-written source. The same five trees are already excluded from the
+# repo's own CodeQL (.github/codeql/codeql-config.yml paths-ignore) and from
+# Semgrep (.semgrepignore); this marks them for everything that reads git
+# attributes instead: GitHub collapses their diffs and leaves them out of the
+# language bar. CodeQL has an exclusion keyed on this attribute
+# (codeql-action "ignore generated files"), but on 2026-09-27 it is still an
+# experimental flag, so this does NOT yet clear Code Quality findings.
+# GitHub Code Quality does not honour `paths-ignore`, which is why its
+# js/useless-expression findings were almost all in these trees: the bundler's
+# `t.node;` in docs/assets and the `{{ }}` bindings in the .dc.html canvases.
+docs/**                   linguist-generated=true
+attached_assets/**        linguist-generated=true
+spin-out-lab-pipeline/**  linguist-generated=true
+design/canvases/**        linguist-generated=true
+design/incoming/**        linguist-generated=true
+
+# ---- README.md: union merges -------------------------------------------------
+# Many branches append a row or a paragraph at the same spot of the same
+# README (a folder's file table, design/incoming/README.md's landings), and a
+# plain merge stops on every one of them. `union` keeps both sides' lines. It
+# keeps BOTH versions of a line two branches rewrote differently, so
+# scripts/check-folder-docs.mjs refuses a README where that happened (rule 4,
+# scripts/lib/readmeUnion.mjs): pick one version and delete the other.
+README.md merge=union
+
+# ---- The route map: no union (D4102, D4103) ---------------------------------
+# The route map itself is no longer one file (D4102, #4102): every section and
+# every canvas row is its own fragment under documentation/architecture/route-map/,
+# so two branches adding canvases add two files and never meet, and two
+# branches changing the same canvas meet as an ordinary conflict on that one
+# line. No union, so no silent second row. scripts/lib/routeMap.mjs refuses a
+# canvas with two rows and names both files. Its two projections,
+# PROFILE_ROUTING.md and PAGE_INVENTORY.md, are not committed at all (D4103,
+# #4103): they are gitignored build output, so they need no merge rule either.

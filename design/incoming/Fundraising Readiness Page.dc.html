@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;RD1&quot;,&quot;options&quot;:[&quot;RD1&quot;,&quot;RD1r&quot;,&quot;RD2&quot;,&quot;RD3&quot;,&quot;RD4&quot;,&quot;RD5&quot;,&quot;RD6&quot;,&quot;RD7&quot;,&quot;RD8&quot;,&quot;RD9a&quot;,&quot;RD9b&quot;,&quot;RD10&quot;,&quot;RD11&quot;,&quot;RD12&quot;,&quot;RD13&quot;,&quot;RD13h&quot;,&quot;RD14&quot;,&quot;RD15&quot;,&quot;RD16a&quot;,&quot;RD16b&quot;,&quot;RD17&quot;,&quot;RD18a&quot;,&quot;RD18b&quot;,&quot;RD18c&quot;,&quot;RD19&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RD1';
+    const dark = B === 'RD19', phone = /^RD18/.test(B);
+    const crop = ['RD1r', 'RD3', 'RD4', 'RD5', 'RD6', 'RD7', 'RD8', 'RD9a', 'RD9b', 'RD10', 'RD11', 'RD12', 'RD16a', 'RD16b', 'RD17'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const LINE = 'font-size:13px;font-weight:500;line-height:1.5', NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink, BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap', PCOL = 'display:flex;flex-direction:column;gap:14px;min-width:0';
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const MONO = (t) => ({ t, s: 'font:600 11.5px ' + MO + ';color:' + c.mu });
+    const EADS = 'display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:#7c3aed;color:#fff;font:800 11px ' + SG + ';flex:none';
+    const NRP = { t: 'Not recorded', s: PILL + 'color:' + c.mu + ';background:' + c.card + ';border:1px dashed ' + c.mu };
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const FX = (a) => a.map(x => Object.assign({ sub: false }, x));
+    const BIG = 'margin:0;font:700 40px ' + MO + ';letter-spacing:-.03em;line-height:1.05;color:' + c.ink, MID = 'margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.25;color:' + c.mu;
+    const VC = dark ? '167,139,250' : '124,58,237', VS = dark ? '#a78bfa' : '#7c3aed';
+    const GR = { m: ['Measured', 1], r: ['Reviewed', .75], s: ['Sourced', .5], st: ['Stated', .25] };
+    const swb = (a) => 'linear-gradient(rgba(' + VC + ',' + a + '),rgba(' + VC + ',' + a + ')) 9px 50%/10px 10px no-repeat,linear-gradient(' + c.card + ',' + c.card + ') 9px 50%/10px 10px no-repeat,linear-gradient(' + VS + ',' + VS + ') 8px 50%/12px 12px no-repeat,' + c.card;
+    const grade = (k) => k === 'nr' ? NRP : k === 'cr' ? { t: 'Could not be read', s: NRP.s } : k === 'ne' ? { t: 'Not expected yet', s: PILL + 'color:' + c.mu + ';background:' + c.card + ';border:1px solid ' + c.hair } : { t: GR[k][0], s: PILL + 'padding-left:26px;color:' + c.ink + ';border:1px solid ' + c.hair + ';background:' + swb(GR[k][1]) };
+    const STALE = pl('◷', 'Stale', 'a');
+    const SRCD = { con: ['⇄', 'Connector', VS], doc: ['▤', 'Document', '#0ea5e9'], rec: ['◉', 'Recorded', '#f59e0b'], sig: ['✎', 'Signed', '#10b981'], typ: ['Aa', 'Typed', '#6b6577'] };
+    const src = (k, x) => ({ t: SRCD[k][0] + ' ' + SRCD[k][1] + (x ? ' · ' + x : ''), s: 'display:inline-flex;align-items:center;min-height:24px;padding:2px 10px 2px 21px;border-radius:999px;box-sizing:border-box;font:600 11px ' + SG + ';line-height:1.45;color:' + c.ink + ';border:1px solid ' + c.hair + ';background:radial-gradient(circle at 11px 50%,' + SRCD[k][2] + ' 0 3.5px,transparent 4px) ' + c.card });
+    const BAND = { St: pl('▲', 'Strong', 'g'), F: pl('◐', 'Fair', 'a'), W: pl('▼', 'Weak', 'r') };
+    const CONFS = 'margin:0;font:700 12px ' + MO + ';line-height:1.6;color:' + c.ink;
+    const M6 = ['[May]', '[Jun]', '[Jul]', '[Aug]', '[Sep]', '[Oct]'];
+    const spark = (vals, col2, sum) => { const W = 300, H = 58, n = vals.length, X = (i) => +(6 + i * (W - 12) / (n - 1)).toFixed(1), Y = (v) => +(6 + (100 - v) / 100 * (H - 22)).toFixed(1);
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:Roboto Mono,monospace">';
+      s += '<line x1="6" x2="' + (W - 6) + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="' + c.hair + '"/>';
+      let prev = -1; vals.forEach((v, i) => { if (v == null) return; if (prev >= 0) { const gap = i - prev > 1; s += '<line x1="' + X(prev) + '" y1="' + Y(vals[prev]) + '" x2="' + X(i) + '" y2="' + Y(v) + '" stroke="' + (gap ? c.mu : col2) + '" stroke-width="' + (gap ? 1.4 : 2.4) + '"' + (gap ? ' stroke-dasharray="3 3"' : '') + ' stroke-linecap="round"/>'; } prev = i; });
+      vals.forEach((v, i) => { if (v == null) return; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (i === n - 1 ? 3.8 : 2.4) + '" fill="' + col2 + '"><title>' + M6[i] + ' · ' + v + '</title></circle>'; });
+      s += '<text x="6" y="' + (H - 2) + '" font-size="10" fill="' + c.mu + '">' + M6[0] + '</text><text x="' + (W - 6) + '" y="' + (H - 2) + '" text-anchor="end" font-size="10" fill="' + c.mu + '">' + M6[n - 1] + '</text>';
+      return { __html: s + '</svg>' }; };
+    const dashLine = (lab) => ({ __html: '<svg viewBox="0 0 300 18" width="100%" role="img" aria-label="' + lab + '" style="display:block"><line x1="2" x2="298" y1="9" y2="9" stroke="' + c.mu + '" stroke-width="1.5" stroke-dasharray="4 3"/></svg>' });
+    const INP = [
+      { g: 'Who you heard from', n: 'ICP interviews held', f: '[14] ICP interviews of [17] held · [9] from recorded sessions', v: 70, k: 'r', src: ['rec', 'Validate › Customer research · 14 interviews (9 recorded sessions)'], at: '[21 Oct 2026]', w: '10', p: '7.0' },
+      { g: 'Who you heard from', n: 'ICP coverage', f: '[15] of [17] interviews have fit and segment recorded', v: 88, k: 'r', src: ['rec', 'Validate › Ideal customer profile · 17 interviews'], at: '[21 Oct 2026]', w: '5', p: '4.4' },
+      { g: 'The problem', n: 'Pain frequency', f: '[10] of [14] ICP interviews name the top pain, “[Month-end reconciliation takes two days]”', v: 100, k: 'r', src: ['rec', 'Validate › Problem discovery · top pain'], at: '[21 Oct 2026]', w: '12.5', p: '12.5' },
+      { g: 'The problem', n: 'Pain severity', f: '[7] of [12] judged Severe or Real', v: 83, k: 'r', stale: 1, src: ['rec', 'Validate › Problem discovery · 12 judged'], at: '[2 Aug 2026]', w: '10', p: '8.3' },
+      { g: 'Claims and experiments', n: 'Claims supported', f: '[2] of [5] supported, strongest “pattern” · H3 has no verdict: fit unrecorded on [2] interviews', v: 30, k: 'r', src: ['rec', 'Validate › Experiments and evidence · 5 claims'], at: '[19 Oct 2026]', w: '20', p: '6.0' },
+      { g: 'Claims and experiments', n: 'Experiment outcomes', f: '[1] of [2] finished experiments support their claim', v: 50, k: 'st', src: ['typ', 'Typed by [Name A] · no source'], at: '[14 Oct 2026]', w: '7.5', p: '3.8' },
+      { g: 'Demand and pull', n: 'Paying demand', f: '[1] paid pilot [€1,200] verified by Mercury · [2] letters of intent, [€6,000] and [€4,500], one with a file', v: 70, k: 's', src: ['con', 'Mercury, as of [3 Sep 2026] · and 2 more'], at: '[3 Sep 2026]', w: '20', p: '14.0' },
+      { g: 'Demand and pull', n: 'Would pay', f: '[3] of [14] ICP interviews said they would pay', v: 54, k: 'r', src: ['rec', 'Validate › Customer research · 14 ICP interviews'], at: '[21 Oct 2026]', w: '15', p: '8.1' },
+      { g: 'Demand and pull', n: 'Waitlist against your bar', f: 'No bar set · [86] sign-ups recorded', v: null, k: 'nr', src: ['rec', 'Validate › Demand and urgency signals · 86 sign-ups'], why: 'Set a bar to count it' },
+      { g: 'Demand and pull', n: 'Product pull', f: 'No release yet. It counts once a release is out or PostHog tracks a metric.', v: null, k: 'ne' }];
+    const inputSvg = (mode) => { const W = 720, L = 196, RR = 130, iw = W - L - RR, rh = 26, gh = 24; let y = 20, body = '', lastG = '';
+      INP.forEach((r) => { if (r.g !== lastG) { lastG = r.g; body += '<text x="0" y="' + (y + 16) + '" font-family="Roboto Mono,monospace" font-size="10" font-weight="700" letter-spacing=".07em" fill="' + c.mu + '">' + r.g.toUpperCase() + '</text>'; y += gh; }
+        const st = mode === 'empty' && r.k !== 'ne' ? 'nr' : mode === 'part' && r.n === 'Paying demand' ? 'cr' : r.k, cy = y + 13, bw = (r.v || 0) / 100 * iw;
+        body += '<text x="0" y="' + (cy + 4) + '" font-family="Space Grotesk,sans-serif" font-size="12" fill="' + (st === 'ne' ? c.mu : c.ink) + '">' + r.n + '</text>';
+        if (st === 'ne') body += '<text x="' + (L + 4) + '" y="' + (cy + 4) + '" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.mu + '">Not expected yet · out of the count</text>';
+        else if (st === 'nr' || st === 'cr') { const lab = st === 'cr' ? 'Could not be read' : 'Not recorded'; body += '<rect x="' + (L + .75) + '" y="' + (cy - 6.25) + '" width="' + (iw - 1.5) + '" height="12.5" rx="3" fill="none" stroke="' + c.mu + '" stroke-width="1.2" stroke-dasharray="4 3"><title>' + r.n + ' · ' + lab + '</title></rect><text x="' + (L + iw + 10) + '" y="' + (cy + 4) + '" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.mu + '">' + lab + '</text>'; }
+        else body += '<rect x="' + L + '" y="' + (cy - 7) + '" width="' + bw.toFixed(1) + '" height="14" rx="3" fill="rgba(' + VC + ',' + GR[st][1] + ')" stroke="' + VS + '" tabindex="0"><title>' + r.n + ' · ' + r.v + ' · ' + GR[st][0] + '</title></rect><text x="' + (L + bw + 8).toFixed(1) + '" y="' + (cy + 4) + '" font-family="Roboto Mono,monospace" font-size="11.5" font-weight="700" fill="' + c.ink + '">' + r.v + '</text><text x="' + (L + bw + 36).toFixed(1) + '" y="' + (cy + 4) + '" font-family="Space Grotesk,sans-serif" font-size="11" fill="' + c.mu + '">' + GR[st][0] + '</text>';
+        y += rh; });
+      const H = y + 4; let s = svgOpen(W, H, mode === 'empty' ? 'Nothing is recorded for any input yet; product pull is not expected yet.' : mode === 'part' ? 'Paying demand could not be read; the other inputs read as before.' : 'Inputs from 0 to 100: pain frequency 100, ICP coverage 88, pain severity 83, ICP interviews held 70, paying demand 70, would pay 54, experiment outcomes 50, claims supported 30; the waitlist is not recorded and product pull is not expected yet.');
+      [0, 25, 50, 75, 100].forEach(t => { const x = +(L + t / 100 * iw).toFixed(1); s += '<line x1="' + x + '" x2="' + x + '" y1="16" y2="' + H + '" stroke="' + c.hair + '"/><text x="' + x + '" y="11" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + t + '</text>'; });
+      return { __html: s + body + '</svg>' }; };
+    const inRows = (mode) => { const out = []; let lastG = '';
+      INP.forEach((r) => { if (r.g !== lastG) { lastG = r.g; out.push(R({ rs: 'display:flex;padding:16px 0 2px', eye: r.g.toUpperCase() })); }
+        const st = mode === 'empty' && r.k !== 'ne' ? 'nr' : r.k, ne = st === 'ne', miss = st === 'nr';
+        const tg = ne ? [grade('ne'), MONO('Out of the coverage count')] : miss ? [NRP].concat(mode === 'empty' ? [] : [src(r.src[0], r.src[1])], [MONO(mode === 'empty' ? 'Lowers confidence, not the score' : r.why + ' · lowers confidence, not the score')]) : [grade(st)].concat(r.stale ? [STALE] : [], [src(r.src[0], r.src[1]), MONO('As of ' + r.at), MONO('Weight ' + r.w + ' · ' + r.p + ' points')]);
+        out.push(R({ t: r.n, ts: 'font-size:13.5px;font-weight:700;line-height:1.4' + (ne ? ';color:' + c.mu : ''), sub: mode === 'empty' && !ne ? 'Nothing recorded yet' : r.f, ss: 'font:500 12px ' + MO + ';line-height:1.55;color:' + c.mu, tags: tg, v: ne ? false : miss ? '—' : String(r.v), vs: 'font:700 16px ' + MO + ';color:' + (miss ? c.mu : c.ink), act: 'Open ›', as: btnG })); });
+      return out; };
+    const GLEG = [['Measured', 1], ['Reviewed', .75], ['Sourced', .5], ['Stated', .25]].map(([t, a]) => ({ t, sw: 'width:12px;height:12px;border-radius:3px;flex:none;box-sizing:border-box;background:rgba(' + VC + ',' + a + ');border:1px solid ' + VS })).concat([{ t: 'Not recorded', sw: 'width:16px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px dashed ' + c.mu }]);
+    const inputK = (mode) => K({ title: 'What Product-market fit rests on', tog: TOG(), note: mode === 'empty' ? 'Nothing is recorded in Validate yet, so every input is Not recorded.' : mode === 'part' ? 'Paying demand could not be read, so the score leaves it out until it reads.' : 'Pain frequency is the strongest input; claims supported is the weakest. A bar’s shade is its grade.', legend: GLEG, svg: inputSvg(mode), rows: mode === 'part' ? [] : inRows(mode), foot: mode === 'empty' ? 'Each input fills from its Validate module. Missing data lowers confidence; it is never a zero.' : mode === 'part' ? 'Without it: [63] · Fair · Low confidence · 7 of 9 inputs that apply.' : 'The points add up to the score, [64]. Weights are shared out again over the inputs that apply and are recorded.' });
+    const GAPS = [['Build the pitch deck.', 'Up to +25', 'Raise kit', 'Raise › Pitch deck'], ['Ask the would-pay question in every ICP interview.', 'Up to +6.9', 'Product-market fit', 'Validate › Customer research'], ['Put each hire in the use of funds on a month.', 'Up to +6.5', 'Raise kit', 'Raise › Use of funds'], ['Hold [6] more ICP interviews, to reach [20].', 'Up to +3.0', 'Product-market fit', 'Validate › Customer research'], ['Record the fit on [2] interviews, so H3 gets a verdict.', 'Up to +3.0', 'Product-market fit', 'Validate › Experiments and evidence'], ['Set a waitlist bar, so your [86] sign-ups count.', 'Coverage 8 → 9 of 9 · Confidence Medium → High', 'Product-market fit', 'Validate › Demand and urgency signals'], ['Connect PostHog, so experiment outcomes are measured, not typed.', 'Experiment outcomes: Stated → Measured', 'Product-market fit', 'Validate › Experiments and evidence'], ['Attach the [€4,500] letter of intent.', 'Paying demand: Stated → Sourced', 'Product-market fit', 'Validate › Demand and urgency signals'], ['Score Team.', 'Coverage 7 → 8 of 8 items', 'Raise kit', 'Score Team']];
+    const GAIN = (t) => ({ t, s: PILL + 'font:700 11px ' + MO + ';white-space:normal;color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE });
+    const SCOPE = (t) => ({ t, s: PILL + 'white-space:normal;color:' + c.mu + ';background:' + c.card + ';border:1px solid ' + c.hair });
+    const MODC = (t) => ({ t: t + ' ›', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 44 : 26) + 'px;padding:0 10px;border-radius:999px;box-sizing:border-box;font:700 11.5px ' + SG + ';color:' + c.vt + ';background:' + c.card + ';border:1px solid ' + c.lavE + ';cursor:pointer;white-space:normal' });
+    const gapsK = () => K({ title: 'Gaps · [9]', tbar: { search: false, chips: [tag('All [9]', true), tag('Product-market fit [6]'), tag('Raise kit [3]')] }, note: 'Every next step that raises either score, by what it raises.', rows: GAPS.map(g => R({ t: g[0], ts: 'font-size:13.5px;font-weight:700;line-height:1.45', tags: [GAIN(g[1]), SCOPE(g[2]), MODC(g[3])] })).concat([R({ rs: NOTE('v') + ';margin-top:10px;flex-wrap:wrap', lead: 'E', ls: EADS, t: 'Eadwyn', ts: 'font-size:13px;font-weight:800', sub: 'Reads the inputs on this page. It never changes a score.', btns: [{ t: 'Explain this score', s: btnSm }, { t: 'Questions for the next interviews', s: btnSm }] })]) });
+    const KST = { d: pl('✓', 'Done', 'g'), g: pl('!', 'Has a gap', 'a'), n: { t: '○ Not scored', s: NRP.s } };
+    const RDS = { c: ['✓ Counted', c.pos], p: ['◐ Partial', c.amT], m: ['○ Missing', c.mu] };
+    const KIT = [['Narrative', 'd', 10, 'Pattern', 'c', 'Computed check', '[18 Oct]', 'Re-score', false], ['Pitch deck', 'g', 0, '—', 'm', 'Computed check', '[21 Oct]', 'Re-score', 'Build the pitch deck.'], ['Data room', 'g', 7, 'Pattern', 'p', 'Computed check', '[20 Oct]', 'Re-score', 'Add the missing folders.'], ['Cap table', 'd', 10, 'Measured', 'c', 'Computed check', '[12 Oct]', 'Re-score', false], ['Use of funds', 'g', 5, 'Anecdote', 'p', 'Computed check', '[9 Oct]', 'Re-score', 'Put each hire on a month.'], ['Traction proof', 'd', 10, 'Pattern', 'c', 'Computed check · Typed fields', '[21 Oct]', 'Re-score', false], ['Product-market fit', 'g', 6, '—', 'p', 'From the score above', '[21 Oct]', 'Re-score', 'See the gaps above.'], ['Team', 'n', null, '—', 'm', 'Scored by you', '—', 'Score Team', 'Waits for your score.']];
+    const kitT = (empty) => TB({ title: 'Raise kit checklist', tbar: { search: false, chips: [MONO(empty ? '[0] of [8] items scored' : '[7] of [8] items scored')] }, pager: false, gc: '1.6fr 1.05fr .7fr .85fr .9fr 1.5fr .75fr .8fr', cols: ['Item', 'State', 'Score', 'Evidence', 'Read', 'Source', 'Updated', ''], rows: KIT.map(k0 => { const k = empty ? [k0[0], 'n', null, '—', 'm', k0[0] === 'Team' ? 'Scored by you' : 'Computed check', '—', k0[0] === 'Team' ? 'Score Team' : 'Score now', k0[0] === 'Product-market fit' ? 'Fills from Validate.' : false] : k0; return [CL(k[0], { ts: 'font-weight:700;line-height:1.35', sub: k[8] || false }), CL('', { pill: KST[k[1]] }), k[2] == null ? CL('—', { ts: 'font-family:' + MO + ';color:' + c.mu, tip: 'Not scored yet' }) : CL('[' + k[2] + '] / 10', { ts: 'font-family:' + MO + ';font-weight:700' }), CL(k[3], k[3] === '—' ? MU : {}), CL(RDS[k[4]][0], { ts: 'font-size:12px;font-weight:700;color:' + RDS[k[4]][1] }), CL(k[5], { ts: 'font-size:12px;line-height:1.4' }), CL(k[6], k[6] === '—' ? MU : MN), CL(k[7], LK)]; }), foot: empty ? 'Nothing is scored yet. An item left unscored is left out of the raise kit, never counted as 0.' : 'The raise kit is the weighted average of the items scored: pitch deck 25, product-market fit 15, data room 15, use of funds 13, narrative 12, cap table 10, traction proof 10. Team is left out until you score it, never counted as 0.' });
+    const peersK = K({ cs: CARD + ';background:' + c.raised, eye: 'PEERS', title: 'Your venture score is a different score', hs: 'margin:0;font-size:13.5px;font-weight:800;line-height:1.4', note: 'The Spin-Out Lab scorer compares ventures in a cohort. It is not readiness and is in neither score here.', btns: [{ t: 'Open the venture score ›', s: btnG }] });
+    const M12 = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+    const PH = [null, null, null, 32, 37, 40, 38, null, 47, 52, 58, 64], KH = [null, null, null, null, null, 24, 30, 34, 41, 46, 52, 58];
+    const PCF = [0, 0, 0, '5 of 9 inputs · Low confidence', '6 of 9 inputs · Low confidence', '6 of 9 inputs · Low confidence', '7 of 9 inputs · Low confidence', 0, '5 of 9 inputs · Low confidence', '6 of 9 inputs · Low confidence', '7 of 9 inputs · Low confidence', '8 of 9 inputs · Medium confidence'];
+    const histSvg = () => { const W = 1080, H = 300, L = 44, T = 56, Bm = 30, RR = 170, iw = W - L - RR, ih = H - T - Bm, n = 12, X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / 100 * ih).toFixed(1);
+      let s = svgOpen(W, H, 'Twelve months of scores. Product-market fit was not enough recorded until February, fell back after the pivot on 3 June and reached 64 in October; the raise kit rose from 24 in April to 58.');
+      [0, 25, 50, 75, 100].forEach(v => { s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>'; });
+      M12.forEach((m, i) => { s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">[' + m + (i === 0 ? ' 2025' : i === 2 ? ' 2026' : '') + ']</text>'; });
+      s += '<line x1="' + X(0) + '" x2="' + X(3) + '" y1="' + (Y(0) - 2) + '" y2="' + (Y(0) - 2) + '" stroke="' + c.mu + '" stroke-width="1.5" stroke-dasharray="4 3"/><text x="' + (X(0) + 2) + '" y="' + (Y(0) - 9) + '" font-family="Space Grotesk,sans-serif" font-size="11" fill="' + c.mu + '">Product-market fit · not enough recorded</text>';
+      const xp = +(X(7) + .1 * iw / 11).toFixed(1);
+      s += '<line x1="' + xp + '" x2="' + xp + '" y1="' + (T - 44) + '" y2="' + (T + ih) + '" stroke="' + c.ink + '" stroke-width="1.5"/><path d="M' + xp + ' ' + (T - 44) + 'l9 4.5-9 4.5z" fill="' + c.ink + '"/><text x="' + (xp + 13) + '" y="' + (T - 35) + '" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.ink + '">Pivot · [3 Jun 2026]</text>';
+      s += '<line x1="' + X(9) + '" x2="' + X(9) + '" y1="' + (T - 22) + '" y2="' + (T + ih) + '" stroke="' + c.mu + '" stroke-width="1.6" stroke-dasharray="1.5 3.5" stroke-linecap="round"/><text x="' + (X(9) + 6) + '" y="' + (T - 13) + '" font-family="Space Grotesk,sans-serif" font-size="11.5" fill="' + c.ink + '">Model v1.0 · [1 Aug 2026]</text>';
+      const ser = (vals, col2, name, conf, dotTo, dy) => { let o = '', prev = -1; vals.forEach((v, i) => { if (v == null) return; if (prev >= 0) { const gap = i - prev > 1, dot = dotTo != null && i <= dotTo; o += '<line x1="' + X(prev) + '" y1="' + Y(vals[prev]) + '" x2="' + X(i) + '" y2="' + Y(v) + '" stroke="' + (gap ? c.mu : col2) + '" stroke-width="' + (gap ? 1.5 : 2.6) + '"' + (gap ? ' stroke-dasharray="4 3"' : dot ? ' stroke-dasharray="1 4.5" stroke-linecap="round"' : ' stroke-linecap="round"') + '/>'; } prev = i; });
+        vals.forEach((v, i) => { if (v == null) return; o += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="3.6" fill="' + col2 + '" tabindex="0"><title>[' + M12[i] + '] · ' + name + ' [' + v + ']' + (conf && conf[i] ? ' · ' + conf[i] : '') + '</title></circle>'; });
+        const li = vals.length - 1; o += '<text x="' + (X(li) + 12) + '" y="' + (Y(vals[li]) + 4 + dy) + '" font-family="Space Grotesk,sans-serif" font-size="11.5" font-weight="700" fill="' + c.ink + '">' + name + ' ' + vals[li] + '</text>'; return o; };
+      s += ser(KH, S[1], 'Raise kit', null, null, 7) + ser(PH, S[0], 'Product-market fit', PCF, 9, -7);
+      return { __html: s + '</svg>' }; };
+    const HLEG = [{ t: 'Product-market fit', sw: dotSw(S[0]) }, { t: 'Raise kit', sw: dotSw(S[1]) }, { t: 'Not enough recorded', sw: 'width:18px;height:0;flex:none;border-top:1.5px dashed ' + c.mu }, { t: 'Scored with Model v0.9', sw: 'width:18px;height:0;flex:none;border-top:2.5px dotted ' + S[0] }, { t: 'Pivot', sw: 'width:0;height:12px;flex:none;border-left:1.5px solid ' + c.ink }];
+    const histK = () => K({ title: 'Score history', tog: TOG(), note: 'Twelve months. Hover a point for its value, confidence and coverage on that day.', legend: HLEG, svg: histSvg(), foot: 'Before [1 Aug 2026] Product-market fit was scored with Model v0.9, so that stretch is dotted. After the pivot on [3 Jun 2026], only records from that day on count.' });
+    const verdictR = R({ rs: 'display:flex;padding:9px 0 0;border-top:1px solid ' + c.hair, t: 'Verdict: Proceed · [7] pieces · [12 Sep 2026]', ts: 'font:600 12px ' + MO + ';line-height:1.5', sub: 'Shown, not scored.' });
+    const pmfTile = (mode) => mode === 'empty' ? K({ eye: 'PRODUCT-MARKET FIT', title: 'Not enough recorded', hs: MID, note: 'Fewer than 5 inputs are recorded, so no number shows.', svg: dashLine('Not enough recorded'), rows: [R({ rs: 'display:flex;padding:9px 0 0;border-top:1px solid ' + c.hair, t: 'Verdict: No verdict yet', ts: 'font:600 12px ' + MO })], foot: 'From Validate · Model v1.0' })
+      : K({ eye: 'PRODUCT-MARKET FIT' + (mode === 'part' ? ' · PARTIAL' : ''), title: mode === 'part' ? '[63]' : '[64]', hs: BIG, meta: BAND.F.t, ms: BAND.F.s, note: mode === 'part' ? '●○○ Low confidence · 7 of 9 inputs that apply' : '●●○ Medium confidence · 8 of 9 inputs that apply', ns: CONFS, svg: spark(mode === 'part' ? [38, null, 47, 52, 58, 63] : [38, null, 47, 52, 58, 64], S[0], 'Product-market fit over six months: 38 in May, not enough recorded in June after the pivot, then 47, 52, 58 and ' + (mode === 'part' ? '63' : '64') + ' in October.'), rows: mode === 'part' ? [ERR('Demand signals could not be read. Paying demand is out until it reads.', 'a')] : [verdictR], foot: 'From Validate · Model v1.0 · [21 Oct, 09:40] · after an interview was logged' });
+    const kitTile = (empty) => empty ? K({ eye: 'RAISE KIT', title: 'Not scored yet', hs: MID, note: '[0] of [8] items scored', ns: CONFS, svg: dashLine('Raise kit not scored yet'), foot: 'Fills as you build the raise kit in Raise.' })
+      : K({ eye: 'RAISE KIT', title: '[58]', hs: BIG, meta: '[7] of [8] items scored', ms: 'font:600 12px ' + MO + ';color:' + c.mu, note: '+[6] in 30 days', ns: 'margin:0;font:700 12px ' + MO + ';color:' + c.pos, svg: spark([30, 34, 41, 46, 52, 58], S[1], 'Raise kit over six months: 30, 34, 41, 46, 52 and 58 in October.'), foot: 'From the checklist below · re-scored [21 Oct, 09:40]' });
+    const runTile = (none) => none ? K({ eye: 'RUNWAY', title: 'Not recorded', hs: MID, note: 'Connect Mercury and runway reads from your bank.', svg: dashLine('Runway not recorded'), btns: [{ t: 'Connect Mercury', s: btnS }], foot: 'Shown beside the scores, not in them.' })
+      : K({ eye: 'RUNWAY', title: '[14]', hs: BIG, meta: 'months', ms: 'font:700 14px ' + SG + ';color:' + c.mu, tags: [grade('m'), src('con', 'Mercury, as of [1 Oct 2026]')], foot: 'Shown beside the scores, not in them.' });
+    const band3 = (m) => [col([pmfTile(m)], 2), col([kitTile(m === 'empty')], 2), col([runTile(m === 'empty')], 2)];
+    const rd1 = () => band3().concat([col([inputK()], 4), col([gapsK()], 2), col([kitT()]), { s: PCOL + ';grid-column:5 / span 2', blocks: [peersK] }, col([histK()])]);
+    const CS = { Supported: ['✓', 'g'], Testing: ['◷', 'v'], Refuted: ['✕', 'r'], Untested: ['○', 'n'], 'No verdict': ['?', 'a'] };
+    const CLM = [['H1', '[Finance leads would switch for a one-day close]', 'Supported', '[5] of 5 ICP', 'pattern', ['Pre-sale · [€1,200] pilot · Counted elsewhere']], ['H2', '[Bookkeeping agencies resell to their clients]', 'Supported', '[5] of 5 ICP', 'pattern', ['Letter of intent · [€6,000] · Counted elsewhere']], ['H3', '[Controllers trust automated matching]', 'No verdict', '[3] of 5 ICP', 'anecdote', []], ['H4', '[Firms pay per entity, not per seat]', 'Testing', '[2] of 5 ICP', 'anecdote', ['Experiment [E3] · running · Counted elsewhere']], ['H5', '[One person owns the month-end close]', 'Refuted', '[0] of 5 ICP · [4] contradict', 'pattern', []]];
+    const claimRows = CLM.map(h => R({ lead: h[0], ls: 'font:700 12px ' + MO + ';color:' + c.vt + ';flex:none;width:24px;line-height:1.5', t: h[1], ts: 'font-size:13px;font-weight:700;line-height:1.45', sub: h[3] + ' · strongest “' + h[4] + '”' + (h[0] === 'H3' ? ' · No verdict: fit unrecorded on [2] interviews.' : ''), ss: 'font:500 11.5px ' + MO + ';color:' + c.mu + ';line-height:1.5', st: pl(CS[h[2]][0], h[2], CS[h[2]][1]), tags: h[5].map(x => SCOPE(x)), btns: h[0] === 'H3' ? [{ t: 'Record the fit ›', s: btnSm }] : false }));
+    const dHead = (eye, t, tags) => K({ cs: PLAIN, eye, title: t, hs: H18, meta: 'Esc to close', tags });
+    const claimsDlg = () => [dHead('PRODUCT-MARKET FIT · CLAIMS AND EXPERIMENTS', 'Claims supported', [grade('r'), src('rec', 'Validate › Experiments and evidence · 5 claims')]), K({ cs: SEC, facts: FX([{ k: 'Value', v: '[30] of 100' }, { k: 'Weight', v: '[20] of 100', sub: 'in this score' }, { k: 'Contribution', v: '[6.0] points', sub: '30 × 20 ÷ 100' }, { k: 'As of', v: '[19 Oct 2026]' }]) }), K({ cs: SEC, title: 'Method', hs: eyeS, rows: [bul('A claim is Supported at 5 supporting interviews with people it is for.'), bul('Each counts by its strongest evidence: measured 1, pattern 0.75, anecdote 0.5.')], foot: '(0.75 + 0.75) ÷ 5 claims = 0.30, so the value is 30.' }), K({ cs: SEC, title: 'The claims', hs: eyeS, rows: claimRows }), K({ cs: SEC, btns: [{ t: 'Close', s: btnS }, { t: 'Open Experiments and evidence ›', s: btnP }], bs: BTNR })];
+    const mixSvg = () => { const W = 500, H = 44, sg = [['Measured', 1], ['Sourced', .5], ['Stated', .25]]; let s = svgOpen(W, H, 'Three demand signals: one Measured, one Sourced and one Stated.', 'Space Grotesk,sans-serif'); sg.forEach(([t, a], i) => { const x = i * W / 3; s += '<rect x="' + (x + 1) + '" y="1" width="' + (W / 3 - 3).toFixed(1) + '" height="16" rx="3" fill="rgba(' + VC + ',' + a + ')" stroke="' + VS + '"><title>' + t + ' · 1 signal</title></rect><text x="' + (x + 2) + '" y="36" font-size="11.5" fill="' + c.ink + '">' + t + ' · [1]</text>'; }); return { __html: s + '</svg>' }; };
+    const MTS = 'font:600 12.5px ' + MO + ';line-height:1.5', MVS = 'font:700 13px ' + MO;
+    const payDlg = () => [dHead('PRODUCT-MARKET FIT · DEMAND AND PULL', 'Paying demand', [grade('s')]), K({ cs: SEC, facts: FX([{ k: 'Value', v: '[70] of 100' }, { k: 'Weight', v: '[20] of 100', sub: 'in this score' }, { k: 'Contribution', v: '[14.0] points', sub: '70 × 20 ÷ 100' }, { k: 'Rule', v: 'A paid pilot 50, each letter of intent 10', sub: 'up to 100' }]) }), K({ cs: SEC, title: 'What it read', hs: eyeS, rows: [R({ t: '[€1,200] · Paid pilot · Mercury verified · [3 Sep]', ts: MTS, tags: [grade('m'), src('con', 'Mercury, as of [3 Sep 2026]')], v: '+50', vs: MVS }), R({ t: '[€6,000] · Letter of intent · file attached', ts: MTS, tags: [grade('s'), src('doc', '[LOI · Harbor Books.pdf]')], v: '+10', vs: MVS }), R({ t: '[€4,500] · Letter of intent · no file', ts: MTS, tags: [grade('st'), src('typ', 'Typed by [Name B] · no source')], v: '+10', vs: MVS, btns: [{ t: 'Attach the letter', s: btnSm }] })] }), K({ cs: SEC, title: 'Grade mix', hs: eyeS, svg: mixSvg(), foot: 'Attach the letter to raise confidence.' }), K({ cs: SEC, btns: [{ t: 'Close', s: btnS }, { t: 'Open Demand and urgency signals ›', s: btnP }], bs: BTNR })];
+    const RULES = [['ICP interviews held', 'ICP interviews held, from Customer research', 'Interviews ÷ 20, up to 100', 8, 'A recorded session is Measured; reviewed notes Reviewed; typed notes Stated'], ['ICP coverage', 'Interviews with fit and segment recorded', 'Share of interviews', 4, 'As its interviews'], ['Pain frequency', 'ICP interviews that name the top pain', 'Share ÷ 70%, up to 100', 10, 'As its interviews'], ['Pain severity', 'Interviews that judge the pain Severe or Real', 'Share ÷ 70%, up to 100', 8, 'As its interviews'], ['Claims supported', 'Claims with 5 supporting ICP interviews', 'Each supported claim by its strongest evidence, over all claims', 16, 'As its interviews'], ['Experiment outcomes', 'Finished experiments that support their claim', 'Share of finished experiments', 6, 'Measured from a connected tool; Stated when typed'], ['Paying demand', 'Paid pilots and letters of intent', 'A paid pilot 50, each letter 10, up to 100', 16, 'Bank-verified Measured; with a file Sourced; without, Stated'], ['Would pay', 'ICP interviews that said they would pay', 'Share ÷ 40%, up to 100', 12, 'As its interviews'], ['Waitlist against your bar', 'Sign-ups against the bar you set', 'Sign-ups ÷ your bar, up to 100', 8, 'Measured from a connected form; Stated when typed'], ['Product pull', 'Activation, week-4 retention and “very disappointed”', 'Each against 40%, 25% and 40%, averaged', 12, 'Measured from PostHog']];
+    const rulesT = () => TB({ title: 'The ten inputs', pager: false, gc: '1.2fr 1.5fr 1.4fr .5fr 1.6fr', cols: ['Input', 'What it reads', 'Rule to 0–100', 'Weight', 'How its grade is set'], rows: RULES.map(r => [CL(r[0], BD), r[1], CL(r[2], { ts: 'font-size:12px;line-height:1.4' }), CL('[' + r[3] + ']', MN), CL(r[4], { ts: 'font-size:12px;line-height:1.4;color:' + c.mu })]), foot: 'The weights add up to 100. On a venture’s page each weight is shared out again over the inputs that apply and are recorded, so Claims supported’s 16 becomes 20 for [Northwind Labs].' });
+    const scoringDlg = () => [dHead('HOW THIS IS SCORED', 'How Product-market fit is scored', [pl('', 'Model v1.0 · [1 Aug 2026]', 'v')]), K({ cs: PLAIN, note: 'Built only from what you recorded in Validate. Missing data lowers confidence; it is never a zero.', ns: NS1 }), rulesT(), K({ cs: SEC, title: 'Grades', hs: eyeS, rows: [['m', 'From a connector, a signed document or a recorded session.'], ['r', 'Checked by a person against its record.'], ['s', 'Backed by a file.'], ['st', 'Typed, with no source.'], ['nr', 'Nothing to read. It lowers confidence and is never a zero.']].map(([k, t]) => R({ pill: grade(k), t, ts: LINE, v: k === 'nr' ? false : Math.round(GR[k][1] * 100) + '%', vs: 'font:700 12px ' + MO })).concat([R({ pill: STALE, t: 'Older than 60 days.', ts: LINE })]) }), K({ cs: SEC, title: 'Confidence and the floor', hs: eyeS, rows: [bul('High: every input that applies is recorded.'), bul('Medium: one input that applies is not recorded.'), bul('Low: two or more are not recorded, or most are Stated.'), bul('Below 5 inputs recorded, no number shows: Not enough recorded.')] }), K({ cs: SEC, title: 'Bands', hs: eyeS, tags: [BAND.St, MONO('70 and above'), BAND.F, MONO('45 to 69'), BAND.W, MONO('Below 45')] }), K({ cs: SEC, title: 'Words', hs: eyeS, rows: [R({ t: 'Not expected yet', sub: 'An input that does not apply at this stage, such as Product pull before a product is live. It leaves the coverage count.' }), R({ t: 'Recorded zero or not recorded', sub: '“0 of 12 signals paid” is a real 0 and lowers the score. “No demand signal recorded” is Not recorded and lowers confidence instead.' }), R({ t: 'After a pivot', sub: 'Records from before a Pivot verdict are left out. All records shows them, greyed.' })] }), K({ cs: SEC, title: 'What is not in this score', hs: eyeS, note: 'Market size and competitors are in Market; revenue and churn are in Traction.', ns: NS1, foot: 'The same score appears as one scope of your investor scorecard.' }), K({ cs: SEC, btns: [{ t: 'Close', s: btnP }], bs: BTNR })];
+    const TH = [['[21 Oct 2026]', '[10]', 'Re-scored after revenue was typed'], ['[14 Oct 2026]', '[10]', ''], ['[1 Oct 2026]', '[8]', 'MRR typed'], ['[15 Sep 2026]', '[8]', ''], ['[1 Sep 2026]', '[6]', 'Paying customers typed'], ['[15 Aug 2026]', '[6]', ''], ['[1 Aug 2026]', '[4]', ''], ['[15 Jul 2026]', '[4]', ''], ['[1 Jul 2026]', '[2]', 'Revenue typed'], ['[15 Jun 2026]', '[2]', ''], ['[1 Jun 2026]', '—', 'Not scored: nothing typed yet'], ['[15 May 2026]', '—', 'Not scored: nothing typed yet']];
+    const tracDlg = () => [dHead('RAISE KIT · CHECKLIST ITEM', 'Traction proof', [KST.d, src('typ', 'Typed fields')]), K({ cs: SEC, facts: FX([{ k: 'Score', v: '[10] / 10' }, { k: 'Scored by', v: 'Computed check' }, { k: 'Weight in the raise kit', v: '[10] of 100' }, { k: 'Updated', v: '[21 Oct 2026, 09:40]' }]) }), K({ cs: SEC, title: 'What it read', hs: eyeS, rows: [['Revenue', '[€3,600] to date'], ['MRR', '[€1,200]'], ['Paying customers', '[1]']].map(([t, x]) => R({ t, ts: 'font-size:13.5px;font-weight:700', sub: x + ' · typed by [Name A]', ss: 'font:500 12px ' + MO + ';color:' + c.mu, st: pl('✓', 'Counted', 'g') })) }), K({ cs: SEC, title: 'Score history', hs: eyeS, rows: TH.map(([d, v, n]) => R({ rs: 'display:flex;gap:11px;align-items:center;padding:6px 0;border-top:1px solid ' + c.hair, t: d, ts: 'font:600 12px ' + MO, sub: n || false, ss: 'font-size:12px;color:' + c.mu, v, vs: 'font:700 12.5px ' + MO + ';color:' + (v === '—' ? c.mu : c.ink) })) }), K({ cs: SEC, btns: [{ t: 'Close', s: btnS }, { t: 'Re-score', s: btnP }], bs: BTNR })];
+    const reDlg = () => dlg('Re-score', 'Choose what to score again.', [K({ cs: SEC, rows: ['Narrative', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Traction proof', 'Product-market fit · checklist item'].map(t => CHK(t, true)).concat([CHK('Product-market fit score · from Validate', true), R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + c.fa, t: 'Team', ts: 'font-size:13px;font-weight:600;color:' + c.mu, sub: 'Scored on its record' })]) }), K({ cs: SEC, eye: 'WHICH RECORDS', rows: [RAD('Everything', true), RAD('Since the last score · [21 Oct, 09:40]', false)] }), K({ cs: PLAIN, note: 'Scores now, from what is recorded. Earlier scores are kept.' })], [{ t: 'Cancel', s: btnS }, { t: 'Re-score', s: btnP }]);
+    const teamDlg = () => dlg('Score Team', 'Team is scored by you. It shows as your own score.', [K({ cs: SEC, eye: 'SCORE · 0 TO 10', tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => tag(String(n), n === 7)) }), K({ cs: SEC, eye: 'EVIDENCE', rows: [RAD('Anecdote', false, 'What you have seen, in your words.'), RAD('Pattern', true, 'The same thing seen across several hires or projects.'), RAD('Missing', false, 'Nothing recorded yet.')], foot: 'There is no Measured for a score you give yourself.' }), K({ cs: PLAIN, rows: [INFOROW('Saving scores Team as “Scored by [Name A]”, and the raise kit counts 8 of 8 items.')] })], [{ t: 'Cancel', s: btnS }, { t: 'Save score', s: btnP }]);
+    const pullA = K({ eye: 'PRODUCT-MARKET FIT · DEMAND AND PULL', title: 'Product pull', tags: [grade('ne')], note: 'Not expected yet. It counts once a release is out or PostHog tracks a metric.', ns: NS1, rows: [R({ t: 'Out of the coverage count', sub: 'Coverage reads 8 of 9 inputs that apply, not 8 of 10.' })], btns: [{ t: 'Open Build › Prototype / MVP ›', s: btnS }] });
+    const pullB = K({ eye: 'PRODUCT-MARKET FIT · DEMAND AND PULL', title: 'Product pull', tags: [grade('m'), src('con', 'PostHog')], rows: [['Activation', '[31%]', 'of new accounts finish setup'], ['Week-4 retention', '[22%]', 'of new accounts are still active in week 4'], ['“Very disappointed”', '[38%]', 'of [52] respondents, if they could no longer use it']].map(([t, v, x]) => R({ t, ts: 'font-size:13.5px;font-weight:700', sub: x + ' · From PostHog, as of [date]', ss: 'font-size:12px;color:' + c.mu, v, vs: 'font:700 16px ' + MO })), foot: 'Each against 40%, 25% and 40%, averaged: the value would be [87].' });
+    const IV = [['23', '[14 Oct 2026]', '[Finance lead · 80-person firm]', 'Recorded session', 1], ['22', '[9 Oct 2026]', '[Bookkeeping agency · 12 people]', 'Typed notes', 1], ['21', '[2 Oct 2026]', '[Finance lead · 140-person firm]', 'Recorded session', 1], ['7', '[12 Jun 2026]', '[Controller · 60-person firm]', 'Recorded session', 1], ['6', '[28 May 2026]', '[Founder · 15-person firm]', 'Typed notes', 0], ['5', '[14 May 2026]', '[Founder · 8-person firm]', 'Typed notes', 0]];
+    const pivotK = K({ title: 'ICP interviews held', tog: seg(['Since the pivot on [3 Jun 2026]', 'All records'], 'All records'), note: 'All records shows interviews from before the pivot, greyed. The score counts only those since [3 Jun 2026].', rows: IV.map(r => R({ lead: '#' + r[0], ls: 'font:700 12px ' + MO + ';flex:none;width:32px;line-height:1.5;color:' + (r[4] ? c.vt : c.mu), t: r[2], ts: 'font-size:13px;font-weight:700;line-height:1.45' + (r[4] ? '' : ';color:' + c.mu), sub: r[1] + ' · ' + r[3], ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, st: r[4] ? pl('✓', 'Counted', 'g') : { t: 'Before the pivot · not counted', s: PILL + 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair } })), foot: '6 of [23] shown · [17] since the pivot, [6] before it.' });
+    const EAD = [['[10] of [14] ICP interviews name month-end reconciliation as their top pain, and [7] of [12] judged it Severe or Real.', ['Pain frequency', 'Pain severity']], ['Demand rests on one paid pilot verified by Mercury and two letters of intent; [3] of [14] ICP interviews said they would pay.', ['Paying demand', 'Would pay']], ['Claims are the lowest input: [2] of [5] are supported, both on patterns rather than measures, and H3 has no verdict yet.', ['Claims supported']]];
+    const eadK = K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0 0 6px', lead: 'E', ls: EADS, t: 'Proposal · plain-language reading', ts: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.vt })].concat(EAD.map(([t, cites]) => R({ rs: 'display:flex;padding:11px 0;border-top:1px solid ' + c.lavE, t, ts: 'font-size:14px;font-weight:500;line-height:1.6', tags: cites.map(x => SCOPE('Cites · ' + x)) }))), btns: [{ t: 'Keep this reading', s: btnS }, { t: 'Dismiss', s: btnG }], foot: 'Eadwyn reads the inputs above. It never changes a score.' });
+    const valK = K({ cs: PLAIN, eye: 'VALIDATE · IS THIS WORTH BUILDING?', es: 'font-size:10px;font-weight:800;color:' + c.vt + ';text-transform:uppercase;letter-spacing:.09em', title: 'Validate', hs: 'margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em', meta: 'Product-market fit · ◐ Fair · ●●○ Medium ›', ms: 'display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;box-sizing:border-box;font:700 12px ' + SG + ';color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE + ';cursor:pointer', note: 'Find out whether the problem is real, for whom, and whether they will pay.', ns: NS1, btns: [{ t: 'Record a session', s: btnP }], foot: 'The chip opens Raise › Fundraising readiness.' });
+    const NA = [['INVESTOR', 'Scores reach investors through the venture scorecard on a deal page.', 'Go to Deals'], ['OPERATING PARTNER', 'Fundraising readiness is the founder’s own page.', 'Go to your home'], ['ADVISOR', 'Fundraising readiness is the founder’s own page.', 'Go to your home'], ['EXPLORER', 'Set up a founder profile to use Raise.', 'Set up a founder profile']];
+    const naK = (x) => K({ cs: CARD + ';align-items:center;text-align:center;padding:30px 24px', glyph: '⊘', eye: x[0], es: eyeS + ';text-align:center', title: x[1], ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:15px;font-weight:800;text-align:center;line-height:1.45', btns: [{ t: x[2], s: btnS }], bs: 'display:flex;justify-content:center' });
+    const phoneInputs = () => K({ title: 'What Product-market fit rests on', note: '[8] of [9] inputs that apply are recorded. Tap one to see what it read.', rows: INP.map(r => R({ rs: 'display:flex;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid ' + c.hair, t: r.n, ts: 'font-size:13.5px;font-weight:700;line-height:1.35' + (r.k === 'ne' ? ';color:' + c.mu : ''), tags: [grade(r.k)], v: r.k === 'ne' ? false : r.k === 'nr' ? '—' : String(r.v), vs: 'font:700 15px ' + MO + ';color:' + (r.k === 'nr' ? c.mu : c.ink), act: '›', as: BTN + 'width:44px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink })) });
+    const SHEET = 'position:absolute;left:0;right:0;bottom:0;z-index:4;max-height:82%;overflow-y:auto;background:' + c.card + ';border-radius:16px 16px 0 0;box-shadow:0 -24px 60px rgba(24,24,27,.28);padding:12px 16px 22px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box';
+    const notice = (who) => K({ cs: PLAIN, rows: [INFOROW('You are viewing [Northwind Labs]’s Raise as ' + who + '. Changes are logged under your name.')] });
+    const RTABS = [['Overview', '/raise'], ['Evidence', '/raise/evidence'], ['Fundraising readiness', '/raise/fundraising-readiness'], ['Investor narrative', '/raise/investor-narrative'], ['Pitch deck', '/raise/pitch'], ['Data room', '/raise/data-room'], ['Cap table', '/raise/cap-table'], ['Use of funds', '/raise/use-of-funds'], ['Capital relationships', '/raise/capital-relationships']];
+    let shell = 'founder', head = true, crumb = phone ? '‹ Raise' : 'Raise › Fundraising readiness', crumbHref = '/raise', title = 'Fundraising readiness', hpills = false, hbtns = phone ? [] : [HB('Re-score', btnP), HB('How this is scored', btnS)], hlines = [{ t: 'Is this venture ready to raise? Product-market fit from your Validate records, the raise kit from Raise, and what to do next.' }], TABL = RTABS, tabCur = 'Fundraising readiness', grid = G6, cols = [], minH = 900, rail = false, pbar = false;
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const one = (b) => [{ s: STACK, blocks: b }];
+    if (B === 'RD1' || B === 'RD19') cols = rd1();
+    else if (B === 'RD2') { cols = rd1().concat(over(claimsDlg(), 600)); minH = 2400; }
+    else if (B === 'RD13') { shell = 'admin'; crumb = 'Accounts › [Northwind Labs] › Raise › Fundraising readiness'; cols = [col([notice('an Admin')])].concat(rd1()); }
+    else if (B === 'RD13h') { shell = 'hq'; crumb = 'Support › [Northwind Labs] › Raise › Fundraising readiness'; cols = [col([notice('a Super Admin')])].concat(band3(), [col([inputK()], 4), col([gapsK()], 2)]); }
+    else if (B === 'RD14') cols = band3('empty').concat([col([K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, title: 'Your score fills as you work in Validate.', note: 'Start with Validate › Customer research or Record a session.', ns: NS1, btns: [{ t: 'Open Customer research ›', s: btnS }, { t: 'Record a session', s: btnS }] })]), col([inputK('empty')]), col([kitT(1)])]);
+    else if (B === 'RD15') cols = [col([TL([['Product-market fit', '', 'Reading…'], ['Raise kit', '', 'Reading…'], ['Runway', '', 'Reading…']], 3)]), col([sk(5)], 4), col([sk(5)], 2), col([sk(4)])];
+    else if (crop) { head = false; TABL = []; grid = STACK;
+      if (B === 'RD1r') cols = one([runTile(1)]);
+      else if (B === 'RD3') cols = [dlgCol(payDlg())];
+      else if (B === 'RD4') cols = [{ s: DLGS + 'width:100%;max-width:960px;margin:0 auto', blocks: scoringDlg() }];
+      else if (B === 'RD5') cols = [dlgCol(tracDlg())];
+      else if (B === 'RD6') cols = [dlgCol(reDlg())];
+      else if (B === 'RD7') cols = [dlgCol(teamDlg())];
+      else if (B === 'RD8') cols = one([histK()]);
+      else if (B === 'RD9a') cols = one([pullA]);
+      else if (B === 'RD9b') cols = one([pullB]);
+      else if (B === 'RD10') cols = one([pivotK]);
+      else if (B === 'RD11') cols = one([eadK]);
+      else if (B === 'RD12') cols = one([valK]);
+      else if (B === 'RD16a') { grid = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start'; cols = [{ s: PCOL, blocks: [K({ eye: 'PRODUCT-MARKET FIT', rows: [ERR('Product-market fit could not be read. The raise kit is current.', 'r', [{ t: 'Retry', s: btnS }])] })] }, { s: PCOL, blocks: [kitTile()] }, { s: PCOL, blocks: [runTile()] }, { s: PCOL + ';grid-column:1/-1', blocks: [kitT()] }]; }
+      else if (B === 'RD16b') { grid = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;align-items:start'; cols = [{ s: PCOL, blocks: [pmfTile('part')] }, { s: PCOL, blocks: [inputK('part')] }]; }
+      else if (B === 'RD17') { grid = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start'; cols = NA.map(x => ({ s: PCOL, blocks: [naK(x)] })); } }
+    else if (phone) { grid = STACK; const page = [pmfTile(), kitTile(), runTile(), phoneInputs()];
+      if (B === 'RD18a') { cols = one(page); pbar = [{ t: 'Re-score', s: btnP + ';flex:1' }]; }
+      else if (B === 'RD18b') cols = one(page).concat([DIMC, { s: SHEET, blocks: claimsDlg() }]);
+      else if (B === 'RD18c') cols = one([gapsK()]); }
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], investor: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'], partner: ['Studio', 'Spin-Out Lab', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] };
+    const LIT = { founder: 'Raise', investor: '', partner: 'Delivery', admin: 'Accounts', hq: 'Support' };
+    const adm = shell === 'admin' || shell === 'hq';
+    const rows = SIDES[shell].map(t => ({ t, href: (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === LIT[shell] ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (rail ? '320px' : '44px') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: shell === 'founder' ? '[Northwind Labs] ▾' : shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : '', groupS: shell === 'founder' ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: '[Northwind Labs]', studioI,
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + ';text-decoration:none' + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', msel: false, mselS: '', moved: false, movedS: '', infoS: INFO, dismissS: btnG,
+      tbar: false, tbarS: '', tbarChips: [], tbarBtns: [], tbarNote: false, tbarNoteS: '',
+      tabsL: 'Raise', tabs: TABL.length ? TABL.map(([t, href]) => ({ t, href, n: false, sel: t === tabCur ? 'page' : 'false', ns: '', s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: phone ? ['Validate', 'Build', 'Raise', 'Grow', 'More'].map(t => ({ t, href: t === 'More' ? '#' : '/' + t.toLowerCase(), s: 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:60px;min-height:48px;font-size:11px;text-decoration:none;font-weight:' + (t === 'Raise' ? 800 : 600) + ';color:' + (t === 'Raise' ? c.vt : c.mu), ds: 'width:18px;height:18px;border-radius:5px;box-sizing:border-box;' + (t === 'Raise' ? 'background:' + c.lav + ';border:1.5px solid ' + c.vt : 'border:1.5px solid ' + c.mu) })) : false,
+      pnavS: 'display:flex;justify-content:space-around;border-top:1px solid ' + c.hair + ';background:' + c.card + ';padding:2px 0 4px;flex:none',
+      spine: isShell && !rail, spineTip: 'Eadwyn reads the inputs on this page. It never changes a score.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;flex:none', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      rail, railS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box', railX: 'display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';cursor:pointer', railP: 'margin:0;font-size:13px;line-height:1.55;color:' + c.ink, railB: btnS + ';width:100%', railI: 'display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

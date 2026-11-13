@@ -1,0 +1,62 @@
+Objective
+  Production must never call Anthropic. Workers AI (one model:
+  @cf/meta/llama-3.3-70b-instruct-fp8-fast) is the standard. Anthropic
+  may remain ONLY as a dev/eval tool, gated by an explicit env flag,
+  never reachable from production.
+
+Audit
+  grep -rn "anthropic\|claude-\|ANTHROPIC" cloudflare-worker/ frontend/
+  Inventory every hit. Common locations to expect:
+    - cloudflare-worker/src/services/advisor/aiRouter.ts
+    - any "fallback" branches for DD synthesis
+    - eval scripts
+    - imported `@anthropic-ai/sdk` packages
+    - environment variable usage (ANTHROPIC_API_KEY)
+
+For every hit:
+  Production path → DELETE. Replace with the Workers AI client
+                     (cloudflare-worker/src/services/advisor/aiClient.ts).
+  Dev/eval path → gate behind:
+    if (env.STAGE !== 'production' && env.ENABLE_ANTHROPIC_DEV === '1')
+  And document in /docs/dev/ANTHROPIC_DEV.md that it's eval-only.
+
+Specific cleanups
+  1. cloudflare-worker/src/services/advisor/aiRouter.ts
+     Remove any branch like:
+       if (task === 'publication') return runViaAnthropic(...)
+     Replace with Workers AI. If the model's quality on synthesis
+     tasks isn't acceptable, accept that limitation rather than
+     re-introducing Anthropic in prod.
+
+  2. Cron jobs that synthesize DD reports / quarterly publications:
+     Use Workers AI. If a job needs multi-turn reasoning, break it
+     into smaller calls. Don't reach for Anthropic.
+
+  3. Eval harness scripts/eval/advisor.mjs:
+     Allow Anthropic as a "ground truth" comparison ONLY when run
+     locally with ENABLE_ANTHROPIC_DEV=1. CI sets the flag to "0".
+
+  4. Wrangler secrets:
+     Remove ANTHROPIC_API_KEY from production environment.
+     Keep it only in a developer's local .dev.vars if they want
+     to run evals.
+
+  5. package.json:
+     If `@anthropic-ai/sdk` is in dependencies AND not used outside
+     dev scripts, move it to devDependencies. If it's not used at
+     all, remove.
+
+Verification
+  Add a CI step:
+    scripts/ci/no-anthropic-in-prod.mjs
+      Statically scans the worker build output for any string
+      matching /anthropic\.com|claude-[a-z0-9-]+|ANTHROPIC_API_KEY/i.
+      Fails the build if found outside an allow-listed file
+      (scripts/eval/*) that has the dev-flag guard.
+
+Acceptance
+  - grep on production worker source returns zero Anthropic
+    references outside dev/eval files.
+  - Production deploy succeeds with ANTHROPIC_API_KEY unset.
+  - CI step passes.
+  - aiRouter.ts has a single model path for production traffic.

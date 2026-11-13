@@ -1,0 +1,120 @@
+Objective
+  Public /news section on axal.vc. Authoring is open to users with a
+  high enough trust score; submissions go to admin review; approved
+  articles are published; rejected ones return to the author with
+  feedback for iteration. Notification on every state change.
+
+Trust gate
+  Articles can be authored by users with users.trust_score >= 70
+  (admins, established partners, accredited investors, founders who
+  graduated Spin-Out Lab and have a verified company). Trust score
+  already exists; if not, derive at read time from:
+    + admin role (100)
+    + verified KYB (15)
+    + signed partner_deal (10)
+    + Spin-Out graduate (10)
+    + 90 days since signup, no abuse flags (10)
+    + verified email + KYC (5)
+  cap 100. Re-compute on profile changes.
+
+Schema
+  CREATE TABLE articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE NOT NULL,
+    author_user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    subtitle TEXT,
+    audience_tags TEXT NOT NULL,        -- json array
+    sector_tags TEXT,
+    body_markdown TEXT NOT NULL,
+    body_html_cached TEXT,
+    cover_image_r2_key TEXT,
+    excerpt TEXT,
+    reading_minutes INTEGER,
+    status TEXT NOT NULL,                -- 'draft','submitted',
+                                         -- 'in_review','changes_requested',
+                                         -- 'approved','published',
+                                         -- 'rejected','retracted'
+    review_notes TEXT,
+    submitted_at DATETIME,
+    reviewed_at DATETIME,
+    published_at DATETIME,
+    reviewed_by_admin_id INTEGER,
+    rejection_reason TEXT,
+    version INTEGER DEFAULT 1
+  );
+  CREATE TABLE article_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    body_markdown TEXT NOT NULL,
+    snapshot_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE article_review_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id INTEGER NOT NULL,
+    admin_id INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    inline_anchor TEXT,                  -- optional section reference
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+Worker routes
+  GET    /api/news                       public — published only
+  GET    /api/news/:slug                  public
+  POST   /api/news/draft                  auth + trust ≥ 70 — create draft
+  GET    /api/news/mine                   author's own drafts
+  PUT    /api/news/:id                    author edits own draft
+  POST   /api/news/:id/submit             author submits for review
+  POST   /api/news/:id/retract            author retracts (before publish)
+  GET    /api/admin/news/queue            admin — submitted + in_review
+  POST   /api/admin/news/:id/start-review
+  POST   /api/admin/news/:id/request-changes { notes, comments[] }
+  POST   /api/admin/news/:id/reject       { reason }
+  POST   /api/admin/news/:id/approve
+  POST   /api/admin/news/:id/publish
+  POST   /api/admin/news/:id/unpublish
+  POST   /api/admin/news/:id/comments     inline review comments
+
+Notifications
+  Each state transition fires a notification (email + in-app):
+    author      ← submitted: "Your article is queued for review."
+    admins      ← submitted: "New article submitted — <title>."
+    author      ← in_review: "An admin is reviewing your article."
+    author      ← changes_requested: "Changes requested. See comments."
+    author      ← approved: "Article approved — scheduling for publish."
+    author      ← published: "Your article is live at /news/<slug>."
+    author      ← rejected: "Submission declined — <reason>."
+
+UX
+  Article editor (frontend/src/pages/NewsAuthorPage.jsx):
+    - Markdown editor with live preview.
+    - Cover image upload, sector + audience tags.
+    - "Submit for review" button shown only after required fields filled.
+    - Threaded review comments visible inline once admin starts review.
+  Admin queue (frontend/src/pages/AdminNewsQueuePage.jsx):
+    - List of submitted + in-review articles.
+    - Side-by-side editor + comment threads.
+    - Approve / Request changes / Reject buttons.
+  Public list (axal.vc, Jekyll):
+    /news rendered server-side from a build-time fetch of
+    /api/news. Pagination + sector filters. Falls back to a
+    committed _data/articles.json if fetch fails. Single article
+    page /news/:slug renders the markdown with security-sanitised
+    HTML (reuse the existing markdown sanitiser).
+
+Anti-abuse
+  - Trust-gate enforced server-side; never trust the client claim.
+  - Rate limit: 3 submissions / week / author.
+  - All submissions auto-scanned with the existing PII redact checker;
+    block submit if private data of other users detected.
+  - On publish, content cached for 60-day TTL through Cloudflare Cache
+    API.
+
+Acceptance
+  - Authorised user creates and submits an article.
+  - Admin sees it in the queue, can comment, request changes, or
+    approve.
+  - Author receives the right notification at each state change.
+  - Approved article appears on /news on the next site rebuild.
+  - Rejection path lets the author iterate without losing prior text.

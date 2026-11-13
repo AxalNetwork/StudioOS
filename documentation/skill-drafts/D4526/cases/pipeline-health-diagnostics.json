@@ -1,0 +1,47 @@
+{
+  "skill": "pipeline-health-diagnostics",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "deals": [
+          {
+            "id": "D1",
+            "value": 80000,
+            "days_in_stage": 90,
+            "next_step": null
+          },
+          {
+            "id": "D2",
+            "value": 20000,
+            "days_in_stage": 4
+          }
+        ],
+        "currency": "USD"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "D1",
+      "80%",
+      "90"
+    ],
+    "must_say_not_recorded": [
+      "next step"
+    ],
+    "must_not_include": [
+      "100000 recognized revenue"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why next step is missing rather than inventing it.",
+    "Do not assert: 100000 recognized revenue.",
+    "Return a proposal only; do not perform any external action.",
+    "Show D1 represents 80000/100000 = 80% of the supplied pipeline value."
+  ],
+  "predicate_witness": "D1; 80%; 90. next step: Not recorded. Human review required."
+}

@@ -1,0 +1,401 @@
+# Axal StudioOS – Production Deployment Guide
+
+Single source of truth for deploying StudioOS to production. Covers the
+Cloudflare Worker (canonical production API, and the SPA on both `axal.vc`
+and `app.axal.vc`), the frontend bundle it serves, secrets, and the
+post-deploy checklist.
+
+---
+
+## 1. Architecture in 30 seconds
+
+| Component        | Tech                       | Hosted on                              | Source                                          |
+| ---------------- | -------------------------- | -------------------------------------- | ----------------------------------------------- |
+| **Public API**   | **TypeScript + Hono**      | **Cloudflare Workers** (`axal.vc`)     | `cloudflare-worker/src/index.ts` + `routes/`    |
+| Database         | Cloudflare D1 (SQLite)     | Cloudflare (`studioos-db`)             | bound as `env.DB`                               |
+| WebSocket fan-out| Durable Objects            | Cloudflare Workers                     | `cloudflare-worker/src/durable-objects/`        |
+| Cache / sessions | KV                         | Cloudflare KV (`TOKENS`, `RATE_LIMITS`)| n/a                                             |
+| MCP OAuth        | OAuth 2.1 + KV             | Cloudflare KV (`OAUTH_KV`)              | `cloudflare-worker/src/mcp/oauth.ts`             |
+| Job queue        | Cloudflare Queues + cron   | Cloudflare                             | `cloudflare-worker/src/services/queueWorker.ts` |
+| File storage     | R2                         | Cloudflare R2 (`studioos-files`)       | bound as `env.FILES`                            |
+| Company logos    | R2                         | Cloudflare R2 (`studioos-company-logos`) | bound as `env.COMPANY_LOGOS` (#4201); created by an operator before the deploy that binds it |
+| Vector search    | Vectorize                  | Cloudflare (`axal-search`)             | bound as `env.VECTORIZE`                        |
+| Dev backend      | FastAPI (Python)           | Local Replit only                      | `backend/`                                      |
+| Frontend         | React + Vite               | **Cloudflare Workers** — the `studioos` Worker's `[assets]` copy of `docs/`, on `axal.vc` + `app.axal.vc` | `frontend/`                                     |
+
+> **Architecture reality (revised 2026-04-28):** Earlier "audit #4" notes proposed
+> making FastAPI the canonical backend with the worker as a thin proxy via
+> `FASTAPI_ORIGIN`. That migration was never completed: the 23 production user
+> accounts live in D1, which only the worker can reach, and FastAPI is not
+> publicly deployed. The Cloudflare Worker is therefore the production API and
+> the source of truth for `/api/*`. FastAPI in `backend/` is the local dev
+> backend used during Replit iteration; do not point production traffic at it.
+
+---
+
+## 2. Release blockers (run before every prod deploy)
+
+- [ ] **`POST /api/search/backfill`** — re-vectorise legacy semantic-search
+      rows (audit #7). The runtime scrub keeps queries safe but old vectors
+      stay stale until the backfill runs. Trigger it once after every schema
+      change that touches a `*_embedding` column. Admin-only.
+- [ ] Confirm `JWT_SECRET` is set on the worker
+      (`wrangler secret put JWT_SECRET`). The worker fails fast at the top of
+      every request if it's missing or weak.
+- [ ] Confirm wrangler is authenticated against the right Cloudflare account
+      (`wrangler whoami`).
+
+---
+
+## 3. Deploy
+
+### Cloudflare Worker (production API)
+
+```bash
+wrangler secret put JWT_SECRET   # used for auth + Durable Object WS handshake
+npm run deploy                   # from the REPOSITORY ROOT
+```
+
+`npm run deploy` dispatches **Cloudflare Worker deploy** on `main`. The
+workflow waits for the candidate's required checks, verifies queues and startup,
+applies D1 migrations and publishes the Worker. Check the run for live smoke.
+The Worker package delegates to the root command (DEPLOY.md §1.1).
+
+**The full procedure, with pre-flight, migration-failure triage and rollback, is
+[documentation/operations/DEPLOY.md](../operations/DEPLOY.md).**
+
+> ✅ **Verified 2026-05-06:** `--env production` IS the correct deploy command.
+> The `[env.production.*]` block in `wrangler.toml` redeclares
+> every binding (D1, KV `TOKENS`/`RATE_LIMITS`, R2 `studioos-files`, Queue
+> `studioos-job-queue`, AI, Durable Objects), so the live worker has all bindings
+> intact — confirmed by `GET /accounts/.../workers/scripts/studioos/bindings`.
+> An earlier note in this file warned against `--env production` because the env
+> block historically didn't redeclare bindings; that's no longer true.
+
+**2026-10-14:** the production deploy of `710f0ae19` (Actions run 38539060463,
+09:00:26Z) was the first to list `env.OAUTH_KV (a536c75e7461447a89b1967d367c13ad)`
+and `env.MCP_SERVER_ENABLED ("true")` among the Worker's bindings. The deploy of
+`dd5b1d49a` (run 38539746250, 09:05:58Z) listed both again. See "MCP
+enablement" below.
+
+### Frontend
+
+There is no separate frontend deploy. `axal.vc` and `app.axal.vc` are both
+whole-host Workers Custom Domains of the `studioos` Worker (`wrangler.toml`
+`[[routes]]` and `[[env.production.routes]]`, each `custom_domain = true`),
+and the Worker serves the SPA on both from its own `[assets]` binding
+(`directory = "./docs"`, `not_found_handling = "single-page-application"`,
+`run_worker_first` for `/api/*`, `/landing/*`, `/p/*` and `/assets/*`). One
+build sits behind both hosts and they ship together on every
+`wrangler deploy` — `npm run deploy` by hand, or
+`.github/workflows/cloudflare-worker-deploy.yml` on every push to `main`. A
+deploy's closing `Deployed studioos triggers: axal.vc (custom domain),
+app.axal.vc (custom domain)` lines are what settle who serves the hosts.
+
+That has been the shape since 2026-09-01 (`1d320dda9`, "Remove stale
+documentation asset files", which replaced the Pages cutover's three
+path-scoped apex routes with the whole-host `axal.vc` custom domain). The
+`studioos` Cloudflare Pages project (`studioos-2p8.pages.dev`) kept receiving
+a mirror build from `cloudflare-pages-deploy.yml` until 2026-09-03, when the
+mirror, that workflow and the `_worker.js` that ran only there were retired
+(`DECISIONS.md` D36) — its dashboard had shown "Production" deployments for
+two commits whose Worker deploy failed in the migration step. Nothing ships a
+build anywhere but the Worker. The static security headers on assets-binding
+responses come from `docs/_headers` (built from `frontend/public/_headers`,
+read natively by Workers static assets), and `scripts/check-spa-live.mjs`
+asserts them on every shell route after a deploy.
+
+`docs/` is **not committed** (D529). It is gitignored, and every job that
+needs it builds it from `frontend/src` at the REPO ROOT (`npm run build`, which
+also prerenders the crawlable routes): CI's full suite and Open Graph check,
+the PR preview, branch provisioning and the deploy. The deploy restores the
+previous deploy's `docs/assets` and retention ledger from the Actions cache
+before it builds, so a tab opened before the deploy keeps its chunks
+(DEPLOY.md §2.1).
+
+### FastAPI (dev only)
+
+`backend/` runs in the local Replit workflow `Backend API` for development.
+It's not part of the production deploy path.
+
+---
+
+### MCP enablement (D681, #1555)
+
+`OAUTH_KV` holds the MCP provider's clients, grants, tokens and parked consent requests. The owner created HQ's namespace on 2026-10-13; its non-secret id is `a536c75e7461447a89b1967d367c13ad`. `wrangler.toml` binds it at the top level and in `[env.production]`, nowhere else. `MCP_SERVER_ENABLED = "true"` at the top level and in production. `mcpEnabled` needs both the flag and a binding.
+
+`[env.preview]` keeps the flag `"false"` and binds `OAUTH_KV` to the placeholder `REPLACE_WITH_PREVIEW_KV_OAUTH_ID` until the operator creates preview's own namespace (`npx wrangler kv namespace create OAUTH_KV-PREVIEW`, in the list above `[env.preview]`). It must never bind HQ's. Grants are keyed by numeric user id, preview has its own D1, and `revokeAllGrants` runs whenever a binding is present, flag on or off, so a preview Worker on HQ's namespace could revoke an HQ member's assistant grants. `checkMcpDeployment` in `cloudflare-worker/test/mcp_server_d666.test.ts` reads `wrangler.toml` through the installed wrangler's own config reader, `unstable_readConfig`, once for the top level and once for every environment the file's `env` table declares (wrangler's raw parse, `experimental_readRawConfig`, names them; `production` and `preview` must be among them), so it checks the bindings `wrangler deploy` would ship however the TOML spells them; a config or an environment wrangler cannot read fails the test. It fails when any of those scopes declares an `unsafe` key, inline or as a table: `wrangler.toml` declares none, and `unsafe.bindings` or `unsafe.metadata.bindings` can name a D1 or KV id that the store comparison never reads. It pins the flags and HQ's OAuth id at the top level and in production. Every other environment, `[env.preview]` and any added later, must set `MCP_SERVER_ENABLED = "false"`, every D1 binding there must name its own `database_id` and every KV binding its own `id` (a D1 binding with no `database_id` is looked up by `database_name` at deploy, so none there may use a `database_name` HQ's D1 uses), and the test fails when any D1 or KV binding there names a store id (`id`, `preview_id`, `database_id` or `preview_database_id`) that a D1 or KV binding at the top level or in `[env.production]` names. The ids it compares have their quotes stripped and escapes decoded, as wrangler reads them, and are then lower-cased so a hex id matches in any case. The `REPLACE_WITH_PREVIEW_*` placeholders pass. Branch configuration generation keeps MCP off and omits HQ's OAuth store; branch enablement requires separately provisioned branch storage.
+
+**Live since 2026-10-14 09:00:26Z.** The deploy of `710f0ae19` (Actions run 38539060463, Worker version `279b51c2-077d-41d0-b549-f2884ebb8213`) switched MCP on in production, and every deploy of `main` since carries it. The owner's D669 MCP Inspector report on #1495 (connect, read context, submit a consented test interview, confirm a pending placement) is still outstanding, and it is now a check against production. The ordinary PR preview is an unbound SPA Worker and cannot run it.
+
+**Switching MCP off.** Keep the OAuth namespace binding so revocation remains available. Set `MCP_SERVER_ENABLED = "false"` in the top-level and production vars and update `HQ_MCP_FLAG` in `cloudflare-worker/test/mcp_server_d666.test.ts` in the same PR. Its verified main release publishes the disabled flag. Confirm that `/.well-known/oauth-authorization-server` answers 404 on `axal.vc`. The normal release path takes configuration from the committed candidate. For immediate owner recovery, follow the [rollback compatibility procedure](../operations/DEPLOY.md#3-capture-a-rollback-point-first) and select a compatible known-good Worker version that retains `OAUTH_KV`.
+
+**Revoking assistant grants.** Revoke a specific grant from Account > Connectors > AI assistants (`/account/connectors#ai-assistants`, which calls `DELETE /api/connectors/assistants/:id`) before the flag goes off: with the flag off, `signedIn` in `cloudflare-worker/src/routes/mcp_consent.ts` answers 404 to that route and to the grant list. After switch-off, these still end every assistant grant a member holds, because `revokeAllGrants` (`cloudflare-worker/src/mcp/grants.ts:104`) checks only that `OAUTH_KV` is bound:
+
+- through `bumpJwtMinIat` (`cloudflare-worker/src/auth.ts:1095`): `POST /api/auth/sign-out-everywhere` (`routes/auth.ts:1512`), `POST /api/settings/sessions/revoke-all` (`routes/settings.ts:890`), `POST /api/settings/totp/repair` (`routes/settings.ts:853`), `POST /api/settings/email-change/revoke` (`routes/settings.ts:586`) and HQ's `POST /api/admin/security/force-reauth/:userId` (`routes/admin_security.ts:1247`);
+- directly: `POST /api/settings/totp/re-enrol/confirm` after recovery (`routes/settings.ts:697`) and `POST /api/settings/account/delete-request` (`routes/settings.ts:906`).
+
+A grant older than a raised session floor is also refused on every tool call (`grants.ts:46`). A grant nobody revokes stays in `OAUTH_KV` until 30 days after its refresh token was issued or last used (`refreshTokenTTL` and `refreshTokenIdleTTL` in `cloudflare-worker/src/mcp/oauth.ts`). Turning the flag back on inside that window makes its refresh token, and any access token still inside its one-hour life, usable again.
+
+---
+
+## 4. Secrets checklist
+
+### Cloudflare Worker (required)
+- [ ] `JWT_SECRET` – 64+ random chars (`openssl rand -hex 48`); the worker
+      refuses requests if it's missing or weak.
+- [ ] `KEK_PII` – 32+ bytes; the key `services/columnCipher.ts` derives the
+      column cipher from (`npx wrangler secret put KEK_PII --env=production`).
+      Without it, production refuses every encrypted write: an EIN (D579), a
+      bank account (D708, which answers 503 `cipher_key_missing`). Changing it
+      leaves every encrypted value unreadable; each bank account then reads
+      `account_unreadable` until it is retired and added again.
+      D710's Mercury entity tokens are stored under it too, and read
+      `token_unreadable` after a change until the Super Admin enters them again
+      in HQ › Fund administration › Bank accounts (`/api/admin/mercury`), the
+      only place they are managed: never the member connector (D879, D883).
+
+### Cloudflare Worker (optional, per feature)
+- [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
+- [ ] `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` – the GitHub connector (D655): the Client ID and a client secret of the StudioOS **GitHub App** (not an OAuth App, and not `GITHUB_ACCESS_TOKEN` above), with read-only contents, issues, metadata and pull requests permissions. The Client ID starts with `Iv`; it is not the numeric App ID. Unset, connecting answers 503 `oauth_unconfigured`. Set them with `npx wrangler secret put GITHUB_APP_CLIENT_ID --config wrangler.toml --env production` (and the same for the secret), or in HQ → Integration keys (`/admin/integration-keys`, Super Admin only), which needs the Worker's own `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Press **Test** there afterwards: it should say "GitHub accepted the client credentials." `GITHUB_APP_SLUG` is a wrangler var in both blocks, not a secret: the App's URL name, used for the install link. Registration, rotation and troubleshooting: [GITHUB_CONNECTOR_APP.md](../operations/GITHUB_CONNECTOR_APP.md).
+- [ ] `VERCEL_CLIENT_ID`, `VERCEL_CLIENT_SECRET` – the Vercel connector (D1096, #2961): the Client ID and Client Secret of the **Axal VC StudioOS Vercel Integration** (a connectable account), with Read on Projects, Deployments and Domains and nothing else. The secret also signs Vercel's webhook deliveries (HMAC-SHA1), which `POST /api/connectors/webhook/vercel` checks. Register the Redirect URL `https://app.axal.vc/api/integrations/oauth/vercel/callback` and the webhook URL `https://app.axal.vc/api/connectors/webhook/vercel`. Unset, connecting answers 503 `oauth_unconfigured`. Set them with `npx wrangler secret put VERCEL_CLIENT_ID --config wrangler.toml --env production` (and the same for the secret), or in HQ → Integration keys. `VERCEL_INTEGRATION_SLUG` is a wrangler var in both blocks, not a secret: the Integration's URL name, used for its install page; empty (as committed) means Vercel reads as not set up. UNVERIFIED until the owner's first live connection: whether an unlisted Integration installs from its URL, the `configuration.scopes` strings, and which webhook field names the configuration id (#2408).
+- [ ] `MEET_BOT_GOOGLE_EMAIL`, `MEET_BOT_GOOGLE_PASSWORD`, `MEET_BOT_GOOGLE_TOTP` – Eadwyn AI's own Google Workspace account (D3678, #3678), so the meeting bot joins Google Meet signed in rather than as an anonymous guest. The account is `eadwyn@axal.vc`, used only for joining calls, with 2-Step Verification on an authenticator app; its display name is what hosts see ("Eadwyn AI (Axal VC)"). `MEET_BOT_GOOGLE_TOTP` is the authenticator's **setup key** (the base32 text Google shows under "Can't scan it?"), never a backup code. Set all three on the **site** Worker only (`npx wrangler secret put MEET_BOT_GOOGLE_EMAIL --config wrangler.toml --env production`, and the same for the other two); the bot host never holds them. A running Meet bot fetches the email and password over its signed callback while it is joining, and a fresh six-digit code each time Google asks; the TOTP key never leaves the site Worker. With any of the three missing, the bot keeps today's guest join. A failed sign-in stops the run with `failure_detail` `platform_blocked@signin_rejected`, `…@signin_challenged`, `…@signin_code_refused`, `…@signin_no_code_method`, `…@signin_unknown_page`, `…@signin_unavailable` or `…@signin_not_kept`; "Diagnose Eadwyn AI" shows the same code with its fix, and its config row says `bot_account: set` or `missing`. Rotation: change the password or re-enrol the authenticator on the account, then put the new values; a run already joining finishes on the old ones.
+- [ ] `STREAM_WEBHOOK_SECRET`, `STREAM_API_TOKEN` – Learning video on Cloudflare Stream (D4176, #4176). The `STREAM` binding is in `wrangler.toml` (`[stream]` and `[env.production.stream]`); until Stream is on for the account (owner step A on #1008) every Stream route answers 503 `stream_unavailable` and items play from R2 or their link as before. `STREAM_WEBHOOK_SECRET` is the secret Stream returns when the webhook `https://app.axal.vc/api/learning/stream/webhook` is registered (owner step B); unset, the webhook answers 503 and Stream retries. `STREAM_API_TOKEN` (Stream: Edit) with `CLOUDFLARE_ACCOUNT_ID` lets the tus route take files over 200 MB; unset, that route answers 503 `stream_tus_unavailable` and only files up to 200 MB upload. The same token lets members' players read a ready caption's WebVTT (`GET /api/learning/items/:uid/captions/:lang`, #4178, D4178) for the click-to-seek transcript; unset, that route answers 503 `stream_captions_unavailable` and the transcript is the plain text. Set each with `npx wrangler secret put <NAME> --config wrangler.toml --env production`. Never logged.
+- [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
+- [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
+- [ ] `AI_PROVIDER_ANTHROPIC_KEY` – the platform's Anthropic API key for model-provider runs (D851, `services/aiProviders.ts`). Used only while the wrangler var `AI_PROVIDER_ANTHROPIC` is exactly `"on"` (unset is off). It is not `ANTHROPIC_API_KEY`, which stays dev-only (Task #31). Never stored in D1 and never logged. Set it with `npx wrangler secret put AI_PROVIDER_ANTHROPIC_KEY --config wrangler.toml --env production`.
+- [ ] `AI_PROVIDER_BRIA` – a wrangler var, not a secret (D1534, #3778 phase 2): the deck's background removal (Bria RMBG 2.0 on the Workers AI binding, billed per image from AI Gateway credits). Off unless exactly `"on"`. Set it only after the owner's steps on #1008: AI Gateway prepaid credits bought, and Bria's 10-day sub-processor notice sent (DPA §6.1). No key: the binding carries the account.
+- [ ] `AI_PROVIDER_PRUNA` – a wrangler var, not a secret (D4316, #4316): the deck's Upscale (Pruna P-Image-Upscale on the Workers AI binding, billed per image from AI Gateway credits, about $0.005 an image). Its own switch: `AI_PROVIDER_BRIA` never turns it on, and it never turns Bria on. Off unless exactly `"on"`. Set it only after Pruna's 10-day sub-processor notice is sent (#1008), and after checking the per-image price in the Cloudflare dashboard against the `0.005` in `services/ai/catalogue.ts`. No key: the binding carries the account.
+- [ ] AI token packs (D755). Packs are made on HQ, never as a variable:
+      the Super Admin presses **New pack** on HQ › AI allowances › Token
+      packs, and the Worker creates the Stripe product and its one-time USD
+      price with its own `STRIPE_SECRET_KEY`. A pack is credited only by the
+      verified webhook, so `STRIPE_WEBHOOK_SECRET` must be set, in the same
+      Stripe mode as the key. The runbook is
+      `documentation/operations/AI_TOKEN_PACKS.md`.
+  - **The webhook endpoint** `https://axal.vc/api/billing/stripe/webhook`
+    sends four events for packs: `payment_intent.succeeded` (the credit),
+    `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`
+    (taking tokens back). Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+    For plans it also sends `invoice.payment_failed` and
+    `invoice.payment_action_required` (D892, D1052: the renewal alerts) and
+    the subscription and invoice events; HQ › Payments › Stripe lists any it
+    is missing.
+  - `STRIPE_PRICE_AI_TOPUP` is now an **optional fallback**: the ID
+    (`price_…`) of an active, one-time, USD price with a fixed amount, in the
+    same Stripe mode as `STRIPE_SECRET_KEY`. Set and not already a pack, it
+    is offered as one more pack with no bonus, under D750's rules; HQ can
+    Adopt it, after which the variable can be removed. A price created after
+    the last **Sync from Stripe** is fetched into the catalog mirror on first
+    read (at most once per 10 minutes per isolate). With no pack on sale,
+    members see "Top-up isn't available yet." and HQ's AI allowances screen
+    (`GET /api/ai-budget/top-up/status`) says why, one line per pack.
+- [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
+- [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
+- [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login, and on the newsletter signup (D810).
+- [ ] `MAIL_LINK_SECRET` – D811 server-to-server HMAC key shared only with the Axal VC Mail Worker. **The owner sets the same newly generated secret in both Workers**, through their secret configuration; never a plain-text var, URL, commit, log or PR. StudioOS uses `npx wrangler secret put MAIL_LINK_SECRET --config wrangler.toml --env production`. All `/api/mail-link/*` routes return 404 while unset. Rotate both Workers together; Mail must sign every request anew with the exact path/query and body, using Unix seconds within five minutes. No browser configuration or production data access is needed to develop/test this link.
+- [ ] `NEWSLETTER_TOKEN_KEY` – the HMAC key that signs every newsletter preferences and unsubscribe link (D810). **The owner sets it**; until then every public `/api/newsletter/*` route answers 503 `newsletter_unconfigured` in production (dev and preview fall back to `JWT_SECRET`). Any long random string, generated once and never committed: `openssl rand -base64 48 | npx wrangler secret put NEWSLETTER_TOKEN_KEY --config wrangler.toml --env production`. Rotating it retires every link already sent, so rotate only if it leaks. It also salts the signup's `ip_hash`.
+- [ ] `GOOGLE_AUTH_CLIENT_ID`, `GOOGLE_AUTH_CLIENT_SECRET` – "Continue with Google" sign-in. Its own Web client, never mail's or the Calendar client. Google Cloud Console setup: Authorized JavaScript origins `https://axal.vc` and `https://app.axal.vc` (D722, Google's window on /login); Authorized redirect URI `https://app.axal.vc/api/auth/google/callback` (the redirect fallback); OAuth consent screen External and "In production", so gmail.com accounts can sign in. Without both secrets the button stays and a click answers "Google sign-in is not enabled on this environment."
+  - `GOOGLE_SIGNIN_POPUP` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"on"` lets /login open Google's own window for everyone, `"canary"` only for `/login?google_window=1`, and anything else keeps every click on the redirect and closes `POST /api/auth/google/popup` (503 `popup_off`). It ships `"off"`. After the JavaScript origins above are registered (Google says up to a few hours to take effect), set both blocks to `"canary"` in one PR, check both hosts with `?google_window=1` on Mac Safari, iPhone Safari and Chrome, then set both to `"on"`. Rollback is `"off"` and a deploy. To find the client in the Console, look for the Web client whose redirect URIs include `https://app.axal.vc/api/auth/google/callback`; Cloudflare never shows the secret's value.
+- [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed. The Telegram and WhatsApp secrets below can be set in HQ › Integration keys › Channels (D885) as well as with `wrangler secret put`; the page shows each one set or not set, never a value.
+  - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
+  - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook (way A, the member's own business number).
+  - `WHATSAPP_AXAL_ACCESS_TOKEN`, `WHATSAPP_AXAL_PHONE_NUMBER_ID`, `WHATSAPP_AXAL_WABA_ID` – Axal's own number, for way B ("Send to Axal", D754 §1). Set them only if the owner said yes to way B; way B is absent until all three and the var below are set. `WHATSAPP_AXAL_DISPLAY_NUMBER` is its public E.164 number, a wrangler **var** in `[vars]` and `[env.production.vars]`, not a secret; it ships `""`.
+  - **Telegram private captures (D867, #2513).** `TELEGRAM_CAPTURE` is a var, default `"off"` in development, production and preview; only `"on"` enables it, and `TELEGRAM_CHANNEL` still gates the member. Migration 528 must precede deployment, including with capture off because the purge reads its table. Reuses the channel bot secrets, queue and recorder store; no new secret or binding. Keep it off until the owner's real-client checks in D867 and #2514 pass. Rollback is capture off; existing Business chat consent is separate.
+  - **WhatsApp rollout (D754).** `WHATSAPP_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can connect or link, and members see "Not available yet". After the owner's live check (`documentation/operations/WHATSAPP.md` §3) passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: members read "Axal has switched this off for now…", and the webhook still verifies and acknowledges but stores nothing. The Worker reads the var since #1950 (D754 `w1_switch_on`), and consent (#1954) is on `main`, so the secrets can be set. In canary a member already sees way B's **Link your WhatsApp** once Axal's number is set, and pressing it is refused. `TELEGRAM_CHANNEL` works the same way for Telegram.
+  - `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN` – the Zoom General app (D757). Zoom is set up only with all three: without the webhook token no transcript arrives, the webhook answers 503 and the Zoom card reads "Not set up here".
+  - Google Meet uses the existing Google Calendar client (`GOOGLE_CAL_CLIENT_*`, else `GOOGLE_CLIENT_*`). It has no secret of its own; its transcript import is switched by the var `MEET_TRANSCRIPTS_ENABLED` (below).
+  - **Provider setup, owner-run, once each.** None of these is done by a deploy:
+    - **Telegram.** `TELEGRAM_CHANNEL_WEBHOOK_SECRET` may use only `A–Z a–z 0–9 _ -`, up to 256 characters (Telegram's rule). With the three secrets set, a Super Admin presses **Register webhook** in "Telegram Business bot (interviews)" on `/admin/telegram` (`POST /api/admin/channels/telegram/webhook`). The same section reads `GET /api/admin/channels/telegram/webhook` and should say ready: Business Mode on, the username matching, not the news bot, the webhook at axal.vc, the update list current and no delivery error in the last 24 hours. Updates waiting are shown but never block ready; with a secret unset it names the missing secrets and calls nothing. Press Register webhook again whenever `TELEGRAM_ALLOWED_UPDATES` changes. The read never shows the token or the secret (D756).
+    - **Meta app.** Set the four WhatsApp secrets **before** saving the webhook: Meta checks the verify token when you save, and without it the Worker answers 503. Callback `https://axal.vc/api/channels/whatsapp/webhook`, with `WHATSAPP_VERIFY_TOKEN` as the verify token. Subscribe the fields `messages` and `smb_message_echoes` only: not `calls` (WhatsApp calls do not reach Axal, D754 §3) and no template fields. No message template is needed: Axal only replies inside the 24-hour window the contact opened. The full owner steps, the live check and the rollback are in `documentation/operations/WHATSAPP.md`; `scripts/check-spa-live.mjs` checks on every smoke run that an unsigned POST to the webhook is refused.
+    - **Zoom app (D757 §2.1).** The full owner steps, the live check and what each refusal means are in `documentation/operations/ZOOM_AND_MEET_TRANSCRIPTS.md`.
+      - A **General app, User-managed**, so each founder connects their own Zoom with no Zoom admin.
+      - Redirect `https://app.axal.vc/api/integrations/oauth/zoom/callback` (`OAUTH_CALLBACK_BASE_URL` + `/api/integrations/oauth/zoom/callback`).
+      - Event endpoint `https://axal.vc/api/channels/zoom/webhook`, for three events: `meeting.ended`, `recording.transcript_completed` and `app_deauthorized`. Zoom's validation challenge is answered only when signed with `ZOOM_WEBHOOK_SECRET_TOKEN`, so put the three secrets before pressing Validate.
+      - Scopes, the registry's nine: `meeting:write:meeting`, `meeting:delete:meeting`, `cloud_recording:read:list_recording_files`, `meeting:read:meeting`, `meeting:read:list_past_instances`, `user:read:user`, plus `cloud_recording:read:recording` and `zoomapp:inmeeting`, plus `user:read:token` (D886, #2582: the notetaker's OBF join token). Zoom grants `cloud_recording:read:recording` and `zoomapp:inmeeting` whatever the Scopes page says (2026-10-22), and Axal calls no endpoint under either. Add `user:read:token` to the app only after the registry lists it. The callback refuses a wider grant (403 `scope_overreach`).
+      - **Distribution is the gate.** Until Zoom approves sharing, only users in Axal's own Zoom account can authorize the app. `ZOOM_APP_AUDIENCE` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"own_account"` (shipped; also absent or unknown), `"beta"` once Zoom approves Beta Test sharing (up to 100 users), `"public"` once the app is on the Zoom Marketplace. It sets only what the Zoom page says; Zoom itself refuses accounts the app is not shared with.
+      - **What a founder needs** for a transcript: a Zoom Pro plan or higher, cloud recording on, and "Create audio transcript" turned on before the call. There is no audio fallback (D757 §2.14).
+    - **GitHub App.** Callback `https://app.axal.vc/api/integrations/oauth/github/callback`. Repository permissions Contents, Issues, Metadata and Pull requests, each Read-only, and nothing else: the callback refuses a wider grant. Webhook inactive. Installable on any account. Setup URL `https://app.axal.vc/account/connectors/github` with Redirect on update; OAuth during installation off; Expire user authorization tokens ticked. No private key is needed. The full steps are in [GITHUB_CONNECTOR_APP.md](../operations/GITHUB_CONNECTOR_APP.md).
+    - **Google Meet transcripts (D757, #1926).** They need `meetings.space.readonly` on the Calendar OAuth client, Google's verification of it, and the Meet REST API enabled. `MEET_TRANSCRIPTS_ENABLED` is a wrangler **var** in both vars blocks: `"on"` offers "Allow transcript import" (an incremental consent, `POST /api/calendar/google/meet-transcripts/connect`); `"off"` (also unset) hides it and that route answers 503 `meet_transcripts_not_set_up`. It is `"on"`, set after verification; `"off"` is the rollback. A grant made before the scope was added does not carry it: the member presses "Allow transcript import" once. Scheduling a Meet call works either way.
+  - **Telegram: rollout, rotation and the off switch (D756).** The full owner steps, the real-device check and these switches are in `documentation/operations/TELEGRAM.md`.
+    - `TELEGRAM_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can link or connect. After the owner's live check passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: connected members read "Axal has switched this off for now…", and the webhook still checks its secret and acknowledges, but stores nothing. The Worker reads the var since #1950. An assigned chat's text goes into its session at once; its notes are fetched only after the interviewee's YES (#1998), and until #1978 only their transcribed text is kept.
+    - Health: after registering, the "Telegram Business bot (interviews)" section on `/admin/telegram` (`GET /api/admin/channels/telegram/webhook`, #1963; also on `/account/connectors/telegram` for a Super Admin) should say ready. Register the webhook again after any change to `TELEGRAM_ALLOWED_UPDATES`; the section reports the mismatch until you do.
+    - Rotation: put the new `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then Register webhook at once (updates answer 401 in between, and Telegram retries). For the token, `/revoke` in @BotFather, put the new `TELEGRAM_CHANNEL_BOT_TOKEN`, then Register webhook.
+    - Off without a deploy: delete `TELEGRAM_CHANNEL_WEBHOOK_SECRET`; the webhook then answers 503 and Telegram retries for a while. To stop the retries too, `/revoke` the token in @BotFather.
+
+### Independent Cloudflare notification Worker (D5671; disabled)
+
+These belong only to the separate receiver configured in
+`engineering-notifications/wrangler.cloudflare-5671.jsonc`, not the StudioOS
+production Worker. No receiver is deployed or enabled by this configuration.
+See [the delivery procedure](../operations/CLOUDFLARE_DELIVERY_5671.md) for
+private registries, destination checks, canary receipts and rollback.
+
+- [ ] `SLACK_BOT_TOKEN` — approved internal publisher with verified workspace,
+      private channel membership and recipient access.
+- [ ] `CF_WEBHOOK_SECRET` — random 32+ characters, configured identically in
+      Cloudflare's generic `cf-webhook-auth` destination field; never logged.
+- [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
+      `/status` reads. Only the independent observer receives this credential.
+
+### GitHub Actions secrets
+- [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
+- [ ] `CLOUDFLARE_ACCOUNT_ID`
+- [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
+      independent receiver's observer secret. It is neither the Slack token nor
+      the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`
+      and the approved `CF_STATUS_URL` are configured and fallback receipt is verified.
+
+---
+
+D5676: the disabled independent archive observer needs separate writer (`ARCHIVE_OBSERVER_SECRET`), owned producer (`ARCHIVE_PRODUCER_SECRET`) and external read (`ARCHIVE_READER_SECRET`) keys. The tail and site receive only their matching private service bindings/role keys after owner preflight; the observer holds only its dedicated metadata DB and approved archive access. Flags remain off, and no values/resources are provisioned by the source change. Never send observer telemetry through studioos or attach a tail consumer to the observer. See D5676 for cadence, fallback, retention and rollback.
+
+D5673: the disabled Cloudflare metadata reconciler requires a separately scoped `CF_OBSERVER_READ_TOKEN` (Workers Scripts Read) and `CF_SOURCE_POLL=on` only after owner approval; never reuse the script-edit token. Neither is provisioned by its source PR.
+
+D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
+
+## 5. Post-deploy checklist
+
+- [ ] `curl https://axal.vc/api/health` returns `{ "status": "ok", ... }` with
+      every binding flag (`db`, `kv_tokens`, `kv_rate_limits`,
+      `durable_pipeline`, `durable_onboarding`) reading `true`.
+- [ ] Sign in to `https://axal.vc/dashboard` — verify all sub-queries resolve (no 500s).
+- [ ] Submit a support ticket — verify it appears in `AxalNetwork/StudioOS`.
+- [ ] Trigger `POST /api/search/backfill` (admin-only) once.
+- [ ] Run a manual partner-scoring job; verify `partner_scores` rows.
+- [ ] Send a test email from the admin panel to verify Gmail OAuth.
+- [ ] Confirm cron is firing — `wrangler tail` should show `[cron] drain` lines.
+
+---
+
+## 6. Rate limits (audit #8)
+
+The worker enforces per-bucket limits via KV (`RATE_LIMITS`). FastAPI mirrors
+the same layout for local-dev parity. See
+`cloudflare-worker/src/services/rateLimit.ts` and
+`backend/app/services/rate_limit.py`.
+
+| Bucket    | Limit          | Scope    | Applies to                                              |
+| --------- | -------------- | -------- | ------------------------------------------------------- |
+| `spinout` | 5 / hour       | per user | `POST/PUT/PATCH /api/legalcap/spinout/*`                |
+| `ai`      | 10 / minute    | per user | `/api/scoring/`, `/api/matches/`, `/api/advisory/`, `/api/profiling/`, `/api/monitoring/anomalies` |
+| `user`    | 60 / minute    | per user | All `/api/*`                                            |
+| `global`  | 1000 / minute  | global   | All `/api/*` (burst protection)                         |
+
+Exempt: `/api/health`, `/api/auth/login|register|verify|me`, `/api/monitoring/metrics|rate-limits`.
+
+---
+
+## 7. Rollback
+
+```bash
+# Worker + SPA — one deployment carries the script and its [assets] bundle,
+# so both hosts (axal.vc, app.axal.vc) roll back together. Run from
+# cloudflare-worker/ with the production config, as DEPLOY.md §3 does.
+npx wrangler deployments list --config ../wrangler.toml --env production
+npx wrangler rollback <DEPLOYMENT_ID> --config ../wrangler.toml --env production
+
+# Then revert the source on main. Reverting the docs/ commit alone changes
+# nothing live: the deploy workflow rebuilds docs/ from source at deploy
+# time, and the next push to main would re-ship the bad build.
+git revert <SHA-of-the-source-change>
+git push
+```
+
+Rollback reverts the worker (and with it the SPA), not D1 — see
+[DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
+
+## Deck co-editing room (D1577, #3824)
+
+`DECK_PRESENCE` binds class `DeckPresence` in the default, production and preview environments, with the appended `v3-deck-presence` Durable Object migration (`new_sqlite_classes`). Keep `v1-realtime` and `v2-meeting-bot` as they are. The owner approved its monthly cost on 2026-11-02 (decision L; estimate in `decisions/D1577.md`). It needs no secret and no storage. A Worker without it answers 503 `presence_off` on `/api/decks/:id/presence`.
+
+## Meeting bot control plane (D886 B1, #2579)
+
+Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
+Object migration. Keep the existing `v1-realtime` migration. `MEETING_BOT_RUN`
+binds class `MeetingBotRun` in default, production and preview environments.
+B8 supplies the runtime factory through `MEETING_BOT_CONTAINER`; runtime must enforce
+the budget lease locally and acknowledge commands without awaiting callbacks.
+Provision a distinct `MEETING_BOT_SECRET` (32+ random characters) in each
+environment; never put its value in configuration, logs or review material.
+The existing column cipher and FILES binding are also required.
+
+Absent/off `MEETING_BOT` refuses dispatch. B9 owns switching to `canary` (hydrated
+Super Admins only, D886 ceiling cost) and then `on`. Public `on` additionally
+requires `MEETING_BOT_COST_MICROUSD_PER_MINUTE`, a measured bot-only cost from
+D886 §7; no unmeasured fallback is allowed there. Existing AI_BILLING/admin
+pricing applies. Dispatch checks the whole plan limit including transcription;
+only rolling two-minute bot-fee holds are taken. B6 charges Nova through aiRouter.
+See D886 §12 for the HMAC protocol, final-part drain and recovery. No live call,
+price measurement, switch change or deployment is performed by B1.
+
+## Meeting bot deployment (#2586, D886 B8)
+
+The bot is a separate private Worker, `studioos-meeting-bot`, configured in
+`wrangler.meeting-bot.toml`. Its preview is `studioos-meeting-bot-preview`.
+Only this config owns the container image and `v1-meeting-bot-container` DO
+migration. The runtime uses cross-script DO bindings named `MEETING_BOT_CONTAINER`
+in default, production and preview once provisioned. The shipped site config
+omits them until the remote hosts exist, so merging this cannot break site
+deployment on an unresolved namespace. It has no image or preflight.
+Site deploys retain their normal timeout and migration hook. A bot image or
+registry failure cannot fail the site deployment workflow.
+
+The runtime factory preserves B1's start/stop/heartbeat interface. Missing host
+binding refuses dispatch before billing. Branch configs deliberately omit the
+HQ host binding: a branch needs its own host, callback origin and HMAC secret
+before it can dispatch. Do not share HQ's secret with a branch.
+
+### Owner-only first deployment
+
+1. Enable Cloudflare Containers for the account. Provision the dedicated
+   `MEETING_BOT_CLOUDFLARE_API_TOKEN` Actions secret, scoped to this deployment
+   with Containers registry access and Worker/DO deployment permissions. The
+   existing site token is not widened. `CLOUDFLARE_ACCOUNT_ID` is reused.
+2. Provision the same random `MEETING_BOT_SECRET` (32+ characters) separately
+   on the site and corresponding bot host through Wrangler secrets. Preview
+   uses a different pair. On first creation, deploy the bot hosts before adding the site
+   cross-script binding; the rollout/notice gates stay closed throughout.
+   The config fixes the callback `APP_URL` per host; verify the preview origin.
+3. On the site only, provision `MEETING_BOT_ZOOM_CLIENT_ID` and
+   `MEETING_BOT_ZOOM_CLIENT_SECRET` for the approved Zoom Meeting SDK app.
+   Its OBF permission and founder OAuth grant remain separate prerequisites.
+   SDK JWT expiry follows the run deadline, capped at two hours, subject to
+   Zoom's 30-minute minimum. The container receives a derived run-only key;
+   it never receives the master secret or long-lived SDK/OAuth credentials.
+4. After merge and owner verification, set the Actions variable
+   `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
+   `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
+   only the preview and production bot hosts, in that order. Later main changes
+   under `meeting-bot/` or the bundled shared helpers trigger it.
+   Disabling this variable freezes bot deployments without affecting the site.
+5. After both production and preview hosts exist, run
+   `node scripts/configure-meeting-bot-binding.mjs` to review the full site
+   config and matching HQ-only architecture catalogue entry, then use
+   `--write` in a follow-up owner PR. Run the full build/drift suite, including
+   binding parity, branch isolation and topology, before normal site deployment. This adds all three
+   remote bindings together; absent bindings keep `botConfigured` false.
+6. Record first deployment and remaining live checks on #1008. No production
+   bot deployment was performed by this implementation. First deployment,
+   container sandbox compatibility, D886 §7 memory/CPU/size and two-hour soak,
+   and real calls remain owner follow-up, not implementation prerequisites.
+
+`meeting-bot-image.yml` builds and boots the real Linux image on PRs without
+provider network, checks the Python SDK load, and dry-runs both bot configs.
+A manual main run can publish a commit-tagged GHCR image using `GITHUB_TOKEN`.
+Wrangler builds/pushes its own container image during bot deployment; retain
+that deployment's digest and Worker version for rollback. Roll back only the
+bot Worker/config and its image, never the site as part of bot rollback.
+
+No secret is an image build argument or label. Never log meeting links,
+passcodes, names, transcripts or signed material. Container Stop records a
+persistent tombstone before waiting for startup; SIGTERM uses B2's bounded
+drain, with destruction after 30 seconds. Expired funded leases stop the
+container. Replacement/rejoin stays refused until a durable resume contract
+exists. Publication, canary/price switches and actual meetings remain gated
+by B9 and the owner; deployment alone enables none of them.
+
+### Google Workspace Picker (D1091, #2956)
+
+The existing Calendar OAuth client is reused. Before enabling the approved files screen, the owner must supply `GOOGLE_PICKER_API_KEY` (browser-visible, restricted to the approved Axal/Google referrers and Picker API) and `GOOGLE_PICKER_APP_ID` (the numeric Cloud project number matching the Calendar OAuth client). Enable the Picker and required Workspace APIs in that project. No values are committed. Live verification remains pending.

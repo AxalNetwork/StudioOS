@@ -1,0 +1,33 @@
+-- 162_cofounder_decision_meta.sql — Spin-Out Lab Co-founder Match decision.
+--
+-- The Claude Design Co-founder Match tool ends in a "decision console": the
+-- founder records which track they are taking — advance with a candidate,
+-- keep searching, or document a solo path (a first-class Week-3 outcome, not
+-- a failure state). Nothing stored that decision, so the console could not
+-- exist. This adds the same additive JSON-blob pattern as use_of_funds_meta
+-- (158) and incorporation_meta (159):
+--
+--   projects.cofounder_decision_meta TEXT   -- JSON:
+--     { outcome: 'advance'|'searching'|'solo', candidate_uid?, note?,
+--       followups?: string[], decided_at }
+--
+-- IMPORTANT (honesty): recording a decision here does NOT by itself satisfy
+-- the Week-3 "validate path" deliverable. That deliverable is defined by the
+-- milestone catalog as any of advisor_meeting_booked / cofounder_request_sent
+-- — sending a real request (advance) marks it; a solo decision points the
+-- founder at the advisor path and at the Week-4 solo declaration
+-- (cofounder_agreement_signed). The UI states this rather than pretending.
+--
+-- NON-IDEMPOTENT: D1's ALTER TABLE has no IF NOT EXISTS. Apply through the
+-- ledger-driven runner, which records the schema_migrations row and runs it
+-- exactly once:
+--
+--   npm run d1:migrate:remote
+--
+-- A hand-applied `wrangler d1 execute` leaves no ledger row; the next deploy
+-- re-runs this file, D1 returns "duplicate column name:
+-- cofounder_decision_meta", and the plan aborts — blocking this migration and
+-- every later one. The worker self-heals cold isolates via
+-- ensureProjectCofounderDecisionColumn() (routes/projects.ts).
+
+ALTER TABLE projects ADD COLUMN cofounder_decision_meta TEXT;

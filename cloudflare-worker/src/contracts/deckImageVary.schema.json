@@ -1,0 +1,31 @@
+{
+  "$id": "deckImageVary",
+  "title": "POST /api/decks/images/:uid/edit/quote (D1544, #3784)",
+  "description": "What the deck v2 adapter's `imageVary` method passes through: an edit's price before it runs (`routes/deck_image_edits.ts`). Either `ai: true` with the model, one hold for the edit and its three checks, the reference images it sends (each at most 512 by 512) and whether the balance covers it; or `ai: false` with the reason the edit cannot run and the words to show. Nothing is run or held by a quote. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ai"],
+  "properties": {
+    "ai": { "type": "boolean" },
+    "op": { "enum": ["vary", "edit", "erase", "expand"] },
+    "model": { "type": "string" },
+    "model_label": { "type": ["string", "null"] },
+    "redraw": { "type": "boolean" },
+    "hold_microusd": { "type": "integer", "minimum": 0 },
+    "draw_microusd": { "type": "integer", "minimum": 0 },
+    "checks_microusd": { "type": "integer", "minimum": 0 },
+    "references": {
+      "type": "array", "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["width", "height"],
+        "properties": { "width": { "type": "integer", "minimum": 1, "maximum": 512 }, "height": { "type": "integer", "minimum": 1, "maximum": 512 } }
+      }
+    },
+    "balance": {
+      "type": "object", "additionalProperties": false, "required": ["ok"],
+      "properties": { "ok": { "type": "boolean" }, "code": { "type": "string" }, "message": { "type": "string" } }
+    },
+    "reason": { "type": "string" },
+    "message": { "type": "string" }
+  }
+}

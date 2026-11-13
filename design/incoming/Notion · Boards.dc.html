@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Founder connectors › Notion</span><h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Notion · choose, map and see pages</h1><p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">NT1 to NT8. The founder chooses Notion pages and databases, maps them into StudioOS modules and sees where they landed. Read only: Axal VC reads the pages the founder shares and never changes them.</p></header>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="8"><section id="{{ r.id }}" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ r.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ r.t }}</h2></div><sc-if value="{{ r.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:13px;line-height:1.55;color:#3f3a47">{{ r.n }}</p></sc-if><div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap"><sc-for list="{{ r.f }}" as="f" hint-placeholder-count="1"><div style="display:flex;flex-direction:column;gap:8px"><sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if><div style="{{ f.st }}"><dc-import name="Notion Page" v="{{ f.v }}" hint-size="100%,900px"></dc-import></div></div></sc-for></div></section></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const box = (w) => 'width:' + w + 'px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)';
+    const M = 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)';
+    const f = (v, cap, w) => ({ v, cap: cap || '', st: /^gw8/.test(v) ? M : box(w || 1440) });
+    const R = (id, t, n, fr) => ({ id, t, n: n || '', f: fr });
+    return { rows: [
+      R('NT1', 'Connector page · desktop 1440, light', 'The pages the founder shared, each with its module and when it was last read. “Stop using” opens a dialog that says what stays and what Axal VC loses.', [f('gw1'), f('gw1d', '“Stop using” opens a dialog')]),
+      R('NT2', 'Not yet allowed · desktop 1440', 'Before any page is shared, the page shows one card and nothing else to act on. When Notion itself is not connected, the card links to the Notion page.', [f('gw2a', 'No pages shared yet'), f('gw2b', 'Notion not connected yet')]),
+      R('NT3', 'From Notion in a module · Build › Product roadmap · crop', 'Six rows read from “Roadmap 2027”. One Progress value is empty in the database, so it reads “—” with the reason on hover, never 0. Delete opens a dialog.', [f('gw3', 'Build › Product roadmap', 1160), f('gw3d', 'Delete opens a dialog', 640)]),
+      R('NT4', 'Map properties dialog · desktop 1440', 'After picking “Metrics”: each database property maps to a module field, with a five-row preview.', [f('gw4'), f('gw4e', 'Error state · rows that are not dates are skipped')]),
+      R('NT5', 'Select property mapping · desktop 1440', 'One question and the answers that count as demand. 11 “Yes, now” and 7 “Yes, later” make the 18 proposed signals.', [f('gw5')]),
+      R('NT6', 'Proposal · Raise › Investor narrative · crop', '', [f('gw6', '', 1160)]),
+      R('NT7', 'States · crops of the From Notion section', 'An unreadable page keeps the rows read before, so one failed read never blanks the module.', [f('gw7l', 'Loading', 1160), f('gw7e', 'Empty', 1160), f('gw7u', 'Unreadable', 1160), f('gw7p', 'Partly synced', 1160)]),
+      R('NT8', 'Phone 390 · light and dark', 'NT1 as a stacked list, and NT3 collapsed under its heading. Every tap target at least 44 by 44 px.', [f('gw8a', 'NT1 · light'), f('gw8b', 'NT3 · light'), f('gw8c', 'NT1 · dark'), f('gw8d', 'NT3 · dark')]),
+    ] };
+  }
+}
+</script>
+</body></html>

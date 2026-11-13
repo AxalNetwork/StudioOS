@@ -1,0 +1,34 @@
+{
+  "skill": "sales-forecast-scenario-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Sales Forecast Scenario Review",
+        "task_scope": "Builds pipeline-driven bookings scenarios using stage probabilities, slippage, capacity and close-period assumptions.",
+        "evidence": [
+          "stage-weighted bookings scenarios"
+        ],
+        "omitted_field": "historical win rate"
+      },
+      "raise.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for stage-weighted bookings scenarios."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "stage-weighted bookings scenarios"
+    ],
+    "must_say_not_recorded": [
+      "historical win rate"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,1000 @@
+#!/usr/bin/env node
+/**
+ * Task #16 — Post-deploy live SPA smoke check.
+ *
+ * Task #15 added a BUILD-TIME guard (`scripts/check-spa-build.mjs` in the
+ * upstream tree) that the Vite artifact (`docs/index.html` + `docs/assets/`)
+ * is complete. This script is the RUNTIME sibling: after `npm run deploy`
+ * publishes the Worker, it fetches the live site and fails loudly if any key
+ * route returns a non-200, a non-HTML body, or the JSON 404 (`{"detail":"Not
+ * found"}`) instead of the rendered SPA shell. The original blank-page
+ * incident shipped because no post-deploy check existed.
+ *
+ * What "healthy" means for a route:
+ *   - HTTP 200
+ *   - Content-Type: text/html
+ *   - Body contains `<div id="root">` (the SPA mount node)
+ *   - Body contains a hashed module script `<script type="module" ...
+ *     src="/assets/*.js">` (proof the built bundle is wired in, not a stub)
+ *   - Every hashed `/assets/*.{js,css}` the shell references actually
+ *     RESOLVES on the same host (HTTP 200 + a JS/CSS content-type, never
+ *     text/html). This is the check that catches the recurring blank page:
+ *     a shell and its `/assets/*` served from two different builds (the
+ *     2026-08-31 apex outage paired Pages-served HTML with a different
+ *     Worker asset build). Both hosts are now served by the one Worker from
+ *     its `[assets]` copy of `docs/`, so the shell and its hashes come from
+ *     the same `wrangler deploy`; a mismatch here means a skewed or partial
+ *     deploy.
+ *   - The response carries the static security headers `docs/_headers`
+ *     declares (HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options`,
+ *     `Referrer-Policy`). The Worker's assets binding answers these routes
+ *     without running the Hono app, so `securityHeaders.ts` never touches
+ *     them; the headers come only from `frontend/public/_headers`, which
+ *     Workers static assets read natively. This is the live answer to
+ *     UNRESOLVED_ITEMS.md U10 — measured here, not asserted from a document.
+ *   - D722: `/login` carries no `Cross-Origin-Opener-Policy` other than
+ *     `unsafe-none`. Google's sign-in window hands /login its code by
+ *     postMessage; `same-origin` cuts that link, and
+ *     `same-origin-allow-popups` cuts the link to a page that opened /login
+ *     in a window of its own (an MCP client's OAuth window). And
+ *     `/api/auth/google/config` answers 200 JSON with boolean `configured`
+ *     and `popup`, and a `client_id` that is null when the window is off and
+ *     shaped like a Google web client ID when it is on. The ID's value is
+ *     checked for its shape only and never printed.
+ *   - D754: the WhatsApp webhook refuses an unsigned body. An unsigned
+ *     `POST /api/channels/whatsapp/webhook` carrying an empty entry list
+ *     must answer 401 or 403 (or 503 while its secrets are unset); a 2xx
+ *     fails the check. No call reaches Meta and no secret is needed. The
+ *     verdict lives in `lib/webhookGuard.mjs`.
+ *
+ * Host model (see wrangler.toml `[[routes]]` + `[assets]`, CLAUDE.md fact 4):
+ *   - axal.vc AND app.axal.vc are both whole-host Workers Custom Domains of
+ *     the `studioos` Worker (since 2026-09-01, commit 1d320dda9). The Worker
+ *     serves the SPA on EVERY path of either host via `not_found_handling =
+ *     "single-page-application"`, so `/` and all deep links return the
+ *     shell; `/api/*`, `/landing/*`, `/p/*` and `/assets/*` run the Hono app
+ *     first (`run_worker_first`). One build sits behind both hosts and they
+ *     ship together on every deploy. The asset checks ensure each shell
+ *     receives its matching JS and CSS.
+ *   - There is no other host. The Cloudflare Pages mirror
+ *     (studioos-2p8.pages.dev) was retired on 2026-09-03 (DECISIONS.md D36);
+ *     who serves a host is settled by the deploy log's "Deployed studioos
+ *     triggers" lines, never by prose.
+ *
+ * Apex `/api/*` routing assertion (the regression that took prod down):
+ *   The shell-HTML checks above can ALL pass while every `/api/*` fetch never
+ *   reaches the Hono app. Historically that meant another host served the
+ *   apex (GitHub Pages, then Cloudflare Pages) and the `axal.vc/api/*` Worker
+ *   route was missing, so `/api/*` came back as that host's HTML 404. Today
+ *   it means the custom domain is not bound to the Worker (an HTML error
+ *   page), or `/api/*` has dropped out of `run_worker_first` and the assets
+ *   binding's SPA fallback answers with `index.html` (an HTML 200). Either
+ *   way the SPA's relative `/api/*` XHRs get HTML and every authenticated
+ *   page breaks. This script probes a stable `/api/*` endpoint on each host
+ *   and FAILS loudly when it returns an HTML body instead of a Worker JSON
+ *   response. A JSON response (a 200 from /api/health, or even a JSON 401
+ *   from an authed probe) counts as HEALTHY — it proves the request reached
+ *   the Worker; auth state is irrelevant here.
+ *
+ * #3590: read each entry's __vite__mapDeps and fetch every lazy JS/CSS on
+ * both hosts. The deploy captures the restored previous entry before Vite
+ * runs; the schedule reads the preceding generation from the deployed cache.
+ * Leaf requests use 16 workers and the normal retry delay. Report counts
+ * and the first five failures per build, never a line per healthy chunk.
+ * This verifies HTTP delivery, not authenticated rendering or JS execution.
+ *
+ * Exit 0 when every check passes; exit 1 after checking both hosts.
+ *
+ * Invocation:
+ *   node scripts/check-spa-live.mjs                  # both prod hosts
+ *   SMOKE_HOSTS=https://app.axal.vc node scripts/check-spa-live.mjs
+ *   node scripts/check-spa-live.mjs https://app.axal.vc
+ *
+ * Wired into `npm run deploy` via the `postdeploy` lifecycle hook so a deploy
+ * that produces a blank/broken site fails the deploy command. Set
+ * SKIP_LIVE_SMOKE=1 to bypass (e.g. from a host with no route to prod) — the
+ * skip is explicit and logged so it can never silently pass.
+ *
+ * Tunables (env):
+ *   SMOKE_HOSTS      space/comma-separated base URLs (default prod pair)
+ *   SMOKE_SLUG       slug used for the /articles/:slug deep link
+ *   SMOKE_EVENT_SLUG slug for the /events/:slug card shell (D1439; default: no record)
+ *   SMOKE_JOB_SLUG   slug for the /jobs/:slug card shell (D1439; default: no record)
+ *   SMOKE_RETRIES    attempts per request before failing (default 3)
+ *   SMOKE_RETRY_MS   delay between attempts in ms (default 5000)
+ *   SMOKE_TIMEOUT_MS per-request timeout in ms (default 15000)
+ *   SMOKE_API_PROBE  exempt `/api/*` path probed to prove the Worker is reached
+ *                    (default /api/health — unauthenticated, always mounted)
+ *   SMOKE_API_PROBE_LIMITED
+ *                    NON-exempt `/api/*` path probed to prove the rate-limit
+ *                    middleware itself still answers (default a synthetic
+ *                    /api/__smoke/rate-limited — see below)
+ *   SMOKE_CONNECTORS_STRICT
+ *                    `1` fails the run when a catalogue OAuth connector has no
+ *                    client or its readiness is unreadable; otherwise that is
+ *                    one WARN line per host and never a failure (D751 T9)
+ *   SMOKE_BUILD_DIR local deployed build (its entry is checked even if a
+ *                    live shell is stale); set by the deploy workflow
+ *   SMOKE_CURRENT_BUILD captured current-entry JSON transferred from the
+ *                    publishing job to its independent smoke job
+ *   SMOKE_PREVIOUS_BUILD captured previous-entry JSON outside docs/; the
+ *                    deploy/schedule both set it. An absent cache is explicit,
+ *                    never reported as a verified previous build.
+ */
+
+import { probeUnsignedWebhook } from './lib/webhookGuard.mjs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { assetPath, assetProblem, entriesFromLedger, entryRefsFromHtml, parseViteMapDeps } from './lib/spaChunks.mjs';
+import { CONNECTOR_READINESS_PATH, connectorReadinessVerdict, summaryMarkdown, warnLine } from './lib/connectorReadiness.mjs';
+
+const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
+
+const SLUG = process.env.SMOKE_SLUG || 'smoke-test-deeplink';
+const RETRIES = Number(process.env.SMOKE_RETRIES || 3);
+const RETRY_MS = Number(process.env.SMOKE_RETRY_MS || 5000);
+// 15s, DELIBERATELY SHORTER THAN THE 30s THE BROWSER WAITED IN THE OUTAGE.
+// Matching 30 would only make this probe wait as long as the user did before
+// reporting the same failure; the point of a synthetic check is to call it
+// broken sooner. 15s is already far past anything healthy — the limiter's own
+// KV await is deadline-bounded in single-digit seconds — so a path that has not
+// answered by then is failing for a real visitor whether or not their browser
+// has given up yet. It also keeps the job inside its 5-minute cap: the budget
+// is per request, and each is retried SMOKE_RETRIES times across two hosts and
+// ~26 routes. Raise it only with that arithmetic in hand.
+const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
+// Always-mounted, unauthenticated `/api/*` probe used to prove the Worker is
+// actually reached on each host (see checkApiRouting). `/api/health` is
+// registered directly on the Hono app (cloudflare-worker/src/index.ts) and
+// returns JSON on every deploy. An authed endpoint would also work — a JSON
+// 401 still proves the Worker answered — but health needs no credentials.
+const API_PROBE_PATH = process.env.SMOKE_API_PROBE || '/api/health';
+
+// THE SECOND PROBE, AND WHY IT IS A PATH NOBODY MOUNTED.
+//
+// `/api/health` is the FIRST entry of `RATE_LIMIT_EXEMPT`
+// (cloudflare-worker/src/middleware/rateLimit.ts), so `rateLimitMiddleware`
+// returns `next()` for it before doing any work. On 2026-09-12 that is exactly
+// why this smoke stayed green through a sign-in outage: `/api/auth/me` is
+// exempt and kept answering while `/api/auth/magic/start` and
+// `/api/auth/google/start`, which are not, hung for 30 seconds — the leading
+// explanation being the middleware awaiting an unanswering KV. One probe on an
+// exempt path cannot see that class at all (D78).
+//
+// A path nothing mounts is the robust second probe. `app.use('/api/*', …)`
+// runs the whole middleware chain before Hono looks for a handler, so an
+// unmatched `/api/...` traverses `rateLimitMiddleware` — its `global` and `ip`
+// buckets both test `p.startsWith('/api/')` — and ends at
+// `app.notFound((c) => c.json({ detail: 'Not found' }, 404))`. That is a JSON
+// body, which `checkApiRouting` already treats as proof the Worker answered.
+// So it exercises the limiter without needing a route to exist, and it cannot
+// be made exempt by accident: exemption is matched as `path === p ||
+// path.startsWith(p + '/')`, and no entry is a prefix of this one.
+//
+// NOTHING HERE WEAKENS `RATE_LIMIT_EXEMPT`. D74 pins `/api/auth/magic/start`
+// and `/api/auth/google/start` as deliberately NOT exempt; this probe exists so
+// their failure mode is visible, not so the list can shrink.
+const API_PROBE_LIMITED_PATH =
+  process.env.SMOKE_API_PROBE_LIMITED || '/api/__smoke/rate-limited';
+
+// Static security headers every SPA shell response must carry. They are set
+// by `docs/_headers` (built from frontend/public/_headers), which Workers
+// static assets apply to the responses the assets binding serves. The values
+// mirror cloudflare-worker/src/middleware/securityHeaders.ts except
+// Referrer-Policy, which is deliberately laxer on the public static surface
+// (GOTCHAS, "Referrer-Policy is two-tier"). HSTS is matched on the presence
+// of a max-age so a longer or shorter window is not a deploy failure; the
+// other three must be the exact value the file declares.
+const REQUIRED_SHELL_HEADERS = [
+  ['strict-transport-security', /max-age=\d+/i],
+  ['x-content-type-options', /^nosniff$/i],
+  ['x-frame-options', /^deny$/i],
+  ['referrer-policy', /^strict-origin-when-cross-origin$/i],
+];
+
+// D722 — "Continue with Google" opens Google's own window from /login, and
+// the window answers by postMessage. The shell must send no opener policy
+// that severs it (frontend/test/google_popup_headers_d722.test.mjs holds the
+// file to the same rule; this measures what the host actually sends).
+const GOOGLE_WINDOW_ROUTE = '/login';
+const GOOGLE_CONFIG_PATH = '/api/auth/google/config';
+// A Google OAuth web client ID's shape. Only the shape is checked: the value
+// is the deployment's, and nothing here prints it.
+const GOOGLE_CLIENT_ID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
+
+const hostsArg =
+  process.argv.slice(2).filter((a) => !a.startsWith('-')).join(' ') ||
+  process.env.SMOKE_HOSTS ||
+  '';
+const HOSTS = hostsArg
+  ? hostsArg.split(/[\s,]+/).filter(Boolean)
+  : DEFAULT_HOSTS;
+
+if (process.env.SKIP_LIVE_SMOKE === '1') {
+  console.log(
+    '[spa-live] SKIP_LIVE_SMOKE=1 — skipping post-deploy live smoke check.',
+  );
+  process.exit(0);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A route check declares the path and whether the SPA shell is required.
+// `shell: false` means "only require a 200 + HTML body" — used for the apex
+// root, a leniency from when another host served `/` on the apex (see the
+// note on that entry below).
+function routesForHost(base) {
+  const isApex = /\/\/axal\.vc/i.test(base);
+  const appRoutes = [
+    { path: '/about', shell: true },
+    { path: '/dashboard', shell: true },
+    { path: '/hq', shell: true },
+    { path: '/studio', shell: true },
+    { path: '/studio/archetype', shell: true },
+    { path: '/login', shell: true },
+    { path: '/articles', shell: true },
+    { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true, card: true },
+    // D1439 (#3914): record paths run the Worker first and come back as the
+    // shell with the record's card, or the section's for a miss. These slugs
+    // are no record on purpose: a miss must still be the shell, with the
+    // static headers and a section card rather than the home card. Set
+    // SMOKE_EVENT_SLUG / SMOKE_JOB_SLUG to a live record to see its own card.
+    { path: `/events/${encodeURIComponent(process.env.SMOKE_EVENT_SLUG || 'live-smoke-not-a-real-event')}`, shell: true, card: true },
+    { path: `/jobs/${encodeURIComponent(process.env.SMOKE_JOB_SLUG || 'live-smoke-not-a-real-job')}`, shell: true, card: true },
+    // Signed-in app paths, added 2026-08-29. Until then every route in this
+    // list happened to be one of the four apex segments that WERE routed, so
+    // the check reported all-PASS through a period when 37 of the 41 segments
+    // the sidebar links to had no apex route at all. These six span segments
+    // that were in the broken set; on the apex they are served only by the
+    // explicit route table, so a table-wide revert turns them red here.
+    { path: '/perks', shell: true },
+    { path: '/messages', shell: true }, // D1345: retired address still serves the SPA redirect.
+    { path: '/email', shell: true },
+    { path: '/raise/data-room', shell: true },
+    { path: '/admin/licences', shell: true },
+    { path: '/portfolio/health', shell: true },
+    { path: '/spinout-lab', shell: true },
+    // The nine partner workspace zones that stopped being no-store cards on
+    // 2026-09-04 (#431, migrations 208/209). They are checked here because
+    // they are the newest deep links in the product and every one of them is
+    // a segment the apex route table has to cover — the failure this script
+    // exists for is a deep link answering the JSON 404 or a stale shell, and
+    // nine new ones landed at once.
+    //
+    // WHAT THIS PROVES AND WHAT IT DOES NOT. It proves each path resolves to
+    // the shell with its matching assets and the static security headers. It
+    // does NOT prove the zone renders data: every one of these reads
+    // `/api/partner/*` behind `requireAuth`, so an unauthenticated fetch gets
+    // the shell either way. Rendering against real rows needs a signed-in
+    // partner session, which no CI check here has.
+    { path: '/pipeline/negotiations', shell: true },
+    { path: '/pipeline/retainers', shell: true },
+    { path: '/delivery/health', shell: true },
+    { path: '/delivery/deliverables', shell: true },
+    { path: '/delivery/capacity', shell: true },
+    { path: '/delivery/status-reports', shell: true },
+    { path: '/offers/visibility', shell: true },
+    { path: '/offers/proof', shell: true },
+    { path: '/offers/audience-fit', shell: true },
+    // The client's side of a partner proof claim — a PUBLIC route, reached by
+    // someone with no account, so a broken shell here is a dead end for a
+    // person who cannot even log in to work around it. The token is arbitrary
+    // on purpose: the page renders its ask before any token is validated, and
+    // what is under test is that the two-segment path reaches the SPA rather
+    // than being shadowed by `/attest/:token` one segment up.
+    { path: '/attest/partner/live-smoke-not-a-real-token', shell: true },
+    // D756 (#1894): the interviewee recording notice, a PUBLIC route reached
+    // from a chat link by someone with no account.
+    { path: '/privacy/interviews', shell: true },
+    // D813 (#2259): the newsletter signup, and the two pages a link in an
+    // email opens. All three are PUBLIC, and each serves the shell before any
+    // token is read, so none is passed.
+    { path: '/newsletter', shell: true },
+    { path: '/newsletter/confirm', shell: true },
+    { path: '/newsletter/preferences', shell: true },
+    // The Help Center's addresses (#103, 2026-09-07). `/help` stopped being a
+    // one-segment path when the ticket flow moved under it, and the same pass
+    // gave `/support` a route for the first time — `ErrorState` had been
+    // building `/support?topic=…` on four pages against no route at all, which
+    // is precisely the failure this script exists to catch, and it went
+    // unnoticed for as long as it did because nothing ever requested the path.
+    //
+    // Two- and three-segment shapes are listed deliberately: a path-scoped
+    // apex route would take these from the assets binding and break the SPA
+    // fallback (CLAUDE.md fact 4), and the deeper the path the more likely it
+    // is to be shadowed. The id is arbitrary — an unauthenticated fetch gets
+    // the shell either way, so what is under test is that the path REACHES the
+    // shell, not that a ticket renders.
+    { path: '/help', shell: true },
+    { path: '/help/tickets', shell: true },
+    { path: '/help/tickets/live-smoke-not-a-real-ticket', shell: true },
+    { path: '/support', shell: true },
+    // `/docs` redirects to `/help` in the SPA router, which happens after the
+    // shell loads — so what this asserts is the same thing as the rest: the
+    // Worker still hands the old address a shell rather than a 404. Bookmarks
+    // and the worker's own older CTAs still arrive here.
+    { path: '/docs', shell: true },
+  ];
+  // Apex `/` is checked leniently (`shell: false`): it was a separate
+  // marketing page (GitHub Pages, then Cloudflare Pages) until 2026-09-01.
+  // Since 1d320dda9 the Worker's assets binding answers `/` on both hosts
+  // with the same shell; the leniency is kept as-is here, not yet tightened.
+  appRoutes.unshift({ path: '/', shell: !isApex });
+  return appRoutes;
+}
+
+function looksLikeJsonNotFound(body) {
+  const trimmed = body.trimStart();
+  return trimmed.startsWith('{') && /"detail"\s*:\s*"Not found"/i.test(body);
+}
+
+// An `/api/*` probe that never reaches the Hono app comes back as HTML: the
+// SPA shell (HTTP 200) if `/api/*` ever drops out of `run_worker_first` and
+// the assets binding's single-page-application fallback answers instead, or
+// an error page if the host is not bound to the Worker at all. Detect an
+// HTML body so such a probe is flagged even when the Content-Type header is
+// missing or unexpected.
+function looksLikeHtml(body) {
+  return /<!doctype html|<html[\s>]/i.test(body.trimStart().slice(0, 2048));
+}
+
+function assertShell(body) {
+  const problems = [];
+  if (!body.includes('<div id="root">')) {
+    problems.push('missing `<div id="root">` mount node');
+  }
+  // Vite emits `<script type="module" crossorigin src="/assets/index-*.js">`.
+  const hasModuleAsset =
+    /type="module"/.test(body) && /src="\/assets\/[^"]+\.js"/.test(body);
+  if (!hasModuleAsset) {
+    problems.push('missing hashed `/assets/*.js` module script');
+  }
+  return problems;
+}
+
+// The shell's security headers, from `docs/_headers`. A missing header means
+// the file did not ship in the deployed build, its rules no longer parse, or
+// Workers static assets is not applying it to the SPA fallback — the
+// UNRESOLVED_ITEMS.md U10 case, which this check answers by measurement.
+function assertSecurityHeaders(headers) {
+  const problems = [];
+  for (const [name, want] of REQUIRED_SHELL_HEADERS) {
+    const got = headers.get(name);
+    if (got == null) {
+      problems.push(`missing security header ${name} (docs/_headers not applied)`);
+    } else if (!want.test(got.trim())) {
+      problems.push(`security header ${name} is "${got}" (expected ${want})`);
+    }
+  }
+  return problems;
+}
+
+// D4582 — the sign-in page is not indexed, said in its header and in its own head. The header is read here without
+// parsing any HTML, so it holds even if the shell's head is rewritten; the canonical and title are checked too, since
+// the first audit found /login carrying the homepage's.
+function assertSignInPolicy(headers, body) {
+  const problems = [];
+  const robots = headers.get('x-robots-tag');
+  if (!/noindex/i.test(robots || '')) problems.push(`/login x-robots-tag is "${robots ?? '(none)'}" (expected noindex)`);
+  const canonical = /<link rel="canonical" href="([^"]*)"/.exec(body)?.[1];
+  if (!canonical || !/\/login\/?$/.test(canonical)) problems.push(`/login canonical is "${canonical ?? '(none)'}", not its own address`);
+  const title = /<title>([^<]*)<\/title>/.exec(body)?.[1] || '';
+  if (!/^Sign in/i.test(title)) problems.push(`/login title is "${title}", not the sign-in page's`);
+  return problems;
+}
+
+// D722 — the opener policy on the page that opens Google's window. Absent or
+// `unsafe-none` is the only answer that keeps both windows talking.
+function assertOpenerPolicy(headers) {
+  const coop = headers.get('cross-origin-opener-policy');
+  if (coop == null || /^unsafe-none$/i.test(coop.trim())) return [];
+  return [
+    `Cross-Origin-Opener-Policy is "${coop}" — Google's sign-in window can no longer ` +
+      'answer /login (D722); the shell must send none, or unsafe-none',
+  ];
+}
+
+// Pull every hashed `/assets/*.{js,css}` the document references (entry
+// script, modulepreload chunks, stylesheet). These are the files the browser
+// must load for the page to render; if any 404s the page goes blank.
+function extractAssetRefs(body) {
+  const refs = new Set();
+  const re = /(?:src|href)="(\/assets\/[^"]+\.(?:js|css))"/g;
+  let m;
+  while ((m = re.exec(body)) !== null) refs.add(m[1]);
+  return refs;
+}
+
+// Lightweight metadata fetch: we only need status + content-type, so cancel
+// the body stream instead of downloading the (often 500KB+) bundle.
+async function fetchAssetMeta(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'axal-spa-smoke/1.0' },
+    });
+    try {
+      await res.body?.cancel();
+    } catch {
+      /* body already consumed/empty */
+    }
+    return {
+      status: res.status,
+      ctype: res.headers.get('content-type') || '',
+      server: res.headers.get('server') || '',
+      githubReqId: res.headers.get('x-github-request-id') || '',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Returns null on success, or a human-readable failure reason. A hashed asset
+// is healthy when it returns 200 with a JS/CSS content-type. A 404 (or a 200
+// `text/html` from the SPA fallback serving index.html in place of the real
+// file) means this host is missing the hash or its HTML and assets came from
+// different deployments. Both render a blank page.
+async function checkAsset(base, ref, quiet = false, attempts = RETRIES) {
+  const url = base.replace(/\/$/, '') + ref;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const { status, ctype } = await fetchAssetMeta(url);
+      const problem = assetProblem({ status, ctype }, ref);
+      if (!problem) return null;
+      lastErr = problem;
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < attempts) {
+      if (!quiet) console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return lastErr;
+}
+
+async function fetchOnce(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'axal-spa-smoke/1.0' },
+    });
+    const body = await res.text();
+    return {
+      status: res.status,
+      ctype: res.headers.get('content-type') || '',
+      headers: res.headers,
+      body,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// D1439: a record path's og:title is its record's or its section's, never the
+// home card the bare shell carries. Only the title is read; nothing is printed
+// from a live record beyond this verdict.
+const HOME_OG_TITLE = 'From idea to funded company — Axal VC StudioOS';
+function assertRecordCard(body) {
+  const m = /<meta property="og:title" content="([^"]*)"/.exec(body);
+  if (!m) return ['no og:title in the card shell'];
+  if (m[1] === HOME_OG_TITLE) return ['og:title is the home card: the D1439 card injector did not run'];
+  return [];
+}
+
+// Returns null on success, or a human-readable failure reason string. On
+// success, any hashed `/assets/*.{js,css}` the document references are added to
+// `assetSink` so the caller can verify they actually resolve on this host.
+async function checkRoute(base, route, assetSink, entrySink) {
+  const url = base.replace(/\/$/, '') + route.path;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype, headers, body } = await fetchOnce(url);
+      const problems = [];
+      if (status !== 200) problems.push(`HTTP ${status} (expected 200)`);
+      if (!/text\/html/i.test(ctype)) {
+        problems.push(`Content-Type "${ctype || '(none)'}" is not text/html`);
+      }
+      if (looksLikeJsonNotFound(body)) {
+        problems.push('body is the JSON 404 (`{"detail":"Not found"}`)');
+      }
+      if (route.shell) {
+        problems.push(...assertShell(body));
+        problems.push(...assertSecurityHeaders(headers));
+        if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertOpenerPolicy(headers));
+        if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertSignInPolicy(headers, body));
+        if (route.card) problems.push(...assertRecordCard(body));
+      } else if (!/<html|<!doctype/i.test(body)) {
+        problems.push('body is not an HTML document');
+      }
+      if (problems.length === 0) {
+        // `assetSink` is intentionally optional: callers that don't care about
+        // asset collection may omit it. Normalize to a no-op sink so this path
+        // stays safe without a redundant truthiness guard.
+        const sink = assetSink ?? { add() {} };
+        // The apex root is a `shell: false` route (a healthy HTML response is
+        // all this checker asserts there), a leniency from when a separate
+        // marketing site answered `/` on the apex and its asset manifest could
+        // not be mixed with the Worker's. Both hosts' `/` now come from the
+        // Worker's assets binding, but only `shell: true` routes feed the
+        // asset checks, so the split is kept.
+        if (route.shell) {
+          for (const ref of extractAssetRefs(body)) sink.add(ref);
+          for (const ref of entryRefsFromHtml(body, base)) entrySink?.add(ref);
+        }
+        return null;
+      }
+      lastErr = problems.join('; ');
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return lastErr;
+}
+
+// Returns null when the API probe reaches the Worker on `base`, else a
+// human-readable failure reason. HEALTHY = a JSON response: a 200 from
+// /api/health, or even a JSON 401 from an authed probe — both prove the
+// request reached the Worker. FAILURE = an HTML body, the signature of
+// `/api/*` never reaching the Hono app: the host is not bound to the Worker,
+// or `/api/*` left `run_worker_first` and the assets binding's SPA fallback
+// answered with `index.html`. (Before 2026-09-01 it was the apex's other
+// host — GitHub Pages, then Cloudflare Pages — answering with its HTML 404.)
+async function checkApiRouting(base, probePath = API_PROBE_PATH) {
+  const url = base.replace(/\/$/, '') + probePath;
+  // Both hosts are Workers Custom Domains (since 2026-09-01, 1d320dda9); the
+  // apex/app split below only chooses which failure text is printed. Match the
+  // same detection routesForHost() uses (`//axal.vc` does not match
+  // `//app.axal.vc`) so each host gets its own message.
+  const isApex = /\/\/axal\.vc/i.test(base);
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype, body } = await fetchOnce(url);
+      const isHtml = /text\/html/i.test(ctype) || looksLikeHtml(body);
+      const isJson =
+        /application\/json/i.test(ctype) ||
+        (!isHtml && body.trimStart().startsWith('{'));
+      if (isHtml) {
+        lastErr = isApex
+          ? `apex /api/* answered with HTML ` +
+            `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
+            `instead of reaching the Worker — the axal.vc custom-domain binding is not answering`
+          : `/api/* returned an HTML response ` +
+            `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
+            `instead of Worker JSON — the Workers custom domain is not routing ` +
+            `to the Worker (Worker error page or custom-domain misconfig)`;
+      } else if (isJson) {
+        // Worker reached (any status — a JSON 401 still proves routing works).
+        return null;
+      } else {
+        lastErr =
+          `non-JSON API response (HTTP ${status}, ` +
+          `Content-Type "${ctype || '(none)'}") — expected a Worker JSON body`;
+      }
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return lastErr;
+}
+
+// D722 — `GET /api/auth/google/config` is what /login reads to decide between
+// Google's window and the redirect. It is a pure read of the deployment's env,
+// rate-limit exempt, so it must answer on every deploy; a host where it does
+// not answer is a host where every click quietly takes the redirect. Returns
+// null when healthy, else a reason. The client ID is never echoed: a reason
+// names only which field is wrong.
+async function checkGoogleConfig(base) {
+  const url = base.replace(/\/$/, '') + GOOGLE_CONFIG_PATH;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype, body } = await fetchOnce(url);
+      const problems = [];
+      if (status !== 200) problems.push(`HTTP ${status} (expected 200)`);
+      if (!/application\/json/i.test(ctype)) problems.push(`Content-Type "${ctype || '(none)'}" is not JSON`);
+      let cfg = null;
+      try { cfg = JSON.parse(body); } catch { problems.push('body is not JSON'); }
+      // The fields are read only off a 200: a JSON 404 means the route is
+      // not deployed, and listing its missing fields would bury that.
+      if (status === 200 && cfg && typeof cfg === 'object') {
+        if (typeof cfg.configured !== 'boolean') problems.push('`configured` is not a boolean');
+        if (typeof cfg.popup !== 'boolean') problems.push('`popup` is not a boolean');
+        if (cfg.popup === true && cfg.configured !== true) problems.push('`popup` is on while `configured` is not');
+        if (cfg.popup === true) {
+          if (typeof cfg.client_id !== 'string' || !GOOGLE_CLIENT_ID_RE.test(cfg.client_id)) {
+            problems.push('`client_id` is not shaped like a Google web client ID while `popup` is on');
+          }
+        } else if (cfg.client_id !== null) {
+          problems.push('`client_id` is handed out while `popup` is off');
+        }
+      }
+      if (problems.length === 0) {
+        return { ok: true, popup: cfg.popup, configured: cfg.configured };
+      }
+      lastErr = problems.join('; ');
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return { ok: false, reason: lastErr };
+}
+
+// D751 T9 (#1921) — `/api/health`'s `connectors_oauth` block: one WARN line
+// per host listing each catalogue OAuth connector with no client (false) or an
+// unreadable one (null), the same list in the run summary. Fails only when the
+// block is missing or malformed, or under SMOKE_CONNECTORS_STRICT=1. Keys only:
+// nothing here prints a value.
+async function checkConnectorReadiness(base) {
+  const url = base.replace(/\/$/, '') + CONNECTOR_READINESS_PATH;
+  const strict = process.env.SMOKE_CONNECTORS_STRICT === '1';
+  let verdict = null;
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, body } = await fetchOnce(url);
+      let parsed = null;
+      try { parsed = JSON.parse(body); } catch { /* judged as a missing block */ }
+      verdict = connectorReadinessVerdict(status === 200 ? parsed : null, { strict });
+      if (verdict.ok || verdict.unset.length + verdict.unreadable.length > 0) break;
+    } catch (err) {
+      verdict = { ok: false, unset: [], unreadable: [], reason: `request failed: ${err?.message || err}` };
+    }
+    if (attempt < RETRIES) {
+      console.log(`[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${verdict.reason})`);
+      await sleep(RETRY_MS);
+    }
+  }
+  const warn = warnLine(url, verdict);
+  if (warn) console.warn(warn);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryMarkdown(url, verdict) + '\n'); } catch { /* the summary is a convenience */ }
+  }
+  return { url, ...verdict };
+}
+
+function lazyBuildInputs() {
+  const problems = [];
+  let current = [];
+  function manifestAt(file) {
+    const manifest = JSON.parse(readFileSync(file, 'utf8'));
+    if (!Array.isArray(manifest?.entries) || manifest.reason === 'capture-failed') throw new Error('Unreadable captured build');
+    manifest.entries = [...new Set(manifest.entries.map(assetPath))];
+    if (manifest.entries.length === 0 && !['cache-miss', 'no-previous-build'].includes(manifest.reason)) throw new Error('Missing captured entry');
+    return manifest;
+  }
+  try {
+    if (process.env.SMOKE_CURRENT_BUILD) {
+      current = manifestAt(process.env.SMOKE_CURRENT_BUILD).entries;
+      if (current.length === 0) throw new Error('Missing current entry');
+    } else if (process.env.SMOKE_BUILD_DIR) {
+      const dir = process.env.SMOKE_BUILD_DIR;
+      current = entriesFromLedger({
+        ledger: JSON.parse(readFileSync(join(dir, '.asset-retention.json'), 'utf8')),
+        readAsset: file => readFileSync(join(dir, 'assets', file), 'utf8'),
+      }).entries;
+      // A cached generation has no shell. A fresh build does: include its
+      // precise entry too, even if a format change made it unrecognisable above.
+      if (existsSync(join(dir, 'index.html'))) {
+        const shellEntries = entryRefsFromHtml(readFileSync(join(dir, 'index.html'), 'utf8'));
+        if (shellEntries.length === 0) throw new Error('The built shell has no module entry');
+        current = [...new Set([...current, ...shellEntries])];
+      }
+    }
+  } catch { problems.push('Current lazy-build input is unreadable; live shell checks continue.'); }
+  let previous = { entries: [], reason: 'no-retained-build-input' };
+  try {
+    if (process.env.SMOKE_PREVIOUS_BUILD) previous = manifestAt(process.env.SMOKE_PREVIOUS_BUILD);
+  } catch {
+    problems.push('Previous lazy-build input is unreadable; live shell checks continue.');
+    previous = { entries: [], reason: 'unreadable-input' };
+  }
+  return { current, previous, problems };
+}
+
+// Retry in waves so a missing generation does not tie up every worker with
+// backoff sleeps. Each failed request still gets the normal retry spacing;
+// untouched files are attempted before any retry, at most 16 at a time.
+async function checkPool(refs, checks, probe, failed) {
+  let pending = refs.filter(ref => !checks.has(ref));
+  for (let attempt = 1; attempt <= RETRIES && pending.length > 0; attempt++) {
+    if (attempt > 1) await sleep(RETRY_MS);
+    const work = pending;
+    pending = [];
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(16, work.length) }, async () => {
+      while (next < work.length) {
+        const ref = work[next++];
+        const result = await probe(ref);
+        if (failed(result) && attempt < RETRIES) pending.push(ref);
+        else checks.set(ref, Promise.resolve(result));
+      }
+    }));
+  }
+}
+
+// Read the entry body (unlike the leaf metadata checks), then fetch every
+// JS/CSS in its Vite map. All callbacks stay in this CLI, not in the parser.
+async function checkLazyBuild(base, label, entries, assetChecks, entryChecks) {
+  const refs = new Set();
+  const firstFailures = [];
+  let failed = 0;
+  function problem(ref, reason) {
+    failed++;
+    if (firstFailures.length < 5) {
+      const line = `${base.replace(/\/$/, '')}${ref} — ${reason}`;
+      firstFailures.push(line);
+      console.error(`[spa-live] FAIL  ${label} ${line}`);
+    }
+  }
+  await checkPool(entries, entryChecks, async entry => {
+    try {
+      const res = await fetchOnce(base.replace(/\/$/, '') + entry);
+      const reason = assetProblem(res, entry);
+      if (reason) throw new Error(reason);
+      return { refs: parseViteMapDeps(res.body) };
+    } catch (error) { return { reason: error.message }; }
+  }, result => Boolean(result.reason));
+  for (const entry of entries) {
+    const result = await entryChecks.get(entry);
+    if (result.reason) problem(entry, result.reason);
+    else for (const ref of result.refs) refs.add(ref);
+  }
+  const work = [...refs];
+  await checkPool(work, assetChecks, ref => checkAsset(base, ref, true, 1), Boolean);
+  for (const ref of work) {
+    const reason = await assetChecks.get(ref);
+    if (reason) problem(ref, reason);
+  }
+  console.log(`[spa-live] ${failed ? 'FAIL' : 'PASS'}  ${base} ${label}: ${entries.length} entry chunk(s), ${refs.size} lazy JS/CSS file(s), ${failed} failure(s).`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Lazy chunks — ${base} — ${label}\n\n${entries.length} entry chunk(s), ${refs.size} lazy JS/CSS file(s), ${failed} failure(s).\n\n`
+        + firstFailures.map(line => `- ${line}\n`).join('') + '\n');
+    } catch { /* reporting convenience, never the verdict */ }
+  }
+  return failed ? `${base} ${label}: ${failed} failure(s); first failures: ${firstFailures.join('; ')}` : null;
+}
+
+async function main() {
+  console.log(
+    `[spa-live] Checking ${HOSTS.length} host(s): ${HOSTS.join(', ')}`,
+  );
+  const failures = [];
+  const builds = lazyBuildInputs();
+  for (const problem of builds.problems) {
+    console.error(`[spa-live] FAIL  ${problem}`);
+    failures.push(problem);
+  }
+  if (builds.previous.entries.length === 0) {
+    console.warn(`[spa-live] WARN  Previous build not verified: ${builds.previous.reason}.`);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Previous build not verified\n\n${builds.previous.reason}. No retention claim is made.\n\n`); } catch { /* convenience */ }
+    }
+  }
+  let apexApiRoutingFailed = false;
+  let securityHeadersFailed = false;
+  // The exempt probe's verdict per host, and the hosts where the exempt one
+  // passed while the non-exempt one did not. THE COMBINATION IS THE DIAGNOSIS,
+  // not either line on its own.
+  const exemptProbeOk = Object.create(null);
+  const limiterSignature = [];
+  for (const base of HOSTS) {
+    // Apex API-routing assertion FIRST: prove `/api/*` actually reaches the
+    // Worker on this host. The shell-HTML + asset checks below can all pass
+    // while every `/api/*` fetch comes back as HTML instead of Worker JSON —
+    // the exact regression that took prod down on axal.vc (then an HTML 404
+    // from the host that served the apex). Catch it loudly before anything
+    // else.
+    {
+      const apiUrl = base.replace(/\/$/, '') + API_PROBE_PATH;
+      const reason = await checkApiRouting(base);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${reason}`);
+        failures.push(`${apiUrl} — ${reason}`);
+        if (/\/\/axal\.vc/i.test(base)) apexApiRoutingFailed = true;
+      } else {
+        console.log(`[spa-live] PASS  ${apiUrl} (API reaches Worker, limiter EXEMPT)`);
+      }
+      exemptProbeOk[base] = !reason;
+    }
+
+    // The same question asked of a path the limiter does NOT skip. Reported as
+    // its own line, because "the Worker is reachable" and "the middleware in
+    // front of every /api/* route still answers" are different claims and the
+    // 2026-09-12 outage separated them.
+    {
+      const apiUrl = base.replace(/\/$/, '') + API_PROBE_LIMITED_PATH;
+      const reason = await checkApiRouting(base, API_PROBE_LIMITED_PATH);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${reason}`);
+        failures.push(`${apiUrl} — ${reason}`);
+        if (exemptProbeOk[base]) limiterSignature.push(base);
+      } else {
+        console.log(`[spa-live] PASS  ${apiUrl} (rate-limit middleware answers)`);
+      }
+    }
+
+    // D722 — the switch /login reads before it opens Google's window.
+    {
+      const apiUrl = base.replace(/\/$/, '') + GOOGLE_CONFIG_PATH;
+      const res = await checkGoogleConfig(base);
+      if (!res.ok) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${res.reason}`);
+        failures.push(`${apiUrl} — ${res.reason}`);
+      } else {
+        const mode = res.popup ? "Google's window" : res.configured ? 'redirect (window off)' : 'not configured';
+        console.log(`[spa-live] PASS  ${apiUrl} (Continue with Google: ${mode})`);
+      }
+    }
+
+    // D751 T9 — which catalogue OAuth connectors have no client. A WARN,
+    // not a failure, unless the block is malformed or strict mode is on.
+    {
+      const res = await checkConnectorReadiness(base);
+      if (!res.ok) {
+        console.error(`[spa-live] FAIL  ${res.url} — ${res.reason}`);
+        failures.push(`${res.url} — ${res.reason}`);
+      } else if (res.unset.length + res.unreadable.length === 0) {
+        console.log(`[spa-live] PASS  ${res.url} (every catalogue OAuth connector has a client)`);
+      }
+    }
+
+    // D754 — the WhatsApp webhook refuses an unsigned body. It fails only on
+    // an acceptance; reachability is the checks above.
+    {
+      const hook = await probeUnsignedWebhook(base, fetch, { timeoutMs: TIMEOUT_MS });
+      if (!hook.ok) {
+        console.error(`[spa-live] FAIL  ${hook.url} — ${hook.reason}`);
+        failures.push(`${hook.url} — ${hook.reason}`);
+      } else {
+        const what = { guarded: 'unsigned body refused', unconfigured: 'not configured yet, fails closed', other: `HTTP ${hook.status}, not an acceptance`, unreachable: 'not reached; the checks above cover reachability' }[hook.kind];
+        console.log(`[spa-live] PASS  ${hook.url} (WhatsApp webhook: ${what})`);
+      }
+    }
+
+    const routes = routesForHost(base);
+    const assetSink = new Set();
+    const entrySink = new Set(builds.current);
+    const assetChecks = new Map();
+    const entryChecks = new Map();
+    for (const route of routes) {
+      const url = base.replace(/\/$/, '') + route.path;
+      const reason = await checkRoute(base, route, assetSink, entrySink);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${url} — ${reason}`);
+        failures.push(`${url} — ${reason}`);
+        if (/security header/.test(reason)) securityHeadersFailed = true;
+      } else {
+        const kind = route.shell ? 'SPA shell + security headers' : '200 + HTML';
+        console.log(`[spa-live] PASS  ${url} (${kind})`);
+      }
+    }
+    // The shell HTML can look perfect while the hashed JS/CSS it points to
+    // 404s — the exact signature of the recurring blank page (an `index.html`
+    // and the `/assets/*` it references coming from two different builds; on
+    // 2026-08-31 that was Pages-served HTML against a different Worker asset
+    // build). Both hosts now come from one Worker deploy, so a mismatch here
+    // means the deploy itself is skewed. Verify every referenced asset
+    // actually resolves on this host.
+    for (const assetPath of assetSink) {
+      if (entrySink.has(assetPath)) continue; // entry bodies are checked below
+      const url = base.replace(/\/$/, '') + assetPath;
+      assetChecks.set(assetPath, checkAsset(base, assetPath));
+      const reason = await assetChecks.get(assetPath);
+      if (reason) {
+        console.error(`[spa-live] FAIL  ${url} — ${reason}`);
+        failures.push(`${url} — ${reason}`);
+      } else {
+        console.log(`[spa-live] PASS  ${url} (asset resolves)`);
+      }
+    }
+    if (entrySink.size === 0) failures.push(`${base} — no current lazy entry found`);
+    else {
+      const reason = await checkLazyBuild(base, 'current build', [...entrySink], assetChecks, entryChecks);
+      if (reason) failures.push(reason);
+    }
+    if (builds.previous.entries.length > 0) {
+      const reason = await checkLazyBuild(base, 'previous build', builds.previous.entries, assetChecks, entryChecks);
+      if (reason) failures.push(reason);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error(
+      `\n[spa-live] ✖ ${failures.length} live route check(s) failed after deploy:`,
+    );
+    for (const f of failures) console.error(`  - ${f}`);
+    if (apexApiRoutingFailed) {
+      console.error(
+        '\nAn `/api/*` probe returned HTML instead of a Worker JSON response, so\n' +
+          'the request never reached the Worker: the whole-host custom-domain\n' +
+          'binding for that host is missing or its DNS record has drifted. Both\n' +
+          '`axal.vc` and `app.axal.vc` are Workers Custom Domains of `studioos`\n' +
+          '(wrangler.toml [[routes]] and [[env.production.routes]], kept in\n' +
+          'lockstep). Fix: redeploy with `npm run deploy` (it passes\n' +
+          '`--env production` and re-binds both domains), then read the closing\n' +
+          '"Deployed studioos triggers" lines of the deploy output and the DNS\n' +
+          'record for the host in the Cloudflare dashboard. Never add a\n' +
+          'path-scoped `axal.vc/*` or `axal.vc/assets/*` route: it steals those\n' +
+          'URLs from the assets binding and breaks the SPA fallback (the\n' +
+          '2026-08-31 outage).',
+      );
+    }
+    if (limiterSignature.length > 0) {
+      console.error(
+        '\nTHE 2026-09-12 SIGNATURE: on ' + limiterSignature.join(', ') + ' the\n' +
+          'RATE-LIMIT-EXEMPT probe answered and the NON-EXEMPT one did not. The\n' +
+          'Worker is reachable and its routing is fine; what is failing is\n' +
+          '`rateLimitMiddleware` (cloudflare-worker/src/middleware/rateLimit.ts),\n' +
+          'which every `/api/*` request passes through except the six entries of\n' +
+          '`RATE_LIMIT_EXEMPT`. That is the shape of the sign-in outage: exempt\n' +
+          'paths kept answering while `/api/auth/magic/start` and\n' +
+          '`/api/auth/google/start` hung. Look at the `RATE_LIMITS` KV binding\n' +
+          'first — an unanswering namespace is what the middleware awaits — then\n' +
+          "at the deadline in `withDeadline` and the bucket's fail-open/\n" +
+          'fail-closed policy. Do NOT resolve this by adding a path to\n' +
+          '`RATE_LIMIT_EXEMPT`: D74 pins those two auth paths as deliberately not\n' +
+          'exempt, and exempting them is what hid the outage in the first place.',
+      );
+    }
+    if (securityHeadersFailed) {
+      console.error(
+        '\nA SPA shell response is missing a security header. Those routes are\n' +
+          "answered by the Worker's assets binding without the Hono app, so the\n" +
+          'headers come only from `docs/_headers` (built from\n' +
+          'frontend/public/_headers by `npm run build`). Check that the deployed\n' +
+          'build carried the file and that its rules still parse; if Workers\n' +
+          'static assets is not applying it to the SPA fallback, that is the\n' +
+          'documentation/architecture/UNRESOLVED_ITEMS.md U10 case — route the\n' +
+          'shell through the Worker rather than asserting the headers from a\n' +
+          'document.',
+      );
+    }
+    console.error(
+      '\nThe deployed site is serving blank/broken pages, a JSON 404, hashed\n' +
+        'assets that 404, or a shell without its security headers. On both hosts\n' +
+        'the Worker serves the HTML, /assets/* and /api/* from one build, so\n' +
+        'confirm the latest main commit\'s "Cloudflare Worker deploy" run finished\n' +
+        '(GitHub Actions) — nothing else ships a build to either host — and\n' +
+        're-run this check. (Set SKIP_LIVE_SMOKE=1 only if this host genuinely\n' +
+        'cannot reach production.)',
+    );
+    process.exit(1);
+  }
+
+  console.log(`\n[spa-live] ✓ All live route checks passed.`);
+}
+
+main().catch((err) => {
+  console.error('[spa-live] unexpected error:', err);
+  process.exit(1);
+});

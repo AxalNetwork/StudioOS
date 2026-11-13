@@ -1,0 +1,87 @@
+import { api, request } from '../api.js';
+
+// D1103 (#2983) — Data room part 2: the founder's own files, versions, a
+// grant's end date and folders, and the preview, on routes/data_room.ts at
+// /api/data-room. Today's room calls (`api.dataRoom`, the folder and file
+// writes, the grant writes) stay in api.js; these are the new ones.
+//   download(p, uid)              POST  /data-room/:p/files/:uid/download → { url, expires_at, name, version: null }
+//   versions(p, uid)              GET   /data-room/:p/files/:uid/versions → { file, current, versions: [{ version, content_type, size_bytes, uploaded_by_name, created_at }] }
+//   downloadVersion(p, uid, n)    POST  /data-room/:p/files/:uid/versions/:n/download → { url, expires_at, name, version }
+//   makeCurrent(p, uid, n)        POST  /data-room/:p/files/:uid/versions/:n/current → { ok, version }; 409 version_conflict
+//   updateGrant(p, uid, body)     PATCH /data-room/:p/grants/:uid { expires_at?: 'YYYY-MM-DD' | null, folders?: [folderUid] | null } → { ok }
+//   preview(p, grantUid)          GET   /data-room/:p/preview?grant= → { grant_uid, open, folders, files, withheld_behind_nda, hidden_from_grant }
+// `folders: null` opens every folder. Sharing, revoking, a grant change and a
+// gate are the owner's: a co-founder gets 403 { code: 'owner_only' }.
+//
+// D1104 (#2984) — Data room part 3: the access-request queue and the founder's NDA.
+//   requests(p)                   GET   /data-room/:p/requests → { requests: [{ uid, investor, source, round_call, message, state, created_at, decided_at, decided_by, decline_reason, nda, has_access }], open, can_answer }; 503 requests_unreadable
+//   acceptRequest(p, uid, body)   POST  /data-room/:p/requests/:uid/accept { expires_at?, folders? } → { ok, state }; 409 request_decided
+//   declineRequest(p, uid, reason) POST /data-room/:p/requests/:uid/decline { reason } → { ok, state }; 409 request_decided
+//   sendNda(p, grantUid)          POST  /data-room/:p/grants/:uid/nda → { status: 'envelope_issued', envelope_uuid, signing_url }; 409 nda_active | nda_pending; 404 for an admin (D1102), 403 founder_only
+// D1107 (#2987) — Data room part 6, Access and Share:
+//   shareCandidates(p)            GET   /data-room/:p/share-candidates → { candidates: [{ uid, name, firm, stage, email }] }; 403 owner_only
+//   share(p, body)                POST  /data-room/:p/grants { prospect, expires_at?, folders? } → { ok }; the address is read from this venture's prospect; 400 no_email, 404 another venture's
+//   The requests read also carries `diligence: [{ id, title, state, created_at, responded_at, reviewed_at, files: [{ uid, name }] }]`, or null with `diligence_unreadable`.
+// D1105 (#2985) — Data room part 4, the owner's and a co-founder's reads:
+//   activity(p, q)     GET /data-room/:p/activity?from&to&investor&action&page
+//                      → { period, previous_period, filters, daily: [{ day, opened, downloaded, blocked }],
+//                          totals, previous, investors: [{ grant_uid, name, email, last_at, opened, downloaded, blocked }],
+//                          log: { total, page, page_size, pages, rows: [{ at, action, investor, file }] } }
+//   activityCsv(p, q)  GET /data-room/:p/activity.csv?… (the same rows; 413 too_many_rows past 10,000)
+//   checklist(p)       GET /data-room/:p/checklist → { grants_in_force, totals, items: [{ key, area, label, state, reason, files }] }
+// A refusal (`blocked`) is never counted as an open. `investor` is a grant's uid.
+// #3938 part 2 (D1478 task 4) — search inside the room:
+//   search(p, q)        POST /data-room/:p/search { q } → { available, value: { hits: [{ file_uid, file_name, snippet, score }] } } | { available: false, reason }
+//   searchIndex(p)      POST /data-room/:p/search/index → { available, value: { indexed, no_text, failed, remaining } }
+//   sharedSearch(p, q)  POST /data-room/shared/:p/search { q } — an investor, over the files their listing shows
+// D1464 (#4021) — read with a reason, per open (D1102's routes):
+//   supportRead(p, reason)  POST /data-room/:p/support-read { reason } → the room read only (`mode: 'support'`);
+//                           an admin, 1–500 characters; 400 support_reason_required, 409 support_owner_unresolved, 503 support_read_unavailable
+//   supportReads(p, page)   GET  /data-room/:p/support-reads?page → { page, page_size, has_more, reads: [{ id, reader: { name, kind }, reason, created_at }] };
+//                           the owner and a co-founder; 503 support_history_unreadable
+// D4170 (#4170) — Eadwyn's proposals for the room (routes/data_room_proposals.ts), the member's own:
+//   proposals(p)              GET  /data-room/:p/proposals → { proposals: [{ uid, type: 'match'|'folder'|'gap', status, reason,
+//                                   file: { uid, name } | null, item: { key, label } | null, folder: { name } | null, would_satisfy, undoable }] }
+//   proposalsQuote(p)         POST /data-room/:p/proposals/quote → { quote: { hold_microusd, model, confirm_quote } }
+//   proposalsRun(p, confirm)  POST /data-room/:p/proposals/run { confirm_quote } → { proposals, cost }; 402 quote_required
+//   acceptProposal(p, uid)    POST /data-room/:p/proposals/:uid/accept → { proposal, change }; 409 not_open | proposal_stale | would_change_access
+//   dismissProposal(p, uid)   POST /data-room/:p/proposals/:uid/dismiss → { proposal }
+//   undoProposal(p, uid)      POST /data-room/:p/proposals/:uid/undo → { proposal, change }; 409 not_undoable | proposal_stale
+const seg = (v) => encodeURIComponent(String(v));
+const activityQuery = (q = {}) => {
+  const p = new URLSearchParams();
+  for (const k of ['from', 'to', 'investor', 'action', 'page']) if (q[k] != null && q[k] !== '') p.set(k, String(q[k]));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+};
+export const dataRoomApi = {
+  // D1602: owner opt-in; a typed document first returns 402 with its quote.
+  setDeckSource: (projectUid, fileUid, { enabled, confirm_quote } = {}) => request(`/data-room/${seg(projectUid)}/files/${seg(fileUid)}/deck-source`, { method: 'PUT', inlinePaywall: true, body: JSON.stringify({ enabled, ...(confirm_quote ? { confirm_quote } : {}) }) }),
+  download: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/download`, { method: 'POST' }),
+  versions: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions`),
+  downloadVersion: (projectUid, uid, n) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions/${seg(n)}/download`, { method: 'POST' }),
+  makeCurrent: (projectUid, uid, n) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions/${seg(n)}/current`, { method: 'POST' }),
+  updateGrant: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/grants/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  preview: (projectUid, grantUid) => request(`/data-room/${seg(projectUid)}/preview?grant=${seg(grantUid)}`),
+  requests: (projectUid) => request(`/data-room/${seg(projectUid)}/requests`),
+  acceptRequest: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/accept`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  declineRequest: (projectUid, uid, reason) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  shareCandidates: (projectUid) => request(`/data-room/${seg(projectUid)}/share-candidates`),
+  share: (projectUid, body) => request(`/data-room/${seg(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  sendNda: (projectUid, grantUid) => request(`/data-room/${seg(projectUid)}/grants/${seg(grantUid)}/nda`, { method: 'POST' }),
+  activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
+  activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),
+  checklist: (projectUid) => request(`/data-room/${seg(projectUid)}/checklist`),
+  proposals: (projectUid) => request(`/data-room/${seg(projectUid)}/proposals`),
+  proposalsQuote: (projectUid) => request(`/data-room/${seg(projectUid)}/proposals/quote`, { method: 'POST' }),
+  proposalsRun: (projectUid, confirm_quote) => request(`/data-room/${seg(projectUid)}/proposals/run`, { method: 'POST', inlinePaywall: true, body: JSON.stringify({ confirm_quote }) }),
+  acceptProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/accept`, { method: 'POST' }),
+  dismissProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/dismiss`, { method: 'POST' }),
+  undoProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/undo`, { method: 'POST' }),
+  // #3938 part 2: search inside the room, on its own index. `{ available: false, reason }` until the index is bound.
+  search: (projectUid, q) => request(`/data-room/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
+  searchIndex: (projectUid) => request(`/data-room/${seg(projectUid)}/search/index`, { method: 'POST' }),
+  sharedSearch: (projectUid, q) => request(`/data-room/shared/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
+  supportRead: (projectUid, reason) => request(`/data-room/${seg(projectUid)}/support-read`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  supportReads: (projectUid, page = 1) => request(`/data-room/${seg(projectUid)}/support-reads?page=${encodeURIComponent(String(page))}`),
+};

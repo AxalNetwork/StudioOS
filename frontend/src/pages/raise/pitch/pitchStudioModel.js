@@ -1,0 +1,443 @@
+/**
+ * D894 (#2434) — the Pitch deck studio's words and derivations, kept pure so
+ * the tests read them without a browser.
+ *
+ * WHAT IS READ, AND FROM WHERE. Every figure here comes from a read that is
+ * already on `main`:
+ *   - `GET /api/decks/by-project/:pid`  → the versions (no slides);
+ *   - `GET /api/decks/:id`              → the current version's slides (its cover);
+ *   - `GET /api/decks/:id/engagement`   → that version's views and NDA count;
+ *   - `GET /api/cycles/raise/modules/pitch-deck` → views per week, seconds per
+ *     slide and the investor links, for every version of the venture, a page of
+ *     links at a time.
+ * Nothing is a sample. A read that fails says so where its figure would be, and
+ * a value nobody recorded reads "Not recorded", never 0. A figure worked out
+ * from a list the Worker caps says so.
+ *
+ * The coverage meter on the current deck reads `GET /api/decks/sources`
+ * through `SourcesBoards.jsx` (D896, #2675); its words are `sourcesModel.js`.
+ *
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's checks,
+ * audience and round columns, the fast-path build, "New in your
+ * data", per-version seconds, present mode and the share dialog need stores the
+ * Worker does not have. Each is a slot task on #2434; this file grows the
+ * derivation when its read lands.
+ */
+
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole.js';
+import { NOT_RECORDED } from '../../../lib/absence.js';
+import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
+
+export const STUDIO_PATH = '/raise/pitch';
+export const EDIT_PATH = '/raise/pitch/edit';
+/**
+ * D898 group E (#2676): the retired template builder's address. It opens the
+ * studio with `?moved=pitch-builder`; its four actions are the studio's now.
+ */
+export const BUILDER_PATH = '/raise/pitch/builder';
+export const REVIEW_PATH = '/raise/pitch/review';
+export const NOTES_PATH = '/raise/pitch/notes';
+
+/** The old `?mode=workspace` address now redirects to the editor with this key. */
+export const MOVED_KEY = 'pitch-workspace';
+export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
+export const BUILDER_MOVED_KEY = 'pitch-builder';
+export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: drafting goes through the deck\'s Ask in the editor, Branding is under the editor\'s \u22ef \u203a Brand kit, and templates are in New deck.';
+/** Every moved notice the studio's pages draw, by its `?moved=` key. */
+export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: MOVED_NOTICE, [BUILDER_MOVED_KEY]: BUILDER_MOVED_NOTICE });
+
+// D4254 (#4254): the module is "Pitch". It prepares the deck and what to say, so
+// "Pitch deck" names only the deck itself.
+export const TITLE = 'Pitch';
+export const LINE = 'Your deck, what to say, and who has seen it, in one place.';
+// PD21: an admin reads the studio and leaves notes (D905).
+export const READ_ONLY = 'Read only. Notes are visible to the founder.';
+
+/**
+ * D4254 (#4254): the tile row. The Overview (`STUDIO_PATH`) is not a tile; it
+ * lights none. Share & analytics lives at /share (the old /analytics address was retired by D2319).
+ */
+export const DECKS_PATH = '/raise/pitch/decks';
+export const SCRIPT_PATH = '/raise/pitch/script';
+export const SHARE_PATH = '/raise/pitch/share';
+export const TABS = [
+  { id: 'decks', label: 'Decks', path: DECKS_PATH },
+  { id: 'script', label: 'Script & rehearsal', path: SCRIPT_PATH },
+  { id: 'review', label: 'Review', path: REVIEW_PATH },
+  { id: 'analytics', label: 'Share & analytics', path: SHARE_PATH },
+  { id: 'notes', label: 'Notes', path: NOTES_PATH },
+];
+
+export const EMPTY_DECK = 'No deck yet. Start from your records.';
+export const NO_VIEWS = 'No one has opened a link yet.';
+export const NO_VENTURE = 'No venture to build a deck for yet.';
+export { NOT_RECORDED, ENGAGEMENT_VIEW_ROWS };
+
+/** The query every studio address carries: the venture, and nothing else. */
+export const ventureQuery = (projectId) => (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '');
+
+/** Where the old `/raise/pitch?mode=workspace` sends you: the editor, query and hash kept. */
+export function movedTarget(search = '', hash = '') {
+  const next = new URLSearchParams(search);
+  next.delete('mode');
+  next.set('moved', MOVED_KEY);
+  return { pathname: EDIT_PATH, search: `?${next.toString()}`, hash };
+}
+
+/** Where the retired `/raise/pitch/builder` sends you: the studio, query and hash kept. */
+export function builderTarget(search = '', hash = '') {
+  const next = new URLSearchParams(search);
+  next.set('moved', BUILDER_MOVED_KEY);
+  return { pathname: STUDIO_PATH, search: `?${next.toString()}`, hash };
+}
+
+/**
+ * Ordinary admins read (PD21). The verified HQ Super Admin can use the builder;
+ * shell preview never grants this permission. The Worker verifies elevation again.
+ */
+export const isReadOnly = (user) => String(user?.role || '').toLowerCase() === 'admin'
+  && (!isSuperAdminUser(user) || Boolean(branchOfUser(user)));
+
+export const asList = (value, ...keys) => {
+  if (Array.isArray(value)) return value;
+  for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
+  return [];
+};
+
+export const currentVersion = (versions) => versions.find((v) => v.is_current || v.current) || versions[0] || null;
+
+const parse = (value) => {
+  if (!value) return null;
+  // D1 stores "YYYY-MM-DD HH:MM:SS" in UTC.
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(value)) ? `${String(value).replace(' ', 'T')}Z` : String(value);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+export function dayLabel(value) {
+  const d = parse(value);
+  return d ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d) : 'Date not recorded';
+}
+
+/** Seconds as m:ss, the canvas's time format. A missing value is not 0:00. */
+export function mmss(seconds) {
+  const s = Number(seconds);
+  if (seconds == null || !Number.isFinite(s) || s < 0) return null;
+  const whole = Math.round(s);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+export const versionLabel = (v) => (v?.version == null ? 'Version not recorded' : `v${v.version}`);
+
+/** Who a version is written for (PD3), as the Worker stores it (D898, migration 539). */
+export const AUDIENCE_LABELS = {
+  angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
+  strategic: 'Strategic', grant: 'Grant', other: 'Other',
+};
+
+/**
+ * The versions table, newest first, as the canvas sorts it by default. A
+ * version saved before D898 has no audience or round: "Not recorded".
+ */
+export function versionRows(versions, { sort = 'newest', audience = 'all' } = {}) {
+  const dir = sort === 'oldest' ? -1 : 1;
+  return [...versions]
+    .filter((v) => audience === 'all' || (audience === 'none' ? !AUDIENCE_LABELS[v.audience] : v.audience === audience))
+    .sort((a, b) => dir * (Number(b.version ?? -1) - Number(a.version ?? -1)))
+    .map((v) => ({
+      id: v.id,
+      label: versionLabel(v),
+      title: String(v.title || '').trim() || 'Untitled deck',
+      audience: AUDIENCE_LABELS[v.audience] || NOT_RECORDED,
+      round: String(v.round?.name || '').trim() || NOT_RECORDED,
+      by: String(v.by?.name || '').trim() || NOT_RECORDED,
+      saved: dayLabel(v.created_at),
+      current: Boolean(v.is_current || v.current),
+      // D1112: links ever made for this version; null when the count could not be read.
+      links: Number.isInteger(v.shared_links) ? String(v.shared_links) : SHARED_LINKS_UNREAD,
+    }));
+}
+
+/** D1112 (#2992): PD2's Sort control, the canvas's default first. */
+export const VERSION_SORTS = [{ id: 'newest', t: 'Newest' }, { id: 'oldest', t: 'Oldest' }];
+export const SHARED_LINKS_UNREAD = 'Not read';
+
+/**
+ * PD2's Audience filter: All, then each audience a version is written for,
+ * in the canvas's order, and "Not recorded" when a version predates D898.
+ */
+export function audienceOptions(versions) {
+  const have = new Set((versions || []).map((v) => (AUDIENCE_LABELS[v?.audience] ? v.audience : 'none')));
+  return [
+    { id: 'all', t: 'All' },
+    ...Object.keys(AUDIENCE_LABELS).filter((k) => have.has(k)).map((k) => ({ id: k, t: AUDIENCE_LABELS[k] })),
+    ...(have.has('none') ? [{ id: 'none', t: NOT_RECORDED }] : []),
+  ];
+}
+
+/**
+ * PD2's "New in your data since vN", from D896's refresh read of that
+ * version: one row per figure whose store has moved past the value the
+ * version holds (stale) or no longer holds one (gone), each once. A figure
+ * that could not be read for this reader is not "new", and is counted apart.
+ */
+export function newInData(refresh) {
+  const rows = Array.isArray(refresh?.rows) ? refresh.rows : [];
+  const seen = new Set();
+  const items = [];
+  let unknown = 0;
+  for (const r of rows) {
+    if (r?.state === 'unknown') { unknown += 1; continue; }
+    if ((r?.state !== 'stale' && r?.state !== 'gone') || seen.has(r.source_key)) continue;
+    seen.add(r.source_key);
+    const label = String(r.current?.label || r.source_key || '').trim() || 'A figure';
+    const module = String(r.current?.module || '').trim();
+    items.push({
+      key: r.source_key,
+      t: r.state === 'gone' ? `${label} is no longer recorded` : `${label} changed${module ? ` · ${module}` : ''}`,
+      v: r.state === 'gone' ? (r.bound?.as_of ? `was ${dayLabel(r.bound.as_of)}` : NOT_RECORDED) : dayLabel(r.current?.as_of),
+      gone: r.state === 'gone',
+    });
+  }
+  return { checked: Number(refresh?.checked) || rows.length, items, unknown };
+}
+
+export const NOTHING_NEW = (label) => `Nothing in your data has changed since ${label}.`;
+export const NOTHING_BOUND = 'This version holds no figure read from your records, so there is nothing to compare.';
+export const NEW_DATA_FAILED = 'What changed in your data could not be read. That is not the same as nothing.';
+export const REFRESH_THE_DECK = 'Refresh the deck ›';
+
+/**
+ * The cover of a deck: its first slide's title and subtitle fields (the
+ * template's headline and tagline), else the deck's own title. The slide's own
+ * `title` is its section name ("Title", or "Problem" on a generated deck) and
+ * its `subtitle` the venture's name, so the section name comes last and the
+ * venture's name, already the cover's eyebrow, never.
+ */
+// The Worker fills a field nobody wrote with a dash (`autofill.ts` PLACEHOLDER).
+const written = (v) => { const t = String(v ?? '').trim(); return t === '—' ? '' : t; };
+
+export function coverOf(deck) {
+  const slides = Array.isArray(deck?.slides) ? deck.slides : [];
+  const first = slides[0] || {};
+  const field = (key) => (Array.isArray(first.fields) ? first.fields.find((f) => f?.key === key || f?.kind === key) : null);
+  const headline = written(field('title')?.value) || written(deck?.title) || written(first.title);
+  const sub = written(field('subtitle')?.value);
+  return { headline: headline || 'Untitled deck', sub, slides: slides.length || null };
+}
+
+const seriesOf = (card, kind) => (Array.isArray(card?.series) ? card.series.find((s) => s?.kind === kind) : null);
+
+/**
+ * Views per week, oldest first, from the module card (eight weeks, every
+ * version). `null` when the card holds no series: no deck, no views, or a read
+ * that failed — the card's own state says which. Eight zeros is a real count:
+ * the venture has views, none of them in the last eight weeks.
+ */
+export function weeklyViews(card) {
+  const bars = seriesOf(card, 'vbars');
+  if (!bars || !Array.isArray(bars.values)) return null;
+  const values = bars.values.map((n) => Number(n) || 0);
+  return { values, total: values.reduce((a, b) => a + b, 0), weeks: values.length };
+}
+
+/**
+ * What the module card says about the views, for both tabs. `failed`: the read
+ * or the card could not be read. `unopened`: the Worker's own empty card, no
+ * view ever, the one case that says "No one has opened a link yet.". `no-deck`:
+ * the Worker's other empty card. `ok`: views exist, perhaps none lately.
+ */
+export function viewsState(card, readStatus) {
+  if (readStatus === 'error' || !card || card.state === 'unreadable') return 'failed';
+  if (noViewsYet(card)) return 'unopened';
+  if (card.state === 'empty') return 'no-deck';
+  return weeklyViews(card) ? 'ok' : 'failed';
+}
+
+/** Seconds per slide, every version together, as the module card counts them. */
+export function slideSeconds(card) {
+  const bar = seriesOf(card, 'hbar');
+  if (!bar || !Array.isArray(bar.items)) return [];
+  return bar.items
+    .map((item) => {
+      const index = Number(/(\d+)/.exec(String(item.label || ''))?.[1]);
+      return { index: Number.isFinite(index) ? index : null, label: String(item.label || ''), seconds: Number(item.value) || 0 };
+    })
+    .filter((r) => r.index != null);
+}
+
+/** The slide read longest, and the one read fastest, for the chart's caption. */
+export function slideExtremes(rows) {
+  if (!rows.length) return null;
+  const sorted = [...rows].sort((a, b) => b.seconds - a.seconds || a.index - b.index);
+  return { longest: sorted[0], fastest: sorted[sorted.length - 1] };
+}
+
+export function slideCaption(rows) {
+  const ex = slideExtremes(rows);
+  if (!ex) return null;
+  if (ex.longest.index === ex.fastest.index) return `Viewers spend longest on slide ${ex.longest.index}.`;
+  return `Viewers spend longest on slide ${ex.longest.index}; slide ${ex.fastest.index} is read fastest.`;
+}
+
+const median = (values) => {
+  if (!values.length) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+/**
+ * One version's readers, from its engagement read. A viewer is one browser
+ * (`ip_hash` with `ua_fingerprint`); a view with neither counts alone.
+ *
+ * The Worker sends at most ENGAGEMENT_VIEW_ROWS views, newest first, and counts
+ * `total_views` from that list, so at the cap `capped` is true: the views are
+ * "at least", and the viewers and the median cover the latest views only. The
+ * NDA count is not capped, and it counts signatures, not browsers: it is never
+ * divided by `viewers`.
+ */
+export function readerStats(engagement) {
+  if (!engagement || typeof engagement !== 'object') return null;
+  const views = asList(engagement, 'views');
+  const viewers = new Set(views.map((v) => (v.ip_hash || v.ua_fingerprint ? `${v.ip_hash || ''}|${v.ua_fingerprint || ''}` : `view:${v.id}`)));
+  const seconds = views.map((v) => Number(v.read_seconds)).filter((n) => Number.isFinite(n) && n > 0);
+  const nda = engagement.conversions?.nda_signed;
+  return {
+    views: Number.isFinite(Number(engagement.total_views)) ? Number(engagement.total_views) : views.length,
+    viewers: viewers.size,
+    medianSeconds: median(seconds),
+    ndaSigned: Number.isFinite(Number(nda)) ? Number(nda) : null,
+    capped: views.length >= ENGAGEMENT_VIEW_ROWS,
+  };
+}
+
+/**
+ * The funnel, over one denominator from the same engagement read: the version's
+ * views. Each row is a count, and its bar that count's share of the views,
+ * never past the end of its track.
+ */
+export function funnelRows(stats) {
+  const of = stats?.views ?? null;
+  const share = (n) => (n == null || !of ? 0 : Math.min(100, Math.round((n / of) * 100)));
+  return [
+    { label: 'Opened', n: of, width: share(of) },
+    { label: 'Accepted the NDA', n: stats?.ndaSigned ?? null, width: share(stats?.ndaSigned ?? null) },
+  ];
+}
+
+/**
+ * The investor links, as the module's records give them, with what the
+ * engagement read adds.
+ *
+ * A link is live only when it has not expired, been withdrawn or been used up.
+ * The records say all three for every version's links (D1111: the expiry
+ * cell reads "Used up" by the engagement read's own rule, D895), so a link the
+ * records call live is live. The engagement read can only be fresher: a
+ * current-version link it calls `exhausted` reads Used up too. Withdrawing a
+ * used-up link marks it Revoked.
+ *
+ * Time on deck comes as the seconds the viewer reported (D1111), drawn m:ss;
+ * none reported is null, "Not recorded", never 0:00.
+ */
+export function linkRows(records, engagement = null) {
+  const shares = new Map(asList(engagement, 'shares').map((s) => [String(s.id), s]));
+  return asList(records, 'rows').map((row) => {
+    const c = row.cells || {};
+    const exp = c.expires && typeof c.expires === 'object' ? c.expires : { text: String(c.expires ?? ''), tone: '' };
+    const views = Number.isFinite(Number(c.views)) ? Number(c.views) : null;
+    const share = shares.get(String(row.id));
+    const usedUp = exp.tone === 'ok' && Boolean(share?.exhausted);
+    return {
+      id: row.id,
+      investor: String(c.link || '').trim() || 'Investor not recorded',
+      expires: usedUp ? 'Used up' : exp.text || NOT_RECORDED,
+      live: exp.tone === 'ok' && !usedUp,
+      views,
+      time: c.time && typeof c.time === 'object' && Number(c.time.seconds) > 0 ? mmss(c.time.seconds) : null,
+      mostRead: c.most_read == null ? null : String(c.most_read),
+    };
+  });
+}
+
+/**
+ * Where this page of links sits in the read's own total, for the pager; null
+ * when the read gave no total (the records could not be read).
+ */
+export function linkPage(records) {
+  if (records?.total == null || records?.page_size == null) return null;
+  const total = Number(records.total);
+  const size = Number(records.page_size);
+  if (!Number.isInteger(total) || !Number.isInteger(size) || size < 1) return null;
+  const page = Math.max(1, Number(records.page) || 1);
+  const shown = asList(records, 'rows').length;
+  const from = shown ? (page - 1) * size + 1 : 0;
+  return { page, pages: Math.max(1, Math.ceil(total / size)), total, from, to: shown ? from + shown - 1 : 0 };
+}
+
+/**
+ * The module's own "New link" address, when it offers one. #4853: it is the Studio's Share tab
+ * (`/raise/pitch/share?project_id=`); the module cycle's old Add form address is still read, so an
+ * older read keeps its link, and lands on the same tab through its redirect.
+ */
+export const newLinkHref = (records) => (records?.add?.href && /^\/raise\/(pitch\/share|pitch-deck\/new)(\?|$)/.test(records.add.href) ? records.add.href : null);
+
+/** Whether the module says nobody has opened a link yet (an empty card with a deck). */
+export const noViewsYet = (card) => card?.state === 'empty' && /No one has opened/i.test(String(card?.reason || ''));
+
+// ---------------------------------------------------------------------------
+// D905 (#2684) — notes (PD21) and the studio's boundary (PD22)
+// ---------------------------------------------------------------------------
+
+/** The Worker's limit on one note (`routes/deck_notes.ts` NOTE_MAX). */
+export const NOTE_MAX = 2000;
+export const NOTES_EYEBROW = 'Notes · visible to the founder';
+export const NOTES_EMPTY = 'No notes yet.';
+export const NOTE_PLACEHOLDER_ADMIN = 'Write a note for the founder…';
+export const NOTE_PLACEHOLDER_FOUNDER = 'Answer your admins…';
+
+const KIND_LABEL = { admin: 'Admin', super_admin: 'Axal VC HQ', founder: 'founder' };
+
+/** A card pill's words: "Card 8", or the whole deck. */
+export const cardLabel = (index) => (Number.isInteger(index) && index >= 0 ? `Card ${index + 1}` : 'Whole deck');
+
+/**
+ * The thread, oldest first, as the Notes tab draws it. A name nobody recorded
+ * reads "Not recorded"; the kind is what the author was when they wrote it.
+ */
+export function noteRows(notes) {
+  return asList(notes, 'notes').map((n) => {
+    const name = String(n?.author?.name || '').trim() || NOT_RECORDED;
+    return {
+      id: n.id,
+      who: `${name} · ${KIND_LABEL[n?.author?.kind] || NOT_RECORDED}`,
+      when: dayLabel(n.created_at),
+      text: String(n.body || ''),
+      card: cardLabel(n.card_index),
+      version: Number.isInteger(n.deck_version) ? `v${n.deck_version}` : NOT_RECORDED,
+    };
+  });
+}
+
+/** What posting does, in the confirm dialog's words. */
+export function postNoteSentence(viewer, cardIndex) {
+  const where = cardLabel(cardIndex) === 'Whole deck' ? 'the whole deck' : cardLabel(cardIndex).toLowerCase();
+  return viewer === 'founder'
+    ? `Your answer is added to the thread on ${where}. Your admins and your cofounders read it.`
+    : `Your note is added to the thread on ${where}. The founder reads it in the studio. Investors never see it, and it is in no export or share.`;
+}
+
+/**
+ * PD22: the roles the studio is not for. An Advisor, an Operating Partner and
+ * an Explorer see a boundary inside their own shell, never a bounce; a member
+ * of an active Spin-Out Lab cohort uses the studio as a founder does.
+ */
+export const BOUNDARY_ROLES = ['advisor', 'partner', 'exploring'];
+export const BOUNDARY_TITLE = 'Pitch is for the venture\u2019s founders.';
+export function boundaryFor(role, labActive = false) {
+  if (labActive || !BOUNDARY_ROLES.includes(String(role || ''))) return null;
+  return role === 'advisor'
+    ? { title: BOUNDARY_TITLE, line: 'Ask them to share a link. A shared deck opens in the viewer, with the NDA if they ask for one.' }
+    : { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' };
+}
+

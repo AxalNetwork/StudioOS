@@ -1,0 +1,30 @@
+#50 - Event host management UI
+What & Why
+Build the host/attendee UI over routes/events.ts from E1, per design/EVENT_SYSTEM.md §10. Lets founders create events, manage rosters, invite people, and check attendees in by QR.
+Done looks like
+* /my/events → MyEventsPage: hosting + attending tabs; tickets show a QR.
+* /events/new and /events/:id/edit → EventEditorPage: title, type, schedule + tz, location_kind, cover, capacity, waitlist, approval_required, visibility, and an audience-rules builder (toggle "free seats for official partners" / "for invested LPs"). "Submit for review" appears when visibility=public.
+* /events/:id/manage → EventManagePage: roster (approve/decline/waitlist/promote), send invites (InvitePeopleModal: pick from network/connections OR paste emails + personal message; show comp badges), and a QR check-in scanner (device camera → /:id/checkin/:code).
+* Lazy routes in App.jsx, an "Events" entry in sidebarConfig.js. Reuses qrcode, useToast, useEscapeClose, PageExplainer. All new components carry dark: variants.
+* A founder can create a private demo day, invite 3 people from their network + 1 email, approve a registrant, and check someone in by QR. npm run test:drift + cd cloudflare-worker && npx tsc --noEmitgreen. Both changelogs updated.
+Out of scope
+* Public calendar/RSVP + apex routing (E3).
+* Admin moderation/analytics/reminders/tickets (E4).
+* New backend routes — consume E1's events api.js namespace only.
+Steps
+1. My Events — build MyEventsPage with hosting/attending tabs and QR tickets.
+2. Event editor — build EventEditorPage (create/edit) incl. the audience-rules builder and "Submit for review" for public visibility.
+3. Manage + invites + check-in — build EventManagePage with roster actions, the InvitePeopleModal (network/connections or emails + comp badges), and the QR check-in scanner.
+4. Routing + nav + green gates — lazy routes in App.jsx, sidebarConfig.js "Events" entry, dark: variants; run drift + tsc; update both changelogs.
+Relevant files
+* frontend/src/App.jsx
+* frontend/src/sidebarConfig.js
+* frontend/src/lib/api.js
+* frontend/src/components/useToast.js
+* frontend/src/components/useEscapeClose.js
+* frontend/src/components/PageExplainer.jsx
+* scripts/check-dark-mode.mjs
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+#49 - Event engine backend (worker)

@@ -1,0 +1,149 @@
+{
+  "$id": "deckFigures",
+  "title": "GET /api/decks/:id/figures (D1523, #3775)",
+  "description": "The reply the deck v2 adapter's `figures` method passes through: every figure on the version and where it comes from (`services/decks/figures.ts`), and the counts Check claims shows. A missing figure is not_recorded, never 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deck_id",
+    "figures",
+    "counts"
+  ],
+  "properties": {
+    "deck_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "figures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/figure"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "linked",
+        "stated",
+        "uncited",
+        "not_recorded"
+      ],
+      "properties": {
+        "linked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uncited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_recorded": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "figure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "card",
+        "block_id",
+        "kind",
+        "label",
+        "at",
+        "state",
+        "value",
+        "source"
+      ],
+      "properties": {
+        "card": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "block_id": {
+          "description": "a string, or null"
+        },
+        "kind": {
+          "enum": [
+            "metric",
+            "chart",
+            "table",
+            "text",
+            "field"
+          ]
+        },
+        "label": {
+          "description": "a string, or null"
+        },
+        "at": {
+          "description": "a string, or null"
+        },
+        "state": {
+          "enum": [
+            "linked",
+            "stated",
+            "uncited",
+            "not_recorded"
+          ]
+        },
+        "value": {
+          "description": "a string, or null"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "figures": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "source": {
+      "additionalProperties": false,
+      "required": [
+        "source_key",
+        "label",
+        "module",
+        "href",
+        "record_ref",
+        "as_of",
+        "grade"
+      ],
+      "properties": {
+        "source_key": {
+          "type": "string"
+        },
+        "label": {
+          "description": "a string, or null"
+        },
+        "module": {
+          "description": "a string, or null"
+        },
+        "href": {
+          "description": "a string, or null"
+        },
+        "record_ref": {
+          "description": "a string, or null"
+        },
+        "as_of": {
+          "description": "a string, or null"
+        },
+        "grade": {
+          "description": "a string, or null"
+        }
+      },
+      "description": "null for a figure no record backs; otherwise the slot, the record, as of and grade. No type is named so null passes; an object must hold every key."
+    }
+  }
+}

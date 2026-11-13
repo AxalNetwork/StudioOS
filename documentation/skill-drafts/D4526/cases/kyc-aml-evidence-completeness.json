@@ -1,0 +1,48 @@
+{
+  "skill": "kyc-aml-evidence-completeness",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "case": "KYC-7",
+        "checklist": [
+          "Entity register",
+          "Beneficial ownership declaration"
+        ],
+        "documents": [
+          {
+            "type": "Entity register",
+            "status": "present"
+          }
+        ],
+        "reviewer": null
+      },
+      "compliance.calendar": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "KYC-7",
+      "Beneficial ownership declaration",
+      "missing"
+    ],
+    "must_say_not_recorded": [
+      "reviewer"
+    ],
+    "must_not_include": [
+      "AML cleared"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why reviewer is missing rather than inventing it.",
+    "Do not assert: AML cleared.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "KYC-7; Beneficial ownership declaration; missing. reviewer: Not recorded. Human review required."
+}

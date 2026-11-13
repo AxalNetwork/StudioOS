@@ -1,0 +1,901 @@
+/**
+ * Task #3 — Due Diligence engine.
+ *
+ * Owns:
+ *   - Section catalog + per-subject-type weights (composite scoring).
+ *   - External-data connectors (only live implementations with their flag
+ *     and credentials can emit evidence; unavailable connectors are disabled).
+ *   - LLM-style finding extractor (regex + heuristic; the real LLM call
+ *     is gated behind OPENAI_API_KEY and is a TODO with a deterministic
+ *     fallback so the route always returns *something* useful).
+ *   - Risk score + band computation.
+ *   - PDF report rendering (Cloudflare Browser Rendering binding when
+ *     present, else a self-contained styled HTML fallback — same pattern
+ *     as `analyticsReports.ts`).
+ *
+ * PII columns are read/written via `columnCipher.ts` (AES-GCM v1, AAD
+ * scoped per-row) — never plaintext to the database.
+ */
+import type { Env } from '../types';
+import { encryptColumn, decryptColumn } from './columnCipher';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+
+// ---------- Section catalog ----------
+
+export interface SectionDef {
+  key: string;
+  title: string;
+  weight: number;
+  applies_to: ReadonlyArray<DDSubjectType>;
+}
+
+export type DDSubjectType = 'project' | 'founder' | 'advisor' | 'investor' | 'partner';
+
+// Weights tuned so the heaviest sections (legal, financial, founder
+// integrity) dominate the composite. Sum doesn't have to equal 1 — the
+// scorer normalises by the sum of applicable weights.
+export const SECTION_CATALOG: ReadonlyArray<SectionDef> = [
+  { key: 'corporate_legal',  title: 'Corporate & Legal Structure',     weight: 1.5, applies_to: ['project','founder','partner'] },
+  { key: 'financial_health', title: 'Financial Health & Runway',       weight: 1.5, applies_to: ['project','founder','investor'] },
+  { key: 'founder_integrity',title: 'Founder Background & Integrity',  weight: 1.5, applies_to: ['founder','advisor','investor'] },
+  { key: 'product_tech',     title: 'Product & Technology Risk',       weight: 1.0, applies_to: ['project'] },
+  { key: 'market_traction',  title: 'Market & Traction',               weight: 1.0, applies_to: ['project','founder'] },
+  { key: 'market_position',  title: 'Market Position & Competitors',   weight: 1.0, applies_to: ['project','founder'] },
+  { key: 'compliance_aml',   title: 'Compliance / AML / Sanctions',    weight: 1.5, applies_to: ['project','founder','advisor','investor','partner'] },
+  { key: 'reputation_press', title: 'Reputation & Press Signals',      weight: 0.75,applies_to: ['project','founder','advisor','investor','partner'] },
+  { key: 'cyber_posture',    title: 'Cyber & Data Posture',            weight: 1.0, applies_to: ['project','partner'] },
+  // Task #8 (X-1) — Partner-specific KYB / KYC / Accreditation. KYB is
+  // ALWAYS seeded by activatePartnerDealOnSignature; KYC + Accreditation
+  // are seeded with verdict='n_a' for non-capital partner deals so
+  // reviewers don't have to clear them.
+  { key: 'kyb_entity',       title: 'KYB — Entity Verification',       weight: 1.5, applies_to: ['partner'] },
+  { key: 'kyc_individual',   title: 'KYC — Individual Verification',   weight: 1.5, applies_to: ['partner'] },
+  { key: 'accreditation',    title: 'Accredited / Qualified Status',   weight: 1.0, applies_to: ['partner'] },
+];
+
+export function sectionsFor(subjectType: DDSubjectType): SectionDef[] {
+  return SECTION_CATALOG.filter(s => s.applies_to.includes(subjectType));
+}
+
+// ---------- Checklist catalog (build queue #128) ----------
+//
+// A per-case working checklist seeded at case-open time, scoped to the
+// case's sections and the chosen template depth. Depth is CUMULATIVE:
+// 'standard' includes every 'lite' item, 'deep' includes everything —
+// so a deeper template never loses the cheaper checks.
+//
+// Item keys are namespaced `<section_key>.<slug>` and unique across the
+// catalog (dd_checklist_items has UNIQUE(case_id, item_key); the test
+// in test/dd_checklists_requests.test.ts pins uniqueness + referential
+// integrity against SECTION_CATALOG).
+
+export type ChecklistDepth = 'lite' | 'standard' | 'deep';
+
+export const DEPTH_RANK: Record<ChecklistDepth, number> = { lite: 0, standard: 1, deep: 2 };
+
+export interface ChecklistItemDef {
+  key: string;          // '<section_key>.<slug>'
+  section_key: string;  // must exist in SECTION_CATALOG
+  title: string;
+  depth: ChecklistDepth; // tier that introduces the item
+}
+
+const item = (section_key: string, slug: string, depth: ChecklistDepth, title: string): ChecklistItemDef =>
+  ({ key: `${section_key}.${slug}`, section_key, title, depth });
+
+export const CHECKLIST_CATALOG: ReadonlyArray<ChecklistItemDef> = [
+  // corporate_legal
+  item('corporate_legal', 'formation_good_standing', 'lite',     'Certificate of formation + good standing verified'),
+  item('corporate_legal', 'cap_table_current',       'lite',     'Cap table current and reconciled to signed instruments'),
+  item('corporate_legal', 'ip_assignment',           'standard', 'IP assignments executed by all founders and contractors'),
+  item('corporate_legal', 'material_contracts',      'standard', 'Material contracts reviewed (customers, vendors, leases)'),
+  item('corporate_legal', 'litigation_check',        'standard', 'No pending or threatened litigation, disputes, or liens'),
+  item('corporate_legal', 'equity_grants_83b',       'deep',     'Equity grants papered; 83(b) elections on file'),
+  item('corporate_legal', 'charter_bylaws_consents', 'deep',     'Charter, bylaws, and board/member consents complete'),
+  item('corporate_legal', 'prior_financings',        'deep',     'Prior financing docs (SAFEs/notes) reviewed for conversion terms'),
+  item('corporate_legal', 'related_party',           'deep',     'Related-party transactions disclosed and papered'),
+  // financial_health
+  item('financial_health', 'bank_runway',            'lite',     'Bank balance + monthly burn confirmed; runway computed'),
+  item('financial_health', 'financials_provided',    'lite',     'P&L and balance sheet provided for trailing 12 months'),
+  item('financial_health', 'revenue_recognition',    'standard', 'Revenue recognition policy sane; deferred revenue identified'),
+  item('financial_health', 'liabilities_debt',       'standard', 'Debt, convertibles, and contingent liabilities scheduled'),
+  item('financial_health', 'budget_model',           'standard', 'Operating budget/model reviewed against actuals'),
+  item('financial_health', 'qoe_lite',               'deep',     'Quality-of-earnings pass on top customers and one-offs'),
+  item('financial_health', 'tax_filings',            'deep',     'Tax filings current (income, payroll, sales/VAT)'),
+  item('financial_health', 'payables_receivables',   'deep',     'AP/AR aging reviewed; concentration and disputes noted'),
+  item('financial_health', 'audit_or_review',        'deep',     'Audited/reviewed statements or bank-data verification'),
+  // founder_integrity
+  item('founder_integrity', 'identity_verified',     'lite',     'Government ID verified for each key person'),
+  item('founder_integrity', 'background_claims',     'lite',     'Bio claims (degrees, roles, exits) spot-verified'),
+  item('founder_integrity', 'references',            'standard', 'Off-list references completed (2+ per founder)'),
+  item('founder_integrity', 'litigation_bankruptcy', 'standard', 'Personal litigation/bankruptcy/judgment search clean'),
+  item('founder_integrity', 'prior_ventures',        'standard', 'Prior ventures and cap-table conduct reviewed'),
+  item('founder_integrity', 'criminal_check',        'deep',     'Criminal-record check completed where lawful'),
+  item('founder_integrity', 'media_deep',            'deep',     'Deep adverse-media and social screen'),
+  item('founder_integrity', 'conflicts',             'deep',     'Conflicts of interest and outside commitments disclosed'),
+  item('founder_integrity', 'credential_docs',       'deep',     'Primary documents for credentials collected'),
+  // product_tech
+  item('product_tech', 'demo_live',                  'lite',     'Working product demoed against claimed functionality'),
+  item('product_tech', 'stack_overview',             'lite',     'Architecture/stack overview and hosting map obtained'),
+  item('product_tech', 'code_ownership',             'standard', 'Code ownership clean (no unlicensed or agency-owned core)'),
+  item('product_tech', 'oss_licenses',               'standard', 'OSS license scan — no copyleft contamination in core'),
+  item('product_tech', 'security_basics',            'standard', 'Security basics: access control, backups, secrets handling'),
+  item('product_tech', 'code_review',                'deep',     'Independent code review / architecture session'),
+  item('product_tech', 'scalability',                'deep',     'Scalability + infrastructure cost curve assessed'),
+  item('product_tech', 'data_model',                 'deep',     'Data model + migration risk reviewed'),
+  item('product_tech', 'key_person_risk',            'deep',     'Bus-factor / key-engineer dependency assessed'),
+  // market_traction
+  item('market_traction', 'metrics_verified',        'lite',     'Core traction metrics verified from source systems'),
+  item('market_traction', 'customer_list',           'lite',     'Customer/user list with cohorts provided'),
+  item('market_traction', 'retention_cohorts',       'standard', 'Retention cohorts reviewed (logo + revenue)'),
+  item('market_traction', 'pipeline_quality',        'standard', 'Sales pipeline quality + conversion rates sanity-checked'),
+  item('market_traction', 'reference_calls',         'standard', 'Customer reference calls completed (3+)'),
+  item('market_traction', 'unit_economics',          'deep',     'Unit economics (CAC/LTV/payback) rebuilt from raw data'),
+  item('market_traction', 'churn_drivers',           'deep',     'Churn drivers analyzed; concentration risk quantified'),
+  item('market_traction', 'growth_accounting',       'deep',     'Growth accounting (new/expansion/contraction/churn) rebuilt'),
+  item('market_traction', 'contract_terms',          'deep',     'Top-10 customer contract terms reviewed'),
+  // market_position
+  item('market_position', 'competitor_map',          'lite',     'Competitor map + differentiation reviewed'),
+  item('market_position', 'tam_sanity',              'lite',     'TAM/SAM sizing sanity-checked bottom-up'),
+  item('market_position', 'moat_assessment',         'standard', 'Moat assessment: switching costs, network effects, IP'),
+  item('market_position', 'pricing_power',           'standard', 'Pricing power vs alternatives evidenced'),
+  item('market_position', 'gtm_channels',            'standard', 'Go-to-market channel economics reviewed'),
+  item('market_position', 'expert_calls',            'deep',     'Industry expert calls completed (2+)'),
+  item('market_position', 'regulatory_dependency',   'deep',     'Regulatory / platform-dependency risks mapped'),
+  item('market_position', 'win_loss',                'deep',     'Win/loss analysis against named competitors'),
+  item('market_position', 'category_timing',         'deep',     'Category timing thesis stress-tested'),
+  // compliance_aml
+  item('compliance_aml', 'sanctions_screen',         'lite',     'OFAC/EU/UK sanctions screen clean (entity + key persons)'),
+  item('compliance_aml', 'jurisdiction_check',       'lite',     'Operating jurisdictions carry no embargo/high-risk flags'),
+  item('compliance_aml', 'pep_screen',               'standard', 'PEP screen on beneficial owners'),
+  item('compliance_aml', 'source_of_funds',          'standard', 'Source of funds/wealth documented where applicable'),
+  item('compliance_aml', 'licenses_required',        'standard', 'Required industry licenses identified and held'),
+  item('compliance_aml', 'adverse_regulatory',       'deep',     'Regulator actions / enforcement history searched'),
+  item('compliance_aml', 'data_privacy',             'deep',     'Privacy regime obligations (GDPR/CCPA) assessed'),
+  item('compliance_aml', 'export_controls',          'deep',     'Export-control exposure (EAR/ITAR) assessed'),
+  item('compliance_aml', 'aml_program',              'deep',     'Counterparty AML program reviewed (regulated industries)'),
+  // reputation_press
+  item('reputation_press', 'adverse_media',          'lite',     'Adverse-media screen on entity + key persons'),
+  item('reputation_press', 'web_footprint',          'lite',     'Web/social footprint consistent with claims'),
+  item('reputation_press', 'press_history',          'standard', 'Press history reviewed for disputes or retractions'),
+  item('reputation_press', 'employee_reviews',       'standard', 'Employee-review signal (Glassdoor et al.) reviewed'),
+  item('reputation_press', 'controversy_history',    'deep',     'Media around past litigation/controversies assessed'),
+  item('reputation_press', 'community_standing',     'deep',     'Standing in relevant developer/industry communities'),
+  item('reputation_press', 'social_conduct',         'deep',     'Public social conduct of key persons reviewed'),
+  // cyber_posture
+  item('cyber_posture', 'domain_hygiene',            'lite',     'Domain/DNS hygiene (SPF, DKIM, DMARC) verified'),
+  item('cyber_posture', 'breach_history',            'lite',     'Known-breach / credential-dump exposure checked'),
+  item('cyber_posture', 'access_mfa',                'standard', 'MFA + access control on critical systems confirmed'),
+  item('cyber_posture', 'data_handling',             'standard', 'Customer-data handling + encryption practices reviewed'),
+  item('cyber_posture', 'vendor_security',           'standard', 'Critical vendor/security dependencies mapped'),
+  item('cyber_posture', 'pentest_evidence',          'deep',     'Recent pentest or vulnerability scan evidence'),
+  item('cyber_posture', 'incident_response',         'deep',     'Incident-response + backup/restore process tested'),
+  item('cyber_posture', 'compliance_certs',          'deep',     'SOC 2 / ISO 27001 posture (or roadmap) reviewed'),
+  // kyb_entity
+  item('kyb_entity', 'registry_match',               'lite',     'Registry record matches provided legal name + number'),
+  item('kyb_entity', 'active_status',                'lite',     'Entity active / in good standing in home registry'),
+  item('kyb_entity', 'ubo_mapped',                   'standard', 'Ultimate beneficial owners mapped (25%+ holders)'),
+  item('kyb_entity', 'registered_agent',             'standard', 'Registered address + agent verified'),
+  item('kyb_entity', 'corporate_tree',               'standard', 'Corporate tree / parent-subsidiary structure documented'),
+  item('kyb_entity', 'officers_verified',            'deep',     'Officers/directors cross-checked against filings'),
+  item('kyb_entity', 'charges_liens',                'deep',     'Charges / liens / UCC filings searched'),
+  item('kyb_entity', 'trade_history',                'deep',     'Operating history + trade references verified'),
+  // kyc_individual
+  item('kyc_individual', 'id_document',              'lite',     'Government ID document verified (authenticity check)'),
+  item('kyc_individual', 'liveness_match',           'lite',     'Liveness/selfie match to ID completed'),
+  item('kyc_individual', 'address_proof',            'standard', 'Proof of address current (<3 months)'),
+  item('kyc_individual', 'sanctions_pep',            'standard', 'Individual sanctions + PEP screen clean'),
+  item('kyc_individual', 'tax_residency',            'deep',     'Tax residency + TIN collected (W-9/W-8)'),
+  item('kyc_individual', 'adverse_media_person',     'deep',     'Individual adverse-media deep screen'),
+  item('kyc_individual', 'source_of_wealth',         'deep',     'Source-of-wealth narrative corroborated'),
+  // accreditation
+  item('accreditation', 'self_cert',                 'lite',     'Accreditation self-certification on file'),
+  item('accreditation', 'category_documented',       'lite',     'Qualifying category (accredited/QP/QIB) documented'),
+  item('accreditation', 'evidence_verified',         'standard', 'Third-party evidence: income/assets/license verified'),
+  item('accreditation', 'entity_qualification',      'standard', 'Entity qualification (QP/QIB/accredited entity) assessed'),
+  item('accreditation', 'reverification_cycle',      'deep',     'Re-verification date set per policy cycle'),
+  item('accreditation', 'professional_letter',       'deep',     'Professional letter (CPA/attorney/RIA) obtained'),
+];
+
+/**
+ * Items to seed for a case: the sections that apply to the subject type,
+ * at every depth tier up to and including the requested one.
+ */
+export function checklistFor(subjectType: DDSubjectType, depth: ChecklistDepth): ChecklistItemDef[] {
+  const rank = DEPTH_RANK[depth] ?? DEPTH_RANK.standard;
+  const sectionKeys = new Set(sectionsFor(subjectType).map(s => s.key));
+  return CHECKLIST_CATALOG.filter(i => sectionKeys.has(i.section_key) && DEPTH_RANK[i.depth] <= rank);
+}
+
+// ---------- Connector catalog ----------
+
+export type ConnectorKey =
+  | 'opencorporates' | 'sec_edgar' | 'sanctions_ofac'
+  | 'newsapi' | 'gdelt' | 'linkedin' | 'github' | 'whois_dns'
+  | 'crunchbase';
+
+export interface ConnectorMeta {
+  key: ConnectorKey;
+  label: string;
+  flag_env: string;       // env var that must be truthy to enable real calls
+  secret_env?: string;    // env var holding the API key (required for live)
+  default_section: string;
+}
+
+export const CONNECTORS: ReadonlyArray<ConnectorMeta> = [
+  { key: 'opencorporates', label: 'OpenCorporates',         flag_env: 'DD_FLAG_OPENCORPORATES', secret_env: 'OPENCORPORATES_API_KEY', default_section: 'corporate_legal' },
+  { key: 'sec_edgar',      label: 'SEC EDGAR',              flag_env: 'DD_FLAG_SEC_EDGAR',                                    default_section: 'financial_health' },
+  { key: 'sanctions_ofac', label: 'OFAC / EU / UK Sanctions',flag_env: 'DD_FLAG_SANCTIONS',                                   default_section: 'compliance_aml' },
+  { key: 'newsapi',        label: 'NewsAPI',                flag_env: 'DD_FLAG_NEWSAPI',        secret_env: 'NEWSAPI_KEY',    default_section: 'reputation_press' },
+  { key: 'gdelt',          label: 'GDELT',                  flag_env: 'DD_FLAG_GDELT',                                        default_section: 'reputation_press' },
+  { key: 'linkedin',       label: 'LinkedIn',               flag_env: 'DD_FLAG_LINKEDIN',       secret_env: 'LINKEDIN_API_KEY',default_section: 'founder_integrity' },
+  { key: 'github',         label: 'GitHub',                 flag_env: 'DD_FLAG_GITHUB',         secret_env: 'GITHUB_PAT',     default_section: 'product_tech' },
+  { key: 'whois_dns',      label: 'WHOIS / DNS',            flag_env: 'DD_FLAG_WHOIS_DNS',                                    default_section: 'cyber_posture' },
+  { key: 'crunchbase',     label: 'Crunchbase',             flag_env: 'DD_FLAG_CRUNCHBASE',     secret_env: 'CRUNCHBASE_API_KEY', default_section: 'market_position' },
+];
+
+interface RawFinding {
+  source_kind: ConnectorKey;
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  detail: string;
+  subject_name?: string;
+  evidence_url?: string;
+  evidence_excerpt?: string;
+  section_key?: string;
+}
+
+interface ConnectorResult {
+  status: 'ok' | 'error' | 'disabled';
+  records_count: number;
+  raw_response: unknown;
+  findings: RawFinding[];
+  error_message?: string;
+}
+
+export function isFlagged(env: Env, flag: string): boolean {
+  const v = (env as unknown as Record<string, string | undefined>)[flag];
+  return Boolean(v && /^(1|true|on|yes)$/i.test(String(v)));
+}
+
+// ---------- Live connector implementations ----------
+
+async function runConnector(env: Env, connector: ConnectorMeta, subject: string): Promise<ConnectorResult> {
+  if (connector.key !== 'crunchbase') {
+    return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: this connector has no live implementation.' };
+  }
+  if (!isFlagged(env, connector.flag_env)) {
+    return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: this connector is switched off.' };
+  }
+  if (connector.key === 'crunchbase') {
+    // Env-first via `loadOauthCreds`, falls back to admin-managed
+    // `provider_oauth_keys` row (HQ → Integration keys). For
+    // Crunchbase the user_key lives in the `secret` slot.
+    const { loadOauthCreds } = await import('./providerOauthKeys');
+    const cred = await loadOauthCreds(env, 'crunchbase');
+    const apiKey = cred?.secret || '';
+    if (apiKey) {
+      try {
+        const { searchOrganizations } = await import('../integrations/providers/crunchbase');
+        const hits = await searchOrganizations(apiKey, subject, 1);
+        // D5304: the managed key answered; stamp its last use (hourly at most, never throws).
+        await (await import('./providerOauthKeys')).markProviderKeyUsed(env, 'crunchbase');
+        const top = hits[0];
+        if (!top) {
+          return {
+            status: 'ok', records_count: 0, raw_response: { matches: 0, subject },
+            findings: [{
+              source_kind: 'crunchbase', severity: 'low',
+              title: `No Crunchbase match for "${subject}"`,
+              detail: 'Subject not found in Crunchbase Basic search index — verify legal name or check operating status.',
+              section_key: 'market_position',
+            }],
+          };
+        }
+        const findings: RawFinding[] = [];
+        findings.push({
+          source_kind: 'crunchbase', severity: 'info',
+          title: `Crunchbase: ${top.name} — ${top.operating_status || 'status unknown'}`,
+          detail: [
+            top.short_description || '',
+            top.hq_location ? `HQ: ${top.hq_location}.` : '',
+            top.employee_range ? `Headcount band: ${top.employee_range}.` : '',
+            top.funding_total_usd ? `Total funding: $${(top.funding_total_usd / 1e6).toFixed(2)}M across ${top.num_funding_rounds || '?'} rounds.` : 'No reported funding.',
+            top.last_funding_type && top.last_funding_at ? `Last round: ${top.last_funding_type} (${top.last_funding_at}).` : '',
+          ].filter(Boolean).join(' '),
+          subject_name: top.name,
+          evidence_url: top.cb_url || undefined,
+          evidence_excerpt: top.short_description || undefined,
+          section_key: 'market_position',
+        });
+
+        if ((top.funding_total_usd === null || top.funding_total_usd === undefined) && (top.website || top.linkedin)) {
+          findings.push({
+            source_kind: 'crunchbase', severity: 'low',
+            title: `${top.name} — domain registered, no disclosed funding`,
+            detail: `Crunchbase has ${top.website ? 'a website ('+top.website+')' : 'a LinkedIn page'} but no reported funding rounds. Confirm whether the company is bootstrapped or simply not tracked.`,
+            subject_name: top.name,
+            evidence_url: top.cb_url || undefined,
+            section_key: 'market_position',
+          });
+        }
+
+        try {
+          // `dd_external_sources` names the connector `connector` (see the
+          // INSERT in routes/dd.ts). `source_kind` is the sibling column on
+          // `dd_findings` in the same migration — selecting it here threw, and
+          // the catch below meant the employee-range enrichment silently never
+          // saw any prior response.
+          const prior = await env.DB.prepare(
+            "SELECT id, raw_response_enc FROM dd_external_sources WHERE connector = 'crunchbase' AND status = 'ok' ORDER BY id DESC LIMIT 5",
+          ).all<{ id: number; raw_response_enc: string | null }>();
+          for (const r of prior?.results || []) {
+            if (!r.raw_response_enc) continue;
+            const txt = await decryptColumn(env, 'dd_external_sources', 'raw_response_enc', r.id, r.raw_response_enc);
+            if (!txt) continue;
+            try {
+              const obj = JSON.parse(txt) as { employee_range?: string; uuid?: string };
+              if (!obj.employee_range || obj.uuid !== top.uuid) continue;
+              if (obj.employee_range !== top.employee_range) {
+                const ranks = ['c_00001_00010','c_00011_00050','c_00051_00100','c_00101_00250','c_00251_00500','c_00501_01000','c_01001_05000','c_05001_10000','c_10001_max'];
+                const a = ranks.indexOf(obj.employee_range || '');
+                const b = ranks.indexOf(top.employee_range || '');
+                const dropped = a >= 0 && b >= 0 && b < a;
+                findings.push({
+                  source_kind: 'crunchbase', severity: 'info',
+                  title: `${top.name} — headcount band changed (${obj.employee_range} → ${top.employee_range})`,
+                  detail: dropped
+                    ? 'Headcount appears to have decreased between scans — possible layoffs or attrition. Confirm with founder.'
+                    : 'Headcount band shifted between scans.',
+                  subject_name: top.name,
+                  section_key: 'market_position',
+                });
+                break;
+              }
+            } catch { /* skip */ }
+          }
+        } catch { /* best-effort */ }
+
+        return { status: 'ok', records_count: 1, raw_response: top, findings };
+      } catch (e) {
+        return {
+          status: 'error', records_count: 0, raw_response: null, findings: [],
+          error_message: (e as Error).message || 'crunchbase_failed',
+        };
+      }
+    }
+  }
+  return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: Crunchbase credentials are not available.' };
+}
+
+// ---------- Risk scoring ----------
+//
+// 1. Per-section severity floor: any unresolved 'critical' clamps that
+//    section to 0; 'high' caps at 0.5. 'medium' caps at 0.75.
+// 2. Reviewer verdict overrides finding-derived score:
+//      pass → 1.0, warn → 0.6, fail → 0.0, n_a → excluded from average.
+// 3. Composite = weighted-mean of section scores. Bands:
+//      ≥0.8 green | ≥0.6 yellow | ≥0.4 amber | else red.
+
+const SEVERITY_FLOOR: Record<string, number> = { critical: 0, high: 0.5, medium: 0.75, low: 0.9, info: 1 };
+const VERDICT_SCORE: Record<string, number> = { pass: 1.0, warn: 0.6, fail: 0.0 };
+
+interface SectionForScore {
+  weight: number;
+  verdict: string | null;
+  worst_severity: keyof typeof SEVERITY_FLOOR | null;
+}
+
+export function computeScore(sections: SectionForScore[]): { score: number | null; band: 'green' | 'yellow' | 'amber' | 'red' | null; reason: string | null } {
+  let totalWeight = 0;
+  let weightedSum = 0;
+  for (const s of sections) {
+    if (s.verdict === 'n_a' || !Number.isFinite(s.weight) || s.weight <= 0) continue;
+    let sectionScore: number;
+    if (s.verdict && s.verdict in VERDICT_SCORE) {
+      sectionScore = VERDICT_SCORE[s.verdict];
+    } else if (s.worst_severity && s.worst_severity in SEVERITY_FLOOR) {
+      sectionScore = SEVERITY_FLOOR[s.worst_severity];
+    } else {
+      continue;
+    }
+    weightedSum += sectionScore * s.weight;
+    totalWeight += s.weight;
+  }
+  if (totalWeight === 0) return { score: null, band: null, reason: 'No scored due-diligence sections recorded' };
+  const score = weightedSum / totalWeight;
+  let band: 'green' | 'yellow' | 'amber' | 'red';
+  if (score >= 0.8) band = 'green';
+  else if (score >= 0.6) band = 'yellow';
+  else if (score >= 0.4) band = 'amber';
+  else band = 'red';
+  return { score: Math.round(score * 1000) / 1000, band, reason: null };
+}
+
+const SEVERITY_RANK: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 };
+export function worstSeverity(sevs: string[]): keyof typeof SEVERITY_FLOOR | null {
+  let max = -1;
+  let out: string | null = null;
+  for (const s of sevs) {
+    const r = SEVERITY_RANK[s] ?? -1;
+    if (r > max) { max = r; out = s; }
+  }
+  return (out as keyof typeof SEVERITY_FLOOR) || null;
+}
+
+// ---------- Blocking sections and the case decision (D1246, #3261) ----------
+//
+// A blocking section cannot carry an open High or Critical flag into
+// "Proceed" (#2385 owner question 4). Until part 5's template store lets HQ
+// mark them per template version, the rule is the canvas's template board
+// (DDL13): Corporate & Legal, Financial Health and Compliance / AML. A case
+// stamps it on each section at open (`dd_sections.blocking`, migration 620),
+// so a later change to this list never rewrites a case already opened.
+
+export const BLOCKING_SECTION_KEYS: ReadonlySet<string> = new Set(['corporate_legal', 'financial_health', 'compliance_aml']);
+
+export const DD_DECISIONS = ['proceed', 'proceed_with_conditions', 'do_not_proceed', 'withdrawn'] as const;
+export type DDDecision = typeof DD_DECISIONS[number];
+
+/** The canvas's sentence when "Proceed" meets an open High or Critical flag in a blocking section (DDL14 D). */
+export const BLOCKING_FLAG_REFUSAL = 'A blocking section still has an open High flag. Record Proceed with conditions, or close the flag first.';
+
+const OPEN_SEVERE = new Set(['high', 'critical']);
+
+/**
+ * The blocking sections that carry an open High or Critical flag, by section
+ * id. A flag is open when it is a finding with no `resolved_at`, or a
+ * checklist item still flagged or failed; a flag or fail with no severity is
+ * not High (the score reads it as low or medium too).
+ */
+export function blockingSectionsWithOpenSevereFlags(
+  sections: ReadonlyArray<{ id: number; blocking: number | boolean | null }>,
+  findings: ReadonlyArray<{ section_id: number | null; severity: string; resolved_at: string | null }>,
+  items: ReadonlyArray<{ section_id: number | null; status: string; severity: string | null }>,
+): number[] {
+  const blocking = new Set(sections.filter((s) => Number(s.blocking) === 1).map((s) => Number(s.id)));
+  const hit = new Set<number>();
+  for (const f of findings) {
+    if (f.section_id != null && blocking.has(Number(f.section_id)) && !f.resolved_at && OPEN_SEVERE.has(String(f.severity))) hit.add(Number(f.section_id));
+  }
+  for (const it of items) {
+    if (it.section_id != null && blocking.has(Number(it.section_id)) && (it.status === 'flag' || it.status === 'fail') && OPEN_SEVERE.has(String(it.severity))) hit.add(Number(it.section_id));
+  }
+  return [...hit].sort((a, b) => a - b);
+}
+
+/**
+ * What every newly opened case takes at open (migration 620): its lead is its
+ * opener, and its blocking sections are stamped from `BLOCKING_SECTION_KEYS`.
+ * Called by both openers, `POST /api/dd/cases` and the partner-deal seed, so
+ * neither carries its own copy of the rule.
+ */
+export async function stampNewCase(env: Env, caseId: number, opts: { blocking?: boolean } = {}): Promise<void> {
+  await env.DB.prepare('UPDATE dd_cases SET lead_user_id = owner_user_id WHERE id = ? AND lead_user_id IS NULL').bind(caseId).run();
+  // D1249: a case opened from a stored template carries that template's
+  // blocking sections already; only a catalog case takes this list.
+  if (opts.blocking === false) return;
+  for (const key of BLOCKING_SECTION_KEYS) {
+    await env.DB.prepare('UPDATE dd_sections SET blocking = 1 WHERE case_id = ? AND section_key = ?').bind(caseId, key).run();
+  }
+}
+
+/**
+ * D1245 (#3260): what every newly opened case seeds — its sections, its
+ * template version and its checklist at its depth — then `stampNewCase`.
+ * Both openers call it, so a partner-deal case (D1245) gets the checklist a
+ * case opened from the desk gets. A section in `notApplicable` is seeded
+ * completed with the verdict `n_a` and seeds no items: nobody works it.
+ */
+export async function seedNewCase(
+  env: Env, caseId: number, subjectType: DDSubjectType, depth: ChecklistDepth,
+  opts: { notApplicable?: ReadonlySet<string> } = {},
+): Promise<{ templateVersion: number; sections: number; items: number }> {
+  // D1249: the depth's latest template version, or the built-in catalog
+  // (version 0) when HQ has saved none. The case keeps the version.
+  const template = await latestTemplate(env, depth);
+  const seed = template ? seedFromTemplate(subjectType, template.body) : null;
+  const sections = seed ? seed.sections : sectionsFor(subjectType).map((s) => ({ ...s, blocking: false }));
+  const notApplicable = opts.notApplicable ?? new Set<string>();
+  const sectionIdByKey = new Map<string, number>();
+  for (const s of sections) {
+    const row = notApplicable.has(s.key)
+      ? await env.DB.prepare(
+        `INSERT INTO dd_sections (case_id, section_key, title, weight, blocking, status, verdict, completed_at)
+         VALUES (?, ?, ?, ?, ?, 'completed', 'n_a', CURRENT_TIMESTAMP) RETURNING id`,
+      ).bind(caseId, s.key, s.title, s.weight, s.blocking ? 1 : 0).first<{ id: number }>()
+      : await env.DB.prepare(
+        'INSERT INTO dd_sections (case_id, section_key, title, weight, blocking) VALUES (?, ?, ?, ?, ?) RETURNING id',
+      ).bind(caseId, s.key, s.title, s.weight, s.blocking ? 1 : 0).first<{ id: number }>();
+    if (row?.id) sectionIdByKey.set(s.key, Number(row.id));
+  }
+  if (template) await env.DB.prepare('UPDATE dd_cases SET template_id = ? WHERE id = ?').bind(template.id, caseId).run();
+  // Items land 'pending'; reviewers work them to pass/flag/fail and the
+  // flagged/failed severities feed the composite score alongside connector
+  // findings (see recomputeAndStoreScore).
+  const checklist = seed ? seed.checklist : checklistFor(subjectType, depth);
+  let items = 0;
+  for (const it of checklist) {
+    if (notApplicable.has(it.section_key)) continue;
+    const sid = sectionIdByKey.get(it.section_key);
+    if (!sid) continue;
+    await env.DB.prepare('INSERT INTO dd_checklist_items (case_id, section_id, item_key, title, depth) VALUES (?, ?, ?, ?, ?)')
+      .bind(caseId, sid, it.key, it.title, it.depth).run();
+    items++;
+  }
+  // D1246: the opener leads it, and its blocking sections are stamped.
+  await stampNewCase(env, caseId, { blocking: !template });
+  return { templateVersion: template ? template.version : 0, sections: sections.length, items };
+}
+
+// ---------- Versioned templates (D1249, #3264) ----------
+//
+// #2385 owner question 3: HQ owns the templates and a studio picks one. A
+// template is one depth (Lite, Standard, Deep) at one version: for every
+// catalog section, its weight, whether it blocks, and the checklist items it
+// seeds. Version 0 is this file's catalog, and it is what every case opened
+// before migration 623 used. A Super Admin saves a new version and it
+// applies to new cases only; a case keeps the version it was opened with
+// (`dd_cases.template_id`).
+
+export interface TemplateSection { key: string; weight: number; blocking: boolean; items: string[] }
+export interface TemplateBody { sections: TemplateSection[] }
+export const TEMPLATE_DEPTHS: ReadonlyArray<ChecklistDepth> = ['lite', 'standard', 'deep'];
+
+/** The catalog as a template: version 0 of a depth. */
+export function builtInTemplate(depth: ChecklistDepth): TemplateBody {
+  const rank = DEPTH_RANK[depth];
+  return {
+    sections: SECTION_CATALOG.map((s) => ({
+      key: s.key, weight: s.weight, blocking: BLOCKING_SECTION_KEYS.has(s.key),
+      items: CHECKLIST_CATALOG.filter((i) => i.section_key === s.key && DEPTH_RANK[i.depth] <= rank).map((i) => i.key),
+    })),
+  };
+}
+
+/**
+ * A body a Super Admin may save, or why not. Every catalog section appears
+ * once, with a weight above 0 and at most 5; items are catalog items of that
+ * section. A section's title and the items' words stay the catalog's: a
+ * template chooses, it does not rewrite.
+ */
+export function checkTemplateBody(raw: unknown): { ok: true; body: TemplateBody } | { ok: false; error: string } {
+  const sections = Array.isArray((raw as any)?.sections) ? (raw as any).sections : null;
+  if (!sections) return { ok: false, error: 'A template lists its sections.' };
+  const known = new Map(SECTION_CATALOG.map((s) => [s.key, s]));
+  const itemSection = new Map(CHECKLIST_CATALOG.map((i) => [i.key, i.section_key]));
+  const seen = new Set<string>();
+  const out: TemplateSection[] = [];
+  for (const s of sections) {
+    const key = String(s?.key ?? '');
+    if (!known.has(key)) return { ok: false, error: `Unknown section: ${key || 'none'}.` };
+    if (seen.has(key)) return { ok: false, error: `${known.get(key)!.title} is listed twice.` };
+    seen.add(key);
+    const weight = Number(s.weight);
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 5) return { ok: false, error: `${known.get(key)!.title}: a weight is above 0 and at most 5.` };
+    const items = Array.isArray(s.items) ? [...new Set(s.items.map((x: unknown) => String(x)))] as string[] : [];
+    for (const it of items) {
+      if (itemSection.get(it) !== key) return { ok: false, error: `${known.get(key)!.title}: ${it} is not one of its items.` };
+    }
+    out.push({ key, weight: Math.round(weight * 100) / 100, blocking: s.blocking === true, items });
+  }
+  if (seen.size !== known.size) return { ok: false, error: 'A template lists every section, each once.' };
+  return { ok: true, body: { sections: out } };
+}
+
+/** The latest version of a depth, or null when HQ has saved none (the catalog applies). */
+export async function latestTemplate(env: Env, depth: ChecklistDepth): Promise<{ id: number; version: number; body: TemplateBody } | null> {
+  const row = await env.DB.prepare('SELECT id, version, body_json FROM dd_templates WHERE depth = ? ORDER BY version DESC LIMIT 1')
+    .bind(depth).first<{ id: number; version: number; body_json: string }>();
+  if (!row) return null;
+  try { return { id: Number(row.id), version: Number(row.version), body: JSON.parse(row.body_json) }; } catch { return null; }
+}
+
+/** What a case of this subject type seeds from a template: its sections with weight and blocking, and its items. */
+export function seedFromTemplate(subjectType: DDSubjectType, body: TemplateBody) {
+  const bySection = new Map(body.sections.map((s) => [s.key, s]));
+  const items = new Map(CHECKLIST_CATALOG.map((i) => [i.key, i]));
+  const sections = sectionsFor(subjectType).map((s) => {
+    const t = bySection.get(s.key);
+    return { key: s.key, title: s.title, weight: t ? t.weight : s.weight, blocking: t ? t.blocking : BLOCKING_SECTION_KEYS.has(s.key) };
+  });
+  const checklist = sections.flatMap((s) => (bySection.get(s.key)?.items ?? []).map((k) => items.get(k)!).filter(Boolean));
+  return { sections, checklist };
+}
+
+// ---------- PII helpers (column cipher wrappers) ----------
+
+export async function encField(env: Env, table: string, column: string, rowId: number, value: string | null): Promise<string | null> {
+  if (value == null || value === '') return null;
+  return encryptColumn(env, table, column, rowId, value);
+}
+export async function decField(env: Env, table: string, column: string, rowId: number, ciphertext: string | null): Promise<string | null> {
+  if (!ciphertext) return null;
+  try {
+    return await decryptColumn(env, table, column, rowId, ciphertext);
+  } catch { return null; }
+}
+
+// ---------- Report rendering ----------
+
+export interface ReportCase {
+  uid: string;
+  subject_label: string;
+  subject_type: string;
+  risk_score: number | null;
+  risk_band: string | null;
+  status: string;
+  created_at: string;
+  notes: string | null;
+}
+export interface ReportSection {
+  section_key: string;
+  title: string;
+  weight: number;
+  status: string;
+  verdict: string | null;
+  reviewer_notes: string | null;
+  // D466 — the sign-off: who returned the verdict, and when. Null on a
+  // section completed before migration 339, rendered as unrecorded rather
+  // than a guessed signer.
+  signed_off_by_name?: string | null;
+  completed_at?: string | null;
+  // D1247 — a flag's state travels into the report: a closed flag leaves the
+  // score but stays here, marked closed with its resolution. Absent on a
+  // caller that predates migration 621.
+  findings: Array<{ severity: string; title: string; detail: string | null; evidence_url: string | null; state?: string | null; resolution?: string | null }>;
+}
+
+/** D1247 — a flag's state in words, for the report. */
+export const FLAG_STATE_WORD: Record<string, string> = {
+  open: 'Open', in_progress: 'In progress', condition_to_close: 'Condition to close', accepted: 'Accepted', closed: 'Closed',
+};
+
+/** D1247 — the report's line under a flag: its state, then its resolution. Null before migration 621. */
+export function flagStateLine(f: { state?: string | null; resolution?: string | null }): string | null {
+  const word = f.state ? FLAG_STATE_WORD[f.state] : undefined;
+  if (!word) return null;
+  return f.resolution ? `${word} — ${f.resolution}` : word;
+}
+
+const BAND_COLOR: Record<string, string> = {
+  green: '#10b981', yellow: '#f59e0b', amber: '#f97316', red: '#ef4444',
+};
+const SEV_COLOR: Record<string, string> = {
+  critical: '#dc2626', high: '#f97316', medium: '#f59e0b', low: '#3b82f6', info: '#6b7280',
+};
+
+function esc(s: string | null | undefined): string {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
+}
+
+export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): string {
+  const band = cs.risk_band || 'Not recorded';
+  const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : '—';
+  const sectionBlocks = sections.map(sec => {
+    const findings = sec.findings.map(f => `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">
+          <span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;color:#fff;background:${SEV_COLOR[f.severity] || '#6b7280'};">${esc(f.severity.toUpperCase())}</span>
+        </td>
+        <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#111827;">
+          <div style="font-weight:600;">${esc(f.title)}</div>
+          ${flagStateLine(f) ? `<div style="color:#6b7280;font-size:11px;margin-top:2px;">${esc(flagStateLine(f)!)}</div>` : ''}
+          ${f.detail ? `<div style="color:#4b5563;font-size:12px;margin-top:2px;">${esc(f.detail)}</div>` : ''}
+          ${f.evidence_url ? `<a href="${esc(f.evidence_url)}" style="color:#7c3aed;font-size:11px;">${esc(f.evidence_url)}</a>` : ''}
+        </td>
+      </tr>`).join('');
+    return `
+      <section style="margin:24px 0;padding:20px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
+        <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h2 style="margin:0;font-size:18px;color:#111827;">${esc(sec.title)}</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:11px;color:#6b7280;">weight ${sec.weight.toFixed(2)}</span>
+            <span style="padding:3px 10px;border-radius:9999px;font-size:11px;font-weight:600;background:#f3f4f6;color:#374151;">${esc(sec.status)}</span>
+            ${sec.verdict ? `<span style="padding:3px 10px;border-radius:9999px;font-size:11px;font-weight:700;color:#fff;background:${sec.verdict === 'pass' ? '#10b981' : sec.verdict === 'warn' ? '#f59e0b' : sec.verdict === 'fail' ? '#ef4444' : '#6b7280'};">${esc(sec.verdict.toUpperCase())}</span>` : ''}
+          </div>
+        </header>
+        ${sec.reviewer_notes ? `<p style="font-size:13px;color:#374151;background:#f9fafb;padding:10px;border-radius:8px;margin:0 0 12px;"><strong>Reviewer:</strong> ${esc(sec.reviewer_notes)}</p>` : ''}
+        ${sec.verdict ? `<p style="font-size:11px;color:#6b7280;margin:0 0 12px;">${sec.signed_off_by_name ? `Signed off by ${esc(sec.signed_off_by_name)}` : 'Sign-off not recorded'}${sec.completed_at ? ` · ${esc(String(sec.completed_at).slice(0, 10))}` : ''}</p>` : ''}
+        ${findings ? `<table style="width:100%;border-collapse:collapse;font-family:-apple-system,sans-serif;">${findings}</table>` : '<p style="color:#9ca3af;font-size:12px;margin:0;">No findings recorded.</p>'}
+      </section>`;
+  }).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>DD Report — ${esc(cs.subject_label)}</title></head>
+<body style="margin:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
+<div style="max-width:880px;margin:0 auto;padding:40px 32px;">
+  <header style="border-bottom:3px solid #7c3aed;padding-bottom:24px;margin-bottom:32px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-size:12px;color:#7c3aed;font-weight:700;letter-spacing:1px;">AXAL VC — DUE DILIGENCE</div>
+        <h1 style="margin:8px 0 4px;font-size:28px;">${esc(cs.subject_label)}</h1>
+        <div style="color:#6b7280;font-size:14px;">${esc(cs.subject_type)} · case ${esc(cs.uid)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="display:inline-block;padding:14px 22px;border-radius:14px;background:${BAND_COLOR[band] || '#64748b'};color:#fff;">
+          <div style="font-size:11px;opacity:0.85;letter-spacing:1px;">RISK BAND</div>
+          <div style="font-size:24px;font-weight:700;text-transform:uppercase;">${esc(band)}</div>
+          <div style="font-size:12px;opacity:0.9;">score ${score}/100</div>
+        </div>
+      </div>
+    </div>
+  </header>
+  <section style="margin-bottom:24px;padding:16px 20px;border-radius:12px;background:#fff;border:1px solid #e5e7eb;">
+    <h2 style="margin:0 0 8px;font-size:14px;color:#6b7280;letter-spacing:1px;">EXECUTIVE SUMMARY</h2>
+    <p style="margin:0;font-size:14px;line-height:1.6;color:#374151;">
+      ${cs.notes ? esc(cs.notes) : 'No analyst summary provided. The composite score is derived from reviewer verdicts on each section, capped by the worst unresolved finding severity within that section.'}
+    </p>
+    <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;">
+      <div style="padding:10px;background:#f9fafb;border-radius:8px;"><div style="color:#6b7280;">Sections</div><div style="font-size:18px;font-weight:700;">${sections.length}</div></div>
+      <div style="padding:10px;background:#f9fafb;border-radius:8px;"><div style="color:#6b7280;">Findings</div><div style="font-size:18px;font-weight:700;">${sections.reduce((n, s) => n + s.findings.length, 0)}</div></div>
+      <div style="padding:10px;background:#f9fafb;border-radius:8px;"><div style="color:#6b7280;">Status</div><div style="font-size:14px;font-weight:600;text-transform:uppercase;">${esc(cs.status)}</div></div>
+    </div>
+  </section>
+  ${sectionBlocks}
+  <footer style="margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center;">
+    Confidential — Axal Ventures internal use only · generated ${new Date().toISOString()}
+  </footer>
+</div></body></html>`;
+}
+
+interface BrowserBinding {
+  fetch: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * Render a real Axal-VC-branded PDF using pdf-lib (already a dep). When
+ * the Cloudflare `BROWSER` binding is present we prefer that path (richer
+ * typography). pdf-lib gives us a true PDF artifact even on the bare
+ * Worker runtime — HTML is only used as a last-resort if even pdf-lib
+ * fails (which it shouldn't on the Worker runtime).
+ */
+const AXAL_PURPLE = rgb(0.486, 0.227, 0.929);   // #7C3AEDish
+const BAND_RGB: Record<string, ReturnType<typeof rgb>> = {
+  green: rgb(0.063, 0.725, 0.506),
+  yellow: rgb(0.961, 0.620, 0.043),
+  amber: rgb(0.976, 0.451, 0.086),
+  red: rgb(0.937, 0.267, 0.267),
+};
+const SEV_RGB: Record<string, ReturnType<typeof rgb>> = {
+  critical: rgb(0.863, 0.149, 0.149),
+  high: rgb(0.976, 0.451, 0.086),
+  medium: rgb(0.961, 0.620, 0.043),
+  low: rgb(0.231, 0.510, 0.965),
+  info: rgb(0.420, 0.447, 0.502),
+};
+
+function wrap(text: string, max: number): string[] {
+  const out: string[] = [];
+  for (const para of String(text).split('\n')) {
+    let cur = '';
+    for (const word of para.split(/\s+/)) {
+      if (!word) continue;
+      const trial = cur ? `${cur} ${word}` : word;
+      if (trial.length <= max) cur = trial;
+      else { if (cur) out.push(cur); cur = word; }
+    }
+    if (cur) out.push(cur);
+    out.push('');
+  }
+  while (out.length && out[out.length - 1] === '') out.pop();
+  return out;
+}
+
+export async function renderReportPdf(cs: ReportCase, sections: ReportSection[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const PAGE_W = 612, PAGE_H = 792, MARGIN = 54;
+  let page = doc.addPage([PAGE_W, PAGE_H]);
+  let y = PAGE_H - MARGIN;
+  const newPage = () => { page = doc.addPage([PAGE_W, PAGE_H]); y = PAGE_H - MARGIN; };
+  const ensure = (h: number) => { if (y - h < MARGIN) newPage(); };
+
+  // Header band
+  page.drawRectangle({ x: 0, y: PAGE_H - 6, width: PAGE_W, height: 6, color: AXAL_PURPLE });
+  page.drawText('AXAL VC — DUE DILIGENCE', { x: MARGIN, y: y - 14, size: 9, font: bold, color: AXAL_PURPLE });
+  y -= 30;
+  page.drawText(cs.subject_label, { x: MARGIN, y, size: 22, font: bold, color: rgb(0.067, 0.094, 0.153) });
+  y -= 18;
+  page.drawText(`${cs.subject_type} · case ${cs.uid}`, { x: MARGIN, y, size: 10, font, color: rgb(0.420, 0.447, 0.502) });
+
+  // Risk badge (right-aligned)
+  const band = cs.risk_band || 'Not recorded';
+  const score = cs.risk_score != null ? `${Math.round(cs.risk_score * 100)}/100` : '—';
+  const badgeW = 150, badgeX = PAGE_W - MARGIN - badgeW, badgeY = PAGE_H - MARGIN - 70;
+  page.drawRectangle({ x: badgeX, y: badgeY, width: badgeW, height: 60, color: BAND_RGB[band] || rgb(0.39, 0.45, 0.55) });
+  page.drawText('RISK BAND', { x: badgeX + 10, y: badgeY + 42, size: 8, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(band.toUpperCase(), { x: badgeX + 10, y: badgeY + 22, size: 18, font: bold, color: rgb(1, 1, 1) });
+  page.drawText(`score ${score}`, { x: badgeX + 10, y: badgeY + 8, size: 9, font, color: rgb(1, 1, 1) });
+  y = badgeY - 24;
+
+  // Executive summary
+  page.drawText('EXECUTIVE SUMMARY', { x: MARGIN, y, size: 9, font: bold, color: rgb(0.420, 0.447, 0.502) });
+  y -= 14;
+  const summary = cs.notes || 'No analyst summary provided. The composite score is the weighted mean of section scores, each capped by the worst unresolved finding severity within that section, then overridden by reviewer verdict where present.';
+  for (const line of wrap(summary, 95)) { ensure(13); page.drawText(line, { x: MARGIN, y, size: 10, font, color: rgb(0.216, 0.255, 0.318) }); y -= 13; }
+  y -= 8;
+
+  // Sections
+  for (const sec of sections) {
+    ensure(40);
+    page.drawLine({ start: { x: MARGIN, y: y + 4 }, end: { x: PAGE_W - MARGIN, y: y + 4 }, thickness: 0.5, color: rgb(0.898, 0.906, 0.922) });
+    y -= 14;
+    page.drawText(sec.title, { x: MARGIN, y, size: 13, font: bold, color: rgb(0.067, 0.094, 0.153) });
+    const meta = `weight ${sec.weight.toFixed(2)} · ${sec.status}${sec.verdict ? ` · ${sec.verdict.toUpperCase()}` : ''}`;
+    page.drawText(meta, { x: PAGE_W - MARGIN - font.widthOfTextAtSize(meta, 9), y, size: 9, font, color: rgb(0.420, 0.447, 0.502) });
+    y -= 16;
+    if (sec.reviewer_notes) {
+      for (const line of wrap(`Reviewer: ${sec.reviewer_notes}`, 95)) { ensure(12); page.drawText(line, { x: MARGIN, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 12; }
+      y -= 4;
+    }
+    if (sec.findings.length === 0) {
+      ensure(12); page.drawText('No findings recorded.', { x: MARGIN + 6, y, size: 9, font, color: rgb(0.612, 0.639, 0.686) }); y -= 14;
+    } else {
+      for (const f of sec.findings) {
+        ensure(28);
+        const sevColor = SEV_RGB[f.severity] || SEV_RGB.info;
+        page.drawRectangle({ x: MARGIN, y: y - 2, width: 4, height: 12, color: sevColor });
+        page.drawText(`[${f.severity.toUpperCase()}] ${f.title}`, { x: MARGIN + 10, y, size: 10, font: bold, color: rgb(0.067, 0.094, 0.153) });
+        y -= 13;
+        const stateLine = flagStateLine(f);
+        if (stateLine) {
+          for (const line of wrap(stateLine, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 8, font, color: rgb(0.42, 0.447, 0.502) }); y -= 11; }
+        }
+        if (f.detail) {
+          for (const line of wrap(f.detail, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 11; }
+        }
+        if (f.evidence_url) { ensure(11); page.drawText(f.evidence_url, { x: MARGIN + 10, y, size: 8, font, color: AXAL_PURPLE }); y -= 11; }
+        y -= 4;
+      }
+    }
+    y -= 6;
+  }
+
+  // Footer on every page
+  const footer = `Confidential — Axal Ventures internal use only · generated ${new Date().toISOString()}`;
+  for (const p of doc.getPages()) {
+    p.drawText(footer, { x: MARGIN, y: 28, size: 7, font, color: rgb(0.612, 0.639, 0.686) });
+  }
+  return doc.save();
+}
+
+/**
+ * Best-effort PDF render. Order of preference:
+ *   1) Cloudflare Browser Rendering (`env.BROWSER`) — richest typography
+ *   2) pdf-lib — real PDF, always available on the Worker runtime
+ *   3) Styled HTML — only if pdf-lib itself fails (defensive)
+ * The caller MUST surface the actual format used.
+ */
+export async function renderReportArtifact(
+  env: Env, cs: ReportCase, sections: ReportSection[],
+): Promise<{ format: 'pdf' | 'html'; bytes: ArrayBuffer; contentType: string }> {
+  const browser = (env as unknown as { BROWSER?: BrowserBinding }).BROWSER;
+  if (browser) {
+    try {
+      const html = renderReportHtml(cs, sections);
+      const res = await browser.fetch('https://browser/pdf', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ html, options: { format: 'Letter', printBackground: true } }),
+      });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        return { format: 'pdf', bytes: buf, contentType: 'application/pdf' };
+      }
+    } catch (e) {
+      console.warn('[dd] BROWSER render failed, falling back to pdf-lib:', (e as Error).message);
+    }
+  }
+  try {
+    const bytes = await renderReportPdf(cs, sections);
+    return { format: 'pdf', bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, contentType: 'application/pdf' };
+  } catch (e) {
+    console.warn('[dd] pdf-lib render failed, last-resort HTML:', (e as Error).message);
+    const html = renderReportHtml(cs, sections);
+    return { format: 'html', bytes: new TextEncoder().encode(html).buffer as ArrayBuffer, contentType: 'text/html; charset=utf-8' };
+  }
+}
+
+// Re-exports so route + connector dispatch live in one place.
+export { runConnector };

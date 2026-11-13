@@ -1,0 +1,32 @@
+{
+  "skill": "design-critique-notes",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "design": "Waitlist screen v3",
+        "goal": "Fill cancelled slots within an hour"
+      },
+      "validate.records": {
+        "problems": [
+          {
+            "text": "Cancelled slots stay empty",
+            "interviews": 6
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Waitlist screen v3",
+      "Cancelled slots stay empty"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "perfect"
+    ]
+  }
+}

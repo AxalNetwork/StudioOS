@@ -1,0 +1,48 @@
+#13 - LF — Admin > X (Twitter) posts + aggregator
+What & Why
+Twin to the Telegram system but for X (Twitter). Admin reviews, edits, optionally attaches media, and approves posts before they go live. Drafts are aggregated from the same platform-event taxonomy as LC but with X-specific 280-char / thread / hashtag constraints. PII linter is shared with LC — this task depends on LC having shipped the linter.
+Done looks like
+* X OAuth 2.0 with PKCE wired (scopes tweet.read tweet.write users.read offline.access); secrets X_CLIENT_ID, X_CLIENT_SECRET, X_BEARER_TOKEN stored via wrangler secret put.
+* New D1 tables x_accounts and x_posts with the encrypted-at-rest token columns per the spec.
+* Worker routes (all admin + Cf-Access):
+    * Accounts: GET /api/admin/x/accounts, GET /api/admin/x/auth/start, GET /api/admin/x/auth/callback.
+    * Posts: POST /api/admin/x/posts, PUT /api/admin/x/posts/:id, POST /api/admin/x/posts/:id/media, POST /api/admin/x/posts/:id/approve, POST /api/admin/x/posts/:id/send, POST /api/admin/x/posts/:id/schedule, POST /api/admin/x/posts/:id/retract.
+    * Aggregator: POST /api/admin/x/aggregator/run.
+* Aggregator (cloudflare-worker/src/services/x/aggregator.ts) reuses LC's platform-event taxonomy but adds: 280-char split, multi-tweet thread suggestions when > 280, hashtag generation from sector + audience tags, suggested MI-chart media when available.
+* Admin can connect @axalvc via OAuth → encrypted refresh token in x_accounts.
+* Composer UX at /admin/x: live 280-char counter, thread mode (+ button, drag to reorder), media uploader with auto-alt-text via existing Workers AI model, send / schedule / save draft, aggregator-suggestions panel, X-style preview pane.
+* PII linter — reuses LC's redactCheck.ts (no duplication; this task does NOT re-implement it). Block-on-violation + admin override with typed reason.
+* Per-day cap: 20 posts / account / day; respect rate-limits returned by X API (typed error { code: 'rate_limited', retry_after: N }, never silent 500).
+* Retraction deletes via X API and updates status='retracted'; logged.
+* Image safety: existing magic-byte check + simple NSFW classifier pass before upload to X.
+* Audit: every state change to admin_audit_log with full body hash.
+* Thread mode chains correctly via in_reply_to_tweet_id.
+* Media uploads round-trip R2 → X media upload → tweet attachment.
+Out of scope
+* DMs from the bot.
+* Reading mentions / replies back into StudioOS.
+* Twitter Spaces or Communities.
+* Multiple bots per account.
+* Re-implementing the PII linter (lives in LC).
+Steps
+1. OAuth + secrets — Implement X OAuth 2.0 PKCE start/callback. Store tokens encrypted at rest via existing cryptoBox (AES-GCM, 100k PBKDF2 per the persistent-gotcha). Store X_CLIENT_ID/SECRET/BEARER_TOKEN via wrangler secret put.
+2. Schema — Migration creates x_accounts + x_posts with the encrypted token columns and self-referential thread_continuation_of.
+3. X client + rate handling — Thin client for POST /2/tweets (with reply.in_reply_to_tweet_id for threads), media upload (v1.1 media/upload two-step), DELETE /2/tweets/:id for retract. Surface X rate-limit responses as typed errors.
+4. Aggregator — Mirror LC's platform-event signal pulls but emit X-shaped drafts: split > 280 into threads, append hashtags from sector + audience tags, suggest one MI-chart image when available. Reuse LC's signal-fetch helpers — extract to a shared services/aggregator/signals.ts if needed so LC + LF both consume it.
+5. PII linter — Import from LC's services/telegram/redactCheck.ts (or whatever shared location it lives at after LC). Block-on-violation; override needs typed reason; audited.
+6. Worker routes — Implement all admin endpoints, admin-gated + Cf-Access. Pagination via util/pagination.ts.
+7. Composer UI — Build /admin/x with live char counter, thread builder, media uploader (alt-text via existing Workers AI model), aggregator suggestions panel, X-style preview, send/schedule/draft controls.
+8. Audit + acceptance — Wire admin_audit_log for create / edit / approve / send / schedule / retract / override. Connect @axalvc, run aggregator, post a tweet, post a thread (verify reply chain), upload media, hit a rate-limit (verify typed error), retract one (verify X deletion).
+Relevant files
+* cloudflare-worker/sql/migrations/ (new — two tables)
+* cloudflare-worker/src/routes/ (new admin_x.ts)
+* cloudflare-worker/src/services/x/ (new client.ts, aggregator.ts, oauth.ts)
+* cloudflare-worker/src/services/telegram/redactCheck.ts (LC dep — imported, not duplicated)
+* cloudflare-worker/src/util/cryptoBox.ts (existing AES-GCM at-rest encryption)
+* cloudflare-worker/src/util/pagination.ts
+* frontend/src/pages/admin/ (new AdminXPage.jsx)
+* wrangler.toml (secrets via CLI)
+Dependencies
+
+LC — Admin > Telegram channels + aggregator
+Main

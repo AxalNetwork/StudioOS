@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0}
+body{background:#e8e6ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9}
+</style>
+</helmet>
+<div style="width:max-content;padding:56px 56px 120px;display:flex;flex-direction:column;gap:72px">
+  <header style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+    <div style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · axal.vc · Canvas</div>
+    <h1 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.02em">Venture scorecard</h1>
+    <p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553">One score breakdown panel for the investor's deal page and deal list and the founder's own page. Eleven scopes, each with a value, a band, a confidence and the inputs behind it. Missing data lowers confidence and is never a zero. There is no overall total.</p>
+  </header>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="7">
+    <section style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid #d9d6e0;padding-bottom:10px">
+        <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em">{{ g.t }}</h2>
+        <span style="font-size:13px;color:#6b6577">{{ g.n }}</span>
+      </div>
+      <div style="display:flex;gap:48px;align-items:flex-start">
+        <sc-for list="{{ g.f }}" as="f" hint-placeholder-count="3">
+          <div id="{{ f.id }}" style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;color:#ffffff;background:#18181b;padding:3px 8px;border-radius:6px">{{ f.id }}</span>
+              <span style="font-size:14px;font-weight:600">{{ f.lab }}</span>
+            </div>
+            <div style="{{ f.box }}"><dc-import name="Venture Scorecard Page" b="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+const FR = (id, lab, w = 1440) => ({ id, lab, b: id, box: 'width:' + w + 'px;border-radius:14px;overflow:hidden;border:1px solid #d9d6e0;background:' + (id === 'SC20' ? '#0b1220' : '#f4f3f7') + ';box-shadow:0 1px 3px rgba(24,24,27,.06)', hint: '100%,' + (w === 390 ? 844 : 760) + 'px' });
+class Component extends DCLogic {
+  renderVals() {
+    return { groups: [
+      { t: 'Investor · deal page', n: 'The full panel on the Scorecard tab, and the scope drawers it opens.', f: [FR('SC1', 'Scorecard · Investor · deal page · light (main board)'), FR('SC2', 'Scope drawer · Team'), FR('SC3', 'Scope drawer · Traction'), FR('SC22', 'Scope drawer · Product-market fit'), FR('SC4', 'Scope drawer · Geographic · two states side by side')] },
+      { t: 'Investor · deal list', n: 'The scope strip on every row, and the weighting that sorts it. The list’s other columns are on the Deal flow canvas.', f: [FR('SC6', 'Deal list · Investor'), FR('SC7', 'Your weighting · dialog')] },
+      { t: 'Founder', n: 'The founder’s own scorecard at /raise/scorecard.', f: [FR('SC8', 'Investor scorecard · Founder'), FR('SC9', 'Ask to correct · dialog'), FR('SC12', 'Trajectory · after Model v1.1 is published'), FR('SC14', 'Empty · new venture')] },
+      { t: 'Operating Partner, Advisor and HQ', n: 'Reviews, read-only sharing, and the model behind every panel.', f: [FR('SC5', 'Scope drawer · Risk · Operating Partner'), FR('SC10', 'Add review · Operating Partner (Admin the same)'), FR('SC21', 'Advisor · read only'), FR('SC13', 'Platform › Scoring · Super Admin')] },
+      { t: 'Method', n: 'Linked from every panel as How scoring works.', f: [FR('SC11', 'How scoring works · any signed-in member')] },
+      { t: 'States', n: 'Loading, one scope unreadable, no access, and masked before the NDA.', f: [FR('SC15', 'Loading'), FR('SC16', 'Error · Traction unreadable'), FR('SC17', 'No permission · Investor and Explorer'), FR('SC18', 'Masked · Investor before the NDA')] },
+      { t: 'Phone and dark', n: 'Phone at 390 wide with 44px targets, and the main board in dark.', f: [FR('SC19a', 'Phone · scope rows', 390), FR('SC19b', 'Phone · inputs in a bottom sheet', 390), FR('SC20', 'Scorecard · dark')] }
+    ] };
+  }
+}
+</script>
+</body></html>

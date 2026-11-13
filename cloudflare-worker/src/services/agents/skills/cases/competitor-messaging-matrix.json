@@ -1,0 +1,35 @@
+{
+  "skill": "competitor-messaging-matrix",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "research.library": [
+        {
+          "title": "Competitor: Dentrix",
+          "claim": "All-in-one practice software"
+        },
+        {
+          "title": "Competitor: Weave",
+          "claim": "Patient communication"
+        }
+      ],
+      "project.summary": {
+        "positioning": "Bookings that never double up"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "All-in-one practice software",
+      "Bookings that never double up"
+    ],
+    "must_say_not_recorded": [
+      "proof"
+    ],
+    "must_not_include": [
+      "better than everyone"
+    ]
+  }
+}

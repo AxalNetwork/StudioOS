@@ -1,0 +1,32 @@
+#6 - Team & Advisory Human-First Redesign
+What & Why
+Roadmap items #4 and #8 from the Founder UX audit. The founder Team page (/build/team) has three tabs but defaults by tier so free users land on Jobs, locked tabs show a bare lock icon instead of a preview, the Co-Founder section still hides browsing behind inner tabs/gates, and the H1 still reads "Team Building." Advisory is still AI-first: the tab order leads with a fake template stub (ai_generated: false) while the real PersonalAdvisor component is not wired in. Flatten Team to a browse-first, human-first layout and invert Advisory to lead with real people.
+Done looks like
+* The Team workspace defaults to the Advisors tab for everyone; locked tabs show a blurred preview of the content instead of a plain lock icon.
+* The Co-Founder area lets founders browse first (no inner-tab gating before they can see matches) and shows an incoming co-founder lead strip.
+* The Team page H1 no longer reads "Team Building" (human-centered naming).
+* Advisory leads with real advisors first: the real PersonalAdvisor experience is wired in as the primary surface and the template stub is demoted to a labeled fallback.
+* Advisor cards surface last-session, notes, and follow-up so the relationship is legible.
+Out of scope
+* Adding the incoming-lead strips' routing logic (handled by the Discovery & Lead Routing task; this task consumes it).
+* The global naming sweep and shared-primitive rollout beyond Team/Advisory (final polish task).
+Steps
+1. Flatten Team defaults — Make the Team workspace default to the Advisors tab regardless of tier, and give locked tabs a blurred content preview instead of a lock icon.
+2. Browse-first Co-Founder — Remove the inner-tab gating so founders can browse co-founder matches first, and add the co-founder incoming-lead strip.
+3. Rename Team — Replace the "Team Building" H1 with human-centered naming.
+4. Invert Advisory — Reorder Advisory to lead with real advisors and wire the real PersonalAdvisor component in as the primary experience, keeping the template response only as a clearly labeled fallback.
+5. Enrich advisor cards — Add last-session, notes, and follow-up details to advisor cards.
+Architectural notes:
+* Depends on the Discovery & Lead Routing task for the lead strips and routing contract.
+* Keep the template advisory response available as a labeled fallback rather than deleting it.
+Relevant files
+* frontend/src/pages/TeamBuildingPage.jsx
+* frontend/src/pages/AdvisoryPage.jsx
+* frontend/src/components/advisor/PersonalAdvisor.jsx
+* cloudflare-worker/src/routes/advisory.ts:76
+* frontend/src/components/profile/PersonCard.jsx
+* frontend/src/App.jsx:1357,1363
+Dependencies
+Discovery Unification & Lead Routing
+
+Open task

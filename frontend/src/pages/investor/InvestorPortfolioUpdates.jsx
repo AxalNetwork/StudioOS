@@ -1,0 +1,336 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { WorkerRail } from '../../ui';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
+import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
+import { api } from '../../lib/api';
+import './investorPortfolioCanvas.css';
+import './investorPortfolioUpdates.css';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../workspaces/ZoneDraft';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase } from '../../lib/absence';
+import { currencyFromLabel } from '../../lib/money';
+import { companyHref } from '../cycles/reportingModel';
+import PortfolioReports from './PortfolioReports';
+
+const money = (value, currency = 'USD') => value == null || value === '' || !Number.isFinite(Number(value))
+  ? 'Unavailable'
+  : Number(value).toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: 0 });
+const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
+const dateLabel = (value) => {
+  const at = value ? new Date(value) : null;
+  return at && Number.isFinite(at.getTime())
+    ? at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    : 'Unavailable';
+};
+const list = (value, ...keys) => {
+  if (Array.isArray(value)) return value;
+  for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
+  return [];
+};
+const unitFor = (key, units) => units?.get(key) || (/month|runway/i.test(key) ? 'months'
+  : /headcount|customer|employee|user|account/i.test(key) ? 'count'
+    : /pct|percent|margin|retention|churn/i.test(key) ? '%'
+      : /cash|burn|revenue|arr|mrr/i.test(key) ? 'USD' : null);
+export const kpiValue = (key, value, units) => {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return 'Not recorded';
+  const numeric = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return String(value);
+  const unit = unitFor(key, units);
+  const currency = currencyFromLabel(unit);
+  if (currency) return money(numeric, currency);
+  if (/^(%|pct|percent)$/i.test(unit || '')) return `${numeric.toLocaleString()}%`;
+  if (unit === 'months') return `${numeric.toLocaleString()} ${numeric === 1 ? 'month' : 'months'}`;
+  return numeric.toLocaleString();
+};
+export const kpiText = (update, rules = []) => {
+  const units = new Map((rules || []).map((rule) => [rule.kpi_key, rule.unit]));
+  return Object.entries(update?.kpis || {}).slice(0, 4).map(([key, value]) => `${title(key)} ${kpiValue(key, value, units)}`).join(' · ');
+};
+
+export default function InvestorPortfolioUpdates() {
+  const [filter, setFilter] = useState('period');
+  const [state, setState] = useState({ loading: true, error: '', positions: [], updates: [], compliance: null, health: null, unavailable: { positions: false, updates: false, compliance: false, health: false } });
+  // The chase log (migration 337): who was asked, when. `null` until read;
+  // 'error' is unreadable, which is not "nobody has been chased".
+  const [chases, setChases] = useState(null);
+  const [chasing, setChasing] = useState(false);
+  const [chaseNote, setChaseNote] = useState('');
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const positionsResult = await api.positionsList();
+      const optional = await Promise.allSettled([api.portfolioUpdatesLatest(), api.positionsKpiCompliance(), api.portfolioHealthList({}), api.portfolioChases()]);
+      setChases(optional[3].status === 'fulfilled' ? list(optional[3].value, 'items') : 'error');
+      setState({
+        loading: false, error: '',
+        positions: list(positionsResult, 'items', 'positions'),
+        updates: optional[0].status === 'fulfilled' ? list(optional[0].value, 'items', 'updates') : [],
+        compliance: optional[1].status === 'fulfilled' ? optional[1].value : null,
+        health: optional[2].status === 'fulfilled' ? optional[2].value : null,
+        unavailable: { positions: false, updates: optional[0].status === 'rejected', compliance: optional[1].status === 'rejected', health: optional[2].status === 'rejected' },
+      });
+    } catch (error) {
+      setState((current) => ({ ...current, loading: false, error: true, unavailable: { positions: true, updates: true, compliance: true, health: true } }));
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const rows = useMemo(() => {
+    const complianceByProject = new Map((state.compliance?.companies || []).map((item) => [String(item.project_id), item]));
+    const healthByProject = new Map((state.health?.items || []).map((item) => [String(item.project_id), item]));
+    const latestByProject = new Map();
+    state.updates.forEach((update) => {
+      const date = update.submitted_at || update.updated_at || update.created_at;
+      const current = latestByProject.get(String(update.project_id));
+      if (date && (!current || new Date(date) > new Date(current.submitted_at || current.updated_at || current.created_at))) latestByProject.set(String(update.project_id), update);
+    });
+    return state.positions.map((position) => {
+      const compliance = complianceByProject.get(String(position.project_id)) || null;
+      const update = latestByProject.get(String(position.project_id)) || null;
+      const current = compliance ? Boolean(compliance.reported) : null;
+      return { ...position, compliance, health: healthByProject.get(String(position.project_id)) || null, update, current, arrived: current === true && update ? update.submitted_at || update.updated_at : null, status: state.unavailable.updates ? 'Unavailable' : current === false ? 'Not reported' : update ? 'Received' : 'Not recorded' };
+    });
+  }, [state]);
+  // `if (filter === 'parse') return false; if (filter === 'rules') return false;`
+  // used to sit here — two chips that emptied the inbox. An empty inbox reads
+  // as "every update is clean", not "nothing here was ever parsed", which is
+  // the actual truth and is now stated in the zone header row instead of being
+  // discovered by clicking. Both are prose there; neither reaches this filter.
+  const visible = rows.filter((row) => (filter === 'overdue' ? row.current === false : true));
+  /**
+   * THE CHASE (D464). The overdue set is the page's own derivation — the same
+   * rows the Overdue chip shows — and the route re-checks the tenancy of each
+   * id it is handed. One row per chase lands in the log and the founder is
+   * notified; a repeat inside the hour answers the existing row.
+   */
+  const overdueRows = rows.filter((row) => row.current === false);
+  const lastChaseByProject = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(chases) ? chases : []).forEach((chase) => {
+      const key = String(chase.project_id);
+      const current = map.get(key);
+      if (!current || new Date(chase.created_at) > new Date(current)) map.set(key, chase.created_at);
+    });
+    return map;
+  }, [chases]);
+  const chaseOne = useCallback(async (row) => {
+    setChasing(true); setChaseNote('');
+    try {
+      const r = await api.portfolioChase([row.project_id]);
+      const already = (r?.chased || []).some((c) => c.already);
+      setChaseNote(already
+        ? `${row.project?.name || 'That company'} was already asked inside the hour — the existing chase stands.`
+        : `${row.project?.name || 'The company'} has been asked. The founder is notified and the chase is logged.`);
+      load();
+    } catch (cause) {
+      setChaseNote(cause?.message || 'The chase could not be sent.');
+    } finally { setChasing(false); }
+  }, [load]);
+
+  const chaseOverdue = useMemo(() => {
+    if (state.unavailable.compliance || state.unavailable.positions) {
+      return { onClick: () => {}, disabled: true, title: 'The cadence record is unavailable, so which companies are overdue is unknown — chasing blind is not offered.' };
+    }
+    if (!overdueRows.length) {
+      return { onClick: () => {}, disabled: true, title: 'No company is overdue this period, so there is nobody to chase.' };
+    }
+    return {
+      onClick: async () => {
+        setChasing(true); setChaseNote('');
+        try {
+          const r = await api.portfolioChase(overdueRows.map((row) => row.project_id));
+          const n = (r?.chased || []).filter((c) => !c.already).length;
+          const already = (r?.chased || []).filter((c) => c.already).length;
+          setChaseNote(`${n} ${n === 1 ? 'company' : 'companies'} chased${already ? ` · ${already} already asked inside the hour` : ''}${r?.skipped?.length ? ` · ${r.skipped.length} skipped as outside your book` : ''}.`);
+          load();
+        } catch (cause) {
+          setChaseNote(cause?.message || 'The chase could not be sent.');
+        } finally { setChasing(false); }
+      },
+      busy: chasing,
+    };
+  }, [overdueRows.length, state.unavailable.compliance, state.unavailable.positions, chasing]);
+  const complianceUnavailable = state.unavailable.compliance;
+  const healthUnavailable = state.unavailable.health;
+  /**
+   * The KPI set companies are held to.
+   *
+   * `GET /positions/kpi-compliance` has returned this as `kpi_set` on every
+   * load of this page since it was written, and nothing rendered it — which is
+   * why the `Rules` chip was marked unbuilt over data already in hand. It is
+   * the firm-wide set (`fund_id IS NULL`) at the requested cadence.
+   *
+   * An unreadable compliance source is NOT an empty rule set: the first says
+   * nothing about what companies owe, the second says they owe nothing. So
+   * `null` and `[]` are kept apart here and rendered apart below.
+   */
+  const kpiSet = complianceUnavailable ? null : (state.compliance?.kpi_set || []);
+  // The cadence the SERVER answered with, not the one this page asked for.
+  // The store holds rules at more than one cadence and the route filters on a
+  // single one, so the set shown is a slice — which the panel has to say, or a
+  // reader counts these rows as the whole of what companies owe.
+  const cadence = state.compliance?.cadence || 'quarterly';
+  /**
+   * The stored updates the rule set is read against, and why `null` is not `[]`.
+   *
+   * Each row's `update` is the LATEST stored update for that company, whatever
+   * period it speaks for — so "carried by N of M" is a statement about the
+   * updates on this page, and the panel words it that way rather than as a
+   * compliance rate for the current period, which this list cannot support.
+   *
+   * With the update source unreadable there is no denominator at all, so the
+   * column reads Unavailable rather than counting zero out of zero.
+   */
+  const storedUpdates = state.unavailable.updates ? null : rows.map((row) => row.update).filter(Boolean);
+  // The `Rules` chip is a VIEW, not a row predicate. `period` and `overdue`
+  // narrow the inbox; there is no way to narrow an inbox by a rule set, and a
+  // chip that emptied it would read as "no update breaks a rule" — the reason
+  // the two dead predicates above this were removed. So it swaps the body.
+  const showingRules = filter === 'rules';
+  const arrived = complianceUnavailable ? 'Unavailable' : state.compliance?.reported_count ?? 0;
+  const total = complianceUnavailable ? 'Unavailable' : state.compliance?.total_count ?? rows.length;
+  const neverArrived = complianceUnavailable ? 'Unavailable' : Math.max(0, Number(total) - Number(arrived));
+  const runwayAlerts = healthUnavailable ? 'Unavailable' : rows.filter((row) => Number(row.health?.runway_months) < 6).length;
+  const partial = Object.values(state.unavailable).some(Boolean);
+
+  return <ZonePrimaryScope><div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates">
+    <ZoneHeader bucketPath="/portfolio" title="Updates & KPI collection" intro="Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio."
+      refresh={<button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button>} />
+    {/* D1061 (#2931): RPT9, what each company the investor signed into owes them and what it sent. */}
+    <PortfolioReports />
+    <ZoneToolbar
+      role="investor"
+      className="mb-3"
+      filters={investorZoneFilters('portfolio/updates', { value: filter, onChange: setFilter })}
+      actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue }, view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })}
+    />
+    {chaseNote && <div className="i4-partial" data-testid="status-chase-note">{chaseNote}</div>}
+    {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>The portfolio update book could not be read.</span><button type="button" onClick={load}>Retry</button></div>}
+    {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
+    {state.loading ? <Skeleton /> : state.error ? null : <>
+      <section className="i4-stats"><Stat label="Arrived" value={complianceUnavailable ? 'Unavailable' : `${arrived} of ${total}`} note={complianceUnavailable ? 'Cadence source unavailable' : `${rows.filter((row) => row.current === true && row.update).length} with a stored update`} /><Stat label="Never arrived" value={complianceUnavailable ? 'Unavailable' : neverArrived} note={complianceUnavailable ? 'Cadence source unavailable' : 'Current period not reported'} /><Stat label="Source handling" value="Source-preserved" note="KPI values and narrative are shown as submitted" muted /><Stat label="Runway alerts" value={runwayAlerts} note={healthUnavailable ? 'Health source unavailable' : 'Below 6 months from health records'} /></section>
+      {showingRules
+        ? <RuleSet kpiSet={kpiSet} cadence={cadence} storedUpdates={storedUpdates} />
+        : <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · the chase writes to the log, never to the update</span></div><UpdateTable rows={visible} rules={kpiSet || []} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} lastChaseByProject={lastChaseByProject} onChase={chaseOne} chasing={chasing} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company and are shown as submitted. A chase asks the company for an update and is logged.</p></section>}
+      {/* The artboard's band is "parse N updates … arriving as editable
+          proposals". Half of that has somewhere to land and half does not, so
+          half is mounted: the read names which asked-for figures are missing
+          from a stored update and which arrived as prose. Accepting a draft
+          stamps the draft and writes nothing else — there is no proposal queue
+          and no KPI ledger to accept INTO — so the label promises a read. */}
+      <ZoneDraft
+        surface="portfolio/updates"
+        railOption="draft:updates-read"
+        label="Proposal · read the updates against the rule set"
+        accept="Accept the read"
+        run="Draft the read"
+        foot="Batch cost estimated before it runs. The read names gaps; it fills none in."
+        empty="What arrived measured against what was asked for: which required figures no stored update carries, and which arrived as a sentence rather than a number. Ambiguity is named, never resolved into a figure."
+        nothingToDraft="No stored update is recorded against an accessible company, so there is nothing to read the rule set against."
+      />
+      <section className="i4-card ip2-unavailable"><div className="i4-section-head"><div><h2>How updates are handled</h2><p>Reporting rules are visible; submitted text stays source-preserved</p></div></div><strong>The Rules view shows the KPI set companies report against.</strong><p>Narrative text is kept as submitted and is not converted into KPI figures. If a value is absent or written only in prose, this workspace names the gap instead of inferring a number.</p><p>The reporting rules are read-only here. Changes to what companies report are handled through the authorised portfolio workflow.</p></section>
+      <footer className="i4-boundary">Investor workspace · updates shown are restricted to this investor’s accessible portfolio.</footer></>}
+  </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div></ZonePrimaryScope>;
+}
+
+function UpdateTable({ rows, rules, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {
+  if (updatesUnavailable) return <div className="i4-empty"><AlertCircle size={16} />Portfolio update source unavailable. No empty-reporting claim is being made.</div>;
+  if (!rows.length) return <div className="i4-empty"><Inbox size={16} />No accessible portfolio companies are recorded for this investor.</div>;
+  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{companyHref(row.project?.uid) ? <Link to={companyHref(row.project.uid)} data-testid={`link-company-${row.project_id}`}>{row.project?.name || `Startup ${row.project_id}`}</Link> : row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : 'Unavailable'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update, rules) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
+}
+/**
+ * The KPI rule set — what accessible companies are asked for, in the wording
+ * they are held to.
+ *
+ * WHY THIS PANEL EXISTS. `Rules` was marked unbuilt on this zone for want of an
+ * extraction layer. That reason is true about extraction and false about rules:
+ * the KPI set is a stored, seeded, firm-wide table, and the compliance endpoint
+ * has been returning it as `kpi_set` on every load of this page since the page
+ * was written. Nothing rendered it. The chip was dark over data already in hand.
+ *
+ * THREE STATES, NOT TWO. `null` is a rule set that could not be read; `[]` is a
+ * rule set with nothing in it. On a page about what companies owe, those are
+ * opposite answers — the first says nothing at all, the second says they owe
+ * nothing — so they never share a branch.
+ *
+ * THE SET SHOWN IS A SLICE AND THE PANEL SAYS SO. The route filters
+ * `cadence = ?` and this page reads one cadence, so rules collected on the
+ * other schedule are stored and absent from this table. Presenting these rows
+ * as the whole of what companies are asked for would be the same defect one
+ * layer down from the one this panel fixes.
+ *
+ * "CARRIED BY" IS NOT A COMPLIANCE RATE. It counts the stored updates on this
+ * page — each company's latest, whatever period it speaks for — that carry a
+ * value under the rule's key. A key present with an empty value is not carried:
+ * an asked-for figure that arrived blank is exactly the gap this column is for.
+ */
+function RuleSet({ kpiSet, cadence, storedUpdates }) {
+  const carried = (key) => (storedUpdates == null ? null : storedUpdates.filter((update) => {
+    const value = update?.kpis?.[key];
+    return value !== undefined && value !== null && String(value).trim() !== '';
+  }).length);
+  return (
+    <section className="i4-card i4-positions ip2-rules" data-testid="ip2-rule-set">
+      <div className="i4-section-head">
+        <div>
+          <h2>KPI rule set</h2>
+          <p>What accessible companies are asked for, and the wording they are held to</p>
+        </div>
+        <span>Firm-wide · read-only</span>
+      </div>
+      {kpiSet === null
+        ? <div className="i4-error" data-testid="ip2-rule-set-unreadable"><span>The rule set could not be read. That is not a claim that companies are asked for nothing.</span></div>
+        : kpiSet.length === 0
+          ? <div className="i4-empty"><AlertCircle size={16} />No KPI is defined for the firm-wide set at the {cadence} cadence. Companies reporting on this schedule are held to no stored figure.</div>
+          : (
+            <>
+              <div className="i4-table-wrap">
+                <table>
+                  <thead><tr><th>KPI</th><th>Unit</th><th>Asked of</th><th>Carried by</th><th>The wording companies are held to</th></tr></thead>
+                  <tbody>
+                    {kpiSet.map((rule) => {
+                      const held = carried(rule.kpi_key);
+                      return (
+                        <tr key={rule.kpi_key} data-testid={`row-ip2-rule-${rule.kpi_key}`}>
+                          <td><strong>{rule.name || title(rule.kpi_key)}</strong><small>{rule.required == null ? 'Requirement not recorded' : Number(rule.required) ? 'Required' : 'Optional'}</small></td>
+                          <td>{rule.unit || 'Not recorded'}</td>
+                          <td>{!rule.applies_to ? 'Not recorded' : rule.applies_to === 'all' ? 'Every company' : title(rule.applies_to)}</td>
+                          <td>{held === null ? <span className="ip2-muted">Unavailable</span> : `${held} of ${storedUpdates.length}`}</td>
+                          <td>{rule.definition || <span className="ip2-muted">No wording is stored. The figure is asked for without a stated way to compute it.</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="i4-seam-note"><span>Which set this is</span> The firm-wide rules collected at the {cadence} cadence — the one this page reads. Rules stored against another cadence are collected on that schedule and are not in this table. <em>Carried by</em> counts the stored updates on this page, each company&rsquo;s latest whatever period it speaks for, not compliance for the current period.</p>
+            </>
+          )}
+    </section>
+  );
+}
+function Stat({ label, value, note, muted }) { return <article className={`i4-stat${muted ? ' ip2-muted-stat' : ''}`}><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
+function UpdatesRail({ rows, unavailable }) {
+  return (
+    <WorkerRail
+      workspace="Portfolio"
+      role="investor"
+      className="i4-rail"
+      stance="Read-only update feed"
+      note="Source-preserved KPI values and narratives, shown without parsing, editing or submitting. The chase asks a silent company for its update and is logged."
+      coverage={[
+        unavailable.updates ? 'Update source unavailable' : `${rows.length} accessible company record${rows.length === 1 ? '' : 's'}`,
+        unavailable.compliance ? 'Cadence compliance unavailable' : 'Reporting status read from cadence compliance',
+      ]}
+      unavailable={[
+        ['Narrative extraction', 'Narrative text stays source-preserved; no figures are inferred from it.'],
+        ['Editing', 'No update is edited or submitted from this page — the chase asks for one and is logged.'],
+      ]}
+    />
+  );
+}
+function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }

@@ -1,0 +1,139 @@
+/**
+ * D1325 (#3486, #2431 part 2) — FILL_FIELDS: which form fields "Fill with
+ * Eadwyn" may fill, how, and from where. The SPA's copy of the Worker's
+ * `cloudflare-worker/src/services/fills/fields.ts`, which explains each key;
+ * `cloudflare-worker/test/fill_sheet_d1325.test.ts` fails when the two
+ * disagree. A field with no entry has no trigger.
+ *
+ * `class` is `restatement`, `sourced`, `composition` or `measured` (a figure a
+ * connector or module measured; Eadwyn never fills it). `sources` lists
+ * `eadwyn`, `connector:<key>` and `module:<cycle>/<slug>`.
+ */
+import { neverFillReason } from './neverFill.js';
+
+export const FILL_FIELD_CLASSES = Object.freeze(['restatement', 'sourced', 'composition', 'measured']);
+
+// D1329 (#3490): the other profiles' pages.
+const COMMIT = 'Investor · Deals · Commit';
+const SERVICES = 'Advisor · Expertise · Services';
+const REPORTING = 'Operating Partner · Delivery · Reporting';
+const EVENTS = 'Admin · Approvals · Events';
+const PUBLICATIONS = 'Super Admin · Content · Publications';
+// D1595 (#3868): three forms the profiles canvas draws (PH5, PH15).
+const VALUE_ADD = 'Investor · Portfolio · Value-add';
+const CATALOG = 'Operating Partner · Offers · Catalog';
+const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
+// #4046 (#3740 2b): the deal page's Notes tab.
+const DEAL_ROOM = 'Investor · Deals · Deal room';
+// #4046 (B2): a member's answers to a product-testing programme's questions, in Studio.
+const TESTING = 'Member · Studio · Product testing';
+// #4046 (B4): a studio's program proposal, on Admin · Programs' Propose a program.
+const PROGRAMS = 'Admin · Programs';
+// #4046 (B4): an admin's note to a partner they invite, in New invitation on Admin · Community · Partner invitations.
+const PARTNER_INVITATIONS = 'Admin · Community · Partner invitations';
+// #4046 (B4): an admin's comment to an article's author, in the review drawer on Super Admin · Content · Content queue.
+const CONTENT_QUEUE = 'Super Admin · Content · Content queue';
+// #4046 (B4): HQ's New segment on Super Admin · Content · Personas (/admin/persona-segments/new).
+const PERSONAS = 'Super Admin · Content · Personas';
+const SOLUTION_DESIGN = 'Founder · Build · Solution design';
+const REVENUE = 'Founder · Grow · Revenue and traction';
+const PROBLEM = 'Founder · Validate · Problem discovery';
+const ICP = 'Founder · Validate · Ideal customer profile';
+const EXPERIMENTS = 'Founder · Validate · Experiments and evidence';
+const PROTOTYPE = 'Founder · Build · Prototype / MVP';
+// #3740 part 2a: three founder Add forms whose rows have an id and a project.
+const ROADMAP = 'Founder · Build · Product roadmap';
+const CAPITAL = 'Founder · Raise · Capital relationships';
+const TEAM = 'Founder · Grow · Team expansion';
+// #4046 (Group A1): a competitor's why, feedback's new theme and an obligation's title.
+const MARKET_INTEL = 'Founder · Validate · Market intelligence';
+const PRODUCT = 'Founder · Grow · Product improvement';
+const DURABLE = 'Founder · Grow · Durable company building';
+// #4046 (S1, 2026-11-04): Distribution's channel name, before the #3722 redesign moves it.
+const DISTRIBUTION = 'Founder · Grow · Distribution';
+
+export const FILL_FIELDS = Object.freeze([
+  // AF1, AF3: Add feature. Impact is the founder's call, so it has no entry.
+  { page: SOLUTION_DESIGN, form: 'feature', field: 'title', label: 'Feature', table: 'mvp_features', column: 'title', class: 'composition', sources: ['connector:github', 'eadwyn'] },
+  { page: SOLUTION_DESIGN, form: 'feature', field: 'pain_group_id', label: 'Answers pain theme', table: 'mvp_features', column: 'pain_group_id', class: 'restatement', sources: ['module:validate/problem-discovery', 'eadwyn'] },
+  { page: SOLUTION_DESIGN, form: 'feature', field: 'hypothesis_id', label: 'Tests hypothesis', table: 'mvp_features', column: 'hypothesis_id', class: 'restatement', sources: ['module:validate/experiments', 'eadwyn'] },
+  { page: SOLUTION_DESIGN, form: 'feature', field: 'effort', label: 'Effort', table: 'mvp_features', column: 'effort', class: 'composition', sources: ['eadwyn'] },
+  // D1328 (#3489, #2431 part 5), part one: Validate's and Build's text fields.
+  // A severity, an urgency, a score window, a direction, a state and an owner
+  // are the founder's call, and a link list is not a column, so none is listed.
+  // New theme: the pain in the customer's words.
+  { page: PROBLEM, form: 'theme', field: 'title', label: 'Theme', table: 'pain_groups', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  // New segment.
+  { page: ICP, form: 'segment', field: 'name', label: 'Segment', table: 'customer_segments', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: ICP, form: 'segment', field: 'who_they_are', label: 'Who they are', table: 'customer_segments', column: 'who_they_are', class: 'composition', sources: ['eadwyn'] },
+  { page: ICP, form: 'segment', field: 'job_to_be_done', label: 'Job to be done', table: 'customer_segments', column: 'job_to_be_done', class: 'composition', sources: ['eadwyn'] },
+  { page: ICP, form: 'segment', field: 'value_promised', label: 'Value promised', table: 'customer_segments', column: 'value_promised', class: 'composition', sources: ['eadwyn'] },
+  // New hypothesis.
+  { page: EXPERIMENTS, form: 'hypothesis', field: 'claim', label: 'Claim', table: 'hypotheses', column: 'claim', class: 'composition', sources: ['eadwyn'] },
+  { page: EXPERIMENTS, form: 'hypothesis', field: 'success_bar', label: 'Success bar', table: 'hypotheses', column: 'success_bar', class: 'composition', sources: ['eadwyn'] },
+  { page: EXPERIMENTS, form: 'hypothesis', field: 'disproof', label: 'What would disprove it', table: 'hypotheses', column: 'disproof', class: 'composition', sources: ['eadwyn'] },
+  // Add must-have: a must-have is an mvp_features row (is_must_have), so its own form keeps its own writer.
+  { page: PROTOTYPE, form: 'must-have', field: 'title', label: 'Must-have', table: 'mvp_features', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: PROTOTYPE, form: 'must-have', field: 'hypothesis_id', label: 'Tests hypothesis', table: 'mvp_features', column: 'hypothesis_id', class: 'restatement', sources: ['module:validate/experiments', 'eadwyn'] },
+  // A measured figure: a connector's, never Eadwyn's.
+  { page: REVENUE, form: 'kpi', field: 'value', label: 'MRR', table: 'project_metrics', column: 'mrr', class: 'measured', sources: ['connector:stripe', 'connector:mercury'] },
+  // #3740 part 2a: a roadmap item's words, an investor's notes and a role's title. Composition only:
+  // a target date, an owner, a stage, a warm path, a band and equity are never filled (D777, D1325).
+  { page: ROADMAP, form: 'item', field: 'title', label: 'Item', table: 'roadmap_okrs', column: 'objective', class: 'composition', sources: ['eadwyn'] },
+  { page: CAPITAL, form: 'investor', field: 'notes', label: 'Notes', table: 'raise_prospects', column: 'notes', class: 'composition', sources: ['eadwyn'] },
+  { page: TEAM, form: 'role', field: 'title', label: 'Role', table: 'job_postings', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (Group A1). Composition only: a competitor's kind and what to watch, feedback's words (what a
+  // customer said), its source and its person, an obligation's kind, date, owner and repeats are never filled.
+  // The competitor's row is keyed by name and feedback's by uid (`ROW_KEYS` in routes/fills.ts).
+  { page: MARKET_INTEL, form: 'competitor', field: 'why', label: 'Why it matters', table: 'competitor_tracking', column: 'why_it_matters', class: 'composition', sources: ['eadwyn'] },
+  { page: PRODUCT, form: 'feedback', field: 'theme', label: 'Theme name', table: 'product_feedback', column: 'theme', class: 'composition', sources: ['eadwyn'] },
+  { page: DURABLE, form: 'obligation', field: 'title', label: 'Obligation', table: 'compliance_events', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: DISTRIBUTION, form: 'channel', field: 'name', label: 'Name', table: 'growth_channels', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  // D1329 (#3490, #2431 part 6): every other profile. These records are not a
+  // venture's; `scopes.ts` holds each one's own write check. No amount, legal
+  // name, approval, decision, outcome, term or member's record is listed.
+  // AF17, on Commit's IC memo (the owner's answer B): the memo's words only.
+  { page: COMMIT, form: 'ic-memo', field: 'memo', label: 'Memo', table: 'ic_decisions', column: 'memo', class: 'composition', sources: ['eadwyn'] },
+  // AF18: New service. Its price is a money term and the legal name an identity field.
+  { page: SERVICES, form: 'service', field: 'title', label: 'Title', table: 'advisor_services', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: SERVICES, form: 'service', field: 'scope', label: 'What it covers', table: 'advisor_services', column: 'scope', class: 'composition', sources: ['module:advisor/outcomes', 'eadwyn'] },
+  // AF19: a status report's Done and Next, from the engagement record at no AI tokens.
+  { page: REPORTING, form: 'status-report', field: 'shipped', label: 'Done this week', table: 'engagement_status_reports', column: 'shipped', class: 'restatement', sources: ['module:delivery/engagement'] },
+  { page: REPORTING, form: 'status-report', field: 'next_up', label: 'Next week', table: 'engagement_status_reports', column: 'next_up', class: 'restatement', sources: ['module:delivery/engagement'] },
+  // AF20: an event's content, never its approval, times, capacity or price. #4046 (B2): its title too.
+  { page: EVENTS, form: 'event', field: 'title', label: 'Title', table: 'events', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: EVENTS, form: 'event', field: 'description', label: 'Description', table: 'events', column: 'description', class: 'composition', sources: ['eadwyn'] },
+  { page: EVENTS, form: 'agenda-item', field: 'title', label: 'Session', table: 'event_agenda_items', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: EVENTS, form: 'agenda-item', field: 'description', label: 'What happens', table: 'event_agenda_items', column: 'description', class: 'composition', sources: ['eadwyn'] },
+  // AF21: a publication's summary (H20's draft, in the shared sheet).
+  { page: PUBLICATIONS, form: 'publication', field: 'summary_text', label: 'Summary', table: 'admin_publications', column: 'summary_text', class: 'composition', sources: ['eadwyn'] },
+  // D1595 (#3868): the words only; no outcome, hours, detail, price, value, credit, cap, title, offer or partner name.
+  { page: VALUE_ADD, form: 'support', field: 'summary', label: 'What happened', table: 'portfolio_support_entries', column: 'summary', class: 'composition', sources: ['eadwyn'] },
+  { page: CATALOG, form: 'offering', field: 'summary', label: 'Summary (what the founder gets)', table: 'service_offerings', column: 'summary', class: 'composition', sources: ['eadwyn'] },
+  { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
+  // #4046: a firm's private note on a deal, its words only. Its tag is the investor's own call, so it has no entry.
+  { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B2): a member's answers to a programme's questions (at most five), their own words; never availability or consent.
+  ...[1, 2, 3, 4, 5].map((n) => ({ page: TESTING, form: 'testing-answers', field: `answer_${n}`, label: `Answer ${n}`, table: 'testing_applications', column: `answer_${n}`, class: 'composition', sources: ['eadwyn'] })),
+  // #4046 (B4): a program proposal's words: its working name, its one-line purpose and who it suits, in the
+  // studio's prose. Who it is for, its group, join method, cycle, seats, rewards, templates, what HQ receives,
+  // its tools and HQ's note and decision are the studio's or HQ's call, so none is listed.
+  { page: PROGRAMS, form: 'program-proposal', field: 'name', label: 'Name', table: 'program_proposals', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'purpose', label: 'One-line purpose', table: 'program_proposals', column: 'purpose', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'eligibility', label: 'Eligibility', table: 'program_proposals', column: 'eligibility', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): the admin's own note to the partner they invite; never the email, name, what to offer or the terms.
+  { page: PARTNER_INVITATIONS, form: 'partner-invitation', field: 'personal_message', label: 'Message to the invitee', table: 'partner_invitations', column: 'personal_message', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): a reviewer's comment to the article's author; never the paragraph it points at, a reply, Resolve or a stage change.
+  { page: CONTENT_QUEUE, form: 'review-comment', field: 'body', label: 'Comment', table: 'article_review_comments', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): HQ's words about a new segment, its name and who they are; never its key, profile, status, typical, needs or offers.
+  { page: PERSONAS, form: 'segment-profile', field: 'name', label: 'Name', table: 'segment_profiles', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PERSONAS, form: 'segment-profile', field: 'who', label: 'Who they are', table: 'segment_profiles', column: 'who', class: 'composition', sources: ['eadwyn'] },
+].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })));
+
+/** The fields of one form, in the form's order. */
+export const fieldsOf = (page, form) => FILL_FIELDS.filter((f) => f.page === page && f.form === form);
+
+/** Whether Eadwyn is ever asked to fill this field. The Worker answers the same. */
+export function offeredToEadwyn(f) {
+  return Boolean(f) && f.sources.includes('eadwyn') && f.class !== 'measured' && !neverFillReason(`${f.table}.${f.column}`);
+}

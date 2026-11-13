@@ -1,0 +1,1 @@
+| Explore the Spin-Out Lab | investor-LP | `/spinout-lab` | `/spinout-lab` (investor branch) | `spinout_lab.ts`; content in `lib/spinoutInvestorContent.js` | OUT OF SCOPE | `SpinoutLabInvestorPage.jsx:2` states it is a native port of this canvas with four documented departures. |

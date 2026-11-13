@@ -1,0 +1,38 @@
+#24 - Use of Funds Allocator → THE ASK
+What & Why
+Replace the free-text "Use of Funds" box on the About Your Startup intake form with a structured allocator over five fixed sections, each with a percentage. A live total calculator enforces that allocations sum to exactly 100% so founders spread funds across sections instead of maxing every one. This structured allocation flows automatically into the THE ASK slide of the Axal VC Spin-Out deck (in-app preview and the PowerPoint export), where it stays read-only.
+The five canonical sections, in this order:
+1. Product & engineering
+2. GTM: sales and marketing
+3. Infrastructure & data
+4. Operations, legal & compliance
+5. Hiring / runway reserve
+Done looks like
+* The About Your Startup form shows the five sections, each with a percentage control (slider plus a numeric field, 0–100), replacing the old free-text box.
+* A running total is always visible. When the total is not 100%, the founder sees a clear inline message and cannot advance/submit.
+* The allocator is optional: if every section is left at 0 (untouched), the founder can still submit. As soon as any section has a value above 0, the total must equal exactly 100% before they can proceed.
+* The submitted allocation is persisted on the project and feeds the deck.
+* On THE ASK slide, the "Use of Funds" list shows only the sections with a percentage above 0 (0% sections are omitted), using the five canonical labels, with bars sized to each percentage. This is true in both the in-app deck and the exported PowerPoint.
+* The funds list on THE ASK slide is not editable in the deck — there is no inline edit affordance for it.
+* Older projects that still have free-text use-of-funds keep rendering as before (no regression).
+Out of scope
+* Changing the other KPIs on THE ASK slide (target raise, instrument, runway, stage, milestone).
+* Editing use-of-funds from the Capital module or any deck-side editor.
+* Adding/removing sections or letting founders rename sections — the five labels are fixed.
+* Backfilling/migrating existing free-text entries into the new structured format.
+Steps
+1. Allocator UI on the intake form — In the About Your Startup step, replace the single "Use of Funds" textarea with the five fixed sections, each with a percentage control and a live total readout. Show a clear validation state and block advancing when any value is entered but the total is not exactly 100%; allow submit when all five are 0. Keep dark-mode variants consistent with the rest of the form.
+2. Persist the allocation through to the deck pipeline — Send and store the structured allocation on the project so the existing deck data path consumes it. Store it as structured data (label + percentage per section) rather than a fragile delimited string — note the canonical labels contain colons (e.g. "GTM: sales and marketing"), which the current text parser would mis-split. Drop sections with 0% so they never reach the deck. Preserve backward compatibility: projects that still hold legacy free-text use-of-funds must continue to parse via the existing fallback.
+3. Deck rendering (in-app + export) — Ensure THE ASK slide renders the structured allocation: only non-zero sections, canonical labels, percentages and bars, capped at five. Confirm the funds list remains read-only (no inline edit), and that the in-app React slide and the PPTX builder stay in lockstep. The deck's sample/fallback values remain only for projects with no allocation.
+4. Tests & drift check — Update/extend the spinout deck data tests for the new allocation shape (non-zero filtering, label fidelity, 5-section cap) and run the required pre-merge drift check.
+Relevant files
+* frontend/src/pages/FounderPortal.jsx:26-34,149-156
+* frontend/src/lib/api.js:644
+* cloudflare-worker/src/routes/projects.ts:277-390,319,456
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:496-510,725-747,1188
+* cloudflare-worker/src/services/decks/spinoutDeckData.ts:509-540
+* cloudflare-worker/src/services/decks/autofill.ts:75,152
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:130-149,741-785
+* frontend/src/decks/spinout/buildDeck.js:439-488
+* frontend/src/decks/spinout/deckData.js:237-254
+* cloudflare-worker/test/spinoutDeckData.test.ts

@@ -1,0 +1,50 @@
+name: Landing policy
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    name: landing policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted base
+        id: base
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Report the advisory tier
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LANDING_AUTO: ${{ vars.LANDING_AUTO == 'true' }}
+          CHECKOUT_OUTCOME: ${{ steps.base.outcome }}
+        shell: bash
+        run: |
+          result='{"tier":"T2","reasons":["Trusted classifier or exact pull request diff unavailable."]}'
+          if [[ "$CHECKOUT_OUTCOME" == success && "$PR_NUMBER" =~ ^[0-9]+$ &&
+                "$BASE_SHA" =~ ^[a-f0-9]{40}$ && "$HEAD_SHA" =~ ^[a-f0-9]{40}$ ]] &&
+             [[ -f scripts/merge-policy.mjs ]] &&
+             [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]] &&
+             git fetch --no-tags origin "refs/pull/$PR_NUMBER/head" &&
+             [[ "$(git rev-parse FETCH_HEAD)" == "$HEAD_SHA" ]] &&
+             classified=$(node scripts/merge-policy.mjs --base "$BASE_SHA" --head "$HEAD_SHA"); then
+            result="$classified"
+          fi
+          {
+            printf '## Landing policy (advisory)\n\n'
+            printf 'Base SHA: `%s`\n\n' "$BASE_SHA"
+            printf 'Head SHA: `%s`\n\n' "$HEAD_SHA"
+            printf 'LANDING_AUTO: `%s`\n\n' "$LANDING_AUTO"
+            printf '    %s\n' "$result"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ef}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="padding:56px 64px 120px;display:flex;flex-direction:column;gap:80px;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <div style="max-width:980px">
+    <div style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Raise</div>
+    <h1 style="margin:8px 0 0;font-size:34px;font-weight:800;letter-spacing:-.02em">Raise evidence</h1>
+    <p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:#4a4553;max-width:760px;text-wrap:pretty">What backs each claim a founder makes to investors, where it came from, how strong and how old it is, and who can see it. Boards VR1 to VR19.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:18px">
+      <a href="#founder" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Founder · VR1–VR5</a>
+      <a href="#modules" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Inside modules · VR6–VR7</a>
+      <a href="#investors" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Investors · VR8–VR11</a>
+      <a href="#studio" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Studio admins · VR12</a>
+      <a href="#states" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">States · VR13–VR16</a>
+      <a href="#phone" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Phone · VR17–VR18</a>
+      <a href="#dark" style="font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:#fff;border:1px solid #ececf1">Dark · VR19</a>
+    </div>
+  </div>
+
+  <section id="founder" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Founder · the Evidence view</h2><span style="font-size:13px;color:#6b6577">VR1 to VR5</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR1" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR1</span><span style="font-size:15px;font-weight:700">Evidence · Founder</span><span style="font-size:13px;color:#6b6577">desktop 1440 · light · main board</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR1" hint-size="1440px,2100px"></dc-import></div>
+      </div>
+      <div id="VR2" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR2</span><span style="font-size:15px;font-weight:700">Claim drawer · Mismatch</span><span style="font-size:13px;color:#6b6577">desktop 1440 · drawer 480 over VR1</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR2" hint-size="1440px,1500px"></dc-import></div>
+      </div>
+      <div id="VR3" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR3</span><span style="font-size:15px;font-weight:700">Evidence item drawer · Recorded theme</span><span style="font-size:13px;color:#6b6577">desktop 1440</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR3" hint-size="1440px,1500px"></dc-import></div>
+      </div>
+      <div id="VR4" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR4</span><span style="font-size:15px;font-weight:700">Waiting for review</span><span style="font-size:13px;color:#6b6577">desktop 1440</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR4" hint-size="1440px,1100px"></dc-import></div>
+      </div>
+      <div id="VR5" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR5</span><span style="font-size:15px;font-weight:700">Share dialog</span><span style="font-size:13px;color:#6b6577">desktop 1440 · dialog 560</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR5" hint-size="1440px,1500px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="modules" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Evidence inside the Raise modules</h2><span style="font-size:13px;color:#6b6577">VR6 to VR7</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR6" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR6</span><span style="font-size:15px;font-weight:700">Inside a module</span><span style="font-size:13px;color:#6b6577">desktop 1440 · two crops</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR6" hint-size="1440px,1350px"></dc-import></div>
+      </div>
+      <div id="VR7" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR7</span><span style="font-size:15px;font-weight:700">Pitch deck editor</span><span style="font-size:13px;color:#6b6577">desktop 1440 · crop</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR7" hint-size="1440px,820px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="investors" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Investors</h2><span style="font-size:13px;color:#6b6577">VR8 to VR11 · the Evidence block on a deal page</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR8" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR8</span><span style="font-size:15px;font-weight:700">Investor · summary before the NDA</span><span style="font-size:13px;color:#6b6577">desktop 1440</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR8" hint-size="1440px,1000px"></dc-import></div>
+      </div>
+      <div id="VR9" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR9</span><span style="font-size:15px;font-weight:700">Investor · summary after the NDA</span><span style="font-size:13px;color:#6b6577">desktop 1440 · after the MRR mismatch was reconciled</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR9" hint-size="1440px,1600px"></dc-import></div>
+      </div>
+      <div id="VR10" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR10</span><span style="font-size:15px;font-weight:700">Investor · item drawer</span><span style="font-size:13px;color:#6b6577">desktop 1440 · three crops</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR10" hint-size="1440px,900px"></dc-import></div>
+      </div>
+      <div id="VR11" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR11</span><span style="font-size:15px;font-weight:700">See as an investor · Founder</span><span style="font-size:13px;color:#6b6577">desktop 1440</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR11" hint-size="1440px,1800px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="studio" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Studio admins</h2><span style="font-size:13px;color:#6b6577">VR12 · read-only, bank-derived evidence hidden</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR12" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR12</span><span style="font-size:15px;font-weight:700">Evidence · Admin</span><span style="font-size:13px;color:#6b6577">desktop 1440 · Admin shell</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR12" hint-size="1440px,1900px"></dc-import></div>
+      </div>
+      <div id="VR12HQ" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR12 · HQ</span><span style="font-size:15px;font-weight:700">Evidence · Super Admin</span><span style="font-size:13px;color:#6b6577">desktop 1440 · HQ shell crop</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR12HQ" hint-size="1440px,600px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="states" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Empty, loading, errors and access</h2><span style="font-size:13px;color:#6b6577">VR13 to VR16</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR13" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR13</span><span style="font-size:15px;font-weight:700">Empty</span><span style="font-size:13px;color:#6b6577">desktop 1440 · two crops</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR13" hint-size="1440px,900px"></dc-import></div>
+      </div>
+      <div id="VR14" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR14</span><span style="font-size:15px;font-weight:700">Loading</span><span style="font-size:13px;color:#6b6577">desktop 1440</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR14" hint-size="1440px,1000px"></dc-import></div>
+      </div>
+      <div id="VR15" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR15</span><span style="font-size:15px;font-weight:700">Error and partial</span><span style="font-size:13px;color:#6b6577">desktop 1440 · two crops</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR15" hint-size="1440px,1400px"></dc-import></div>
+      </div>
+      <div id="VR16" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR16</span><span style="font-size:15px;font-weight:700">No permission</span><span style="font-size:13px;color:#6b6577">desktop 1440 · two panels</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR16" hint-size="1440px,660px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="phone" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Phone</h2><span style="font-size:13px;color:#6b6577">VR17 to VR18 · 390 wide</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR17" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR17</span><span style="font-size:15px;font-weight:700">Phone · Founder</span><span style="font-size:13px;color:#6b6577">390 · three frames</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR17" hint-size="1294px,970px"></dc-import></div>
+      </div>
+      <div id="VR18" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR18</span><span style="font-size:15px;font-weight:700">Phone · Investor</span><span style="font-size:13px;color:#6b6577">390 · two frames</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR18" hint-size="872px,970px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="dark" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid #d9d6e2;padding-bottom:12px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Dark</h2><span style="font-size:13px;color:#6b6577">VR19</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+      <div id="VR19" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">VR19</span><span style="font-size:15px;font-weight:700">Evidence · Founder · dark</span><span style="font-size:13px;color:#6b6577">desktop 1440 · with the Use of funds chart</span></div>
+        <div style="border-radius:14px;overflow:hidden;box-shadow:0 16px 40px rgba(24,24,27,.1);align-self:flex-start"><dc-import name="Raise Evidence Page" board="VR19" hint-size="1440px,2500px"></dc-import></div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+</body></html>

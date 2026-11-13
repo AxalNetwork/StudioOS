@@ -1,0 +1,2339 @@
+import { NOT_SOLD } from '../services/planCatalogue';
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { heldInterval, markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
+import type { Env, User } from '../types';
+import { requireAuth, requireFactor, requireStepUp } from '../auth';
+import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
+import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
+import {
+  ensureInvestorPaywallSchema,
+  effectiveInvestorTier,
+  INVESTOR_QUOTAS,
+  paidInvestorTier,
+  type InvestorTier,
+  type InvestorUser,
+} from '../middleware/requireInvestorTier';
+import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
+import { priceForPlanMetadata, getCatalog } from '../services/catalog';
+import { planByKey } from '../services/planCatalogue';
+import { priceForEntry } from '../services/planCheckout';
+import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
+import { stripeMode, type CatalogPrice } from '../services/catalog';
+import { isTokenPackPrice } from '../services/aiCredits';
+import {
+  ensureAccountPlanSchema,
+  planGroupForRole,
+  readAccountSubscription,
+  upsertAccountPlanFromStripe,
+  markAccountPlanDeleted,
+  devUpgradeAccountPlan,
+} from '../services/accountPlans';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { devPaymentFallbackAllowed } from '../util/paymentMode';
+import {
+  StripeApiError,
+  classifyStripeError,
+  resolveCoreOutcome,
+  type StripeErrorKind,
+} from '../util/stripeError';
+import { refuse } from '../util/refusal';
+import { assertStripeMoneyKind, type StripeMoneyKind } from '../services/moneyRails';
+
+// Epic 6 — Market Intel Pro billing surface.
+//
+//   POST /api/billing/mi-pro/checkout   { plan: 'mi_pro_monthly' | 'mi_pro_annual' }
+//   POST /api/billing/mi-pro/portal     → Stripe Customer Portal session
+//   GET  /api/billing/mi-pro/status     → { status, plan, period_end, products }
+//   POST /api/billing/mi-pro/dev-upgrade { plan }   (dev-only — no Stripe key)
+//   POST /api/billing/stripe/webhook    Stripe event sink (no auth)
+//
+// In dev / when STRIPE_SECRET_KEY is unset, /checkout returns a dev URL that
+// hits /dev-upgrade so the frontend flow is testable without real Stripe.
+
+const billing = new Hono<{ Bindings: Env }>();
+
+interface MiUserCols {
+  mi_subscription_status?: string | null;
+  mi_subscription_id?: string | null;
+  mi_subscription_plan?: string | null;
+  mi_subscription_period_end?: string | null;
+  mi_stripe_customer_id?: string | null;
+}
+type MiUser = User & MiUserCols;
+
+function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
+  return p === 'mi_pro_monthly' || p === 'mi_pro_annual';
+}
+
+/**
+ * D707 (#1772) — the Stripe paths that create an object which takes money. A
+ * `POST` to one of them must name a platform money kind (`services/moneyRails.ts`).
+ */
+export const STRIPE_CREATE_PATHS: readonly string[] = Object.freeze([
+  '/checkout/sessions', '/subscriptions', '/subscription_items', '/subscription_schedules', '/invoices',
+  '/invoiceitems', '/quotes', '/payment_intents', '/payment_links', '/charges',
+]);
+
+/** A path with its query string and any trailing slash removed, as the guard compares it. */
+export function stripePathOf(path: string): string {
+  const bare = String(path).split('?')[0].split('#')[0];
+  return bare.length > 1 ? bare.replace(/\/+$/, '') : bare;
+}
+
+export async function stripeCall<T>(
+  env: Env,
+  path: string,
+  body: Record<string, string>,
+  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' | 'DELETE'; moneyKind?: StripeMoneyKind },
+): Promise<T> {
+  // D707: a create that takes money names its kind, and only Management's
+  // platform kinds travel on Stripe. Checked before the key is read, so a
+  // refused call never leaves the Worker.
+  if ((opts?.method ?? 'POST') === 'POST' && STRIPE_CREATE_PATHS.includes(stripePathOf(path))) {
+    assertStripeMoneyKind(opts?.moneyKind);
+  } else if (opts?.moneyKind !== undefined) {
+    assertStripeMoneyKind(opts.moneyKind);
+  }
+  if (opts?.moneyKind) {
+    body = { ...body, 'metadata[money_kind]': opts.moneyKind };
+    if (Object.keys(body).some((k) => k.startsWith('subscription_data[metadata]'))) {
+      body['subscription_data[metadata][money_kind]'] = opts.moneyKind;
+    }
+  }
+  const key = env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error('stripe_not_configured');
+  const method = opts?.method ?? 'POST';
+  const params = new URLSearchParams(body);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${key}`,
+  };
+  // Stripe replays the original response for 24h when the same Idempotency-Key
+  // recurs — protects money-movement calls (e.g. /refunds) from double-submits
+  // and retries. Only sent when a caller opts in (existing callers unaffected).
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+  // GET (list/read) + DELETE (resource removal, e.g. /coupons/:id) carry query
+  // params with no body; POST (mutations) take a form-encoded body. Catalog
+  // reads use GET; all existing callers stay POST.
+  let url = `https://api.stripe.com/v1${path}`;
+  let reqBody: string | undefined;
+  if (method === 'GET' || method === 'DELETE') {
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+  } else {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    reqBody = params.toString();
+  }
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: reqBody,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    // StripeApiError carries the HTTP status + parsed Stripe error code so
+    // callers can branch on the failure kind. Its `.message` keeps the legacy
+    // `stripe_error:STATUS:body` shape, so existing callers are unaffected.
+    throw new StripeApiError(res.status, text);
+  }
+  return (await res.json()) as T;
+}
+
+billing.post('/mi-pro/checkout', async (c) => {
+  // Task #6 — billing changes are step-up: SMS-only sessions are denied
+  // and must re-authenticate with TOTP before they can mint a Stripe
+  // Checkout session.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as MiUser;
+  await ensureMiPaywallSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as { plan?: string }));
+  const plan = body.plan;
+  if (!isValidPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
+
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+  // Resolve the SKU from the catalog (mirrored from Stripe) instead of a
+  // hardcoded STRIPE_PRICE_* env var. The MI Pro product carries
+  // `metadata.plan === 'mi_pro'`; the plan string encodes the interval.
+  const interval = plan === 'mi_pro_annual' ? 'year' : 'month';
+  const price = stripeKey ? await priceForPlanMetadata(c.env, 'plan', 'mi_pro', interval) : null;
+  const priceId = price?.id;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+
+  // No resolvable SKU. In a keyless dev environment we hand back the simulated
+  // dev-upgrade URL so the UI flow stays testable; in production (or whenever a
+  // Stripe key is present) we FAIL LOUDLY instead of granting a free upgrade.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      return c.json({
+        url: `${appUrl}/api/billing/mi-pro/dev-upgrade?plan=${plan}`,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for plan=mi_pro interval=${interval}` },
+      502,
+    );
+  }
+
+  const params: Record<string, string> = {
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    // D670 retired /market-intel; MI Pro returns to Research.
+    success_url: `${appUrl}/research?upgraded=1`,
+    cancel_url: `${appUrl}/research?upgrade_cancelled=1`,
+    'metadata[user_id]': String(user.id),
+    'metadata[plan]': plan,
+    'metadata[kind]': 'mi',                       // disambiguates from tier/investor in webhook
+    // Checkout session metadata does NOT cascade to the underlying Stripe
+    // Subscription. Propagate it via subscription_data[metadata] so the
+    // customer.subscription.created/updated webhook can identify MI Pro and
+    // upsert by user_id (incl. period_end) even when that event arrives
+    // before checkout.session.completed.
+    'subscription_data[metadata][kind]': 'mi',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][plan]': plan,
+    client_reference_id: String(user.id),
+  };
+  if (user.mi_stripe_customer_id) {
+    params.customer = user.mi_stripe_customer_id;
+  } else {
+    params.customer_email = user.email;
+  }
+  // Task #12 — Stripe Tax (flag-gated). Checkout collects the billing address;
+  // customer_update[address]=auto saves it back to an existing customer.
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
+
+  try {
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'platform_plan' });
+    return c.json({ url: session.url, session_id: session.id });
+  } catch (e) {
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.post('/mi-pro/portal', async (c) => {
+  // Task #6 — Stripe Customer Portal is the cancel/upgrade surface; gate
+  // it on TOTP step-up so a stolen SMS factor can never reach billing.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as MiUser;
+  if (!user.mi_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  try {
+    const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
+      customer: user.mi_stripe_customer_id,
+      return_url: `${appUrl}/research`,
+    });
+    return c.json({ url: session.url });
+  } catch (e) {
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.get('/mi-pro/status', async (c) => {
+  const user = (await requireAuth(c)) as MiUser;
+  await ensureMiPaywallSchema(c.env);
+  return c.json({
+    status: user.mi_subscription_status ?? 'free',
+    plan: user.mi_subscription_plan ?? null,
+    period_end: user.mi_subscription_period_end ?? null,
+    is_pro: userHasMiPro(user),
+    products: MI_PRO_PRODUCTS,
+  });
+});
+
+// Dev-only: flip the user to active Pro without a real Stripe round-trip.
+// 404s when STRIPE_SECRET_KEY is set so prod can't accidentally expose this.
+billing.all('/mi-pro/dev-upgrade', async (c) => {
+  // Simulated upgrade — reachable ONLY in a keyless, non-production env.
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as MiUser;
+  await ensureMiPaywallSchema(c.env);
+  const url = new URL(c.req.url);
+  const plan = url.searchParams.get('plan') ?? 'mi_pro_monthly';
+  if (!isValidPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
+  const periodEnd = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await c.env.DB.prepare(
+    `INSERT INTO mi_pro_subscriptions (user_id, status, plan, period_end, updated_at)
+     VALUES (?, 'active', ?, ?, datetime('now'))
+     ON CONFLICT(user_id) DO UPDATE SET
+       status = 'active', plan = excluded.plan,
+       period_end = excluded.period_end, updated_at = datetime('now')`
+  ).bind(user.id, plan, periodEnd).run();
+  // For browser-initiated flows (the dev checkout URL is opened in a new tab),
+  // redirect back to the app instead of returning JSON.
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/research?upgraded=1`);
+  }
+  return c.json({ ok: true, status: 'active', plan, period_end: periodEnd });
+});
+
+// ---------------------------------------------------------------------------
+// Task #6 — Founder subscription tier checkout / portal / dev-upgrade.
+// Distinct customer + subscription columns from MI Pro so a founder can hold
+// both a Tier sub (Growth/Studio) and an MI Pro sub side-by-side.
+// ---------------------------------------------------------------------------
+
+function isValidTier(t: unknown): t is 'growth' | 'studio' {
+  return t === 'growth' || t === 'studio';
+}
+
+/**
+ * D816 (#2262): the billing interval a checkout asked for. Absent is monthly,
+ * so a caller that sends none buys what it always bought; anything other than
+ * `month` or `year` is refused (null), never read as monthly.
+ */
+export function checkoutInterval(v: unknown): 'month' | 'year' | null {
+  if (v === undefined || v === null) return 'month';
+  return v === 'month' || v === 'year' ? v : null;
+}
+
+/** Legacy entry points use the same mode/key rule as the checkout sheet. */
+async function legacyPlanPrice(c: Context<{ Bindings: Env }>, key: string, interval: 'month' | 'year'): Promise<CatalogPrice | Response> {
+  const keys = await keyReadiness(c.env);
+  if (keys.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+    audience: 'member', extra: { reason: keys.reason } });
+  const entry = planByKey(key);
+  let products;
+  try { products = await getCatalog(c.env, 'subscription', undefined, { sync: false }); }
+  catch { return refuse(c, 503, { code: 'catalogue_unreadable', message: 'The plan catalogue could not be read. Nothing was charged.', audience: 'member' }); }
+  const readiness = entry ? await planReadiness(c.env, products, entry, interval) : { state: 'not_ready' as const, reason: 'price_missing' as const };
+  if (readiness.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+    audience: 'member', extra: { reason: readiness.reason } });
+  return priceForEntry(products, entry!, interval)!.price;
+}
+
+billing.post('/tier/checkout', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  const body = await c.req.json().catch(() => ({} as { tier?: string; interval?: string }));
+  const tier = body.tier;
+  if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
+  // D816 (#2262): every paid plan sells monthly or yearly; monthly when the caller names none.
+  const interval = checkoutInterval(body.interval);
+  if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
+
+  const price = await legacyPlanPrice(c, `founder:${tier}`, interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+
+  const params: Record<string, string> = {
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/settings?tab=billing&upgraded=1`,
+    cancel_url: `${appUrl}/settings?tab=billing&upgrade_cancelled=1`,
+    'metadata[user_id]': String(user.id),
+    'metadata[tier]': tier,
+    'metadata[interval]': interval,
+    'metadata[kind]': 'tier',                     // disambiguates from MI Pro in webhook
+    // Checkout session metadata does NOT cascade to the underlying Stripe
+    // Subscription. Propagate via subscription_data[metadata] so the
+    // customer.subscription.created/updated webhook can positively identify
+    // a founder-tier event — without this the tier mirror cannot be scoped
+    // by kind and would clobber state shared on the same Stripe customer.
+    'subscription_data[metadata][kind]': 'tier',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][tier]': tier,
+    client_reference_id: `tier:${user.id}`,
+  };
+  if (user.stripe_customer_id) {
+    params.customer = user.stripe_customer_id;
+  } else {
+    params.customer_email = user.email;
+  }
+  // Task #12 — Stripe Tax (flag-gated).
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
+
+  try {
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'platform_plan' });
+    return c.json({ url: session.url, session_id: session.id });
+  } catch (e) {
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.post('/tier/portal', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  if (!user.stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  try {
+    const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
+      customer: user.stripe_customer_id,
+      return_url: `${appUrl}/account/billing`,
+    });
+    return c.json({ url: session.url });
+  } catch (e) {
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// Spin-Out Lab billing exception. Participants get a 30-day free window and are
+// NEVER pushed into the standard paid-plan trial / auto-charge flow. This
+// billing guarantee is deliberately DISTINCT from the 4-week (28-day) guided
+// sprint length in routes/spinout_lab.ts: the sprint is the product experience;
+// this is the money guarantee surfaced in Settings → Billing so the two can
+// evolve independently.
+const SPINOUT_LAB_FREE_DAYS = 30;
+
+// Compute the founder's Spin-Out Lab billing state (or null when they're not in
+// the Lab). Best-effort: the spinout columns may not exist in every env, so a
+// lookup failure returns null rather than 500-ing the whole Billing tab.
+async function spinoutLabBilling(
+  env: Env,
+  userId: number | string,
+): Promise<{ active: true; free_days: number; free_until: string | null; days_remaining: number } | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT spinout_lab_active, spinout_lab_started_at FROM users WHERE id = ?`,
+    ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_started_at: string | null }>();
+    if (!row || Number(row.spinout_lab_active ?? 0) !== 1) return null;
+    const started = row.spinout_lab_started_at;
+    let freeUntil: string | null = null;
+    let daysRemaining = SPINOUT_LAB_FREE_DAYS;
+    if (started) {
+      const startMs = Date.parse(started.replace(' ', 'T') + (started.includes('Z') ? '' : 'Z'));
+      if (Number.isFinite(startMs)) {
+        const endMs = startMs + SPINOUT_LAB_FREE_DAYS * 86_400_000;
+        freeUntil = new Date(endMs).toISOString();
+        daysRemaining = Math.max(0, Math.ceil((endMs - Date.now()) / 86_400_000));
+      }
+    }
+    return { active: true, free_days: SPINOUT_LAB_FREE_DAYS, free_until: freeUntil, days_remaining: daysRemaining };
+  } catch {
+    return null;
+  }
+}
+
+// D1052 (#2903): the caller's open billing alerts (a failed renewal, a bank's
+// confirmation, a disputed plan payment), for the banner. Ids, counts, dates
+// and an amount, never card data. Before migration 578 there are none.
+billing.get('/alerts', async (c) => {
+  const user = await requireAuth(c);
+  const { openAlerts } = await import('../services/billingAlerts');
+  let alerts: Awaited<ReturnType<typeof openAlerts>> = [];
+  try { alerts = await openAlerts(c.env, Number(user.id)); }
+  catch (e) { if (!/no such table:\s*billing_alerts/i.test(String((e as Error)?.message ?? e))) throw e; }
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ alerts });
+});
+
+// D1052: Confirm pressed on a `needs_confirmation` alert. The client secret is
+// fetched from Stripe now, for the caller's own open alert only, and is never
+// stored; the page hands it to Stripe.js to finish the bank's check.
+billing.post('/alerts/:id/confirm', async (c) => {
+  const user = await requireAuth(c);
+  const { confirmationFor } = await import('../services/billingAlerts');
+  const r = await confirmationFor(c.env, Number(user.id), Number(c.req.param('id')));
+  c.header('Cache-Control', 'private, no-store');
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json({ client_secret: r.client_secret, payment_intent: r.payment_intent });
+});
+
+// D1133: failed-renewal actions prepare Stripe Elements only after a fresh TOTP.
+const renewalAction = (action: 'pay' | 'update-card') => async (c: Context<{ Bindings: Env }>) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const user = await requireAuth(c);
+  c.header('Cache-Control', 'private, no-store');
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  try {
+    const { prepareRenewal } = await import('../services/billingRecovery');
+    const body = await c.req.json<{ nonce?: unknown }>().catch(() => null);
+    const r = await prepareRenewal(c.env, Number(user.id), Number(c.req.param('id')), action, body?.nonce);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json({ kind: r.kind, client_secret: r.client_secret, scope: r.scope });
+  } catch {
+    return refuse(c, 503, { code: 'renewal_unreadable', message: 'The renewal payment could not be read. Try again.', audience: 'member' });
+  }
+};
+billing.post('/alerts/:id/pay', renewalAction('pay'));
+billing.post('/alerts/:id/update-card', renewalAction('update-card'));
+
+billing.get('/tier/status', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  const status = user.subscription_status || 'active';
+  const renews = user.subscription_renews_at || null;
+  return c.json({
+    tier: user.subscription_tier || 'free',
+    status,
+    // D816: how often the held plan is charged (`month` | `year`), from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), 'founder'),
+    renews_at: renews,
+    // When Stripe reports the sub as `trialing`, the current-period end IS the
+    // trial end — the moment the first real charge is attempted. Surfacing it
+    // lets the Settings → Billing trial card show a countdown + "charges on
+    // <date>" without a dedicated column.
+    trial_ends_at: status === 'trialing' ? renews : null,
+    has_customer: !!user.stripe_customer_id,
+    // 30-day free Spin-Out Lab window (null unless the founder is in the Lab).
+    spinout_lab: await spinoutLabBilling(c.env, user.id),
+  });
+});
+
+billing.all('/tier/dev-upgrade', async (c) => {
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  const url = new URL(c.req.url);
+  const tier = url.searchParams.get('tier') ?? 'growth';
+  if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
+  const renewsAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await c.env.DB.prepare(
+    `UPDATE users SET subscription_tier = ?, subscription_status = 'active',
+                       subscription_renews_at = ?
+     WHERE id = ?`,
+  ).bind(tier, renewsAt, user.id).run();
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&upgraded=1`);
+  }
+  return c.json({ ok: true, tier, renews_at: renewsAt });
+});
+
+// ---------------------------------------------------------------------------
+// Task #6 (W-1) — Investor paywall checkout / portal / status / dev-upgrade.
+// Distinct customer + subscription columns from MI Pro and from founder-tier
+// so an investor can carry independent billing state. Free → Professional
+// → Institutional (custom terms; Contact Axal VC).
+// ---------------------------------------------------------------------------
+
+// The investor `plan` string encodes both the tier (professional |
+// institutional) and the billing interval (month | year). Each investor
+// product in the catalog carries `metadata.investor_tier === cfg.tier`; the
+// interval selects the matching recurring price on that product.
+const INVESTOR_PLAN_TO_PRICE: Record<string, { tier: InvestorTier; interval: 'month' | 'year' }> = {
+  // D1334: Investor Plus, between Basic and Pro.
+  investor_plus_monthly: { tier: 'plus',          interval: 'month' },
+  investor_plus_yearly:  { tier: 'plus',          interval: 'year'  },
+  investor_pro_monthly:  { tier: 'professional',  interval: 'month' },
+  investor_pro_yearly:   { tier: 'professional',  interval: 'year'  },
+  investor_inst_monthly: { tier: 'institutional', interval: 'month' },
+  investor_inst_yearly:  { tier: 'institutional', interval: 'year'  },
+};
+
+function isValidInvestorPlan(p: unknown): p is keyof typeof INVESTOR_PLAN_TO_PRICE {
+  return typeof p === 'string' && Object.prototype.hasOwnProperty.call(INVESTOR_PLAN_TO_PRICE, p);
+}
+
+/** D816: the plan key for a tier at an interval, so the plan Stripe records names what was bought. */
+function investorPlanFor(tier: InvestorTier, interval: 'month' | 'year'): keyof typeof INVESTOR_PLAN_TO_PRICE | null {
+  const key = Object.entries(INVESTOR_PLAN_TO_PRICE).find(([, v]) => v.tier === tier && v.interval === interval)?.[0];
+  return key ?? null;
+}
+
+billing.post('/investor/checkout', async (c) => {
+  // Step-up to TOTP, mirrors mi-pro/checkout — billing surfaces never run on
+  // SMS-only sessions.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  if (user.role !== 'investor' && user.role !== 'admin') {
+    return c.json({ error: 'investor_only' }, 403);
+  }
+  const body = await c.req.json().catch(() => ({} as { plan?: string; interval?: string }));
+  if (!isValidInvestorPlan(body.plan)) return c.json({ error: 'invalid_plan' }, 400);
+  // D1430: Institutional is negotiated, never a self-service subscription.
+  if (INVESTOR_PLAN_TO_PRICE[body.plan].tier === 'institutional')
+    return refuse(c, 409, { code: 'not_sellable', message: NOT_SOLD.custom });
+  // D816 (#2262): an explicit interval chooses the price, as on the founder and
+  // persona checkouts; with none, the plan key's own interval stands.
+  const interval = body.interval === undefined ? INVESTOR_PLAN_TO_PRICE[body.plan].interval : checkoutInterval(body.interval);
+  if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
+  const plan = investorPlanFor(INVESTOR_PLAN_TO_PRICE[body.plan].tier, interval);
+  // D1334: a tier with no plan key at this interval is refused, never priced as another tier.
+  if (!plan) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
+  const cfg = INVESTOR_PLAN_TO_PRICE[plan];
+  const price = await legacyPlanPrice(c, `investor:${cfg.tier}`, cfg.interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+
+  const params: Record<string, string> = {
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/settings?tab=billing&investor_upgraded=1`,
+    cancel_url: `${appUrl}/settings?tab=billing&investor_cancelled=1`,
+    'metadata[user_id]': String(user.id),
+    'metadata[plan]': plan,
+    'metadata[investor_tier]': cfg.tier,
+    'metadata[kind]': 'investor',
+    // Stripe Checkout metadata does NOT cascade to the underlying
+    // Subscription unless we also pass it via subscription_data[metadata].
+    // Webhook events for subscription.created/updated/deleted carry the
+    // Subscription object; without this, our `isInvestor`/`investor_tier`
+    // routing on those events silently no-ops.
+    'subscription_data[metadata][kind]': 'investor',
+    'subscription_data[metadata][user_id]': String(user.id),
+    'subscription_data[metadata][investor_tier]': cfg.tier,
+    'subscription_data[metadata][plan]': plan,
+    client_reference_id: `investor:${user.id}`,
+  };
+  // Institutional supports invoice billing — let Stripe collect a card OR an
+  // invoice address depending on the price config; we don't force a payment
+  // method here.
+  if (cfg.tier === 'institutional') {
+    params['payment_method_collection'] = 'if_required';
+  }
+  if (user.investor_stripe_customer_id) {
+    params.customer = user.investor_stripe_customer_id;
+  } else {
+    params.customer_email = user.email;
+  }
+  // Task #12 — Stripe Tax (flag-gated).
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
+
+  try {
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'investor_tier' });
+    return c.json({ url: session.url, session_id: session.id });
+  } catch (e) {
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.post('/investor/portal', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as InvestorUser;
+  if (!user.investor_stripe_customer_id) return c.json({ error: 'no_subscription' }, 400);
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  try {
+    const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
+      customer: user.investor_stripe_customer_id,
+      return_url: `${appUrl}/account/billing`,
+    });
+    return c.json({ url: session.url });
+  } catch (e) {
+    return refuse(c, 502, { code: 'portal_failed', message: 'The billing portal could not be opened. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.get('/investor/status', async (c) => {
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  const tier = effectiveInvestorTier(user);
+  const quotas = INVESTOR_QUOTAS[tier];
+  // Task #7 (W-2) — surface live deal-room usage so the frontend quota bar
+  // can render used/cap. Source of truth is the same table the
+  // `/api/deals/:id/dealroom/join` endpoint counts against.
+  const dealroomRow = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM investor_dealroom_members WHERE investor_user_id = ?`
+  ).bind(user.id).first<{ n: number }>().catch(() => null);
+  const dealroomUsed = Number(dealroomRow?.n ?? 0);
+  return c.json({
+    tier,
+    raw_tier: user.investor_tier ?? 'free',
+    status: user.investor_subscription_status ?? 'free',
+    // D816: how often the held plan is charged, from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), 'investor'),
+    trial_ends_at: user.investor_trial_ends_at ?? null,
+    renews_at: user.investor_subscription_renews_at ?? null,
+    has_customer: !!user.investor_stripe_customer_id,
+    quotas: {
+      intros_per_quarter: quotas.intros_per_quarter,
+      intros_used: user.investor_quota_intros_used ?? 0,
+      dealroom_max: quotas.dealroom_max,
+      dealroom_used: dealroomUsed,
+      seats: quotas.seats,
+      seat_count: user.investor_seat_count ?? 0,
+    },
+  });
+});
+
+billing.all('/investor/dev-upgrade', async (c) => {
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as InvestorUser;
+  await ensureInvestorPaywallSchema(c.env);
+  const url = new URL(c.req.url);
+  const plan = url.searchParams.get('plan') ?? 'investor_pro_monthly';
+  if (!isValidInvestorPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
+  const cfg = INVESTOR_PLAN_TO_PRICE[plan];
+  const renewsAt = new Date(Date.now() + 30 * 86400 * 1000).toISOString();
+  await c.env.DB.prepare(
+    `UPDATE users SET investor_tier = ?,
+                       investor_subscription_status = 'active',
+                       investor_subscription_renews_at = ?,
+                       investor_dealroom_max = ?
+     WHERE id = ?`,
+  ).bind(cfg.tier, renewsAt, INVESTOR_QUOTAS[cfg.tier].dealroom_max, user.id).run();
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&investor_upgraded=1`);
+  }
+  return c.json({ ok: true, tier: cfg.tier, renews_at: renewsAt });
+});
+
+// ---------------------------------------------------------------------------
+// Persona (account-plan) billing — the generic subscription pipeline for every
+// signed-in role that isn't a founder or investor (partner, advisor, and
+// any future persona). Catalog products opt a persona in via
+// `metadata.plan_group === <group>`; state lives in the account_subscriptions
+// side table. Subscriptions are created INLINE (Payment Element in the SPA), so
+// there is no redirect to checkout.stripe.com.
+//
+//   GET  /api/billing/plan/status      → current plan/trial/renewal for the caller
+//   POST /api/billing/plan/checkout    → create an incomplete subscription; returns
+//                                        a client_secret the SPA confirms inline
+//   POST /api/billing/plan/dev-upgrade → keyless-dev simulated upgrade
+// ---------------------------------------------------------------------------
+
+// Resolve (creating if needed) the caller's general payments customer, mirroring
+// payments.ensurePaymentsCustomer without importing it (avoids a billing↔payments
+// import cycle). Persona subscriptions live on this same general customer, so the
+// existing /overview + management endpoints (scope=founder) already surface them.
+async function ensureGeneralCustomer(env: Env, user: TierUser): Promise<string> {
+  if (user.stripe_customer_id) return user.stripe_customer_id;
+  const customer = await stripeCall<{ id: string }>(env, '/customers', {
+    email: user.email,
+    name: user.name || user.email,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+  });
+  await env.DB.prepare('UPDATE users SET stripe_customer_id = ? WHERE id = ?')
+    .bind(customer.id, user.id).run();
+  return customer.id;
+}
+
+billing.get('/plan/status', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const group = planGroupForRole(user.role);
+  // Founder/investor have their own status endpoints; this returns an inert
+  // shell for them so the frontend can call it uniformly without branching.
+  if (!group) {
+    return c.json({ plan_group: null, status: 'free', has_customer: !!user.stripe_customer_id });
+  }
+  // D1049 (#2900): a store that cannot be read says so, so the pricing page
+  // marks no plan rather than marking a paying member on Basic.
+  let row;
+  try {
+    row = await readAccountSubscription(c.env, user.id);
+  } catch (e) {
+    console.error('[billing] plan status', (e as Error)?.message);
+    return c.json({ error: 'unreadable', detail: 'Your plan could not be read. That is not the same as no plan.' }, 503);
+  }
+  // Best-effort: is there a live Stripe price for this persona's Pro plan? Lets
+  // the UI show a real "Subscribe" button vs a "coming soon / contact" state.
+  let hasPaidPrice = false;
+  if (c.env.STRIPE_SECRET_KEY) {
+    try {
+      hasPaidPrice = !!(await priceForPlanMetadata(c.env, 'plan_group', group, 'month'));
+    } catch { hasPaidPrice = false; }
+  }
+  const status = row?.status ?? 'free';
+  return c.json({
+    plan_group: group,
+    plan: row?.plan ?? null,
+    status,
+    // D816: how often the held plan is charged, from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), group),
+    renews_at: row?.period_end ?? null,
+    trial_ends_at: status === 'trialing' ? (row?.trial_end ?? row?.period_end ?? null) : null,
+    has_customer: !!user.stripe_customer_id,
+    has_paid_price: hasPaidPrice,
+  });
+});
+
+billing.post('/plan/checkout', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureAccountPlanSchema(c.env);
+  const group = planGroupForRole(user.role);
+  if (!group) return c.json({ error: 'no_plan_for_role' }, 400);
+  const body = await c.req.json().catch(() => ({} as { interval?: string }));
+  const interval = body.interval === 'year' ? 'year' : 'month';
+
+  const price = await legacyPlanPrice(c, `${group}:pro`, interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
+
+  const customer = await ensureGeneralCustomer(c.env, user);
+  // Create an incomplete subscription and hand back the first invoice's
+  // PaymentIntent client_secret; the SPA confirms the card inline (no redirect).
+  // metadata.kind='plan' + plan_group + user_id let the webhook route the
+  // resulting subscription.created/updated events into account_subscriptions.
+  const subParams: Record<string, string> = {
+    customer,
+    'items[0][price]': priceId,
+    'items[0][quantity]': '1',
+    payment_behavior: 'default_incomplete',
+    'payment_settings[save_default_payment_method]': 'on_subscription',
+    'expand[0]': 'latest_invoice.payment_intent',
+    'metadata[kind]': 'plan',
+    'metadata[plan_group]': group,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+    'metadata[price_id]': priceId,
+    ...automaticTaxParams(stripeTaxEnabled(c.env)),
+  };
+  try {
+    const sub = await stripeCall<{
+      id: string; status: string;
+      latest_invoice?: { payment_intent?: { client_secret?: string } };
+    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan' });
+    const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
+    if (!clientSecret) {
+      // Zero-due first invoice (e.g. a trial) → already active/trialing.
+      if (sub.status === 'active' || sub.status === 'trialing') {
+        return c.json({ free: true, subscription_id: sub.id, status: sub.status });
+      }
+      return c.json({ error: 'no_client_secret' }, 502);
+    }
+    return c.json({ client_secret: clientSecret, subscription_id: sub.id, status: sub.status });
+  } catch (e) {
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.all('/plan/dev-upgrade', async (c) => {
+  if (!devPaymentFallbackAllowed(c.env)) return c.json({ error: 'not_found' }, 404);
+  const user = (await requireAuth(c)) as TierUser;
+  const group = planGroupForRole(user.role);
+  if (!group) return c.json({ error: 'no_plan_for_role' }, 400);
+  const periodEnd = await devUpgradeAccountPlan(c.env, user.id, group);
+  if (c.req.method === 'GET') {
+    const appUrl = c.env.APP_URL || 'http://localhost:5000';
+    return c.redirect(`${appUrl}/settings?tab=billing&upgraded=1`);
+  }
+  return c.json({ ok: true, plan_group: group, status: 'active', period_end: periodEnd });
+});
+
+// ---------------------------------------------------------------------------
+// Task #5 — In-app billing dashboard.
+//
+//   GET  /api/billing/overview?scope=founder|investor
+//        → { has_customer, subscriptions, payment_methods, upcoming_invoice,
+//            invoices } — everything the dashboard needs in one round trip.
+//   POST /api/billing/subscription/cancel   { subscription_id, scope }
+//   POST /api/billing/subscription/resume   { subscription_id, scope }
+//   POST /api/billing/subscription/swap/preview  { subscription_id, price_id, scope }
+//   POST /api/billing/subscription/swap/confirm  { subscription_id, price_id, scope }
+//
+// Replaces the Stripe Customer Portal redirect: users manage subscriptions,
+// payment methods, and invoices without leaving StudioOS. All Stripe access is
+// server-side via the `stripeCall` wrapper — the secret key never reaches the
+// SPA. Every mutation re-fetches the subscription from Stripe and verifies it
+// belongs to the caller's customer before acting.
+// ---------------------------------------------------------------------------
+
+type BillingScope = 'founder' | 'investor';
+
+function billingScope(v: unknown): BillingScope {
+  return v === 'investor' ? 'investor' : 'founder';
+}
+
+function resolveScopeCustomer(user: TierUser & InvestorUser, scope: BillingScope): string | null {
+  return scope === 'investor'
+    ? user.investor_stripe_customer_id ?? null
+    : user.stripe_customer_id ?? null;
+}
+
+// Minimal Stripe shapes (only the fields we read / surface).
+interface StripeList<T> { data: T[]; has_more?: boolean }
+interface StripeSubItem {
+  id: string;
+  quantity?: number;
+  current_period_end?: number;
+  price?: {
+    id: string;
+    unit_amount: number | null;
+    currency: string;
+    nickname: string | null;
+    recurring?: { interval: string; interval_count: number } | null;
+    product?: string;
+  };
+}
+interface StripeSubscription {
+  id: string;
+  customer: string;
+  status: string;
+  cancel_at_period_end?: boolean;
+  current_period_end?: number;
+  cancel_at?: number | null;
+  canceled_at?: number | null;
+  items?: { data: StripeSubItem[] };
+}
+interface StripeAddress {
+  line1?: string | null; line2?: string | null; city?: string | null; postal_code?: string | null; country?: string | null;
+}
+interface StripePaymentMethod {
+  id: string;
+  card?: { brand: string; last4: string; exp_month: number; exp_year: number };
+  billing_details?: { address?: StripeAddress | null } | null;
+}
+
+/**
+ * D806 (#2245): the card's billing address as Stripe holds it, or null when
+ * it holds none. Never filled in from anywhere else.
+ */
+export function billingAddressOf(pm: StripePaymentMethod) {
+  const a = pm.billing_details?.address;
+  if (!a) return null;
+  const field = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+  const out = { line1: field(a.line1), line2: field(a.line2), city: field(a.city), postal_code: field(a.postal_code), country: field(a.country) };
+  return Object.values(out).some((v) => v !== null) ? out : null;
+}
+interface StripeCustomer {
+  id: string;
+  invoice_settings?: { default_payment_method?: string | null };
+}
+interface StripeInvoiceLine { amount: number; proration?: boolean; description?: string | null }
+interface StripeInvoice {
+  id?: string;
+  number?: string | null;
+  status?: string | null;
+  currency: string;
+  total?: number;
+  amount_due?: number;
+  amount_paid?: number;
+  created?: number;
+  period_start?: number;
+  period_end?: number;
+  next_payment_attempt?: number | null;
+  hosted_invoice_url?: string | null;
+  invoice_pdf?: string | null;
+  lines?: { data: StripeInvoiceLine[] };
+}
+interface StripeCharge {
+  id: string;
+  amount: number;
+  amount_captured?: number;
+  amount_refunded?: number;
+  currency: string;
+  paid?: boolean;
+  refunded?: boolean;
+  status?: string | null;
+  description?: string | null;
+  receipt_url?: string | null;
+  invoice?: string | null;
+  created?: number;
+}
+
+function subPeriodEnd(sub: StripeSubscription): string | null {
+  const unix = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+  return unix ? new Date(unix * 1000).toISOString() : null;
+}
+
+function normSub(sub: StripeSubscription) {
+  return {
+    id: sub.id,
+    status: sub.status,
+    cancel_at_period_end: !!sub.cancel_at_period_end,
+    current_period_end: subPeriodEnd(sub),
+    cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+    // D1054 (PAYX11): "Cancelled on [date]" on Billing's cancelled card.
+    canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+    items: (sub.items?.data ?? []).map((it) => ({
+      id: it.id,
+      quantity: it.quantity ?? 1,
+      price_id: it.price?.id ?? null,
+      product_id: it.price?.product ?? null,
+      amount: it.price?.unit_amount ?? null,
+      currency: it.price?.currency ?? null,
+      interval: it.price?.recurring?.interval ?? null,
+      nickname: it.price?.nickname ?? null,
+    })),
+  };
+}
+
+function normInvoice(inv: StripeInvoice) {
+  return {
+    id: inv.id ?? null,
+    number: inv.number ?? null,
+    status: inv.status ?? null,
+    currency: inv.currency,
+    total: inv.total ?? inv.amount_due ?? 0,
+    amount_paid: inv.amount_paid ?? 0,
+    created: inv.created ? new Date(inv.created * 1000).toISOString() : null,
+    period_end: inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null,
+    hosted_invoice_url: inv.hosted_invoice_url ?? null,
+    invoice_pdf: inv.invoice_pdf ?? null,
+  };
+}
+
+// Normalise a one-off (non-invoice) Stripe charge for the dashboard's
+// "Payment history" section. `amount` prefers the captured amount; the
+// Stripe-hosted `receipt_url` is the user-facing receipt for à la carte buys
+// (incorporation, feature unlocks, expert sessions) that never produce an
+// invoice/PDF.
+function normCharge(ch: StripeCharge) {
+  return {
+    id: ch.id,
+    amount: ch.amount_captured ?? ch.amount ?? 0,
+    amount_refunded: ch.amount_refunded ?? 0,
+    currency: ch.currency,
+    status: ch.status ?? (ch.paid ? 'paid' : null),
+    refunded: !!ch.refunded,
+    description: ch.description ?? null,
+    receipt_url: ch.receipt_url ?? null,
+    created: ch.created ? new Date(ch.created * 1000).toISOString() : null,
+  };
+}
+
+// Fetch a subscription and assert it belongs to `customer`. Throws a Response
+// (403 / 404) the global handler returns as-is, so callers stay terse.
+async function fetchOwnedSub(env: Env, subId: string, customer: string): Promise<StripeSubscription> {
+  const sub = await stripeCall<StripeSubscription>(
+    env, `/subscriptions/${subId}`, { 'expand[0]': 'items.data.price' }, { method: 'GET' },
+  );
+  if (!sub || sub.customer !== customer) {
+    throw new Response(JSON.stringify({ error: 'subscription_not_found' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return sub;
+}
+
+// D892 §6: a swap changes a subscription of its own scope's family only. The
+// customer check above is not enough on its own: a member whose investor
+// customer is their general customer (a plan the payments intent sold before
+// D892) holds both families on one customer. A subscription of no known family
+// keeps today's behaviour. The family is read strictly: a catalog that cannot
+// be read throws, and the caller refuses the swap rather than call it in scope.
+async function subscriptionInScope(env: Env, sub: StripeSubscription, scope: BillingScope): Promise<boolean> {
+  const { planKindOfSubscription } = await import('../services/planSubscription');
+  const kind = await planKindOfSubscription(env, sub as unknown as Record<string, unknown>, { strict: true });
+  if (!kind) return true;
+  return scope === 'investor' ? kind === 'investor' : kind === 'tier';
+}
+
+// Validate a client-supplied Stripe price id against the mirrored catalog and
+// the request scope, returning the destination tier. This is the server-side
+// authorization gate for plan swaps: the client may only switch to an ACTIVE,
+// RECURRING subscription price whose product carries metadata for the SAME
+// scope it is acting in (founder → metadata.tier; investor →
+// metadata.investor_tier). Anything else (unknown id, inactive/one-time price,
+// non-subscription product, or a cross-scope price) returns null so the caller
+// rejects the request BEFORE any Stripe mutation — preventing both entitlement
+// drift (Stripe changed but D1 tier columns stale) and unintended switches to
+// hidden/cross-scope internal prices.
+async function resolveScopePrice(
+  env: Env, scope: BillingScope, priceId: string,
+): Promise<{ tier?: string; investorTier?: string } | null> {
+  const products = await getCatalog(env);
+  for (const p of products) {
+    if (p.kind !== 'subscription' || p.active === false) continue;
+    const price = p.prices.find((pr) => pr.id === priceId);
+    if (!price) continue;
+    if (price.active === false || price.type !== 'recurring') return null;
+    if (scope === 'investor') {
+      // D1334: only a tier this code knows; an unknown one is refused, never mapped.
+      const investorTier = paidInvestorTier(p.metadata.investor_tier);
+      return investorTier ? { investorTier } : null;
+    }
+    return p.metadata.tier ? { tier: p.metadata.tier } : null;
+  }
+  return null;
+}
+
+// Fetch one billing section, capturing any Stripe failure as a classified kind
+// instead of throwing — so one failing call never takes the whole overview down.
+type SectionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; kind: StripeErrorKind };
+
+async function section<T>(p: Promise<T>): Promise<SectionResult<T>> {
+  try {
+    return { ok: true, data: await p };
+  } catch (e) {
+    return { ok: false, kind: classifyStripeError(e) };
+  }
+}
+
+// After a test→live (or otherwise mismatched) Stripe cutover, a user can carry
+// a stored customer id that no longer resolves under the active secret key.
+// Null the stale column for this scope so the next purchase re-creates a fresh
+// customer in the live account (via ensurePaymentsCustomer) and real data
+// flows from then on. The column name comes from a fixed allowlist, never user
+// input. Best-effort: a failed self-heal must never turn a graceful empty
+// response into a 502.
+async function clearStaleScopeCustomer(
+  env: Env, userId: number | string, scope: BillingScope,
+): Promise<void> {
+  const col = scope === 'investor' ? 'investor_stripe_customer_id' : 'stripe_customer_id';
+  try {
+    await env.DB.prepare(`UPDATE users SET ${col} = NULL WHERE id = ?`).bind(userId).run();
+  } catch {
+    /* swallow — self-heal is best-effort */
+  }
+}
+
+billing.get('/overview', async (c) => {
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const scope = billingScope(c.req.query('scope'));
+  const customer = resolveScopeCustomer(user, scope);
+  const base = { scope, has_customer: !!customer, stripe_configured: !!c.env.STRIPE_SECRET_KEY };
+  const emptyOverview = (over: Partial<typeof base> = {}) => ({
+    ...base, ...over,
+    subscriptions: [], payment_methods: [], upcoming_invoice: null, invoices: [], charges: [],
+  });
+  if (!customer || !c.env.STRIPE_SECRET_KEY) {
+    return c.json(emptyOverview());
+  }
+
+  // One-off (à la carte) purchases always live on the general payments
+  // customer — `users.stripe_customer_id`, the id `ensurePaymentsCustomer`
+  // creates — even when this dashboard is showing a different subscription
+  // scope (e.g. the investor scope reads `investor_stripe_customer_id`). Pull
+  // the charge history from the general customer so every role's "Payment
+  // history" reflects their actual buys, not just charges on the scope customer.
+  const chargesCustomer = user.stripe_customer_id ?? null;
+
+  // Fetch every section independently. A single failure is captured, not
+  // thrown, so it can never 502 the whole Billing tab.
+  const [subsR, pmR, custR, invR, chgR] = await Promise.all([
+    section(stripeCall<StripeList<StripeSubscription>>(c.env, '/subscriptions', {
+      customer, status: 'all', limit: '10', 'expand[0]': 'data.items.data.price',
+    }, { method: 'GET' })),
+    section(stripeCall<StripeList<StripePaymentMethod>>(c.env, '/payment_methods', {
+      customer, type: 'card', limit: '10',
+    }, { method: 'GET' })),
+    section(stripeCall<StripeCustomer>(c.env, `/customers/${customer}`, {}, { method: 'GET' })),
+    section(stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
+      customer, limit: '12',
+    }, { method: 'GET' })),
+    // Payment history is additive enrichment, not core billing data, so it is
+    // never allowed to influence the overall outcome below.
+    chargesCustomer
+      ? section(stripeCall<StripeList<StripeCharge>>(c.env, '/charges', {
+          customer: chargesCustomer, limit: '20',
+        }, { method: 'GET' }))
+      : Promise.resolve({ ok: true, data: { data: [] } } as SectionResult<StripeList<StripeCharge>>),
+  ]);
+
+  const coreKinds = [subsR, pmR, custR, invR].map((r) => (r.ok ? null : r.kind));
+  const outcome = resolveCoreOutcome(coreKinds);
+
+  // The stored customer no longer exists under the active key (classic
+  // test→live mismatch) — treat as "no customer", self-heal the stale id, and
+  // return the same clean empty payload the no-customer path returns. The UI
+  // then shows the friendly "no billing activity yet" empty state.
+  if (outcome === 'customer_missing') {
+    await clearStaleScopeCustomer(c.env, user.id, scope);
+    return c.json(emptyOverview({ has_customer: false }));
+  }
+  // Hard misconfiguration (bad/expired/wrong-mode key) or a total outage of
+  // every core section — surface an explicit, structured error the UI maps to a
+  // friendly "billing temporarily unavailable" message (never a silent empty
+  // page that would misrepresent the user's real billing state).
+  if (outcome === 'unavailable') {
+    return c.json({ ...base, error: 'billing_unavailable' }, 502);
+  }
+
+  // Partial success — degrade any individually-failed section to empty and
+  // render the rest. Record which core sections were degraded so the UI can
+  // tell the user the view may be incomplete (explicit over a silent empty).
+  const subsData = subsR.ok ? (subsR.data.data ?? []) : [];
+  const pmData = pmR.ok ? (pmR.data.data ?? []) : [];
+  const customerObj = custR.ok ? custR.data : null;
+  const invoicesData = invR.ok ? (invR.data.data ?? []) : [];
+  const chargesData = chgR.ok ? (chgR.data.data ?? []) : [];
+  const degraded: string[] = [];
+  if (!subsR.ok) degraded.push('subscriptions');
+  if (!pmR.ok) degraded.push('payment_methods');
+  if (!custR.ok) degraded.push('customer');
+  if (!invR.ok) degraded.push('invoices');
+
+  // Upcoming invoice 404s when nothing is scheduled — treat as "none".
+  let upcoming: StripeInvoice | null = null;
+  try {
+    upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', { customer }, { method: 'GET' });
+  } catch {
+    upcoming = null;
+  }
+  const defaultPm = customerObj?.invoice_settings?.default_payment_method ?? null;
+  // Surface only active-ish subscriptions in the dashboard (hide fully
+  // cancelled/incomplete-expired rows) so the UI shows what the user pays for.
+  const liveSubs = subsData.filter(
+    (s) => !['canceled', 'incomplete_expired'].includes(s.status),
+  );
+  return c.json({
+    ...base,
+    ...(degraded.length ? { degraded } : {}),
+    subscriptions: liveSubs.map(normSub),
+    payment_methods: pmData.map((pm) => ({
+      id: pm.id,
+      brand: pm.card?.brand ?? 'card',
+      last4: pm.card?.last4 ?? '••••',
+      exp_month: pm.card?.exp_month ?? null,
+      exp_year: pm.card?.exp_year ?? null,
+      is_default: pm.id === defaultPm,
+      billing_address: billingAddressOf(pm),
+    })),
+    upcoming_invoice: upcoming
+      ? {
+          currency: upcoming.currency,
+          total: upcoming.total ?? upcoming.amount_due ?? 0,
+          amount_due: upcoming.amount_due ?? 0,
+          next_attempt: upcoming.next_payment_attempt
+            ? new Date(upcoming.next_payment_attempt * 1000).toISOString()
+            : (upcoming.period_end ? new Date(upcoming.period_end * 1000).toISOString() : null),
+        }
+      : null,
+    invoices: invoicesData.map(normInvoice),
+    // One-off (non-invoice) purchases for the "Payment history" section.
+    // Charges created by a subscription/invoice carry `invoice` and already
+    // surface under "Recent invoices", so we drop them to avoid duplication
+    // and only show paid à la carte buys (incorporation, unlocks, sessions).
+    charges: chargesData
+      .filter((ch) => ch.paid && !ch.invoice)
+      .map(normCharge),
+  });
+});
+
+/**
+ * D806 (#2245): one invoice list, newest first, 25 to a page: the member's own
+ * paid orders from D1 and the plan invoices of each Stripe customer they have
+ * (founder, investor). When Stripe cannot be read, the orders still list, with
+ * `degraded: ['stripe']`; the list is never an error as a whole.
+ */
+billing.get('/invoices', async (c) => {
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const { invoicePaging, orderInvoiceRows, pageInvoices, stripeInvoiceRow } = await import('../services/billingInvoices');
+  const { page, per } = invoicePaging(c.req.query('page'), c.req.query('per'));
+  const rows = await orderInvoiceRows(c.env, Number(user.id));
+  const customers = [...new Set([resolveScopeCustomer(user, 'founder'), resolveScopeCustomer(user, 'investor')].filter((v): v is string => !!v))];
+  let stripeDown = false;
+  if (customers.length && !c.env.STRIPE_SECRET_KEY) stripeDown = true;
+  else if (customers.length) {
+    const names = new Map<string, string>();
+    try {
+      for (const p of await getCatalog(c.env)) for (const pr of p.prices) names.set(pr.id, p.name);
+    } catch { /* no catalogue: Stripe's own line words are used */ }
+    const lists = await Promise.all(customers.map((customer) => section(stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
+      customer, limit: '100',
+    }, { method: 'GET' }))));
+    for (const r of lists) {
+      if (!r.ok) { stripeDown = true; continue; }
+      for (const inv of r.data.data ?? []) {
+        const row = stripeInvoiceRow(inv as any, (priceId) => names.get(priceId) ?? null);
+        if (row) rows.push(row);
+      }
+    }
+  }
+  return c.json({ ...pageInvoices(rows, page, per), ...(stripeDown ? { degraded: ['stripe'] } : {}) });
+});
+
+async function setCancelAtPeriodEnd(c: Context<{ Bindings: Env }>, value: boolean) {
+  // Billing mutations are step-up gated, mirroring the (now-removed) Stripe
+  // portal endpoints — never run a subscription change on an SMS-only or stale
+  // session. The SPA auto-prompts for a fresh TOTP on the 403 and retries.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  if (!customer || !subId) return c.json({ error: 'no_subscription' }, 400);
+  await fetchOwnedSub(c.env, subId, customer);
+  try {
+    const updated = await stripeCall<StripeSubscription>(
+      c.env, `/subscriptions/${subId}`,
+      { cancel_at_period_end: value ? 'true' : 'false', 'expand[0]': 'items.data.price' },
+    );
+    return c.json({ ok: true, subscription: normSub(updated) });
+  } catch (e) {
+    return refuse(c, 502, { code: value ? 'cancel_failed' : 'resume_failed', message: value ? "The subscription could not be cancelled. Nothing changed; try again in a moment." : "The subscription could not be resumed. Nothing changed; try again in a moment.", raw: e, audience: 'member' });
+  }
+}
+
+// Cancel = schedule at period end (keeps access until renews_at); the
+// subscription.deleted webhook flips the D1 tier→free when Stripe ends it.
+billing.post('/subscription/cancel', (c) => setCancelAtPeriodEnd(c, true));
+billing.post('/subscription/resume', (c) => setCancelAtPeriodEnd(c, false));
+
+billing.post('/subscription/swap/preview', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; price_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  const priceId = String(body.price_id || '');
+  if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+  // D755 §9: a token pack is bought only through the order intent.
+  if (await isTokenPackPrice(c.env, priceId)) return c.json({ error: 'token_pack_checkout_only' }, 400);
+  // Authorize the destination price for THIS scope before touching Stripe.
+  if (!(await resolveScopePrice(c.env, scope, priceId))) {
+    return c.json({ error: 'invalid_price' }, 400);
+  }
+  const sub = await fetchOwnedSub(c.env, subId, customer);
+  let inScope: boolean;
+  try {
+    inScope = await subscriptionInScope(c.env, sub, scope);
+  } catch (e) {
+    return refuse(c, 502, { code: 'preview_failed', message: 'The plan change could not be previewed. Nothing changed; try again in a moment.', raw: e, audience: 'member' });
+  }
+  if (!inScope) return c.json({ error: 'invalid_scope' }, 400);
+  const itemId = sub.items?.data?.[0]?.id;
+  if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
+  try {
+    const upcoming = await stripeCall<StripeInvoice>(c.env, '/invoices/upcoming', {
+      customer,
+      subscription: subId,
+      'subscription_items[0][id]': itemId,
+      'subscription_items[0][price]': priceId,
+      subscription_proration_behavior: 'create_prorations',
+    }, { method: 'GET' });
+    const prorationLines = (upcoming.lines?.data ?? []).filter((l) => l.proration);
+    const prorationAmount = prorationLines.reduce((s, l) => s + (l.amount || 0), 0);
+    return c.json({
+      currency: upcoming.currency,
+      proration_amount: prorationAmount, // can be negative (credit) on downgrade
+      amount_due: upcoming.amount_due ?? 0,
+      total: upcoming.total ?? 0,
+      new_price_id: priceId,
+    });
+  } catch (e) {
+    return refuse(c, 502, { code: 'preview_failed', message: 'The plan change could not be previewed. Nothing changed; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+billing.post('/subscription/swap/confirm', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — require a RECENT TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const body = await c.req.json().catch(() => ({} as { subscription_id?: string; price_id?: string; scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = resolveScopeCustomer(user, scope);
+  const subId = String(body.subscription_id || '');
+  const priceId = String(body.price_id || '');
+  if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+  // D755 §9: a token pack is bought only through the order intent.
+  if (await isTokenPackPrice(c.env, priceId)) return c.json({ error: 'token_pack_checkout_only' }, 400);
+
+  // Authorize the destination price for THIS scope BEFORE any Stripe mutation.
+  // A valid result is required: it is both the access-control gate (only active,
+  // recurring, same-scope catalog prices are switchable) AND the source for the
+  // entitlement tier we tag on Stripe metadata + sync to D1. Refusing unmapped
+  // prices prevents the drift where Stripe billing changes but the D1 tier
+  // columns stay stale.
+  const mapped = await resolveScopePrice(c.env, scope, priceId);
+  if (!mapped) return c.json({ error: 'invalid_price' }, 400);
+
+  const sub = await fetchOwnedSub(c.env, subId, customer);
+  let inScope: boolean;
+  try {
+    inScope = await subscriptionInScope(c.env, sub, scope);
+  } catch (e) {
+    return refuse(c, 502, { code: 'swap_failed', message: 'The plan could not be changed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+  if (!inScope) return c.json({ error: 'invalid_scope' }, 400);
+  const itemId = sub.items?.data?.[0]?.id;
+  if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
+
+  const params: Record<string, string> = {
+    'items[0][id]': itemId,
+    'items[0][price]': priceId,
+    proration_behavior: 'create_prorations',
+    'expand[0]': 'items.data.price',
+  };
+  if (scope === 'investor' && mapped?.investorTier) {
+    params['metadata[kind]'] = 'investor';
+    params['metadata[investor_tier]'] = mapped.investorTier;
+  } else if (scope === 'founder' && mapped?.tier) {
+    params['metadata[kind]'] = 'tier';
+    params['metadata[tier]'] = mapped.tier;
+  }
+
+  try {
+    // D707: the swap re-stamps `metadata[kind]`, so it stamps the matching money kind too.
+    const moneyKind = params['metadata[kind]'] === 'investor' ? 'investor_tier' as const
+      : params['metadata[kind]'] === 'tier' ? 'platform_plan' as const : undefined;
+    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, { moneyKind });
+    // Align D1 immediately (webhook will re-affirm). Scoped to the calling user.
+    if (scope === 'investor' && mapped?.investorTier) {
+      const t = mapped.investorTier as InvestorTier;
+      const dealroomMax = INVESTOR_QUOTAS[t]?.dealroom_max ?? INVESTOR_QUOTAS.free.dealroom_max;
+      await c.env.DB.prepare(
+        `UPDATE users SET investor_tier = ?, investor_dealroom_max = ? WHERE id = ?`,
+      ).bind(t, dealroomMax, user.id).run();
+    } else if (scope === 'founder' && mapped?.tier) {
+      await c.env.DB.prepare(
+        `UPDATE users SET subscription_tier = ? WHERE id = ?`,
+      ).bind(mapped.tier, user.id).run();
+    }
+    return c.json({ ok: true, subscription: normSub(updated) });
+  } catch (e) {
+    return refuse(c, 502, { code: 'swap_failed', message: 'The plan could not be changed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// In-app payment-method management. Removing the Stripe Customer Portal means
+// the dashboard is now the ONLY place a user can add / replace / remove a card,
+// so these endpoints must exist for BOTH scopes. They reuse `stripeCall` (secret
+// stays server-side) and the Stripe SetupIntent flow — raw card data is captured
+// exclusively by Stripe Elements in the SPA, never touching the worker.
+//
+// All three MUTATE billing state and are therefore step-up gated, exactly like
+// cancel/resume/swap. `resolveScopeCustomer` pins every call to the calling
+// user's own founder/investor customer; default/detach additionally re-fetch the
+// payment method and assert `pm.customer === customer` so a caller can never act
+// on a card that isn't theirs.
+
+// Resolve the scope customer or throw the standard JSON Response the global
+// handler returns verbatim. Used by the mutating PM endpoints below.
+function requireScopeCustomer(user: TierUser & InvestorUser, scope: BillingScope): string {
+  const customer = resolveScopeCustomer(user, scope);
+  if (!customer) {
+    throw new Response(JSON.stringify({ error: 'no_customer' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return customer;
+}
+
+// Fetch a payment method and assert it belongs to `customer`. Throws 404 on a
+// foreign / missing card so default/detach can't touch another user's card.
+async function fetchOwnedPaymentMethod(
+  env: Env, pmId: string, customer: string,
+): Promise<{ id: string; customer?: string | null }> {
+  const pm = await stripeCall<{ id: string; customer?: string | null }>(
+    env, `/payment_methods/${pmId}`, {}, { method: 'GET' },
+  );
+  if (!pm || pm.customer !== customer) {
+    throw new Response(JSON.stringify({ error: 'payment_method_not_found' }), {
+      status: 404, headers: { 'content-type': 'application/json' },
+    });
+  }
+  return pm;
+}
+
+const PM_ID_RE = /^pm_[A-Za-z0-9]+$/;
+
+// Create a SetupIntent for the scope's customer so the SPA can collect & save a
+// new card via Stripe Elements (`confirmSetup`). Returns only a client_secret.
+billing.post('/payment-method/setup-intent', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  try {
+    const intent = await stripeCall<{ id: string; client_secret: string; status: string }>(
+      c.env, '/setup_intents', {
+        customer,
+        usage: 'off_session',
+        'payment_method_types[0]': 'card',
+        'metadata[user_id]': String(user.id),
+        'metadata[uid]': user.uid,
+        'metadata[scope]': scope,
+      },
+    );
+    return c.json({ client_secret: intent.client_secret, setup_intent_id: intent.id, status: intent.status });
+  } catch (e) {
+    return refuse(c, 502, { code: 'setup_intent_failed', message: 'A card could not be set up. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// Make an existing (owned) card the customer's default for future invoices, and
+// re-point any live subscriptions at it so the next renewal charges the new card.
+billing.post('/payment-method/default', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string; payment_method_id?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  const pmId = String(body.payment_method_id || '');
+  if (!PM_ID_RE.test(pmId)) return c.json({ error: 'invalid_payment_method' }, 400);
+  await fetchOwnedPaymentMethod(c.env, pmId, customer);
+  try {
+    await stripeCall(c.env, `/customers/${customer}`, {
+      'invoice_settings[default_payment_method]': pmId,
+    });
+    // Re-point live subscriptions so the next renewal uses the new default.
+    const subsRes = await stripeCall<StripeList<StripeSubscription>>(
+      c.env, '/subscriptions', { customer, status: 'all', limit: '10' }, { method: 'GET' },
+    );
+    const liveSubs = (subsRes.data ?? []).filter(
+      (s) => !['canceled', 'incomplete_expired'].includes(s.status),
+    );
+    for (const s of liveSubs) {
+      await stripeCall(c.env, `/subscriptions/${s.id}`, { default_payment_method: pmId });
+    }
+    return c.json({ ok: true, default_payment_method: pmId });
+  } catch (e) {
+    return refuse(c, 502, { code: 'set_default_failed', message: 'That card could not be made the default. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// Detach an owned card. Stripe refuses to detach a subscription's only/last card
+// that is still required, surfacing as a 502 the SPA shows to the user.
+billing.post('/payment-method/detach', async (c) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c); // BLOCK-AUTH-03 — recent TOTP, not just a TOTP-minted session
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const body = await c.req.json().catch(() => ({} as { scope?: string; payment_method_id?: string }));
+  const scope = billingScope(body.scope);
+  const customer = requireScopeCustomer(user, scope);
+  const pmId = String(body.payment_method_id || '');
+  if (!PM_ID_RE.test(pmId)) return c.json({ error: 'invalid_payment_method' }, 400);
+  await fetchOwnedPaymentMethod(c.env, pmId, customer);
+  try {
+    await stripeCall(c.env, `/payment_methods/${pmId}/detach`, {});
+    return c.json({ ok: true, detached: pmId });
+  } catch (e) {
+    return refuse(c, 502, { code: 'detach_failed', message: 'That card could not be removed. Try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// Best-effort schema bootstrap for the webhook. A single schema hiccup (e.g.
+// the MI Pro columns hitting D1's hard 100-column limit on `users`) must NOT
+// abort the whole webhook and block fulfilment for every other product kind.
+// Fulfilment writes below still throw on genuinely-missing schema, so Stripe
+// simply retries those specific events — no silent data loss.
+async function safeEnsure(name: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    console.warn('[billing] webhook ensure skipped', name, (e as Error).message);
+  }
+}
+
+// Stripe webhook. Signature verification is required when STRIPE_WEBHOOK_SECRET
+// is set; in dev with no secret we accept the body as-is so local testing works.
+billing.post('/stripe/webhook', async (c) => {
+  // SECURITY: verify the signature BEFORE doing any DB/DDL work. Doing schema
+  // bootstrap first let unauthenticated callers trigger DDL and surfaced as a
+  // 500 (which also made Stripe retry forever). Read raw body + verify first.
+  const raw = await c.req.text();
+  const sig = c.req.header('stripe-signature') ?? '';
+  const secret = c.env.STRIPE_WEBHOOK_SECRET;
+  // Task #1 (security hardening) — fail-closed for the Stripe webhook.
+  // Historically this route accepted unsigned payloads whenever
+  // STRIPE_WEBHOOK_SECRET was unset, which gave any unauth caller the
+  // ability to forge subscription state changes. We now ONLY soft-accept
+  // when the worker is explicitly running in a local/dev/test/preview
+  // environment AND the secret is unset; every other config (including the
+  // dangerous "ENVIRONMENT variable typo / unset" case) hard-rejects with
+  // 503 so the misconfiguration is loud rather than silently exploitable.
+  const envName = String((c.env as { ENVIRONMENT?: string }).ENVIRONMENT || '').toLowerCase();
+  const SOFT_ACCEPT_ENVS = new Set(['development', 'dev', 'test', 'local', 'preview']);
+  if (!secret) {
+    if (!SOFT_ACCEPT_ENVS.has(envName)) {
+      return c.json({ error: 'webhook_misconfigured' }, 503);
+    }
+  } else {
+    const ok = await verifyStripeSignature(raw, sig, secret);
+    if (!ok) return c.json({ error: 'invalid_signature' }, 400);
+  }
+  let event: { id: string; type: string; livemode: boolean; data: { object: Record<string, unknown> } };
+  try {
+    event = JSON.parse(raw);
+    if (!event || typeof event.id !== 'string' || !event.id || typeof event.type !== 'string'
+      || typeof event.livemode !== 'boolean' || !event.data || !event.data.object || typeof event.data.object !== 'object') {
+      return c.json({ error: 'invalid_payload' }, 400);
+    }
+  } catch {
+    return c.json({ error: 'invalid_payload' }, 400);
+  }
+  // The authenticated event id is the receipt. A failed dispatch leaves the
+  // receipt unfinished, so a signed retry can run the existing handlers again.
+  await c.env.DB.prepare('INSERT OR IGNORE INTO stripe_webhook_events (event_id, type, livemode) VALUES (?, ?, ?)')
+    .bind(event.id, event.type, event.livemode ? 1 : 0).run();
+  const receipt = await c.env.DB.prepare('SELECT handled_at FROM stripe_webhook_events WHERE event_id = ?')
+    .bind(event.id).first<{ handled_at: string | null }>();
+  if (!receipt) return c.json({ error: 'webhook_unreadable' }, 503);
+  if (receipt.handled_at !== null) return c.json({ received: true, duplicate: true });
+  if (stripeMode(c.env) === 'unconfigured' || event.livemode !== (stripeMode(c.env) === 'live')) {
+    return c.json({ ignored: 'mode_mismatch' });
+  }
+  const processingUid = crypto.randomUUID();
+  const claim = await c.env.DB.prepare(`UPDATE stripe_webhook_events
+    SET processing_uid = ?, processing_until = datetime('now', '+5 minutes')
+    WHERE event_id = ? AND handled_at IS NULL
+      AND (processing_uid IS NULL OR processing_until <= datetime('now'))`)
+    .bind(processingUid, event.id).run();
+  if (Number(claim.meta?.changes ?? 0) !== 1) {
+    const completed = await c.env.DB.prepare('SELECT handled_at FROM stripe_webhook_events WHERE event_id = ?')
+      .bind(event.id).first<{ handled_at: string | null }>();
+    if (completed?.handled_at) return c.json({ received: true, duplicate: true });
+    return c.json({ error: 'webhook_processing' }, 409);
+  }
+  try {
+    // Schema bootstrap AFTER verification, and non-fatal (see safeEnsure).
+    await safeEnsure('mi', () => ensureMiPaywallSchema(c.env));
+    await safeEnsure('tier', () => ensureTierSchema(c.env));
+    await safeEnsure('investor', () => ensureInvestorPaywallSchema(c.env));
+    await safeEnsure('account_plans', () => ensureAccountPlanSchema(c.env));
+    await safeEnsure('incorporations', async () => {
+      const { ensureIncorporationsSchema } = await import('../services/incorporations');
+      await ensureIncorporationsSchema(c.env);
+    });
+    await handleStripeEvent(c.env, event);
+    // `account.updated` still mirrors Connect flags onto experts.* — Task #4's
+    // paid-bookings gate depends on it, and Expert Connect accounts are a
+    // SEPARATE Connect integration from the retired Refer & Earn payouts.
+    //
+    // The Refer & Earn dispatch that used to sit here (`applyConnectAccountUpdated`
+    // onto users.*, plus the `transfer.paid` / `transfer.failed` handlers closing
+    // the referral_payouts lifecycle) went with Stripe Connect in the referrals
+    // redesign. There is no referral payout ledger left for a transfer event to
+    // close, so those event types are simply no longer dispatched here.
+    try {
+      const ev = event as { type: string; account?: string; data: { object: Record<string, unknown> } };
+      if (ev.type === 'account.updated') {
+        const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
+        if (acct?.id) {
+          await c.env.DB.prepare(
+            `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
+               WHERE stripe_account_id = ?`,
+          ).bind(
+            acct.charges_enabled ? 1 : 0,
+            acct.payouts_enabled ? 1 : 0,
+            acct.id,
+          ).run();
+        }
+      }
+    } catch (e: any) {
+      console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
+    }
+    // D5299 (#5299): the revenue ledger's row for this event, once. A failed write throws, so the receipt stays
+    // unfinished and the 503 below makes Stripe retry; a replay writes nothing new.
+    const { recordStripeFinancialEvent } = await import('../services/financialEvents');
+    await recordStripeFinancialEvent(c.env, event as Parameters<typeof recordStripeFinancialEvent>[1]);
+    const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
+      SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
+      WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)
+      .bind(event.id, processingUid).run();
+    if (Number(completed.meta?.changes ?? 0) !== 1) throw new Error('webhook completion unavailable');
+    return c.json({ received: true });
+  } catch {
+    try {
+      await c.env.DB.prepare(`UPDATE stripe_webhook_events SET processing_uid = NULL, processing_until = NULL
+        WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`).bind(event.id, processingUid).run();
+    } catch { console.error('[billing] event processing claim could not be released'); }
+    return c.json({ error: 'webhook_processing_failed' }, 503);
+  }
+});
+
+async function handleStripeEvent(
+  env: Env,
+  event: { id?: string; type: string; created?: number; data: { object: Record<string, unknown> } },
+): Promise<void> {
+  const obj = event.data.object;
+  // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
+  // tier columns (subscription_tier / stripe_customer_id) instead of the MI
+  // Pro columns. Both pipes share the same Stripe webhook because Stripe
+  // only delivers to one endpoint per env.
+  // D892 (#2453): a subscription event with no `kind` — one the payments intent
+  // made before the fix — takes its plan from its price's catalog product.
+  const { subscriptionPlanEvent } = await import('../services/planSubscription');
+  const { meta, fromCatalog } = await subscriptionPlanEvent(env, event.type, obj);
+  const isTier = meta.kind === 'tier'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
+  const isInvestor = meta.kind === 'investor'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('investor:'));
+  const isExpertBooking = meta.kind === 'expert_booking'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('expert_booking:'));
+  const isIncorporation = meta.kind === 'incorporation'
+    || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('incorporation:'));
+  // Persona account-plan subscription (partner, advisor, …). Stamped with
+  // kind='plan' + plan_group + user_id at /plan/checkout. Routed into the
+  // account_subscriptions side table, never the founder/investor/MI columns.
+  const isPlan = meta.kind === 'plan';
+
+  // D1052 (#2903): a subscription active again, or ended, closes its open
+  // payment alerts; `unpaid` keeps them open with no next try. Before the
+  // switch, because the plan cases below return early. Idempotent.
+  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    const { syncSubscriptionAlerts } = await import('../services/billingAlerts');
+    await syncSubscriptionAlerts(env, event.type, obj);
+  }
+  // D4292: an ended subscription's member no longer counts toward the
+  // influencer's milestone bonuses. Idempotent.
+  if (event.type === 'customer.subscription.deleted') {
+    const { onSubscriptionEnded } = await import('../services/influencerCommission');
+    await onSubscriptionEnded(env, obj);
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      // Task #4 — wellbeing expert booking fulfilment.
+      if (isExpertBooking) {
+        const { confirmBookingFromStripe } = await import('../services/wellbeing/bookings');
+        await confirmBookingFromStripe(env, obj);
+        return;
+      }
+      // Task #11 — incorporation Stripe Checkout fulfilment.
+      if (isIncorporation) {
+        const { recordPaidIncorporation } = await import('../services/incorporations');
+        await recordPaidIncorporation(env, obj as any);
+        return;
+      }
+      const userId = Number(meta.user_id ??
+        (typeof obj.client_reference_id === 'string'
+          ? (obj.client_reference_id as string).replace(/^(tier|investor):/, '')
+          : obj.client_reference_id));
+      const customer = obj.customer as string | null;
+      const subscription = obj.subscription as string | null;
+      if (!userId) return;
+      if (isInvestor) {
+        // D1334: the tier the checkout named, or nothing. An unknown tier never
+        // becomes Professional; the subscription events re-read it.
+        const investorTier = paidInvestorTier(meta.investor_tier);
+        if (!investorTier) {
+          console.warn(`[billing] investor checkout ${String(obj.id ?? '')} named no known investor_tier; granted nothing`);
+          return;
+        }
+        const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = ?,
+                             investor_subscription_status = 'active',
+                             investor_dealroom_max = ?,
+                             investor_stripe_customer_id = COALESCE(?, investor_stripe_customer_id),
+                             investor_stripe_subscription_id = COALESCE(?, investor_stripe_subscription_id)
+           WHERE id = ?`,
+        ).bind(investorTier, dealroomMax, customer, subscription, userId).run();
+        return;
+      }
+      if (isTier) {
+        const tier = (meta.tier === 'growth' || meta.tier === 'studio') ? meta.tier : 'growth';
+        await env.DB.prepare(
+          `UPDATE users SET subscription_tier = ?,
+                             subscription_status = 'active',
+                             stripe_customer_id = COALESCE(?, stripe_customer_id),
+                             stripe_subscription_id = COALESCE(?, stripe_subscription_id)
+           WHERE id = ?`,
+        ).bind(tier, customer, subscription, userId).run();
+        return;
+      }
+      const plan = meta.plan ?? null;
+      // MI Pro state lives in the mi_pro_subscriptions side table (users is at
+      // D1's hard 100-column limit). Upsert by user_id.
+      await env.DB.prepare(
+        `INSERT INTO mi_pro_subscriptions (user_id, status, subscription_id, plan, stripe_customer_id, updated_at)
+         VALUES (?, 'active', ?, ?, ?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           status = 'active',
+           subscription_id = COALESCE(excluded.subscription_id, mi_pro_subscriptions.subscription_id),
+           plan = COALESCE(excluded.plan, mi_pro_subscriptions.plan),
+           stripe_customer_id = COALESCE(excluded.stripe_customer_id, mi_pro_subscriptions.stripe_customer_id),
+           updated_at = datetime('now')`
+      ).bind(userId, subscription, plan, customer).run();
+      return;
+    }
+    case 'customer.subscription.updated':
+    case 'customer.subscription.created': {
+      // D783: what the member pays for this plan, for its AI allowance. Never fails the webhook.
+      // D4703: ordered by the event's own `created`, so a late older event cannot overwrite a newer amount.
+      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }, typeof event.created === 'number' ? event.created : null); }
+      catch (e) { console.warn('[billing] subscription amount not recorded:', (e as Error).message); }
+      const customer = obj.customer as string | null;
+      const status = (obj.status as string) ?? 'active';
+      const periodEnd = obj.current_period_end
+        ? new Date(Number(obj.current_period_end) * 1000).toISOString()
+        : null;
+      // Persona account-plan subscription — self-contained: upsert the side
+      // table by user_id and return before any founder/investor/MI logic (those
+      // are gated on isTier/isInvestor and would no-op anyway, but returning
+      // keeps the persona path independent and cheap).
+      if (isPlan) {
+        const planUserId = Number(meta.user_id);
+        if (planUserId) {
+          // D892 §6: the same rule as the founder and investor rows below.
+          await upsertAccountPlanFromStripe(env, obj, meta.plan_group ?? null, planUserId, { takeOver: !fromCatalog });
+        }
+        return;
+      }
+      if (!customer) return;
+      const subId = obj.id as string;
+      // D892 §6: a subscription whose first payment never completed grants
+      // nothing. The payments intent's subscription is `incomplete` until its
+      // first invoice is paid; the `active` event that follows grants the plan.
+      // One that expires unpaid takes back what such an event gave before
+      // this rule existed, on the row that still points at it, and nothing else.
+      // A row an earlier event left at `incomplete` for this same subscription
+      // takes Stripe's status when Stripe says it is live.
+      const { isUnpaidStatus, repairIncompleteFromStripe } = await import('../services/planSubscription');
+      if (isUnpaidStatus(status) && (isTier || isInvestor)) {
+        if (status === 'incomplete') await repairIncompleteFromStripe(env, subId);
+        if (status === 'incomplete_expired') {
+          if (isTier) {
+            await env.DB.prepare(
+              `UPDATE users SET subscription_tier = 'free',
+                                 subscription_status = 'incomplete_expired',
+                                 stripe_subscription_id = NULL
+               WHERE stripe_customer_id = ? AND stripe_subscription_id = ?`,
+            ).bind(customer, subId).run();
+          }
+          if (isInvestor) {
+            const taken = await env.DB.prepare(
+              `UPDATE users SET investor_tier = 'free',
+                                 investor_subscription_status = 'incomplete_expired',
+                                 investor_dealroom_max = ?,
+                                 investor_stripe_subscription_id = NULL
+               WHERE investor_stripe_customer_id = ? AND investor_stripe_subscription_id = ?`,
+            ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer, subId).run();
+            if (((taken?.meta?.changes ?? 0) as number) > 0) {
+              await env.DB.prepare(
+                `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'incomplete_expired'
+                 WHERE investor_seat_primary_user_id IN (
+                   SELECT id FROM users WHERE investor_stripe_customer_id = ?
+                 )`,
+              ).bind(customer).run();
+            }
+          }
+        }
+        return;
+      }
+      // D892 §6: an event for another subscription than the one a row holds
+      // never takes over a plan the member still holds, unless this one is
+      // live too (an upgrade made through a checkout). A subscription whose
+      // plan was read from the catalog (made before D892, with no `kind`)
+      // never takes over a held plan at all: it was a duplicate, and it stays
+      // as inert as it was, so its own end drops nothing.
+      const takeOver = fromCatalog ? 0 : 1;
+      // Investor mirror — only touches users whose investor_stripe_customer_id matches.
+      const invTier: InvestorTier | null = isInvestor ? paidInvestorTier(meta.investor_tier) : null;
+      if (invTier) {
+        const granted = await env.DB.prepare(
+          `UPDATE users SET investor_tier = ?,
+                             investor_subscription_status = ?,
+                             investor_subscription_renews_at = ?,
+                             investor_dealroom_max = ?,
+                             investor_stripe_subscription_id = ?
+           WHERE investor_stripe_customer_id = ?
+             AND (investor_stripe_subscription_id IS NULL OR investor_stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(investor_subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, subId, customer, subId, takeOver, status).run();
+        let changed = (granted?.meta?.changes ?? 0) as number;
+        // A plan bought through the payments intent before D892 sits on the
+        // member's general customer, which no investor row named. The member
+        // its metadata names adopts that customer, if they have no investor
+        // customer of their own; one who has keeps theirs (D892 §6).
+        const legacyUser = Number(meta.user_id);
+        if (changed === 0 && fromCatalog && Number.isSafeInteger(legacyUser) && legacyUser > 0) {
+          const adopted = await env.DB.prepare(
+            `UPDATE users SET investor_stripe_customer_id = ?,
+                               investor_tier = ?,
+                               investor_subscription_status = ?,
+                               investor_subscription_renews_at = ?,
+                               investor_dealroom_max = ?,
+                               investor_stripe_subscription_id = ?
+             WHERE id = ? AND stripe_customer_id = ? AND investor_stripe_customer_id IS NULL`,
+          ).bind(customer, invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, subId, legacyUser, customer).run();
+          changed = (adopted?.meta?.changes ?? 0) as number;
+        }
+        // Cascade tier change to accepted seat colleagues, only when the
+        // primary's row moved. They carry its period end too (D1100).
+        if (changed > 0) {
+          await env.DB.prepare(
+            `UPDATE users SET investor_tier = ?, investor_subscription_status = ?, investor_subscription_renews_at = ?
+             WHERE investor_seat_primary_user_id IN (
+               SELECT id FROM users WHERE investor_stripe_customer_id = ?
+             )`,
+          ).bind(invTier, status, periodEnd, customer).run();
+        }
+      } else if (isInvestor) {
+        // Investor sub event without explicit metadata.tier — only run when
+        // we know it's an investor event (avoid clobbering rows that share
+        // a stripe_customer_id with an unrelated founder subscription).
+        await env.DB.prepare(
+          `UPDATE users SET investor_subscription_status = ?,
+                             investor_subscription_renews_at = ?,
+                             investor_stripe_subscription_id = ?
+           WHERE investor_stripe_customer_id = ?
+             AND (investor_stripe_subscription_id IS NULL OR investor_stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(investor_subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(status, periodEnd, subId, customer, subId, takeOver, status).run();
+      }
+      // Tier-side update: only touches users whose stripe_customer_id matches.
+      // Tier metadata may be on the subscription's `metadata.tier`; if absent
+      // we leave subscription_tier alone (keeps the value set by checkout).
+      const subTier = isTier && (meta.tier === 'growth' || meta.tier === 'studio')
+        ? meta.tier
+        : null;
+      if (subTier) {
+        await env.DB.prepare(
+          `UPDATE users SET subscription_tier = ?,
+                             subscription_status = ?,
+                             subscription_renews_at = ?,
+                             stripe_subscription_id = ?
+           WHERE stripe_customer_id = ?
+             AND (stripe_subscription_id IS NULL OR stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(subTier, status, periodEnd, subId, customer, subId, takeOver, status).run();
+      } else if (isTier) {
+        // Founder-tier event whose subscription metadata didn't echo the tier
+        // string — update status/renewal only, leaving subscription_tier as set
+        // at checkout. Gated on isTier so MI Pro / investor events that share a
+        // Stripe customer can NEVER clobber the founder-tier columns.
+        await env.DB.prepare(
+          `UPDATE users SET subscription_status = ?,
+                             subscription_renews_at = ?,
+                             stripe_subscription_id = ?
+           WHERE stripe_customer_id = ?
+             AND (stripe_subscription_id IS NULL OR stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(status, periodEnd, subId, customer, subId, takeOver, status).run();
+      }
+      // MI Pro mirror — side table. When the event carries kind=mi metadata
+      // (propagated via subscription_data at checkout) UPSERT by user_id so an
+      // out-of-order customer.subscription.created — one that arrives BEFORE
+      // checkout.session.completed — still creates the row WITH period_end.
+      // Otherwise (legacy sub lacking kind metadata) fall back to a
+      // subscription_id-scoped update — but never for a tier/investor event, so
+      // those can never write an MI row that shares a Stripe customer.
+      const isMi = meta.kind === 'mi';
+      const miUserId = Number(meta.user_id);
+      // Tracks whether THIS event is actually an MI Pro event (so the
+      // MI-specific plan-catalog registration below only runs for MI events /
+      // rows — never for tier/investor or unknown-kind events).
+      let miRowTouched = false;
+      if (isMi && miUserId) {
+        await env.DB.prepare(
+          `INSERT INTO mi_pro_subscriptions (user_id, status, subscription_id, plan, period_end, stripe_customer_id, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+           ON CONFLICT(user_id) DO UPDATE SET
+             status = excluded.status,
+             subscription_id = COALESCE(excluded.subscription_id, mi_pro_subscriptions.subscription_id),
+             plan = COALESCE(excluded.plan, mi_pro_subscriptions.plan),
+             period_end = excluded.period_end,
+             stripe_customer_id = COALESCE(excluded.stripe_customer_id, mi_pro_subscriptions.stripe_customer_id),
+             updated_at = datetime('now')
+           WHERE mi_pro_subscriptions.subscription_id IS NULL OR mi_pro_subscriptions.subscription_id = excluded.subscription_id
+              OR (? = 1 AND excluded.status IN ('active', 'trialing', 'past_due'))
+              OR COALESCE(mi_pro_subscriptions.status, '') NOT IN ('active', 'trialing', 'past_due')`
+        ).bind(miUserId, status, obj.id as string, meta.plan ?? null, periodEnd, customer, takeOver).run();
+        miRowTouched = true;
+      } else if (!isTier && !isInvestor) {
+        const res = await env.DB.prepare(
+          `UPDATE mi_pro_subscriptions
+              SET status = ?, period_end = ?, updated_at = datetime('now')
+            WHERE subscription_id = ?`
+        ).bind(status, periodEnd, obj.id as string).run();
+        // Only a legacy MI sub (whose row actually exists) counts as MI here.
+        miRowTouched = ((res?.meta?.changes ?? 0) as number) > 0;
+      }
+      // Plan-catalog registration below is MI-Pro-specific. Run it ONLY for a
+      // confirmed MI event (kind=mi) or a legacy event that actually updated an
+      // MI row — never for tier/investor or unknown-kind events, so their price
+      // can never be auto-registered as an MI Pro plan.
+      if (!isMi && !miRowTouched) return;
+      // Task #11 — auto-register the plan in `subscription_plans` so MRR/ARR
+      // analytics include any plan launched in Stripe without a code change.
+      // We pass the user's existing `mi_subscription_plan` as the preferred
+      // catalog key so the catalog row stays aligned with what's stored in the
+      // mi_pro_subscriptions side table (otherwise we could end up with the row
+      // keyed on `mi_pro_monthly` while the catalog upsert keys on the Stripe
+      // `price.id`, leaving MRR at $0 for that subscriber). When the row has no
+      // plan yet (subscription event arriving before checkout.session.completed
+      // for some reason), we backfill `mi_pro_subscriptions.plan` with the
+      // resolved plan_id so the side table + catalog stay in lockstep.
+      // Wrapped because pricing-catalog upserts must never block billing state.
+      try {
+        const userRow = await env.DB.prepare(
+          'SELECT plan FROM mi_pro_subscriptions WHERE subscription_id = ? LIMIT 1'
+        ).bind(obj.id as string).first<{ plan: string | null }>();
+        const existingPlan = userRow?.plan ?? null;
+        // If Stripe is sending a price.id that doesn't match what the user's
+        // existing catalog row was last seen with, treat it as a plan change
+        // (e.g. upgrade/downgrade from the customer portal) — drop the
+        // preferred-plan-id hint so the upsert keys on the new price.id and
+        // we re-align `mi_pro_subscriptions.plan` below.
+        let preferred: string | null = existingPlan;
+        const itemPriceId = (((obj.items as { data?: Array<{ price?: { id?: string } }> } | undefined)?.data?.[0]?.price?.id)
+          ?? ((obj.plan as { id?: string } | undefined)?.id)
+          ?? null) as string | null;
+        if (existingPlan && itemPriceId) {
+          const catalogRow = await env.DB.prepare(
+            'SELECT stripe_price_id FROM subscription_plans WHERE plan_id = ? LIMIT 1'
+          ).bind(existingPlan).first<{ stripe_price_id: string | null }>().catch(() => null);
+          const storedPriceId = catalogRow?.stripe_price_id ?? null;
+          if (storedPriceId && storedPriceId !== itemPriceId) preferred = null;
+        }
+        const resolvedPlan = await upsertPlanFromStripeSubscription(
+          env,
+          obj as Parameters<typeof upsertPlanFromStripeSubscription>[1],
+          preferred,
+        );
+        // Backfill / re-align the user's plan id whenever Stripe disagrees
+        // with what we previously stored — covers both the "no plan yet"
+        // case and the "user upgraded/downgraded to a new Stripe price"
+        // case (where Stripe doesn't echo our checkout metadata.plan, so
+        // the resolved plan_id falls back to the new price.id).
+        if (resolvedPlan && resolvedPlan !== existingPlan) {
+          await env.DB.prepare(
+            "UPDATE mi_pro_subscriptions SET plan = ?, updated_at = datetime('now') WHERE subscription_id = ?"
+          ).bind(resolvedPlan, obj.id as string).run();
+        }
+      } catch (e) {
+        console.warn('[billing] plan catalog upsert failed:', (e as Error).message);
+      }
+      return;
+    }
+    case 'customer.subscription.deleted': {
+      const customer = obj.customer as string | null;
+      const subId = obj.id as string | null;
+      if (!customer || !subId) return;
+      // D783: a canceled plan gives no allowance. Never fails the webhook.
+      try { await markSubscriptionAmountCanceled(env, subId); }
+      catch (e) { console.warn('[billing] subscription amount not canceled:', (e as Error).message); }
+      // Disambiguate by subscription_id so a customer with multiple Stripe
+      // subscriptions (e.g. MI Pro + Investor Pro on the same customer)
+      // only loses the entitlement that was actually cancelled.
+      await env.DB.prepare(
+        `UPDATE mi_pro_subscriptions SET status = 'cancelled', updated_at = datetime('now')
+         WHERE subscription_id = ?`
+      ).bind(subId).run();
+      // Persona account-plan sub — cancelled scoped by subscription_id (no-op
+      // when this deletion belongs to a different pipeline).
+      await markAccountPlanDeleted(env, subId);
+      // Task #6 — drop the founder tier back to free when the tier sub ends.
+      await env.DB.prepare(
+        `UPDATE users SET subscription_tier = 'free',
+                           subscription_status = 'cancelled',
+                           stripe_subscription_id = NULL
+         WHERE stripe_customer_id = ? AND stripe_subscription_id = ?`,
+      ).bind(customer, subId).run();
+      // Task #6 (W-1) — drop investor tier back to free on sub deletion,
+      // including any accepted seat colleagues. Scoped by sub id so a
+      // founder-tier deletion doesn't clobber an active investor sub.
+      const downgraded = await env.DB.prepare(
+        `UPDATE users SET investor_tier = 'free',
+                           investor_subscription_status = 'cancelled',
+                           investor_dealroom_max = ?,
+                           investor_stripe_subscription_id = NULL
+         WHERE investor_stripe_customer_id = ? AND investor_stripe_subscription_id = ?`,
+      ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer, subId).run();
+      // Cascade to seat colleagues only when the investor sub itself was
+      // the one cancelled (downgraded.meta.changes > 0).
+      const changes = (downgraded?.meta?.changes ?? 0) as number;
+      if (changes > 0) {
+        await env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled'
+           WHERE investor_seat_primary_user_id IN (
+             SELECT id FROM users WHERE investor_stripe_customer_id = ?
+           )`,
+        ).bind(customer).run();
+      }
+      return;
+    }
+    // D794 (#2219): an auto-reload's charge that failed after it was confirmed
+    // turns auto-reload off and tells the member. D1133 also audits a plan refusal,
+    // with only its reason family, through its caller-bound invoice.
+    case 'payment_intent.payment_failed': {
+      const { onReloadPaymentFailed } = await import('../services/aiAutoReload');
+      await onReloadPaymentFailed(env, obj);
+      if (meta.kind !== 'cart_order' || meta.auto_reload !== '1') {
+        const { recordCheckoutRefusal } = await import('../services/billingRecovery');
+        await recordCheckoutRefusal(env, event.id, obj);
+      }
+      return;
+    }
+    case 'payment_intent.succeeded': {
+      // Task #9 — record a promo redemption for ANY PI that carries a
+      // promo_code_id (à la carte or generic one-time; subscriptions redeem
+      // natively via Stripe). Idempotent on the PI id, and independent of the
+      // kind dispatch below, so it runs even for kinds that return early.
+      const promoCodeId = (meta.promo_code_id || '').trim();
+      const promoUserId = Number(meta.user_id);
+      const promoPiId = (obj.id as string | null) ?? null;
+      if (promoCodeId && promoUserId && promoPiId) {
+        const { recordPaidRedemption } = await import('../services/promos');
+        // D1274: the detail checkout stamped (`promoDetailMeta`). A PI made
+        // before it carries none, and its fields stay NULL.
+        const whole = (v: unknown) => (typeof v === 'string' && /^\d{1,12}$/.test(v) ? Number(v) : null);
+        await recordPaidRedemption(env, {
+          promoId: promoCodeId,
+          userId: promoUserId,
+          paymentIntentId: promoPiId,
+          detail: {
+            source: 'payment',
+            productId: meta.product_id ?? null,
+            priceId: meta.price_id ?? null,
+            amountBeforeCents: whole(meta.promo_amount_before),
+            discountCents: whole(meta.promo_discount),
+            currency: typeof obj.currency === 'string' ? obj.currency : null,
+          },
+        });
+      }
+      // D4855: the discount this payment took stops being a hold on the licence's
+      // promotion ceiling and counts for good. Idempotent: a re-delivered event
+      // commits a row that is already committed. A PI with no reservation (HQ,
+      // or made before this) names none and this does nothing.
+      const reservationRef = (meta.promo_reservation_ref || '').trim();
+      if (reservationRef) {
+        const { commitPromoReservation } = await import('../services/promoRedemption');
+        await commitPromoReservation(env, reservationRef);
+      }
+      // Task #8 — universal referral commission. ANY PI stamped at creation
+      // with referral attribution (referral_code + referrer_user_id + price_id)
+      // earns the referrer a commission off the product's `commission_pct`
+      // catalog metadata. Runs BEFORE the kind dispatch so it fires even for
+      // kinds that return early (alacarte / booking / incorporation). Fully
+      // best-effort: any failure here must never block fulfilment.
+      try {
+        const refCode = (meta.referral_code || '').trim();
+        const referrerUserId = Number(meta.referrer_user_id);
+        const refPriceId = (meta.price_id || '').trim();
+        const buyerUserId = Number(meta.user_id);
+        const refPiId = (obj.id as string | null) ?? null;
+        // D4292: no stacking. A payment whose subscription invoice already
+        // earned an influencer commission earns no purchase commission.
+        const { paymentEarnedInfluencerCommission } = await import('../services/influencerCommission');
+        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId && !(await paymentEarnedInfluencerCommission(env, refPiId))) {
+          const { findCatalogProductByPriceId } = await import('../services/catalog');
+          const found = await findCatalogProductByPriceId(env, refPriceId);
+          const pct = Number(found?.product.metadata?.commission_pct);
+          if (found && Number.isFinite(pct) && pct > 0) {
+            const amountCents = Number(obj.amount_received ?? obj.amount ?? 0);
+            const currency = String(obj.currency || found.price.currency || 'usd');
+            const { firePurchaseCommission } = await import('./network');
+            await firePurchaseCommission(env, {
+              buyerUserId,
+              referrerUserId,
+              referralCode: refCode,
+              paymentIntentId: refPiId,
+              amountCents,
+              currency,
+              commissionPct: pct,
+              productName: found.product.name,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[refer-earn] purchase commission webhook failed:', (e as Error).message);
+      }
+      // Task #7 — embedded-terminal fulfilment. Dispatch STRICTLY on
+      // metadata.kind: generic PaymentIntents (no kind) are a no-op, and legacy
+      // Checkout-session bookings carry metadata on the SESSION (not the PI), so
+      // their PaymentIntent lacks `kind` and won't double-fulfil here.
+      if (meta.kind === 'expert_booking') {
+        const { confirmBookingFromPaymentIntent } = await import('../services/wellbeing/bookings');
+        await confirmBookingFromPaymentIntent(env, obj);
+        return;
+      }
+      // 241/242 — the ADVISORY session leg, which is the wellbeing one over
+      // different tables. Its own `kind`, because the two products have
+      // separate bookings, separate payout accounts and separate ledgers;
+      // routing both through one handler would let a fulfilment land on the
+      // wrong row. Unreachable while `ADVISOR_CHARGING_ENABLED` is unset,
+      // because nothing creates an intent carrying this kind. D75.
+      if (meta.kind === 'advisor_session') {
+        const { markSessionCharged } = await import('../services/advisorConnect');
+        await markSessionCharged(env, obj);
+        return;
+      }
+      if (meta.kind === 'event_ticket') {
+        const { fulfillEventTicket } = await import('../services/eventTickets');
+        await fulfillEventTicket(env, obj);
+        return;
+      }
+      if (meta.kind === 'alacarte') {
+        const featureKey = (meta.feature_key || '').trim();
+        const userId = Number(meta.user_id);
+        const piId = (obj.id as string | null) ?? null;
+        if (!featureKey || !userId || !piId) return;
+        const { writeFeatureUnlock } = await import('../services/featureUnlocks');
+        await writeFeatureUnlock(env, {
+          userId,
+          featureKey,
+          paymentIntentId: piId,
+          unlockDays: Number(meta.unlock_days),
+        });
+        return;
+      }
+      // Network Introductions — credit pack fulfilment. Idempotent on the PI
+      // id (UNIQUE(user_id, kind, source_ref) in intro_credit_ledger), so a
+      // Stripe webhook retry can never double-credit.
+      if (meta.kind === 'intro_credits') {
+        const userId = Number(meta.user_id);
+        const credits = Number(meta.credits);
+        const piId = (obj.id as string | null) ?? null;
+        if (!userId || !Number.isFinite(credits) || credits <= 0 || !piId) return;
+        const { grantPurchasedIntroCredits } = await import('../services/introductions');
+        await grantPurchasedIntroCredits(env, {
+          userId,
+          credits,
+          paymentIntentId: piId,
+          pack: (meta.pack || '').trim() || undefined,
+        });
+        return;
+      }
+      // One-time CART ORDER fulfilment. The PI carries metadata.kind='cart_order'
+      // + order_ref; mark the order paid, grant user_products, record the promo
+      // redemption, render the invoice and email the buyer. Idempotent on the
+      // order_ref (fulfilOrder no-ops once the order is already paid), so a
+      // Stripe webhook retry can never double-fulfil.
+      if (meta.kind === 'cart_order') {
+        // D629: signed webhook only; independent of an already fulfilled order. Failure retries the webhook.
+        const { creditAiTopupFromPayment } = await import('../services/aiTopups');
+        await creditAiTopupFromPayment(env, obj);
+        const orderRef = (meta.order_ref || '').trim();
+        if (!orderRef) return;
+        const { fulfilOrder } = await import('../services/orders');
+        await fulfilOrder(env, orderRef);
+        return;
+      }
+      // Task #6 — embedded-terminal incorporation fee. The invoice's PI carries
+      // metadata.kind='incorporation' + incorporation_id; mark the order paid and
+      // advance the filing workflow (enqueues the packet pipeline). Idempotent.
+      if (meta.kind === 'incorporation') {
+        const { recordPaidIncorporationFromPaymentIntent } = await import('../services/incorporations');
+        await recordPaidIncorporationFromPaymentIntent(env, obj as any);
+        return;
+      }
+      return;
+    }
+    // Task #10 — Branded receipt emails via Gmail. Invoice-backed payments fire
+    // `invoice.paid` (and `invoice.finalized`, which only sends once paid → PDF
+    // attached); non-invoice one-time charges fire `charge.succeeded` (no PDF →
+    // link the Stripe receipt). These are DEDICATED email events with no other
+    // fulfilment, so a Gmail send failure is allowed to throw → the webhook
+    // returns non-2xx → Stripe retries the event (idempotent: one email per
+    // invoice/charge id). Stripe's own customer emails are disabled (ops step)
+    // so buyers only ever see Axal branding.
+    case 'invoice.created': {
+      const { checkPromoRenewal } = await import('../services/promoRenewal');
+      await checkPromoRenewal(env, obj);
+      return;
+    }
+    case 'invoice.voided': {
+      const { settlePromoRenewal } = await import('../services/promoRenewal');
+      await settlePromoRenewal(env, obj, false);
+      return;
+    }
+    case 'invoice.paid':
+    case 'invoice.finalized': {
+      // D1052: a paid invoice closes its open payment alerts.
+      if (event.type === 'invoice.paid') {
+        const { settlePromoRenewal } = await import('../services/promoRenewal');
+        await settlePromoRenewal(env, obj, true);
+        const { closeInvoiceAlerts } = await import('../services/billingAlerts');
+        await closeInvoiceAlerts(env, obj);
+        // D892 §6: a founder or investor row left at `incomplete` for the
+        // invoice's subscription takes Stripe's status when Stripe says it is
+        // live. Never fails the webhook.
+        const { repairIncompleteFromStripe } = await import('../services/planSubscription');
+        await repairIncompleteFromStripe(env, obj.subscription);
+        // D1274: a subscription's promo redemption, from its first paid invoice.
+        const { recordInvoiceRedemption } = await import('../services/promoUsage');
+        await recordInvoiceRedemption(env, obj);
+        // D4292: an attributed member's paid software invoice earns the
+        // influencer a pending commission, once per invoice id. A database
+        // failure throws so Stripe retries; every step above is idempotent.
+        const { onInvoicePaid } = await import('../services/influencerCommission');
+        await onInvoicePaid(env, obj);
+      }
+      const { handleInvoiceEvent } = await import('../services/invoiceEmails');
+      await handleInvoiceEvent(env, obj);
+      return;
+    }
+    // D892 (#2453): a renewal whose payment failed tells the member, once per
+    // attempt. D1052 (#2903): it also opens the alert the banner reads, and
+    // the plan keeps its access while Stripe retries (`past_due`).
+    case 'invoice.payment_failed': {
+      const { recordPaymentFailedAlert } = await import('../services/billingAlerts');
+      await recordPaymentFailedAlert(env, obj);
+      const { recordRenewalFailure } = await import('../services/planSubscription');
+      await recordRenewalFailure(env, obj);
+      return;
+    }
+    // D1052: the bank asks the member to confirm a renewal. The alert holds the
+    // invoice id; the client secret is fetched only when they press Confirm.
+    case 'invoice.payment_action_required': {
+      const { recordConfirmationAlert } = await import('../services/billingAlerts');
+      await recordConfirmationAlert(env, obj);
+      return;
+    }
+    case 'charge.succeeded': {
+      const { handleChargeSucceeded } = await import('../services/invoiceEmails');
+      await handleChargeSucceeded(env, obj);
+      return;
+    }
+    // D755 §8 (#1920): a refund or a dispute of a token pack takes its tokens
+    // back, up to the balance, and records the rest. Each acts only on a charge
+    // whose PaymentIntent has an ai_topup_purchases row; every other charge is
+    // untouched. A case that cannot act throws, so Stripe retries.
+    // D1052 (#2903): a charge that is no token pack's may be a plan payment's:
+    // it is recorded and the member is told (owner question 9).
+    // D4292: first, an influencer commission on the charge's invoice is
+    // cancelled inside its hold or clawed back after it. It acts only on a
+    // charge that paid such an invoice, and throws so Stripe retries.
+    case 'charge.refunded': {
+      const { onChargeRefunded } = await import('../services/influencerCommission');
+      await onChargeRefunded(env, obj);
+      const { reverseRefund } = await import('../services/aiCreditReversals');
+      if (await reverseRefund(env, obj)) return;
+      const { recordPlanRefund } = await import('../services/billingAlerts');
+      await recordPlanRefund(env, obj);
+      return;
+    }
+    case 'charge.dispute.created': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
+      const { reverseDispute } = await import('../services/aiCreditReversals');
+      if (await reverseDispute(env, obj)) return;
+      const { recordPlanDispute } = await import('../services/billingAlerts');
+      await recordPlanDispute(env, obj);
+      return;
+    }
+    case 'charge.dispute.closed': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
+      const { closeDispute } = await import('../services/aiCreditReversals');
+      if (await closeDispute(env, obj)) return;
+      const { closePlanDispute } = await import('../services/billingAlerts');
+      await closePlanDispute(env, obj);
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+// Stripe sends `t=...,v1=<hex>`. We HMAC-SHA256 over `${t}.${body}` with the
+// webhook secret and compare in constant time. No Stripe SDK in the worker.
+async function verifyStripeSignature(body: string, header: string, secret: string): Promise<boolean> {
+  const parts: Record<string, string> = {};
+  for (const seg of header.split(',')) {
+    const [k, v] = seg.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  }
+  const t = parts['t'];
+  const v1 = parts['v1'];
+  if (!t || !v1) return false;
+  const timestamp = Number(t);
+  if (!/^\d+$/.test(t) || !Number.isSafeInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300) return false;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${body}`));
+  const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (hex.length !== v1.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ v1.charCodeAt(i);
+  return diff === 0;
+}
+
+export default billing;

@@ -1,0 +1,192 @@
+/*
+ * The Firm, Platform and Administrators pages (D677, #1551), from the FIRM,
+ * PLATFORM and ADMINISTRATORS views of the owner's canvas
+ * `design/canvases/integrated/Axal VC Website.dc.html`.
+ *
+ * Everything is scoped under `.ax-site` and takes the tokens of
+ * `components/site/site.css`. Headings take the display face from site.css;
+ * a heading drawn in the text face here says `font-family: inherit`.
+ * Breakpoints are the canvas's: 1060px (two-up grids stack, three-up go two)
+ * and 640px (everything stacks).
+ */
+
+/* ---------- Shared ---------- */
+.ax-site .fx-w1200 { max-width: 1200px; }
+.ax-site .fx-label-h { font-family: inherit; text-wrap: initial; }
+.ax-site .fx-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; }
+.ax-site .fx-hero-link { display: inline-block; margin-top: 22px; font-size: 14px; }
+/* The FIRM and PLATFORM heroes carry no image; the canvas washes them lavender to white. */
+.ax-site .ax-phero:has(#fx-firm-h, #fx-plat-h) .ax-phero-veil { background: linear-gradient(160deg, #faf8ff, #fff); }
+
+/* ---------- Firm ---------- */
+.ax-site .fx-mission-t { font-size: 22px; font-weight: 800; letter-spacing: -.024em; line-height: 1.34; margin-top: 12px; }
+.ax-site .fx-mission-p { font-size: 15px; color: var(--ax-body); line-height: 1.74; margin: 16px 0 0; }
+.ax-site .fx-mission-p + .fx-mission-p { margin-top: 14px; }
+.ax-site .fx-phil { list-style: none; margin: 12px 0 0; padding: 0; }
+.ax-site .fx-phil li { display: flex; gap: 14px; align-items: baseline; padding: 18px 0; border-bottom: 1px solid var(--ax-line); }
+.ax-site .fx-phil-n { flex: none; font-size: 11px; font-weight: 700; color: var(--ax-violet); }
+.ax-site .fx-phil-t { font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: -.014em; text-wrap: initial; }
+.ax-site .fx-phil-d { font-size: 13.5px; color: var(--ax-muted); line-height: 1.64; margin: 5px 0 0; }
+
+.ax-site .fx-criteria { margin-top: 32px; padding: 0; list-style: none; }
+.ax-site .fx-crit { background: #fff; border: 1px solid var(--ax-line-2); border-radius: 16px; padding: 26px 24px; }
+.ax-site .fx-crit-w { font-size: 12px; font-weight: 700; color: var(--ax-violet); }
+.ax-site .fx-crit-t { font-family: inherit; font-size: 16px; font-weight: 800; letter-spacing: -.02em; margin-top: 12px; }
+.ax-site .fx-crit-d { font-size: 13px; color: var(--ax-muted); line-height: 1.64; margin: 7px 0 0; }
+
+.ax-site .fx-fund {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px 32px; flex-wrap: wrap;
+  padding: 36px 40px; border: 1px solid var(--ax-line-2); border-radius: 18px;
+}
+.ax-site .fx-fund h2 { font-family: inherit; font-size: 19px; font-weight: 800; letter-spacing: -.024em; }
+
+/* ---------- Platform ---------- */
+.ax-site .fx-layers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 20px; }
+.ax-site .fx-layer { background: #fff; border: 1px solid var(--ax-line-2); border-radius: 20px; padding: 32px 36px; }
+.ax-site .fx-layer-grid { display: grid; grid-template-columns: minmax(0, .5fr) minmax(0, 1.5fr); gap: 40px; align-items: start; }
+.ax-site .fx-layer-n { font-size: 11.5px; font-weight: 700; color: var(--ax-violet); }
+.ax-site .fx-layer-t { font-family: inherit; font-size: 21px; font-weight: 800; letter-spacing: -.026em; margin-top: 10px; }
+.ax-site .fx-layer-d { font-size: 13.5px; color: var(--ax-muted); line-height: 1.66; margin: 9px 0 0; }
+.ax-site .fx-mods { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ax-site .fx-mod {
+  display: block; height: 100%; background: var(--ax-wash); border: 1px solid var(--ax-line); border-radius: 13px; padding: 18px;
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.ax-site .fx-mod:hover { border-color: #c9c2e6; box-shadow: 0 8px 28px rgba(109,40,217,.07); transform: translateY(-2px); }
+.ax-site .fx-mod-t { font-family: inherit; font-size: 13.5px; font-weight: 800; letter-spacing: -.014em; text-wrap: initial; }
+.ax-site .fx-mod-d { font-size: 12.5px; color: var(--ax-muted); line-height: 1.58; margin: 6px 0 0; }
+
+.ax-site .fx-compounds { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 56px; align-items: center; }
+.ax-site .fx-compounds .ax-lbl { color: var(--ax-lavender); }
+.ax-site .fx-compounds h2 { font-size: 33px; line-height: 1.12; font-weight: 800; letter-spacing: -.034em; margin-top: 18px; color: #fff; }
+.ax-site .fx-compounds-p { font-size: 15.5px; line-height: 1.72; margin: 18px 0 0; }
+.ax-site .fx-flows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.ax-site .fx-flow {
+  display: flex; align-items: center; gap: 13px; padding: 16px 20px;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 12px;
+}
+.ax-site .fx-flow-from, .ax-site .fx-flow-to { flex: 0 1 auto; min-width: 0; font-size: 13px; font-weight: 700; }
+.ax-site .fx-flow-to { color: #ddd6fe; text-align: right; }
+.ax-site .fx-flow-line { flex: 1 0 20px; height: 1px; background: linear-gradient(90deg, rgba(167,139,250,.5), rgba(167,139,250,.1)); }
+
+/* ---------- Administrators ---------- */
+.ax-site .fx-adm-hero { border-bottom: 1px solid var(--ax-line); background: linear-gradient(160deg, #faf8ff, #fff); }
+.ax-site .fx-adm-hero-grid {
+  display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 48px 64px; align-items: end;
+  padding-top: 96px; padding-bottom: 80px;
+}
+.ax-site .fx-adm-hero .ax-h1 { margin-top: 20px; }
+.ax-site .fx-adm-for { margin: 18px 0 0; font-size: 15px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+.ax-site .fx-adm-aside { padding: 26px 28px; border-radius: 20px; background: #faf8ff; }
+.ax-site .fx-adm-aside-lead { margin: 0; font-size: 22px; line-height: 1.35; font-weight: 800; letter-spacing: -.02em; color: var(--ax-ink); text-wrap: pretty; }
+.ax-site .fx-adm-aside-note { margin: 14px 0 0; font-size: 14px; line-height: 1.65; color: var(--ax-body); }
+
+.ax-site .fx-console { scroll-margin-top: calc(var(--ax-nav-h) + 8px); padding-top: 88px; padding-bottom: 24px; }
+.ax-site .fx-place-n { font-size: 13px; font-weight: 600; color: var(--ax-violet); }
+.ax-site .fx-place-t { font-size: 32px; line-height: 1.05; font-weight: 800; letter-spacing: -.035em; margin-top: 8px; }
+.ax-site .fx-place-p { margin: 14px 0 0; font-size: 17px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+.ax-site .fx-studio {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 32px 56px; align-items: center;
+  margin-top: 48px; padding: 36px; border-radius: 24px; background: #faf8ff;
+}
+.ax-site .fx-sketch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.ax-site .fx-sketch-card { background: #fff; border: 1px solid var(--ax-line-2); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.ax-site .fx-sketch-who { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 14px; }
+.ax-site .fx-e { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--ax-violet); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+.ax-site .fx-e-lg { width: 40px; height: 40px; border-radius: 12px; font-size: 15px; }
+.ax-site .fx-sketch-msg { font-size: 13.5px; line-height: 1.55; color: var(--ax-body); padding: 10px 12px; border-radius: 10px; background: #faf8ff; }
+.ax-site .fx-sketch-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.ax-site .fx-sketch-chip { font-size: 12px; font-weight: 600; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--ax-line-2); }
+.ax-site .fx-sketch-k { font-size: 10.5px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; color: var(--ax-muted); }
+.ax-site .fx-sketch-t { font-weight: 800; font-size: 15px; line-height: 1.3; }
+.ax-site .fx-sketch-bar { height: 6px; border-radius: 3px; background: var(--ax-line-2); }
+.ax-site .fx-sketch-btn { font-size: 12px; font-weight: 700; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--ax-line-3); }
+.ax-site .fx-sketch-btn.is-primary { background: var(--ax-violet); border-color: var(--ax-violet); color: #fff; }
+
+.ax-site .fx-blocks { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--ax-line-2); }
+.ax-site .fx-block { padding: 30px 28px 34px 0; border-bottom: 1px solid var(--ax-line-2); }
+.ax-site .fx-block-t { font-size: 24px; line-height: 1.1; font-weight: 800; letter-spacing: -.03em; margin-top: 8px; }
+.ax-site .fx-block-d { margin: 10px 0 0; font-size: 15.5px; line-height: 1.62; color: var(--ax-body); }
+
+.ax-site .fx-settings {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 32px 56px;
+  margin-top: 40px; padding: 36px; border-radius: 24px; background: var(--ax-ink); color: #fff;
+}
+.ax-site .fx-settings .fx-place-n { color: var(--ax-lilac); }
+.ax-site .fx-settings-p { margin: 14px 0 0; font-size: 16.5px; line-height: 1.65; color: rgba(255,255,255,.78); }
+.ax-site .fx-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; padding: 0; list-style: none; }
+.ax-site .fx-chips li { font-size: 12.5px; font-weight: 600; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(167,139,250,.45); color: #fff; }
+.ax-site .fx-dns-k { font-size: 10.5px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; color: var(--ax-lavender); }
+.ax-site .fx-dns {
+  width: 100%; margin-top: 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; overflow: hidden;
+  border-collapse: separate; border-spacing: 0; table-layout: fixed; font-family: var(--font-mono); font-size: 13px;
+}
+.ax-site .fx-dns th, .ax-site .fx-dns td { text-align: left; vertical-align: top; padding: 14px 16px; overflow-wrap: anywhere; }
+.ax-site .fx-dns th { padding-top: 10px; padding-bottom: 10px; background: rgba(255,255,255,.06); color: var(--ax-lavender); font-size: 11.5px; font-weight: 400; letter-spacing: .06em; text-transform: uppercase; }
+.ax-site .fx-dns td { border-top: 1px solid rgba(255,255,255,.12); color: #fff; }
+.ax-site .fx-dns col.fx-dns-type { width: 86px; }
+.ax-site .fx-dns-token { color: var(--ax-lilac); font-style: italic; }
+.ax-site .fx-dns-note { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: rgba(255,255,255,.62); }
+
+.ax-site .fx-eadwyn { display: flex; gap: 16px; align-items: flex-start; margin-top: 16px; padding: 20px 24px; border-radius: 16px; border: 1px solid var(--ax-line-2); }
+.ax-site .fx-eadwyn-t { font-weight: 800; font-size: 15px; }
+.ax-site .fx-eadwyn-p { margin: 4px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+
+.ax-site .fx-sec-h { margin-top: 14px; }
+.ax-site .fx-licence-sec { padding-top: 72px; padding-bottom: 72px; }
+.ax-site .fx-lede { margin: 14px 0 0; font-size: 17px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; max-width: 720px; }
+.ax-site .fx-licences { list-style: none; margin: 36px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.ax-site .fx-licence { border: 1px solid var(--ax-line-2); border-radius: 20px; padding: 30px 28px; }
+.ax-site .fx-licence h3 { font-size: 24px; font-weight: 800; letter-spacing: -.03em; }
+.ax-site .fx-licence dl { margin: 18px 0 0; border-top: 1px solid var(--ax-line-2); }
+.ax-site .fx-licence-row { display: flex; justify-content: space-between; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--ax-line-2); font-size: 15px; }
+.ax-site .fx-licence-row dt { color: var(--ax-body); }
+.ax-site .fx-licence-row dd { margin: 0; font-weight: 700; text-align: right; }
+.ax-site .fx-note { margin: 18px 0 0; font-size: 14.5px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+
+.ax-site .fx-faq-band { background: #faf8ff; border-top: 1px solid var(--ax-line-2); border-bottom: 1px solid var(--ax-line-2); }
+.ax-site .fx-faq-band .ax-section { padding-top: 72px; padding-bottom: 72px; }
+.ax-site .fx-faq-band h2 { font-size: 32px; line-height: 1.14; font-weight: 800; letter-spacing: -.032em; }
+.ax-site .fx-qs { list-style: none; margin: 22px 0 0; padding: 0; border-top: 1px solid var(--ax-line-2); }
+.ax-site .fx-q { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px 40px; padding: 22px 0; border-bottom: 1px solid var(--ax-line-2); }
+.ax-site .fx-q h3 { font-size: 19px; font-weight: 800; letter-spacing: -.015em; }
+.ax-site .fx-q p { margin: 0; font-size: 15.5px; line-height: 1.65; color: var(--ax-body); text-wrap: pretty; }
+
+.ax-site .fx-closing { padding-top: 80px; padding-bottom: 96px; }
+.ax-site .fx-closing-box {
+  border-radius: 24px; padding: 56px 44px; background: #faf8ff;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px;
+}
+.ax-site .fx-closing-box h2 { font-size: 35px; line-height: 1.14; font-weight: 800; letter-spacing: -.032em; max-width: 620px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ax-site .fx-mod { transition: none; }
+  .ax-site .fx-mod:hover { transform: none; }
+}
+
+@media (max-width: 1060px) {
+  .ax-site .fx-two, .ax-site .fx-layer-grid, .ax-site .fx-compounds,
+  .ax-site .fx-adm-hero-grid, .ax-site .fx-studio, .ax-site .fx-settings,
+  .ax-site .fx-licences, .ax-site .fx-q { grid-template-columns: minmax(0, 1fr); }
+  .ax-site .fx-two { gap: 40px; }
+  .ax-site .fx-layer-grid { gap: 24px; }
+  .ax-site .fx-mods, .ax-site .fx-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .ax-site .fx-mods, .ax-site .fx-blocks, .ax-site .fx-sketch { grid-template-columns: minmax(0, 1fr); }
+  .ax-site .fx-block { padding-right: 0; }
+  .ax-site .fx-fund { padding: 26px 22px; }
+  .ax-site .fx-layer { padding: 24px 20px; }
+  .ax-site .fx-compounds h2 { font-size: 28px; }
+  .ax-site .fx-flow { padding: 14px 16px; }
+  .ax-site .fx-adm-hero-grid { padding-top: 60px; padding-bottom: 56px; }
+  .ax-site .fx-console { padding-top: 64px; }
+  .ax-site .fx-licence-sec, .ax-site .fx-faq-band .ax-section { padding-top: 56px; padding-bottom: 56px; }
+  .ax-site .fx-studio, .ax-site .fx-settings { padding: 24px 20px; margin-top: 32px; }
+  .ax-site .fx-dns th, .ax-site .fx-dns td { padding-left: 12px; padding-right: 12px; }
+  .ax-site .fx-dns col.fx-dns-type { width: 68px; }
+  .ax-site .fx-eadwyn { padding: 18px; }
+  .ax-site .fx-closing { padding-top: 56px; padding-bottom: 64px; }
+  .ax-site .fx-closing-box { padding: 36px 22px; }
+  .ax-site .fx-closing-box h2, .ax-site .fx-faq-band h2 { font-size: 28px; }
+}

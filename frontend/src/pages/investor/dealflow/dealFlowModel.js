@@ -1,0 +1,142 @@
+/**
+ * D1236 (#2423) — Deal flow at /deals, from the owner's canvas "Deal flow"
+ * (DLS1–DLS18): the view, the scope switch and the compare picks carried in
+ * the address, the scoring scopes in SCORING's order and the round's status
+ * words. Pure, so `frontend/test/deal_flow_d1236.test.mjs` holds each rule.
+ *
+ * WHAT IS READ. D1236 read `GET /api/deals`. D1240 (#3253) adds the firm's
+ * own flow, SCORING's batch, the fit and saved views (`flowModel.js`). D1241
+ * (#3254) reads every way into New for you (`movesModel.js`) and draws Compare
+ * from the batch (`compareModel.js`): no block waits on a read any more.
+ */
+
+import { SCOPE_LABELS } from '../../../components/scoring/scorecard/scorecardModel.js';
+import { roundAsk } from '../../../components/deals/dealMoney.js';
+
+export const BASE = '/deals';
+export const COMPARE = '/deals/compare';
+/** D4815 (#4815): the deal rooms' own route, linked from "Other deal activity". */
+export const ROOMS = '/deals/rooms';
+
+/** The page's title (DLS1). The Deals bucket's root is this page. */
+export const TITLE = 'Deal flow';
+
+export const PAGE_LINE = 'Every venture you are looking at, how it scores by scope, and where it stands with you.';
+
+/**
+ * D4815 (#4815): each Deals route names itself in the browser tab, rather than
+ * the product's marketing title. A deal page names its company (`DealRoomPage`).
+ */
+export const DEALS_PAGE_TITLES = Object.freeze({
+  root: 'Deal flow · Axal VC',
+  compare: 'Compare · Axal VC',
+  rooms: 'Deal rooms · Axal VC',
+  screening: 'Screening · Axal VC',
+  commit: 'Investment committee · Axal VC',
+  closing: 'Closing · Axal VC',
+});
+
+/** The tab title for a Deals route: the root, Compare, the deal rooms, or a zone by its slug. */
+export function dealsPageTitle({ isRoot, isCompare, isRooms, slug }) {
+  if (isRoot) return DEALS_PAGE_TITLES.root;
+  if (isCompare) return DEALS_PAGE_TITLES.compare;
+  if (isRooms) return DEALS_PAGE_TITLES.rooms;
+  return DEALS_PAGE_TITLES[slug] || DEALS_PAGE_TITLES.root;
+}
+
+export const VIEWS = Object.freeze(['board', 'table']);
+/** The scope switch (DLS1): Mine, All deals, New for you. */
+export const SCOPE_SWITCH = Object.freeze([
+  { key: 'mine', label: 'Mine' },
+  { key: 'all', label: 'All deals' },
+  { key: 'new', label: 'New for you' },
+]);
+
+/** What the address names. Board and Mine by default; anything unknown is the default. */
+export function viewOf(search = '') {
+  const q = new URLSearchParams(String(search));
+  const view = VIEWS.includes(q.get('view')) ? q.get('view') : 'board';
+  const scope = SCOPE_SWITCH.some((s) => s.key === q.get('scope')) ? q.get('scope') : 'mine';
+  return { view, scope };
+}
+
+/** The address of a view: the defaults are left out, so `/deals` is board and Mine. */
+export function viewHref({ view = 'board', scope = 'mine' } = {}) {
+  const q = new URLSearchParams();
+  if (view !== 'board') q.set('view', view);
+  if (scope !== 'mine') q.set('scope', scope);
+  const s = q.toString();
+  return s ? `${BASE}?${s}` : BASE;
+}
+
+/**
+ * D1243 (#3256): where `/deals/pipeline` and an investor's `/pipeline` land —
+ * the table, with the address's own query and hash kept. The view is the
+ * table whatever the old query said; every other word travels as it was.
+ */
+export function pipelineMovedHref(search = '', hash = '') {
+  const q = new URLSearchParams(String(search));
+  q.set('view', 'table');
+  const h = String(hash || '');
+  return `${BASE}?${q.toString()}${h && h !== '#' ? (h.startsWith('#') ? h : `#${h}`) : ''}`;
+}
+
+export const MAX_COMPARE = 4;
+const ID = /^[1-9][0-9]{0,15}$/;
+
+/** The deal ids `/deals/compare?ids=` names: digits only, no repeats, at most four, in order. */
+export function compareIds(search = '') {
+  const raw = new URLSearchParams(String(search)).get('ids') || '';
+  const out = [];
+  for (const part of raw.split(',')) {
+    const id = part.trim();
+    if (ID.test(id) && !out.includes(id)) out.push(id);
+    if (out.length === MAX_COMPARE) break;
+  }
+  return out;
+}
+
+export function compareHref(ids = []) {
+  const clean = compareIds(`ids=${ids.join(',')}`);
+  return clean.length ? `${COMPARE}?ids=${clean.join(',')}` : COMPARE;
+}
+
+/** SCORING's eleven scopes (#2428), in its order, from the scorecard's one list (D1253). There is no Overall. */
+export const SCOPES = SCOPE_LABELS;
+
+/** The investor's own stages (DLS1). Passed sits outside the board, as a filter. */
+export const MY_STAGES = Object.freeze(['Sourced', 'Screening', 'Diligence', 'Commit', 'Closing']);
+
+/** The round's status, the studio's (`deals.status`), as the canvas words it. */
+export const ROUND_WORD = Object.freeze({
+  applied: 'In intake',
+  scored: 'Screened',
+  active: 'Raising',
+  funded: 'Funded',
+  rejected: 'Not raising',
+});
+export const roundWord = (s) => ROUND_WORD[s] || 'Not recorded';
+
+const num = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** One table row (DLS2) from one `GET /api/deals` item. A value the read did not return stays null. */
+export function dealRow(d = {}) {
+  return {
+    id: String(d.id ?? ''),
+    name: d.project_name || 'Name not recorded',
+    sector: d.project_sector || null,
+    round: roundWord(d.status),
+    ask: roundAsk(d),
+    currency: d.currency || null,
+    daysInStage: num(d.days_in_stage),
+    member: Number(d.is_member) === 1,
+  };
+}
+
+/**
+ * Who may open a deal from this list. An investor reads a deal only when
+ * invited or committed (`deals.ts` canReadDeal), which is exactly Mine; a row
+ * under All deals is not a door until then (#2423 broken item 2).
+ */
+export const opensDeal = (scope) => scope === 'mine';
+

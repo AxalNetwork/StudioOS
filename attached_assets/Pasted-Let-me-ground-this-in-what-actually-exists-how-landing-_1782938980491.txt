@@ -1,0 +1,74 @@
+Let me ground this in what actually exists — how landing signups are captured today and what relationship/CRM tables are already present.
+
+Let me see how landing pages capture signups today and what the network CRM stores.
+
+Grounding confirmed: landing pages already capture signups into a `waitlist_signups` table with an `audience` column — but it's constrained to only `customer | partner | investor` (advisors/mentors/co-founders aren't even capturable yet), and there's no management layer behind it. You already have a Relationships CRM (`network.ts`), Network Effects (`networkfx.ts`), Customer Discovery (`/build/discovery`), and invite infra (`invite_reminders`). Here's the architecture.
+
+## 1. Problem summary
+
+You have a **capture layer with no management layer**. `waitlist_signups` collects emails tagged by audience, but nothing routes them, tracks replies, assigns status, or drives follow-up. The instinct to build "a workflow per audience" would fragment this into 6 dead-end inboxes. The real gap is a single inbound contact system with audience-aware routing — plus one true exception (customers) and one promotion path (investors).
+
+## 2. Recommended architecture
+
+**One unified system, not six.** Build a single **Contacts** hub with one data model and one inbox. Audience is a *dimension* on the contact, not a separate system.
+
+Three layers:
+
+1. **Capture (stays in Brand & Landing).** Every landing CTA writes a `contacts` row: `email`, `audience`, `source_landing_page_id`, `cta`, `message`, `status='new'`. This is the existing `waitlist_signups` flow, generalized.
+2. **Route (rules on submit).** On insert, an audience→destination rule fires:
+   - **customer** → also creates a Customer Discovery lead (interview candidate).
+   - **investor** → flagged `promotable` to the Raise investor pipeline.
+   - **advisor / mentor / partner / co-founder** → relationship pipeline in Contacts.
+3. **Manage (Contacts hub).** One inbox for *all* inbound, filterable by audience, each with its own status pipeline, reply log, and follow-up tasks.
+
+**Key decision:** customers and investors are the two audiences with genuinely distinct downstream workflows (discovery interviews; fundraising diligence). Everyone else is "a relationship." So Contacts is the front door for all, but customers *branch* to Customer Discovery and investors *promote* to the raise pipeline. The other four never leave Contacts.
+
+## 3. Audience routing map
+
+| Audience | Primary destination | Statuses/stages | Why |
+|---|---|---|---|
+| **Customers** | Contacts inbox → **promote to Customer Discovery** | New → Interview scheduled → Interviewed → Design partner → Passed | Customers need the interview/validation workflow, which already exists at `/build/discovery`. Don't rebuild it in Contacts. |
+| **Investors** | Contacts inbox → **promote to Raise › Investor pipeline** | New → Intro'd → Meeting → Diligence → Committed → Passed | Fundraising is a distinct pipeline with its own artifacts (deck, data room). Inbound investor interest seeds it. |
+| **Partners** | **Contacts** (relationship pipeline) | New → Contacted → In discussion → Active → Passed | Ongoing B2B relationship, not a one-shot conversion. |
+| **Advisors / Mentors** | **Contacts** (relationship pipeline) | New → Contacted → Conversation → Engaged → Passed | Same relationship shape; distinguished only by the `audience` tag + role. |
+| **Co-founders** | **Contacts** (relationship pipeline) | New → Contacted → Conversation → Trial → Onboarded → Passed | High-touch relationship; the existing `/cofounder` matching feeds the same inbox. |
+
+## 4. Sidebar placement
+
+- **Do NOT make "Network" a top-level section.** It belongs in **Validate** — relationship-building is signal gathering.
+- **Merge Relationships + Network Effects into one module called "Contacts"** (under Validate). Network Effects becomes an *insights tab* inside it, not a peer item.
+- **Contacts** owns: the inbound Inbox, the per-audience pipelines, replies, and follow-ups — for partners, advisors, mentors, co-founders, and the *triage* of customers/investors before they branch out.
+- **Customer Discovery** stays its own Validate item (customer contacts flow *into* it).
+- **Investor pipeline** lives in **Raise** (the Investor CRM I flagged in the founder audit) — investor contacts promote *into* it.
+- **Capture config** stays inside **Brand & Landing** (Build) — that's where you edit the CTAs/templates; it just now writes to Contacts.
+
+So: no new top-level section. One new/merged item ("Contacts") in Validate, plus the existing Customer Discovery and the Raise investor pipeline as the two branch destinations.
+
+## 5. Missing features
+
+1. **Unified `contacts` table + Inbox** — the single inbound queue with `audience`, `source_landing_page_id`, `cta`, `status`, `owner`, `last_activity_at`.
+2. **Audience enum extension** — `waitlist_signups.audience` currently only allows `customer/partner/investor`; add `advisor/mentor/cofounder` (and mirror the audience headline/body/CTA fields on `landing_pages`, which today only exist for those same three).
+3. **Routing rules** — on submit, create the discovery lead / mark investor promotable / drop into relationship pipeline.
+4. **Reply & thread tracking** — log inbound replies against the contact (so it's not "email into nowhere").
+5. **Follow-up tasks / reminders** — per-contact next-step + due date (reuse the `invite_reminders` pattern).
+6. **Send invitations** — founder-initiated invite creates a contact in `invited` status; acceptance tracked (invite infra partly exists via `invite_reminders`/`invite_joined_notified`).
+7. **Promote actions** — one-click "→ Discovery interview" and "→ Investor pipeline."
+8. **New-inbound notifications** — ping the founder when a lead lands.
+
+## 6. Merge / rename / remove
+
+| Item | Action | Detail |
+|---|---|---|
+| Relationships (`/relationships`) | **Rename → Contacts** | Becomes the unified inbound + relationship hub. |
+| Network Effects (`/network-effects`) | **Merge into Contacts** | As an "Insights" tab, not a separate sidebar item. |
+| `waitlist_signups` | **Keep, generalize → `contacts`** | Add audience values, source, status, owner, reply/task relations. Don't fork a new table per audience. |
+| Landing capture (Brand & Landing) | **Keep as capture layer** | Stays in Build; output now routes to Contacts. |
+| Customer Discovery (`/build/discovery`) | **Keep separate** | Branch destination for customer contacts. |
+| Investor pipeline | **Add in Raise** | Branch destination for investor contacts (the Investor CRM from the founder audit). |
+| Six per-audience inboxes | **Never build** | One inbox, filtered by audience. |
+
+## 7. Final product recommendation
+
+Build **one Contacts hub in Validate** (the merged Relationships + Network Effects + a new inbound Inbox) backed by a single `contacts` table where **audience is a column, not a separate app**. Every landing-page CTA writes into it; a routing rule on submit sends **customers to Customer Discovery** and marks **investors promotable to the Raise investor pipeline**, while **partners, advisors, mentors, and co-founders live entirely in Contacts** with audience-specific statuses. Founders get one inbox, one place to send invites, and one place to track replies, status, and follow-ups. That gives you the "integrated, not a form that dumps emails into nowhere" system with exactly **one new sidebar item (Contacts)** and two well-defined branch destinations you already have or already planned — no fragmentation.
+
+Want me to implement the capture→Contacts backbone (generalize `waitlist_signups` → `contacts`, extend the audience enum, add the routing + inbox route + a Contacts page), the same worker-first way I built the investor features?

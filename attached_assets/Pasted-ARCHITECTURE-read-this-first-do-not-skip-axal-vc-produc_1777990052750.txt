@@ -1,0 +1,289 @@
+ARCHITECTURE — read this first, do not skip.
+
+axal.vc production runs on Cloudflare ONLY. Specifically:
+  - Frontend → Cloudflare Pages, built from /frontend
+  - API      → Cloudflare Worker at cloudflare-worker/src/index.ts
+               (Hono + TypeScript + D1 binding `DB` + KV)
+  - DB       → Cloudflare D1 (studioos-db, id 16a23acd-c82e-4ff1-
+               a6c0-408e3eb014c8)
+  - Secrets  → `wrangler secret put NAME` against the Worker
+The Python FastAPI in /backend is dev-only on Replit and is NEVER
+deployed to production. Confirmed by the comment block at
+cloudflare-worker/src/index.ts:1–20 and wrangler.toml:6–14.
+
+Today /api/calendar/* has NO worker route. The frontend calls it,
+the worker returns "Not found", which is why CalendarPage shows
+both the orange "credentials not configured" banner AND a red
+"Not found" error in the screenshot. The Google calendar code we
+already paid to build sits in backend/app/services/calendar_unified.py
+and backend/app/api/routes/calendar.py — that work is the SPEC for
+this task. Translate it to TypeScript, do not redesign it.
+
+═══════════════════════════════════════════════════════════════════
+TASK — port Calendar (Google + new Outlook) into the Worker
+═══════════════════════════════════════════════════════════════════
+
+Three phases. Stop at the end of phase 1 and confirm with me before
+starting phase 2.
+
+──────────────────────────────────────────────────────────────────
+Phase 1 — D1 schema + Env types  (no OAuth secrets needed yet)
+──────────────────────────────────────────────────────────────────
+
+A) Create cloudflare-worker/sql/calendar.sql with these tables.
+   Use the schema from backend/app/models/entities.py:1412 (Google
+   token model) as the template; mirror it for Microsoft.
+
+     ic_meetings              — match the FastAPI IcMeeting model
+     ic_meeting_attendees     — match IcMeetingAttendee
+     founder_checkins         — match FounderCheckin
+     google_oauth_tokens      — id, user_id UNIQUE, refresh_token,
+                                scope, google_email, last_synced_at,
+                                created_at, updated_at
+     microsoft_oauth_tokens   — same columns, microsoft_email
+     calendar_sync_records    — id, user_id, provider TEXT NOT NULL
+                                ('google'|'microsoft'), source_kind,
+                                source_id, external_event_id,
+                                last_synced_at;
+                                UNIQUE(user_id, provider,
+                                       source_kind, source_id)
+     oauth_state_tokens       — id, state TEXT UNIQUE, user_id,
+                                provider, expires_at, created_at
+                                (10-min TTL, swept on use)
+
+   Document at the top of the SQL: "apply with `npx wrangler d1
+   execute studioos-db --file=cloudflare-worker/sql/calendar.sql
+   --remote`".
+
+B) Extend cloudflare-worker/src/types.ts Env interface (next to
+   the existing GMAIL_* keys at line 15) with:
+
+     GOOGLE_CLIENT_ID?: string
+     GOOGLE_CLIENT_SECRET?: string
+     GOOGLE_CALENDAR_REDIRECT_URI?: string
+     MICROSOFT_CLIENT_ID?: string
+     MICROSOFT_CLIENT_SECRET?: string
+     MICROSOFT_TENANT_ID?: string             // default "common"
+     MICROSOFT_CALENDAR_REDIRECT_URI?: string
+
+   All optional — runtime checks should treat absence as
+   "provider unavailable", same way email.ts treats GMAIL_*.
+
+STOP. Show me the SQL file and the types.ts diff. Do not start
+phase 2 until I have applied the migration to the remote D1 and
+confirmed.
+
+──────────────────────────────────────────────────────────────────
+Phase 2 — Worker calendar route  (needs secrets to be live, but
+                                  scaffolding can be written first)
+──────────────────────────────────────────────────────────────────
+
+A) Create cloudflare-worker/src/services/calendar.ts. Translate
+   backend/app/services/calendar_unified.py to TypeScript. Keep
+   the same function names so the diff is auditable:
+
+     googleOAuthAvailable(env)
+     buildGoogleAuthUrl(env, state)
+     exchangeGoogleCode(env, code)
+     refreshGoogleAccessToken(env, refreshToken)
+     fetchGoogleUserinfo(accessToken)
+     pushEventToGoogle(accessToken, payload, googleEventId?)
+     deleteEventFromGoogle(accessToken, googleEventId)
+     syncUserToGoogle(env, db, user)
+
+     microsoftOAuthAvailable(env)
+     buildMicrosoftAuthUrl(env, state)
+     exchangeMicrosoftCode(env, code)
+     refreshMicrosoftAccessToken(env, refreshToken)
+     fetchMicrosoftUserinfo(accessToken)
+     pushEventToMicrosoft(accessToken, payload, microsoftEventId?)
+     deleteEventFromMicrosoft(accessToken, microsoftEventId)
+     syncUserToMicrosoft(env, db, user)
+
+     fetchUserEvents(db, user, opts)            // unified aggregator
+     eventsToIcs(events, calendarName)          // ICS export
+
+   Microsoft constants:
+     MS_AUTHORITY = "https://login.microsoftonline.com"
+     MS_GRAPH     = "https://graph.microsoft.com/v1.0"
+     MS_SCOPES    = ["openid","profile","email","offline_access",
+                     "Calendars.ReadWrite","User.Read"]
+     authorize: `${MS_AUTHORITY}/${tenant}/oauth2/v2.0/authorize`
+     token:     `${MS_AUTHORITY}/${tenant}/oauth2/v2.0/token`
+     userinfo:  `${MS_GRAPH}/me`
+     events:    `${MS_GRAPH}/me/events`
+   Tenant defaults to "common" if MICROSOFT_TENANT_ID unset.
+
+   Reuse the fetch/refresh pattern from
+   cloudflare-worker/src/services/email.ts:4 verbatim — same
+   error handling, same 10-second timeout, same "fail-open with
+   console.warn when env keys missing" pattern.
+
+B) Create cloudflare-worker/src/routes/calendar.ts (Hono router,
+   shape mirrors auth.ts). Endpoints:
+
+     GET    /events                    list aggregated events
+     GET    /events.ics                ICS export
+     POST   /ic-meetings               create
+     GET    /ic-meetings               list
+     POST   /ic-meetings/:id/rsvp
+     DELETE /ic-meetings/:id
+     POST   /founder-checkins
+     GET    /founder-checkins
+     DELETE /founder-checkins/:id
+     GET    /google/status
+     POST   /google/connect            returns { auth_url }
+     GET    /google/callback           302 redirects back to
+                                       /calendar?google=connected
+                                       or ?google=error&reason=...
+     POST   /google/sync
+     DELETE /google
+     GET    /microsoft/status
+     POST   /microsoft/connect
+     GET    /microsoft/callback
+     POST   /microsoft/sync
+     DELETE /microsoft
+
+   Wrap every handler with safe() like auth.ts does. Use
+   requireAuth from ../auth on every route except the OAuth
+   callbacks (which use the state token instead).
+
+C) Wire it in cloudflare-worker/src/index.ts next to the existing
+   route imports (around line 30). Mount as
+   `app.route('/api/calendar', calendar)`. Use the same CORS,
+   rate-limit, observability, and security-headers middleware
+   the rest of the routes use.
+
+D) Frontend: zero new files. Two diffs only:
+   - frontend/src/pages/CalendarPage.jsx  duplicate the Google
+     panel at lines 152–192 immediately below itself as
+     "Outlook / Microsoft 365 sync"; reuse the same syncResult
+     toast, swap `google` state for a parallel `microsoft`
+     state. Extend the URL query handler around line 78 to
+     accept ?microsoft=connected and ?microsoft=error.
+   - frontend/src/lib/api.js  add four methods next to the
+     googleCal* block at line 853:
+       microsoftCalStatus()
+       microsoftCalConnect()
+       microsoftCalDisconnect()
+       microsoftCalSync()
+
+E) Update DocsPage.jsx Calendar/Integrations section (one line)
+   to mention Outlook alongside Google.
+
+STOP. At the end of phase 2, deploy to a preview environment
+(`npx wrangler deploy --env preview`) and tell me the preview URL.
+Do NOT touch production yet. Do NOT request secrets yet — the code
+should compile and respond "provider unavailable" cleanly without
+any secrets set.
+
+──────────────────────────────────────────────────────────────────
+Phase 3 — Provision secrets (ASK ME, do not guess)
+──────────────────────────────────────────────────────────────────
+
+ASK ME for these BEFORE running any wrangler secret put commands.
+Do not invent values, do not leave placeholders in wrangler.toml,
+do not ship without them.
+
+  GOOGLE_CLIENT_ID
+  GOOGLE_CLIENT_SECRET
+  GOOGLE_CALENDAR_REDIRECT_URI
+       = https://studioos.guillaumelauzier.workers.dev/api/calendar/google/callback
+       (and add a second redirect for the production apex if it
+       routes through a different worker hostname)
+
+  MICROSOFT_CLIENT_ID
+  MICROSOFT_CLIENT_SECRET
+  MICROSOFT_TENANT_ID            (default "common", confirm with me)
+  MICROSOFT_CALENDAR_REDIRECT_URI
+       = https://studioos.guillaumelauzier.workers.dev/api/calendar/microsoft/callback
+
+Tell me to:
+
+  GOOGLE
+  1. https://console.cloud.google.com → Project "Axal StudioOS" →
+     APIs & Services → Library → enable "Google Calendar API"
+     and "Google People API".
+  2. APIs & Services → OAuth consent screen → External, scopes
+     `https://www.googleapis.com/auth/calendar.events` and
+     `https://www.googleapis.com/auth/userinfo.email`. Add
+     axal.vc and the workers.dev domain as authorized domains.
+  3. APIs & Services → Credentials → Create OAuth client ID →
+     Web application. Authorized redirect URIs = the value of
+     GOOGLE_CALENDAR_REDIRECT_URI above. Copy Client ID +
+     Secret.
+
+  MICROSOFT
+  1. https://entra.microsoft.com → App registrations → New
+     registration. Name "Axal StudioOS". Supported account
+     types: "Accounts in any organizational directory and
+     personal Microsoft accounts" (this lets Outlook.com users
+     connect, not just enterprise tenants).
+  2. Redirect URI: Web, set to the value of
+     MICROSOFT_CALENDAR_REDIRECT_URI above. Add the workers.dev
+     URL as a second redirect.
+  3. Certificates & secrets → New client secret → 24 months →
+     copy the VALUE column (not the Secret ID).
+  4. API permissions → Add → Microsoft Graph → Delegated:
+        Calendars.ReadWrite, User.Read, offline_access,
+        openid, profile, email
+     Do not click "Grant admin consent" unless I ask — for
+     personal+multitenant accounts, per-user consent on the
+     OAuth screen is sufficient.
+  5. Overview → copy "Application (client) ID".
+
+Tell me the EXACT commands to run. They will look like:
+
+  npx wrangler secret put GOOGLE_CLIENT_ID
+  npx wrangler secret put GOOGLE_CLIENT_SECRET
+  npx wrangler secret put GOOGLE_CALENDAR_REDIRECT_URI
+  npx wrangler secret put MICROSOFT_CLIENT_ID
+  npx wrangler secret put MICROSOFT_CLIENT_SECRET
+  npx wrangler secret put MICROSOFT_TENANT_ID
+  npx wrangler secret put MICROSOFT_CALENDAR_REDIRECT_URI
+
+Specify whether to target production or `--env preview` first.
+I will run them myself in my terminal from the repo root and
+paste each value when prompted; do not ask me to share secrets
+in chat.
+
+═══════════════════════════════════════════════════════════════════
+CONSTRAINTS — to keep this cheap
+═══════════════════════════════════════════════════════════════════
+
+- Do NOT modify any other worker route, FastAPI file, or frontend
+  page outside the explicit list above.
+- Do NOT introduce new npm dependencies. The Worker already has
+  Hono and uses fetch directly for OAuth — same approach here.
+- Do NOT generalize the two providers behind an interface. Keep
+  google* and microsoft* function pairs side by side. We can
+  refactor when a third provider lands.
+- Do NOT delete or modify the FastAPI calendar code. It stays as
+  reference for the dev environment.
+- The OAuth state token MUST be HMAC-signed with JWT_SECRET, stored
+  in oauth_state_tokens with a 10-min TTL, and single-use (deleted
+  on callback). This prevents the OAuth-CSRF described at
+  backend/app/api/routes/calendar.py:370–392.
+- Disconnect MUST also delete that user's calendar_sync_records
+  rows where provider matches. Don't leave orphan mappings.
+- Verification at the end of phase 3: connect Google and Outlook
+  on the preview URL as a Founder, create one IC meeting, confirm
+  it appears on both external calendars and on the StudioOS feed.
+  Manual test only — no integration tests for OAuth round-trips.
+
+═══════════════════════════════════════════════════════════════════
+ORDER OF OPERATIONS (echo this back to me before starting)
+═══════════════════════════════════════════════════════════════════
+
+1. Confirm you understand by listing back: (a) which files you
+   will create or modify, (b) which FastAPI source functions
+   you are translating, (c) the names of the seven secrets you
+   will need from me.
+2. Phase 1 — schema + types. Stop, show diff, wait for me to apply
+   the migration.
+3. Phase 2 — services + route + frontend panels. Stop, deploy to
+   --env preview, give me the preview URL.
+4. Phase 3 — request secrets, I provision, you redeploy preview,
+   we manually verify.
+5. Promote to production with `npx wrangler deploy` only after I
+   approve.

@@ -1,0 +1,7 @@
+{
+  "DELETE /api/investor-seats/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,1 @@
+| Event Syndication · Boards | Super Admin; host or admin (event tools) | — (board grid, imports Event Syndication Page) | as Event Syndication Page | as Event Syndication Page | NEW | D1491 (#3725), SY0–SY8: current screen wiring and remaining connector/import dependencies are recorded in D1491 §5. |

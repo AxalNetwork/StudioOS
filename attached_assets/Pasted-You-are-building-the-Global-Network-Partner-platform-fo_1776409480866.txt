@@ -1,0 +1,63 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). The current codebase is a static frontend + Python backend scaffolding + Cloudflare Workers + D1 database.
+
+Current structure includes:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers, D1 bindings)
+- frontend/ and static HTML/JS
+- .replit and replit.md already configured
+
+Add complete KYC/AML, user verification, and user management logic with these exact requirements:
+
+1. **Authentication**  
+   - Use Replit Auth (OpenID Connect) for signup/login. Request scopes: openid, email, profile.  
+   - Store Replit user ID + email in D1 database.
+
+2. **User Model in D1**  
+   Create a `users` table with columns:  
+   - id (primary key)  
+   - replit_user_id (text, unique)  
+   - email (text, unique)  
+   - full_name (text)  
+   - role (text) → allowed values: 'lp', 'investor', 'operator', 'advisor', 'service_provider', 'admin'  
+   - kyc_status (text) → 'pending', 'approved', 'rejected', 'not_started'  
+   - kyc_data (json) → store verification results  
+   - created_at, updated_at (timestamp)  
+   - Use proper indexes and follow Cloudflare D1 best practices.
+
+3. **Role-Based Access Control (RBAC)**  
+   - Middleware / decorator in Python backend that checks user role on every protected route.  
+   - Example protected routes: /api/partner/onboard, /api/deals, /api/spinout (only certain roles allowed).
+
+4. **Onboarding Flow (KYC/AML)**  
+   - After Replit Auth login, redirect to /onboard if kyc_status is not 'approved'.  
+   - Step 1: Collect basic profile (name, role selection).  
+   - Step 2: KYC/AML verification.  
+     • First implement a **mock KYC flow** (upload ID document simulation + basic checks).  
+     • Then add real integration placeholder for Persona or Sumsub API (use environment variables for API keys: PERSONA_API_KEY or SUMSUB_API_KEY).  
+     • Store results in kyc_data JSON.  
+   - Email verification (send via Cloudflare Worker or Replit).  
+   - Phone/SMS verification stub (Twilio placeholder).
+
+5. **Backend Endpoints (FastAPI style in main.py or new routers)**  
+   - POST /api/auth/callback (Replit Auth webhook handler)  
+   - POST /api/onboard/profile  
+   - POST /api/onboard/kyc  
+   - GET /api/me (return current user + role + kyc_status)  
+   - GET /api/admin/users (admin-only, list all users with filters)  
+   - PATCH /api/admin/users/{id}/approve-kyc (admin-only)
+
+6. **Frontend**  
+   - Add simple onboarding pages (onboard.html or React-like components if frontend is extended).  
+   - Protected dashboard route that shows different UI based on role.  
+   - Use fetch to call the new API endpoints.
+
+7. **Security & Best Practices**  
+   - Use Web Crypto for any tokens.  
+   - Store secrets in Replit Secrets (not code).  
+   - Follow Cloudflare Workers + D1 best practices (bindings, indexes, retry logic).  
+   - Add basic rate limiting and input validation.  
+   - Log all KYC attempts for audit.
+
+Build this step-by-step: first create the D1 schema and migration, then auth integration, then onboarding flow, then RBAC middleware, then endpoints and frontend pages. After each major step, show me the code changes and ask for confirmation before continuing.
+
+Start now.

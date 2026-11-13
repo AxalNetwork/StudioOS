@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .cp-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .cp-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .cp-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .cp-qa:hover{border-color:#ececf1;background:#fff}
+    .cp-row:hover{background:#faf9fc}
+    .cp-root.cp-embedded .cp-header{display:none!important}
+    .cp-embed-header{display:none}
+    .cp-root.cp-embedded .cp-embed-header{display:none}
+    @media (max-width:1200px){.cp-3col{grid-template-columns:1fr!important}.cp-2col{grid-template-columns:1fr!important}}
+  
+    .cp-root.cp-embedded .cp-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="cp-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="cp-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <div class="cp-embed-header" style="font-size:13px;color:#71717a;margin:0 0 14px">Run the round — targeting, warm intros, data room, pipeline, instruments, and pitch feedback in one workspace.</div>
+
+  <div class="cp-header" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icBolt }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px"><h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Capital</h1><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span></div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Run the round — targeting, warm intros, data room, pipeline, instruments, and pitch feedback in one workspace.</div>
+      </div>
+    </div>
+    <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">Unlocked · Wk 4</span>
+  </div>
+
+  <div style="display:flex;gap:4px;padding:10px 0 16px;flex-wrap:wrap;align-items:center">
+    <button class="cp-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <div style="position:relative">
+      <button onClick="{{ toggleExport }}" class="cp-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export<span style="width:12px;height:12px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icChevD }}"></span></button>
+      <sc-if value="{{ exportOpen }}">
+        <div style="position:absolute;top:38px;left:0;z-index:30;width:200px;background:#fff;border:1px solid #ececf1;border-radius:12px;box-shadow:0 12px 32px rgba(24,24,27,.16);padding:6px">
+          <button onClick="{{ toggleExport }}" style="display:flex;width:100%;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left">Data room export</button>
+          <button onClick="{{ toggleExport }}" style="display:flex;width:100%;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left">Pipeline CSV</button>
+        </div>
+      </sc-if>
+    </div>
+    <button class="cp-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button onClick="{{ openPreview }}" class="cp-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#7c3aed;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+  </div>
+
+  <!-- ROUND COMMAND CENTER -->
+  <div class="cp-card" style="padding:20px 22px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px" class="cp-3col">
+      <sc-for list="{{ cmdStats }}" as="s" hint-placeholder-count="5">
+        <div><div style="font-size:10.5px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em">{{ s.label }}</div><div class="cp-mono" style="font-size:20px;font-weight:600;margin-top:4px;color:{{ s.color }}">{{ s.value }}</div></div>
+      </sc-for>
+    </div>
+    <div style="height:8px;background:#f0f0f3;border-radius:999px;overflow:hidden;margin-top:16px;position:relative">
+      <div style="height:100%;width:{{ committedPct }};background:#7c3aed;border-radius:999px"></div>
+      <div style="position:absolute;top:0;left:{{ softCircledPct }};height:100%;width:2px;background:#1A202C"></div>
+    </div>
+    <div style="font-size:11px;color:#a1a1aa;margin-top:6px">Committed (solid) · soft-circled marker · target {{ targetLabel }}</div>
+  </div>
+
+  <!-- FUNDRAISE OVERVIEW -->
+  <div class="cp-card" style="padding:22px;margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Fundraise overview · round control center</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px" class="cp-3col">
+      <sc-for list="{{ overviewFields }}" as="f" hint-placeholder-count="8">
+        <div style="border:1px solid #f0f0f3;border-radius:12px;padding:13px">
+          <div style="font-size:10.5px;color:#71717a;text-transform:uppercase;letter-spacing:.04em">{{ f.label }}</div>
+          <div class="cp-mono" style="font-size:14px;font-weight:600;color:#1A202C;margin-top:4px">{{ f.value }}</div>
+          <div style="font-size:10px;font-weight:600;margin-top:5px;color:{{ f.syncColor }}">{{ f.sync }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- SPLIT: pipeline / right rail -->
+  <div class="cp-2col" style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;margin-bottom:20px">
+    <!-- INVESTOR PIPELINE -->
+    <div class="cp-card" style="padding:0;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Investor pipeline · ranked by fit + warm-intro probability</div>
+        </div>
+        <div style="display:flex;gap:4px;background:#f4f4f5;border-radius:8px;padding:3px">
+          <button onClick="{{ setViewPriority }}" style="font-size:11px;font-weight:600;padding:6px 11px;border-radius:6px;border:none;cursor:pointer;{{ viewPriorityStyle }}">Priority</button>
+          <button onClick="{{ setViewKanban }}" style="font-size:11px;font-weight:600;padding:6px 11px;border-radius:6px;border:none;cursor:pointer;{{ viewKanbanStyle }}">Kanban</button>
+          <button onClick="{{ setViewTable }}" style="font-size:11px;font-weight:600;padding:6px 11px;border-radius:6px;border:none;cursor:pointer;{{ viewTableStyle }}">Table</button>
+        </div>
+      </div>
+
+      <!-- PRIORITY LIST -->
+      <sc-if value="{{ isPriority }}">
+        <sc-for list="{{ investors }}" as="v" hint-placeholder-count="6">
+          <div class="cp-row" style="padding:14px 22px;border-top:1px solid #f4f4f5;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center">
+            <span style="width:38px;height:38px;border-radius:10px;background:{{ v.avatarBg }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ v.initials }}</span>
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:700">{{ v.name }}</span><span style="font-size:11px;color:#71717a">· {{ v.firm }}</span><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;{{ v.stageStyle }}">{{ v.stage }}</span></div>
+              <div style="font-size:11.5px;color:#71717a;margin-top:5px">{{ v.checkSize }} · {{ v.warmth }} intro via {{ v.introSource }} · last touch {{ v.lastTouch }}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;{{ v.statusStyle }}">{{ v.status }}</span>
+              <span class="cp-mono" style="font-size:11px;color:#7c3aed">{{ v.conviction }} conviction</span>
+            </div>
+          </div>
+        </sc-for>
+      </sc-if>
+
+      <!-- KANBAN -->
+      <sc-if value="{{ isKanban }}">
+        <div style="overflow-x:auto;padding:0 22px 18px">
+          <div style="display:flex;gap:12px;min-width:900px">
+            <sc-for list="{{ kanbanCols }}" as="col" hint-placeholder-count="6">
+              <div style="flex:1;min-width:140px">
+                <div style="font-size:11px;font-weight:700;color:#71717a;margin-bottom:9px;text-transform:uppercase">{{ col.name }} <span class="cp-mono" style="color:#c4c4cc">{{ col.count }}</span></div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="2">
+                    <div style="background:#faf9fc;border:1px solid #f0f0f3;border-radius:10px;padding:10px">
+                      <div style="font-size:12px;font-weight:700">{{ c.name }}</div>
+                      <div style="font-size:10.5px;color:#a1a1aa;margin-top:3px">{{ c.checkSize }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- TABLE -->
+      <sc-if value="{{ isTable }}">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:700px">
+            <thead><tr style="border-bottom:1px solid #f0f0f3">
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 22px;text-align:left">Investor</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 10px;text-align:left">Stage</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 10px;text-align:left">Status</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 10px;text-align:right">Check size</th>
+              <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:9px 22px;text-align:right">Next step</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ investors }}" as="v" hint-placeholder-count="6">
+                <tr class="cp-row" style="border-bottom:1px solid #f8f8fa">
+                  <td style="padding:11px 22px;font-size:12.5px;font-weight:600">{{ v.name }}</td>
+                  <td style="padding:11px 10px;font-size:11.5px;color:#71717a">{{ v.stage }}</td>
+                  <td style="padding:11px 10px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;{{ v.statusStyle }}">{{ v.status }}</span></td>
+                  <td class="cp-mono" style="padding:11px 10px;text-align:right;font-size:12px">{{ v.checkSize }}</td>
+                  <td style="padding:11px 22px;text-align:right;font-size:11.5px;color:#71717a">{{ v.nextStep }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="cp-card" style="padding:18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:12px">Next best actions</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ nextActions }}" as="n" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:9px;padding:10px 11px;background:#faf9fc;border:1px solid #f0eefb;border-radius:9px">
+              <span style="width:20px;height:20px;flex:none;border-radius:6px;background:#ecfdf5;color:#0d9488;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ n.num }}</span>
+              <div style="font-size:11.5px;color:#3f3f46;line-height:1.4">{{ n.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="cp-card" style="padding:18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:12px">Warm intro opportunities</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ warmIntros }}" as="w" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div><div style="font-size:12px;font-weight:600">{{ w.target }}</div><div style="font-size:10.5px;color:#a1a1aa">via {{ w.via }}</div></div>
+              <span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;{{ w.strengthStyle }}">{{ w.strength }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="cp-card" style="padding:18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:12px">Missing diligence items</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ missingItems }}" as="m" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:9px;font-size:11.5px;color:#b45309"><span style="width:13px;height:13px;flex:none;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span>{{ m }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA ROOM -->
+  <div class="cp-card" style="padding:22px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Data room · investor-ready diligence workspace</div>
+      <div style="display:flex;align-items:center;gap:10px"><span class="cp-mono" style="font-size:20px;font-weight:600;color:{{ readinessColor }}">{{ readinessScore }}</span><span style="font-size:11px;color:#a1a1aa">/ 100 readiness</span></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:680px">
+        <thead><tr style="border-bottom:1px solid #f0f0f3">
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Section</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:left">Source</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:center">Status</th>
+          <th style="font-size:10px;font-weight:700;text-transform:uppercase;color:#a1a1aa;padding:8px 10px;text-align:right">Updated</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ dataRoom }}" as="d" hint-placeholder-count="10">
+            <tr class="cp-row" style="border-bottom:1px solid #f8f8fa">
+              <td style="padding:9px 10px;font-size:12.5px;font-weight:600">{{ d.name }}</td>
+              <td style="padding:9px 10px;font-size:11.5px;color:#71717a">{{ d.source }}</td>
+              <td style="padding:9px 10px;text-align:center"><span style="font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:999px;{{ d.statusStyle }}">{{ d.status }}</span></td>
+              <td style="padding:9px 10px;text-align:right;font-size:11px;color:#a1a1aa">{{ d.updated }}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    <sc-if value="{{ hasBlocking }}"><div style="font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 12px;margin-top:14px">Blocking investor readiness: {{ blockingText }}</div></sc-if>
+  </div>
+
+  <!-- ROUND TRACKER -->
+  <div class="cp-card" style="padding:22px;margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:6px">Round tracker · weighted forecast</div>
+    <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:16px">At current pace, projected first close on {{ projectedClose }}.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px" class="cp-3col">
+      <sc-for list="{{ trackerStats }}" as="t" hint-placeholder-count="4">
+        <div><div style="font-size:10.5px;color:#a1a1aa;text-transform:uppercase">{{ t.label }}</div><div class="cp-mono" style="font-size:18px;font-weight:600;margin-top:4px">{{ t.value }}</div></div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- SAFE GENERATOR + PITCH FEEDBACK -->
+  <div class="cp-2col" style="display:grid;grid-template-columns:1.2fr 1fr;gap:20px">
+    <div class="cp-card" style="padding:22px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">SAFE generator · document workflow</div>
+      <sc-for list="{{ safeDocs }}" as="s" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid #f4f4f5">
+          <div><div style="font-size:13px;font-weight:600">{{ s.investor }}</div><div style="font-size:11px;color:#a1a1aa">{{ s.terms }}</div></div>
+          <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;{{ s.statusStyle }}">{{ s.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div class="cp-card" style="padding:22px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Pitch feedback · recurring objections</div>
+      <sc-for list="{{ feedbackThemes }}" as="f" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+          <span style="font-size:12px;color:#3f3f46">{{ f.text }}</span>
+          <span class="cp-mono" style="font-size:11px;font-weight:600;color:#b45309">×{{ f.count }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+
+<sc-if value="{{ previewOpen }}">
+  <div onClick="{{ closePreview }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:640px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #f0f0f3">
+        <div style="font-size:14px;font-weight:700">Investor preview · Capital &amp; data room</div>
+        <button onClick="{{ closePreview }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:22px;font-size:12.5px;color:#52525b;line-height:1.6">Renders the data room, current pitch deck, use-of-funds summary, cap table summary, and scoring/diligence status exactly as an investor would see them.</div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { view:'priority', exportOpen:false, previewOpen:false };
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+  statusStyle(s){
+    const m={ Identified:'color:#71717a;background:#f4f4f5', Researching:'color:#71717a;background:#f4f4f5', 'Intro sent':'color:#5b21b6;background:#f5f3ff', Replied:'color:#0891b2;background:#ecfeff',
+      Meeting:'color:#0891b2;background:#ecfeff', Diligence:'color:#b45309;background:#fffbeb', 'Term sheet':'color:#b45309;background:#fffbeb', Committed:'color:#166534;background:#dcfce7', Closed:'color:#166534;background:#dcfce7', Passed:'color:#b91c1c;background:#fef2f2' };
+    return m[s]||'color:#71717a;background:#f4f4f5';
+  }
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state;
+    const investorsRaw=[
+      { name:'Priya Shah', firm:'Basecamp Ventures', initials:'PS', avatarBg:'#4f46e5', stage:'Pre-seed', checkSize:'$150K–300K', warmth:'Warm', introSource:'Sofia M.', lastTouch:'2d ago', status:'Diligence', conviction:88, nextStep:'Send updated data room' },
+      { name:'David Kim', firm:'Northbeam Capital', initials:'DK', avatarBg:'#0891b2', stage:'Pre-seed–Seed', checkSize:'$200K–500K', warmth:'Direct', introSource:'MI Signals', lastTouch:'5d ago', status:'Meeting', conviction:74, nextStep:'Schedule partner meeting' },
+      { name:'Angela Torres', firm:'Fathom Seed', initials:'AT', avatarBg:'#7c3aed', stage:'Seed', checkSize:'$250K–500K', warmth:'Warm', introSource:'Raj P.', lastTouch:'1d ago', status:'Term sheet', conviction:92, nextStep:'Review term sheet redlines' },
+      { name:'Marcus Webb', firm:'Angel syndicate', initials:'MW', avatarBg:'#0d9488', stage:'Pre-seed', checkSize:'$25K–100K', warmth:'Cold', introSource:'MI Signals', lastTouch:'12d ago', status:'Intro sent', conviction:41, nextStep:'Follow up on intro email' },
+      { name:'Helena Cruz', firm:'Longview Partners', initials:'HC', avatarBg:'#db2777', stage:'Seed–A', checkSize:'$500K–1M', warmth:'Weak', introSource:'Cold outreach', lastTouch:'20d ago', status:'Researching', conviction:22, nextStep:'Qualify thesis fit' },
+      { name:'James Okafor', firm:'Coldstream VC', initials:'JO', avatarBg:'#d97706', stage:'Pre-seed', checkSize:'$100K–200K', warmth:'Warm', introSource:'Advisors', lastTouch:'6d ago', status:'Replied', conviction:63, nextStep:'Book first call' },
+    ];
+    const stageStyle=(s)=> 'color:#71717a;background:#f4f4f5';
+    const investors=investorsRaw.sort((a,b)=>b.conviction-a.conviction).map(v=>({ ...v, statusStyle:this.statusStyle(v.status), stageStyle:stageStyle(v.stage) }));
+
+    const kanbanOrder=['Identified','Researching','Intro sent','Replied','Meeting','Diligence','Term sheet','Committed'];
+    const kanbanCols=kanbanOrder.map(name=>({ name, cards: investorsRaw.filter(v=>v.status===name).map(v=>({name:v.name,checkSize:v.checkSize})), count: investorsRaw.filter(v=>v.status===name).length }));
+
+    const cmdStats=[
+      { label:'Target raise', value:'$1.0M', color:'#1A202C' },
+      { label:'Committed', value:'$250K', color:'#166534' },
+      { label:'Soft-circled', value:'$400K', color:'#d97706' },
+      { label:'Remaining', value:'$350K', color:'#71717a' },
+      { label:'Close confidence', value:'Medium', color:'#b45309' },
+    ];
+    const committedPct='25%', softCircledPct='65%', targetLabel='$1.0M · Day 11 of process';
+
+    const syncOk='color:#166534', syncWarn='color:#b45309';
+    const overviewFields=[
+      { label:'Instrument', value:'SAFE', sync:'Synced · Cap Table', syncColor:syncOk },
+      { label:'Valuation cap', value:'$8.0M', sync:'Synced · Cap Table', syncColor:syncOk },
+      { label:'Discount', value:'20%', sync:'Synced · Cap Table', syncColor:syncOk },
+      { label:'Pro-rata rights', value:'Included', sync:'Default', syncColor:syncOk },
+      { label:'MFN', value:'Enabled', sync:'Default', syncColor:syncOk },
+      { label:'Lead profile', value:'Pre-seed generalist', sync:'Manual', syncColor:syncWarn },
+      { label:'Target close', value:'Aug 15, 2026', sync:'Manual', syncColor:syncWarn },
+      { label:'Min / Ideal / Max', value:'$500K / $1M / $1.5M', sync:'Synced · Use of Funds', syncColor:syncOk },
+    ];
+
+    const nextActions=[
+      { num:1, text:'Send Angela Torres\u2019 redlined term sheet to counsel for review.' },
+      { num:2, text:'Follow up with Marcus Webb — 12 days since intro, no response.' },
+      { num:3, text:'Upload updated scoring report before Priya\u2019s diligence deadline.' },
+    ];
+    const warmIntros=[
+      { target:'Northbeam Capital', via:'MI Investor Signals', strength:'Direct', strengthStyle:'color:#166534;background:#dcfce7' },
+      { target:'Longview Partners', via:'2nd-degree · Sofia M.', strength:'Weak', strengthStyle:'color:#b45309;background:#fffbeb' },
+      { target:'Coldstream VC', via:'Advisor network', strength:'Warm', strengthStyle:'color:#0891b2;background:#ecfeff' },
+    ];
+    const missingItems=['Updated financial model (3yr) not yet uploaded','Team bios missing 1 advisor headshot'];
+
+    const dataRoomRaw=[
+      ['Pitch deck','Pitch Deck Builder','ready','Jul 19'], ['Financials','Use of Funds','outdated','Jul 10'], ['Cap table','Cap Table','ready','Jul 20'],
+      ['Scoring report','Scoring Engine','ready','Jul 18'], ['Team bios','Startups','missing','—'], ['IP summary','Startups','ready','Jul 12'],
+      ['Customer evidence','Customer Discovery','ready','Jul 15'], ['Product roadmap','Roadmap','ready','Jul 17'], ['Incorporation docs','Incorporate','pending','—'], ['SAFE / financing docs','this tool','ready','Jul 20'],
+    ];
+    const drStyle=(k)=>({ ready:'color:#166534;background:#dcfce7', outdated:'color:#b45309;background:#fffbeb', missing:'color:#b91c1c;background:#fef2f2', pending:'color:#71717a;background:#f4f4f5' }[k]);
+    const dataRoom=dataRoomRaw.map(([name,source,status,updated])=>({ name, source, status: status[0].toUpperCase()+status.slice(1), statusStyle:drStyle(status), updated }));
+    const readinessScore=68; const readinessColor='#d97706';
+    const hasBlocking=true; const blockingText='Team bios missing and incorporation docs pending — both required for a 70+ score.';
+
+    const projectedClose='Aug 22, 2026';
+    const trackerStats=[
+      { label:'Active conversations', value:'6' }, { label:'Meetings this week', value:'3' },
+      { label:'Diligence outstanding', value:'2 requests' }, { label:'Weighted pipeline', value:'$612K' },
+    ];
+
+    const safeDocs=[
+      { investor:'Angela Torres · Fathom Seed', terms:'$300K · $8M cap · 20% disc.', status:'Countersigned', statusStyle:'color:#166534;background:#dcfce7' },
+      { investor:'Priya Shah · Basecamp Ventures', terms:'$250K · $8M cap · 20% disc.', status:'Sent', statusStyle:'color:#5b21b6;background:#f5f3ff' },
+    ];
+    const feedbackThemes=[
+      { text:'Traction objection', count:4 }, { text:'Market sizing unclear', count:3 }, { text:'Cap table complexity raised', count:2 },
+    ];
+
+    return {
+      embeddedClass: this.props.embedded ? 'cp-embedded' : '',
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icBolt:ic('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+      icCheck:ic('<polyline points="20 6 9 17 4 12"/>',2.4),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icChevD:ic('<polyline points="6 9 12 15 18 9"/>',2.2),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      cmdStats, committedPct, softCircledPct, targetLabel,
+      overviewFields,
+      isPriority: st.view==='priority', isKanban: st.view==='kanban', isTable: st.view==='table',
+      viewPriorityStyle: st.view==='priority'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      viewKanbanStyle: st.view==='kanban'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      viewTableStyle: st.view==='table'?'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(0,0,0,.08)':'background:transparent;color:#71717a',
+      setViewPriority:()=>this.setState({view:'priority'}), setViewKanban:()=>this.setState({view:'kanban'}), setViewTable:()=>this.setState({view:'table'}),
+      investors, kanbanCols,
+      nextActions, warmIntros, missingItems,
+      dataRoom, readinessScore, readinessColor, hasBlocking, blockingText,
+      projectedClose, trackerStats,
+      safeDocs, feedbackThemes,
+      exportOpen:st.exportOpen, toggleExport:()=>this.setState({exportOpen:!st.exportOpen}),
+      previewOpen:st.previewOpen, openPreview:()=>this.setState({previewOpen:true}), closePreview:()=>this.setState({previewOpen:false}),
+      stop:(e)=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'cp-back'},'*');}catch(x){}},
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+// Network layer — shared config + curated data for the public Network surface
+// (Articles · Directory · Programs & Events · Communities & Circles).
+//
+// This is the single source of truth for the circle/program taxonomy so the
+// pages stay in sync and new circles/programs are a one-line data edit rather
+// than a JSX change. Anything that is not yet backed by a live API is modelled
+// here and surfaced with an explicit "coming soon" / "preview" affordance in
+// the UI — we never fabricate verified member accounts.
+//
+// Circles are now ADMIN-MANAGED and served by the worker
+// (GET /api/public/circles); the taxonomy consts below are the shared source
+// of truth for the type/access/activity labels the cards render. PROGRAMS +
+// DIRECTORY_* remain curated preview data until their public endpoints ship.
+
+// ---------------------------------------------------------------------------
+// Circle taxonomy
+// ---------------------------------------------------------------------------
+
+// The six circle families. `accent` maps to Tailwind colour families already in
+// the design system; `icon` is a lucide-react icon name resolved on the page.
+export const CIRCLE_TYPES = [
+  { id: 'founder', label: 'Founder circles', short: 'Founders', icon: 'Rocket', accent: 'violet',
+    blurb: 'Peer groups for operators building and scaling ventures.' },
+  { id: 'investor', label: 'Investor circles', short: 'Investors', icon: 'TrendingUp', accent: 'emerald',
+    blurb: 'Angels, LPs, and funds sharing dealflow and diligence.' },
+  { id: 'partner', label: 'Service partner circles', short: 'Partners', icon: 'Handshake', accent: 'sky',
+    blurb: 'Vetted operators — legal, finance, GTM, design, engineering.' },
+  { id: 'advisor', label: 'Advisor circles', short: 'Advisors', icon: 'GraduationCap', accent: 'amber',
+    blurb: 'Advisors and domain experts offering office hours and guidance.' },
+  { id: 'city', label: 'City / region circles', short: 'City & region', icon: 'MapPin', accent: 'rose',
+    blurb: 'Local hubs for in-person meetups and regional dealflow.' },
+  { id: 'topic', label: 'Topic circles', short: 'Topics', icon: 'Sparkles', accent: 'indigo',
+    blurb: 'Deep-dive communities around a sector or technology.' },
+];
+
+export const CIRCLE_TYPE_LABEL = Object.fromEntries(
+  CIRCLE_TYPES.map((t) => [t.id, t.label]),
+);
+export const CIRCLE_TYPE_ACCENT = Object.fromEntries(
+  CIRCLE_TYPES.map((t) => [t.id, t.accent]),
+);
+
+// Access model — public pages anyone can preview vs invite-only circles.
+export const ACCESS_TYPES = [
+  { id: 'public', label: 'Public', desc: 'Anyone can view and join.' },
+  { id: 'private', label: 'Invite-only', desc: 'Request access or get invited by a member.' },
+];
+
+// Activity signal shown on each card.
+export const ACTIVITY_LEVELS = {
+  active: { label: 'Active', dot: 'bg-emerald-500' },
+  growing: { label: 'Growing', dot: 'bg-sky-500' },
+  quiet: { label: 'Quiet', dot: 'bg-slate-400' },
+  new: { label: 'New', dot: 'bg-violet-500' },
+};
+
+// ---------------------------------------------------------------------------
+// Circles are admin-managed (Task #9): the former hardcoded CIRCLES array was
+// removed. The public /circles page fetches published circles from the worker
+// (GET /api/public/circles) and admins author them from /admin/circles. Only
+// the taxonomy consts above are still shared from here.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Programs — recurring, cohort-style series that sit alongside one-off Events.
+// ---------------------------------------------------------------------------
+export const PROGRAM_CATEGORIES = [
+  { id: 'office_hours', label: 'Office hours' },
+  { id: 'roundtable', label: 'Roundtables' },
+  { id: 'workshop', label: 'Workshops' },
+  { id: 'demo_day', label: 'Demo days' },
+  { id: 'community', label: 'Community sessions' },
+];
+
+export const AUDIENCES = [
+  { id: 'founders', label: 'Founders' },
+  { id: 'investors', label: 'Investors' },
+  { id: 'partners', label: 'Partners' },
+  { id: 'advisors', label: 'Advisors' },
+];
+
+export const FORMATS = [
+  { id: 'online', label: 'Online' },
+  { id: 'in_person', label: 'In-person' },
+  { id: 'hybrid', label: 'Hybrid' },
+];
+
+// Fields: id, name, category, cadence, format, audience[], description,
+// nextSession, status ('open' | 'coming_soon').
+export const PROGRAMS = [
+  {
+    id: 'founder-office-hours',
+    name: 'Founder Office Hours',
+    category: 'office_hours',
+    cadence: 'Weekly',
+    format: 'online',
+    audience: ['founders'],
+    description: '30-minute slots with Axal VC partners and advisors on fundraising, product, and GTM.',
+    nextSession: 'Every Tuesday · 10:00 PT',
+    status: 'coming_soon',
+  },
+  {
+    id: 'investor-roundtable',
+    name: 'Investor Roundtable',
+    category: 'roundtable',
+    cadence: 'Monthly',
+    format: 'hybrid',
+    audience: ['investors', 'partners'],
+    description: 'Curated dealflow review and diligence discussion for angels, LPs, and syndicate leads.',
+    nextSession: 'First Thursday of the month',
+    status: 'coming_soon',
+  },
+  {
+    id: 'spinout-demo-day',
+    name: '30D Spin-Out Demo Day',
+    category: 'demo_day',
+    cadence: 'Monthly',
+    format: 'hybrid',
+    audience: ['founders', 'investors'],
+    description: 'Graduating Spin-Out Lab cohorts pitch to the investor network. Warm intros follow.',
+    nextSession: 'Next cohort — dates TBA',
+    status: 'coming_soon',
+  },
+  {
+    id: 'gtm-workshop',
+    name: 'GTM Workshop Series',
+    category: 'workshop',
+    cadence: 'Bi-weekly',
+    format: 'online',
+    audience: ['founders'],
+    description: 'Hands-on workshops on positioning, pricing, and pipeline led by the partner network.',
+    nextSession: 'Rolling — join the waitlist',
+    status: 'coming_soon',
+  },
+  {
+    id: 'partner-clinics',
+    name: 'Partner Clinics',
+    category: 'office_hours',
+    cadence: 'Weekly',
+    format: 'online',
+    audience: ['founders', 'partners'],
+    description: 'Free 1:1 clinics with vetted service partners — legal, finance, design, recruiting.',
+    nextSession: 'Book via the Directory',
+    status: 'coming_soon',
+  },
+  {
+    id: 'community-sessions',
+    name: 'Community-Hosted Sessions',
+    category: 'community',
+    cadence: 'Ongoing',
+    format: 'in_person',
+    audience: ['founders', 'investors', 'partners', 'advisors'],
+    description: 'Meetups and dinners hosted by city and topic circles. Anyone in the network can host.',
+    nextSession: 'See Communities & Circles',
+    status: 'coming_soon',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Directory categories — the tabbed structure for the public Directory.
+// `live` marks the tab wired to the production API; the rest are curated
+// preview/"coming soon" surfaces until their public endpoints ship.
+// ---------------------------------------------------------------------------
+export const DIRECTORY_CATEGORIES = [
+  { id: 'partners', label: 'Service Partners', icon: 'Handshake', live: true,
+    blurb: 'Vetted operators — legal, finance, design, recruiting, GTM and more.' },
+  { id: 'startups', label: 'Startups', icon: 'Rocket', live: false,
+    blurb: 'Ventures building in and around the Axal VC studio.' },
+  { id: 'investors', label: 'Investors & LPs', icon: 'TrendingUp', live: false,
+    blurb: 'Angels, funds, and limited partners active in the network.' },
+  { id: 'advisors', label: 'Advisors', icon: 'GraduationCap', live: false,
+    blurb: 'Advisors and domain experts offering office hours and guidance.' },
+];
+
+// Field shapes for the not-yet-live Directory tabs.
+//
+// These used to be three invented listings per tab, complete with company and
+// PERSON names ("Dr. Priya Nair", "Marcus Vale") rendered on a PUBLIC page in
+// the same card layout as the real, live Service Partners tab. Each card did
+// carry a "Preview" chip — but a Preview chip beside a plausible name reads as
+// "preview of this listing", not "this person does not exist", and a card seen
+// on its own carries no banner at all.
+//
+// The cards now show the FIELDS a listing will carry, with the identity slot
+// left explicitly blank. Nothing here names an entity, so nothing here can be
+// mistaken for one.
+export const DIRECTORY_PREVIEWS = {
+  startups: [
+    { id: 's1', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus', 'focus'] },
+    { id: 's2', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus'] },
+    { id: 's3', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus', 'focus'] },
+  ],
+  investors: [
+    { id: 'i1', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis'] },
+    { id: 'i2', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis', 'thesis'] },
+    { id: 'i3', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis'] },
+  ],
+  advisors: [
+    { id: 'a1', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill', 'skill'] },
+    { id: 'a2', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill'] },
+    { id: 'a3', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill', 'skill'] },
+  ],
+};

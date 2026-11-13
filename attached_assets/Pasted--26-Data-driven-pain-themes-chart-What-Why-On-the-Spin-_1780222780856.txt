@@ -1,0 +1,27 @@
+#26 - Data-driven pain themes chart
+What & Why
+On the Spin-Out demo-day deck's Problem slide (eyebrow "01 · PROBLEM", "The pain we built the Lab to investigate."), the right column currently leads with ProblemEcho — a purely decorative SVG of random red "problem" scribbles converging onto an INSIGHT star. It shows nothing real about the venture. Replace it with a data-driven ranked dot / lollipop plot of the pain themes founders' discovery customers actually raised, ordered top-to-bottom by how many times each theme was mentioned across interviews. This turns the slide's hero visual into evidence instead of decoration.
+Done looks like
+* The decorative scribble-to-star graphic is gone from the Problem slide's right column.
+* In its place is a ranked lollipop chart: one row per pain theme, sorted most-mentioned at the top, each row showing the theme label, a stem ending in a dot, and its mention count. The dot/stem length encodes mentions relative to the most-mentioned theme.
+* The chart uses the same pain-theme data already computed for this slide (the themes value from deckPainPoints(p.pain_themes, signals)), so it stays in sync with the "Evidence backing this" counts below it.
+* The separate "Pain themes · clustered" horizontal frequency-bars card is removed — the new lollipop chart is the single pain-themes visual in that column (no duplication).
+* When a venture has no pain themes yet (new founder), the card shows a tidy placeholder/skeleton in the same ghost-card style the slide already uses for empty states, rather than an empty or broken chart.
+* The chart respects the deck's existing theme tokens (accent/rose/muted colors, mono/display fonts, vibe variants) and renders correctly in both light and dark mode, matching the surrounding cards.
+* The "Evidence backing this" stats row (Themes / Pain mentions / Interviews) is unchanged and still appears below the chart.
+Out of scope
+* Adding any new data fields, backend queries, or migrations — use only the pain-theme/mention data the slide already receives.
+* Changing the left column (headline, PAIN 01/02/03 signal cards, nudges).
+* Two-dimensional encodings (e.g. severity × frequency) — the deck data only reliably carries mention counts.
+* Changes to PDF/PowerPoint export rendering beyond whatever naturally follows from the slide component change.
+Steps
+1. Build the lollipop chart component — Add a ranked dot/lollipop plot that takes the existing PainTheme[] ({ theme, mentions }), sorts by mentions descending, and renders each as a labeled row with a stem + dot scaled against the max mention count. Match the visual language and theme tokens of the existing ThemeFrequencyBars/card styling, including light/dark and vibe variants.
+2. Swap it into the Problem slide's right column — Replace the <ProblemEcho /> card with the new chart, feeding it the themes value already computed in the slide. Remove the now-redundant ThemeFrequencyBars "Pain themes · clustered" card so the lollipop chart is the only pain-themes visual. Keep the "Evidence backing this" stats card as-is.
+3. Handle the empty state — When there are no themes, render the placeholder/ghost-card treatment consistent with the slide's other empty states instead of an empty chart.
+4. Clean up — Remove the unused ProblemEcho component (and ThemeFrequencyBars if no longer referenced) so no dead code remains.
+Relevant files
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:1399-1430
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:1535-1629
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2305-2325
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2629-2631
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:190-210

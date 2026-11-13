@@ -1,0 +1,231 @@
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { api } from '../lib/api';
+import { safeReadJSON } from '../lib/storage';
+
+/**
+ * T20 — Auth re-sync on navigation.
+ *
+ * The React app holds the signed-in user in memory; without a refresh path
+ * a server-side role change (admin promotes a partner to investor, KYC
+ * is approved, access_level flips, etc.) is invisible until the next hard
+ * reload. AuthProvider owns the canonical `user` (mirrored to localStorage
+ * for cross-tab continuity and the legacy `safeReadJSON('user')` reads
+ * scattered through the codebase) and re-fetches `/api/auth/me` on route
+ * changes, throttled to once per `THROTTLE_MS`. Callers that know they
+ * just mutated the session (impersonation start/stop, login, KYC submit)
+ * can call `refresh({ force: true })` to bypass the throttle.
+ *
+ * What this is *not*: a real-time push of role changes (that would need
+ * a WebSocket subscription) and not a tab-focus refresher (could be a
+ * follow-up). Those are explicitly out of scope per the task spec.
+ */
+
+const THROTTLE_MS = 5 * 60 * 1000;
+
+const AuthCtx = createContext({
+  user: null,
+  role: null,
+  loading: false,
+  oauthBootstrapping: false,
+  refresh: async () => {},
+  setUser: () => {},
+});
+
+export function AuthProvider({ children }) {
+  const [user, setUserState] = useState(() => safeReadJSON('user'));
+  const [loading, setLoading] = useState(false);
+  const lastFetchRef = useRef(0);
+  const inFlightRef = useRef(null);
+  const location = useLocation();
+
+  // Capture the post-OAuth marker DURING the initial render (lazy initializer
+  // runs once, synchronously, before any effect). We can't read it from a
+  // useEffect because the protected-route guard's <Navigate to="/login"/>
+  // fires inside useLayoutEffect — which runs before useEffect — and rewrites
+  // window.location.search to '' before our effect ever sees the marker.
+  // Stashing it here means the post-OAuth bootstrap below still fires even
+  // after the guard has bounced us through /login.
+  const [postOAuthMarker] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.has('google') || params.has('google_signup');
+    } catch { return false; }
+  });
+
+  // True while we force-probe /me for a session the OAuth callback set
+  // entirely server-side (httpOnly cookie only — localStorage is still
+  // empty). RequireAuth shows a spinner instead of bouncing to /login while
+  // this is set: that bounce lands the user on AuthScreen, which treats any
+  // authenticated user on /login as an "account switch" and tears the
+  // freshly-minted Google session down (clearSession → /api/auth/logout),
+  // dumping the user straight back onto the sign-in form. Flips false the
+  // moment the probe settles (success OR failure) so a genuinely failed
+  // bootstrap still falls through to /login.
+  const [oauthBootstrapping, setOauthBootstrapping] = useState(postOAuthMarker);
+
+  // Wrap setUser so localStorage stays consistent. Callers like
+  // handleImpersonate / login still write to localStorage themselves
+  // (legacy behaviour) — this also accepts a plain object so context
+  // and storage stay in lock-step when the caller goes through here.
+  // D4581 (#4581): the session's generation. A sign-out, or another account, moves it on, and a
+  // `/me` that started under an earlier one is dropped when it answers (see `refresh`). Without it,
+  // a `/me` sent before /login's teardown answered with the still-valid cookie and wrote the old
+  // account back, and AuthScreen (which tears down once) drew "Signing you out…" until a reload.
+  const sessionRef = useRef({ gen: 0, id: user?.id ?? null });
+  const nextSession = (u) => {
+    const id = u?.id ?? null;
+    if (!u || Number(id) !== Number(sessionRef.current.id)) sessionRef.current = { gen: sessionRef.current.gen + 1, id };
+  };
+
+  const setUser = useCallback((next) => {
+    nextSession(next);
+    setUserState(next);
+    try {
+      if (next) localStorage.setItem('user', JSON.stringify(next));
+      else localStorage.removeItem('user');
+    } catch { /* quota / disabled storage — context still updates */ }
+  }, []);
+
+  const refresh = useCallback(async ({ force = false } = {}) => {
+    // Gate on cached `user` presence rather than token/cookie readability.
+    // T6 makes `studioos_auth` an httpOnly cookie (not visible to JS), so
+    // checking `document.cookie` would skip /me for every cookie-auth
+    // session. Pages that load *without* any cached user are either
+    // public (no /me needed) or the route guard will redirect to /login
+    // before this fires; if /me 401s anyway, api.request bounces to
+    // /login on its own.
+    // EXCEPTION: `force: true` bypasses the cached-user gate — used by the
+    // post-OAuth bootstrap below where the cookie was set entirely
+    // server-side and localStorage is still empty.
+    const hasCachedUser = !!safeReadJSON('user');
+    if (!hasCachedUser && !force) return;
+
+    const now = Date.now();
+    if (!force && now - lastFetchRef.current < THROTTLE_MS) return;
+
+    // Coalesce concurrent calls (e.g. two route changes inside the
+    // same React tick) so we don't fire a flood of /me requests.
+    if (inFlightRef.current) return inFlightRef.current;
+
+    setLoading(true);
+    const gen = sessionRef.current.gen;
+    const p = (async () => {
+      try {
+        const me = await api.getMe();
+        // D4581: signed out (or another account signed in) while this was in flight. Its answer is
+        // the old session's; drawing it would sign that account back in on this tab.
+        if (gen !== sessionRef.current.gen) return;
+        const stored = safeReadJSON('user', {}) || {};
+        // Task #4 — identity-change purge. If /me returned a different user
+        // than the one we had cached (e.g. someone signed in with Google on
+        // a browser that still had a previous admin's localStorage), wipe
+        // every cross-user crumb: stale Bearer (which auth.ts now ignores
+        // server-side but the SPA would still ship on every fetch),
+        // viewMode (defaults to 'admin' in App.jsx), and any active
+        // impersonation handles. Replace `user` outright rather than merge
+        // so we don't inherit the prior user's role/founder_id/etc.
+        if (stored?.id && me?.id && Number(stored.id) !== Number(me.id)) {
+          try {
+            localStorage.removeItem('token');
+            localStorage.removeItem('viewMode');
+            localStorage.removeItem('realUser');
+            localStorage.removeItem('realToken');
+          } catch { /* quota / disabled storage */ }
+          try { localStorage.setItem('user', JSON.stringify(me)); } catch { /* ignore */ }
+          nextSession(me);
+          setUserState(me);
+          lastFetchRef.current = Date.now();
+          return;
+        }
+        const merged = { ...stored, ...me };
+        try { localStorage.setItem('user', JSON.stringify(merged)); } catch { /* ignore */ }
+        setUserState(merged);
+        // Only stamp the throttle on a successful round-trip — if /me
+        // failed transiently we want the next navigation to retry
+        // instead of being silenced for the full 5-minute window.
+        lastFetchRef.current = Date.now();
+      } catch {
+        // 401 is already handled by api.request (redirects to /login).
+        // Other errors are transient — keep the cached user and let the
+        // next navigation re-attempt the sync.
+      } finally {
+        setLoading(false);
+        inFlightRef.current = null;
+      }
+    })();
+    inFlightRef.current = p;
+    return p;
+  }, []);
+
+  // Re-sync on every route change (throttled). Using pathname as the key
+  // is intentional — query-only changes (e.g. ?status=open filter swaps)
+  // shouldn't burn a /me call.
+  useEffect(() => {
+    refresh();
+  }, [location.pathname, refresh]);
+
+  // Post-OAuth bootstrap. The Google sign-in callback sets the auth cookie
+  // entirely server-side and 302-redirects to `/dashboard?google=ok` (or
+  // `?google_signup=1` for fresh signups). At that point the SPA has a
+  // valid httpOnly cookie but localStorage is still empty, so the
+  // cached-user gate in refresh() would skip /me and the route guard in
+  // App.jsx would bounce the user back to /login. Force one /me probe
+  // when we see the post-OAuth marker so the user lands on their
+  // dashboard instead of /login. Marker captured at initial render
+  // above — by the time this effect runs the URL may already be /login.
+  useEffect(() => {
+    if (postOAuthMarker) {
+      // Task #4 — proactively drop any stale localStorage Bearer + viewMode
+      // BEFORE the first /me probe. The cookie minted server-side by the
+      // Google callback is the canonical session; a stale admin Bearer
+      // sitting in localStorage from a prior browser user must not ride
+      // along on the /me request (auth.ts now also defends against this
+      // server-side, but clearing here means even an outdated worker
+      // build can't leak the wrong account into the SPA).
+      try {
+        localStorage.removeItem('token');
+        localStorage.removeItem('viewMode');
+        localStorage.removeItem('realUser');
+        localStorage.removeItem('realToken');
+      } catch { /* ignore */ }
+      // Settle `oauthBootstrapping` once the forced /me resolves (success
+      // populates `user`; failure leaves it null) so RequireAuth either
+      // renders the protected page or, only then, falls through to /login.
+      Promise.resolve(refresh({ force: true })).finally(() => setOauthBootstrapping(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postOAuthMarker]);
+
+  // Cross-tab sync: another tab logging in/out updates localStorage; mirror
+  // it here so tabs stay consistent without a reload.
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'user') {
+        const next = safeReadJSON('user');
+        nextSession(next);
+        setUserState(next);
+        // Reset the throttle so a freshly-restored session re-validates
+        // against the server on the next navigation.
+        lastFetchRef.current = 0;
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const value = {
+    user,
+    role: user?.role || null,
+    loading,
+    oauthBootstrapping,
+    refresh,
+    setUser,
+  };
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+}
+
+export function useAuth() {
+  return useContext(AuthCtx);
+}

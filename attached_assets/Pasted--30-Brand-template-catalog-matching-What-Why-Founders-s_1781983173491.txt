@@ -1,0 +1,35 @@
+#30 - Brand template catalog & matching
+What & Why
+Founders should be able to pick the right communication surface for a given audience. The user supplied 16 prebuilt templates (Capital Ready Kit, Pilot Partner Page, Proof Builder, the Co-Founder set, Partner Hub/Pipeline Pro, Capital Storyteller, Advisor/Mentor Connect, Distribution Deck, Seed Stage Spark, Builder's Launchpad, etc.). This task builds the data layer that maps every template to an audience + goal and the pure matching/seed helpers that drive the reworked Brand & Landing wizard. Per the agreed approach, published pages keep using the existing built-in visual styles — so each catalog template also maps to one of the existing visual templates; we are NOT recreating the zip designs here.
+Shared contract (used by the backend + wizard tasks — keep in lockstep)
+* Audience values (6): customer, investor, partner, advisor, mentor, cofounder.
+* Goal values: join_waitlist, request_intro, start_pilot, book_call, apply, offer_guidance.
+* Catalog template id: kebab-case, e.g. capital-ready-kit, pilot-partner-page.
+* Visual template keys (existing, reuse — do not invent): minimal, bold-hero, video-first, editorial, product-mock (see cloudflare-worker/src/services/landingTemplates.ts).
+Done looks like
+* All 16 supplied templates are represented in a typed catalog, each tagged with: id, human label, audience, asset type (landing/deck/memo/doc), primary goal, default CTA label, default slug, the existing visual template it renders with, optional "recommended" flag, and notes.
+* Given an audience, the catalog returns its recommended templates (recommended first), so the wizard can show "templates for investors", etc.
+* Given a project summary + a chosen template, helper functions return seeded brand-kit copy (brand name, headline, subheadline, CTA label) as editable defaults — plain deterministic placeholders, no network calls.
+* Helper to suggest a sensible default audience + goal from a project.
+* Unit tests cover: every template has valid audience/goal/visual-template values; audience filtering returns the expected sets; copy seeding fills all fields. Tests run under the existing frontend test runner.
+Out of scope
+* Recreating the actual zip designs / pixel-faithful rendering (deferred; published pages use existing visual styles).
+* Persisting the selection or any DB/API changes (separate backend task).
+* Changing the wizard UI (separate flow task).
+* Routing deck/memo asset types to the deck builder or other surfaces (future).
+* Real AI copy generation (helpers return deterministic placeholders the wizard can later replace).
+Suggested starting mapping (executor may refine labels/goals)
+* Investor: Capital Ready Kit, Capital Storyteller, Seed Stage Spark, Distribution Deck → goal request_intro, CTA "Request intro".
+* Partner: Pilot Partner Page, Partner Hub, Partner Pipeline Pro → goal start_pilot/book_call, CTA "Start pilot"/"Book a call".
+* Cofounder: Co-Founder Builder, Co-Founder Canvas, Co-founder Connect, Co-Founder Quest → goal apply, CTA "Apply to join"/"Let's talk".
+* Advisor/Mentor: Advisor Connect, Mentor Connect, Mentor Connect Page → goal offer_guidance, CTA "Become an advisor"/"Become a mentor".
+* Customer: Proof Builder, Builder's Launchpad → goal join_waitlist, CTA "Join the waitlist". Map each to one of the 5 visual templates (e.g. editorial for memo-like investor pages, product-mock for product/partner pages, bold-hero for high-energy pages, minimal for clean directories).
+Steps
+1. Build the catalog — Add a new typed catalog module under the frontend lib with the TemplateConfig shape and the TEMPLATES array covering all 16 templates using the shared contract values.
+2. Add matching + seed helpers — Pure functions: get-by-id, get-recommended-by-audience (recommended-first), infer-defaults-from-template, suggest-audience-and-goal from a project, and generate-initial-brand-kit (seeded copy). No I/O.
+3. Unit tests — Add a test file following the existing frontend/test/*.test.mjs pattern asserting catalog integrity, audience filtering, and copy seeding; wire it into the existing frontend test script so it runs in the drift/test gate.
+Relevant files
+* frontend/src/pages/BrandBuilderPage.jsx
+* frontend/src/lib/api.js:1340-1354
+* cloudflare-worker/src/services/landingTemplates.ts:9-60
+* frontend/test/spinout_preview_sync.test.mjs

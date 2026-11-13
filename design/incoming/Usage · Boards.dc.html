@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="padding:56px;display:flex;flex-direction:column;gap:72px">
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="5">
+    <section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font:600 11px 'Roboto Mono',monospace;padding:4px 8px;border-radius:5px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-weight:700;font-size:22px;letter-spacing:-.02em">{{ b.title }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ b.route }}</span></div>
+      <div style="display:flex;gap:28px;align-items:flex-start">
+        <div style="width:1440px;flex:none;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7;box-shadow:0 18px 44px rgba(24,24,27,.07)">
+          <dc-import name="Usage Page" screen="{{ b.screen }}" hint-size="1440px,1300px"></dc-import>
+        </div>
+        <sc-if value="{{ b.phone }}" hint-placeholder-val="{{ false }}">
+          <div style="width:390px;height:844px;flex:none;border:10px solid #18181b;border-radius:40px;overflow:auto;background:#f4f3f7">
+            <dc-import name="Usage Page" screen="{{ b.screen }}" hint-size="370px,844px"></dc-import>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    return { boards: [
+      { id: 'B1', title: 'Usage overview', route: '/account/usage', screen: 'usage', phone: true },
+      { id: 'B2', title: 'Cost', route: '/account/usage/cost', screen: 'cost', phone: true },
+      { id: 'B3', title: 'Billing', route: '/account/billing', screen: 'billing', phone: true },
+      { id: 'B4', title: 'Limits', route: '/account/usage/limits', screen: 'limits', phone: true },
+      { id: 'B5', title: 'HQ › AI usage', route: '/admin/platform/ai-usage', screen: 'hq', phone: false },
+    ] };
+  }
+}
+</script>
+</body></html>

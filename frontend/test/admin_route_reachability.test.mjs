@@ -1,0 +1,804 @@
+/**
+ * Every `/admin/*` route either has a door, or is a recorded decision whose
+ * reason this file re-checks.
+ *
+ * THE CONVERSE OF `super_admin_shell.test.mjs:41-47`, which asserts row → route
+ * (`rows.filter(r => !APP.includes(\`path="${r.to}"\`))`) — every advertised door
+ * opens onto something. Nothing asserted route → door, and the gap was not
+ * theoretical: seven `/admin/*` routes had no way in from the UI, between them
+ * ~2,250 lines of working, API-backed admin tooling. `/admin/trash` and
+ * `/admin/refer-earn` each appeared EXACTLY ONCE in all of `frontend/src` — the
+ * `<Route>` line that registers them.
+ *
+ * REACHABILITY IS BFS FROM ROOTS, NOT "HAS AN INBOUND LINK", and the publications
+ * feature is why. `Publications.jsx` links to `new` and `:id`; both of those link
+ * back to the list. All three have inbound links; all three were unreachable —
+ * a closed cycle with no edge entering it from any navigation root. The cheap
+ * check reports zero orphans on a three-page feature nobody can find.
+ *
+ * DOORS ARE MATCHED BY SYNTAX, NOT BY PATH SUBSTRING, and that is load-bearing
+ * rather than tidy. `frontend/src/lib/api.js` carries ~90 `/admin/*` strings and
+ * ZERO navigation — every one an argument to `request(...)`. A bare grep scores
+ * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. A path
+ * that survives `codeOnly` is not a door either: `/admin/partners` survives as
+ * its redirect route's own `path=` (D923), which is code and not navigation.
+ * Only the syntax anchor tells the two apart, which is what 'the door scanner
+ * reads navigation syntax…' pins.
+ *
+ * `SIDEBAR_GROUPS` IS IMPORTED, NOT PARSED. `super_admin_shell.test.mjs:25` does
+ * the same and ships (the "cannot be imported, lucide-react" note on
+ * `parseSidebar` in `scripts/build-profile-routing.mjs:97` is true of plain-node
+ * scripts, not of tests, which run under `_deck-loader.mjs`). Importing makes the
+ * ONE commented-out row — `// { to: '/admin/x', … }`, parked beside the Telegram
+ * row in `sidebarConfig.js` — structurally invisible instead of regex-filtered,
+ * so a deliberately-dark door
+ * can never read as live. It also keeps `match:` a separate field the door
+ * extractor never touches; `match` decides highlighting, not navigation
+ * (`sidebarConfig.js:273-276`).
+ *
+ * Scope is `/admin/*` deliberately. 132 of 375 static routes carry no literal
+ * link, but nearly all are legitimately unlinked — `/lp/*` campaign pages,
+ * emailed `/account/email/confirm` links, wizard steps reached programmatically,
+ * and every zone route the rail computes through `zonePath()` rather than a
+ * literal. A guard at that scope needs a ~100-entry allowlist, which documents
+ * nothing. The admin sidebar is meant to be complete, so here the assertion bites.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { codeOnly } from './_codeOnly.mjs';
+import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
+import { adminConsoleSource, ADMIN_CONSOLE_FILES, HQ_KEYS_CONSOLE_FILES } from './_adminConsoles.mjs';
+import { ADMIN_TAB_MOVES } from '../src/pages/admin/LegacyContractsRedirect.jsx';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
+// D528 — App.jsx plus every module under frontend/src/routes/, so an /admin
+// route declared in a module needs a door like any other.
+const APP = readRoutesSource(root);
+
+/* ------------------------------------------------------------------ *
+ * The route table
+ * ------------------------------------------------------------------ */
+
+/**
+ * Every `<Route>` as `{ path, body, component, redirect }`.
+ *
+ * Scans the WHOLE file. `/admin/advisor-cohorts` lives far below the block
+ * where the other 32 sit, so a block-bounded parser silently loses it —
+ * which is why the completeness test below counts.
+ * Segment-splitting shape lifted from `route_role_zone_contract.test.mjs:67`.
+ */
+function routes(src) {
+  const out = [];
+  for (const seg of src.split('<Route').slice(1)) {
+    const p = /^\s*path="([^"]+)"/.exec(seg);
+    if (!p) continue;
+    const next = seg.indexOf('\n      <Route');
+    const body = next >= 0 ? seg.slice(0, next) : seg;
+    // The first PascalCase element is the page; `<Navigate>` means this route is
+    // a redirect rather than a surface.
+    const els = [...body.matchAll(/<([A-Z]\w+)/g)].map((m) => m[1]);
+    out.push({
+      path: p[1],
+      body,
+      // A `*Redirect` element that is the route's whole body is a redirect too,
+      // as `redirect_hits_2301.test.mjs` counts it (D893's HeldInsightsRedirect).
+      // Since D938 that includes LegacyContractsRedirect: `/admin` mounts nothing.
+      redirect: els[0] === 'Navigate' || (/Redirect$/.test(els[0] || '') && els.length === 1),
+      component: els.find((e) => e !== 'Navigate') ?? null,
+    });
+  }
+  return out;
+}
+
+const ALL = routes(APP);
+const ADMIN = ALL.filter((r) => r.path === '/admin' || r.path.startsWith('/admin/'));
+const BY_PATH = new Map(ALL.map((r) => [r.path, r]));
+
+/**
+ * component name → source file, from App.jsx's lazy-import table.
+ *
+ * EXTENSIONS ARE RESOLVED HERE, not at read time. The import specifiers carry
+ * none (`import('./pages/AdminPage')`), and leaving them bare made the
+ * `SECOND_MOUNTS` key below — written with `.jsx`, as a person naturally would —
+ * miss every lookup, silently emptying the second-mount edge set and reporting
+ * `/admin/spinout-lab/preview` as an orphan when it is reachable. A path that is
+ * a key in one place and a display string in another has to be one spelling.
+ */
+const resolveFile = (rel) => {
+  for (const ext of ['', '.jsx', '.js']) {
+    if (existsSync(resolve(root, `${rel}${ext}`))) return `${rel}${ext}`;
+  }
+  return null;
+};
+
+const FILE_OF = new Map();
+// One table across App.jsx and the route modules (D528), keyed by the bare
+// component name — which is sound only while one name means one page. The
+// helper reports a name two sources declare for different pages, and the
+// first test below fails on one, so a module cannot make this table scan
+// the wrong file (Codex on #1062).
+const LAZY_CONFLICTS = conflictingLazyImports(root);
+for (const { name, target } of lazyImports(root)) {
+  const f = resolveFile(target);
+  if (f) FILE_OF.set(name, f);
+}
+for (const m of APP.matchAll(/^import (\w+) from '\.\/([^']+)'/gm)) {
+  if (FILE_OF.has(m[1])) continue;
+  const f = resolveFile(`frontend/src/${m[2]}`);
+  if (f) FILE_OF.set(m[1], f);
+}
+
+const srcOf = (file) => (existsSync(resolve(root, file)) ? readFileSync(resolve(root, file), 'utf8') : null);
+
+/* ------------------------------------------------------------------ *
+ * The door scanner
+ * ------------------------------------------------------------------ */
+
+/**
+ * Navigation targets in one source file.
+ *
+ * Every pattern is a LITERAL regex — nothing is interpolated, so there is no
+ * `detect-non-literal-regexp` surface here at all. A `<Navigate>`'s `to=` is
+ * syntactically identical to a `<Link>`'s, so redirects are stripped first and
+ * returned separately: a redirect is not a door a person can walk through.
+ */
+function doorsIn(src) {
+  const code = codeOnly(src);
+  const redirects = [];
+  for (const m of code.matchAll(/<Navigate\b[^>]*?to="(\/[^"]*)"/g)) redirects.push(m[1]);
+  const withoutNavigate = code.replace(/<Navigate\b[^>]*>/g, '');
+
+  const doors = new Set();
+  const LITERALS = [
+    /\bto="(\/[^"]*)"/g,
+    /\bhref="(\/[^"]*)"/g,
+    /\bto=\{`(\/[^`${]*)/g,
+    /\bhref=\{`(\/[^`${]*)/g,
+    /\b(?:navigate|nav)\(\s*'(\/[^']*)'/g,
+    /\b(?:navigate|nav)\(\s*"(\/[^"]*)"/g,
+    /\b(?:navigate|nav)\(\s*`(\/[^`${]*)/g,
+  ];
+  for (const re of LITERALS) for (const m of withoutNavigate.matchAll(re)) doors.add(m[1]);
+  // D1005 (#2820): a value BETWEEN two literal parts — a segment's tab,
+  // `/admin/persona-segments/${segKey}/members` — is one segment with a path
+  // after it, which the head alone cannot say. It is read as `${}`, which no
+  // literal segment equals, so only a `:param` in that place matches it.
+  for (const m of withoutNavigate.matchAll(/\b(?:to|href)=\{`(\/[^`$]*\/)\$\{[^}`]*\}(\/[^`$?#]+)/g)) doors.add(`${m[1]}\${}${m[2]}`);
+
+  // Computed-base links. `duediligence/DdCasesTab.jsx` (D1250; before it, `AdminDueDiligencePage.jsx`) builds
+  //   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
+  // and links `${base}/${c.uid}`, so the literal never appears anywhere. Resolve
+  // by substitution rather than by pattern: plain indexOf and slicing, no regex
+  // built from a read value.
+  for (const m of withoutNavigate.matchAll(/\b(?:to|href)=\{`\$\{(\w+)\}([^`]*)/g)) {
+    const [, ident, rest] = m;
+    const tail = rest.split('${')[0];
+    for (const bind of withoutNavigate.matchAll(/\bconst (\w+) = ([^;\n]*)/g)) {
+      if (bind[1] !== ident) continue;
+      // ONLY THE TERNARY'S RESULTS ARE CANDIDATE BASES. The condition holds a path
+      // literal too — `pathname.startsWith('/admin') ? … : …` — and reading it as a
+      // base produced a door at `/admin/`, which then failed the dangling-link test
+      // as a link nobody wrote. A literal before the `?` is a test, not a value.
+      const value = bind[2].includes('?') ? bind[2].slice(bind[2].indexOf('?')) : bind[2];
+      for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}${tail}`);
+      // D1244 (#2385): a case's tab is `${base}/${uid}/${t.key}`: two whole
+      // segments after the base, each a value. Read as `/…/${}/${}`, which only
+      // a `:uid/:tab` route matches — the head alone (`/…/`) reaches `:uid`.
+      if (/^(?:\/\$\{[^}`]*\}){2}$/.test(rest)) for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}/\${}/\${}`);
+    }
+  }
+  return { doors: [...doors], redirects };
+}
+
+/**
+ * A door's target → the route it opens. Query and hash are dropped: `?tab=` picks
+ * a panel inside a page, it does not address a different route.
+ */
+function toRoute(target) {
+  const clean = target.split('?')[0].split('#')[0];
+  if (BY_PATH.has(clean)) return clean;                        // static wins
+  const want = clean.replace(/\/$/, '').split('/');
+  // A trailing slash is a template head — `/articles/edit/${id}` scanned up to the
+  // first `${` — so exactly ONE more segment follows, and the arity is strict.
+  // Allowing `want.length` as well made a 4-segment link also match the 3-segment
+  // `/articles/:slug`, whose `:slug` then absorbed the literal `edit`, and the two
+  // together read as an ambiguity that is not one.
+  const expected = clean.endsWith('/') ? want.length + 1 : want.length;
+  const candidates = [];
+  for (const r of ALL) {
+    const have = r.path.split('/');
+    if (have.length !== expected) continue;
+    let ok = true; let params = 0;
+    for (let i = 0; i < have.length; i += 1) {
+      if (have[i].startsWith(':')) { params += 1; continue; }
+      if (have[i] !== want[i]) { ok = false; break; }
+    }
+    if (ok && params > 0) candidates.push(r.path);
+  }
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) return { ambiguous: clean, candidates };
+  return null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Roots, second mounts, and the closure
+ * ------------------------------------------------------------------ */
+
+/** Every live sidebar row across every shell. Commented rows cannot appear. */
+const SIDEBAR_ROWS = Object.entries(SIDEBAR_GROUPS).flatMap(([role, groups]) =>
+  groups.flatMap((g) => (g.items || []).map((it) => ({ role, group: g.label, to: it.to }))));
+
+/**
+ * App.jsx outside `<Routes>` — the user dropdown, the portal switcher, anything
+ * mounted on every page. These are doors no route owns.
+ */
+const CHROME = (() => {
+  const open = APP.indexOf('<Routes');
+  const close = APP.indexOf('</Routes>');
+  return open >= 0 && close > open ? APP.slice(0, open) + APP.slice(close) : APP;
+})();
+
+/**
+ * A component rendered by ANOTHER routed component, which is itself a route
+ * element elsewhere. Three files do it, and it is how
+ * `/admin/spinout-lab/preview` is genuinely reachable: the preview button lives
+ * inside `AdminSpinoutLab.jsx`'s `body`, and `:825` is `if (!standalone) return
+ * body;`, so it renders in the `/admin?tab=lab-applications` framing too — and
+ * `/admin` has a real row. Attributing doors to FILES and files to ALL their
+ * mount points is what gets that right; a path-only model calls it an orphan.
+ *
+ * The table is hand-written and machine-checked against the tree below, which is
+ * the only reason to trust it: the first draft declared two of these four, and the
+ * parity test named the two it had missed rather than letting the closure quietly
+ * run short.
+ */
+const SECOND_MOUNTS = new Map([
+  // The Admin Console's own tabs stood here, and fed the `same-component-elsewhere`
+  // exemptions.
+  // D937 (#2374) and D972 (#2369): AdminSpinoutLab and AdminNetworkProfiles
+  // left the console; their tabs forward to their own pages before it mounts.
+  // The founder-journey walkthrough renders the real apply page on simulated data
+  // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
+  ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
+]);
+
+/**
+ * D648 — files a routed page renders that are NOT routes themselves. Since
+ * D648 the Admin Console is a shell and each console is its own file under
+ * `pages/admin/consoles/`, so a door a console draws (the Wellbeing roster's
+ * resource-library link, the account drawer's credits link) lives in that
+ * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
+ * alone. Checked against the hosts' own imports below, so it cannot drift.
+ */
+const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
+// D995 retired PartnerProfilesConsole: Partner profiles draws its own record,
+// and D1005 retired PersonasConsole: Persona segments draws its own Move dialog.
+const COMPOSED = new Map([
+  // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
+  [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx', 'frontend/src/pages/admin/kyc/KycBusinesses.jsx']],
+  ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D1295 (#3391): the Content queue draws Pipeline from contentQueue/, which holds the door to one article.
+  ['frontend/src/pages/admin/ArticlesQueuePage.jsx', ['frontend/src/pages/admin/contentQueue/Pipeline.jsx']],
+  // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
+  ['frontend/src/pages/hq/ContractsPage.jsx', ['frontend/src/pages/admin/contracts/ContractsDesk.jsx']],
+  // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
+  ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
+  // D800 (#2233): the Licences page draws its tab row and its tabs' links from
+  // the files beside it.
+  ['frontend/src/pages/subsidiary/MyLicencePage.jsx', [
+    'frontend/src/pages/subsidiary/LicenceFrame.jsx',
+    'frontend/src/pages/subsidiary/LicenceSummary.jsx',
+    'frontend/src/pages/subsidiary/LicenceTerms.jsx',
+  ]],
+  // D915 (2026-10-24, #2368): the Events desk draws its tabs from the files
+  // beside it, and they hold the doors to one event's page (`/admin/events/:id`).
+  ['frontend/src/pages/admin/AdminEventsPage.jsx', [
+    'frontend/src/pages/admin/events/EventsOverview.jsx',
+    'frontend/src/pages/admin/events/EventsReview.jsx',
+    'frontend/src/pages/admin/events/EventsAll.jsx',
+    'frontend/src/pages/admin/events/EventsCalendar.jsx',
+    'frontend/src/pages/admin/events/EventPage.jsx',
+  ]],
+  // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
+  // and its dialogs from the files beside it. They hold the doors to one
+  // invitation and one deal, and Overview's Needs-you row opens Advisors &
+  // Partners › Firms (D952).
+  ['frontend/src/pages/admin/PartnerInvitations.jsx', [
+    'frontend/src/pages/admin/partners/PartnersOverview.jsx',
+    'frontend/src/pages/admin/partners/PartnersInvitations.jsx',
+    'frontend/src/pages/admin/partners/InvitationRecord.jsx',
+    'frontend/src/pages/admin/partners/NewInvitationDialog.jsx',
+    'frontend/src/pages/admin/partners/PartnersDeals.jsx',
+    'frontend/src/pages/admin/partners/DealRecord.jsx',
+    'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
+    'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
+  ]],
+  // D5039 (#5039): Revenue v2's parts hold the doors to the Billing tab and to one
+  // dispute (`/admin/revenue/disputes/:disputeId`), from Billing exceptions and Needs attention.
+  ['frontend/src/pages/hq/RevenuePage.jsx', [
+    'frontend/src/pages/hq/revenue/BillingExceptions.jsx',
+    'frontend/src/pages/hq/revenue/ExecutiveSummary.jsx',
+  ]],
+  // D4819 (#4819): the licence ledger's table holds the doors to one licence
+  // (`/admin/licences/:uid`) and to its sections (`/admin/licences/:uid/:section`).
+  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx']],
+  // D1046 (#2894): the Approvals lane boards draw their tabs and the doors to
+  // one item (`/admin/approvals/<board>/:item`) from the files beside them.
+  ['frontend/src/pages/admin/approvals/LaneBoards.jsx', [
+    'frontend/src/pages/admin/approvals/TesterBoard.jsx',
+    'frontend/src/pages/admin/approvals/PitchBoard.jsx',
+    'frontend/src/pages/admin/approvals/ExpertBoard.jsx',
+  ]],
+  // D978 (#2764): Advisors & Partners' People tab holds the door to one
+  // person (`/admin/advisors-partners/people/:ref`).
+  ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
+    'frontend/src/pages/admin/advisors/People.jsx',
+  ]],
+  // D987 (#2778): Program grants draws its grid and its Requests tab from the
+  // files beside it, and they hold the doors to one studio
+  // (`/admin/licences/programs/studio/:uid`).
+  ['frontend/src/pages/admin/grants/ProgramGrants.jsx', [
+    'frontend/src/pages/admin/grants/GridView.jsx',
+    'frontend/src/pages/admin/grants/RequestsView.jsx',
+    // D5059 (#5059): the User licences tab holds the doors to one user licence
+    // (`/admin/licences/programs/licence/:uid`).
+    'frontend/src/pages/admin/grants/EntitlementViews.jsx',
+  ]],
+  // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
+  // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
+  // and one founder (`/participants/:uid`).
+  ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabApplications.jsx',
+    'frontend/src/pages/admin/lab/LabParticipants.jsx',
+    'frontend/src/pages/admin/lab/LabCohorts.jsx',
+    'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
+  ]],
+  // D953 (2026-10-24, #2371): Programs. The catalogue draws its card doors and
+  // its foot in its own file. Each program page draws its crumb from the frame,
+  // its tab strip from ProgramTabs, and its blocks' doors from the files
+  // beside it. Mentor cohort access and Refer & Earn mount the two consoles'
+  // bodies; once /admin/refer-earn redirects, ReferralReview.jsx is not
+  // routed, and its /admin/commissions door counts only through this entry.
+  ['frontend/src/pages/admin/programs/MentorCohortAccess.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/AdvisorCohortAssignments.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ReferAndEarn.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/ReferralReview.jsx',
+    // D965 (#2798): Overview's Rewards card, with Open Perks and Edit in Credit rules.
+    'frontend/src/pages/admin/programs/ReferRewards.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProgramPage.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/programs/LearningPages.jsx',
+    'frontend/src/pages/admin/programs/PerksPages.jsx',
+    'frontend/src/pages/admin/programs/ReferralPartners.jsx',
+  ]],
+  // D964 (#2797): the catalogue draws HQ's tab strip (its Proposals door) from
+  // ProposalsPage and the two proposal lists from ProposalTables, and the
+  // proposals page draws the same lists; Your proposals holds the door to
+  // Propose a program.
+  ['frontend/src/pages/admin/programs/ProgramsCatalogue.jsx', [
+    'frontend/src/pages/admin/programs/ProposalsPage.jsx',
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
+  // D1244 (#2385): Due diligence's list tabs and case tabs are drawn by DdTabs.
+  ['frontend/src/pages/AdminDueDiligencePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
+  ['frontend/src/pages/AdminDueDiligenceCasePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
+]);
+
+/** path → the files whose doors that path can reach. */
+function filesFor(path) {
+  const r = BY_PATH.get(path);
+  if (!r?.component) return [];
+  const own = FILE_OF.get(r.component);
+  if (!own) return [];
+  const extra = (SECOND_MOUNTS.get(own) || []).map((c) => FILE_OF.get(c)).filter(Boolean);
+  return [own, ...extra, ...(COMPOSED.get(own) || [])];
+}
+
+const AMBIGUOUS = [];
+const DANGLING = [];
+
+/**
+ * BFS. A link only counts once the page holding it is itself reachable.
+ *
+ * `roleSet` limits the sidebar roots, so a door on the branch shell is not
+ * treated as a door for HQ-held accounts. Faults are recorded only on the
+ * full walk: the tier walks ask a different question and must not triple
+ * the dangling-link register.
+ */
+function reachable(roleSet, recordFaults) {
+  const seen = new Set();
+  const queue = [];
+  // HQ-held shells do not walk /branch routes. Those pages refuse off a
+  // branch, and a link that only renders there (MyLicencePage's appeal) is
+  // not a door an HQ-held admin can open.
+  const skipBranch = roleSet && !roleSet.has('branch_admin');
+  const admit = (target, from) => {
+    if (skipBranch && target.startsWith('/branch')) return;
+    const hit = toRoute(target);
+    // Both registers are scoped to /admin: this file's remit is the admin console,
+    // and failing it over an ambiguity in the articles routes would make it red for
+    // a reason it has no opinion about.
+    if (hit && typeof hit === 'object') {
+      if (recordFaults && target.startsWith('/admin')) AMBIGUOUS.push({ ...hit, from });
+      return;
+    }
+    if (!hit) {
+      if (recordFaults && target.startsWith('/admin')) DANGLING.push({ target, from });
+      return;
+    }
+    if (!seen.has(hit)) { seen.add(hit); queue.push(hit); }
+  };
+
+  for (const row of SIDEBAR_ROWS) {
+    if (roleSet && !roleSet.has(row.role)) continue;
+    admit(row.to, `sidebar:${row.role}`);
+  }
+  for (const d of doorsIn(CHROME).doors) admit(d, 'App.jsx chrome');
+
+  while (queue.length) {
+    const path = queue.shift();
+    for (const file of filesFor(path)) {
+      const src = srcOf(file);
+      if (!src) continue;
+      for (const d of doorsIn(src).doors) admit(d, file);
+    }
+  }
+  return seen;
+}
+
+const REACHED = reachable(null, true);
+const REACHED_HQ = reachable(new Set(['admin', 'super_admin']), false);
+const REACHED_BRANCH = reachable(new Set(['branch_admin']), false);
+
+/* ------------------------------------------------------------------ *
+ * EXEMPT — "no door, and that is correct". Every entry is proved below.
+ * ------------------------------------------------------------------ */
+
+const EXEMPT = [
+  {
+    path: '/admin/x',
+    kind: 'parked-row',
+    // Copied verbatim from ONE physical line of sidebarConfig.js — a line
+    // number in a comment goes stale with the next edit above it, a phrase
+    // from the line itself does not. Tested below (`raw.includes(e.cites)`).
+    cites: 'Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.',
+    why: 'the row exists but is commented out — the X broadcaster is parked until '
+       + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
+       + 'the Telegram row).',
+  },
+  {
+    path: '/admin/*',
+    kind: 'not-found',
+    why: 'D940 (#2745): the catch-all for an /admin address no route names. It draws Not found for an '
+       + 'admin, and RoleGuard draws SHL7b\'s card for a member, so nothing should link to it.',
+  },
+  // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
+  // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
+  // a page with no door.
+  // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
+  // `BranchPrograms` links to it as the console where grace and override are
+  // actually decided, so the route has a real door and an exemption claiming it
+  // has none would be the stale entry this file refuses. The route is unchanged
+  // — what changed is that something now points at it, which is the outcome the
+  // guard wants rather than a reason to keep the entry.
+];
+
+/**
+ * NO DEBT LIST. An earlier draft carried a shrink-only `KNOWN_ORPHANS` ratchet,
+ * and it is deliberately not here: every orphan this guard found turned out to be
+ * a functional, API-backed page, so each got a door instead of an entry. An entry
+ * would have recorded a bug as a decision. If this ever needs one, the honest
+ * shape is a second list with its own anti-rot test — not a string in EXEMPT,
+ * whose whole point is "this is correct".
+ */
+const EXEMPT_PATHS = new Set(EXEMPT.map((e) => e.path));
+const REDIRECTS = ADMIN.filter((r) => r.redirect).map((r) => r.path);
+
+/* ------------------------------------------------------------------ *
+ * Tests
+ * ------------------------------------------------------------------ */
+
+test('one lazy component name means one page across App.jsx and the route modules, so FILE_OF scans the right file', () => {
+  // The table above is flat on purpose: every reader of a route's component
+  // keys by the bare name. A module declaring `SettingsPage` for a page other
+  // than App.jsx's would overwrite the entry and this file would walk the
+  // wrong page's links — a door it does not have, or an orphan hidden by one
+  // it does. The helper reports such a pair with both files.
+  assert.deepEqual(LAZY_CONFLICTS, [],
+    `a lazy component name is declared for two different pages; rename one:\n  ${JSON.stringify(LAZY_CONFLICTS)}`);
+  assert.ok(FILE_OF.size >= 200, `the lazy-import table parsed to ${FILE_OF.size} entries`);
+});
+
+test('the route parser finds every /admin route in App.jsx', () => {
+  // A route this parser misses is a route the guard silently has no opinion
+  // about — the exact failure mode of a block-bounded scan, which would lose
+  // /admin/advisor-cohorts, sitting far below where the rest of the routes sit.
+  const paths = ADMIN.map((r) => r.path);
+  assert.equal(paths.includes('/admin/advisor-cohorts'), false, 'D2319 retired the alias');
+  assert.ok(paths.includes('/admin/programs/mentor-cohorts/people'), 'the canonical route is parsed');
+  const nameless = ADMIN.filter((r) => !r.component && !r.redirect).map((r) => r.path);
+  assert.deepEqual(nameless, [], 'these routes yielded no component, so their doors cannot be read');
+  const unmapped = ADMIN.filter((r) => r.component && !FILE_OF.get(r.component))
+    .map((r) => `${r.path} → ${r.component}`);
+  assert.deepEqual(unmapped, [], 'these components are not in App.jsx\'s import table');
+});
+
+test('every /admin route is reachable from navigation', () => {
+  const orphans = ADMIN
+    .filter((r) => !r.redirect)
+    .filter((r) => !EXEMPT_PATHS.has(r.path))
+    .filter((r) => !REACHED.has(r.path))
+    .map((r) => r.path);
+  assert.deepEqual(orphans, [],
+    'these /admin routes render a real page that nothing in the UI links to, so the only\n'
+    + 'way in is to type the URL. Give each a sidebar row in frontend/src/sidebarConfig.js,\n'
+    + 'or — if having no door is correct — add an EXEMPT entry whose kind has a prover:\n  '
+    + orphans.join('\n  '));
+});
+
+test('the HQ-held walk reaches spinout moderation too (D506), and no route is reachable only from the branch', () => {
+  // The branch Approvals board links to the console (D442). HQ-held Approvals
+  // (HeldApprovals) did not until D506 made lane 4 its door. A walk that
+  // starts from every sidebar treats the branch door as enough; this one does
+  // not: the HQ-held shells are admin and super_admin, and before D506 the one
+  // route they could not reach that the branch shell could was the console.
+  assert.equal(REACHED_BRANCH.has('/admin/spinout-moderation'), true);
+  assert.equal(REACHED_HQ.has('/admin/spinout-moderation'), true);
+  const onlyOnTheBranch = ADMIN
+    .filter((r) => !r.redirect)
+    .filter((r) => !EXEMPT_PATHS.has(r.path))
+    .filter((r) => REACHED_BRANCH.has(r.path) && !REACHED_HQ.has(r.path))
+    .map((r) => r.path);
+  assert.deepEqual(onlyOnTheBranch, []);
+});
+
+test('every in-page /admin link points at a registered route', () => {
+  // The row → route rule from super_admin_shell.test.mjs, extended from sidebar
+  // rows to every link inside a page. A typo'd target is a door onto a 404.
+  assert.deepEqual(DANGLING, [], 'these links name an /admin route that does not exist');
+  assert.deepEqual(AMBIGUOUS, [], 'these links match two dynamic routes; the guard will not guess');
+});
+
+test('a redirect-only /admin route is excluded, and its target is reachable', () => {
+  // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
+  // But a redirect INTO an orphan is still a dead end, so the target is checked.
+  // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/spinout-lab'],
+    'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
+  // A `*Redirect` component names its target in its own file, not in App.jsx
+  // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
+  // D930: HeldCommunityRedirect sends /admin/held/community to COMMUNITY_PATH;
+  // D953: the three Programs redirects take theirs from programsModel.js).
+  const PROGRAMS_MODEL = 'frontend/src/pages/admin/programs/programsModel.js';
+  const COMPONENT_TARGETS = {
+    HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
+    HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    // D1038 (#2390): HeldApprovalsRedirect sends /admin/held/approvals to PATH.
+    HeldApprovalsRedirect: ['/admin/approvals', 'frontend/src/pages/admin/approvals/approvalsModel.js', 'PATH'],
+    HeldProgramsRedirect: ['/admin/programs', PROGRAMS_MODEL, 'PROGRAMS_PATH'],
+    AdvisorCohortsRedirect: ['/admin/programs/mentor-cohorts/people', PROGRAMS_MODEL, 'MENTOR_PEOPLE_PATH'],
+    ReferEarnRedirect: ['/admin/programs/refer-and-earn/queue', PROGRAMS_MODEL, 'REFER_QUEUE_PATH'],
+    // D937 (#2374): the Lab and its preview moved under Programs.
+    LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
+    LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
+    // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
+    ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
+    // D941 (#2746): the Accounts page's old held address forwards to /admin/accounts.
+    HeldAccountsRedirect: ['/admin/accounts', 'frontend/src/pages/admin/accountsAddress.js', 'ACCOUNTS_PATH'],
+    // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
+    FirmLinksRedirect: ['/admin/advisors-partners/firms', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_FIRMS_PATH'],
+  };
+  for (const path of REDIRECTS) {
+    const route = BY_PATH.get(path);
+    // D938: `/admin` forwards each old tab to its own page; every one must be reachable.
+    if (route.component === 'LegacyContractsRedirect') {
+      for (const [tab, move] of Object.entries(ADMIN_TAB_MOVES)) {
+        assert.ok(REACHED.has(move.to) || REACHED.has(move.to.split('/').slice(0, -1).join('/')),
+          `/admin?tab=${tab} forwards to ${move.to}, which is itself unreachable`);
+      }
+      continue;
+    }
+    let { redirects } = doorsIn(route.body);
+    if (!redirects.length && COMPONENT_TARGETS[route.component]) {
+      const [target, file, name] = COMPONENT_TARGETS[route.component];
+      assert.match(read(file), new RegExp(`${name} = '${target}'`), `${route.component}'s target moved`);
+      redirects = [target];
+    }
+    assert.equal(redirects.length, 1, `${path} should name exactly one redirect target`);
+    const target = toRoute(redirects[0]);
+    assert.ok(typeof target === 'string', `${path} redirects to ${redirects[0]}, which is not a route`);
+    // A redirect may land on a reachable route, or on one exempt because the same
+    // component is live elsewhere — both put a working page in front of the user.
+    // It may NOT land on a `parked-row` exemption: that page is parked behind a
+    // notice, so redirecting into it is the dead end this test exists to catch. An
+    // earlier draft allowed any exempt target and a mutation pointing /admin/news
+    // at the parked /admin/x escaped.
+    const viaLiveTwin = EXEMPT.some((e) => e.path === target && e.kind === 'same-component-elsewhere');
+    assert.ok(REACHED.has(target) || viaLiveTwin,
+      `${path} redirects to ${target}, which is itself unreachable — a redirect into a dead end`);
+  }
+});
+
+test('no exemption covers a route that already has a door', () => {
+  // The anti-rot half. Fixing an exemption's cause without removing the entry
+  // leaves a claim that is no longer true, and nothing else would notice.
+  const stale = EXEMPT.filter((e) => REACHED.has(e.path)).map((e) => e.path);
+  assert.deepEqual(stale, [],
+    'these routes are now reachable, so their EXEMPT entry is stale — delete it');
+  for (const e of EXEMPT) {
+    assert.ok(BY_PATH.has(e.path), `${e.path} is exempted but is not a registered route`);
+    assert.ok(e.why && e.why.length > 40, `${e.path}'s exemption does not state a reason`);
+  }
+});
+
+test('a not-found exemption is a splat that draws Not found and nothing else', () => {
+  // A 404 has no door by definition; the claim is that this route IS one, so its element is checked.
+  const app = readRoutesSource();
+  for (const e of EXEMPT.filter((x) => x.kind === 'not-found')) {
+    assert.ok(e.path.endsWith('/*'), `${e.path} is exempted as not-found but is not a splat`);
+    assert.equal(BY_PATH.get(e.path)?.component, 'NotFoundPage', `${e.path} no longer draws NotFoundPage`);
+    const line = app.split('\n').find((l) => l.includes(`<Route path="${e.path}"`));
+    assert.match(line || '', /element=\{guard\(\['admin'\], <NotFoundPage \/>\)\} \/>/, `${e.path} draws more than Not found`);
+  }
+});
+
+test('a parked sidebar row still names a row that is present but commented out', () => {
+  const raw = read('frontend/src/sidebarConfig.js');
+  for (const e of EXEMPT.filter((x) => x.kind === 'parked-row')) {
+    // Present-but-commented is the whole substance of the claim, and it needs the
+    // RAW text: the import cannot see a commented row, which is exactly why the
+    // import is what the live-row set comes from.
+    const commented = raw.split('\n').filter((l) => /^\s*\/\/\s*\{\s*to: '/.test(l)
+      && l.includes(`'${e.path}'`));
+    assert.equal(commented.length, 1,
+      `${e.path} is exempted as a parked row, but no commented-out row for it remains in `
+      + 'sidebarConfig.js — either restore the row, or retire the route');
+    assert.ok(!SIDEBAR_ROWS.some((r) => r.to === e.path),
+      `${e.path} now has a LIVE row, so it is not parked — remove the EXEMPT entry`);
+    // The `why` cites this file by phrase, not by line number, so a comment
+    // edit above it cannot go stale silently. Require the phrase to still be
+    // there, not merely present in the EXEMPT entry.
+    assert.ok(e.cites, `${e.path}'s EXEMPT entry has no \`cites\` field`);
+    assert.ok(raw.includes(e.cites),
+      `${e.path}'s EXEMPT entry cites "${e.cites}", which no longer appears in `
+      + 'sidebarConfig.js — the comment moved or was reworded; re-anchor the citation');
+  }
+});
+
+test('a route exempted as a tab still mounts the same component behind that tab', () => {
+  const adminPage = adminConsoleSource();
+  for (const e of EXEMPT.filter((x) => x.kind === 'same-component-elsewhere')) {
+    const component = BY_PATH.get(e.path)?.component;
+    assert.ok(component, `${e.path} has no component to compare`);
+    // 1. the tab is offered in the section list a person picks from
+    assert.ok(adminPage.includes(`value: '${e.tab}'`),
+      `${e.path} is exempted because /admin?tab=${e.tab} reaches it, but ADMIN_SECTIONS no `
+      + 'longer offers that section');
+    // 2. and the tab mounts THAT component, not merely something
+    assert.ok(adminPage.includes(component),
+      `/admin?tab=${e.tab} no longer mounts ${component}, so ${e.path} is the only way in`);
+    // 3. the chain has to end on a real door
+    assert.ok(REACHED.has(e.host),
+      `${e.path} is exempted via ${e.host}, which is itself unreachable`);
+    // 4. the `why` cites AdminPage.jsx by phrase, not by line number, so a
+    //    comment edit above it cannot go stale silently.
+    assert.ok(e.cites, `${e.path}'s EXEMPT entry has no \`cites\` field`);
+    assert.ok(adminPage.includes(e.cites),
+      `${e.path}'s EXEMPT entry cites "${e.cites}", which no longer appears in `
+      + 'AdminPage.jsx — the comment moved or was reworded; re-anchor the citation');
+  }
+});
+
+test('every old ?tab= forwards before anything mounts (D938)', () => {
+  // The console that read `?tab=` is retired; the redirect is what reads it now.
+  const redirect = read('frontend/src/pages/admin/LegacyContractsRedirect.jsx');
+  assert.match(redirect, /get\('tab'\)/, 'the redirect no longer reads the `tab` search param');
+  assert.match(redirect, /Object\.hasOwn\(ADMIN_TAB_MOVES, /, 'the redirect no longer validates the tab against its map');
+  assert.equal(BY_PATH.get('/admin').component, 'LegacyContractsRedirect');
+  assert.ok(BY_PATH.get('/admin').redirect, '/admin renders a surface again');
+});
+
+test('the door scanner reads navigation syntax, not paths in prose or api calls', () => {
+  // THE MODEL'S LOAD-BEARING ASSUMPTION. api.js holds ~90 /admin/* strings and no
+  // navigation; a substring grep would score /admin/x as linked 19 times.
+  const api = doorsIn(read('frontend/src/lib/api.js')).doors.filter((d) => d.startsWith('/admin'));
+  assert.deepEqual(api, [], 'api.js yielded navigation targets; the scanner is matching request() arguments');
+
+  // And a path in code that is not navigation. `/admin/partners` survives
+  // codeOnly as the redirect route's own `path="…"` (D923, #2370), so this
+  // proves the SYNTAX anchor rejects it, not the comment stripper.
+  assert.ok(codeOnly(APP).includes('/admin'),
+    'the /admin/partners route no longer survives codeOnly; this assertion now proves '
+    + 'nothing: pin another non-navigation path that does');
+  assert.ok(!doorsIn(CHROME).doors.includes('/admin'),
+    'the scanner read a door out of a path that is not navigation');
+
+  // The commented row is invisible to the live set but present in the text.
+  const raw = read('frontend/src/sidebarConfig.js');
+  assert.ok(raw.includes("/admin/x"), 'the parked row vanished from sidebarConfig.js');
+  assert.ok(!SIDEBAR_ROWS.some((r) => r.to === '/admin/x'),
+    'the imported rows include /admin/x, so a commented row is being read as live');
+});
+
+test('the computed-base resolver still sees the due-diligence case links', () => {
+  // `const base = … ? '/admin/due-diligence' : '/due-diligence'` then `${base}/${c.uid}`.
+  // If this regresses, /admin/due-diligence/:uid stops looking reachable from that
+  // page — it stays reachable via AdminPage's raw anchor, so only this test would
+  // notice, which is the point of pinning the mechanism separately.
+  // D1250 (#3265): the case links moved with the Cases tab into DdCasesTab.jsx.
+  const dd = doorsIn(read('frontend/src/pages/duediligence/DdCasesTab.jsx')).doors;
+  assert.ok(dd.includes('/admin/due-diligence/'),
+    'the computed base no longer resolves; template links through a const are unread');
+  // D1244 (#2385): the case tabs, `${base}/${uid}/${t.key}`, reach only `:uid/:tab`.
+  const tabs = doorsIn(read('frontend/src/pages/duediligence/DdTabs.jsx')).doors;
+  for (const d of ['/admin/due-diligence/${}/${}', '/due-diligence/${}/${}', '/admin/due-diligence/my-reviews', '/admin/due-diligence/templates']) {
+    assert.ok(tabs.includes(d), `DdTabs no longer yields the door ${d}`);
+  }
+  assert.equal(toRoute('/admin/due-diligence/${}/${}'), '/admin/due-diligence/:uid/:tab');
+});
+
+test('a component mounted at a second path is declared once', () => {
+  // SECOND_MOUNTS feeds both the reachability closure and the tab exemptions, so
+  // the two can never disagree. A third such mount must be declared, not guessed.
+  const routed = new Set(ALL.map((r) => r.component).filter(Boolean));
+  const found = [];
+  for (const r of ADMIN) {
+    const file = r.component && FILE_OF.get(r.component);
+    const src = file && srcOf(file);
+    if (!src) continue;
+    for (const m of src.matchAll(/^import (\w+) from /gm)) {
+      if (routed.has(m[1]) && m[1] !== r.component) found.push(`${file} → ${m[1]}`);
+    }
+  }
+  const declared = [...SECOND_MOUNTS].flatMap(([f, cs]) => cs.map((c) => `${f} → ${c}`));
+  assert.deepEqual(found.sort(), declared.sort(),
+    'a routed /admin component is imported by another routed component and not declared in '
+    + 'SECOND_MOUNTS (or vice versa); the closure and the tab exemptions read this table');
+});
+
+test('D648: every composed console file is imported by the page it is credited to', () => {
+  for (const [host, files] of COMPOSED) {
+    const src = read(host);
+    for (const f of files) {
+      const rel = relative(dirname(resolve(root, host)), resolve(root, f)).replace(/\.jsx$/, '');
+      const spec = rel.startsWith('.') ? rel : `./${rel}`;
+      if (f.endsWith('/shared.jsx')) continue; // imported by the consoles, not the shell
+      assert.ok(src.includes(`from '${spec}'`), `${host} does not import ${f}, so its doors are not that page's`);
+    }
+  }
+  // …and nothing a host imports from the consoles folder is missing from the table.
+  for (const [host, files] of COMPOSED) {
+    for (const m of read(host).matchAll(/from '([^']*admin\/consoles\/\w+)'/g)) {
+      const f = relative(root, resolve(dirname(resolve(root, host)), m[1])) + '.jsx';
+      assert.ok(files.includes(f), `${host} imports ${f} but COMPOSED does not credit its doors`);
+    }
+  }
+});
+
+test('the Spin-Out Lab preview door is in the Lab header on every tab', () => {
+  // D937 (#2374): the preview's one door is the Lab header's action, drawn on
+  // every tab. File-level attribution cannot see a condition around it, so
+  // this pins that it is not inside the Overview-only actions.
+  const src = read('frontend/src/pages/admin/lab/AdminLab.jsx');
+  const actionsAt = src.indexOf('const actions = (');
+  const doorAt = src.indexOf('to="/admin/programs/spinout-lab/preview"');
+  const overviewOnlyAt = src.indexOf("{tab === 'overview' && (", actionsAt);
+  assert.ok(actionsAt >= 0 && doorAt > actionsAt && doorAt < overviewOnlyAt,
+    'the preview door is no longer an unconditional header action, so /admin/programs/spinout-lab/preview may lose its door');
+});

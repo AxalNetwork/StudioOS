@@ -1,0 +1,41 @@
+{
+  "skill": "vendor-spend-review",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "mercury.balances": {
+        "vendors": [
+          {
+            "name": "Figma",
+            "monthly_usd": 180,
+            "recurring": true
+          },
+          {
+            "name": "Old CRM",
+            "monthly_usd": 240,
+            "recurring": true
+          }
+        ]
+      },
+      "build.records": {
+        "tools_in_use": [
+          "Figma"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Old CRM",
+      "240"
+    ],
+    "must_say_not_recorded": [
+      "owner"
+    ],
+    "must_not_include": [
+      "cancelled"
+    ]
+  }
+}

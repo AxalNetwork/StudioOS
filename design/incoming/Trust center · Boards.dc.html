@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Trust center · /trust</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Trust center</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">A public trust center anyone can read, and, when signed in, a Your trust tab with the member’s own agreements, verifications and data. Every claim is a fact with the date it was checked, or it says Not recorded. Signed-out boards use the public site’s type and colours; signed-in boards use StudioOS. Sample today is [21 Oct 2026]. The requirement drawer is drawn as a centred lightbox, and the page has no Eadwyn rail.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="20">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Trust Center Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['TRU1', 'Overview · signed out · desktop 1440 · light', 'The public frame. At a glance, how we protect you, what we check for each profile, and the dated changes. The footer’s legal row adds Trust center and Status.', [D('TRU1'), D('TRU1s', 'Status strip · records began on [2 Sep]', 760)]],
+      ['TRU2', 'Security · signed out', 'Each control is a fact with the date it was checked. Encryption at rest by our host, a recovery drill and a penetration test say Not recorded.', [D('TRU2')]],
+      ['TRU3', 'Data and privacy · signed out', 'Who holds the data, what is collected and why, matching, rights and breaches. Retention we have not set says Not recorded.', [D('TRU3')]],
+      ['TRU4', 'Subprocessors · signed out', 'Five companies with their purpose, data and place, connectors listed apart, and the subscribe step. The second frame is the list while counsel reviews it.', [D('TRU4'), D('TRU4v', 'While counsel reviews the list', 900)]],
+      ['TRU5', 'Documents · signed out', 'Each document with its version and date. A version nobody recorded says so; the Data Processing Addendum is not published yet.', [D('TRU5')]],
+      ['TRU6', 'Disclosure · signed out', 'Three ways to report, response times by severity, safe harbour and the 90-day window. The second frame is the signed-in report dialog.', [D('TRU6'), D('TRU6d', 'Report a security issue · signed in', 680)]],
+      ['TRU7', 'Your trust · Investor · light', 'The Investor shell with Trust lit. Requirements met against last month, what needs the member, what must be done before investing, and agreements accepted and signed with founders.', [D('TRU7')]],
+      ['TRU8', 'Your trust · Founder', 'The account menu open with Trust Center marked current. The founder’s requirements, no identity check today, and each company’s entity check.', [D('TRU8')]],
+      ['TRU9', 'Your trust · Advisor and Operating Partner', 'An advisor with the disclaimer to accept, and an operating partner before and after a partner deal.', [D('TRU9a', 'Advisor', 760), D('TRU9b', 'Operating Partner · before a deal', 760), D('TRU9c', 'Operating Partner · after a deal', 760)]],
+      ['TRU10', 'Your trust · Explorer, Admin and Super Admin', 'Terms and Privacy only. Admins see where the studio tools went; the Super Admin also reaches the public content.', [D('TRU10a', 'Explorer', 760), D('TRU10b', 'Admin', 760), D('TRU10c', 'Super Admin', 760)]],
+      ['TRU11', 'Requirement · lightbox over TRU7', 'What it is, why it is asked, where it stands and the one action that fits. The second frame shows Expired, In review, Not required and accreditation.', [D('TRU11'), D('TRU11v', 'Variants', 1100)]],
+      ['TRU12', 'Agreements · Investor', 'Every agreement with another member, one row open with its signing trail, and how a row reads on your turn.', [D('TRU12')]],
+      ['TRU13', 'Your data', 'Download, delete with its after-state, matching, the view log not recorded yet, and apps with access.', [D('TRU13')]],
+      ['TRU14', 'Edit public trust content · Super Admin', 'Security › Trust center content in the HQ shell. Two blocks in draft, a subprocessor being added, certifications that need the auditor’s report, and the change note. The second frame is Publish.', [D('TRU14'), D('TRU14d', 'Publish', 680)]],
+      ['TRU15', 'Empty', 'Nothing asked of the member, no agreements with other members, and no published changes.', [D('TRU15a', 'Nothing asked', 680), D('TRU15b', 'No agreements', 680), D('TRU15c', 'No changes published', 680)]],
+      ['TRU16', 'Loading', 'Header and tabs at once; every tile and card reads.', [D('TRU16')]],
+      ['TRU17', 'Error and partial', 'The status tile failed while the rest renders, Your trust failed, and the identity block failed.', [D('TRU17a', 'Status tile failed', 1300), D('TRU17b', 'Your trust failed', 900), D('TRU17c', 'Identity block failed', 900)]],
+      ['TRU18', 'No permission', 'Signed out on /trust/me, and a member opening someone else’s requirement.', [D('TRU18a', 'Signed out · /trust/me'), D('TRU18b', 'Another member’s requirement')]],
+      ['TRU19', 'Phone · 390 wide', 'The public overview, Your trust, and a requirement as a full screen with its action fixed at the foot.', [P('TRU19a', 'Public overview'), P('TRU19b', 'Your trust'), P('TRU19c', 'Requirement')]],
+      ['TRU20', 'Overview · signed in · dark', 'TRU1 inside the Founder shell in the dark colours, with Your trust [1].', [D('TRU20')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

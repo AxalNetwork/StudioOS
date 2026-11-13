@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f3f7}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+button:focus-visible,a:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+</style>
+</helmet>
+<div style="{{ vars }}">
+<div style="font-family:'Space Grotesk',system-ui,sans-serif;color:var(--ink,#18181b);font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">
+
+<sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+<div style="{{ deskS }}">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ true }}">
+<aside aria-label="Main navigation" style="width:216px;flex:none;box-sizing:border-box;background:var(--cd,#ffffff);border-right:1px solid var(--hl,#ececf1);display:flex;flex-direction:column;gap:12px;padding:16px 12px">
+<div style="display:flex;align-items:center;gap:9px;padding:0 6px;height:32px"><img src="uploads/axal-logo-200x200.png" alt="Axal VC" style="width:28px;height:28px;display:block;border-radius:7px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span></div>
+<button type="button" aria-label="Switch company" style="display:flex;align-items:center;gap:8px;height:40px;padding:0 10px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--rz,#faf9fc);font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink,#18181b);text-align:left;cursor:pointer"><span style="width:22px;height:22px;border-radius:6px;background:var(--lv,#f4f0fe);color:var(--vd,#6d28d9);display:grid;place-items:center;font-size:10px;font-weight:800;flex:none">NL</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">[Northwind Labs]</span><span aria-hidden="true" style="color:var(--mu,#6b6577)">▾</span></button>
+<nav aria-label="Workspace" style="display:flex;flex-direction:column;gap:2px"><sc-for list="{{ side }}" as="r" hint-placeholder-count="8"><div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;font-weight:500;color:var(--ink,#18181b)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--mu,#6b6577)"><path d="{{ r.ic }}"></path></svg>{{ r.t }}</div></sc-for></nav>
+</aside>
+</sc-if>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ true }}">
+<header style="height:56px;flex:none;box-sizing:border-box;background:var(--cd,#ffffff);border-bottom:1px solid var(--hl,#ececf1);display:flex;align-items:center;gap:12px;padding:0 24px">
+<div style="width:320px;height:36px;box-sizing:border-box;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--rz,#faf9fc);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mu,#6b6577);font-size:12.5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg><span style="flex:1">Search StudioOS</span><span style="font-family:'Roboto Mono',monospace;font-size:11px">⌘K</span></div>
+<div style="flex:1"></div>
+<button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);display:grid;place-items:center;color:var(--ink,#18181b);cursor:pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"></path></svg></button>
+<button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 4px;border-radius:9px;border:1px solid var(--le,#ddd0fb);background:var(--lv,#f4f0fe);cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink,#18181b)"><span style="width:28px;height:28px;border-radius:999px;background:var(--cd,#ffffff);border:1px solid var(--le,#ddd0fb);display:grid;place-items:center;font-size:10.5px;font-weight:800;color:var(--vd,#6d28d9)">NA</span>[Name A]<span aria-hidden="true" style="color:var(--mu,#6b6577)">▾</span></button>
+</header>
+<div style="padding:24px 24px 0"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Account</h1><p style="margin:4px 0 0;font-size:13px;color:var(--mu,#6b6577)">Your profile, sign-in, billing, usage, connectors and developer access.</p></div>
+</sc-if>
+
+<div style="{{ bodyS }}">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ true }}"><nav aria-label="Account sections" style="width:200px;flex:none;display:flex;flex-direction:column;gap:2px"><sc-for list="{{ sec }}" as="s" hint-placeholder-count="14"><div style="{{ s.st }}" aria-current="{{ s.cur }}">{{ s.t }}</div></sc-for></nav></sc-if>
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:5px;padding-bottom:2px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">{{ eyebrow }}</span>
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Builder</h2>
+<p style="margin:0;font-size:13px;color:var(--mu,#6b6577);max-width:720px">What your keys and assistants asked StudioOS to do, what it cost in AI tokens, and what failed.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ nokey }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--lv,#f4f0fe);border:1px solid var(--le,#ddd0fb);font-size:13px"><span aria-hidden="true" style="width:18px;height:18px;border-radius:50%;border:1.5px solid var(--vd,#6d28d9);color:var(--vd,#6d28d9);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none">i</span><span style="flex:1">That key is not on your account. The filter is back to All keys.</span><button type="button" style="height:32px;padding:0 12px;border-radius:9px;border:1px solid var(--le,#ddd0fb);background:var(--cd,#ffffff);font-family:inherit;font-size:12.5px;font-weight:600;color:var(--vd,#6d28d9);cursor:pointer">Dismiss</button></div>
+</sc-if>
+
+<sc-if value="{{ bar }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<div role="radiogroup" aria-label="Range" style="display:flex;gap:3px;padding:3px;border:1px solid var(--hl,#ececf1);border-radius:10px;background:var(--cd,#ffffff)"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><span role="radio" aria-checked="{{ r.on }}" style="{{ r.s }}">{{ r.t }}</span></sc-for></div>
+<span style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Key: {{ keyF }}<span aria-hidden="true" style="color:var(--mu,#6b6577)">▾</span></span>
+<button type="button" role="switch" aria-checked="{{ cmpOn }}" onClick="{{ toggleCmp }}" style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink,#18181b);cursor:pointer"><span style="{{ swS }}"><span style="{{ knS }}"></span></span>Compare with previous period</button>
+<span style="flex:1"></span>
+<button type="button" style="height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Download CSV</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ tiles }}" hint-placeholder-val="{{ false }}">
+<div style="{{ tileGridS }}"><sc-for list="{{ tileList }}" as="t" hint-placeholder-count="4"><div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">{{ t.ey }}</span><span style="{{ t.vS }}">{{ t.v }}</span><sc-if value="{{ t.skel }}" hint-placeholder-val="{{ false }}"><span style="display:block;width:64%;height:22px;border-radius:6px;background:var(--hl,#ececf1)"></span></sc-if><sc-if value="{{ t.sub }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--mu,#6b6577)">{{ t.sub }}</span></sc-if><sc-if value="{{ t.prev }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mu,#6b6577)">{{ t.prev }}</span></sc-if><sc-if value="{{ t.link }}" hint-placeholder-val="{{ false }}"><a href="#" style="font-size:12px;font-weight:600">{{ t.link }}</a></sc-if></div></sc-for></div>
+</sc-if>
+
+<sc-if value="{{ c1 }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Requests and AI tokens by day" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:3px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Requests and AI tokens by day</h3><p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">{{ c1Sum }}</p></div><button type="button" onClick="{{ tog1 }}" style="background:none;border:0;padding:0;color:var(--vi,#7c3aed);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">{{ tbl1L }}</button></div>
+<sc-if value="{{ load }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="height:170px;border-radius:10px;border:1px dashed var(--hl,#ececf1);display:grid;place-items:center;font-size:12.5px;color:var(--mu,#6b6577)">Reading…</div></sc-if>
+<sc-if value="{{ chOn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:10px">
+<div aria-hidden="true" style="display:flex;flex-direction:column;justify-content:space-between;height:160px;font-family:'Roboto Mono',monospace;font-size:11px;color:var(--mu,#6b6577);text-align:right;width:26px"><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span></div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<div role="img" aria-label="{{ c1Sum }}" style="display:flex;align-items:stretch;gap:5px;height:160px;border-bottom:1px solid var(--hl,#ececf1);background:repeating-linear-gradient(to top,var(--hl,#ececf1) 0 1px,transparent 1px 40px)"><sc-for list="{{ days }}" as="d" hint-placeholder-count="30"><div title="{{ d.tip }}" style="flex:1;min-width:0;height:100%;position:relative;display:flex;flex-direction:column-reverse"><sc-if value="{{ d.none }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;right:0;bottom:0;border-top:1.5px dashed var(--fa,#a1a1aa)"></span></sc-if><span style="{{ d.okS }}"></span><span style="{{ d.fS }}"></span><sc-if value="{{ d.pv }}" hint-placeholder-val="{{ false }}"><span style="{{ d.pS }}"></span></sc-if><span style="{{ d.tS }}"></span></div></sc-for></div>
+<div aria-hidden="true" style="display:flex;gap:5px"><sc-for list="{{ xl }}" as="x" hint-placeholder-count="30"><span style="flex:1;min-width:0;font-family:'Roboto Mono',monospace;font-size:10.5px;color:var(--mu,#6b6577);white-space:nowrap;overflow:visible">{{ x.t }}</span></sc-for></div>
+</div>
+<div aria-hidden="true" style="display:flex;flex-direction:column;justify-content:space-between;height:160px;font-family:'Roboto Mono',monospace;font-size:11px;color:#0369a1;width:36px"><span>$0.40</span><span>$0.30</span><span>$0.20</span><span>$0.10</span><span>$0</span></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mu,#6b6577)"><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:var(--vi,#7c3aed)"></span>OK</span><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b"></span>Failed</span><span style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#0ea5e9"></span>AI tokens charged (right axis)</span><sc-if value="{{ cmpOn }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:2px dotted var(--mu,#6b6577)"></span>Previous period</span></sc-if><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:1.5px dashed var(--fa,#a1a1aa)"></span>{{ noneLab }}</span></div>
+</sc-if>
+<sc-if value="{{ tbl1 }}" hint-placeholder-val="{{ false }}">
+<div role="table" aria-label="Requests and AI tokens by day" style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px;overflow:hidden"><div role="row" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:8px 12px;background:var(--rz,#faf9fc);font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)"><span>Day</span><span>Requests</span><span>OK</span><span>Failed</span><span>AI tokens</span></div><sc-for list="{{ dayRows }}" as="r" hint-placeholder-count="10"><div role="row" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:7px 12px;border-top:1px solid var(--hl,#ececf1);font-family:'Roboto Mono',monospace;font-size:12px"><span>{{ r.d }}</span><span>{{ r.r }}</span><span>{{ r.ok }}</span><span>{{ r.f }}</span><span>{{ r.t }}</span></div></sc-for><div style="padding:7px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12px;color:var(--mu,#6b6577)">Showing the last 10 of 30 days. Download CSV for every day.</div></div>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ c2 }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Where the AI tokens went" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:3px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Where the AI tokens went</h3><p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">{{ c2Sum }}</p></div><div role="tablist" aria-label="Break down by" style="display:flex;gap:3px;padding:3px;border:1px solid var(--hl,#ececf1);border-radius:10px"><sc-for list="{{ segs }}" as="g" hint-placeholder-count="4"><button type="button" role="tab" aria-selected="{{ g.on }}" onClick="{{ g.pick }}" style="{{ g.s }}">{{ g.t }}</button></sc-for></div></div>
+<sc-if value="{{ load }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="height:150px;border-radius:10px;border:1px dashed var(--hl,#ececf1);display:grid;place-items:center;font-size:12.5px;color:var(--mu,#6b6577)">Reading…</div></sc-if>
+<sc-if value="{{ c2err }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;align-items:center;gap:12px;padding:14px;border-radius:10px;background:var(--dt,#fef2f2);border:1px solid var(--dd,#fecaca);color:var(--de,#b91c1c);font-size:13px"><span style="flex:1"><strong>This breakdown could not be read.</strong> The other tabs still work.</span><button type="button" style="height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--dd,#fecaca);background:var(--cd,#ffffff);font-family:inherit;font-size:12.5px;font-weight:600;color:var(--de,#b91c1c);cursor:pointer">Try again</button></div></sc-if>
+<sc-if value="{{ c2ok }}" hint-placeholder-val="{{ false }}">
+<div style="{{ c2GridS }}">
+<div style="display:flex;flex-direction:column;gap:10px"><sc-for list="{{ brkRows }}" as="r" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 92px;gap:10px;align-items:center"><span style="{{ r.nS }}" title="{{ r.n }}">{{ r.n }}</span><span style="display:flex;align-items:center;height:10px;background:var(--rz,#faf9fc);border-radius:999px"><span style="{{ r.barS }}"></span></span><span style="{{ r.tokS }}">{{ r.tok }}</span></div></sc-for></div>
+<div role="table" style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px;overflow:hidden"><div role="row" style="display:grid;grid-template-columns:minmax(0,1.6fr) 74px 54px 84px 84px;gap:8px;padding:8px 12px;background:var(--rz,#faf9fc);font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)"><span>Name</span><span>Requests</span><span>Failed</span><span>AI tokens</span><span>Typical</span></div><sc-for list="{{ brkRows }}" as="r" hint-placeholder-count="4"><div role="row" style="display:grid;grid-template-columns:minmax(0,1.6fr) 74px 54px 84px 84px;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12px;cursor:pointer"><span style="display:flex;flex-direction:column;min-width:0"><span style="{{ r.nS }}">{{ r.n }}</span><sc-if value="{{ r.why }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:var(--mu,#6b6577)">{{ r.why }}</span></sc-if></span><span style="font-family:'Roboto Mono',monospace">{{ r.req }}</span><span style="font-family:'Roboto Mono',monospace">{{ r.fail }}</span><span style="{{ r.tokS }}">{{ r.tok }}</span><span style="font-family:'Roboto Mono',monospace;color:var(--mu,#6b6577)">{{ r.p50 }}</span></div></sc-for></div>
+</div>
+<p style="margin:0;font-size:12px;color:var(--mu,#6b6577)">A row filters the page to it. Typical time is the median, in milliseconds.</p>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ lim }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Limits and alerts" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Limits and alerts</h3><a href="#" style="font-size:12.5px;font-weight:600">Manage alerts ›</a></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px"><sc-for list="{{ meters }}" as="m" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span>{{ m.l }}</span><span style="font-family:'Roboto Mono',monospace;font-weight:600">{{ m.v }}</span></div><div role="img" aria-label="{{ m.v }}" style="height:8px;border-radius:999px;background:var(--rz,#faf9fc);border:1px solid var(--hl,#ececf1);overflow:hidden"><span style="{{ m.fS }}"></span></div><a href="#" style="font-size:12px;font-weight:600">{{ m.link }}</a></div></sc-for></div>
+<div style="font-size:12.5px;color:var(--mu,#6b6577)">Rate limits · <span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">[60]</span> a minute per key, <span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">[120]</span> across all callers.</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ foot }}" hint-placeholder-val="{{ false }}">
+<p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577);max-width:820px">StudioOS records which tool ran, for whom, how it ended and what it cost. It never records what was sent or what came back. <a href="#" style="font-weight:600">AI runs by model are in Usage › Cost ›</a></p>
+</sc-if>
+
+<sc-if value="{{ limd }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Limits and alerts" style="display:flex;flex-direction:column;gap:14px">
+<div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Per key</h3>
+<div role="table" style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px;overflow:hidden"><div role="row" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.4fr) 130px 130px;gap:12px;padding:8px 12px;background:var(--rz,#faf9fc);font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)"><span>Key</span><span>This month against its limit</span><span>Resets</span><span></span></div><sc-for list="{{ perKey }}" as="k" hint-placeholder-count="2"><div role="row" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.4fr) 130px 130px;gap:12px;align-items:center;padding:11px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="display:flex;flex-direction:column;min-width:0"><span style="font-weight:600">{{ k.n }}</span><span style="font-family:'Roboto Mono',monospace;font-size:11.5px;color:var(--mu,#6b6577)">{{ k.k }}</span></span><span style="display:flex;flex-direction:column;gap:5px"><span style="font-family:'Roboto Mono',monospace;font-weight:600">{{ k.v }}</span><sc-if value="{{ k.lim }}" hint-placeholder-val="{{ false }}"><span style="height:8px;border-radius:999px;background:var(--rz,#faf9fc);border:1px solid var(--hl,#ececf1);overflow:hidden"><span style="{{ k.fS }}"></span></span></sc-if></span><span style="color:var(--mu,#6b6577)">{{ k.rs }}</span><a href="#" style="font-weight:600;text-align:right">Edit on the key ›</a></div></sc-for></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+<div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Your account</h3><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Monthly limit, from Usage › Limits</span><span style="font-family:'Roboto Mono',monospace;font-weight:600">[$6.42] of [$50.00]</span></div><div role="img" aria-label="[$6.42] of [$50.00]" style="height:8px;border-radius:999px;background:var(--rz,#faf9fc);border:1px solid var(--hl,#ececf1);overflow:hidden"><span style="display:block;height:100%;width:12.8%;border-radius:999px;background:var(--vi,#7c3aed)"></span></div><a href="#" style="font-size:12.5px;font-weight:600">Change in Limits ›</a><div style="font-size:12.5px;color:var(--mu,#6b6577)">Plan allowance <span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">[$3.10]</span> left this month · token balance <span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">[$3.40]</span> · <a href="#" style="font-weight:600">See AI tokens ›</a></div></div>
+<div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:9px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Rate limits</h3><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Per key</span><span style="font-family:'Roboto Mono',monospace;font-weight:600">[60] a minute</span></div><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>Across every key and assistant</span><span style="font-family:'Roboto Mono',monospace;font-weight:600">[120] a minute</span></div><div style="font-size:12.5px;color:var(--mu,#6b6577)"><span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">[2]</span> requests were rate-limited in the last 30 days.</div></div>
+</div>
+<div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Alerts</h3><button type="button" style="height:36px;padding:0 14px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#ffffff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Save alerts</button></div>
+<sc-for list="{{ alerts }}" as="a" hint-placeholder-count="4"><div style="display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border:1px solid var(--hl,#ececf1);border-radius:10px"><span role="checkbox" aria-checked="{{ a.on }}" style="{{ a.boxS }}">{{ a.tick }}</span><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px;font-weight:600">{{ a.t }}</span><span style="font-size:12px;color:var(--mu,#6b6577)">{{ a.s }}<sc-if value="{{ a.link }}" hint-placeholder-val="{{ false }}"> · <a href="#" style="font-weight:600">{{ a.link }}</a></sc-if></span></span><sc-if value="{{ a.nw }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;border:1px dashed #7c3aed;color:var(--vd,#6d28d9);font-size:11px;font-weight:600;white-space:nowrap">{{ a.nw }}</span></sc-if></div></sc-for>
+<p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">A limit stops calls. An alert only tells you.</p>
+</div>
+<div role="dialog" aria-label="Save alert changes" style="width:520px;background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:16px;padding:20px 22px;box-shadow:0 24px 60px rgba(15,12,24,.18);display:flex;flex-direction:column;gap:10px">
+<span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">Saving opens this dialog</span>
+<h3 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Save alert changes?</h3>
+<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6"><li>Turns on: When a key reaches 80% of its monthly limit.</li><li>Turns off: When requests fail more than [10] times in an hour.</li></ul>
+<p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">Alerts reach you in the app and by email. No limit changes.</p>
+<div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Cancel</button><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#ffffff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Save alerts</button></div>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ abar }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<div style="width:260px;height:36px;box-sizing:border-box;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--fa,#a1a1aa);font-size:12.5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg>Search tool, key or request ID</div>
+<span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Caller ▾</span>
+<span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Surface ▾</span>
+<sc-if value="{{ fail }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--le,#ddd0fb);border-radius:9px;background:var(--lv,#f4f0fe);color:var(--vd,#6d28d9);font-size:12.5px;font-weight:600">Outcome: failed ✕</span></sc-if>
+<sc-if value="{{ log }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Outcome ▾</span></sc-if>
+<span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Tool ▾</span>
+<span style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--hl,#ececf1);border-radius:9px;background:var(--cd,#ffffff);font-size:12.5px;font-weight:600">Company ▾</span>
+<span style="flex:1"></span>
+<div role="radiogroup" aria-label="Range" style="display:flex;gap:3px;padding:3px;border:1px solid var(--hl,#ececf1);border-radius:10px;background:var(--cd,#ffffff)"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><span role="radio" aria-checked="{{ r.on }}" style="{{ r.s }}">{{ r.t }}</span></sc-for></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ ach }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Calls by day" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">Calls by day</h3><p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">[1,284] calls in 30 days: [28] refused, [14] errors, [9] without enough AI tokens, [2] rate-limited.</p></div><button type="button" style="background:none;border:0;padding:0;color:var(--vi,#7c3aed);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">View as table</button></div>
+<div role="img" aria-label="Calls by day, stacked by outcome" style="display:flex;align-items:stretch;gap:5px;height:120px;border-bottom:1px solid var(--hl,#ececf1);background:repeating-linear-gradient(to top,var(--hl,#ececf1) 0 1px,transparent 1px 30px)"><sc-for list="{{ adays }}" as="d" hint-placeholder-count="30"><div title="{{ d.tip }}" style="flex:1;min-width:0;height:100%;position:relative;display:flex;flex-direction:column-reverse"><sc-if value="{{ d.none }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;left:0;right:0;bottom:0;border-top:1.5px dashed var(--fa,#a1a1aa)"></span></sc-if><span style="{{ d.a }}"></span><span style="{{ d.bS }}"></span><span style="{{ d.cS }}"></span><span style="{{ d.dS }}"></span><span style="{{ d.pS }}"></span></div></sc-for></div>
+<div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mu,#6b6577)"><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:var(--vi,#7c3aed)"></span>Done</span><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#0ea5e9"></span>Rate-limited</span><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b"></span>Refused</span><span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:3px;background:#6b6577"></span>Failed</span><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:2px dotted var(--mu,#6b6577)"></span>Previous period</span><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:1.5px dashed var(--fa,#a1a1aa)"></span>Not connected yet</span></div>
+</section>
+</sc-if>
+
+<sc-if value="{{ fail }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Failures" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:16px 18px;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:10px"><h3 style="margin:0;font-size:14.5px;font-weight:800;letter-spacing:-0.02em">[53] failures in 30 days</h3><div role="img" aria-label="Failures by outcome: Refused 28, Error 14, Rate-limited 2, Not enough AI tokens 9" style="display:flex;gap:2px;height:14px;border-radius:999px;overflow:hidden"><sc-for list="{{ fails }}" as="f" hint-placeholder-count="4"><span style="{{ f.s }}"></span></sc-for></div><div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mu,#6b6577)"><sc-for list="{{ fails }}" as="f" hint-placeholder-count="4"><span style="display:flex;align-items:center;gap:6px"><span style="{{ f.k }}"></span>{{ f.t }} <span style="font-family:'Roboto Mono',monospace;color:var(--ink,#18181b)">{{ f.n }}</span></span></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">Top reasons</span><sc-for list="{{ reasons }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 10px;border:1px solid var(--hl,#ececf1);border-radius:9px"><span>{{ r.t }}</span><span style="font-family:'Roboto Mono',monospace;font-weight:600">{{ r.n }}</span></div></sc-for></div>
+</section>
+</sc-if>
+
+<sc-if value="{{ log }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Request history" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;overflow:hidden">
+<div role="row" style="{{ logHead }}"><span>Time</span><span>Caller</span><span>Surface</span><span>Tool</span><span>Company</span><span>Outcome</span><span>HTTP</span><span>Took</span><span>AI tokens</span></div>
+<sc-if value="{{ logLoad }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="display:flex;flex-direction:column"><sc-for list="{{ skRows }}" as="k" hint-placeholder-count="8"><div style="height:38px;border-top:1px solid var(--hl,#ececf1);display:flex;align-items:center;padding:0 14px;gap:10px"><span style="width:90px;height:10px;border-radius:4px;background:var(--hl,#ececf1)"></span><span style="flex:1;height:10px;border-radius:4px;background:var(--hl,#ececf1)"></span><span style="width:120px;height:10px;border-radius:4px;background:var(--hl,#ececf1)"></span></div></sc-for></div></sc-if>
+<sc-for list="{{ logRows }}" as="r" hint-placeholder-count="8">
+<sc-if value="{{ r.c }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--hl,#ececf1);background:var(--rz,#faf9fc);font-size:12.5px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;color:var(--mu,#6b6577);width:112px;flex:none">{{ r.t }}</span><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--vi,#7c3aed);flex:none"><path d="M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z"></path></svg><span>{{ r.txt }}</span></div></sc-if>
+<sc-if value="{{ r.rq }}" hint-placeholder-val="{{ false }}"><div style="border-top:1px solid var(--hl,#ececf1);cursor:pointer"><div role="row" style="{{ r.rowS }}"><span style="font-family:'Roboto Mono',monospace;font-size:12px;color:var(--mu,#6b6577)">{{ r.t }}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.who }}</span><span style="font-family:'Roboto Mono',monospace;font-size:11px;color:var(--mu,#6b6577);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.whoS }}</span></span><span style="display:inline-flex;align-items:center;justify-content:center;height:20px;padding:0 6px;border-radius:6px;border:1px solid var(--hl,#ececf1);font-family:'Roboto Mono',monospace;font-size:10.5px;font-weight:600;width:max-content">{{ r.sf }}</span><span style="font-family:'Roboto Mono',monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.tool }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.co }}</span><span><span style="{{ r.o.s }}">{{ r.o.t }}</span></span><span style="font-family:'Roboto Mono',monospace;font-size:12px;color:var(--mu,#6b6577)">{{ r.http }}</span><span style="font-family:'Roboto Mono',monospace;font-size:12px">{{ r.took }}</span><span style="font-family:'Roboto Mono',monospace;font-size:12px">{{ r.tok }}</span></div><sc-if value="{{ r.why }}" hint-placeholder-val="{{ false }}"><div style="padding:0 14px 9px 136px;font-size:12px;color:var(--mu,#6b6577)">{{ r.why }}</div></sc-if></div></sc-if>
+</sc-for>
+</section>
+</sc-if>
+
+<sc-if value="{{ afoot }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--mu,#6b6577)"><span style="font-family:'Roboto Mono',monospace">1-50 of [1,286]</span><button type="button" style="height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--mu,#6b6577);font-family:inherit;font-size:12.5px;font-weight:600">‹ Newer</button><button type="button" style="height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Older ›</button><span style="flex:1"></span><a href="#" style="font-weight:600">Download CSV</a></div>
+<p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577);max-width:820px">StudioOS records which tool ran, for which company, how it ended and what it cost. It never records what the assistant or key sent or what came back.</p>
+</sc-if>
+
+<sc-if value="{{ e1 }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--cd,#ffffff);border:1px dashed var(--hl,#ececf1);border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">No caller</span><h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">No requests yet.</h3><p style="margin:0;font-size:13px;color:var(--mu,#6b6577)">Requests appear here once an API key or an assistant calls StudioOS.</p><div style="display:flex;gap:16px"><a href="#" style="font-size:13px;font-weight:600">Create an API key ›</a><a href="#" style="font-size:13px;font-weight:600">Connect an assistant ›</a></div></div>
+</sc-if>
+<sc-if value="{{ e2 }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--cd,#ffffff);border:1px dashed var(--hl,#ececf1);border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">Callers, no request in range</span><h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">No requests between [22 Sep] and [21 Oct].</h3><p style="margin:0;font-size:13px;color:var(--mu,#6b6577)">Your keys and assistants are connected, but none called StudioOS in this range.</p><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Show all time</button></div>
+</sc-if>
+<sc-if value="{{ sumErr }}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:12px;background:var(--dt,#fef2f2);border:1px solid var(--dd,#fecaca);color:var(--de,#b91c1c)"><span style="flex:1;font-size:13.5px"><strong>Usage could not be read.</strong> That is not the same as none. The request history below was read separately.</span><button type="button" style="height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--dd,#fecaca);background:var(--cd,#ffffff);color:var(--de,#b91c1c);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Try again</button></div>
+</sc-if>
+<sc-if value="{{ logErr }}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:12px;background:var(--dt,#fef2f2);border:1px solid var(--dd,#fecaca);color:var(--de,#b91c1c)"><span style="flex:1;font-size:13.5px"><strong>Requests could not be read.</strong> The chart above was read separately and stays.</span><button type="button" style="height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--dd,#fecaca);background:var(--cd,#ffffff);color:var(--de,#b91c1c);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Try again</button></div>
+</sc-if>
+<sc-if value="{{ nodw }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Request" style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:16px;box-shadow:0 24px 60px rgba(15,12,24,.16);overflow:hidden"><div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--hl,#ececf1)"><a href="#" style="font-size:13px;font-weight:600">‹ Activity</a><button type="button" aria-label="Close" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);font-size:17px;color:var(--ink,#18181b);cursor:pointer">×</button></div><div style="padding:34px 22px;display:flex;flex-direction:column;gap:8px;align-items:flex-start"><h3 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">This request is not on your account.</h3><p style="margin:0;font-size:13px;color:var(--mu,#6b6577)">Nothing here says whether it exists. Your own requests are in Activity.</p><a href="#" style="font-size:13px;font-weight:600">Back to Activity ›</a></div></div>
+</sc-if>
+
+</main>
+</div>
+</div>
+
+<sc-if value="{{ drawer }}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position:absolute;inset:0;background:rgba(24,24,27,.32)"></div>
+<aside role="dialog" aria-modal="true" aria-label="Request detail" style="position:absolute;top:0;right:0;bottom:0;width:560px;box-sizing:border-box;background:var(--cd,#ffffff);border-radius:16px 0 0 16px;box-shadow:-16px 0 48px rgba(24,24,27,.18);display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px 0"><a href="#" style="display:inline-flex;align-items:center;height:36px;font-weight:600;font-size:13px">‹ Activity</a><button type="button" aria-label="Close" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);cursor:pointer;font-size:17px;color:var(--ink,#18181b)">×</button></div>
+<div style="padding:8px 22px 16px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--hl,#ececf1)"><h2 style="margin:0;flex:1;font-family:'Roboto Mono',monospace;font-size:16px;font-weight:600">{{ dw.tool }}</h2><span style="{{ dw.o.s }}">{{ dw.o.t }}</span></div>
+<div style="flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:20px">
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">Who</span><div style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px"><sc-for list="{{ dwWho }}" as="k" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="color:var(--mu,#6b6577)">{{ k.k }}</span><span style="font-family:'Roboto Mono',monospace;text-align:right">{{ k.v }}</span></div></sc-for></div></section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">When</span><div style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px"><sc-for list="{{ dwWhen }}" as="k" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="color:var(--mu,#6b6577)">{{ k.k }}</span><span style="font-family:'Roboto Mono',monospace">{{ k.v }}</span></div></sc-for></div></section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">AI tokens</span><div style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px"><sc-for list="{{ dwTok }}" as="k" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="color:var(--mu,#6b6577)">{{ k.k }}</span><span style="font-family:'Roboto Mono',monospace;text-align:right">{{ k.v }}</span></div></sc-for></div><span style="font-size:12px;color:var(--mu,#6b6577)">Token counts only. The model is not shown here.</span></section>
+<sc-if value="{{ dwHasWhy }}" hint-placeholder-val="{{ false }}"><section style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:10px;background:var(--amb,#fffbeb);border:1px solid #fcd34d;color:var(--amt,#92400e)"><span style="font-weight:700;font-size:13px">Why it failed</span><span style="font-size:12.5px;line-height:1.5">{{ dwWhy }}</span><div style="display:flex;gap:14px;flex-wrap:wrap"><sc-for list="{{ dwActs }}" as="a" hint-placeholder-count="2"><a href="#" style="font-size:12.5px;font-weight:700">{{ a.t }}</a></sc-for></div></section></sc-if>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">IDs</span><sc-for list="{{ ids }}" as="k" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:10px;font-size:12.5px"><span style="color:var(--mu,#6b6577);width:120px;flex:none">{{ k.k }}</span><span style="flex:1;font-family:'Roboto Mono',monospace">{{ k.v }}</span><button type="button" style="height:32px;padding:0 11px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Copy</button></div></sc-for></section>
+</div>
+<div style="padding:12px 22px;border-top:1px solid var(--hl,#ececf1);font-size:12px;color:var(--mu,#6b6577)">Arguments and results are never stored, so they cannot be shown.</div>
+</aside>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ phone }}" hint-placeholder-val="{{ false }}">
+<div style="{{ phS }}">
+<header style="height:56px;flex:none;display:flex;align-items:center;padding:0 6px;background:var(--cd,#ffffff);border-bottom:1px solid var(--hl,#ececf1)"><a href="#" style="display:inline-flex;align-items:center;min-width:88px;height:44px;padding:0 8px;font-size:15px;font-weight:600">‹ Account</a><span style="flex:1;text-align:center;font-size:16px;font-weight:700">Builder</span><span style="min-width:88px"></span></header>
+<div role="tablist" aria-label="Builder" style="display:flex;gap:18px;padding:0 16px;overflow-x:auto;border-bottom:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);flex:none"><sc-for list="{{ phTabs }}" as="t" hint-placeholder-count="4"><span role="tab" style="{{ t.s }}">{{ t.t }}</span></sc-for></div>
+<div style="flex:1;min-height:0;overflow:auto;padding:14px 16px 22px;display:flex;flex-direction:column;gap:12px">
+<sc-if value="{{ pa }}" hint-placeholder-val="{{ false }}">
+<div role="radiogroup" aria-label="Range" style="display:flex;gap:6px;overflow-x:auto"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="4"><span role="radio" aria-checked="{{ r.on }}" style="{{ r.ps }}">{{ r.t }}</span></sc-for></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px"><sc-for list="{{ phTiles }}" as="t" hint-placeholder-count="4"><div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px"><span style="font-family:'Roboto Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)">{{ t.ey }}</span><span style="font-family:'Roboto Mono',monospace;font-size:20px;font-weight:600">{{ t.v }}</span><sc-if value="{{ t.sub }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:var(--mu,#6b6577)">{{ t.sub }}</span></sc-if></div></sc-for></div>
+<p style="margin:0;font-size:12.5px;color:var(--mu,#6b6577)">[1,284] requests in 30 days, [53] failed; [$6.42] of AI tokens.</p>
+</sc-if>
+<sc-if value="{{ pb }}" hint-placeholder-val="{{ false }}">
+<section style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;align-items:center;gap:8px"><button type="button" aria-label="Previous week" style="width:44px;height:44px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);font-size:16px;color:var(--ink,#18181b)">‹</button><span style="flex:1;text-align:center;font-size:13px;font-weight:700">[15 Oct] to [21 Oct]</span><button type="button" aria-label="Next week" style="width:44px;height:44px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);font-size:16px;color:var(--mu,#6b6577)">›</button></div><div role="img" aria-label="Requests by day, this week" style="display:flex;align-items:stretch;gap:10px;height:120px;border-bottom:1px solid var(--hl,#ececf1)"><sc-for list="{{ wk }}" as="d" hint-placeholder-count="7"><div style="flex:1;display:flex;flex-direction:column-reverse"><span style="{{ d.a }}"></span><span style="{{ d.f }}"></span></div></sc-for></div><div style="display:flex;gap:10px"><sc-for list="{{ wk }}" as="d" hint-placeholder-count="7"><span style="flex:1;text-align:center;font-family:'Roboto Mono',monospace;font-size:11px;color:var(--mu,#6b6577)">{{ d.x }}</span></sc-for></div></section>
+<section style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px"><h3 style="margin:0;font-size:14px;font-weight:800">Where the AI tokens went</h3><sc-for list="{{ brkRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:5px;padding:8px 0;border-top:1px solid var(--hl,#ececf1)"><div style="display:flex;justify-content:space-between;gap:10px"><span style="{{ r.nS }}">{{ r.n }}</span><span style="{{ r.tokS }}">{{ r.tok }}</span></div><span style="display:flex;height:8px;background:var(--rz,#faf9fc);border-radius:999px"><span style="{{ r.barS }}"></span></span><span style="font-family:'Roboto Mono',monospace;font-size:11.5px;color:var(--mu,#6b6577)">{{ r.req }} requests · {{ r.fail }} failed</span></div></sc-for></section>
+</sc-if>
+<sc-if value="{{ pc }}" hint-placeholder-val="{{ false }}">
+<button type="button" style="height:44px;border-radius:9px;border:1px solid var(--hl,#ececf1);background:var(--cd,#ffffff);color:var(--ink,#18181b);font-family:inherit;font-size:13.5px;font-weight:600">Filters · 2</button>
+<sc-for list="{{ phCards }}" as="c" hint-placeholder-count="6"><div style="background:var(--cd,#ffffff);border:1px solid var(--hl,#ececf1);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-height:44px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-family:'Roboto Mono',monospace;font-size:12.5px;font-weight:600">{{ c.tool }}</span><span style="{{ c.o.s }}">{{ c.o.t }}</span></div><span style="font-size:12.5px">{{ c.who }}</span><div style="display:flex;justify-content:space-between;font-family:'Roboto Mono',monospace;font-size:11.5px;color:var(--mu,#6b6577)"><span>{{ c.t }}</span><span>{{ c.tok }}</span></div></div></sc-for>
+</sc-if>
+<sc-if value="{{ pd }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px"><a href="#" style="font-size:14px;font-weight:600;min-height:44px;display:inline-flex;align-items:center">‹ Activity</a></div>
+<div style="display:flex;align-items:center;gap:10px"><h2 style="margin:0;flex:1;font-family:'Roboto Mono',monospace;font-size:15px;font-weight:600">{{ dw.tool }}</h2><span style="{{ dw.o.s }}">{{ dw.o.t }}</span></div>
+<div style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px;background:var(--cd,#ffffff)"><sc-for list="{{ dwWho }}" as="k" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="color:var(--mu,#6b6577)">{{ k.k }}</span><span style="font-family:'Roboto Mono',monospace;text-align:right">{{ k.v }}</span></div></sc-for></div>
+<div style="display:flex;flex-direction:column;border:1px solid var(--hl,#ececf1);border-radius:10px;background:var(--cd,#ffffff)"><sc-for list="{{ dwTok }}" as="k" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--hl,#ececf1);font-size:12.5px"><span style="color:var(--mu,#6b6577)">{{ k.k }}</span><span style="font-family:'Roboto Mono',monospace;text-align:right">{{ k.v }}</span></div></sc-for></div>
+<p style="margin:0;font-size:12px;color:var(--mu,#6b6577)">Arguments and results are never stored, so they cannot be shown.</p>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;b&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;u1&quot;,&quot;u2a&quot;,&quot;u2b&quot;,&quot;u2c&quot;,&quot;u2d&quot;,&quot;u3&quot;,&quot;u4a&quot;,&quot;u4b&quot;,&quot;u5&quot;,&quot;u6&quot;,&quot;u7&quot;,&quot;u8a&quot;,&quot;u8b&quot;,&quot;u8c&quot;,&quot;u8d&quot;,&quot;u9a&quot;,&quot;u9b&quot;,&quot;u9c&quot;,&quot;u10&quot;,&quot;u11a&quot;,&quot;u11b&quot;,&quot;u11c&quot;,&quot;u12a&quot;,&quot;u12b&quot;],&quot;default&quot;:&quot;u1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { brk: null, tbl1: false, cmp: null };
+  renderVals() {
+    const b = this.props.b || 'u1';
+    const css = (s) => { const o = {}; String(s).split(';').forEach((d) => { const i = d.indexOf(':'); if (i < 1) return; const k = d.slice(0, i).trim(); o[k.indexOf('--') === 0 ? k : k.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = d.slice(i + 1).trim(); }); return o; };
+    const MONO = "font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;";
+    const LV = { '--pg': '#f4f3f7', '--cd': '#ffffff', '--rz': '#faf9fc', '--ink': '#18181b', '--mu': '#6b6577', '--fa': '#a1a1aa', '--hl': '#ececf1', '--vi': '#7c3aed', '--vd': '#6d28d9', '--lv': '#f4f0fe', '--le': '#ddd0fb', '--po': '#047857', '--de': '#b91c1c', '--dt': '#fef2f2', '--dd': '#fecaca', '--amt': '#92400e', '--amb': '#fffbeb', '--skt': '#0369a1', '--skb': 'rgba(14,165,233,.10)' };
+    const DV = { '--pg': '#0b1220', '--cd': '#111827', '--rz': '#1f2937', '--ink': '#e5e7eb', '--mu': '#9ca3af', '--fa': '#6b7280', '--hl': '#374151', '--vi': '#a78bfa', '--vd': '#c4b5fd', '--lv': '#241b3f', '--le': '#4c3a86', '--po': '#34d399', '--de': '#f87171', '--dt': '#3a1518', '--dd': '#7f1d1d', '--amt': '#fcd34d', '--amb': '#2a2210', '--skt': '#7dd3fc', '--skb': 'rgba(14,165,233,.16)' };
+    const FL = {
+      u1: { pg: 'u', bar: 1, tiles: 1, c1: 1, c2: 1, lim: 1, foot: 1 },
+      u7: { pg: 'u', bar: 1, tiles: 1, c1: 1, c2: 1, lim: 1, foot: 1, dark: 1 },
+      u2a: { cw: 760, c2: 1, brk: 'key' }, u2b: { cw: 760, c2: 1, brk: 'prov' }, u2c: { cw: 760, c2: 1, brk: 'conn' }, u2d: { cw: 760, c2: 1, brk: 'tool' },
+      u3: { pg: 'a', abar: 1, ach: 1, log: 1, afoot: 1 },
+      u4a: { pg: 'a', abar: 1, ach: 1, log: 1, dw: 'ok' },
+      u4b: { pg: 'a', abar: 1, ach: 1, log: 1, dw: 'fail' },
+      u5: { pg: 'u', limd: 1 },
+      u6: { pg: 'a', abar: 1, fail: 1, log: 1, only: 1, afoot: 1 },
+      u9a: { cw: 900, e1: 1 }, u9b: { cw: 900, e2: 1 }, u9c: { cw: 1000, tiles: 1, c1: 1, rec: 1 },
+      u10: { pg: 'u', bar: 1, tiles: 1, c1: 1, c2: 1, lim: 1, load: 1 },
+      u11a: { cw: 1000, sumErr: 1, log: 1, short: 1 }, u11b: { cw: 760, c2: 1, c2err: 1 }, u11c: { cw: 1000, c1: 1, logErr: 1 },
+      u12a: { cw: 620, nodw: 1 }, u12b: { cw: 1000, nokey: 1, bar: 1 },
+      u8a: { ph: 'a' }, u8b: { ph: 'b' }, u8c: { ph: 'c' }, u8d: { ph: 'd' },
+    };
+    const F = FL[b] || FL.u1;
+    const shell = !!F.pg; const load = !!F.load;
+    const SI = { 'Studio': 'M2.5 7.5L8 3l5.5 4.5V13h-11z', 'Spin-Out Lab': 'M6 2.5h4M6.5 2.5v4L3 12.5h10L9.5 6.5v-4', 'Validate': 'M3 8.5l3 3 7-7', 'Build': 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z', 'Raise': 'M2.5 12.5l4-4 3 3 4-6M10 5.5h3.5V9', 'Grow': 'M8 13.5V7M8 7c0-2.5 2-4 4.5-4 0 2.5-2 4-4.5 4zM8 9c0-2-1.5-3.5-4.5-3.5 0 2.5 2 3.5 4.5 3.5z', 'Network': 'M5.5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM2 13c0-2 1.6-3.5 3.5-3.5S9 11 9 13M11 7.5a1.6 1.6 0 1 0 0-3.2M10.5 9.6c1.9 0 3.5 1.4 3.5 3.4', 'Research': 'M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14' };
+    const side = Object.keys(SI).map((t) => ({ t, ic: SI[t] }));
+    const lit = F.pg === 'a' ? 'Activity' : 'API usage';
+    const SB = 'display:flex;align-items:center;box-sizing:border-box;min-height:32px;border-radius:9px;';
+    const SK = { n: 'padding:0 10px;font-size:13px;font-weight:500;color:var(--ink,#18181b)', sec: 'padding:0 10px;font-size:13px;font-weight:700;color:var(--ink,#18181b)', sub: 'padding:0 10px 0 24px;font-size:12.5px;font-weight:500;color:var(--mu,#6b6577)', lit: 'padding:0 10px 0 24px;font-size:12.5px;font-weight:700;color:var(--vd,#6d28d9);background:var(--lv,#f4f0fe);border:1px solid var(--le,#ddd0fb)', head: MONO + 'padding:12px 10px 4px;min-height:0;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)' };
+    const sec = [['Profile and identity'], ['Companies and Projects'], ['Notifications'], ['Sign-in and security'], ['Billing and orders'], ['Usage', 'sec'], ['Overview', 'sub'], ['Cost', 'sub'], ['AI tokens', 'sub'], ['Limits', 'sub'], ['Storage', 'sub'], ['Connectors'], ['Following'], ['Builder', 'sec'], ['MCP and services', 'sub'], ['API keys', 'sub'], ['API usage', 'sub'], ['Activity', 'sub'], ['More', 'head'], ['Onboarding', 'sub'], ['Appearance', 'sub'], ['Activity Log', 'sub']].map(([t, k]) => { const kk = t === lit ? 'lit' : (k || 'n'); return { t, st: css(SB + SK[kk]), cur: kk === 'lit' ? 'page' : undefined }; });
+
+    const cmpOn = this.state.cmp != null ? this.state.cmp : false;
+    const seg = (on) => css('display:inline-flex;align-items:center;height:30px;padding:0 11px;border-radius:7px;border:0;font-family:inherit;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;' + (on ? 'background:var(--ink,#18181b);color:var(--cd,#ffffff)' : 'background:transparent;color:var(--ink,#18181b)'));
+    const ranges = ['7 days', '30 days', 'Month to date', 'Custom'].map((t) => ({ t, on: t === '30 days', s: seg(t === '30 days'), ps: css('display:inline-flex;align-items:center;flex:none;height:44px;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap;box-sizing:border-box;' + (t === '30 days' ? 'background:var(--ink,#18181b);color:var(--cd,#ffffff)' : 'background:var(--cd,#ffffff);color:var(--ink,#18181b);border:1px solid var(--hl,#ececf1)')) }));
+    const swS = css('width:32px;height:18px;border-radius:999px;position:relative;flex:none;background:' + (cmpOn ? '#7c3aed' : 'var(--hl,#ececf1)'));
+    const knS = css('position:absolute;top:2px;left:' + (cmpOn ? '16px' : '2px') + ';width:14px;height:14px;border-radius:50%;background:#ffffff;box-shadow:0 1px 2px rgba(0,0,0,.25)');
+
+    const T = (ey, v, o) => Object.assign({ ey, v, sub: '', prev: '', link: '', skel: load, vS: css(MONO + 'font-size:24px;font-weight:600;letter-spacing:-0.02em;line-height:1.2' + (load ? ';display:none' : '')) }, o || {});
+    let tiles = [T('Requests', '[1,284]', { prev: cmpOn ? 'Previous 30 days · [1,092]' : '' }), T('OK', '[1,231]', { prev: cmpOn ? 'Previous · [1,060]' : '' }), T('Failed', '[53]', { link: 'See them in Activity ›', prev: cmpOn ? 'Previous · [32]' : '' }), T('AI tokens charged', '[$6.42]', { sub: '[$0.38] returned', prev: cmpOn ? 'Previous · [$5.10]' : '' })];
+    if (F.rec) tiles = [T('Requests', '[812]', { sub: 'Not recorded before [8 Oct]' }), T('OK', '[788]', { sub: 'Not recorded before [8 Oct]' }), T('Failed', '[24]', { sub: 'Not recorded before [8 Oct]' }), T('AI tokens charged', '[$4.06]', { sub: 'Not recorded before [8 Oct]' })];
+    const tileGridS = css('display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px');
+
+    const REQ = [0, 0, 0, 32, 44, 40, 53, 49, 24, 20, 46, 55, 51, 59, 63, 28, 23, 50, 57, 54, 62, 60, 31, 26, 52, 64, 59, 68, 61, 53];
+    const FAI = [0, 0, 0, 1, 2, 1, 3, 2, 0, 0, 2, 3, 1, 4, 2, 1, 0, 2, 3, 2, 5, 3, 0, 1, 2, 3, 2, 4, 2, 2];
+    const MON = ['Sep', 'Oct'];
+    const DATES = REQ.map((_, i) => { const d = new Date(2026, 8, 22 + i); return d.getDate() + ' ' + MON[d.getMonth() - 8]; });
+    const RECF = F.rec ? 16 : 0; const MX = 80; const TMX = 0.4;
+    const days = REQ.map((r, i) => {
+      const none = r === 0 || i < RECF; const f = none ? 0 : FAI[i]; const ok = none ? 0 : r - f; const tk = none ? 0 : r * 0.005;
+      return { tip: '[' + DATES[i] + '] · ' + (none ? (i < RECF ? 'Not recorded' : 'No caller yet') : '[' + r + '] requests, [' + f + '] failed, [$' + tk.toFixed(2) + ']'), none, okS: css('flex:none;height:' + (ok / MX * 100) + '%;background:var(--vi,#7c3aed);border-radius:2px 2px 0 0'), fS: css('flex:none;height:' + (f / MX * 100) + '%;background:#f59e0b'), pv: cmpOn && !none, pS: css('position:absolute;left:12%;right:12%;bottom:' + (Math.round(r * 0.85) / MX * 100) + '%;border-top:2px dotted var(--mu,#6b6577)'), tS: css(none ? 'display:none' : 'position:absolute;left:50%;bottom:' + (tk / TMX * 100) + '%;width:7px;height:7px;margin:0 0 -3.5px -3.5px;border-radius:50%;background:#0ea5e9;box-shadow:0 0 0 2px var(--cd,#ffffff)') };
+    });
+    const xl = DATES.map((d, i) => ({ t: i % 7 === 0 ? d : '' }));
+    const c1Sum = F.rec ? 'Usage is recorded from [8 Oct]: [812] requests since then, [24] failed; [$4.06] of AI tokens.' : '[1,284] requests in 30 days, [53] failed; [$6.42] of AI tokens.';
+    const noneLab = F.rec ? 'Usage recorded from [8 Oct]' : 'No caller yet';
+    const tbl1 = !!this.state.tbl1;
+    const dayRows = REQ.map((r, i) => ({ d: '[' + DATES[i] + ']', r: r && i >= RECF ? '[' + r + ']' : '—', ok: r && i >= RECF ? '[' + (r - FAI[i]) + ']' : '—', f: r && i >= RECF ? '[' + FAI[i] + ']' : '—', t: r && i >= RECF ? '[$' + (r * 0.005).toFixed(2) + ']' : (i < RECF ? 'Not recorded' : 'No caller yet') })).slice(-10).reverse();
+
+    const BRK = {
+      key: [['[Deploy bot] axk_[k7f3m2q9x4p1]_••••', 612, 21, 4.10, 380], ['[Nightly sync] axk_[r2d8w5n1c6v3]_••••', 340, 9, 0.85, 512], ['Recognised as [Assistant A]', 332, 23, 1.47, 440], ['[Old script] · revoked', null, null, null, null]],
+      prov: [['StudioOS', 980, 30, 5.20, 410], ['[Provider A]', 214, 15, 1.02, 620], ['[Provider B]', 90, 8, 0.20, 700]],
+      conn: [['No connector', 1028, 33, 5.99, 400], ['[Docs workspace]', 160, 6, 0.31, 560], ['[CRM]', 96, 14, 0.12, 690]],
+      tool: [['structure_with_studioos', 260, 9, 5.20, 1840], ['[search_docs]', 160, 6, 0.31, 560], ['get_validate_context', 430, 12, 0, 180], ['submit_interview', 318, 14, 0, 240], ['Other', 116, 12, 0.91, 520]],
+    };
+    const bk = this.state.brk || F.brk || 'key';
+    const set = BRK[bk];
+    const vmax = Math.max(...set.filter((r) => r[3] != null).map((r) => r[3]), 0.01);
+    const COL = ['var(--vi,#7c3aed)', '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const fmt = (n) => n.toLocaleString('en-US');
+    const brkRows = set.map((r, i) => { const nr = r[1] == null; const free = r[3] === 0; return { n: r[0], req: nr ? '—' : '[' + fmt(r[1]) + ']', fail: nr ? '—' : '[' + r[2] + ']', tok: nr ? 'Not recorded' : free ? 'Free' : '[$' + r[3].toFixed(2) + ']', p50: nr ? '—' : '[' + fmt(r[4]) + '] ms', why: nr ? 'Ran before usage was recorded.' : '', barS: css(nr ? 'display:block;height:0;width:100%;border-top:1.5px dashed var(--fa,#a1a1aa);margin-top:5px' : 'display:block;height:10px;border-radius:999px;width:' + (free ? 0 : Math.max(2, r[3] / vmax * 100)) + '%;background:' + (r[0] === 'Other' ? '#6b6577' : COL[i % 5])), nS: css('font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (bk === 'tool' ? MONO : '')), tokS: css(MONO + 'font-size:12px;text-align:right;white-space:nowrap;color:' + (nr ? 'var(--mu,#6b6577)' : 'var(--ink,#18181b)')) }; });
+    const segs = [['key', 'By key'], ['prov', 'By provider'], ['conn', 'By connector'], ['tool', 'By tool']].map(([k, t]) => ({ t, on: k === bk, pick: () => this.setState({ brk: k }), s: seg(k === bk) }));
+    const c2Sum = { key: '[Deploy bot] spent the most: [$4.10] of [$6.42].', prov: 'StudioOS ran most of the AI: [$5.20] of [$6.42].', conn: 'Most requests used no connector: [$5.99] of [$6.42].', tool: 'structure_with_studioos spent the most, [$5.20]. Reads are free.' }[bk];
+    const c2GridS = css('display:grid;grid-template-columns:' + (F.cw ? '1fr' : 'minmax(0,1fr) minmax(0,1.2fr)') + ';gap:18px;align-items:start');
+
+    const meters = [{ l: '[Deploy bot] · this month', v: '[$4.10] of [$20.00]', pct: 20.5, link: 'Edit on the key ›' }, { l: 'Your account · this month', v: '[$6.42] of [$50.00]', pct: 12.8, link: 'Usage › Limits ›' }].map((m) => Object.assign({}, m, { fS: css('display:block;height:100%;border-radius:999px;width:' + m.pct + '%;background:var(--vi,#7c3aed)') }));
+    const perKey = [{ n: '[Deploy bot]', k: 'axk_[k7f3m2q9x4p1]_••••', v: '[$4.10] of [$20.00]', pct: 20.5, rs: 'Resets on [1 Nov]', lim: true }, { n: '[Nightly sync]', k: 'axk_[r2d8w5n1c6v3]_••••', v: '[$0.85] this month', pct: 0, rs: 'No limit', lim: false }].map((m) => Object.assign({}, m, { fS: css('display:block;height:100%;border-radius:999px;width:' + m.pct + '%;background:var(--vi,#7c3aed)') }));
+    const alerts = [{ t: 'When a key reaches 80% of its monthly limit', s: 'In the app and by email', on: true, nw: 'NEW: contract gap, being decided' }, { t: 'When a key reaches its monthly limit', s: 'In the app and by email', on: true, nw: 'NEW: contract gap, being decided' }, { t: 'When my account reaches 50%, 80%, 100% of its monthly limit', s: 'In the app and by email · these exist today', on: true, nw: '', link: 'Change in Limits ›' }, { t: 'When requests fail more than [10] times in an hour', s: 'In the app and by email', on: false, nw: 'NEW: contract gap, being decided' }].map((a) => Object.assign({ link: '' }, a, { boxS: css('width:18px;height:18px;border-radius:5px;flex:none;box-sizing:border-box;display:grid;place-items:center;color:#ffffff;font-size:12px;font-weight:800;margin-top:1px;' + (a.on ? 'background:#7c3aed;border:1px solid #7c3aed' : 'border:1.5px solid var(--mu,#6b6577)')), tick: a.on ? '✓' : '' }));
+
+    const pool = [].concat(Array(28).fill('r'), Array(14).fill('e'), Array(9).fill('t'), Array(2).fill('l'));
+    const order = pool.map((_, i) => i).sort((i, j) => ((i * 0.618034) % 1) - ((j * 0.618034) % 1));
+    const mixed = order.map((i) => pool[i]);
+    let cur = 0;
+    const adays = REQ.map((r, i) => { const n = FAI[i]; const ty = mixed.slice(cur, cur + n); cur += n; const c = (k) => ty.filter((y) => y === k).length; const none = r === 0; const ok = none ? 0 : r - n; const H = (v) => (v / MX * 100) + '%'; return { tip: '[' + DATES[i] + '] · ' + (none ? 'Not connected yet' : '[' + r + '] calls · [' + c('r') + '] refused · [' + (c('e') + c('t')) + '] failed · [' + c('l') + '] rate-limited'), none, a: css('flex:none;height:' + H(ok) + ';background:var(--vi,#7c3aed);border-radius:2px 2px 0 0'), bS: css('flex:none;height:' + H(c('l')) + ';background:#0ea5e9'), cS: css('flex:none;height:' + H(c('r')) + ';background:#f59e0b'), dS: css('flex:none;height:' + H(c('e') + c('t')) + ';background:#6b6577'), pS: css(none ? 'display:none' : 'position:absolute;left:12%;right:12%;bottom:' + (Math.round(r * 0.82) / MX * 100) + '%;border-top:2px dotted var(--mu,#6b6577)') }; });
+
+    const PILL = 'display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;box-sizing:border-box;';
+    const OUT = { ok: ['OK', 'background:var(--lv,#f4f0fe);color:var(--vi,#7c3aed);border:1px solid var(--le,#ddd0fb)'], ref: ['Refused', 'background:var(--amb,#fffbeb);color:var(--amt,#92400e);border:1px solid #fcd34d'], err: ['Error', 'background:var(--dt,#fef2f2);color:var(--de,#b91c1c);border:1px solid var(--dd,#fecaca)'], rl: ['Rate-limited', 'background:var(--skb);color:var(--skt);border:1px solid rgba(14,165,233,.45)'], tok: ['Not enough AI tokens', 'background:repeating-linear-gradient(135deg,var(--rz,#faf9fc) 0 4px,var(--hl,#ececf1) 4px 5px);color:var(--mu,#6b6577);border:1px solid var(--hl,#ececf1)'] };
+    const op = (k) => ({ t: OUT[k][0], s: css(PILL + OUT[k][1]) });
+    const LOGR = [
+      ['21 Oct · 14:32:07', '[Deploy bot]', 'axk_[k7f3m2q9x4p1]_••••', 'API', 'structure_with_studioos', '[Northwind Labs]', 'ok', '200', '[420] ms', 'Charged [$0.0040]', ''],
+      ['21 Oct · 14:30:55', 'Recognised as [Assistant A]', '[assistant-a.example]', 'MCP', 'get_validate_context', '[Northwind Labs]', 'ok', '200', '[180] ms', 'Free', ''],
+      ['21 Oct · 14:28:10', '[Nightly sync]', 'axk_[r2d8w5n1c6v3]_••••', 'API', '[list_deals]', '[Bluefern Health]', 'ref', '403', '[35] ms', '— not run', 'The key lacks the permission for this tool.'],
+      ['21 Oct · 14:21:42', '[Deploy bot]', 'axk_[k7f3m2q9x4p1]_••••', 'API', 'structure_with_studioos', '[Northwind Labs]', 'tok', '402', '[60] ms', '— not run', 'Not enough AI tokens.'],
+      ['21 Oct · 13:58:03', 'Recognised as [Assistant A]', '[assistant-a.example]', 'MCP', 'submit_interview', '[Northwind Labs]', 'ok', '200', '[240] ms', 'Free', ''],
+      ['21 Oct · 13:40:19', '[Deploy bot]', 'axk_[k7f3m2q9x4p1]_••••', 'API', '[search_docs]', '[Northwind Labs]', 'err', '504', '[10,000] ms', '— not charged', 'The service behind this tool did not answer in time.'],
+      ['21 Oct · 13:12:44', '[Nightly sync]', 'axk_[r2d8w5n1c6v3]_••••', 'API', 'get_validate_context', '[Bluefern Health]', 'rl', '429', '[12] ms', '— not run', 'Too many requests this minute. It was not run.'],
+      ['C', '21 Oct · 11:05', 'You approved [Assistant A] for [Northwind Labs]'],
+      ['20 Oct · 23:00:02', '[Nightly sync]', 'axk_[r2d8w5n1c6v3]_••••', 'API', '[list_deals]', '[Bluefern Health]', 'ok', '200', '[510] ms', 'Charged [$0.0020]', ''],
+      ['20 Oct · 18:44:30', 'Recognised as [Assistant A]', '[assistant-a.example]', 'MCP', 'structure_with_studioos', '[Northwind Labs]', 'ok', '200', '[2,140] ms', 'Charged [$0.0310]', ''],
+      ['C', '18 Oct · 09:12', 'You revoked [Assistant B]'],
+    ];
+    const LG = '112px minmax(0,1.6fr) 46px minmax(0,1.35fr) minmax(0,1fr) 136px 38px 74px minmax(0,1fr)';
+    const logHead = css('display:grid;grid-template-columns:' + LG + ';gap:10px;padding:9px 14px;background:var(--rz,#faf9fc);' + MONO + 'font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mu,#6b6577)');
+    let src = LOGR.filter((r) => !F.only || (r[0] !== 'C' && r[6] !== 'ok'));
+    if (F.short) src = src.slice(0, 4);
+    const logRows = src.map((r, i) => r[0] === 'C' ? { c: true, rq: false, t: r[1], txt: r[2] } : { c: false, rq: true, t: r[0], who: r[1], whoS: r[2], sf: r[3], tool: r[4], co: r[5], o: op(r[6]), http: r[7], took: r[8], tok: r[9], why: r[10], rowS: css('display:grid;grid-template-columns:' + LG + ';gap:10px;align-items:center;padding:10px 14px 6px;font-size:12.5px;' + ((F.dw === 'ok' && i === 0) || (F.dw === 'fail' && i === 3) ? 'background:var(--lv,#f4f0fe);' : '')) });
+
+    const DWOK = { tool: 'structure_with_studioos', o: op('ok'), who: [['Caller', '[Deploy bot] axk_[k7f3m2q9x4p1]_••••'], ['Surface', 'API'], ['Company', '[Northwind Labs]'], ['Provider', 'StudioOS'], ['Connector', 'No connector']], when: [['Started', '[21 Oct] · 14:32:07'], ['Took', '[420] ms']], tok: [['Held', '[$0.0100]'], ['Charged', '[$0.0040]'], ['Returned', '[$0.0060]'], ['Units', 'Input [1,820] · Output [412]'], ['Price list', '[m1-2026-10]']], why: '', acts: [] };
+    const DWF = { tool: 'structure_with_studioos', o: op('tok'), who: [['Caller', '[Deploy bot] axk_[k7f3m2q9x4p1]_••••'], ['Surface', 'API'], ['Company', '[Northwind Labs]'], ['Provider', 'StudioOS'], ['Connector', 'No connector']], when: [['Started', '[21 Oct] · 14:21:42'], ['Took', '[60] ms']], tok: [['Held', 'Not placed: the hold was refused'], ['Charged', 'Free'], ['Returned', '—'], ['Units', 'Not recorded: it did not run'], ['Price list', '[m1-2026-10]']], why: 'The hold of [$0.0100] could not be placed: your AI tokens and plan allowance did not cover it. The request did not run, and nothing was charged.', acts: ['Add AI tokens ›', 'See the key ›'] };
+    const DW = F.dw === 'fail' ? DWF : DWOK;
+    const ids = [['Execution', '[ex_7f3a…c21]'], ['Request', '[rq_91b2…e04]'], ['Idempotency key', 'None']];
+
+    const fails = [['Refused', 28, '#f59e0b', ''], ['Error', 14, 'var(--de,#b91c1c)', ''], ['Rate-limited', 2, '#0ea5e9', ''], ['Not enough AI tokens', 9, '#6b6577', 'pat']].map(([t, n, c, p]) => ({ t, n: '[' + n + ']', s: css('display:block;height:100%;width:' + (n / 53 * 100) + '%;' + (p ? 'background:repeating-linear-gradient(135deg,#6b6577 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px #6b6577' : 'background:' + c)), k: css('width:10px;height:10px;border-radius:3px;flex:none;' + (p ? 'background:repeating-linear-gradient(135deg,#6b6577 0 2px,transparent 2px 4px);box-shadow:inset 0 0 0 1px #6b6577' : 'background:' + c)) }));
+    const reasons = [['Missing permission', '[21]'], ['Service did not answer', '[14]'], ['Not enough AI tokens', '[9]']].map(([t, n]) => ({ t, n }));
+
+    const ph = F.ph || '';
+    const phTabs = ['MCP and services', 'API keys', 'API usage', 'Activity'].map((t) => ({ t, s: css('display:inline-flex;align-items:center;height:44px;flex:none;white-space:nowrap;font-size:13.5px;margin-bottom:-1px;border-bottom:2px solid ' + (t === (ph === 'c' || ph === 'd' ? 'Activity' : 'API usage') ? '#7c3aed;color:var(--ink,#18181b);font-weight:700' : 'transparent;color:var(--mu,#6b6577);font-weight:600')) }));
+    const wk = REQ.slice(23).map((r, i) => ({ x: DATES[23 + i].split(' ')[0], a: css('flex:none;height:' + ((r - FAI[23 + i]) / MX * 100) + '%;background:var(--vi,#7c3aed);border-radius:2px 2px 0 0'), f: css('flex:none;height:' + (FAI[23 + i] / MX * 100) + '%;background:#f59e0b') }));
+    const phCards = LOGR.filter((r) => r[0] !== 'C').slice(0, 6).map((r) => ({ t: r[0], who: r[1], tool: r[4], o: op(r[6]), tok: r[9] }));
+
+    return {
+      vars: F.dark ? DV : LV, desk: !ph, phone: !!ph, shell, side, sec, eyebrow: F.pg === 'a' ? 'Builder › Activity' : 'Builder › API usage',
+      deskS: css('position:relative;display:flex;align-items:stretch;background:var(--pg,#f4f3f7);' + (shell ? 'width:1440px;min-height:' + (F.dw ? 1160 : 400) + 'px' : 'width:' + F.cw + 'px;padding:22px;box-sizing:border-box')),
+      bodyS: css(shell ? 'display:flex;gap:24px;align-items:flex-start;padding:20px 24px 32px' : 'display:flex;flex-direction:column'),
+      bar: !!F.bar, tiles: !!F.tiles, c1: !!F.c1, c2: !!F.c2, lim: !!F.lim, foot: !!F.foot, limd: !!F.limd, abar: !!F.abar, ach: !!F.ach, fail: !!F.fail, log: !!F.log && !F.logErr, afoot: !!F.afoot, load,
+      e1: !!F.e1, e2: !!F.e2, sumErr: !!F.sumErr, logErr: !!F.logErr, c2err: !!F.c2err, c2ok: !F.c2err && !load, nodw: !!F.nodw, nokey: !!F.nokey,
+      ranges, keyF: 'All keys', cmpOn, toggleCmp: () => this.setState({ cmp: !cmpOn }), swS, knS,
+      tileList: tiles, tileGridS, days, xl, c1Sum, noneLab, chartOn: !load, tbl1, tbl1L: tbl1 ? 'View as chart' : 'View as table', tog1: () => this.setState({ tbl1: !tbl1 }), dayRows, chOn: !load && !tbl1,
+      segs, brkRows, c2Sum, c2GridS, meters, perKey, alerts,
+      adays, fails, reasons,
+      logHead, logRows, logLoad: load, skRows: [1, 2, 3, 4, 5, 6, 7, 8],
+      drawer: !!F.dw, dw: DW, dwWho: DW.who.map(([k, v]) => ({ k, v })), dwWhen: DW.when.map(([k, v]) => ({ k, v })), dwTok: DW.tok.map(([k, v]) => ({ k, v })), dwWhy: DW.why, dwActs: DW.acts.map((t) => ({ t })), dwHasWhy: !!DW.why, ids: ids.map(([k, v]) => ({ k, v })),
+      phS: css('width:390px;height:844px;position:relative;overflow:hidden;display:flex;flex-direction:column;background:var(--pg,#f4f3f7);border-radius:28px;border:1px solid var(--hl,#ececf1);box-sizing:border-box'),
+      pa: ph === 'a', pb: ph === 'b', pc: ph === 'c', pd: ph === 'd', phTabs, wk, phCards, phTiles: tiles,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

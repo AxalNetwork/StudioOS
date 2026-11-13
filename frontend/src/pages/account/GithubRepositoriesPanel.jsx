@@ -1,0 +1,290 @@
+import { useContext, useEffect, useRef, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { Pill, Unreadable } from '../../ui';
+import { api as mainApi } from '../../lib/api';
+import { connectorsApi } from '../../lib/api/connectors';
+import { BTN, INPUT, LoadingRows } from './AccountCenter';
+import { Banner, FedGroup, Group, Row, SheetFrame } from './ConnectorSheet';
+import { emptyRepoSentence, githubLink, installHref, repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from './githubSync';
+import { LOVABLE_HINT, LOVABLE_MARK, isLovable } from '../../lib/lovableMark';
+
+/**
+ * D753 F4 (#1957) — GitHub's repositories, moved out of `GithubSyncSheet.jsx`
+ * unchanged (D686 §5.4, #1597): choose what StudioOS reads, then sync it. It
+ * draws no `Sheet`. `GithubSyncSheet` frames it in Build's lightbox and on the
+ * Connectors page; GitHub's own page (D753 F3) draws it as its Repositories
+ * section.
+ *
+ * THE PROJECT. The repositories feed one project. Build passes its own; on
+ * the Connectors page it is the one already chosen (GET's `project_id`), else
+ * the member picks one. `companyId` is the project's company, sent as the
+ * header the Worker scopes the connection by (Build only).
+ *
+ * THE SYNC RUNS INSIDE ITS REQUEST, so its progress is read from
+ * `/sync-status` from the moment it starts, before the POST answers. A
+ * percentage is drawn only when the Worker reports one.
+ *
+ * `emptySlot` is drawn after the "No repository" row's words when GitHub lists
+ * none. Nothing fills it today.
+ *
+ * THE INSTALL LINK (D655 follow-up, #1884). The read keeps the GET's
+ * `needs_install` and `install_url`; the "No repository" row says when the App
+ * is not installed (`emptyRepoSentence`). With `installLinks` (GitHub's page),
+ * a line under the list holds one link to the App's install page, in a new tab
+ * (its two labels are `githubLink`'s), only when the URL is the exact shape
+ * the Worker builds, and Refresh, which reads the list again. A re-read keeps the unsaved
+ * choices GitHub still lists and drops the rest.
+ *
+ * `frame({ done, name, busy, body, footer })` lays the parts out; without one
+ * they are drawn in a plain block, with the footer below the body.
+ *
+ * SYNCED WITH LOVABLE (D1084, #2949). A repository already saved as chosen
+ * carries the founder's mark control: setting or clearing it asks first, in
+ * place, then patches the connection's config (`synced_with`). Only the
+ * connection's owner reaches it, and a sync never changes it. The list ends
+ * with how a Lovable project comes in.
+ */
+
+const POLL_MS = 1000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function plainFrame({ body, footer }) {
+  return (
+    <div data-testid="github-repositories-panel">
+      {body}
+      <div className="mx-5 mt-3 flex items-center gap-2">{footer}</div>
+    </div>
+  );
+}
+
+export default function GithubRepositoriesPanel({ p, conn, projectId = null, companyId = null, onClose, onChanged, api = connectorsApi, projectsApi = mainApi, wait = sleep, emptySlot = null, installLinks = false, frame = plainFrame }) {
+  const uid = conn?.uid;
+  // In Build's lightbox Done and Open close it all (D686 §5.4); elsewhere they close the sheet.
+  const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
+  const opts = companyId ? { companyId } : undefined;
+  const [read, setRead] = useState({ status: 'loading', available: [], message: '', installUrl: null, needsInstall: false });
+  // D1084: the repositories saved as chosen, and the founder's marks on them.
+  const [saved, setSaved] = useState(new Set());
+  const [marks, setMarks] = useState({});
+  const [marking, setMarking] = useState(null); // { repo, set } while the founder confirms
+  const [markError, setMarkError] = useState('');
+  const [markBusy, setMarkBusy] = useState(false);
+  // Each Refresh is one more read; the first takes the Worker's `selected`, later ones keep the member's choices.
+  const [reads, setReads] = useState(0);
+  const [chosen, setChosen] = useState(new Set());
+  const [project, setProject] = useState(projectId);
+  const [projects, setProjects] = useState(null);
+  const [phase, setPhase] = useState('choose'); // choose | saving | syncing | done
+  const [progress, setProgress] = useState(null);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
+
+  useEffect(() => {
+    if (!uid) return undefined;
+    let live = true;
+    api.repositories(uid, opts).then((r) => {
+      if (!live) return;
+      const available = Array.isArray(r?.available) ? r.available : [];
+      setRead({ status: 'ready', available, message: '', installUrl: installHref(r?.install_url), needsInstall: r?.needs_install === true });
+      setSaved(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
+      setMarks(r?.synced_with && typeof r.synced_with === 'object' && !Array.isArray(r.synced_with) ? r.synced_with : {});
+      if (reads === 0) setChosen(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
+      else {
+        const listed = new Set(available.map((x) => String(x?.full_name)));
+        setChosen((prev) => new Set([...prev].filter((n) => listed.has(n))));
+      }
+      if (projectId == null && r?.project_id != null) setProject((cur) => (cur == null ? Number(r.project_id) : cur));
+    }, (e) => { if (live) setRead({ status: 'refused', available: [], message: syncRefusal(e), installUrl: null, needsInstall: false }); });
+    return () => { live = false; };
+    // `opts` is derived from companyId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, uid, companyId, projectId, reads]);
+
+  const refresh = () => { setRead((r) => ({ ...r, status: 'loading' })); setReads((n) => n + 1); };
+
+  // The Connectors page has no project of its own: with none chosen yet, the member picks one.
+  const needsPicker = projectId == null && project == null && read.status === 'ready';
+  useEffect(() => {
+    if (!needsPicker || projects !== null) return undefined;
+    let live = true;
+    projectsApi.listProjects().then((r) => { if (live) setProjects(Array.isArray(r) ? r : r?.items || r?.projects || []); }, () => { if (live) setProjects(false); });
+    return () => { live = false; };
+  }, [needsPicker, projects, projectsApi]);
+
+  const confirmMark = async () => {
+    if (!marking) return;
+    setMarkBusy(true); setMarkError('');
+    try {
+      const out = await api.patchConfig(uid, { synced_with: { [marking.repo]: marking.set ? 'lovable' : null } });
+      const next = out?.config?.synced_with;
+      setMarks(next && typeof next === 'object' && !Array.isArray(next) ? next : {});
+      setMarking(null);
+    } catch (e) { setMarkError(syncRefusal(e)); } finally { setMarkBusy(false); }
+  };
+
+  const toggle = (name) => setChosen((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+
+  const syncSelected = async () => {
+    setError('');
+    setPhase('saving');
+    try {
+      await api.setRepositories(uid, [...chosen], project, opts);
+    } catch (e) {
+      setError(syncRefusal(e));
+      setPhase('choose');
+      return;
+    }
+    setPhase('syncing');
+    setProgress(syncProgress(null));
+    // Progress is read from before the POST answers: the sync runs inside it.
+    let answered = false;
+    const run = api.sync(uid, opts).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e })).finally(() => { answered = true; });
+    (async () => {
+      while (!answered && alive.current) {
+        try {
+          const st = await api.syncStatus(uid);
+          if (alive.current) setProgress(syncProgress(st));
+          if (syncFinished(st)) break;
+        } catch { /* a progress read is a convenience; the POST's answer decides */ }
+        await wait(POLL_MS);
+      }
+    })();
+    const out = await run;
+    // A sync that finished after the sheet closed (Escape or × while "Syncing…")
+    // still tells Build to re-read: the data changed whether or not anyone is looking (#1597).
+    if (out.ok) onChanged?.();
+    if (!alive.current) return;
+    if (!out.ok) {
+      setError(syncRefusal(out.e));
+      setPhase('choose');
+      return;
+    }
+    setResult(out.r || null);
+    setPhase('done');
+  };
+
+  const name = p?.display_name || 'GitHub';
+
+  if (phase === 'done') {
+    const banner = successBanner(p?.key || 'github', result);
+    return frame({
+      done: true, name, busy: false,
+      body: (
+        <>
+          {banner && <Banner tone="ok" data-testid="connect-success-banner">{banner}</Banner>}
+          <FedGroup conn={conn} name={name} projectId={project} onOpen={dismiss} />
+        </>
+      ),
+      footer: <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>,
+    });
+  }
+
+  const busy = phase === 'saving' || phase === 'syncing';
+  const link = githubLink(read);
+  const footer = (
+    <>
+      <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">Reads issues, pull requests and releases only.</span>
+      <button type="button" className={BTN.primary} disabled={busy || chosen.size === 0 || project == null || read.status !== 'ready'} onClick={syncSelected} data-testid="button-sync-selected">
+        {phase === 'saving' ? 'Saving…' : phase === 'syncing' ? 'Syncing…' : 'Sync selected'}
+      </button>
+    </>
+  );
+
+  const body = (
+    <>
+      {error && <Banner tone="danger" data-testid="sync-error">{error}</Banner>}
+      {phase === 'syncing' && progress && (
+        <div className="mx-5 mt-3" role="status" data-testid="sync-progress">
+          <p className="text-[12.5px] text-axal-ink dark:text-gray-200">
+            {progress.reading ? `Reading ${progress.reading.replace(/^Reading /, '')}` : 'Syncing…'}{progress.pct != null ? ` · ${progress.pct}%` : ''}
+          </p>
+          {progress.pct != null && (
+            <div className="mt-1 h-1.5 rounded-full bg-violet-100 dark:bg-violet-950" role="progressbar" aria-label="Sync progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.pct}>
+              <div className="h-full rounded-full bg-violet-700 dark:bg-violet-400" style={{ width: `${progress.pct}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+      {read.status === 'loading' && <div className="mx-5 mt-4"><LoadingRows lines={3} /></div>}
+      {read.status === 'refused' && <Banner tone="danger" data-testid="sync-refused">{read.message}</Banner>}
+      {needsPicker && (
+        <div className="mx-5 mt-4" data-testid="sync-project">
+          {projects === false
+            ? <Unreadable what="Your projects" claim="This is not a claim that you have none." />
+            : (
+              <label className="block text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">The project these feed
+                <select className={`${INPUT} mt-1`} value="" onChange={(e) => setProject(e.target.value ? Number(e.target.value) : null)} data-testid="sync-project-select">
+                  <option value="">Choose a project</option>
+                  {(projects || []).map((pr) => <option key={pr.id} value={pr.id}>{pr.name || pr.title || `Project ${pr.id}`}</option>)}
+                </select>
+              </label>
+            )}
+        </div>
+      )}
+      {read.status === 'ready' && (
+        <Group label="Repositories">
+          {read.available.length === 0
+            ? (
+              <>
+                <Row a="No repository" b={emptyRepoSentence(read)} />
+                {emptySlot && <div className="px-4 pb-3" data-testid="github-repositories-empty-slot">{emptySlot}</div>}
+              </>
+            )
+            : read.available.map((r) => {
+              const on = chosen.has(r.full_name);
+              const lovable = isLovable(marks[r.full_name]);
+              return (
+                <Row key={r.full_name} a={r.full_name} b={lovable ? `${repoLine(r)} · ${LOVABLE_MARK}` : repoLine(r)}
+                  action={(
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {saved.has(r.full_name) && (
+                        <button type="button" aria-pressed={lovable} onClick={() => { setMarkError(''); setMarking({ repo: r.full_name, set: !lovable }); }} disabled={busy || markBusy}
+                          data-testid={`repo-lovable-${r.full_name}`} className={BTN.link}>
+                          {lovable ? 'Clear Lovable mark' : 'Mark synced with Lovable'}
+                        </button>
+                      )}
+                      <button type="button" aria-pressed={on} onClick={() => toggle(r.full_name)} disabled={busy} data-testid={`repo-${r.full_name}`}
+                        className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+                        {on ? 'Selected' : 'Not selected'}
+                      </button>
+                    </span>
+                  )} />
+              );
+            })}
+        </Group>
+      )}
+      {installLinks && (read.status === 'ready' || read.status === 'refused') && (
+        <div className="mx-5 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1" data-testid="sync-github-links">
+          {link && (
+            <a className={BTN.link} href={link.href} target="_blank" rel="noreferrer" data-testid="github-install-link">
+              {link.label} <ExternalLink size={11} className="inline" aria-hidden="true" />
+            </a>
+          )}
+          <button type="button" className={BTN.link} onClick={refresh} disabled={busy} data-testid="button-repos-refresh">Refresh</button>
+        </div>
+      )}
+      {marking && (
+        <div role="group" aria-label={marking.set ? `Mark ${marking.repo} synced with Lovable` : `Clear the Lovable mark on ${marking.repo}`}
+          className="mx-5 mt-3 flex flex-col gap-2 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60" data-testid="repo-lovable-confirm">
+          <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">
+            {marking.set ? `Mark ${marking.repo} as synced with Lovable?` : `Clear the Lovable mark on ${marking.repo}?`}
+          </p>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">
+            {marking.set ? `Build shows "${LOVABLE_MARK}" beside this repository. Only you can clear it; a sync never changes it.` : 'Build stops showing the mark. What GitHub feeds from this repository is unchanged.'}
+          </p>
+          {markError && <p role="alert" className="m-0 text-[12px] text-axal-destructive dark:text-red-300" data-testid="repo-lovable-error">{markError}</p>}
+          <span className="flex gap-2">
+            <button type="button" className={BTN.ghost} onClick={() => setMarking(null)} disabled={markBusy}>Back</button>
+            <button type="button" className={BTN.primary} onClick={confirmMark} disabled={markBusy} data-testid="repo-lovable-confirm-button">{marking.set ? 'Mark it' : 'Clear it'}</button>
+          </span>
+        </div>
+      )}
+      {read.status === 'ready' && <p className="mx-5 mt-2 text-[11.5px] text-axal-muted dark:text-gray-400"><Pill tone="neutral">{chosen.size} selected</Pill></p>}
+      {(read.status === 'ready' || read.status === 'refused') && <p className="mx-5 mt-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="github-lovable-hint">{LOVABLE_HINT}</p>}
+    </>
+  );
+
+  return frame({ done: false, name, busy, body, footer });
+}

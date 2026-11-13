@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#6b6577">Axal VC · /studio</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Studio modularity</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The fixed core of every Studio (Eadwyn’s interview, the profile card and, for founders only, the Studio strip), then a grid of modules each member arranges from their own profile’s catalogue. At most 12 placed modules, in thirds, halves or full width. The layout is per member and profile, never per venture.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1440px;font-size:13px;line-height:1.5;color:#3f3a47">{{ b.note }}</p></sc-if>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;max-width:2944px">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Studio Modularity Page" v="{{ f.v }}" hint-size="1440px,1000px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const fr = (v, w, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const RENAME = { SM9: ['Eadwyn’s layout proposals, in the chat', 'AI layout proposals (pending owner). Studio has no AIRail and no Ask: proposals arrive as inline cards in Eadwyn’s chat, and nothing changes until you accept.'], SM10: ['AI states, in the chat', ''] };
+    const boards0 = [
+      B('SM0', 'Page canvas · founder, outside a Lab cohort', [fr('sm0', 1440)], 'AIRail closed. Ask carries “[2] waiting” while Eadwyn’s questions wait. Outside a cohort, Modules active and Tasks done read Not recorded, with the reason on hover.'),
+      B('SM1', 'Founder default layout · in a Lab cohort', [fr('sm1', 1440)], 'Day-one default = today’s blocks minus the two removed (pending owner).'),
+      B('SM2', 'Investor default layout', [fr('sm2', 1440)], 'No strip. The compact profile-fit band sits under the chat. Customise is the primary.'),
+      B('SM3', 'Advisor default layout', [fr('sm3', 1440)]),
+      B('SM4', 'Operating partner default layout', [fr('sm4', 1440)]),
+      B('SM5', 'Edit mode · Customise', [fr('sm5', 1440, 'One card mid-drag, one ⋯ menu open'), fr('sm5s', 980, 'Done: Saving…, then Saved'), fr('sm5r', 520, 'Reset to default asks first')], 'Fixed blocks dim slightly and keep their lock. They have no handle, no × and no size control.'),
+      B('SM6', 'Module map lightbox', [fr('sm6', 1440, 'Founder · Validate + Build'), fr('sm6c', 1008, '12 placed: Add is off'), fr('sm6n', 1008, 'A search with no result'), fr('sm6i', 1008, 'Investor example · Included in Investor Pro')], 'Recommended = unplaced default modules (pending owner).'),
+      B('SM7', 'The module tile · five states', [fr('sm7', 1200)], 'The only red is the small error icon. Not recorded is never a 0 and never red.'),
+      B('SM8', 'Layout notices', [fr('sm8a', 1180, '(a) The layout read failed'), fr('sm8b', 1180, '(b) A saved module left the plan'), fr('sm8c', 1180, '(c) Saved in another tab'), fr('sm8d', 1440, '(d) Everything removed')], 'An empty saved layout is the member’s choice. It stays empty and does not fall back to the default.'),
+      B('SM9', 'Ask panel open on Studio', [fr('sm9', 1440)], 'AI layout proposals (pending owner). The panel docks to the AIRail’s left edge between header and footer, and the content narrows beside it.'),
+      B('SM10', 'AI states', [fr('sm10a', 1040, 'Running'), fr('sm10b', 1040, 'Nothing to propose'), fr('sm10c', 1040, 'Out of AI tokens'), fr('sm10d', 1040, 'AI paused'), fr('sm10e', 1040, 'Error'), fr('sm10f', 900, 'Ask button states · accessible names')]),
+      B('SM11', 'Read-only admin access · investor Studio preview', [fr('sm11', 1440)], 'No Customise, no Module map, no Ask.'),
+      B('SM12', 'Permission refused and locked detail', [fr('sm12a', 1440, '(a) An Explorer opens Customise'), fr('sm12b', 1440, '(b) A plan-locked module in the right Sheet')]),
+      B('SM13', 'Phone · 390', [fr('sm13a', 390, 'Founder'), fr('sm13b', 390, 'Customise · long-press, Move up and Move down'), fr('sm13c', 390, 'Ask as a bottom sheet'), fr('sm13d', 390, 'Investor · no strip')], 'Founder modules on phone, superseding D701’s no-zone phone page (pending owner). Ask is an icon in the header, with an amber dot while proposals wait.'),
+      B('SM14', 'Tablet · 768', [fr('sm14', 768)], 'The profile card moves below the strip. Thirds and halves become half width; full stays full. The Ask panel overlays the content only.'),
+      B('SM15', 'Dark', [fr('sm1-d', 1440, 'SM1'), fr('sm5-d', 1440, 'SM5'), fr('sm6-d', 1440, 'SM6')])
+    ];
+    const NOTES = { SM5: 'The Eadwyn AI card (with your founder profile inside it) and the Studio strip stay in place: they dim slightly, with no handle, no × and no size control. The strip keeps its lock.', SM0: 'No AIRail and no Ask on Studio: Eadwyn works in the chat. Outside a cohort, Modules active and Tasks done read Not recorded, with the reason on hover.', SM11: 'No Customise and no Module map. Eadwyn is off in the chat while an administrator previews.', SM13: 'Founder modules on phone, superseding D701’s no-zone phone page (pending owner).', SM14: 'The profile card moves below the strip. Thirds and halves become half width; full stays full.' };
+    const boards = boards0.map(b => {
+      const r = RENAME[b.id]; const n = NOTES[b.id];
+      const frames = b.frames.filter(f => f.v !== 'sm10f').map(f => f.v === 'sm13c' ? Object.assign({}, f, { cap: 'Eadwyn’s proposals in the chat' }) : f);
+      const note = r ? r[1] : (n !== undefined ? n : b.note);
+      return Object.assign({}, b, { t: r ? r[0] : b.t, frames, note, noteOn: !!note });
+    });
+    return { boards };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <sc-if value="{{ v.strip }}" hint-placeholder-val="{{ false }}"><nav aria-label="Platform" style="{{ v.stripS }}"><sc-for list="{{ v.strip }}" as="sp" hint-placeholder-count="11"><a href="{{ sp.href }}" style="{{ sp.s }}">{{ sp.t }}</a></sc-for></nav></sc-if><div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;BNK1&quot;,&quot;options&quot;:[&quot;BNK1&quot;,&quot;BNK2&quot;,&quot;BNK2s&quot;,&quot;BNK3&quot;,&quot;BNK4&quot;,&quot;BNK5&quot;,&quot;BNK6&quot;,&quot;BNK7&quot;,&quot;BNK8a&quot;,&quot;BNK8b&quot;,&quot;BNK9&quot;,&quot;BNK10a&quot;,&quot;BNK10b&quot;,&quot;BNK10c&quot;,&quot;BNK11a&quot;,&quot;BNK11b&quot;,&quot;BNK12a&quot;,&quot;BNK12b&quot;,&quot;BNK12c&quot;,&quot;BNK12d&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'BNK1';
+    const dark = B === 'BNK4', phone = /^BNK12/.test(B);
+    const crop = ['BNK2s', 'BNK6', 'BNK7'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const MN3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const LINE = 'font-size:13px;font-weight:500;line-height:1.5', NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink, BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap', PCOL = 'display:flex;flex-direction:column;gap:14px;min-width:0';
+    const btnDF = BTN + 'border:1px solid ' + c.neg + ';background:' + c.neg + ';color:#fff';
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const NRS = PILL + 'color:' + c.mu + ';background:' + c.card + ';border:1px dashed ' + c.mu;
+    const MS = 'font:600 12px ' + MO + ';color:' + c.mu, MB = { ts: 'font-family:' + MO + ';font-weight:700' };
+    const FX = (a) => a.map(x => Object.assign({ sub: false }, x));
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const EC = { h: S[0], m: S[1], g: S[2], f: S[3], o: S[4] };
+    const ENT = { h: ['Holdings', '[Holdings legal name]'], m: ['Management', '[Management legal name]'], g: ['GP', '[GP legal name]'], f: ['Fund I', '[Fund I legal name]'] };
+    const MASK = (e) => '••••' + e;
+    const EDOT = (k) => CL(ENT[k][0], { ts: 'font-weight:700;padding-left:16px;background:radial-gradient(circle at 5px 9px,' + EC[k] + ' 0 4.5px,transparent 5px)' });
+    const LEGAL = (k) => ({ t: ENT[k][1], s: 'display:inline-flex;align-items:center;font-size:12.5px;color:' + c.mu });
+    const MENU = (k) => ({ t: '⋯', tip: 'Sync now · ' + (k === 'f' ? 'Connect Mercury' : 'Replace token') + ' · Disconnect… · Add an account for ' + ENT[k][0], s: 'display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;box-sizing:border-box;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font-weight:800' });
+    const CONN = { ok: pl('✓', 'Connected, read-only, last synced 2 h ago', 'g'), att: pl('!', 'Needs attention', 'a'), nr: pl('–', 'Not read', 'n') };
+    const NOCONN = (n) => pl('!', 'Not connected: add a read-only Mercury API token for ' + n, 'a');
+    const FOOTK = (x) => K({ cs: PLAIN, note: (x ? x + ' ' : '') + 'Opening this page is recorded in the admin audit log.', ns: 'margin:0;font-size:12px;color:' + c.mu });
+    const ACC = [['h', 'Operating', 'Checking', '4821', ['Platform licence fee', 'Territory licence fee'], '$412,560.18', '$409,900.00', 'm', 'a'], ['h', 'Reserve', 'Savings', '1937', 0, '$1,250,000.00', '$1,250,000.00', 'm', 'a'], ['h', 'Old operating', 'Checking', '5540', 0, 0, 0, 'x', 'r'], ['m', 'Operating', 'Checking', '7730', [], '$86,340.55', '$86,340.55', 'm', 'a'], ['m', 'Reserve', 'Savings', '0562', 0, '$200,000.00', '$200,000.00', 'm', 'a'], ['g', 'Operating', 'Checking', '3318', ['Management fee'], '$54,120.00', '$51,800.00', 'm', 'a'], ['g', 'Reserve', 'Savings', '6604', 0, 'NR', 'NR', 'm', 'a']];
+    const payTxt = (a) => a[2] === 'Savings' ? 'Reserve: never printed on a notice' : !a[4] || !a[4].length ? 'No notice purpose' : a[4].join(' · ');
+    const merPill = (a, nr) => nr ? pl('–', 'Not read', 'n') : a[7] === 'm' ? pl('✓', 'Matched', 'g') : a[7] === 'x' ? pl('!', 'Not seen in Mercury', 'a') : pl('', 'Not connected', 'n');
+    const stPill = (a) => a[8] === 'a' ? pl('●', 'Active', 'g') : pl('–', 'Retired', 'n');
+    const accRow = (a, o) => { const nr = o.mer === 'nr', p = payTxt(a);
+      const bal = a[8] === 'r' ? CL('—', MU) : nr ? CL('Could not be read', { ts: 'font-size:12px;font-weight:600;color:' + c.mu }) : a[5] === 'NR' ? CL('Not recorded', { ts: NRS, tip: 'Mercury sent no balance for this account' }) : CL('[' + a[5] + ']', { ts: 'font-family:' + MO + ';font-weight:700', sub: 'as of 08:00' });
+      return [CL(a[1], { ts: 'font-weight:700', sub: a[2] }), CL(MASK(a[3]), { ts: 'font-family:' + MO + ';font-weight:600', tip: 'ending ' + a[3].split('').join(' ') }), a[4] && a[4].length ? CL(p, { ts: 'font-size:12.5px;line-height:1.4' }) : CL(p, MU), bal, CL('', { pill: merPill(a, nr) }), CL('', { pill: stPill(a) }), DOTS]; };
+    const FOOTS = { h: 'Platform licence fee: paid into ••••4821. Territory licence fee: paid into ••••4821.', m: 'Management takes no payment through the registry.', g: 'Management fee: paid into ••••3318.' };
+    const entT = (k, o) => { o = o || {}; const act = ACC.filter(a => a[0] === k && a[8] === 'a'), ret = ACC.filter(a => a[0] === k && a[8] === 'r'), rows = act.map(a => accRow(a, o)); let xi = -1;
+      if (ret.length) rows.push([CL('Show 1 retired account ▾', { ts: 'font-weight:700;color:' + c.vt, sub: 'Old operating ••••5540 · retired 12 Oct 2026 · ‘Moved to the new operating account’' }), '', '', '', '', '', '']);
+      if (k === 'h') { xi = rows.length; rows.push([CL('Mercury also reads ••••9012 [Card account]', { ts: 'font-weight:700;color:' + c.mu, sub: 'It is not in the registry, so no notice prints it and no receipt is matched to it.' }), '', '', o.mer === 'nr' ? CL('Could not be read', MU) : CL('[$3,210.40]', { ts: 'font-family:' + MO + ';font-weight:700;color:' + c.mu }), CL('Add it to the registry', LK), '', '']); }
+      const t = TB({ title: ENT[k][0], tbar: { search: false, chips: [LEGAL(k), o.mer === 'nr' ? CONN.nr : o.att && k === 'g' ? CONN.att : CONN.ok, MENU(k)] }, pager: false, gc: '1.2fr .8fr 1.55fr 1.1fr 1.15fr .75fr .3fr', minW: 780, cols: ['Account', 'Ending', 'Payments', 'Balance', 'Mercury', 'State', ''], rows, foot: FOOTS[k] });
+      if (xi >= 0) t.rows[xi].s += ';border-top:1px dashed ' + c.mu; return t; };
+    const AMBOX = (t, act) => R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:14px;margin-top:4px;border-radius:10px;border:1.5px dashed ' + c.amE + ';background:' + c.amBg, lead: '!', ls: 'font-weight:800;flex:none;color:' + c.amT, t, ts: 'font-size:13px;font-weight:700;color:' + c.amT, act: act || false, as: btnS });
+    const fundK = (o) => { o = o || {}; return K({ title: 'Fund I', tags: [LEGAL('f'), o.mer === 'nr' ? CONN.nr : NOCONN('Fund I'), MENU('f')], note: 'Fund I is [Fund I legal name] (fund [#12]). Its capital calls are paid into the Fund’s account below.', ns: NS1, rows: [AMBOX('No account on file. Capital calls can’t issue until the Fund has one.', 'Add Fund I’s account')] }); };
+    const emptyEnt = (k) => K({ title: ENT[k][0], tags: [LEGAL(k), k === 'f' ? NOCONN('Fund I') : CONN.ok, MENU(k)], rows: [R({ rs: 'display:flex;gap:11px;align-items:center;padding:14px;border-radius:10px;border:1.5px dashed ' + c.mu, t: 'No account on file.', ts: 'font-size:13px;font-weight:700;color:' + c.mu, act: 'Add an account for ' + ENT[k][0], as: btnSm })] });
+    const PAYS = [['Capital contributions', 'f', 0, 'capital contributions'], ['GP commitment', 'f', 0, 'GP commitment'], ['Management fee', 'g', '3318', 'management fee'], ['Platform licence fee', 'h', '4821', 'platform licence fee'], ['Territory licence fee', 'h', '4821', 'territory licence fee']];
+    const covK = (o) => { o = o || {}; const e = o.empty, rows = [ERR(e ? '5 of 5 payments cannot be printed. Notices print no payment instructions until each entity has an account.' : '2 of 5 payments cannot be printed. Fund I capital calls cannot issue until the Fund has an account.', 'a', e ? false : [{ t: 'Add Fund I’s account', s: btnS }])];
+      PAYS.forEach(([p, k, acc, w]) => { const ok = acc && !e; rows.push(R({ lead: '\u00a0', ls: 'width:10px;height:10px;border-radius:999px;flex:none;margin-top:5px;background:' + EC[k], t: p, ts: 'font-size:13.5px;font-weight:700', sub: ok ? false : 'A notice reads: ' + ENT[k][1] + ' has no bank account for ' + w + ' yet, so no payment instructions can be given.', ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45', v: ENT[k][0] + ' · ' + (ok ? 'Operating ' + MASK(acc) : '—'), vs: MS, st: ok ? pl('✓', 'Paid here', 'g') : pl('!', 'Refused', 'a') })); });
+      rows.push(R({ rs: 'display:flex;gap:8px;align-items:center;padding:10px 0 0;border-top:1px solid ' + c.hair, lead: o.open ? '▾' : '▸', ls: 'flex:none;color:' + c.vt, t: 'Why a notice refuses', ts: 'font-size:13px;font-weight:700;color:' + c.vt, sub: o.open ? false : 'Four reasons, each with the sentence a notice prints.' }));
+      if (o.open) [['No account for this payment', '[Holdings legal name] has no bank account for platform licence fee yet, so no payment instructions can be given.'], ['The holder is not the payee', 'The account on file belongs to [Management legal name], not [GP legal name], so no payment instructions can be given.'], ['A reserve account cannot receive payments', 'This account is a reserve and cannot receive payments, so no payment instructions can be given.'], ['Fund I has no account', '[Fund I legal name] has no bank account for capital contributions yet, so no payment instructions can be given.']].forEach(([t, s2]) => rows.push(R({ rs: 'display:flex;padding:6px 0 6px 18px', t, ts: 'font-size:12.5px;font-weight:700', sub: 'A notice reads: ' + s2, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })));
+      return K({ title: 'Where each payment goes', meta: e ? '[0] of [5] can print' : '[3] of [5] can print', ms: MS, rows }); };
+    const accCols = (o) => { o = o || {}; return (o.pre || []).concat([col([covK(o)]), col([entT('h', o)]), col([entT('m', o)]), col([entT('g', o)]), col([fundK(o)]), col([FOOTK()])]); };
+    const VAL = (n, i) => n + 12560.18 * i / 89 + 7000 * Math.sin(i / 5);
+    const sparkSvg = (W) => { const H = 64, vals = []; for (let i = 0; i < 90; i++) vals.push(i === 89 ? 412560.18 : VAL(400000, i)); const mn = 385000, mx = 425000, X = (i) => +(2 + i * (W - 4) / 89).toFixed(1), Y = (v) => +(H - 6 - (v - mn) / (mx - mn) * (H - 14)).toFixed(1); let d = '';
+      vals.forEach((v, i) => { if (i >= 42 && i <= 48) return; d += (i === 0 || i === 49 ? 'M' : 'L') + X(i) + ' ' + Y(v); });
+      return { __html: svgOpen(W, H, 'End-of-day balance of the account ending 4 8 2 1 over 90 days, rising from about 400,000 to 412,560.18 dollars. Seven days in September are not recorded.') + '<path d="' + d + '" fill="none" stroke="' + S[0] + '" stroke-width="2"/><line x1="' + X(41) + '" x2="' + X(49) + '" y1="' + Y(vals[41]) + '" y2="' + Y(vals[49]) + '" stroke="' + c.mu + '" stroke-width="1.2" stroke-dasharray="3 3"><title>Not recorded</title></line><text x="' + ((X(41) + X(49)) / 2) + '" y="10" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="9.5" fill="' + c.mu + '">Not recorded</text></svg>' }; };
+    const TXN = [['21 Oct', '[LP Name]', '+[$25,000.00]', 'g', 'Matched'], ['20 Oct', '[Software vendor]', '−[$1,240.00]', 'n', 'Not a receipt'], ['18 Oct', '[Studio Lisbon]', '+[$12,000.00]', 'a', 'Unmatched'], ['15 Oct', '[Payroll provider]', '−[$38,400.00]', 'n', 'Not a receipt'], ['14 Oct', '[Studio Seoul]', '+[$9,000.00]', 'a', 'Unmatched']];
+    const noticeK = () => K({ cs: 'display:flex;flex-direction:column;gap:2px;padding:14px 16px;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, eye: 'HOW A NOTICE PRINTS IT', rows: [['Pay to', '[Holdings legal name]'], ['Bank', 'Mercury · [Partner bank]'], ['ABA', '[routing number]'], ['SWIFT', '[SWIFT code]'], ['Account', '••••4821'], ['Reference', '[Reference]']].map(([k2, v2]) => R({ rs: 'display:flex;gap:9px;padding:3px 0', t: k2, ts: 'font-size:12.5px;color:' + c.mu + ';width:90px;flex:none', v: v2, vs: 'font:600 12.5px ' + MO + ';color:' + c.ink })).concat([R({ rs: 'display:flex;padding:8px 0 0', t: 'Before you send money, call us to confirm these details on a phone number you already hold for Axal, never one given in an email or on this page. Axal never changes its payment instructions by email.', ts: 'font-size:12.5px;font-weight:600;line-height:1.5;color:' + c.amT })]) });
+    const drawer = (sav) => [K({ cs: PLAIN, eye: 'ACCOUNT · HOLDINGS', title: sav ? 'Reserve ••••1937' : 'Operating ••••4821', hs: H18, meta: 'Esc to close', tags: [pl('', sav ? 'Savings' : 'Checking', 'n'), pl('●', 'Active', 'g')], btns: [{ t: 'Reveal full number…', s: btnS }, { t: '⋯', s: btnG }] }),
+      K({ cs: SEC, title: 'Payment instructions', hs: eyeS, facts: FX([{ k: 'Beneficiary', v: '[Holdings legal name]' }, { k: 'Beneficiary address', v: '[Beneficiary address]' }, { k: 'Bank', v: 'Mercury · [Partner bank]' }, { k: 'Bank address', v: '[Bank address]' }, { k: 'ABA', v: '[routing number]' }, { k: 'Alternate ABA', v: 'Not recorded' }, { k: 'SWIFT', v: '[SWIFT code]' }, { k: 'Intermediary SWIFT', v: 'Not recorded' }, { k: 'Account', v: sav ? '••••1937' : '••••4821' }, { k: 'Added', v: '12 Oct 2026', sub: 'by [Admin Name]' }]), foot: 'These never change. To change them, retire this account and add another.' }),
+      K({ cs: SEC, title: 'Payments it takes', hs: eyeS, note: sav ? 'Reserve: never printed on a notice. A savings account takes no payments.' : 'Platform licence fee · Territory licence fee. Licence-fee invoices print this account.', ns: NS1 })].concat(sav ? [] : [noticeK()]).concat([
+      K({ cs: SEC, title: 'In Mercury', hs: eyeS, rows: [R({ t: 'Current', v: sav ? '[$1,250,000.00]' : '[$412,560.18]', vs: 'font:700 13px ' + MO + ';color:' + c.ink }), R({ t: 'Available', v: sav ? '[$1,250,000.00]' : '[$409,900.00]', vs: 'font:700 13px ' + MO + ';color:' + c.ink }), R({ rs: 'display:flex;padding:4px 0 0', t: 'as of 21 Oct 2026, 08:00', ts: 'font:500 11.5px ' + MO + ';color:' + c.mu })], svg: sav ? false : sparkSvg(520) }),
+      K({ cs: SEC, title: 'Latest lines', hs: eyeS, rows: TXN.map(x => R({ t: x[1], ts: 'font-size:13px;font-weight:700', sub: '[' + x[0] + ' 2026]', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, v: x[2], vs: 'font:700 12.5px ' + MO + ';color:' + c.ink, st: pl(x[3] === 'g' ? '✓' : x[3] === 'a' ? '!' : '–', x[4], x[3]) })), btns: [{ t: 'All transactions in Fund admin › Banking →', s: btnG }] }),
+      K({ cs: SEC, title: 'History of this account', hs: eyeS, rows: [['21 Oct 2026, 09:14', 'Reveal', '[Admin Name] · ‘Checking the number against the bank before the Q4 licence invoice.’'], ['12 Oct 2026, 11:42', 'Payments changed', '[Admin Name] · Added: Platform licence fee · Territory licence fee'], ['12 Oct 2026, 11:41', 'Added', '[Admin Name] · Operating checking ••••4821']].map(([d2, e2, x2]) => R({ t: x2, ts: 'font-size:12.5px;font-weight:600;line-height:1.45', sub: d2, ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, st: pl(e2 === 'Reveal' ? '◉' : '•', e2, e2 === 'Reveal' ? 'v' : 'n') })), btns: [{ t: 'See all in History →', s: btnG }] }),
+      K({ cs: SEC, btns: [{ t: 'Close', s: btnS }], bs: BTNR })]);
+    const D90 = []; for (let i = 0; i < 90; i++) { const d = new Date(Date.UTC(2026, 6, 24) + i * 864e5); D90.push('[' + d.getUTCDate() + ' ' + MN3[d.getUTCMonth()] + ']'); }
+    const HS = [], MG = [], GS = []; for (let i = 0; i < 90; i++) { const t = i / 89; HS.push(1600000 + 62560.18 * t + 24000 * Math.sin(i / 7)); MG.push(300000 - 13659.45 * t + 8000 * Math.sin(i / 4 + 1)); GS.push(40000 + 14120 * t + 3000 * Math.sin(i / 3)); }
+    HS[89] = 1662560.18; MG[89] = 286340.55; GS[89] = 54120;
+    const areaSvg = (W) => { const ph = W < 500, H = ph ? 240 : 290, L = ph ? 44 : 60, T = 24, iw = W - L - (ph ? 10 : 150), ih = H - T - 30, X = (i) => +(L + i * iw / 89).toFixed(1), Y = (v) => +(T + ih - v / 2500000 * ih).toFixed(1);
+      let s = svgOpen(W, H, 'Cash by entity over 90 days, ending at 2,003,020.73 dollars on 21 October: Holdings 1,662,560.18, Management 286,340.55 and GP 54,120. Fund I is not connected. Seven days in September have no Management snapshot and are not recorded.');
+      for (let v = 0; v <= 2500000; v += 500000) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 7) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (v ? '$' + (v / 1e6).toFixed(1) + 'M' : '0') + '</text>';
+      for (let i = 0; i < 90; i += ph ? 28 : 14) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + D90[i] + '</text>';
+      const LY = [[HS, S[0], 'Holdings'], [MG, S[1], 'Management'], [GS, S[2], 'GP']];
+      [[0, 41], [49, 89]].forEach(([a, b]) => { let base = []; for (let i = a; i <= b; i++) base.push(0); LY.forEach(([arr, col2, nm]) => { let d = ''; const nb = []; for (let i = a; i <= b; i++) { const y1 = base[i - a] + arr[i]; nb.push(y1); d += (i === a ? 'M' : 'L') + X(i) + ' ' + Y(y1); } for (let i = b; i >= a; i--) d += 'L' + X(i) + ' ' + Y(base[i - a]); s += '<path d="' + d + 'Z" fill="' + col2 + '" stroke="' + c.card + '" stroke-width=".6"><title>' + nm + ' · ' + D90[a] + ' to ' + D90[b] + '</title></path>'; base = nb; }); });
+      s += '<rect x="' + X(41) + '" y="' + T + '" width="' + (X(49) - X(41)).toFixed(1) + '" height="' + ih + '" fill="none" stroke="' + c.mu + '" stroke-dasharray="4 3"><title>' + D90[42] + ' to ' + D90[48] + ' · Not recorded: no Management snapshot</title></rect><text x="' + ((X(41) + X(49)) / 2).toFixed(1) + '" y="' + (T - 7) + '" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="10.5" fill="' + c.mu + '">Not recorded</text>';
+      if (!ph) { const tot = HS[89] + MG[89] + GS[89], lx = L + iw + 10; [[HS[89] / 2, 'Holdings [$1,662,560.18]'], [HS[89] + MG[89] / 2, 'Management [$286,340.55]'], [tot + 60000, 'GP [$54,120.00]']].forEach(([v2, t2]) => { s += '<text x="' + lx + '" y="' + (Y(v2) + 4) + '" font-family="Space Grotesk,sans-serif" font-size="11" fill="' + c.ink + '">' + t2 + '</text>'; }); }
+      return { __html: s + '</svg>' }; };
+    const ELEG = [{ t: 'Holdings', sw: dotSw(S[0]) }, { t: 'Management', sw: dotSw(S[1]) }, { t: 'GP', sw: dotSw(S[2]) }, { t: 'Fund I · not connected', sw: 'width:10px;height:10px;border-radius:999px;flex:none;box-sizing:border-box;border:1.5px dashed ' + S[3] }];
+    const NRSW = { t: 'Not recorded', sw: 'width:14px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px dashed ' + c.mu };
+    const areaK = (W) => K({ title: 'Cash by entity', tog: TOG(), tbar: { search: false, chips: [tag('30 days'), tag('90 days', true), tag('12 months'), tag('Show by account')] }, legend: ELEG.concat([NRSW]), svg: areaSvg(W), foot: 'End-of-day current balance. Hover a day for each entity and the total.' });
+    const MO6 = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+    const IN = { h: [120, 95, 140, 110, 130, 60], m: [60, 62, 58, 64, 61, 30], g: [45, 45, 45, 47, 45, 22] }, OUT = { h: [80, 85, 90, 88, 92, 41], m: [70, 72, 69, 75, 71, 38], g: [30, 32, 29, 33, 31, 15] };
+    const mioSvg = (W) => { const ph = W < 500, H = 300, L = ph ? 44 : 60, T = 18, iw = W - L - 12, ih = H - T - 32, mid = T + ih / 2, sc = (ih / 2) / 250, step = iw / 6, bw = step * (ph ? .6 : .46), pid = 'mh' + B;
+      let s = svgOpen(W, H, 'Money in and out by month, May to October 2026, by entity. In October so far 112 thousand dollars came in and 94 thousand went out.') + '<defs><pattern id="' + pid + '" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="' + c.card + '" stroke-width="2.2"/></pattern></defs>';
+      [-250, -125, 0, 125, 250].forEach(v => { s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + (mid - v * sc) + '" y2="' + (mid - v * sc) + '" stroke="' + (v ? c.hair : c.mu) + '"/><text x="' + (L - 7) + '" y="' + (mid - v * sc + 4) + '" text-anchor="end" font-size="10.5" fill="' + c.mu + '">' + (v ? (v < 0 ? '−' : '') + '$' + Math.abs(v) + 'k' : '0') + '</text>'; });
+      s += '<text x="' + (L + 4) + '" y="' + (T + 10) + '" font-family="Space Grotesk,sans-serif" font-size="10.5" fill="' + c.mu + '">In</text><text x="' + (L + 4) + '" y="' + (T + ih - 2) + '" font-family="Space Grotesk,sans-serif" font-size="10.5" fill="' + c.mu + '">Out</text>';
+      MO6.forEach((m, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === 5; let up = 0, dn = 0;
+        ['h', 'm', 'g'].forEach(e => { const vi = IN[e][i], vo = OUT[e][i]; s += '<rect x="' + x + '" y="' + (mid - (up + vi) * sc).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (vi * sc).toFixed(1) + '" fill="' + EC[e] + '" stroke="' + c.card + '" stroke-width=".8"><title>[' + m + '] · ' + ENT[e][0] + ' in [$' + vi + 'k]' + (cur ? ' to date' : '') + '</title></rect><rect x="' + x + '" y="' + (mid + dn * sc).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + (vo * sc).toFixed(1) + '" fill="' + EC[e] + '" stroke="' + c.card + '" stroke-width=".8"><title>[' + m + '] · ' + ENT[e][0] + ' out [$' + vo + 'k]' + (cur ? ' to date' : '') + '</title></rect>'; up += vi; dn += vo; });
+        if (cur) s += '<rect x="' + x + '" y="' + (mid - up * sc).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + ((up + dn) * sc).toFixed(1) + '" fill="url(#' + pid + ')" pointer-events="none"/>';
+        s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (mid - up * sc - 5).toFixed(1) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + c.ink + '">+[$' + up + 'k]</text><text x="' + (x + bw / 2).toFixed(1) + '" y="' + (mid + dn * sc + 12).toFixed(1) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + c.ink + '">−[$' + dn + 'k]</text><text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle" font-family="Space Grotesk,sans-serif" font-size="11" fill="' + c.ink + '">[' + m + ']' + (cur ? ' · to date' : '') + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const mioK = (W) => K({ title: 'Money in and out by month', tog: TOG(), tbar: { search: false, chips: [tag('All', true), tag('Holdings'), tag('Management'), tag('GP'), tag('Fund I')] }, legend: ELEG.concat([{ t: 'Hatched · this month, to date', sw: 'width:14px;height:10px;border-radius:3px;flex:none;background:repeating-linear-gradient(45deg,' + c.mu + ' 0 1.5px,' + c.card + ' 1.5px 5px)' }]), svg: mioSvg(W), foot: 'Moves between Axal’s own accounts are not counted.' });
+    const cashTiles = (n) => TL([['Cash across entities', '[$2,003,020.73]', 'Registered accounts, 5 of 6 read · as of 08:00'], ['Available', '[$1,998,040.55]', 'Excludes pending debits'], ['Unmatched receipts', '[3]', 'Holdings 2 · GP 1 · Fund I not connected · Match in Fund admin › Banking › Reconciliation'], ['Accounts without a balance', '[1]', 'GP ••••6604: Mercury sent no balance']], n);
+    const balT = () => TB({ title: 'Balances', tbar: { search: false, chips: [tag('Sort: Entity ▾')] }, pager: false, gc: '1.05fr 1fr .8fr 1.15fr 1.15fr 1.25fr 1.2fr', minW: 860, cols: ['Entity', 'Account', 'Ending', 'Current', 'Available', 'As of', 'Registry'], rows: ACC.filter(a => a[8] === 'a').map(a => [EDOT(a[0]), a[1], CL(MASK(a[3]), MN), a[5] === 'NR' ? CL('Not recorded', { ts: NRS, tip: 'Mercury sent no balance for this account' }) : CL('[' + a[5] + ']', MB), a[6] === 'NR' ? CL('Not recorded', { ts: NRS, tip: 'Mercury sent no balance for this account' }) : CL('[' + a[6] + ']', MN), a[5] === 'NR' ? CL('—', MU) : CL('21 Oct 2026, 08:00', MN), CL('In the registry', { ts: 'font-size:12px;color:' + c.mu })]).concat([[EDOT('h'), '[Card account]', CL('••••9012', MN), CL('[$3,210.40]', MB), CL('Not recorded', { ts: NRS, tip: 'Mercury sent a current balance only' }), CL('21 Oct 2026, 08:00', MN), CL('', { pill: pl('!', 'Not in the registry', 'a') })]]), foot: 'Cash across entities adds Current over the registry’s active accounts that have a balance, so ••••9012 is not in it.' });
+    const cashCols = () => [col([cashTiles(4)]), col([areaK(1060)]), col([mioK(1060)]), col([balT()]), col([K({ title: 'Reconcile receipts', note: 'Match receipts against capital calls and fees in Fund admin › Banking › Reconciliation. No matching happens here.', ns: NS1, btns: [{ t: 'Open Reconciliation →', s: btnG }] })]), col([FOOTK('Mercury is read once an hour. Everything here is read-only.')])];
+    const HR = [['21 Oct 2026, 09:14', 'Reveal', 'h', '4821', '[Admin Name]', 'Checking the number against the bank before the Q4 licence invoice.'], ['18 Oct 2026, 16:02', 'Payments changed', 'g', '3318', '[Admin Name]', 'Added: Management fee.'], ['12 Oct 2026, 11:42', 'Payments changed', 'h', '4821', '[Admin Name]', 'Added: Platform licence fee · Territory licence fee.'], ['12 Oct 2026, 11:41', 'Added', 'h', '4821', '[Admin Name]', 'Operating checking added.'], ['12 Oct 2026, 11:40', 'Retired', 'h', '5540', '[Admin Name]', 'Moved to the new operating account.'], ['9 Oct 2026, 10:05', 'Token replaced', 'g', 0, '[Admin Name]', 'Mercury connection replaced.'], ['2 Oct 2026, 14:20', 'Relabelled', 'm', '0562', '[Admin Name]', '‘Savings’ → ‘Reserve’.'], ['30 Sep 2026, 09:00', 'Mercury connected', 'm', 0, '[Admin Name]', 'Read-only token added.']];
+    const EVP = (e) => pl(e === 'Reveal' ? '◉' : e === 'Retired' ? '–' : '•', e, e === 'Reveal' ? 'v' : 'n');
+    const histT = () => { const rows = HR.map(h2 => [CL(h2[0], MN), CL('', { pill: EVP(h2[1]) }), EDOT(h2[2]), h2[3] ? CL(MASK(h2[3]), MN) : CL('—', MU), h2[4], CL(h2[5], { ts: 'font-size:12.5px;line-height:1.4' })]);
+      rows.splice(1, 0, [CL('▾ Full reason', { ts: 'font-size:12px;font-weight:700;color:' + c.vt }), '', '', '', '', CL('‘Checking the number against the bank before the Q4 licence invoice.’ The number was shown for 30 seconds.', { ts: 'font-size:12.5px;line-height:1.45' })]);
+      rows.push([CL('[date]', MN), CL('', { pill: EVP('Reveal') }), EDOT('f'), CL('••••[ending]', MN), '[LP Name]', CL('Their own capital-call line.', { ts: 'font-size:12.5px', sub: 'Sample · once Fund I has an account' })]);
+      const t = TB({ title: 'Reveals and changes', tbar: { search: 'Search ending, person or reason', chips: [tag('Event ▾'), tag('Entity ▾'), tag('Who ▾'), tag('Dates ▾'), tag('Sort: Newest ▾')] }, gc: '1.15fr 1.05fr .9fr .8fr 1fr 2.4fr', minW: 920, cols: ['When', 'Event', 'Entity', 'Account', 'By', 'Detail'], rows, count: '1–23 of [23]', foot: 'Nine of the twenty-three rows are drawn. Reveals are recorded before the number is shown. A reveal that could not be recorded showed nothing.' });
+      t.rows[1].s += ';background:' + c.lav; t.rows[rows.length - 1].s += ';opacity:.85;border-top:1px dashed ' + c.mu; return t; };
+    const ringSvg = () => { const r = 26, cf = 2 * Math.PI * r; return { __html: svgOpen(72, 72, '24 seconds left') + '<circle cx="36" cy="36" r="' + r + '" fill="none" stroke="' + c.hair + '" stroke-width="6"/><circle cx="36" cy="36" r="' + r + '" fill="none" stroke="' + c.vi + '" stroke-width="6" stroke-linecap="round" stroke-dasharray="' + (cf * 24 / 30).toFixed(1) + ' ' + cf.toFixed(1) + '" transform="rotate(-90 36 36)"/><text x="36" y="41" text-anchor="middle" font-size="14" font-weight="700" fill="' + c.ink + '">24 s</text></svg>' }; };
+    const revealAfter = (big) => [K({ cs: PLAIN, eye: 'AFTER · IN THE ROW AND THE DRAWER', title: 'Holdings · Operating checking', hs: H18 }), K({ cs: SEC, svg: ringSvg(), rows: [R({ rs: 'display:flex;flex-direction:column;gap:8px;padding:4px 0', t: '[2010 4417 4821]', ts: 'font:700 ' + (big ? 28 : 24) + 'px ' + MO + ';letter-spacing:.05em', sub: 'Shown for 30 seconds. It is not kept on this device.', ss: 'font-size:12.5px;color:' + c.mu }), R({ rs: 'display:flex;padding:0', t: 'Reason recorded at 09:14: ‘Checking the number against the bank before the Q4 licence invoice.’', ts: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })], btns: big ? false : [{ t: 'Hide now', s: btnS }] })];
+    const BOX = (f) => ({ t: f ? '•' : '', s: 'display:inline-grid;place-items:center;width:40px;height:46px;border-radius:7px;box-sizing:border-box;border:1px solid ' + (f ? c.vi : c.hair) + ';background:' + c.card + ';font:700 18px ' + MO + ';color:' + c.ink });
+    const lab = (t) => K({ cs: PLAIN, note: t, ns: eyeS });
+    const DGA = dlg('Add an account', 'For one entity. Payment instructions never change once saved.', [K({ cs: SEC, rows: [field('ENTITY', 'Holdings ▾', { sub: 'Beneficiary, read only: [Holdings legal name]' }), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'BANK', tags: [tag('Mercury · [Partner bank] · ABA [routing number] · SWIFT [SWIFT code]', true), tag('Another bank')] }), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'KIND', tags: [tag('Checking', true), tag('Savings')] }), field('LABEL', 'Operating', { sub: 'Prefilled from the kind. You can change it.' }), field('ACCOUNT NUMBER', '••••••••••••', { ts: FIN + ';font-family:' + MO }), field('ACCOUNT NUMBER AGAIN', '••••••••••••', { ts: FIN + ';font-family:' + MO }), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'PAYMENTS · THIS ENTITY’S ONLY', tags: [tag('☑ Platform licence fee', true), tag('☐ Territory licence fee')] })], foot: 'Another bank opens its name, addresses, ABA, alternate ABA, SWIFT and intermediary SWIFT. For Savings the payments hide: a savings account takes no payments.' }), K({ cs: PLAIN, note: 'Saved encrypted. The full number is not shown again, except through Reveal.' }), K({ cs: PLAIN, rows: [ERR('The two copies of the account number differ. Type it again.', 'r')] })], [{ t: 'Cancel', s: btnS }, { t: 'Save account', s: btnP }]);
+    const DGA2 = dlg('Add an account', 'Holdings · from Mercury', [K({ cs: PLAIN, rows: [INFOROW('Mercury reads ••••9012 for Holdings. Type the full number from Mercury’s account page. It must end in 9012.')] }), K({ cs: SEC, rows: [field('ACCOUNT NUMBER', '••••••••9012', { ts: FIN + ';font-family:' + MO }), field('ACCOUNT NUMBER AGAIN', '••••••••9012', { ts: FIN + ';font-family:' + MO })] })], [{ t: 'Cancel', s: btnS }, { t: 'Save account', s: btnP }]);
+    const DGB = dlg('Relabel Holdings · Operating ••••4821', 'Only the label changes. Notices do not print it.', [K({ cs: SEC, rows: [field('LABEL · 1 TO 60 CHARACTERS', 'Operating')] })], [{ t: 'Cancel', s: btnS }, { t: 'Save label', s: btnP }]);
+    const DGC = dlg('Change payments · GP · Operating ••••3318', 'Only the payments it takes change. Its payment instructions stay as they are.', [K({ cs: PLAIN, rows: [R({ rs: NOTE('v'), lead: 'i', ls: INFO, t: 'Adding Management fee: management-fee invoices will print ••••3318.', ts: 'font-size:12.5px;font-weight:600;line-height:1.5' })] }), K({ cs: SEC, rows: [CHK('Management fee', true)] }), K({ cs: PLAIN, eye: 'ON HOLDINGS ••••4821, REMOVING ONE', rows: [ERR('Removing Platform licence fee: licence-fee invoices refuse to print until another Holdings checking account takes it.', 'a')] })], [{ t: 'Cancel', s: btnS }, { t: 'Save payments', s: btnP }]);
+    const DGD = dlg('Retire Holdings · Operating ••••4821?', 'A retired account is kept, never changed, and takes no payments.', [K({ cs: SEC, rows: [field('REASON · REQUIRED · UP TO 200 CHARACTERS', 'Write a reason…', { ts: FIE + ';min-height:56px' })] }), K({ cs: PLAIN, rows: [ERR('This account takes Platform licence fee and Territory licence fee. After you retire it, those invoices refuse to print until another account takes them.', 'a')] })], [{ t: 'Cancel', s: btnS }, { t: 'Retire account', s: btnDF }]);
+    const DGE = dlg('Reveal the full number', 'Holdings · Operating checking ••••4821. Your reason is recorded before the number is shown.', [K({ cs: SEC, rows: [field('REASON · REQUIRED · 1 TO 200 CHARACTERS', '[Checking the number against the bank before the Q4 licence invoice.]', { ts: FIN + ';min-height:52px;font-weight:500' })] })], [{ t: 'Cancel', s: btnS }, { t: 'Reveal for 30 seconds', s: btnP }]);
+    const DGF = dlg('Confirm it’s you', 'Enter the code from your authenticator. A fresh sign-in check comes first.', [K({ cs: SEC, tags: [1, 1, 1, 0, 0, 0].map(BOX), btns: [{ t: 'Use a recovery method', s: btnG }] }), K({ cs: PLAIN, note: 'Asked before any change or reveal.' })], [{ t: 'Cancel', s: btnS }, { t: 'Confirm', s: btnP }]);
+    const DGG = [K({ cs: PLAIN, eye: 'BANK ACCOUNTS', title: 'Mercury connection · GP', hs: H18, meta: 'Esc to close' }), K({ cs: SEC, title: 'Disconnect', hs: eyeS, note: 'GP’s balances stop updating. The registry keeps every account.', ns: NS1, rows: [field('REASON · AT LEAST 10 CHARACTERS', 'Write a reason…', { ts: FIE + ';min-height:56px' })] }), K({ cs: SEC, btns: [{ t: 'Cancel', s: btnS }, { t: 'Disconnect', s: btnD }], bs: BTNR, foot: 'This is the existing Mercury connection sheet, opened at GP’s Disconnect form.' })];
+    const DGH = [K({ cs: PLAIN, eye: 'BANK ACCOUNTS', title: 'Connect Mercury · Fund I', hs: H18, meta: 'Esc to close' }), K({ cs: SEC, note: 'Paste a read-only Mercury API token for Fund I. A read-write token is never accepted.', ns: NS1, rows: [field('MERCURY API TOKEN', 'Paste the token', { ts: FIE + ';font-family:' + MO }), CHK('This token is read-only.', false)] }), K({ cs: SEC, btns: [{ t: 'Cancel', s: btnS }, { t: 'Connect', s: btnP }], bs: BTNR, foot: 'The rest of this sheet is the existing Mercury connection sheet.' })];
+    const MITEMS = (k, items) => K({ cs: CARD + ';padding:6px;gap:0', rows: items.map(t => R({ rs: 'display:flex;align-items:center;min-height:36px;padding:0 10px;border-radius:8px', t, ts: 'font-size:13px;font-weight:600' + (t.indexOf('Disconnect') === 0 ? ';color:' + c.neg : '') })) });
+    const stateCrop = (k, pill, line, items, extra) => ({ s: PCOL, blocks: [K({ title: ENT[k][0], tags: [LEGAL(k), pill, MENU(k)], rows: line ? [R({ rs: 'display:flex;padding:0', t: line, ts: 'font-size:12.5px;line-height:1.5;color:' + c.mu })] : [] }), MITEMS(k, items)].concat(extra || []) });
+    const EYEBROW = 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + ';text-decoration:none';
+    let shell = 'hq', head = true, crumb = phone ? '‹ Platform' : 'Platform › Bank accounts', crumbHref = '/admin/platform', title = 'Bank accounts', hpills = [pl('⌂', 'HQ only', 'n')], hbtns = phone ? [] : [HB('Add an account', btnP), ICON('⋯', 'More: Structure of the Fund, Open Fund admin › Banking, Open reconciliation in Fund admin')], hlines = [{ t: 'The registry of each entity’s bank accounts. Notices and invoices print their payment instructions from here.' }], moved = false, tabsOn = true, tabCur = 'Accounts', tabCounts = true, stripOn = true, grid = G6, cols = [], minH = 900, rail = false, pbar = false;
+    const TABL = [['Accounts', '', '[6]'], ['Cash', 'cash', false], ['History', 'history', '[23]']];
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const one = (b) => [{ s: STACK, blocks: b }];
+    const CEN = ';max-width:620px;margin:90px auto 0;width:100%';
+    if (B === 'BNK1') { moved = 'The Admin Console has moved: Bank accounts now lives under Platform.'; rail = { line: 'Eadwyn can see which entities have an account and which payments are refused. It never sees an account number, a balance or a transaction.', btn: 'Explain the refused payments', items: [{ e: 'CAN SEE', t: 'Which entities have an account, and the 2 payments that are refused.' }, { e: 'NEVER SEES', t: 'An account number, a balance or a transaction.' }] }; cols = accCols(); minH = 2100; }
+    else if (B === 'BNK2') { cols = accCols().concat(over(drawer(), 640)); minH = 2100; }
+    else if (B === 'BNK3' || B === 'BNK4') { tabCur = 'Cash'; cols = cashCols(); }
+    else if (B === 'BNK5') { tabCur = 'History'; cols = [col([histT()]), col([FOOTK()])]; }
+    else if (B === 'BNK8a') { cols = [col([K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, title: 'No bank account recorded yet.', note: 'Add each entity’s accounts from its bank’s account page. Notices print nothing until you do.', ns: NS1, btns: [{ t: 'Add an account', s: btnS }] })]), col([covK({ empty: 1 })]), col([emptyEnt('h')], 3), col([emptyEnt('m')], 3), col([emptyEnt('g')], 3), col([emptyEnt('f')], 3), col([FOOTK()])]; }
+    else if (B === 'BNK8b') { tabCur = 'History'; cols = [col([CENTER('○', 'Nothing has been revealed or changed yet.', 'Every reveal and change will be listed here.', false, CEN)])]; }
+    else if (B === 'BNK9') { tabCounts = false; cols = [col([K({ title: 'Where each payment goes', rows: [R({ t: 'Reading…', ts: 'font-size:13px;color:' + c.mu })] }), sk(4)])].concat(['h', 'm', 'g', 'f'].map(k => col([K({ title: ENT[k][0], tags: [LEGAL(k), { t: 'Reading…', s: 'font-size:12.5px;color:' + c.mu }] }), sk(3)], 3))); }
+    else if (B === 'BNK10a') { tabCounts = false; cols = [col([K({ rows: [ERR('We could not load the bank accounts. The rest of HQ still works.', 'r', [{ t: 'Try again', s: btnS }]), R({ rs: 'display:flex;gap:8px;align-items:center;padding:10px 0 0', lead: '▾', ls: 'flex:none;color:' + c.mu, t: 'Details', ts: 'font-size:12.5px;font-weight:700', sub: '[ref 7F3A-21C9]', ss: 'font:600 12px ' + MO + ';color:' + c.mu })] })])]; }
+    else if (B === 'BNK10b') { cols = accCols({ mer: 'nr', pre: [col([K({ cs: PLAIN, rows: [ERR('The Mercury connections could not be read. This is not a claim that none is connected.', 'a', [{ t: 'Try again', s: btnS }]), R({ rs: NOTE('n') + ';margin-top:8px', eye: 'VARIANT', t: 'Nothing was read, because its audit row could not be written.', ts: 'font-size:13px;font-weight:600' })] })])] }); minH = 2100; }
+    else if (B === 'BNK10c') { tabCounts = false; cols = [col([K({ rows: [ERR('Bank accounts are paused for [24 hours] after an account recovery.', 'a'), R({ rs: 'display:flex;padding:8px 0 0', t: 'Paused until [22 Oct 2026, 09:14].', ts: 'font:600 12.5px ' + MO + ';color:' + c.mu })] })])]; }
+    else if (B === 'BNK11a') { shell = 'admin'; head = false; stripOn = false; cols = [col([K({ cs: CARD + ';border-style:dashed' + CEN, eye: 'HQ ONLY', title: 'This page belongs to the Super Admin', hs: 'margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em', note: 'HQ manages the entities’ bank accounts. You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action. Balances and reconciliation are in Fund admin.', ns: NS1, btns: [{ t: 'Open Fund admin', s: btnS }, { t: 'My licence', s: btnG }] })])]; }
+    else if (B === 'BNK11b') { shell = 'founder'; head = false; stripOn = false; cols = [col([CENTER('⊘', 'This page is for studio admins.', 'If you run a studio, ask HQ for admin access.', [{ t: 'Go to your home', s: btnP }], CEN)])]; }
+    else if (crop) { head = false; tabsOn = false; stripOn = false; grid = STACK;
+      if (B === 'BNK2s') cols = [dlgCol(drawer(1))];
+      else if (B === 'BNK6') { grid = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start'; cols = [['A · Add an account', DGA], ['A · From Add it to the registry', DGA2], ['B · Relabel', DGB], ['C · Change payments', DGC], ['D · Retire', DGD], ['E · Reveal the full number', DGE], ['E · After the reveal', revealAfter()], ['F · Step-up, before any change or reveal', DGF], ['G · Disconnect · opening state', DGG], ['H · Connect Mercury · opening state', DGH]].map(([l, b]) => ({ s: DLGS, blocks: [lab(l)].concat(b) })); }
+      else if (B === 'BNK7') { grid = 'display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start'; cols = [stateCrop('h', CONN.ok, 'Last synced 21 Oct 2026, 08:00.', ['Sync now · once every five minutes', 'Replace token', 'Disconnect…', 'Add an account for Holdings'], [K({ eye: 'IF MERCURY NAMES IT DIFFERENTLY', rows: [ERR('Mercury names this organisation [Other name], not [Holdings legal name]. Check the token belongs to this entity.', 'a')] })]), stateCrop('g', CONN.att, 'Mercury refused the token. Only the Super Admin can replace it.', ['Replace token', 'Disconnect…', 'Add an account for GP']), stateCrop('f', NOCONN('Fund I'), 'Connect Mercury to see this entity’s balances. The registry works without it.', ['Connect Mercury', 'Add an account for Fund I']), { s: PCOL, blocks: [K({ eye: 'SYNC REFUSED · A TOAST', cs: CARD + ';background:' + (dark ? '#1f2937' : '#18181b') + ';border-color:transparent', rows: [R({ rs: 'display:flex;gap:9px;padding:0', lead: 'i', ls: 'font-weight:800;flex:none;color:#e5e7eb', t: 'A sync was asked for in the last five minutes. Try again in 3 minutes.', ts: 'font-size:13px;font-weight:600;line-height:1.5;color:#ffffff' })] })] }]; } }
+    else if (phone) { grid = STACK;
+      const pAcc = (a) => K({ eye: ENT[a[0]][0].toUpperCase(), title: a[1] + ' ' + MASK(a[3]), hs: 'margin:0;font-size:15px;font-weight:800', meta: '⋯', ms: 'font-size:18px;color:' + c.mu, tags: [merPill(a), stPill(a)], rows: [R({ t: payTxt(a), ts: LINE + (a[4] && a[4].length ? '' : ';color:' + c.mu) }), R({ t: 'Current', v: a[5] === 'NR' ? 'Not recorded' : '[' + a[5] + ']', vs: 'font:700 12.5px ' + MO + ';color:' + (a[5] === 'NR' ? c.mu : c.ink), sub: a[5] === 'NR' ? 'Mercury sent no balance for this account' : 'as of 21 Oct 2026, 08:00', ss: 'font:500 11px ' + MO + ';color:' + c.mu })] });
+      if (B === 'BNK12a') cols = one([K({ cs: PLAIN, btns: [{ t: 'Add an account', s: btnP + ';width:100%' }] }), covK()].concat(ACC.filter(a => a[8] === 'a').map(pAcc), [fundK()]));
+      else if (B === 'BNK12b') { stripOn = false; tabsOn = false; crumb = '‹ Bank accounts'; crumbHref = '/admin/platform/bank-accounts'; title = 'Operating ••••4821'; hpills = [pl('', 'Checking', 'n'), pl('●', 'Active', 'g')]; hlines = [{ t: 'Holdings · [Holdings legal name]' }]; cols = one(drawer().slice(1, -1)); pbar = [{ t: 'Reveal full number…', s: btnS + ';flex:1' }]; }
+      else if (B === 'BNK12c') { tabCur = 'Cash'; cols = one([cashTiles(2), areaK(340), mioK(340)]); }
+      else if (B === 'BNK12d') { stripOn = false; tabsOn = false; crumb = '‹ Operating ••••4821'; crumbHref = '/admin/platform/bank-accounts/account/4821'; title = 'Reveal the full number'; hpills = false; hlines = [{ t: 'Holdings · Operating checking ••••4821' }]; cols = one(revealAfter(1)); pbar = [{ t: 'Hide now', s: btnS + ';flex:1' }]; } }
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] };
+    const LIT = { hq: 'Platform' };
+    const adm = shell === 'admin' || shell === 'hq';
+    const rows = SIDES[shell].map(t => ({ t, href: (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === LIT[shell] ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const PSTRIP = ['Overview', 'Switches', 'Topology', 'AI allowances', 'AI usage', 'Payments', 'Bank accounts', 'Product testing', 'Promo codes', 'Monitoring', 'Telegram'];
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (rail ? '320px' : '44px') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: { founder: '[Acme Robotics] ▾', admin: 'Admin', hq: 'HQ' }[shell] || '', groupS: shell === 'founder' ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: 'Bank accounts', studioI,
+      strip: stripOn && shell === 'hq' && (isShell || phone) ? PSTRIP.map(t => ({ t, href: '/admin/platform/' + t.toLowerCase().replace(/ /g, '-'), s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 44 : 30) + 'px;padding:0 6px;border-radius:8px;box-sizing:border-box;font-size:12.5px;text-decoration:none;white-space:nowrap;' + (t === 'Bank accounts' ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.mu + ';font-weight:600') })) : false,
+      stripS: 'display:flex;gap:2px;align-items:center;flex:none;min-height:46px;padding:0 ' + (phone ? 10 : rail ? 14 : 22) + 'px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';overflow-x:auto' + (phone ? ';-webkit-mask-image:linear-gradient(90deg,#000 94%,transparent);mask-image:linear-gradient(90deg,#000 94%,transparent)' : ''),
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: EYEBROW + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', msel: false, mselS: '',
+      moved, movedS: 'display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE + ';font-size:13px;color:' + c.ink, infoS: INFO, dismissS: btnG,
+      tbar: false, tbarS: '', tbarChips: [], tbarBtns: [], tbarNote: false, tbarNoteS: '',
+      tabsL: 'Bank accounts', tabs: tabsOn ? TABL.map(([t, p, n]) => ({ t, href: '/admin/platform/bank-accounts' + (p ? '/' + p : ''), n: tabCounts ? n : (n ? '\u00a0\u00a0\u00a0' : false), sel: t === tabCur ? 'page' : 'false', ns: 'display:inline-flex;align-items:center;min-width:18px;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair, s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: false, pnavS: '',
+      spine: isShell && !rail, spineTip: B === 'BNK9' ? 'Reading' : 'Eadwyn can see which entities have an account and which payments are refused. It never sees an account number, a balance or a transaction.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;flex:none', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      rail, railS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box', railX: 'display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';cursor:pointer', railP: 'margin:0;font-size:13px;line-height:1.55;color:' + c.ink, railB: btnS + ';width:100%', railI: 'display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

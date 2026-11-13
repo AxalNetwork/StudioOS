@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Raise · Data room</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Data room</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One tool inside the Raise module page, with seven tabs. A download is a one-time link for one person that works for two minutes and is logged; files are not watermarked and there is no viewer. The log never records that a file was read. A file an investor may not open is never named to them. Sample today is [25 Oct 2026]; drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="24">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise Data Room Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['DR1', 'Home · Founder · desktop 1440 · light', 'The Raise module header and rail, the tool’s bar and the seven tabs. Needs you, checklist coverage, 90 days of activity, who has access, what was added, and the readiness figure shown but not edited.', [D('DR1')]],
+      ['DR2', 'Files', 'The folder tree and every file with its source, gate, what it answers and the links issued. Two rows are ticked, so the bulk bar shows.', [D('DR2')]],
+      ['DR3', 'File · lightbox over Files', 'Who can open it now and why, its gate, what it answers, its versions, and every link issued or refused. The second frame is a connector file with an Eadwyn match to accept.', [D('DR3'), D('DR3c', 'A connector file · Eadwyn proposes a match', 760)]],
+      ['DR4', 'Upload', 'Drop zone, connectors, the queue in states rather than percentages, and the settings for every file. The second frame is a file larger than the storage left.', [D('DR4'), D('DR4s', 'Storage left', 760)]],
+      ['DR5', 'Folder and dialogs', 'The folder lightbox, a new folder, removing a file with its trash note, and deleting a folder.', [D('DR5', false, 1200)]],
+      ['DR6', 'Access · by investor', 'Every grant with its end, folders, NDA, committed state and what it opens. The second frame is the matrix.', [D('DR6'), D('DR6m', 'Matrix')]],
+      ['DR7', 'Share and one investor', 'Sharing with [Northwind Angels], who asked from the round call, and one investor’s grant opened. The third frame is revoking.', [D('DR7', 'Share the room'), D('DR7i', 'An investor’s grant'), D('DR7r', 'Revoke access', 680)]],
+      ['DR8', 'The NDA', 'Sending the three-way NDA, its state per investor, and what it unlocks, named for the founder only.', [D('DR8', false, 1200)]],
+      ['DR9', 'Requests', 'Access requests from the round call and the deal page, and diligence requests with the files that answer them. The second frame is declining.', [D('DR9'), D('DR9d', 'Decline', 680)]],
+      ['DR10', 'Activity · light', 'Thirty days of events by day against the period before, events by investor, and the log. A link issued is not a read.', [D('DR10')]],
+      ['DR11', 'Activity · dark', 'DR10 in the dark colours; violet becomes #a78bfa.', [D('DR11')]],
+      ['DR12', 'Checklist', 'The twelve diligence items in six areas, Eadwyn’s three proposed matches, and the readiness figure it feeds.', [D('DR12')]],
+      ['DR13', 'Preview · as an investor', 'The room exactly as [Bluefern Capital] sees it today: files it may not open are counted, never named. The second frame is an investor whose access ended.', [D('DR13'), D('DR13e', 'Access ended', 760)]],
+      ['DR14', 'Eadwyn proposals', 'Three kinds only: a checklist match, a folder for a top-level file, and a reading of gaps.', [D('DR14', false, 760)]],
+      ['DR15', 'Make a version current', 'The dialog over the file lightbox.', [D('DR15', false, 900)]],
+      ['DR16', 'Co-founder', 'Upload, move, match and answer stay on. Sharing and gates are the owner’s.', [D('DR16a', 'Files', 1440, 900), D('DR16b', 'Access', 1440, 820)]],
+      ['DR17', 'Admin and Super Admin', 'A summary of a studio venture’s room: counts, coverage and grants, no file names. Opening for support asks a reason the founder sees.', [D('DR17a', 'Admin', 1440, 900), D('DR17b', 'Super Admin', 1440, 900)]],
+      ['DR18', 'No permission', 'An investor, an operating partner or advisor, and an explorer.', [D('DR18a', 'Investor', 1440, 640), D('DR18b', 'Operating Partner or Advisor', 1440, 640), D('DR18c', 'Explorer', 1440, 640)]],
+      ['DR19', 'Empty', 'No files, not shared, and no activity in the log.', [D('DR19a', 'No files', 680), D('DR19b', 'Not shared', 680), D('DR19c', 'No activity', 680)]],
+      ['DR20', 'Loading', 'The header, module rail and tabs at once; skeletons where the tree, table and charts go.', [D('DR20')]],
+      ['DR21', 'Error and partial', 'The room could not be read, activity could not be read while the rest renders, and a connector file that did not arrive.', [D('DR21a', 'The room could not be read', 1440, 760), D('DR21b', 'Activity could not be read', 1100), D('DR21c', 'A connector file failed', 760)]],
+      ['DR22', 'Phone · 390 wide', 'Home, Files and Activity with the module select and tabs that scroll sideways.', [P('DR22a', 'Home'), P('DR22b', 'Files'), P('DR22c', 'Activity')]],
+      ['DR23', 'Storage near the limit', 'An amber line under the tool’s chips.', [D('DR23', false, 1440, 760)]],
+      ['DR24', 'Moved notices', 'Each old address lands on its tab with a one-line notice.', [D('DR24a', 'From the old workspace', 1440, 900), D('DR24b', 'From the old access view', 1440, 820)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,40 @@
+#12 - Invite tracking & reminders
+
+What & Why
+
+After importing contacts (CSV or LinkedIn) and sending invites from Refer & Earn, the sender currently has NO way to see who joined or re-prod the ones who didn't. Three concrete gaps:
+
+Joined status never recorded. attachReferral (called on /api/auth/register?ref=…) inserts a referrals row but never updates referral_invites.signed_up_user_id. So even though the column exists, it stays NULL forever.
+No invite-list UI. GET /api/email/invites exists but nothing in ReferEarnPage.jsx calls it.
+No reminder action. Users can re-upload the same CSV but the 30-day dedupe window will silently drop everyone, and there's no per-invite "remind" button.
+Done looks like
+
+After someone registers via my ref link, my "Sent invitations" panel on /refer immediately shows them as Joined (green badge).
+The same panel shows every invite I've ever sent with a status badge (Sent · Opened · Joined · Failed) and a timestamp.
+Each non-joined invite has a "Send reminder" button that re-sends the invite email (with rate-limit: 1 reminder per invite per 7 days).
+When I import contacts again, anyone I've already invited shows an "Already invited" badge in the preview (still selectable, but unchecked by default), and anyone already a member shows "Joined".
+Dedupe is now permanent per (sender, recipient) — no more 30-day re-invite loophole; if I want to re-engage I use the Reminder button.
+Out of scope
+
+Open-rate tracking (no pixel/webhook today; status stays at "sent" until joined).
+Bulk reminder send (per-row only; safer for rate limits).
+Admin-side cross-sender invite analytics.
+Steps
+
+Worker — link invites to signups. In attachReferral (or a helper called next to it), when the new user registered with a ref code, UPDATE referral_invites SET signed_up_user_id = ?, status = 'joined' WHERE LOWER(recipient_email) = LOWER(?) AND signed_up_user_id IS NULL. Idempotent.
+Worker — enrich GET /api/email/invites. Add lazy backfill (one sweep per call: any invite whose recipient_email now matches a users row gets signed_up_user_id populated). Return joined-user name + a derived joined_at timestamp via LEFT JOIN.
+Worker — permanent dedupe + report. Drop the 30-day window in /send-referral-invites; treat any prior invite as a dedupe hit and include them in the response under a new already_invited array so the UI can render the badge. Keep the Already a member array too.
+Worker — POST /api/email/invites/:id/remind. Re-send the invite via sendReferralInviteEmail, bump reminder_count, write last_reminded_at. Reject if signed_up_user_id IS NOT NULL, if status='failed' (use original endpoint to retry), or if last_reminded_at > now() - 7 days. Rate-limit: 20 reminders/day per sender via existing RATE_LIMITS bucket pattern.
+Schema migration. New cloudflare-worker/sql/migrations/045_invite_reminders.sql adding reminder_count INTEGER DEFAULT 0 and last_reminded_at TIMESTAMP columns. Mirror as ALTER TABLE … IF NOT EXISTS-safe in the lazy ensureSchema.
+Frontend api wrapper. Add api.emailInvites() and api.emailRemindInvite(id) to frontend/src/lib/api.js.
+Frontend — Sent Invitations panel. New section under the referral link card in ReferEarnPage.jsx that lists invites with status badges and a Reminder button. Optimistically updates after the reminder POST.
+Frontend — import preview annotations. When the import preview table renders, cross-reference already_invited and already_member (returned from the previous send response or pre-fetched via a new /api/email/invites cache) and tag rows accordingly.
+Validation. npx tsc --noEmit (worker), npm run test:drift, architect code review.
+Relevant files
+
+cloudflare-worker/src/routes/email.ts:1-188
+cloudflare-worker/src/routes/network.ts:160-182
+cloudflare-worker/src/services/email.ts
+cloudflare-worker/sql/migrations/
+frontend/src/pages/ReferEarnPage.jsx:60-665
+frontend/src/lib/api.js:1040-1060

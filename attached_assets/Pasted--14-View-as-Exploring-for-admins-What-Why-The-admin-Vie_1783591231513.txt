@@ -1,0 +1,29 @@
+#14 - View as: Exploring for admins
+What & Why
+The admin "View as" dropdown (top bar) currently offers Admin, Founder, Partner, Investor, Advisor — the Exploring role was deliberately filtered out in v1. Admins now need to preview the Exploring experience end-to-end (holding dashboard, restricted sidebar, gated routes) to verify how everything is configured for chat-onboarded users awaiting role assignment.
+Done looks like
+* The "View as" dropdown shows an "Exploring" option after the existing roles.
+* Selecting it lands the admin on the Exploring holding dashboard and shows the Exploring sidebar (Dashboard, plus the shared pages exploring users can reach: settings, docs, tickets, activity, trust, profile).
+* Navigating to a page exploring users can't access redirects back to the Exploring dashboard — exactly what a real exploring user experiences.
+* The Exploring dashboard renders cleanly for an admin viewer who has no exploring/profiling data of their own (sensible empty states, no crashes or error toasts).
+* Switching back to "View as: Admin" restores the full admin experience; the choice survives a page refresh (same as the other view modes).
+* Dark mode looks correct on anything touched.
+* Both changelogs get an entry (technical + plain-English "What's new").
+Out of scope
+* Viewing as a specific exploring user (that's impersonation, which already exists).
+* Any backend/Worker changes — this is frontend-only; route guards and default paths for the exploring role already exist.
+* Changing what real exploring users see.
+Steps
+1. Add Exploring to the View-as menu — Include the Exploring role in the admin view-mode dropdown (it's currently filtered out) and update the stale code comment documenting the v1 exclusion.
+2. Verify the viewed experience end-to-end — Confirm the view-mode switch navigates to the Exploring default page, the Exploring sidebar renders, disallowed routes bounce back to the Exploring dashboard, and exiting back to Admin works, including after a refresh.
+3. Harden the Exploring dashboard for admin viewers — Ensure its self-contained widgets (Personal Advisor, Profile & Fit) degrade gracefully when the signed-in viewer is an admin with no exploring/profiling record.
+4. Changelog entries — Add a line to the technical changelog and a plain-English note to the in-app "What's new" page.
+Relevant files
+* frontend/src/App.jsx:203-240
+* frontend/src/App.jsx:516-584
+* frontend/src/App.jsx:645-680
+* frontend/src/App.jsx:1052-1110
+* frontend/src/pages/ExploringDashboard.jsx
+* frontend/src/sidebarConfig.js:413-425
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

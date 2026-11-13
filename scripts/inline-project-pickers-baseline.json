@@ -1,0 +1,4 @@
+{
+  "note": "EMPTY ON PURPOSE, and it stays that way. Task #181 asked for the in-body startup pickers to go and was blocked on one product question: the sidebar switcher selects a COMPANY while each picker selected a PROJECT, so the picker was a second axis rather than a duplicate. The answer is one company = one startup, measured against production D1 (5 projects, 5 founders, one project each). Every picker sat behind `projects.length > 1`, so not one of them rendered for a live account. All 25 are removed — 21 found by the `select-*-project` testid sweep, and FOUR more that carried no testid at all and were therefore invisible to the ledger that claimed to count them. `scripts/check-inline-project-pickers.mjs` now sweeps for the render guard too, and fails on any picker of either shape. A genuine need to choose between two startups on one page is a product change: record the decision, then add the entry here.",
+  "pickers": []
+}

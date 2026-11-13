@@ -1,0 +1,34 @@
+{
+  "skill": "content-editorial-strategy",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Content Strategy and Editorial Planning",
+        "task_scope": "Plans editorial themes, audience journeys, content formats, publishing cadence, review and repurposing.",
+        "evidence": [
+          "editorial pillars and cadence"
+        ],
+        "omitted_field": "content owner"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for editorial pillars and cadence."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "editorial pillars and cadence"
+    ],
+    "must_say_not_recorded": [
+      "content owner"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

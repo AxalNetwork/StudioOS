@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Research overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#6d28d9;text-decoration:none}
+a:hover{color:#4c1d95;text-decoration:underline}
+:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.f-d{font-family:'Space Grotesk','Inter',system-ui,sans-serif}
+.f-m{font-family:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.eye{font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1.3;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+.h2{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:21px;line-height:1.25;font-weight:600;letter-spacing:-.015em;color:#18181b}
+.h3{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:16px;line-height:1.3;font-weight:600;letter-spacing:-.01em;color:#18181b}
+.sub{margin:0;font-size:14px;line-height:1.55;color:#6b6577;max-width:760px}
+.cap{margin:0;font-size:12px;line-height:1.5;color:#6b6577}
+.cap .f-m{font-size:11.5px;color:#3f3a49}
+.card{background:#ffffff;border:1px solid #ececf1;border-radius:12px;box-sizing:border-box}
+.nr{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap}
+.ur{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;font-size:11.5px;font-weight:700;line-height:1;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;background:#f4f3f7;color:#3f3a49;border:1px solid #e7e5ee;font-size:12px;font-weight:600;line-height:1;white-space:nowrap}
+.chip-v{background:#f4f0fe;color:#6d28d9;border-color:#ddd0fb}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:9px;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box}
+.btn-p{background:#7c3aed;color:#ffffff;border:1px solid #7c3aed}
+.btn-p:hover{background:#6d28d9;color:#ffffff}
+.btn-g{background:#ffffff;color:#18181b;border:1px solid #e2e1e8}
+a.btn:hover{text-decoration:none}
+.lnk{font-size:14px;font-weight:600;color:#6d28d9}
+.inp{box-sizing:border-box;width:100%;min-height:44px;padding:0 14px;border:1px solid #e2e1e8;border-radius:9px;background:#ffffff;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:500;color:#18181b}
+.inp::placeholder{color:#6b6577}
+.th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577}
+.trow{border-bottom:1px solid #f1f0f4}
+.trow:hover{background:#faf8ff}
+.ghost{background:#e6e2ef}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:760px){
+.r-topnav{order:3;flex-basis:100% !important}
+.h1{font-size:28px !important}
+}
+</style>
+</helmet>
+<div style="background:#f4f3f7;color:#18181b;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased">
+
+<header style="background:#ffffff;border-bottom:1px solid #ececf1">
+<div style="max-width:1240px;margin:0 auto;padding:10px clamp(16px,4vw,32px);display:flex;flex-wrap:wrap;align-items:center;gap:6px 28px">
+<a href="Main.dc.html" data-route="/research" style="display:flex;align-items:center;gap:10px;min-height:44px;color:#18181b;text-decoration:none">
+<img src="/_blob/4d1a19f3daba48c312b4e17b9df70aea" alt="" width="24" height="24" style="display:block;width:24px;height:24px;object-fit:contain">
+<span class="f-d" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">StudioOS</span>
+<span style="font-size:14px;font-weight:500;color:#6b6577">Research</span>
+</a>
+<nav aria-label="Research sections" class="r-topnav" style="display:flex;gap:4px;flex:1 1 auto;min-width:0;overflow-x:auto">
+<a href="Main.dc.html" data-route="/research" aria-current="page" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#6d28d9;background:#f4f0fe;box-shadow:inset 0 0 0 1px #ddd0fb">Overview</a>
+<a href="Companies.dc.html" data-route="/research/companies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Companies</a>
+<a href="Markets.dc.html" data-route="/research/markets" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Markets</a>
+<a href="Geography.dc.html" data-route="/research/geographies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Geographies</a>
+<a href="Funds.dc.html" data-route="/research/funds" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Funds</a>
+</nav>
+<a href="#" data-route="/login" class="btn btn-g" style="margin-left:auto">Sign in</a>
+</div>
+</header>
+
+<main style="max-width:1240px;margin:0 auto;padding:36px clamp(16px,4vw,32px) 64px;display:flex;flex-direction:column;gap:48px">
+
+<section aria-labelledby="ov-h1" style="display:flex;flex-direction:column;gap:14px">
+<div class="eye">StudioOS Research</div>
+<h1 id="ov-h1" class="f-d h1" style="margin:0;font-size:40px;line-height:1.1;font-weight:600;letter-spacing:-0.025em;color:#18181b;text-wrap:balance">Markets, companies and funds</h1>
+<p class="sub" style="font-size:16px;color:#3f3a49">See where demand is rising, who already builds there and where the money sits. Every figure names its source and the date it was read.</p>
+<form role="search" aria-label="Search research" style="display:flex;flex-wrap:wrap;gap:10px;max-width:820px;margin-top:6px">
+<div style="position:relative;flex:1 1 420px;min-width:0">
+<label for="ov-q" class="sr">Search companies, markets and funds</label>
+<span aria-hidden="true" style="position:absolute;left:15px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
+<input id="ov-q" class="inp" type="search" placeholder="Search 300 companies, 82 markets and 2,032 funds by name" style="min-height:52px;padding-left:44px;font-size:15px">
+</div>
+<button type="submit" class="btn btn-p" style="min-height:52px;padding:0 24px">Search</button>
+</form>
+</section>
+
+<section aria-label="What StudioOS holds" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:12px">
+<a href="Companies.dc.html" data-route="/research/companies" class="card" style="display:flex;flex-direction:column;gap:6px;padding:18px;color:inherit;text-decoration:none">
+<span class="eye">Companies</span>
+<span class="f-m" style="font-size:34px;line-height:1.1;font-weight:600;letter-spacing:-0.02em;color:#18181b">300</span>
+<span style="font-size:13.5px;color:#3f3a49">in the company directory</span>
+<span class="cap"><span class="f-m">research_company_directory</span> · Wikidata · as of 2026-09-30</span>
+<span class="lnk" style="margin-top:auto;padding-top:6px">Browse companies →</span>
+</a>
+<a href="Markets.dc.html" data-route="/research/markets" class="card" style="display:flex;flex-direction:column;gap:6px;padding:18px;color:inherit;text-decoration:none">
+<span class="eye">Markets</span>
+<span class="f-m" style="font-size:34px;line-height:1.1;font-weight:600;letter-spacing:-0.02em;color:#18181b">82</span>
+<span style="font-size:13.5px;color:#3f3a49">holding 60,829 companies, as the taxonomy source counts them</span>
+<span class="cap"><span class="f-m">research_market_directory</span> · Axal sector taxonomy · as of 2026-09-30</span>
+<span class="lnk" style="margin-top:auto;padding-top:6px">Browse markets →</span>
+</a>
+<a href="Funds.dc.html" data-route="/research/funds" class="card" style="display:flex;flex-direction:column;gap:6px;padding:18px;color:inherit;text-decoration:none">
+<span class="eye">Funds</span>
+<span class="f-m" style="font-size:34px;line-height:1.1;font-weight:600;letter-spacing:-0.02em;color:#18181b">2,032</span>
+<span style="font-size:13.5px;color:#3f3a49">from two public fund lists</span>
+<span class="cap"><span class="f-m">research_fund_directory</span> · 2 sources · as of [latest as_of]</span>
+<span class="lnk" style="margin-top:auto;padding-top:6px">Browse funds →</span>
+</a>
+<a href="Geography.dc.html" data-route="/research/geographies" class="card" style="display:flex;flex-direction:column;gap:6px;padding:18px;color:inherit;text-decoration:none">
+<span class="eye">Countries</span>
+<span class="f-m" style="font-size:34px;line-height:1.1;font-weight:600;letter-spacing:-0.02em;color:#18181b">49</span>
+<span style="font-size:13.5px;color:#3f3a49">where directory companies are based</span>
+<span class="cap"><span class="f-m">research_company_directory</span> · as of 2026-09-30</span>
+<span class="lnk" style="margin-top:auto;padding-top:6px">Browse geographies →</span>
+</a>
+<a href="#sector-grid" class="card" style="display:flex;flex-direction:column;gap:6px;padding:18px;color:inherit;text-decoration:none">
+<span class="eye">Sectors tracked</span>
+<span class="f-m" style="font-size:34px;line-height:1.1;font-weight:600;letter-spacing:-0.02em;color:#18181b">12</span>
+<span style="font-size:13.5px;color:#3f3a49">each read on six dimensions</span>
+<span class="cap"><span class="f-m">market_intel_indexes</span> · about 35 sources · refreshed every few hours · last [computed_at]</span>
+<span class="lnk" style="margin-top:auto;padding-top:6px">See the sector grid ↓</span>
+</a>
+</section>
+
+<section aria-labelledby="ov-split" style="display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="ov-split" class="h2">Private, public and government companies</h2>
+<p class="sub" style="margin-top:4px">No source records ownership for each company, so each count follows the list the record came from.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:12px">
+<div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span class="eye">Private</span><span class="chip">Company directory</span></div>
+<div style="display:flex;align-items:baseline;gap:10px"><span class="f-m" style="font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-0.02em">300</span><span style="color:#3f3a49">companies</span></div>
+<p style="margin:0;font-size:13.5px;color:#3f3a49">Directory records not known to be listed. Listing status is not recorded per company, so a few may trade on an exchange.</p>
+<p class="cap"><span class="f-m">research_company_directory</span> · as of 2026-09-30</p>
+<a href="Companies.dc.html" data-route="/research/companies" class="lnk" style="margin-top:auto">Browse the directory →</a>
+</div>
+<div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span class="eye">Public</span><span class="chip">Listed companies</span></div>
+<div style="display:flex;align-items:baseline;gap:10px"><span class="f-m" style="font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-0.02em">21</span><span style="color:#3f3a49">listed companies</span></div>
+<p style="margin:0;font-size:13.5px;color:#3f3a49">Each with its symbol, exchange, market-cap band and employee band.</p>
+<p class="cap"><span class="f-m">signal_companies</span> · as of [updated_at]</p>
+<a href="Markets.dc.html" data-route="/research/markets?view=public" class="lnk" style="margin-top:auto">See the 21 listed companies →</a>
+</div>
+<div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span class="eye">Government</span></div>
+<div style="display:flex;align-items:center;min-height:36px"><span class="nr" style="font-size:13px;min-height:28px;padding:0 10px">Not recorded</span></div>
+<p style="margin:0;font-size:13.5px;color:#3f3a49">No source lists government-owned companies yet.</p>
+<p class="cap">No store holds ownership type.</p>
+</div>
+</div>
+</section>
+
+<section id="sector-grid" aria-labelledby="ov-grid" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="ov-grid" class="h2">Twelve sectors on six dimensions</h2>
+<p class="sub" style="margin-top:4px">Each index runs from 0 to 100, worldwide, for the latest month. The arrow and percentage compare it with the month before. Open a sector to see every month since May 2026.</p>
+</div>
+<p class="cap"><span class="f-m">market_intel_indexes</span> · global · [period_key] · computed [computed_at]</p>
+</div>
+<div class="card" style="padding:10px 10px 16px">
+<div style="overflow-x:auto">
+<div role="table" aria-label="Index by sector and dimension, latest month" style="min-width:900px">
+<div role="row" style="display:grid;grid-template-columns:minmax(190px,1.5fr) repeat(6,minmax(0,1fr));gap:6px;padding:8px 8px 6px">
+<span role="columnheader" class="th">Sector</span>
+<span role="columnheader" class="th">Demand</span>
+<span role="columnheader" class="th">Supply</span>
+<span role="columnheader" class="th">Capital</span>
+<span role="columnheader" class="th">Talent</span>
+<span role="columnheader" class="th">Research</span>
+<span role="columnheader" class="th">Sentiment</span>
+</div>
+<sc-for list="{{ sectors }}" as="s" hint-placeholder-count="12">
+<div role="row" style="display:grid;grid-template-columns:minmax(190px,1.5fr) repeat(6,minmax(0,1fr));gap:6px;padding:3px 8px">
+<span role="rowheader" style="display:flex;align-items:center;min-height:44px"><a href="Sector.dc.html" data-route="/research/markets/{{ s.slug }}" style="font-weight:600;color:#18181b">{{ s.name }}</a></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+<span role="cell" style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:44px;padding:0 10px;border-radius:8px;background:#f7f6fa;border:1px dashed #dcd8e6"><span class="f-m" style="font-size:13px;color:#18181b">[index]</span><span class="f-m" style="font-size:11.5px;color:#6b6577">[Δ%]</span></span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 28px;margin-top:10px;padding:14px 8px 0;border-top:1px solid #f1f0f4">
+<div style="display:flex;align-items:center;gap:8px"><span class="cap">Cell shade: index</span><span class="f-m cap">0</span><span style="display:flex;gap:2px"><span style="display:block;width:22px;height:14px;border-radius:3px;background:#f4f0fe;border:1px solid #ddd0fb"></span><span style="display:block;width:22px;height:14px;border-radius:3px;background:#ddd0fb"></span><span style="display:block;width:22px;height:14px;border-radius:3px;background:#c4b5fd"></span><span style="display:block;width:22px;height:14px;border-radius:3px;background:#a78bfa"></span><span style="display:block;width:22px;height:14px;border-radius:3px;background:#7c3aed"></span></span><span class="f-m cap">100</span></div>
+<span class="cap">▲ rose · ▼ fell, against the month before</span>
+<span style="display:flex;align-items:center;gap:8px"><span class="nr">Not recorded</span><span class="cap">no source reported this month</span></span>
+<span style="display:flex;align-items:center;gap:8px"><span class="ur">Unreadable</span><span class="cap">the read failed; never drawn as 0</span></span>
+</div>
+</div>
+</section>
+
+<section aria-label="Demand and supply" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(480px,100%),1fr));gap:12px">
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="ov-dos" class="h2">Where demand outruns supply</h2>
+<p class="sub" style="margin-top:4px">Sectors whose demand index rose more than their supply index since last month: more people looking than new products arriving.</p>
+</div>
+<div role="table" aria-labelledby="ov-dos">
+<div role="row" style="display:grid;grid-template-columns:28px minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:10px;padding:0 0 8px;border-bottom:1px solid #ececf1">
+<span role="columnheader" class="th">#</span>
+<span role="columnheader" class="th">Sector</span>
+<span role="columnheader" class="th" style="text-align:right">Demand</span>
+<span role="columnheader" class="th" style="text-align:right">Supply</span>
+<span role="columnheader" class="th" style="text-align:right">Gap</span>
+</div>
+<sc-for list="{{ outruns }}" as="o" hint-placeholder-count="5">
+<div role="row" class="trow" style="display:grid;grid-template-columns:28px minmax(0,1.6fr) repeat(3,minmax(0,1fr));gap:10px;align-items:center;min-height:48px">
+<span role="cell" class="f-m" style="font-size:12.5px;color:#6b6577">{{ o.rank }}</span>
+<span role="cell"><a href="Sector.dc.html" style="font-weight:600;color:#18181b">[Sector]</a></span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b">[Δ%]</span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b">[Δ%]</span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b;font-weight:600">[+pp]</span>
+</div>
+</sc-for>
+</div>
+<p class="cap">Up to five sectors, largest gap first. When none qualifies, the card reads “No sector’s demand rose faster than its supply this month.”</p>
+<p class="cap" style="margin-top:-8px"><span class="f-m">market_intel_indexes</span> · demand and supply · global · [period_key] against [previous period_key]</p>
+</div>
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 class="h2">What the six dimensions read</h2>
+<p class="sub" style="margin-top:4px">Each index blends several public sources. These are the records behind each one.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:16px 20px">
+<div><div class="h3" style="font-size:15px">Demand</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">Search interest, app-store activity, product launches and community discussion.</p></div>
+<div><div class="h3" style="font-size:15px">Supply</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">New apps and products, open-source activity, patents and company filings.</p></div>
+<div><div class="h3" style="font-size:15px">Capital</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">Funding filings and public finance series.</p></div>
+<div><div class="h3" style="font-size:15px">Talent</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">Labour statistics and developer questions.</p></div>
+<div><div class="h3" style="font-size:15px">Research</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">Papers, citations, code releases and patents.</p></div>
+<div><div class="h3" style="font-size:15px">Sentiment</div><p style="margin:2px 0 0;font-size:13px;color:#3f3a49">News tone and community discussion.</p></div>
+</div>
+<p class="cap" style="margin-top:auto">Sources per dimension come from the market intelligence registry; a sector page lists them by name.</p>
+</div>
+</section>
+
+<section aria-labelledby="ov-comp" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="ov-comp" class="h2">Who is already building</h2>
+<p class="sub" style="margin-top:4px">The company directory by sector and by country. Sector labels are Wikidata’s own words: 154 different labels across 251 companies.</p>
+</div>
+<a href="Companies.dc.html" data-route="/research/companies" class="lnk">Browse all 300 companies →</a>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(480px,100%),1fr));gap:12px">
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Companies per sector label</span><span class="cap">Top 10 labels by number of companies</span></figcaption>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ sectorBars }}" as="b" hint-placeholder-count="10">
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:24px">
+<a href="Companies.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px;margin-top:4px;padding-top:8px;border-top:1px solid #f1f0f4">
+<span style="font-size:13px;color:#3f3a49">144 other labels</span>
+<span></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px">
+<span style="font-size:13px;color:#3f3a49">No sector label</span>
+<span><span class="nr">Not recorded</span></span>
+<span class="f-m" style="font-size:12px;color:#18181b;text-align:right">49</span>
+</div>
+</div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_company_directory</span> · sector label for 251 of 300 · as of 2026-09-30</p>
+</figure>
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Where they are based</span><span class="cap">Top 10 countries by number of companies</span></figcaption>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ countryBars }}" as="b" hint-placeholder-count="10">
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:24px">
+<a href="Geography.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px;margin-top:4px;padding-top:8px;border-top:1px solid #f1f0f4">
+<a href="Geography.dc.html" style="font-size:13px;color:#6d28d9;font-weight:600">39 more countries</a>
+<span></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_company_directory</span> · 300 companies in 49 countries · as of 2026-09-30</p>
+</figure>
+</div>
+</section>
+
+<section aria-labelledby="ov-money" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="ov-money" class="h2">Where the money is</h2>
+<p class="sub" style="margin-top:4px">2,032 funds from two public lists. HQ and focus are free text as the sources wrote them; these charts group them.</p>
+</div>
+<a href="Funds.dc.html" data-route="/research/funds" class="lnk">Browse all 2,032 funds →</a>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(480px,100%),1fr));gap:12px">
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Funds by HQ</span><span class="cap">Top 8 countries by number of funds headquartered there</span></figcaption>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ hqBars }}" as="b" hint-placeholder-count="8">
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:24px">
+<a href="Geography.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px;margin-top:4px;padding-top:8px;border-top:1px solid #f1f0f4">
+<span style="font-size:13px;color:#3f3a49">Other HQs</span>
+<span></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px">
+<span style="font-size:13px;color:#3f3a49">No HQ</span>
+<span><span class="nr">Not recorded</span></span>
+<span class="f-m" style="font-size:12px;color:#18181b;text-align:right">29</span>
+</div>
+</div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_fund_directory</span> · HQ for 2,003 of 2,032 · 250 distinct values, matched to countries · as of [latest as_of]</p>
+</figure>
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Funds by stated focus</span><span class="cap">Top 8 focus keywords by number of funds</span></figcaption>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ focusBars }}" as="b" hint-placeholder-count="8">
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:24px">
+<a href="Funds.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px;margin-top:4px;padding-top:8px;border-top:1px solid #f1f0f4">
+<span style="font-size:13px;color:#3f3a49">Other focus</span>
+<span></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) 48px;align-items:center;gap:12px;min-height:28px">
+<span style="font-size:13px;color:#3f3a49">No stated focus</span>
+<span><span class="nr">Not recorded</span></span>
+<span class="f-m" style="font-size:12px;color:#18181b;text-align:right">996</span>
+</div>
+</div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_fund_directory</span> · focus for 1,036 of 2,032 · 620 distinct values, grouped by keyword · as of [latest as_of]</p>
+</figure>
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Fund sizes</span><span class="cap">Number of funds in each size band</span></figcaption>
+<div style="overflow-x:auto">
+<div style="min-width:420px">
+<div style="display:flex;align-items:flex-end;gap:10px;height:160px;padding:0 4px;border-bottom:1px solid #d9d6e2">
+<sc-for list="{{ sizeBands }}" as="z" hint-placeholder-count="6">
+<div style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%">
+<span class="f-m" style="font-size:11.5px;color:#6b6577">[n]</span>
+<span class="ghost" style="display:block;width:100%;height:96px;border-radius:4px 4px 0 0"></span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:10px;padding:7px 4px 0">
+<sc-for list="{{ sizeBands }}" as="z" hint-placeholder-count="6"><span style="flex:1 1 0;text-align:center;font-size:11.5px;line-height:1.3;color:#3f3a49">{{ z.l }}</span></sc-for>
+</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px"><span class="nr">Not recorded</span><span class="cap">size missing for <span class="f-m" style="color:#18181b">2</span> funds</span></div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_fund_directory</span> · size for 2,030 of 2,032 · in euros as the source reports them · as of [latest as_of]</p>
+</figure>
+<figure class="card" style="margin:0;padding:20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">Recent vintages</span><span class="cap">Number of funds by vintage year</span></figcaption>
+<div style="overflow-x:auto">
+<div style="min-width:560px">
+<div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px;border-bottom:1px solid #d9d6e2">
+<sc-for list="{{ vintages }}" as="v" hint-placeholder-count="16">
+<div style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%">
+<span class="f-m" style="font-size:10.5px;color:#6b6577">[n]</span>
+<span class="ghost" style="display:block;width:100%;height:96px;border-radius:3px 3px 0 0"></span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:6px;padding:7px 4px 0">
+<sc-for list="{{ vintages }}" as="v" hint-placeholder-count="16"><span class="f-m" style="flex:1 1 0;text-align:center;font-size:10.5px;color:#3f3a49">{{ v.y }}</span></sc-for>
+</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px"><span class="nr">Not recorded</span><span class="cap">vintage missing for <span class="f-m" style="color:#18181b">1,059</span> funds</span></div>
+<p class="cap" style="margin-top:auto"><span class="f-m">research_fund_directory</span> · vintage for 973 of 2,032 · 2011 to 2026 · as of [latest as_of]</p>
+</figure>
+</div>
+</section>
+
+<section aria-labelledby="ov-sig" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="ov-sig" class="h2">Latest opportunity signals</h2>
+<p class="sub" style="margin-top:4px">Ten signals curated by the StudioOS team. Each states a thesis, why now, and what a founder could build.</p>
+</div>
+<a href="#" data-route="/signals" class="lnk">See all 10 signals →</a>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px">
+<sc-for list="{{ signals }}" as="g" hint-placeholder-count="3">
+<article class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip chip-v">[Sector]</span><span class="chip">[Region] · [Country]</span></div>
+<h3 class="h3">[Signal title]</h3>
+<div><div class="eye" style="font-size:10.5px">Why now</div><p style="margin:3px 0 0;font-size:13.5px;color:#3f3a49">[Why now, in one sentence]</p></div>
+<div><div class="eye" style="font-size:10.5px">What a founder could build</div><p style="margin:3px 0 0;font-size:13.5px;color:#3f3a49">[Build opportunity, in one sentence]</p></div>
+<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #f1f0f4">
+<span class="cap">Confidence <b style="color:#18181b">[level]</b> · updated [date]</span>
+<a href="#" data-route="/signals/[id]" class="lnk" style="font-size:13.5px">Read the signal →</a>
+</div>
+</article>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">signals</span> · 10 active · newest first · as of [updated_at]</p>
+</section>
+
+<section aria-labelledby="ov-dir" style="display:flex;flex-direction:column;gap:14px">
+<h2 id="ov-dir" class="h2">Browse the directories</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px">
+<a href="Companies.dc.html" data-route="/research/companies" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+<span class="h3">Companies</span>
+<span class="f-m" style="font-size:12.5px;color:#3f3a49">300 companies · 49 countries</span>
+<span style="font-size:13.5px;color:#3f3a49">Search by name or website. Filter by sector, country, founding year and recorded data.</span>
+<span class="lnk" style="margin-top:auto">Open companies →</span>
+</a>
+<a href="Markets.dc.html" data-route="/research/markets" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+<span class="h3">Markets</span>
+<span class="f-m" style="font-size:12.5px;color:#3f3a49">82 markets · 21 listed · 12 sectors</span>
+<span style="font-size:13.5px;color:#3f3a49">Private, public and government views, and a page for each tracked sector.</span>
+<span class="lnk" style="margin-top:auto">Open markets →</span>
+</a>
+<a href="Geography.dc.html" data-route="/research/geographies" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+<span class="h3">Geographies</span>
+<span class="f-m" style="font-size:12.5px;color:#3f3a49">49 countries</span>
+<span style="font-size:13.5px;color:#3f3a49">Companies based in a country, funds headquartered there, and the signals that name it.</span>
+<span class="lnk" style="margin-top:auto">Open geographies →</span>
+</a>
+<a href="Funds.dc.html" data-route="/research/funds" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+<span class="h3">Funds</span>
+<span class="f-m" style="font-size:12.5px;color:#3f3a49">2,032 funds · 2 sources</span>
+<span style="font-size:13.5px;color:#3f3a49">Search by name. Filter by HQ, focus, size, vintage and EIF or EIFO backing.</span>
+<span class="lnk" style="margin-top:auto">Open funds →</span>
+</a>
+</div>
+</section>
+
+</main>
+
+<footer style="border-top:1px solid #e7e5ee;background:#ffffff">
+<div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,4vw,32px) 32px">
+<p class="cap" style="max-width:820px">StudioOS Research reads public records: Wikidata (CC0) for companies, the Axal sector taxonomy for markets, two public fund lists, and about 35 public sources for the sector indexes. Figures are records from those sources, not forecasts. What no source holds reads “Not recorded”.</p>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":5200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // The twelve sectors market_intel_indexes covers. Names are real; every value is a placeholder.
+    const SECTORS = ['AI Infrastructure', 'Agentic B2B', 'Autonomous Robotics', 'Bio-Automation',
+      'Climate Intelligence', 'Cybersecurity', 'Data / Analytics', 'DevTools', 'Enterprise AI',
+      'Fintech / DeFi', 'Quantum Infrastructure', 'Vertical SaaS'];
+    const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // A ranked bar chart is sorted, so its placeholder is a descending staircase: shape only, no values.
+    const ranked = (n, label) => Array.from({ length: n }, (_, i) => ({
+      label, w: Math.round(100 - i * 72 / (n - 1)) + '%' }));
+    return {
+      sectors: SECTORS.map((name) => ({ name, slug: slug(name) })),
+      sectorBars: ranked(10, '[Sector label]'),
+      countryBars: ranked(10, '[Country]'),
+      hqBars: ranked(8, '[Country]'),
+      focusBars: ranked(8, '[Focus keyword]'),
+      sizeBands: ['Under €25M', '€25–50M', '€50–100M', '€100–250M', '€250–500M', '€500M and over'].map((l) => ({ l })),
+      vintages: Array.from({ length: 16 }, (_, i) => ({ y: String(2011 + i) })),
+      outruns: [1, 2, 3, 4, 5].map((i) => ({ rank: String(i) })),
+      signals: [{ k: 1 }, { k: 2 }, { k: 3 }]
+    };
+  }
+}
+</script>
+</body>
+</html>

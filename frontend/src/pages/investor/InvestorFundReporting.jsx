@@ -1,0 +1,99 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, FileBarChart, RefreshCw } from 'lucide-react';
+import { WorkerRail } from '../../ui';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
+import { api } from '../../lib/api';
+import './investorFundLanding.css';
+import './investorFundReporting.css';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { titleCase as caseLabel } from '../../lib/absence';
+import { useManagedFund, FundPicker } from './managedFund';
+import FromMercury from './FromMercury';
+
+const titleCase = (value) => caseLabel(value) || 'Unrecorded';
+const periodOf = (row) => row.period || row.label || row.reporting_period || `Period ${row.id || 'unrecorded'}`;
+const statusOf = (row) => String(row.status || (row.issued_at ? 'published' : 'drafted')).toLowerCase();
+const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
+
+export function ReportContents({ row }) {
+  if (row.narrative && typeof row.narrative === 'object') return <>Recorded narrative</>;
+  return <>{row.narrative || row.contents || row.note || 'Source contents not recorded'}</>;
+}
+
+export default function InvestorFundReporting() {
+  // D371: the periods are read for a fund the caller operates (`can_manage`,
+  // `?fund=`), not `items[0]` of a list that also carries LP-only funds.
+  const managed = useManagedFund();
+  const [state, setState] = useState({ loading: true, rows: [], error: null, fund: null });
+  const [filter, setFilter] = useState('all');
+
+  const load = useCallback(async () => {
+    if (managed.loading) { setState({ loading: true, rows: [], error: null, fund: null }); return; }
+    if (managed.error) { setState({ loading: false, rows: [], error: managed.error, fund: null }); return; }
+    setState({ loading: true, rows: [], error: null, fund: managed.fund });
+    try {
+      const reports = await api.lpReportsList();
+      const reportRows = Array.isArray(reports?.items) ? reports.items : [];
+      let periodRows = [];
+      if (managed.fund?.id) {
+        const periods = await api.fundsReportPeriods(managed.fund.id);
+        periodRows = periods?.items || periods?.periods || [];
+      }
+      const rows = reportRows.length ? reportRows : periodRows;
+      setState({ loading: false, rows, error: null, fund: managed.fund });
+    } catch (error) {
+      setState({ loading: false, rows: [], error: error?.message || 'The reporting archive is unavailable.', fund: managed.fund });
+    }
+  }, [managed.loading, managed.error, managed.fund]);
+  useEffect(() => { load(); }, [load]);
+  const refresh = () => (managed.error ? managed.reload() : load());
+
+  const visible = useMemo(() => {
+    if (filter === 'all') return state.rows;
+    if (filter === 'delivery') return state.rows.filter((row) => row.delivery_count != null || row.delivered_count != null || row.delivery_status);
+    return state.rows.filter((row) => statusOf(row) === filter);
+  }, [filter, state.rows]);
+  const published = state.rows.filter((row) => statusOf(row) === 'published' || statusOf(row) === 'issued').length;
+  const latest = state.rows[0];
+  const deliveryKnown = state.rows.some((row) => row.delivery_count != null || row.delivered_count != null || row.delivery_status);
+
+  return <ZonePrimaryScope><div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting">
+    <ZoneHeader family="i6" bucketPath="/funds" activeSlug="reporting" crumb="Reporting" title={<><FileBarChart size={19} /> LP reporting</>} intro="Pack builder, archive and per-LP delivery status."
+      refresh={<button type="button" className="if4-refresh" onClick={refresh} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button>} />
+    <FundPicker funds={managed.funds} fund={managed.fund} onSelect={managed.select} />
+    {/* Four real predicates over the same `visible` memo as before — this row
+        moved into the canvas's shape and nothing about what it selects changed.
+        `Delivery` narrows on optional fields, which is honest: a period with no
+        delivery record simply does not match. */}
+    <ZoneToolbar
+      role="investor"
+      className="mb-3"
+      filters={investorZoneFilters('funds/reporting', { value: filter, onChange: setFilter })}
+      actions={investorZoneActions('funds/reporting', { view: { scope: state.fund?.name, header: ['Period', 'State', 'Issued', 'Delivered'], rows: visible, cells: (r) => [periodOf(r), statusOf(r), r.issued_at, r.delivery_count ?? r.delivered_count] } })}
+    />
+    {state.error && <div className="i6-load-error if4-unavailable"><AlertCircle size={14} /> <span>Reporting archive unavailable. No period count, publication state, or delivery claim is being made.</span></div>}
+    {!state.loading && !state.error && !state.rows.length && <div className="i6-load-error if4-unavailable" data-testid="status-fund-reporting-unavailable"><AlertCircle size={14} /> <span>No reporting archive is available in this environment. Current pack, period, and per-LP delivery values remain unavailable.</span></div>}
+    <section className="if4-stats"><Stat label="Periods" value={state.error || !state.rows.length ? null : state.rows.length} note={state.rows.length ? `${published} published` : 'Archive source unavailable'} /><Stat label="Current pack" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : 'No current pack recorded'} /><Stat label="Delivery" value={deliveryKnown ? 'Recorded' : null} note={deliveryKnown ? 'Per-LP delivery source' : 'Per-LP delivery unavailable'} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
+    <section className="i6-card if4-archive"><header><div><h2>Report archive</h2><span>{state.loading ? 'Loading source records' : `${visible.length} of ${state.rows.length} records`}</span></div><span>Read-only collection</span></header>{state.loading ? <div className="i6-skeleton" /> : state.error || !state.rows.length ? <div className="i6-empty if4-empty"><AlertCircle size={17} /><div><strong>Report archive is unavailable.</strong><p>Pack contents, publication state, and per-LP delivery cannot be displayed without stored reporting records.</p></div></div> : !visible.length ? <div className="i6-empty">No reporting records match this filter.</div> : <div className="if4-table-wrap"><table><thead><tr><th>Period</th><th>State</th><th>Delivered</th><th>Contents</th></tr></thead><tbody>{visible.map((row) => <tr key={row.uid || row.id || periodOf(row)}><td><strong>{periodOf(row)}</strong><small>{row.issued_at ? `Issued ${date(row.issued_at)}` : 'Source period'}</small></td><td><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td><td>{row.delivery_count ?? row.delivered_count ?? row.delivery_status ?? 'Unavailable'}</td><td><ReportContents row={row} /></td></tr>)}</tbody></table></div>}<p className="i6-footnote">A draft is not represented as delivered. This page never builds, publishes, exports, or changes an LP pack.</p></section>
+    <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>Source-preserved · no write</span></div></header><p>Axal offers no pack authoring, publishing, archive export or delivery log here. Missing per-LP delivery data is not treated as delivery to all LPs.</p></section>
+    {/* D840 (#2349): month-end cash from the GP's own Mercury, and its statement attached on Accept. */}
+    <FromMercury section="reporting" fundId={managed.fund?.id ?? null} />
+    <footer className="i6-footnote">Fund source-preserved · no pack builder, publish, export, or AI write action from this page.</footer>
+  </main><WorkerRail
+    workspace="Fund"
+    role="investor"
+    className="i6-rail"
+    stance={"Read-only reporting archive"}
+    note={"Issued periods and their delivery state, as recorded. A draft is never represented as delivered."}
+    coverage={['Issued periods read from the fund record']}
+    coverageNote={'Axal offers no LP pack authoring or publishing.'}
+    unavailable={[
+        ['Pack authoring', 'Nothing is drafted, published or delivered from this page.'],
+      ]}
+  /></div></ZonePrimaryScope>;
+}
+
+function Stat({ label, value, note }) { return <article className="if4-stat"><span>{label}</span><b>{value == null ? 'Unavailable' : value}</b><small>{note}</small></article>; }

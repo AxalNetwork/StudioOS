@@ -1,0 +1,96 @@
+**✅ Here are the exact configs you need for Cloudflare Turnstile** (before you prompt Replit).
+
+### 1. `wrangler.toml` (add this section)
+
+```toml
+# wrangler.toml
+[vars]
+# Public Turnstile Site Key (safe to expose)
+TURNSTILE_SITEKEY = "0x4AAAAAAA..."   # ← replace with your real site key from Cloudflare
+
+# Secret key will come from .env (never commit it)
+```
+
+### 2. `.env.example` (add these lines)
+
+```env
+# Cloudflare Turnstile (bot protection)
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA   # ← replace with your real secret key
+TURNSTILE_SITEKEY=0x4AAAAAAA...                       # ← same as above (for reference)
+```
+
+### 3. Frontend widget (example for register page)
+
+Add this to any public registration form (e.g. the marketing site `index.html` or `/register` page):
+
+```html
+<!-- Turnstile Widget -->
+<div class="cf-turnstile" 
+     data-sitekey="YOUR_TURNSTILE_SITEKEY" 
+     data-callback="onTurnstileSuccess"
+     data-action="register"
+     data-theme="auto"></div>
+
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+<script>
+  function onTurnstileSuccess(token) {
+    // Store token in hidden field or global variable
+    window.turnstileToken = token;
+  }
+</script>
+```
+
+---
+
+**Now here is the ready-to-copy prompt** for Replit Agent.
+
+**Paste this directly into the Agent tab:**
+
+```
+You are the senior security + frontend engineer for Axal StudioOS. Implement **Cloudflare Turnstile** bot protection on all public registration and referral flows.
+
+Use the exact configurations below:
+
+1. Add TURNSTILE_SITEKEY and TURNSTILE_SECRET to environment variables (use the .env.example I provided).
+
+2. Update wrangler.toml with the TURNSTILE_SITEKEY var (as shown in the config I gave you).
+
+3. Protect these public endpoints:
+   - POST /api/auth/register (or wherever new users sign up via ?ref= link)
+   - Any referral link handling (public register flow)
+
+4. Frontend (public marketing site + any register page):
+   - Add the Turnstile widget script + div (use the exact HTML I provided).
+   - On form submit, include the Turnstile token in the request body as `turnstile_token`.
+
+5. Backend verification (in auth.py router or main.py):
+   - Create a helper `verify_turnstile(token: str, ip: str)` that calls https://challenges.cloudflare.com/turnstile/v0/siteverify
+   - Reject the request with 403 + clear message if verification fails.
+   - Log failed attempts to activity_logs or integration_logs.
+
+6. Make it seamless:
+   - Show the widget on the public register page.
+   - Automatically pass the token when a user clicks a referral link (?ref=CODE).
+   - Graceful fallback: if Turnstile fails to load, show a warning but still allow submission (with extra rate limiting).
+
+7. Update the Refer & Earn page and any public signup flows to include the widget.
+
+Build this step-by-step:
+1. First update wrangler.toml and .env.example with Turnstile keys.
+2. Then add the Turnstile widget to the public register/signup pages.
+3. Then implement the backend verification helper and protect the register endpoint.
+4. Finally update the referral flow to carry the token and test end-to-end.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+Just copy the configs above first, then paste the prompt into Replit Agent.
+
+After it finishes, Turnstile will be live on all public registration and referral links, giving you strong bot protection.
+
+Would you like the next prompt for **R2 (file storage for legal docs)** or **Durable Objects (real-time updates)**? Just say the word.

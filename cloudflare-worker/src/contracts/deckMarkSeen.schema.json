@@ -1,0 +1,9 @@
+{
+  "$id": "deckMarkSeen",
+  "title": "POST /api/decks/areas/batches/:uid/seen (D1600, #3879)",
+  "description": "The reply the deck v2 adapter's `markSeen` method passes through when the return banner's Review is opened (`routes/deck_batches.ts`). Repeating it answers the same.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok"],
+  "properties": { "ok": { "const": true } }
+}

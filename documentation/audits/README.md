@@ -1,0 +1,72 @@
+# documentation/audits — point-in-time findings
+
+**An audit is a snapshot, not a spec.** Each file was accurate on its date and
+is *not* maintained afterwards. Many findings have since been fixed and the
+audit files do not say so.
+
+So: never treat a finding here as a live bug without re-checking it against the
+code. Reading an old audit as a to-do list is how work gets redone.
+
+| File | Covers |
+| --- | --- |
+| `RUNTIME_DDL_2026-11-07.md` | Every runtime `ADD COLUMN` in the Worker: 360 blind ALTERs in 61 files, 359 for columns a migration already declares, so each fails as `duplicate column name` on every fresh isolate against an up-to-date database; the cohort bootstrap moved onto `runSchemaBootstrap` and the no-growth ratchet (#4568 R2-04). |
+| `USAGE_TABLES_2026-11-07.md`, `USAGE_TABLES_2026-11-07.json` | The five usage tables read from the code: every statement, its plan, each index's readers and write cost, the foreign keys and triggers that bound retention, and D4568's before and after (D4568). |
+| `D1_BASELINE_2026-11-06.md`, `D1_BASELINE_2026-11-06.json` | The D1 contention benchmark's first results (simulated): statements per operation and stage, the scans that grow with the platform, load steps, growth, invariants, and what production's baseline must still supply (D4567). |
+| `SCALE_1000_DAU_AUDIT_2026-09-18.md` | Worker + D1 + SPA load for the first 1,000 daily users, with a Claude Code implementation plan. |
+| `PERFORMANCE_BASELINE_2026-11-06.md` | #4573 part 1: what is measured on main, the frontend shell and lazy-chunk composition, lab Web Vitals for the anonymous pages, D1 statements per API flow, ten proven hotspots and the budgets now in CI. Local and read-only; production metrics are marked unavailable. |
+| `PLATFORM-DELIVERY-AUDIT.md` | The most recent canvas-by-canvas delivery sweep. Start here for “what shipped.” |
+| `BETA_READINESS_AUDIT_2026-05-20.md`, `BETA_READINESS_AUDIT_2026-06-03.md`, `BETA_READINESS_AUDIT_2026-07-03.md` | Three successive beta-readiness passes. |
+| `BETA_READINESS_ISSUES_2026-05-20.md` | The issue list from the first of those. |
+| `FOUNDER_UX_AUDIT.md`, `INVESTOR_UX_AUDIT.md`, `PARTNER_UX_AUDIT.md`, `ADVISOR_UX_AUDIT.md` | Per-persona journey audits. |
+| `SECURITY_AUDIT.md`, `SECURITY_REVIEW.md` | Security passes. |
+| `BROKEN_FEATURES_VERIFIED.md` | Features confirmed broken at the time of writing. |
+| `DECK_AUTOFILL_AUDIT.md`, `AXAL_SPINOUT_DECK_AUDIT_2026-05-30.md` | Pitch-deck data wiring. |
+| `COMMUNITY_OVERVIEW_MAP_2026-10-24.md` | Every read behind the Admin · Community canvas (CM1–CM13), board by board, and its defects on that day (D930). |
+| `ADVISORS_PARTNERS_MAP_2026-10-24.md` | The Advisors & Partners canvas (AP1–AP14) read board by board against the reads that existed that day, and its defects re-checked at HEAD (D972). |
+| `PROGRAM_GRANTS_MAP_2026-10-24.md` | The Program grants canvas (GR1–GR15) read board by board against the code that day: no grant store, the ledger read the grid's rows come from, and the licence page's tabs (D981). |
+| `PARTNER_PROFILES_MAP_2026-10-24.md` | The Partner profiles canvas (PRF1–PRF12) read board by board against the code that day: the list read the page draws from, what it lacks, and the verify route's three defects (D989). |
+| `PERSONA_SEGMENTS_MAP_2026-10-24.md` | The Persona segments canvas (SEG1–SEG14) read board by board against the code that day: the capped persona list the page draws from, the taxonomy, and the profile-mapping defects (D997). |
+| `PAYMENTS_MAP_2026-10-24.md` | The Payments canvas (PAY1–PAY13) read board by board against the code that day: the four reads the page draws from, the Worker gates still open to any admin, and the webhook's required events after #2393 (D1008). |
+| `CAP_TABLE_MAP_2026-10-24.md` | The Cap table canvas (CT1–CT24) read board by board against the code that day: #2432's broken items re-checked (most fixed by #2645, #2651 and #2446), the four reads the tool draws from, and why every figure on `main` is Modelled (D1015). |
+| `MY_EVENTS_MAP_2026-10-25.md` | The My events canvas (MEV1–MEV18) read board by board against the code that day: #2387's eleven broken items re-checked (six fixed by #2623 and #2626), the three reads the page draws from, and what `registered` means (D1030). |
+| `APPROVALS_MAP_2026-10-25.md` | The Approvals canvas (APR1–APR16) read board by board against the code that day: #2390's nine gaps re-checked (three fixed by D938 and D1038), the three reads the page draws from, and what each board waits for (D1038). |
+| `VALIDATE_BUILD_MAP_2026-10-25.md` | The Validate → Build canvas (VB1–VB22) read against the code that day: #2426's four findings re-checked (all open), the one read the plan draws from, what is stored nowhere yet, and what each board waits for (D1063). |
+| `SECURITY_CONTROL_MATRIX_2026-11-06.md` | #4571 (Security S2): the GitHub, Cloudflare, storage and deploy controls read from the repository that day, each VERIFIED (repo), OBSERVED (repo) or UNVERIFIED; the risk register SC-01 to SC-09; the migration and deploy tabletop; the owner-only checklist. Its register ids are read by `frontend/test/workflow_security_4571.test.mjs` (D4571). |
+| `TRUST_MAP_2026-10-25.md` | The Trust center canvas (TRU1–TRU20) read against the code that day: #2425's eleven findings re-checked (one fixed by D1072, the sanctions fail-open fixed on main), what each public tab can read, and what waits (D1072). |
+| `DATA_ROOM_MAP_2026-10-25.md` | The Data room canvas (DR1–DR24) read against the code that day: #2456's broken items re-checked (three fixed on main, one half fixed), what each tab can read, and what waits (D1101). |
+| `COMPANIES_MAP_2026-10-25.md` | The Companies and projects canvas (CMP1–CMP19) read against the code that day: #2422's eleven broken items re-checked (the Operating Partner power fixed by D889), what each tab can read, and what waits (D1134). |
+| `READINESS_MAP_2026-10-25.md` | The Fundraising readiness canvas (RD1–RD19) read against the code that day: #2433's eight broken items re-checked (items 1–4 fixed on main by #2445), what the page can read, and that nothing computes Product-market fit yet (D1141). |
+| `DEAL_PAGE_MAP_2026-10-25.md` | The Investor Deal Page canvas (DL1–DL24) read against the code that day: #2421's thirteen broken items re-checked (seven fixed on main, mostly by #2647), what each tab can read, and what waits (D1148). |
+| `CALENDAR_MAP_2026-10-25.md` | The Calendar canvas (CAL1–CAL21) read against the code that day: #2420's sixteen broken items re-checked (1, 9 and 12 fixed by #2637 and #2627, 4 by D1205, 3 in part by D1033), what each board can read, and what waits (D1205). |
+| `CALLS_FOR_CAPITAL_MAP_2026-10-26.md` | The Calls for Capital canvas (CLS1–CLS15) read against the code that day: what "Calls" was, what each board can read with the flag off, #2458's three broken items re-checked, and what waits (D1221). |
+| `CLOSING_MAP_2026-10-26.md` | The Closing room canvas (CP1–CP21) read against the code that day: what each board can read (a closing is its deal; no closings store), #2424's live bugs re-checked, and what waits (D1213). |
+| `PRODUCT_TESTING_MAP_2026-10-25.md` | The Product Testing canvas (TST1–TST16) read against the code that day: #2382's fourteen missing items re-checked (the address by D938, the tester store by D1042, the overview and pool drawn by D1195), what each tab can read, and what waits (D1195). |
+| `CAPITAL_RELATIONSHIPS_MAP_2026-10-25.md` | The Capital relationships canvas (CRL1–CRL19) read against the code that day: #2457's broken items re-checked (1–3 fixed on main), what each tab can read, and what waits (D1188). |
+| `BANK_ACCOUNTS_MAP_2026-10-25.md` | The Bank Accounts canvas (BNK1–BNK12) read against the code that day: #2389's twelve missing items re-checked (three fixed by D938, balances by D1181), what each tab can read, and what waits (D1181). |
+| `USE_OF_FUNDS_MAP_2026-10-25.md` | The Use of funds canvas (UF1–UF22) read against the code that day: #2455's findings re-checked (its four new faults already fixed on main), what each tab can read, and what waits (D1173). |
+| `STORAGE_MAP_2026-10-25.md` | The Account · Usage · Storage canvas (STG1–STG20) read against the code that day: #2449's findings re-checked, what each block can read, and what waits (D1166). |
+| `FUND_ADMIN_MAP_2026-10-25.md` | The Fund Administration · Admin canvas (FND1–FND22) read against the code that day: #2388's eleven missing items re-checked, what each tab can read, and what waits (D1157). |
+| `REPORTING_MAP_2026-10-25.md` | The Reporting to investors canvas (RPT1–RPT21) read against the code that day: #2427's eight findings re-checked (three fixed by D889 and `cleanMetrics`), the reads the desk and the company page draw from, what is read nowhere yet, and what each board waits for (D1056). |
+| `ACCOUNTS_MAP_2026-10-26.md` | The Accounts canvas (ACC1–ACC14, #2377) read against the code that day: what each board can read, #2377's fifteen findings re-checked, and which part takes each (D1299). |
+| `CONTENT_QUEUE_MAP_2026-10-26.md` | The Content queue canvas (ART1–ART18, #2383) read against the code that day: what each board can read, #2383's sixteen findings re-checked, and which part takes each (D1290). |
+| `ADD_TOKENS_MAP_2026-10-26.md` | The "Add tokens" canvas (CRP1–CRP18, #2452) read against the code that day: the reads each board draws from, #2452's four broken items re-checked, and what waits on which part (D1285). |
+| `CHECKOUT_MAP_2026-10-25.md` | The Checkout canvas (PAYX1–PAYX21) read against the code that day: #2451's nine findings re-checked (two fixed by D892), the reads the sheet draws from, and what each board waits for (D1048). |
+| `ADMIN_PAGE_HEADER_MAP_2026-10-24.md` | The Admin page header canvas (SHL1–SHL9) read against what each board can reuse that day (D936). |
+| `SPINOUT_LAB_ADMIN_MAP_2026-10-24.md` | Every read behind the Spin-Out Lab admin canvas (SL1–SL21), board by board, its defects re-checked at HEAD, and production's calendar that day (D937). |
+| `PITCH_DECK_WORKER_MAP_2026-10-24.md` | Every deck endpoint against the Pitch deck studio canvas's boards, and the twelve #2434 bugs on that day (D894). |
+| `INVESTOR_NARRATIVE_MAP_2026-10-24.md` | The Investor narrative canvas's boards against the code, the narrative reads and writes with their shapes, and #2454's bugs on that day (D906). |
+| `EVENTS_CONSOLE_MAP_2026-10-24.md` | The admin Events Console canvas's boards against the code, the event reads and writes with their shapes, the admin shell around `/admin/events`, and #2368's defects on that day (D915). |
+| `PARTNER_INVITATIONS_MAP_2026-10-24.md` | The Partner invitations canvas's boards against the code, the partner reads and writes with their shapes, the admin shell around `/admin/partners`, #2370's defects on that day, and a completeness critique (D923). |
+| `PROGRAMS_MAP_2026-10-24.md` | The admin Programs canvas's boards against the code, each program family's reads and writes, the landing and the admin shell around `/admin/held/programs`, #2371's defects on that day, and a completeness critique (D953). |
+| `SPINOUT_LAB_UI_FIDELITY_AUDIT_2026-08-03.md` | Lab UI against its designs. |
+| `SIGNUP_FRICTION_AUDIT_2026-07-08.md` | Signup funnel friction. |
+| `DOCS_VISIBILITY_AUDIT.md` | Help Center coverage. |
+| `MIGRATION_LFS_AUDIT.md` | Git LFS migration. |
+| `PORTFOLIO_UX_AUDIT_2026-11-09.md`, `portfolio-ux-2026-11-09/` | #4816: the investor Portfolio's screens, journeys and states captured from the current build with synthetic data, findings graded against the evidence, the proposed information architecture and state model, and the gaps in the Portfolio v2 canvas (D4817). The folder holds the capture script, its fixtures and the screenshots. |
+| `LEARNING_COVERAGE_2026-11-10.md` | #4650 part 4: the Learning curriculum coverage record. Coverage of the founder, investor, advisor and partner journeys is unknown until a Super Admin opens it in the studio, because no agent read production; it explains how to read the four states (D4650). |
+
+## Adding one
+
+Date it in the filename, state the date and the commit in the first paragraph,
+and say plainly what you did *not* check. An audit that implies full coverage it
+did not have is worse than a narrow one that says so.

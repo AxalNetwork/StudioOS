@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eef0f2;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#334155;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f8f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:184px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:0 0 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .terr{background:#334155;color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+    .inner{padding:18px 22px 0}
+    .num{font-variant-numeric:tabular-nums}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14.5px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:12px;padding:8px 0;color:#3f3a49}
+    .vm{font-size:11.5px;font-weight:700;color:#334155;cursor:pointer}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .prop{background:#f6f8fa;border:1px solid #cbd5e1;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#334155;background:#e6ebf0;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #334155;background:#334155;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .lock{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px}
+    .forge{background:#eef2ff;border:1px dashed #a5b4fc;border-radius:5px;padding:2px 6px}
+  </style>
+</helmet>
+
+<!-- ══════════ C1 · HUB ══════════ -->
+<section class="ab" id="c1">
+  <div class="ab-hd"><a class="ab-id" href="#c1">C1</a><span class="ab-nm">Subsidiary · Contracts hub</span><span class="ab-sub">steel · six zones · offers and contracts are one pipeline</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The organising decision: an offer and a contract are two stages of the same thing, not two systems. A partner deal starts as structured terms, gets negotiated, and only becomes an envelope once accepted — so the Accepted lane's action is literally "Send for e-signature," and it lands in the send flow with the terms already filled.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:12.5px;font-weight:700">Axal VC France</span>
+          <span class="num" style="font-size:11px;opacity:.72">FR · BE · LU</span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.72">{{ totalContracts }} contracts · {{ totalOffers }} offers</span>
+      </div>
+      <div class="inner">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Contracts</h1>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ hubSub }}</div>
+          </div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap"><span class="acc">New contract ▸</span><span class="gho">New offer</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-top:15px">
+          <sc-for list="{{ strip }}" as="s" hint-placeholder-count="5">
+            <div style="{{ s.cardStyle }}">
+              <div class="lbl" style="font-size:9px">{{ s.label }}</div>
+              <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:5px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+              <div class="num" style="font-size:10.5px;color:{{ s.ink }};margin-top:5px;font-weight:600">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:9px;line-height:1.55">{{ stripNote }}</div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Active contracts</span><span class="zs">LEDGER · per-recipient progress, not just a status word</span></div>
+          <div style="background:#fbfbfc;border:1px solid #e2e1e8;border-radius:9px;padding:8px 12px;display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <span style="width:14px;height:14px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+            <span style="font-size:12.5px;color:#615c6e;flex:1">Searching Axal VC France contracts</span>
+            <span class="lock">Territory-scoped</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.15fr 1.15fr .62fr .78fr .95fr .85fr;gap:10px">
+            <span class="th">Counterparty</span><span class="th">Document</span><span class="th">Layer</span><span class="th">Channel</span><span class="th">Signatures</span><span class="th">Expiry</span>
+          </div>
+          <sc-for list="{{ contracts }}" as="c" hint-placeholder-count="6">
+            <div style="{{ c.rowStyle }}">
+              <span class="td" style="font-weight:600">{{ c.who }}<span style="{{ c.roleStyle }}">{{ c.role }}</span></span>
+              <span class="td">{{ c.doc }}</span>
+              <span class="td"><span style="{{ c.layerStyle }}">{{ c.layer }}</span></span>
+              <span class="td"><span style="{{ c.chanStyle }}">{{ c.channel }}</span></span>
+              <span class="td">
+                <span style="{{ c.statusStyle }}">{{ c.status }}</span>
+                <div class="num" style="font-size:10px;color:#615c6e;margin-top:4px">{{ c.progress }}</div>
+              </span>
+              <span class="td num" style="color:{{ c.expInk }};font-weight:600">{{ c.expiry }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+            <span style="font-size:11.5px;color:#615c6e;line-height:1.55">{{ ledgerNote }}</span>
+            <span class="vm">View more · contract record →</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Offers in flight</span><span class="zs">WORK BOARD · terms before envelopes</span></div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px">
+              <sc-for list="{{ offerLanes }}" as="l" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:8px">
+                    <span style="font-size:10.5px;font-weight:800;line-height:1.25">{{ l.name }}</span>
+                    <span class="num" style="font-size:10.5px;font-weight:700;color:#615c6e">{{ l.n }}</span>
+                  </div>
+                  <div style="display:grid;gap:8px">
+                    <sc-for list="{{ l.cards }}" as="o" hint-placeholder-count="1">
+                      <div style="{{ o.cardStyle }}">
+                        <div style="font-size:11.5px;font-weight:700;line-height:1.35">{{ o.who }}</div>
+                        <div class="mono" style="font-size:9.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ o.terms }}</div>
+                        <sc-if value="{{ o.cta }}"><div style="{{ o.ctaStyle }}">{{ o.cta }}</div></sc-if>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{ l.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:8px;padding:11px;text-align:center;font-size:10px;color:#615c6e">None</div></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ offerNote }}</div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Pending signatures</span><span class="zs">Link age against the 7-day expiry</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ pending }}" as="p" hint-placeholder-count="4">
+                <div style="{{ p.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                    <div style="min-width:0">
+                      <div style="font-size:12px;font-weight:700">{{ p.who }}</div>
+                      <div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">{{ p.doc }}</div>
+                    </div>
+                    <span style="{{ p.pill }}">{{ p.state }}</span>
+                  </div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:9px"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.bar }};border-radius:999px"></div></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px">
+                    <span class="num" style="font-size:10px;color:#615c6e">{{ p.age }}</span>
+                    <span style="{{ p.actionStyle }}">{{ p.action }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Template picker</span><span class="zs">COLLECTION · HQ master library, read-only</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+            <sc-for list="{{ templates }}" as="t" hint-placeholder-count="8">
+              <div style="{{ t.cardStyle }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+                  <span style="{{ t.layerStyle }}">{{ t.layer }}</span>
+                  <sc-if value="{{ t.updated }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px">UPDATED</span></sc-if>
+                </div>
+                <div style="font-size:12px;font-weight:700;margin-top:8px;line-height:1.35">{{ t.name }}</div>
+                <div class="mono" style="font-size:9.5px;color:#615c6e;margin-top:6px">Axal VC master · {{ t.ver }}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">
+                  <span class="lock" style="font-size:8.5px">Read-only</span>
+                  <span class="vm" style="font-size:10.5px">Use ▸</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ tplNote }}</div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px;border-color:#fde68a;background:#fffdf5">
+          <div class="zh"><span class="zt">Expiring soon</span><span class="zs">Next 90 days · NDAs by valid_until, agreements by renewal</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+            <sc-for list="{{ expiring }}" as="e" hint-placeholder-count="4">
+              <div style="{{ e.cardStyle }}">
+                <div class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ e.ink }}">{{ e.days }}</div>
+                <div style="font-size:11.5px;font-weight:700;margin-top:6px;line-height:1.35">{{ e.who }}</div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.45">{{ e.doc }}</div>
+                <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap">
+                  <span style="font-size:10px;font-weight:700;color:#334155;cursor:pointer">Renew</span>
+                  <span style="font-size:10px;font-weight:600;color:#615c6e;cursor:pointer">Lapse</span>
+                  <span style="font-size:10px;font-weight:600;color:#615c6e;cursor:pointer">Snooze</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ expNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="subsidiary" page="Contracts" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ C2 · SEND FLOW ══════════ -->
+<section class="ab" id="c2">
+  <div class="ab-hd"><a class="ab-id" href="#c2">C2</a><span class="ab-nm">Send for signature — five steps</span><span class="ab-sub">arriving from an accepted offer, terms pre-filled</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Every field Forge filled stays visibly tinted until a human confirms it. That is the whole safety property of the flow: the model can populate a merge field from a profile, but the difference between "drafted" and "agreed" has to survive all the way to step five, where a person clicks send.</div>
+
+  <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px">
+    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5"><span style="{{ s.style }}"><span class="num">{{ s.n }}</span>{{ s.label }}</span></sc-for>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 1 · Template</div>
+      <div style="background:#f6f8fa;border:1px solid #cbd5e1;border-radius:10px;padding:13px 14px;margin-top:12px">
+        <span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;color:#334155">FROM ACCEPTED OFFER</span>
+        <div style="font-size:13px;font-weight:800;margin-top:7px">Partner Revenue-Share Deal</div>
+        <div class="mono" style="font-size:10.5px;color:#615c6e;margin-top:5px">Axal VC master · v3.1 · pinned</div>
+      </div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:12px;line-height:1.6">{{ s1Note }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div class="lbl">Step 2 · Parties and merge fields</div>
+        <span style="font-size:9.5px;font-weight:700;color:#3730a3;background:#eef2ff;border:1px dashed #a5b4fc;border-radius:4px;padding:2px 7px">Forge-filled</span>
+      </div>
+      <div style="display:grid;gap:9px;margin-top:12px">
+        <sc-for list="{{ mergeFields }}" as="f" hint-placeholder-count="6">
+          <div>
+            <div class="lbl" style="font-size:8.5px;margin-bottom:4px">{{ f.label }}</div>
+            <div style="{{ f.style }}">{{ f.value }}<sc-if value="{{ f.forged }}"><span style="font-size:9px;font-weight:700;color:#3730a3;margin-left:8px">confirm</span></sc-if></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">{{ s2Note }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 3 · Review</div>
+      <div style="border:1px solid #ececf1;border-radius:10px;padding:13px 14px;margin-top:12px;background:#fbfbfc">
+        <div style="font-size:11.5px;font-weight:800">REVENUE-SHARE AGREEMENT</div>
+        <div style="display:grid;gap:5px;margin-top:9px">
+          <sc-for list="{{ previewLines }}" as="p" hint-placeholder-count="5"><div style="{{ p.style }}">{{ p.text }}</div></sc-for>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:11px">
+        <span class="mono" style="font-size:9.5px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px">v3.1 pinned</span>
+        <span style="font-size:11px;color:#615c6e;line-height:1.5">The version is fixed at send. A later publish does not alter this envelope.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 4 · Channel</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <sc-for list="{{ channels }}" as="ch" hint-placeholder-count="2">
+          <div style="{{ ch.cardStyle }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:13px;font-weight:800;color:{{ ch.ink }}">{{ ch.name }}</span>
+              <sc-if value="{{ ch.on }}"><span style="width:16px;height:16px;border-radius:50%;background:#334155;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;flex:none">✓</span></sc-if>
+            </div>
+            <div style="display:grid;gap:6px;margin-top:10px">
+              <sc-for list="{{ ch.facts }}" as="f" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px"><span style="color:#615c6e">{{ f.k }}</span><span class="num" style="font-weight:700">{{ f.v }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ chanNote }}</div>
+    </div>
+
+    <div style="background:#fff;border:1px solid #cbd5e1;border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 5 · Send</div>
+      <div style="background:#f6f8fa;border:1px solid #cbd5e1;border-radius:10px;padding:13px 15px;margin-top:12px">
+        <div style="font-size:12px;font-weight:800;color:#1e293b">Three people receive a signing link</div>
+        <div style="display:grid;gap:7px;margin-top:10px">
+          <sc-for list="{{ recipients }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11.5px">
+              <span style="font-weight:600">{{ r.who }}</span><span class="num" style="color:#615c6e">{{ r.role }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="num" style="font-size:11px;color:#334155;margin-top:11px;padding-top:10px;border-top:1px solid #cbd5e1;font-weight:600">{{ sendNote }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;margin-top:13px;flex-wrap:wrap">
+        <span style="{{ sendStyle }}">{{ sendLabel }}</span>
+        <span class="dis">Back to review</span>
+      </div>
+      <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ humanNote }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ C3 · CONTRACT RECORD ══════════ -->
+<section class="ab" id="c3">
+  <div class="ab-hd"><a class="ab-id" href="#c3">C3</a><span class="ab-nm">Contract record — the dossier</span><span class="ab-sub">subsidiary variant · Super adds a tenant breadcrumb</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.72">FR · BE · LU</span></div>
+        <span class="num mono" style="font-size:11px;opacity:.72">{{ recordId }}</span>
+      </div>
+      <div class="inner">
+        <div class="crumb"><span style="color:#334155;font-weight:700">Contracts</span><span>‹</span><span style="font-weight:700;color:#18181b">Studio Vireo · Partner Revenue-Share Deal</span></div>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:7px">
+          <div>
+            <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.025em">Partner Revenue-Share Deal</h1>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
+              <sc-for list="{{ recChips }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+            </div>
+          </div>
+          <span class="gho" style="border-color:#fecaca;color:#b91c1c">Void envelope</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:14px;margin-top:15px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Signers</span><span class="zs">{{ signerSummary }}</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ signers }}" as="s" hint-placeholder-count="3">
+                <div style="{{ s.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                    <div style="min-width:0">
+                      <div style="font-size:12.5px;font-weight:700">{{ s.who }}</div>
+                      <div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ s.role }}</div>
+                    </div>
+                    <span style="{{ s.pill }}">{{ s.state }}</span>
+                  </div>
+                  <div class="num mono" style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5">{{ s.meta }}</div>
+                  <sc-if value="{{ s.action }}"><div style="display:flex;gap:9px;margin-top:8px"><span style="{{ s.actionStyle }}">{{ s.action }}</span><span style="font-size:10.5px;font-weight:600;color:#615c6e;cursor:pointer">Remind</span></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:14px">
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Linked offer</span><span class="zs">Accepted terms snapshot</span></div>
+              <div style="background:#f6f8fa;border:1px solid #cbd5e1;border-radius:10px;padding:12px 13px">
+                <div style="display:grid;gap:6px">
+                  <sc-for list="{{ offerTerms }}" as="t" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px"><span style="color:#3f3a49">{{ t.k }}</span><span class="num" style="font-weight:700">{{ t.v }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">{{ offerLinkNote }}</div>
+            </div>
+
+            <div class="c" style="padding:16px 18px;border-color:#e2e1e8;background:#fbfbfc">
+              <div class="zh"><span class="zt">Tamper evidence</span><span class="zs">Written at completion</span></div>
+              <div style="display:grid;gap:8px">
+                <sc-for list="{{ tamper }}" as="t" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-bottom:7px;border-bottom:1px solid #f0eff4">
+                    <span style="font-size:11px;color:#615c6e">{{ t.k }}</span>
+                    <span class="num mono" style="font-size:10.5px;font-weight:700;text-align:right;word-break:break-all">{{ t.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">{{ tamperNote }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Event timeline</span><span class="zs">Immutable · newest last, because a contract reads forwards</span></div>
+          <div style="display:grid;gap:0">
+            <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="7">
+              <div style="display:grid;grid-template-columns:.75fr .9fr 1.9fr;gap:12px;align-items:center;padding:8px 0;border-top:1px solid #f4f3f7">
+                <span class="num mono" style="font-size:10.5px;color:#615c6e">{{ t.when }}</span>
+                <span style="font-size:11.5px;font-weight:700;color:{{ t.ink }}">{{ t.event }}</span>
+                <span style="font-size:11.5px;color:#3f3a49">{{ t.detail }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="subsidiary" page="Record" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      acc:this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      app:this.ic('<path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/>'),
+      prog:this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      comm:this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      con:this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5M9 15h6"/>'),
+      ins:this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>'),
+      cog:this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
+      globe:this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      srch:this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')
+    };
+    const ST = '#334155', STT = '#f6f8fa', STE = '#cbd5e1';
+    const nav = [['Home',I.home],['Accounts',I.acc],['Approvals',I.app],['Programs',I.prog],
+                 ['Community',I.comm],['Contracts',I.con],['Insights',I.ins],['Settings',I.cog]]
+      .map(([label, icon]) => ({ label, icon,
+        style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+          + (label === 'Contracts' ? 'font-weight:700;color:' + ST + ';background:' + STT + ';box-shadow:inset 2px 0 0 ' + ST
+                                   : 'font-weight:600;color:#4a4553') }));
+
+    const eur = (n) => '€' + n.toLocaleString('en-US');
+    const TODAY = new Date('2026-08-26');
+    const daysTo = (d) => Math.round((new Date(d) - TODAY) / 86400000);
+    // One expiry colour rule: green >90d, amber ≤90d, red ≤30d.
+    const expInk = (d) => d <= 30 ? '#b91c1c' : (d <= 90 ? '#b45309' : '#047857');
+
+    const LAYER = { GP:['#f5f2ff','#6d28d9','#e6dcff'], FUND:['#f5f5ff','#3730a3','#c7d2fe'],
+                    PORTFOLIO:['#f2fdf7','#047857','#a7f3d0'], COMPLIANCE:['#fffbf2','#b45309','#fde68a'] };
+    const layerChip = (l) => { const c = LAYER[l];
+      return 'font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:4px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ROLE = { partner:['#fffbf2','#b45309'], investor:['#f5f5ff','#3730a3'],
+                   advisor:['#f2fdf7','#047857'], founder:['#f5f2ff','#6d28d9'], axal:['#f4f4f6','#615c6e'] };
+    const roleChip = (r) => { const c = ROLE[r] || ROLE.axal;
+      return 'display:inline-block;margin-left:7px;font-size:8.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 5px;border-radius:3px;background:'+c[0]+';color:'+c[1]; };
+    const statusChip = (s) => {
+      const M = { completed:['#ecfdf5','#047857','#a7f3d0'], partially_signed:['#fffbeb','#92400e','#fde68a'],
+                  sent:['#f6f8fa','#334155','#cbd5e1'], draft:['#f4f4f6','#615c6e','#e4e4e8'],
+                  rejected:['#fef2f2','#b91c1c','#fecaca'], void:['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[s] || M.draft;
+      return 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const chanChip = (c) => 'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;'
+      + (c === 'DocuSign' ? 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe'
+                          : 'background:#f6f8fa;color:#334155;border:1px solid #cbd5e1');
+
+    // ══ ONE contract record. The status strip, the ledger and the expiring strip all derive
+    // from it, so a tile's count cannot disagree with the rows it filters to. ══
+    const CONTRACTS = [
+      { who:'Studio Vireo', role:'partner', doc:'Partner Revenue-Share Deal', layer:'GP', channel:'Native',
+        status:'partially_signed', signed:1, of:3, exp:'2027-11-12' },
+      { who:'Cabinet Lefèvre', role:'advisor', doc:'Advisor NDA', layer:'GP', channel:'Native',
+        status:'completed', signed:2, of:2, exp:'2026-09-30' },
+      { who:'Meriwether SAS', role:'partner', doc:'Partner Services Agreement', layer:'GP', channel:'DocuSign',
+        status:'completed', signed:2, of:2, exp:'2026-10-04' },
+      { who:'Aurélie Chen', role:'investor', doc:'Investor Subscription — Pro', layer:'FUND', channel:'Native',
+        status:'sent', signed:0, of:2, exp:'2027-03-14' },
+      { who:'Novacraft SAS', role:'founder', doc:'SAFE', layer:'PORTFOLIO', channel:'Native',
+        status:'partially_signed', signed:1, of:2, exp:'2027-06-01' },
+      { who:'Halcyon Works', role:'partner', doc:'Partner NDA + Non-Solicit', layer:'GP', channel:'DocuSign',
+        status:'completed', signed:2, of:2, exp:'2026-09-18' }
+    ].map(c => Object.assign({}, c, { days:daysTo(c.exp) }));
+
+    const awaiting = CONTRACTS.filter(c => c.status === 'sent' || c.status === 'partially_signed');
+    const completedMo = CONTRACTS.filter(c => c.status === 'completed');
+    const compNative = completedMo.filter(c => c.channel === 'Native').length;
+    const compDocu = completedMo.length - compNative;
+    const expiring60 = CONTRACTS.filter(c => c.days <= 60);
+    const expiring90 = CONTRACTS.filter(c => c.days <= 90).sort((a, b) => a.days - b.days);
+
+    const OFFERS = [
+      { lane:'Drafting', who:'Nord Ventures', terms:'Rev-share · 12% · 24 mo' },
+      { lane:'Sent to counterparty', who:'Brackish BE', terms:'Capital · €75k · 3% equity' },
+      { lane:'In negotiation', who:'Ferrous Type', terms:'Custom · scope TBD' },
+      { lane:'Accepted', who:'Studio Vireo', terms:'Rev-share · 15% · 36 mo', cta:'Send for e-signature ▸' },
+      { lane:'Declined', who:'Sable Grove', terms:'Equity · declined on dilution' }
+    ];
+    const OFFER_LANES = ['Drafting','Sent to counterparty','In negotiation','Accepted','Declined'];
+
+    // "In flight" excludes Accepted — that lane has its own CTA and its own count, so folding
+    // it in would make the header and the tile disagree about the same word.
+    const inFlight = OFFERS.filter(o => o.lane !== 'Declined' && o.lane !== 'Accepted').length;
+    const accepted = OFFERS.filter(o => o.lane === 'Accepted').length;
+
+    // Signing links: 7-day expiry, one rule.
+    const LINK_DAYS = 7;
+    const PENDING = [
+      { who:'Élodie Vasseur', doc:'Partner Revenue-Share Deal · Studio Vireo', age:2 },
+      { who:'Aurélie Chen', doc:'Investor Subscription — Pro', age:5 },
+      { who:'T. Roussel · Axal VC', doc:'Partner Revenue-Share Deal · Studio Vireo', age:2 },
+      { who:'Marc Delacroix', doc:'SAFE · Novacraft SAS', age:9 }
+    ].map(p => Object.assign({}, p, { expired:p.age >= LINK_DAYS }));
+    const oldestLive = Math.max.apply(null, PENDING.filter(p => !p.expired).map(p => p.age));
+
+    // ══ Merge fields declared BEFORE the prose that counts them, so every sentence about
+    // "how many did Forge fill" reads the same array the tinted inputs render from. ══
+    const MERGE = [
+      { label:'Counterparty entity', value:'Studio Vireo SARL', forged:true },
+      { label:'Registered address', value:'14 rue Oberkampf, 75011 Paris', forged:true },
+      { label:'Signatory', value:'Élodie Vasseur · Managing Partner', forged:true },
+      { label:'Revenue share', value:'15%', forged:false },
+      { label:'Term', value:'36 months from execution', forged:false },
+      { label:'Governing law', value:'French law · Paris courts', forged:true }
+    ];
+    const forgedN = MERGE.filter(f => f.forged).length;
+    const fromOffer = MERGE.length - forgedN;
+    const nWord = ['no','one','two','three','four','five','six','seven'];
+
+    return {
+      globeIcon:I.globe, searchIcon:I.srch, nav,
+      totalContracts:String(CONTRACTS.length), totalOffers:String(OFFERS.length),
+      hubSub: awaiting.length + ' awaiting signature, ' + inFlight + ' offers in flight, '
+        + accepted + ' accepted and ready to send, ' + expiring60.length + ' expiring within 60 days.',
+      stripNote: 'Each tile is a filter on the ledger below, which is why they carry an age rather than only a count — "'
+        + awaiting.length + ' awaiting" is a number, "oldest ' + oldestLive + ' days" is the reason to click.',
+
+      strip: [
+        { label:'Awaiting signature', value:String(awaiting.length),
+          note:'oldest ' + oldestLive + ' days', tone:'prog' },
+        { label:'Offers in flight', value:String(inFlight),
+          note:accepted + ' accepted, ready to send', tone:'plain' },
+        { label:'Completed this month', value:String(completedMo.length),
+          note:compNative + ' native, ' + compDocu + ' DocuSign', tone:'ok' },
+        { label:'Expiring ≤60 days', value:String(expiring60.length),
+          note:expiring90[0].who + ' in ' + expiring90[0].days + 'd', tone:'prog' },
+        { label:'Rejected or void', value:'0', note:'nothing needing attention', tone:'ok' }
+      ].map(s => {
+        const M = { ok:['#ecfdf5','#047857','#a7f3d0'], prog:['#fffbeb','#92400e','#fde68a'], plain:['#fff','#18181b','#ececf1'] };
+        const c = M[s.tone];
+        return { label:s.label, value:s.value, note:s.note, ink: s.tone === 'plain' ? '#615c6e' : c[1],
+          cardStyle:'border:1px solid ' + c[2] + ';background:' + c[0] + ';border-radius:11px;padding:13px 14px;cursor:pointer' };
+      }),
+
+      contracts: CONTRACTS.map(c => ({
+        who:c.who, role:c.role, roleStyle:roleChip(c.role), doc:c.doc,
+        layer:c.layer, layerStyle:layerChip(c.layer),
+        channel:c.channel, chanStyle:chanChip(c.channel),
+        status:c.status.replace('_', ' '), statusStyle:statusChip(c.status),
+        progress:c.signed + ' of ' + c.of + ' signed',
+        expiry:c.exp.slice(0, 7) + ' · ' + c.days + 'd', expInk:expInk(c.days),
+        rowStyle:'display:grid;grid-template-columns:1.15fr 1.15fr .62fr .78fr .95fr .85fr;gap:10px;align-items:center;border-top:1px solid #f4f3f7;'
+          + (c.days <= 30 ? 'background:#fffbfb;' : '')
+      })),
+      ledgerNote: 'Status alone would say "partially signed" for both Studio Vireo and Novacraft; the per-recipient count says one is waiting on two people and the other on one. That difference decides which you chase.',
+
+      offerLanes: OFFER_LANES.map(name => {
+        const cards = OFFERS.filter(o => o.lane === name);
+        return { name, n:String(cards.length), empty:cards.length === 0,
+          cards:cards.map(o => ({ who:o.who, terms:o.terms, cta:o.cta || null,
+            ctaStyle:'font-size:9.5px;font-weight:800;color:#fff;background:#334155;border-radius:5px;padding:5px 7px;margin-top:8px;text-align:center;cursor:pointer',
+            cardStyle:'border:1px solid ' + (o.cta ? '#cbd5e1;background:#f6f8fa' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px;padding:10px 11px' })) };
+      }),
+      offerNote: 'The Accepted lane has one action and it is the conversion: accepted terms become a draft envelope with the merge fields already populated. Nothing before that lane has an envelope at all, which is why a declined offer leaves no contract behind.',
+
+      pending: PENDING.map(p => ({
+        who:p.who, doc:p.doc,
+        state: p.expired ? 'Link expired' : 'Awaiting',
+        pill:'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;flex:none;'
+          + (p.expired ? 'background:#fffbeb;color:#92400e;border:1px solid #fde68a' : 'background:#f6f8fa;color:#334155;border:1px solid #cbd5e1'),
+        pct:String(Math.min(100, Math.round(p.age / LINK_DAYS * 100))),
+        bar: p.expired ? '#f59e0b' : '#475569',
+        age: p.expired ? 'Expired ' + (p.age - LINK_DAYS) + 'd ago · issued ' + p.age + 'd ago'
+                       : 'Day ' + p.age + ' of ' + LINK_DAYS,
+        action: p.expired ? 'Issue fresh link' : 'Void',
+        actionStyle:'font-size:10.5px;font-weight:700;cursor:pointer;color:' + (p.expired ? '#92400e' : '#615c6e'),
+        rowStyle:'border:1px solid ' + (p.expired ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px'
+      })),
+
+      templates: [
+        { layer:'GP', name:'Partner Revenue-Share Deal', ver:'v3.1', updated:true },
+        { layer:'GP', name:'Advisor NDA', ver:'v2.4' },
+        { layer:'GP', name:'Partner NDA + Non-Solicit', ver:'v1.8' },
+        { layer:'FUND', name:'Investor Subscription — Pro', ver:'v5.0' },
+        { layer:'FUND', name:'Investor NDA', ver:'v2.2' },
+        { layer:'PORTFOLIO', name:'SAFE', ver:'v4.3', updated:true },
+        { layer:'PORTFOLIO', name:'Term Sheet', ver:'v3.0' },
+        { layer:'COMPLIANCE', name:'Data Access Acknowledgment', ver:'v1.2' }
+      ].map(t => ({ layer:t.layer, layerStyle:layerChip(t.layer), name:t.name, ver:t.ver, updated:!!t.updated,
+        cardStyle:'border:1px solid ' + (t.updated ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px' })),
+      tplNote: 'Two cards carry an "updated" chip because HQ published a newer version since you last instantiated them. Existing contracts keep the version they were sent on — the chip is about what your next send will use, not about anything already signed.',
+
+      expiring: expiring90.slice(0, 4).map(e => ({
+        days:e.days + 'd', who:e.who, doc:e.doc, ink:expInk(e.days),
+        cardStyle:'background:#fff;border:1px solid ' + (e.days <= 30 ? '#fecaca' : '#fde68a') + ';border-radius:10px;padding:13px 14px'
+      })),
+      expNote: 'NDAs lapse at valid_until and agreements at renewal — different fields, one strip, because the admin\u2019s question is "what stops working soon" rather than "which column holds the date." Renewing re-instantiates from the current template version, which is where the "updated" chips above become consequential.',
+
+      // ══ C2 · send flow ══
+      steps: ['Template','Parties','Review','Channel','Send'].map((l, i) => ({
+        n:String(i + 1), label:l,
+        style:'display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;padding:6px 11px;border-radius:999px;white-space:nowrap;'
+          + (i === 1 ? 'background:#334155;color:#fff;border:1px solid #334155'
+              : (i < 1 ? 'background:' + STT + ';color:' + ST + ';border:1px solid ' + STE
+                       : 'background:#fff;color:#615c6e;border:1px solid #ececf1'))
+      })),
+      s1Note: 'Arriving from the Accepted lane means the template is already chosen — the offer named the deal type, and the deal type maps to exactly one registered document. Picking a template by hand is the other entry point, not the default one.',
+      mergeFields: MERGE.map(f => ({ label:f.label, value:f.value, forged:f.forged,
+        style:'border-radius:8px;padding:9px 11px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;'
+          + (f.forged ? 'background:#eef2ff;border:1px dashed #a5b4fc;color:#1e1b4b'
+                      : 'background:#fff;border:1px solid #e2e1e8;color:#18181b') })),
+      s2Note: nWord[forgedN].charAt(0).toUpperCase() + nWord[forgedN].slice(1) + ' fields came from the counterparty profile and '
+        + nWord[fromOffer] + ' from the accepted offer. The tinted ones are unconfirmed — they render dashed until a human touches them, and the send button carries the outstanding count until they are.',
+      sendLabel: forgedN ? 'Send for signature · ' + forgedN + ' to confirm' : 'Send for signature',
+      sendStyle: forgedN
+        ? 'font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:7px;border:1px solid #e2e1e8;background:#f4f4f6;color:#615c6e;cursor:not-allowed'
+        : 'font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:7px;border:1px solid #334155;background:#334155;color:#fff;cursor:pointer',
+      previewLines: [
+        { text:'This Agreement is entered into between Axal VC France SAS and', dim:false },
+        { text:'Studio Vireo SARL, 14 rue Oberkampf, 75011 Paris.', dim:false },
+        { text:'§3 — Partner shall receive fifteen percent (15%) of net revenue', dim:false },
+        { text:'attributable to introductions made under this Agreement, for a', dim:true },
+        { text:'term of thirty-six (36) months from the date of execution.', dim:true }
+      ].map(p => ({ text:p.text, style:'font-size:10px;line-height:1.55;color:' + (p.dim ? '#615c6e' : '#3f3a49') })),
+      channels: [
+        { name:'Native e-sign', on:true, ink:'#334155',
+          facts:[{ k:'Link expiry', v:'7 days' }, { k:'Re-issue', v:'One click' }, { k:'Evidence', v:'SHA-256 + IP' }] },
+        { name:'DocuSign', on:false, ink:'#615c6e',
+          facts:[{ k:'Link expiry', v:'Envelope rules' }, { k:'Re-issue', v:'Via DocuSign' }, { k:'Evidence', v:'DocuSign CoC' }] }
+      ].map(c => ({ name:c.name, on:c.on, ink:c.ink, facts:c.facts,
+        cardStyle:'border-radius:11px;padding:13px 14px;cursor:pointer;'
+          + (c.on ? 'border:1.5px solid #334155;background:#f6f8fa' : 'border:1px solid #e2e1e8;background:#fff') })),
+      chanNote: 'The two channels differ in one operationally visible way: a native link dies after seven days and you can re-issue it yourself, where a DocuSign envelope follows DocuSign\u2019s rules and re-issue leaves the platform. That is the comparison worth putting on the step.',
+      recipients: [
+        { who:'Élodie Vasseur', role:'partner · signs first' },
+        { who:'T. Roussel', role:'axal · countersigns' },
+        { who:'C. Moreau', role:'axal · witness' }
+      ],
+      sendNote: 'Links expire 2 Sep 2026, seven days from send. Expired links can be re-issued without restarting the envelope.',
+      humanNote: 'Forge filled ' + nWord[forgedN] + ' fields and drafted nothing else — all ' + forgedN
+        + ' still unconfirmed, which is why the button is inert. It does not send, does not sign, and does not void: this click is a person\u2019s, and the timeline will record it as one.',
+
+      // ══ C3 · record ══
+      recordId: 'ENV-2026-0841 · Studio Vireo',
+      recChips: [
+        { label:'Partner Revenue-Share Deal', tone:'plain' },
+        { label:'GP', tone:'gp' }, { label:'partner + axal', tone:'role' },
+        { label:'Native e-sign', tone:'chan' }, { label:'partially signed', tone:'prog' }
+      ].map(c => {
+        const M = { plain:['#f4f4f6','#3f3a49','#e4e4e8'], gp:['#f5f2ff','#6d28d9','#e6dcff'],
+                    role:['#fffbf2','#b45309','#fde68a'], chan:['#f6f8fa','#334155','#cbd5e1'],
+                    prog:['#fffbeb','#92400e','#fde68a'] };
+        const x = M[c.tone];
+        return { label:c.label, style:'font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:'+x[0]+';color:'+x[1]+';border:1px solid '+x[2] };
+      }),
+      signerSummary: '1 of 3 signed · sent 2 days ago',
+      signers: [
+        { who:'Élodie Vasseur', role:'partner · Studio Vireo SARL', state:'signed',
+          meta:'Signed 24 Aug 2026, 16:41 CET · 82.66.14.203', action:null },
+        { who:'T. Roussel', role:'axal · countersignature', state:'signing',
+          meta:'Link opened 25 Aug, 09:12 · expires 2 Sep · day 2 of 7', action:'Issue fresh link' },
+        { who:'C. Moreau', role:'axal · witness', state:'pending',
+          meta:'Link issued 24 Aug · not yet opened · expires 2 Sep', action:'Issue fresh link' }
+      ].map(s => {
+        const M = { signed:['#ecfdf5','#047857','#a7f3d0'], signing:['#fffbeb','#92400e','#fde68a'],
+                    pending:['#f4f4f6','#615c6e','#e4e4e8'], rejected:['#fef2f2','#b91c1c','#fecaca'] };
+        const c = M[s.state];
+        return { who:s.who, role:s.role, state:s.state, meta:s.meta, action:s.action,
+          pill:'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none',
+          actionStyle:'font-size:10.5px;font-weight:700;color:#334155;cursor:pointer',
+          rowStyle:'border:1px solid ' + (s.state === 'signed' ? '#a7f3d0;background:#f7fffb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px' };
+      }),
+      offerTerms: [
+        { k:'Deal type', v:'Revenue share' }, { k:'Share', v:'15%' },
+        { k:'Term', v:'36 months' }, { k:'Accepted', v:'22 Aug 2026' }
+      ],
+      offerLinkNote: 'The snapshot is what was accepted, not what the contract currently says — if the two diverge during signature, that divergence is the thing worth seeing, and it needs both figures present to be visible at all.',
+      tamper: [
+        { k:'Document hash', v:'—' },
+        { k:'Signed PDF', v:'available at completion' },
+        { k:'Signatures on file', v:'1 of 3 · timestamps + IP' }
+      ],
+      tamperNote: 'The hash is written when the last signer completes, not before — an envelope that is still moving has no final document to hash, and showing a provisional one would be worse than showing none.',
+      timeline: [
+        { when:'22 Aug 14:02', event:'offer accepted', detail:'Terms snapshot taken · rev-share 15%, 36 months', ink:'#334155' },
+        { when:'24 Aug 09:30', event:'created', detail:'From Partner Revenue-Share Deal v3.1 · ' + forgedN + ' fields Forge-filled, all confirmed by C. Moreau before send', ink:'#615c6e' },
+        { when:'24 Aug 09:34', event:'sent', detail:'C. Moreau · 3 recipients · native e-sign · links expire 2 Sep', ink:'#334155' },
+        { when:'24 Aug 11:18', event:'viewed', detail:'Élodie Vasseur opened the signing link', ink:'#615c6e' },
+        { when:'24 Aug 16:41', event:'signed', detail:'Élodie Vasseur · 82.66.14.203', ink:'#047857' },
+        { when:'25 Aug 09:12', event:'viewed', detail:'T. Roussel opened the signing link, did not complete', ink:'#615c6e' },
+        { when:'—', event:'awaiting', detail:'2 signatures outstanding · envelope remains partially_signed', ink:'#92400e' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

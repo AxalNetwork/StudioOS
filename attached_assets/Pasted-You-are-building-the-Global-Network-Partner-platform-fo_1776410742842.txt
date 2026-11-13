@@ -1,0 +1,89 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, D1 tables for users (with roles/kyc_status), referrals, commissions, payouts, deals/projects, user_preferences, match_scores, workflows, workflow_tasks, shared_services_log, referral_chains, syndicates, syndicate_members, and marketplace_profiles from all previous builds. We also have RBAC middleware, Replit AI integration, and the Partner Dashboard.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add a complete **Deal/Project Pipeline** with parallel MVP development, automated decision gates, and traction/metrics review engine with these exact requirements:
+
+1. **Database Models (extend + new D1 tables)**  
+   Enhance the existing `deals` table if needed, then create:
+   - `project_stages`
+     • id (PK)
+     • deal_id (FK to deals.id)
+     • stage_name (text: 'idea', 'mvp_dev', 'traction_review', 'decision_gate', 'spinout_ready', 'iterate')
+     • status (text: 'active', 'completed', 'blocked')
+     • start_date, end_date (timestamp)
+     • metadata (json)
+   - `mvp_tasks`
+     • id (PK)
+     • deal_id (FK)
+     • title (text)
+     • description (text)
+     • assigned_to (FK to users.id, optional)
+     • status (text: 'todo', 'in_progress', 'done')
+     • ai_generated (boolean)
+     • due_date
+   - `metrics_snapshots`
+     • id (PK)
+     • deal_id (FK)
+     • snapshot_date (timestamp)
+     • key_metrics (json) → e.g. {"users": 1200, "revenue": 4500, "engagement": 68}
+     • traction_score (float)
+     • ai_review (text)
+   - `decision_gates`
+     • id (PK)
+     • deal_id (FK)
+     • gate_type (text: 'traction_review')
+     • status (text: 'pending', 'passed', 'failed', 'iterate')
+     • ai_recommendation (text)
+     • final_decision (text)
+     • decided_by (FK to users.id)
+     • decided_at
+
+2. **Pipeline Logic**  
+   - Support **parallel MVP development**: up to 5+ active projects running simultaneously (no blocking).
+   - **Automated Decision Gates**: When a project reaches 'traction_review', trigger Replit AI to:
+     • Analyze latest metrics_snapshot
+     • Generate recommendation ("Continue / Iterate" or "Spin-Out Ready") with explanation
+     • Create a new decision_gate record
+   - **Traction/Metrics Review Engine**: 
+     • Auto-capture metrics (mock data entry for now)
+     • AI-powered scoring and review on-demand or on schedule
+     • Link to Studio Ops workflows automatically (e.g. create strategic oversight workflow)
+   - On decision_gate outcome: if "Spin-Out Ready" → flag for future spin-out automation; if "Iterate" → reset to mvp_dev stage.
+
+3. **Backend Endpoints (add to main.py)**  
+   - POST /api/pipeline/projects (create new deal/project, RBAC: operator/advisor only)
+   - GET /api/pipeline/active (list all parallel projects with current stage)
+   - POST /api/pipeline/mvp-tasks
+   - POST /api/pipeline/metrics/snapshot
+   - POST /api/pipeline/decision-gate/review (triggers Replit AI review)
+   - PATCH /api/pipeline/decision-gate/decide (admin/operator records final decision)
+   - All endpoints protected by RBAC; investors see only read-only deal flow view.
+
+4. **Frontend**  
+   - New page /pipeline.html (or integrate as a tab in the existing dashboard)
+   - Visual **Pipeline Board**: Kanban-style columns for each stage (Idea → MVP Dev → Traction Review → Decision Gate → Spin-Out / Iterate)
+   - Cards for each active project showing parallel progress, latest metrics, AI recommendation badge, and "Trigger Review" button.
+   - Clickable project card opens detailed view with MVP task list, metrics history chart (Chart.js), and decision gate history.
+   - "New Project" button (operator only).
+   - Live refresh button to re-run AI review.
+   - Use fetch() for dynamic updates; reuse dashboard styling and network graph aesthetics where possible.
+
+5. **Security & Best Practices**  
+   - RBAC: Only operators/advisors/admins can advance stages or trigger reviews; all KYC-approved partners can view the pipeline (read-only).
+   - Rate limit AI review calls.
+   - Full audit trail via shared_services_log and decision_gates table.
+   - Keep it lightweight (mock metrics input for now; ready for future real integrations).
+
+Build this step-by-step:  
+1. First create/extend the new D1 tables and run migration.  
+2. Then implement core pipeline logic + Replit AI decision-gate review.  
+3. Then build all backend endpoints.  
+4. Finally create the frontend Pipeline Board with Kanban view and charts.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

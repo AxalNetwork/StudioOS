@@ -1,0 +1,33 @@
+{
+  "skill": "pre-meeting-investor-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "network.relationships": {
+        "investor": {
+          "name": "Riley Fund",
+          "firm": "Fixture Ventures",
+          "last_note": "Liked the pilot data; wants retention."
+        }
+      },
+      "raise.records": {
+        "pipeline_stage": "Second meeting"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Fixture Ventures",
+      "Second meeting",
+      "retention"
+    ],
+    "must_say_not_recorded": [
+      "check size"
+    ],
+    "must_not_include": [
+      "@"
+    ]
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "skill": "legal-due-diligence-coordination",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "skill_name": "Legal Due Diligence Coordination",
+        "task_scope": "Coordinates legal diligence workstreams, evidence owners, gaps, deadlines and counsel questions, rather than a static document list.",
+        "evidence": [
+          "legal diligence workstream ownership"
+        ],
+        "omitted_field": "counsel response deadline"
+      },
+      "raise.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for legal diligence workstream ownership."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "legal diligence workstream ownership"
+    ],
+    "must_say_not_recorded": [
+      "counsel response deadline"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

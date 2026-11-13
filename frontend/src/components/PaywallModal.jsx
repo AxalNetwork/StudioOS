@@ -1,0 +1,302 @@
+// Task #6 — Paywall modal for the FREE/GROWTH/STUDIO tier ladder.
+// Task #7 (W-2) — Extended to also cover the investor tier ladder
+//   (free / professional / institutional) via the same global event.
+//
+// Listens for the global `studioos:tier_required` custom event dispatched by
+// `lib/api.js` whenever the worker returns 402 `{error:'tier_required'|
+// 'investor_tier_required', required, message?}`. Also exposes
+// `openPaywall(required, message?)` for imperative triggers (sidebar lock-pill
+// click). `required` is one of: growth, studio, professional, institutional.
+//
+// D1054 (#2905): Upgrade no longer leaves for Stripe's hosted checkout. It
+// closes the paywall and opens D1048's checkout sheet over the same page
+// (`openCheckout`), naming what the plan unlocks; after payment the sheet
+// offers "Back to [feature]". `openPaywall(required, message, feature)` takes
+// the feature's name for that.
+
+import React, { useEffect, useState, useCallback } from 'react';
+import { Lock, Check, X } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { openCheckout } from './checkout/checkoutEntry';
+import QuotaCard from './QuotaCard';
+import { PRICE_UNREAD, PRICE_UNREAD_LINE, priceOf, usePlansRead } from '../lib/planPrices';
+import { useEscapeClose } from './useEscapeClose';
+
+// Task #4 (ID) — Exported so the public /pricing page can derive its
+// feature lists from the same source-of-truth instead of duplicating
+// them and drifting over time. See `frontend/src/data/pricing.js`.
+//
+// D1050 (#2901): each plan is the plan catalogue's (`services/planCatalogue.ts`
+// in the Worker): `key`, its name, its line and the lines it includes, held
+// equal by `frontend/test/plan_catalogue_d1050.test.mjs`. No price is typed
+// here. The card reads it from `GET /api/public/plans-and-packs`
+// (`lib/planPrices.js`), as Pricing and the checkout sheet do.
+export const TIER_PLANS = {
+  growth: {
+    key: 'founder:growth',
+    label: 'Validate + Build',
+    blurb: 'Prove the idea, then build the company.',
+    features: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Company data for market research', 'Your full archetype card', 'Accept up to 10 introductions a month'],
+  },
+  studio: {
+    key: 'founder:studio',
+    label: 'Raise + Grow',
+    blurb: 'Raise the money, then grow the company.',
+    // D683: the second group keeps everything in the first, as Pricing's card leads its lines.
+    lead: 'Everything in Validate + Build, plus:',
+    features: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+  },
+  // D1334: Investor Plus, sold monthly between Basic and Pro.
+  plus: {
+    key: 'investor:plus',
+    label: 'Investor Plus',
+    blurb: 'For angel investors, independent investors and investment professionals.',
+    plan: 'investor_plus_monthly',
+    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+  },
+  professional: {
+    key: 'investor:professional',
+    label: 'Investor Pro',
+    blurb: 'For professional angels, investment analysts and smaller firms.',
+    plan: 'investor_pro_monthly',
+    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+  },
+  institutional: {
+    key: 'investor:institutional',
+    label: 'Institutional',
+    blurb: 'For institutional investors, family offices and investment teams.',
+    custom: true,
+    features: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
+  },
+};
+
+const FOUNDER_RANK = { free: 0, growth: 1, studio: 2 };
+const INVESTOR_RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
+const INVESTOR_TIERS = new Set(['plus', 'professional', 'institutional']);
+
+export function openPaywall(required = 'growth', message = '', feature = '') {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('studioos:tier_required', {
+    detail: { required, message, feature },
+  }));
+}
+
+/** A card's monthly price, from the plans read: reading, the price, or that it was not read, never a zero. */
+export function PlanPrice({ read, planKey }) {
+  if (read.status === 'loading') {
+    return <div className="mt-2 text-sm text-gray-500 dark:text-gray-400" data-testid={`paywall-price-${planKey}`}>Reading…</div>;
+  }
+  const price = read.status === 'ready' ? priceOf(read.data, planKey, 'month') : null;
+  if (!price) {
+    return (
+      <div className="mt-2 flex flex-col gap-0.5" data-testid={`paywall-price-${planKey}`}>
+        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{PRICE_UNREAD}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{PRICE_UNREAD_LINE}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex items-baseline gap-1" data-testid={`paywall-price-${planKey}`}>
+      <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{price.amount}</span>
+      <span className="text-sm text-gray-500 dark:text-gray-400">/ month</span>
+    </div>
+  );
+}
+
+export default function PaywallModal({ user }) {
+  const [open, setOpen] = useState(false);
+  const [required, setRequired] = useState('growth');
+  const [message, setMessage] = useState('');
+  const [feature, setFeature] = useState('');
+  const location = useLocation();
+  // D1050: the prices, from the plans read the checkout sheet and Pricing read.
+  const prices = usePlansRead();
+
+  useEffect(() => {
+    function onEvt(e) {
+      const detail = e.detail || {};
+      const raw = detail.required;
+      // Normalize legacy / namespaced tier codes from the worker (some
+      // older routes emit `investor_professional` / `investor_institutional`).
+      const r = raw === 'investor_professional' ? 'professional'
+        : raw === 'investor_institutional' ? 'institutional'
+        : raw;
+      const norm = (r === 'studio' || INVESTOR_TIERS.has(r)) ? r : 'growth';
+      // Auto-fires (background 402 from api.js, fired by data fetches on
+      // page load) are gated to once-per-session per tier so refreshing the
+      // page doesn't keep re-opening the same upsell. Explicit user actions
+      // — sidebar lock pill, openPaywall(), CTA buttons — omit `source` and
+      // always open the modal.
+      if (detail.source === 'auto') {
+        try {
+          const key = `paywall_auto_shown:${norm}`;
+          if (window.sessionStorage.getItem(key)) return;
+          window.sessionStorage.setItem(key, '1');
+        } catch { /* sessionStorage unavailable — fall through and show */ }
+      }
+      setRequired(norm);
+      setMessage(typeof detail.message === 'string' ? detail.message : '');
+      setFeature(typeof detail.feature === 'string' ? detail.feature.slice(0, 60) : '');
+      setOpen(true);
+    }
+    window.addEventListener('studioos:tier_required', onEvt);
+    return () => window.removeEventListener('studioos:tier_required', onEvt);
+  }, []);
+
+  // Esc to close: on the one dialog stack, so only the top dialog acts (D686).
+  useEscapeClose(() => setOpen(false), { active: open });
+
+  const isInvestorMode = INVESTOR_TIERS.has(required);
+
+  // D1054: the sheet opens over this page; the paywall closes so one dialog is on top.
+  const startCheckout = useCallback((key) => {
+    const here = `${location.pathname}${location.search || ''}`;
+    setOpen(false);
+    openCheckout({
+      plan_key: TIER_PLANS[key]?.key,
+      interval: 'monthly',
+      from: { label: feature || 'where you were', href: here },
+      unlocks: feature || null,
+    });
+  }, [location.pathname, location.search, feature]);
+
+  if (!open) return null;
+
+  let tiersToShow;
+  if (isInvestorMode) {
+    const userTier = String(user?.investor_tier || 'free').toLowerCase();
+    const userRank = INVESTOR_RANK[userTier] ?? 0;
+    // D1334: only the plans that unlock what was asked for; Plus never opens a Pro feature.
+    tiersToShow = ['plus', 'professional', 'institutional']
+      .filter((t) => INVESTOR_RANK[t] >= INVESTOR_RANK[required] && INVESTOR_RANK[t] > userRank);
+    if (tiersToShow.length === 0) tiersToShow = [required];
+  } else {
+    const userTier = String(user?.subscription_tier || 'free').toLowerCase();
+    const userRank = FOUNDER_RANK[userTier] ?? 0;
+    tiersToShow = ['growth', 'studio'].filter((t) => FOUNDER_RANK[t] > userRank);
+    if (tiersToShow.length === 0) tiersToShow = [required];
+  }
+
+  const titleLabel = TIER_PLANS[required]?.label || required;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paywall-title"
+      className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 print:hidden overflow-y-auto"
+      onClick={() => setOpen(false)}
+    >
+      <div
+        className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 my-3 sm:my-0 max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900 rounded-t-2xl z-10">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-violet-700 dark:text-violet-300">
+              <Lock size={18} />
+            </div>
+            <div>
+              <h2 id="paywall-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {isInvestorMode ? 'Upgrade your investor plan' : 'Upgrade to keep building'}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                {message || (feature ? `${feature} is on ${titleLabel}.` : `This is a ${titleLabel}-tier feature.`)}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+            className="-mr-2 -mt-2 p-2 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <X size={22} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+        {isInvestorMode && (
+          <div className="px-5 sm:px-6 pt-5">
+            <QuotaCard user={{ role: 'investor' }} />
+          </div>
+        )}
+        <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
+          {tiersToShow.map((tier) => {
+            const plan = TIER_PLANS[tier];
+            const featured = tier === required;
+            return (
+              <div
+                key={tier}
+                className={`rounded-xl border p-5 flex flex-col ${
+                  featured
+                    ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+                }`}
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-semibold text-gray-900 dark:text-gray-100">{plan.label}</span>
+                  {featured && (
+                    <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-600 text-white font-semibold">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                {plan.custom ? <div className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">Custom</div> : <PlanPrice read={prices} planKey={plan.key} />}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{plan.blurb}</p>
+                {plan.lead ? <p className="mt-4 text-sm font-semibold text-gray-800 dark:text-gray-200">{plan.lead}</p> : null}
+                <ul className={`${plan.lead ? 'mt-2' : 'mt-4'} space-y-1.5 flex-1`}>
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <Check size={14} className="text-violet-600 dark:text-violet-400 mt-1 flex-shrink-0" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                {plan.custom ? <Link to="/contact" onClick={() => setOpen(false)} className="mt-5 w-full py-2.5 rounded-lg font-medium text-sm text-center text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700">Contact Axal VC</Link> : <button
+                  type="button"
+                  onClick={() => startCheckout(tier)}
+                  data-testid={`paywall-upgrade-${tier}`}
+                  className={`mt-5 w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
+                    featured
+                      ? 'bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50'
+                      : 'border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
+                  }`}
+                >
+                  {`Upgrade to ${plan.label}`}
+                </button>}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="px-5 sm:px-6 pb-5 space-y-3">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full sm:w-auto sm:mx-auto sm:block py-2.5 px-4 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-h-[44px]"
+          >
+            Maybe later — stay on free plan
+          </button>
+          <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+            {isInvestorMode && (
+              <Link
+                to="/pricing?for=investor"
+                onClick={() => setOpen(false)}
+                className="text-violet-700 dark:text-violet-300 hover:underline mr-2"
+              >
+                Compare investor plans →
+              </Link>
+            )}
+            Questions? Email{' '}
+            <a href="mailto:billing@axal.vc" className="text-violet-700 dark:text-violet-300 hover:underline">
+              billing@axal.vc
+            </a>
+            . You can cancel any time from Settings &rsaquo; Billing.
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  );
+}

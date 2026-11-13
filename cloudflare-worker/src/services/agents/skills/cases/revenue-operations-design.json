@@ -1,0 +1,34 @@
+{
+  "skill": "revenue-operations-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Revenue Operations Process Design",
+        "task_scope": "Designs the operating model connecting marketing, sales and customer-success processes, systems, definitions and handoffs.",
+        "evidence": [
+          "lifecycle handoff and metric ownership"
+        ],
+        "omitted_field": "system owner"
+      },
+      "company.profile": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for lifecycle handoff and metric ownership."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "lifecycle handoff and metric ownership"
+    ],
+    "must_say_not_recorded": [
+      "system owner"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

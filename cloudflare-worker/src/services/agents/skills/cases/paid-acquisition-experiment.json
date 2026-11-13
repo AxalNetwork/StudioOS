@@ -1,0 +1,34 @@
+{
+  "skill": "paid-acquisition-experiment",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Paid Acquisition Experiment Design",
+        "task_scope": "Designs controlled paid-acquisition tests with hypothesis, audience, creative variable, budget guardrails and stopping rules.",
+        "evidence": [
+          "controlled acquisition experiment"
+        ],
+        "omitted_field": "experiment budget"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for controlled acquisition experiment."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "controlled acquisition experiment"
+    ],
+    "must_say_not_recorded": [
+      "experiment budget"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#92400e;background:#fffbf2;border-color:#fde68a;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#fffbf2;border-color:#fde68a;color:#92400e;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .rvk{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .gate{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .mode{display:inline-block;margin-left:6px;font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:4px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .link{font-size:11px;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:8px;padding:9px 12px;line-height:1.55}
+    .bar{height:5px;border-radius:999px;background:#ececf1;overflow:hidden;margin-top:5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /offers</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#92400e;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Offers</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">Studio Vireo <span style="color:#615c6e;font-weight:600">· one storefront</span></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ p.linkage }}">
+          <div class="link" style="margin-top:12px"><strong style="color:#0e7490">Reads through to Pipeline:</strong> {{ p.linkage }}</div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.mode }}"><span class="mode" style="{{ c.modeStyle }}">{{ c.mode }}</span></sc-if>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.rvk }}"><span class="rvk">{{ c.rvk }}</span></sc-if>
+                  <sc-if value="{{ c.gate }}"><span class="gate">{{ c.gate }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.barPct }}"><span class="bar" style="display:block"><span style="display:block;height:100%;width:{{ c.barPct }}%;background:{{ c.barColor }}"></span></span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <sc-if value="{{ p.anti }}">
+          <div class="card" style="padding:15px 17px;margin-top:13px;border-color:#f5d0fe;background:#fefbff">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:14px;font-weight:800;letter-spacing:-.015em;color:#86198f">Who we are not for</span>
+              <span style="font-size:11px;color:#615c6e">First-class — a pass needs a reason, not a shrug</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:12px">
+              <sc-for list="{{ p.anti }}" as="an" hint-placeholder-count="3">
+                <div style="background:#fff;border:1px solid #f5d0fe;border-radius:9px;padding:11px 13px">
+                  <div class="lbl" style="font-size:9px;color:#86198f">{{ an.k }}</div>
+                  <div style="font-size:12px;font-weight:700;margin-top:5px">{{ an.v }}</div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ an.d }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="amber" page="Offers" hint-size="100%,780px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const A = { ink:'#b45309', deep:'#92400e', tint:'#fffbf2' };
+    const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Offers' ? 'nav on' : 'nav',
+      style: label === 'Offers' ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Catalog','Perk deals','Visibility','Proof','Audience fit'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Perk deals' || label === 'Proof' }));
+
+    const pill = (t) => {
+      const M = { 'Live':['#ecfdf5','#047857','#a7f3d0'], 'Published':['#ecfdf5','#047857','#a7f3d0'],
+        'Qualified':['#ecfdf5','#047857','#a7f3d0'], 'Best fit':['#ecfdf5','#047857','#a7f3d0'],
+        'Expiring':['#fffbeb','#92400e','#fde68a'], 'Draft':['#fffbeb','#92400e','#fde68a'],
+        'Consent asked':['#fffbeb','#92400e','#fde68a'], 'Weak intent':['#fffbeb','#92400e','#fde68a'],
+        'Expired':['#fef2f2','#b91c1c','#fecaca'], 'Blocked':['#fef2f2','#b91c1c','#fecaca'],
+        'Declined':['#fef2f2','#b91c1c','#fecaca'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const MODE = { Fixed:['#eef2ff','#3730a3','#c7d2fe'], Retainer:['#fffbeb','#92400e','#fde68a'], Seat:['#f7f4ff','#5b21b6','#ddd6fe'] };
+    const modeStyle = (m) => { const c = MODE[m]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, mode:null, pill:null, seam:null, rvk:null, gate:null, nr:false, barPct:null, barColor:'#b45309', style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      o.modeStyle = o.mode ? modeStyle(o.mode) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    // Money lives as integers everywhere; usd() is the single formatting edge.
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight'][n] || String(n);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+    // Counts that open a sentence get a capital — a lowercase numeral word after a full stop
+    // reads as an unfinished template, and these are the first lines on each artboard.
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    const O_IN = 0.017, O_OUT = 0.112;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * O_IN + tout / 1e6 * O_OUT;
+
+    // ══ ONE catalog. Prices are integers; the draft entry has none. ══
+    const CAT = [
+      { name:'Design system build', mode:'Fixed', price:48000, sold:3, state:'Live', incl:'Audit, tokens, component library, handoff' },
+      { name:'Sprint team — 2 weeks', mode:'Fixed', price:22500, sold:5, state:'Live', incl:'2 engineers, 1 designer, scoped build' },
+      { name:'Fractional Head of Product', mode:'Seat', price:14000, sold:1, state:'Live', incl:'2 days/wk, granted seat, roadmap ownership' },
+      { name:'Interim RevOps', mode:'Seat', price:6500, sold:1, state:'Live', incl:'1 day/wk, pipeline hygiene, reporting' },
+      { name:'Brand refresh + pages', mode:'Fixed', price:31000, sold:2, state:'Live', incl:'Identity routes, landing pages, guidelines' },
+      { name:'Ongoing design retainer', mode:'Retainer', price:null, sold:0, state:'Draft', incl:'Monthly hours, priority queue — scope not final' }
+    ];
+    const liveCat = CAT.filter(c => c.state === 'Live');
+    const drafts = CAT.filter(c => c.state === 'Draft');
+    const priced = CAT.filter(c => c.price !== null);
+    const revenue = CAT.reduce((a, c) => a + (c.price || 0) * c.sold, 0);
+    const units = CAT.reduce((a, c) => a + c.sold, 0);
+    const catRows = CAT.map(c => ({ rowStyle: c.state === 'Draft' ? 'background:#fffcf5' : '', cells:[
+      cell(c.name, { pill: c.state === 'Draft' ? 'Draft' : null }),
+      cell('', { mode: c.mode }),
+      c.price === null ? cell('', { nr:true }) : cell(usd(c.price) + (c.mode === 'Retainer' || c.mode === 'Seat' ? ' / mo' : '')),
+      cell(c.sold ? String(c.sold) : '—'),
+      cell(c.incl)
+    ]}));
+
+    // ══ ONE perk book. Expiry revokes what the perk granted — the page must say so. ══
+    const PERK = [
+      { name:'Design system audit — free', state:'Live', cap:10, used:4, ends:'Oct 15, 2026',
+        grants:'Priority queue access, 90 days', revokedOn:null },
+      { name:'20% off first sprint', state:'Live', cap:15, used:11, ends:'Nov 30, 2026',
+        grants:'Nothing beyond the discount', revokedOn:null },
+      { name:'Cohort 4 landing-page credit', state:'Expiring', cap:8, used:6, ends:'Sep 8, 2026',
+        grants:'Studio Vireo partner tier, 6 months', revokedOn:null },
+      { name:'Free brand teardown', state:'Expired', cap:12, used:12, ends:'Aug 1, 2026',
+        grants:'Priority queue access, 60 days', revokedOn:'Aug 1, 2026' },
+      { name:'Cohort 3 seat trial', state:'Expired', cap:5, used:2, ends:'Jul 20, 2026',
+        grants:'Trial seat scope — Board, read-only', revokedOn:'Jul 20, 2026' }
+    ];
+    const livePerk = PERK.filter(p => p.state === 'Live');
+    const expiring = PERK.filter(p => p.state === 'Expiring');
+    const expired = PERK.filter(p => p.state === 'Expired');
+    const revokedGrants = expired.filter(p => p.grants.indexOf('Nothing') !== 0);
+    const revokedRedeemers = expired.reduce((a, p) => a + p.used, 0);
+    const perkRows = PERK.map(p => {
+      const ratio = p.cap ? p.used / p.cap : 0;
+      return { rowStyle: p.state === 'Expired' ? 'background:#fffafa' : (p.state === 'Expiring' ? 'background:#fffcf5' : ''), cells:[
+        cell(p.name), cell('', { pill: p.state }),
+        cell(p.used + ' of ' + p.cap, { barPct: String(Math.round(ratio * 100)),
+          barColor: ratio >= 1 ? '#b91c1c' : (ratio >= .7 ? '#b45309' : '#047857') }),
+        cell(p.ends),
+        p.revokedOn
+          ? cell(p.grants, { rvk:'Revoked ' + p.revokedOn })
+          : cell(p.grants)
+      ]};
+    });
+
+    // ══ ONE visibility ledger. Every engagement names its sourcing surface. ══
+    // eng values name specific Delivery rows, so the column sums to the six engagements that
+    // exist there — Verwood, Halverton, Meridian Robotics, Novacraft Labs, Thornfield, Aperture.
+    const SURF = [
+      { s:'Cohort perks listing', views:null, leads:9, sourced:['Novacraft Labs','Aperture'], intent:'Qualified' },
+      { s:'Marketplace needs board', views:412, leads:14, sourced:['Meridian Robotics','Thornfield'], intent:'Qualified' },
+      { s:'Partner directory', views:1840, leads:11, sourced:[], intent:'Weak intent' },
+      { s:'Co-marketing webinar', views:203, leads:3, sourced:['Verwood'], intent:'Qualified' },
+      { s:'Referral from another partner', views:null, leads:2, sourced:['Halverton'], intent:'Best fit' }
+    ].map(s => Object.assign({}, s, { eng: s.sourced.length }));
+    const totalLeads = SURF.reduce((a, s) => a + s.leads, 0);
+    const totalEng = SURF.reduce((a, s) => a + s.eng, 0);
+    const noCounter = SURF.filter(s => s.views === null);
+    const weak = SURF.filter(s => s.intent === 'Weak intent');
+    const surfRows = SURF.slice().sort((a, b) => b.eng - a.eng || b.leads - a.leads).map(s => ({
+      rowStyle: s.intent === 'Weak intent' ? 'background:#fffafa' : '', cells:[
+        cell(s.s), s.views === null ? cell('—') : cell(s.views.toLocaleString('en-US')),
+        cell(String(s.leads)), cell(s.eng ? String(s.eng) : '—'),
+        cell(s.leads ? (s.eng / s.leads * 100).toFixed(0) + '%' : '—', { pill: s.intent })
+      ]}));
+
+    // ══ ONE proof shelf. Seam-fed from completed engagements; consent gates publication. ══
+    const PROOF = [
+      { title:'Meridian Robotics — onboarding rebuild', from:'Sprint 2, signed off Aug 26', consent:'Published', outcome:'Activation 31% → 48% in six weeks.' },
+      { title:'Halverton — product org restart', from:'Fractional HoP seat, ongoing', consent:'Published', outcome:'Roadmap and OKRs set; two hires closed.' },
+      { title:'Novacraft Labs — pipeline hygiene', from:'RevOps seat, Aug 28', consent:'Consent asked', outcome:'Held: asked Aug 29, no answer yet.' },
+      { title:'Thornfield — brand direction', from:'Brand refresh, in progress', consent:'Blocked', outcome:'Held: engagement not complete.' },
+      { title:'Verwood — design system v2', from:'Handoff shipped Aug 14', consent:'Consent asked', outcome:'Held: client has not opened the deliverable.' }
+    ];
+    const published = PROOF.filter(p => p.consent === 'Published');
+    const held = PROOF.filter(p => p.consent !== 'Published');
+    const proofRows = PROOF.map(p => ({ rowStyle: p.consent === 'Published' ? '' : 'opacity:.72', cells:[
+      cell(p.title),
+      cell(p.from, { seam:'From engagement' }),
+      cell('', { pill: p.consent }),
+      p.consent === 'Published' ? cell(p.outcome) : cell(p.outcome, { gate:'Not public' })
+    ]}));
+
+    // ══ ONE audience-fit record. The anti-persona is a section, not a footnote. ══
+    const FLOOR = 10000;
+    const FIT = [
+      { who:'Seed-stage B2B software, 5–25 people', why:'Our sprint and design-system work assumes a product already in market.', signal:'Best fit' },
+      { who:'Spin-Out Lab cohort companies', why:'Incorporated, funded, and building in the open — our fastest starts.', signal:'Best fit' },
+      { who:'Series A companies without design leadership', why:'The fractional seat exists for exactly this gap.', signal:'Qualified' },
+      { who:'Pre-product founders with a deck', why:'We can scope, but there is nothing to build against yet.', signal:'Weak intent' }
+    ];
+    const ANTI = [
+      { k:'Budget floor', v:'Under ' + usd(FLOOR), d:'Referred out with a named alternative — passing quietly wastes the founder\u2019s week.' },
+      { k:'Sectors declined', v:'Regulated health, defence', d:'No compliance depth in-house; we would be learning on their money.' },
+      { k:'Capability absent', v:'Native mobile, ML engineering', d:'Stated rather than stretched — two engagements taught us this.' }
+    ];
+    const fitRows = FIT.map(f => ({ rowStyle: f.signal === 'Weak intent' ? 'background:#fffafa' : '', cells:[
+      cell(f.who), cell('', { pill: f.signal }), cell(f.why)
+    ]}));
+
+    const PAGES = [
+      { id:'po1', badge:'PO1', route:'/offers/catalog', zone:'Catalog', arch:'LEDGER',
+        title:'Offers · Catalog', h1:'Service catalog',
+        blurb:'What the firm sells, at what price, under which engagement model. This is the record Pipeline · Leads scores against — a lead\u2019s match number is only as good as the catalog behind it, so an unpriced draft is a scoring gap, not a cosmetic one.',
+        sub:'Productised services with engagement model and price.',
+        cmpTitle:'Catalog · ' + liveCat.length + ' live services',
+        cmpBody: units + ' units sold, ' + usd(revenue) + ' booked. ' + cap(nWord(drafts.length)) + ' draft without a price.',
+        viewMore:'View more · ' + CAT.length + ' entries, ' + priced.length + ' priced →',
+        filters: fil(['All','Fixed','Retainer','Seat'], 0), ops:['New service','Pricing history','Export'],
+        adds:[ { label:'Live services', value:String(liveCat.length), note: drafts.length + ' draft, unpriced' },
+          { label:'Booked to date', value:usd(revenue), note:'from ' + units + ' units' },
+          { label:'Highest price', value:usd(Math.max.apply(null, priced.map(c => c.price))), note:'design system build' },
+          { label:'Retainer price', nr:true, note:'the one draft — scope not final' } ],
+        linkage:'Pipeline · Leads computes each lead\u2019s match score against these entries. The unpriced retainer scores as a capability but not as a fit, so retainer-shaped leads currently read lower than they should — a pricing decision, surfacing as a pipeline symptom.',
+        instTitle:'Services', instMeta:'Prices stored as integers, formatted once',
+        cols:'1.5fr .8fr 1fr .6fr 2fr',
+        head:['Service','Model','Price','Sold','What\u2019s included'],
+        rows: catRows,
+        instNote:'The retainer sits in draft with its price reading "Not recorded" rather than a placeholder figure — an invented number here would propagate straight into lead scoring and into every proposal generated from the catalog. Seat services price monthly and carry a granted scope; fixed services price once. That distinction is the same one Delivery reports progress against.',
+        aiLabel:'Draft · catalog read', aiCost:c4(runCost(6800, 560)),
+        aiBody:'Across ' + CAT.length + ' entries, revenue concentrates in ' + nWord(2) + ' fixed services while both seat products sold once each. Points to the retainer draft as the gap: retainer-shaped demand appears in the lead feed but has nothing priced to match against.',
+        aiAccept:'Accept draft', aiFoot:'Figures read from catalog rows.' },
+
+      { id:'po2', badge:'PO2', route:'/offers/perk-deals', zone:'Perk deals', arch:'LEDGER',
+        title:'Offers · Perk deals', h1:'Perk deals',
+        blurb:'Time-boxed offers with a redemption cap and a lifecycle. The consequence this page exists to render: some perks grant the redeemer something, and when the perk expires that grant is revoked — so an expired row states what it took back and on what date, rather than greying out.',
+        sub:'Live, expiring and expired offers with redemption against cap.',
+        cmpTitle:'Perks · ' + livePerk.length + ' live, ' + expiring.length + ' expiring',
+        cmpBody: expired.length + ' expired, revoking grants from ' + revokedRedeemers + ' redeemers.',
+        viewMore:'View more · ' + PERK.length + ' perks, full lifecycle →',
+        filters: fil(['All','Live','Expiring','Expired'], 0), ops:['New perk','Extend','Export'],
+        adds:[ { label:'Live', value:String(livePerk.length), note:'accepting redemptions' },
+          { label:'Expiring', value:String(expiring.length), note:'cohort credit · Sep 8' },
+          { label:'Expired', value:String(expired.length), note:'grants revoked on expiry' },
+          { label:'Grants revoked', value:String(revokedRedeemers), note:'redeemers affected across ' + revokedGrants.length + ' ' + plural(revokedGrants.length, 'perk') } ],
+        instTitle:'Perk lifecycle', instMeta:'Expiry is an event with a consequence, not a filter',
+        cols:'1.6fr .9fr 1.1fr .9fr 1.9fr',
+        head:['Perk','State','Redeemed / cap','Ends','What it granted'],
+        rows: perkRows,
+        instNote:'The brand teardown hit its cap of 12 and expired on Aug 1 — which revoked priority-queue access for all twelve redeemers on that date, and the row says so in red rather than fading. The cohort 3 seat trial revoked a read-only Board scope from two companies. The expiring cohort credit is at ' + expiring[0].used + ' of ' + expiring[0].cap + ' with six months of partner tier riding on it: extending the perk and extending the grant are two decisions, and this page is where the second one becomes visible.',
+        aiLabel:'Draft · expiry consequences', aiCost:c4(runCost(5400, 620)),
+        aiBody:'For each expiring perk, what its expiry revokes and from whom — the cohort credit\u2019s six-month partner tier for ' + expiring[0].used
+          + ' companies, ending Sep 8. Points to which redeemers lose access, so a notice can go out before it happens rather than after.',
+        aiAccept:'Accept draft', aiFoot:'Traces to perk rows and grant scopes.' },
+
+      { id:'po3', badge:'PO3', route:'/offers/visibility', zone:'Visibility', arch:'ANALYTICS',
+        title:'Offers · Visibility', h1:'Surfaces & attribution',
+        blurb:'Which surfaces the firm appears on and what each actually produced. Volume is not the ranking: a directory listing with 1,840 views and no engagements reads worse here than a referral with two leads and one, because the column that matters is the last one.',
+        sub:'Views, leads and engagements per surface.',
+        cmpTitle:'Visibility · ' + SURF.length + ' surfaces',
+        cmpBody: totalLeads + ' leads, ' + totalEng + ' engagements. ' + cap(nWord(weak.length)) + ' surface produces volume without intent.',
+        viewMore:'View more · ' + SURF.length + ' surfaces, attribution by engagement →',
+        filters: fil(['By engagements','By leads','By views','Weak intent'], 0), ops:['Adjust placements','Attribution rules','Export'],
+        adds:[ { label:'Leads', value:String(totalLeads), note:'across ' + SURF.length + ' surfaces' },
+          { label:'Engagements', value:String(totalEng), note:'each names its source' },
+          { label:'Best converter', value:'Referral', note:'2 leads → Halverton' },
+          { label:'Directory views', value:'1,840', note:'0 engagements — the widest, weakest surface' } ],
+        linkage:'Every engagement in Delivery names the surface that sourced it, so this column counts named rows rather than modelling a total: ' + SURF.filter(s => s.eng).map(s => s.sourced.join(' and ') + ' from the ' + s.s.toLowerCase()).join('; ') + '. Nothing appears here that does not exist there.',
+        instTitle:'Surfaces', instMeta:'Sorted by engagements, not views',
+        cols:'1.6fr .9fr .8fr 1fr 1.1fr',
+        head:['Surface','Views','Leads','Engagements','Lead → engagement'],
+        rows: surfRows,
+        instNote:'Two surfaces have no view counter and render "—" rather than a number: perks listings and referrals arrive without impression tracking, and inventing one would make the widest column the least true. The partner directory is the honest failure — 1,840 views, eleven leads, no engagements — which is a placement to change rather than a channel to celebrate.',
+        aiLabel:'Draft · attribution read', aiCost:c4(runCost(6200, 540)),
+        aiBody:'Points to the referral and webinar surfaces as the ones converting, and to the directory as volume without intent: eleven leads, none reaching an engagement. Where a surface has no view counter the read says so instead of modelling one.',
+        aiAccept:'Accept read', aiFoot:'Engagement counts traced to Delivery rows.' },
+
+      { id:'po4', badge:'PO4', route:'/offers/proof', zone:'Proof', arch:'COLLECTION',
+        title:'Offers · Proof', h1:'Case studies & outcomes',
+        blurb:'Proof is seam-fed: each item is generated from a completed engagement the client was party to, and carries their consent state. Consent is a gate rather than a warning — an unconsented outcome has no published form to suppress, so it simply is not one.',
+        sub:'Provenance and consent state per outcome.',
+        cmpTitle:'Proof · ' + published.length + ' published',
+        cmpBody: held.length + ' held: ' + PROOF.filter(p => p.consent === 'Consent asked').length + ' awaiting consent, 1 engagement incomplete.',
+        viewMore:'View more · ' + PROOF.length + ' outcomes, consent trail →',
+        filters: fil(['All','Published','Awaiting consent','Blocked'], 0), ops:['Ask for consent','Preview public page','Export'],
+        adds:[ { label:'Published', value:String(published.length), note:'live on the public profile' },
+          { label:'Awaiting consent', value:String(PROOF.filter(p => p.consent === 'Consent asked').length), note:'asked, no answer' },
+          { label:'Blocked', value:'1', note:'engagement not complete' },
+          { label:'Client-verified metrics', value:String(published.length), note:'none self-reported' } ],
+        instTitle:'Outcome shelf', instMeta:'Seam-fed · consent gates publication',
+        cols:'1.9fr 1.4fr 1.1fr 2fr',
+        head:['Outcome','Provenance','Consent','What it says'],
+        rows: proofRows,
+        instNote:'Every row is seam-marked because none of it originates here — the outcome comes from an engagement record the client can see from their side. Verwood is the instructive hold: the deliverable shipped, so the engagement is real, but the client has not opened it, which makes a case study about their success premature regardless of consent. Nothing on this page is a metric the firm reported about itself.',
+        aiLabel:'Draft · consent requests', aiCost:c4(runCost(4900, 470)),
+        aiBody:'A consent request per held outcome, naming the engagement, the specific claim, and where it would appear — sent by a person from the account that did the work. The draft for Verwood notes the unopened deliverable, so the ask does not arrive before the review does.',
+        aiAccept:'Accept drafts', aiFoot:'Three requests; each needs a human send.' },
+
+      { id:'po5', badge:'PO5', route:'/offers/audience-fit', zone:'Audience fit', arch:'MATCH ENGINE',
+        title:'Offers · Audience fit', h1:'Who this firm is for',
+        blurb:'The fit record, and its equal half: who the firm is not for. A stated floor, declined sectors and honestly absent capabilities are what let Pipeline pass a lead with a reason — the anti-persona is the working half of a match engine, not a disclaimer.',
+        sub:'Fit signals and the stated anti-persona.',
+        cmpTitle:'Audience fit · ' + FIT.filter(f => f.signal === 'Best fit').length + ' best-fit profiles',
+        cmpBody:'Floor ' + usd(FLOOR) + '. ' + ANTI.length + ' stated exclusions feeding lead passes.',
+        viewMore:'View more · fit rules and pass reasons →',
+        filters: fil(['All','Best fit','Qualified','Weak'], 0), ops:['Edit fit rules','Pass reasons','Export'],
+        adds:[ { label:'Best fit', value:String(FIT.filter(f => f.signal === 'Best fit').length), note:'fastest starts, highest ratings' },
+          { label:'Budget floor', value:usd(FLOOR), note:'below it, referred out by name' },
+          { label:'Sectors declined', value:'2', note:'regulated health, defence' },
+          { label:'Capabilities absent', value:'2', note:'stated, not stretched' } ],
+        linkage:'Pipeline · Leads reads these rules to pass a lead with a named reason — "under floor, referred to Ostara Studio" rather than silence. ' + ANTI.length + ' exclusions produced ' + nWord(4) + ' explained passes last quarter.',
+        instTitle:'Fit profiles', instMeta:'Signals feed lead scoring',
+        cols:'1.9fr 1fr 2.4fr',
+        head:['Profile','Signal','Why'],
+        rows: fitRows,
+        anti: ANTI,
+        instNote:'Pre-product founders read as weak intent rather than declined, because the honest answer is "not yet" — and a match engine that cannot say "not yet" ends up saying "no" to the same founder twice. The floor and the two absent capabilities below are stated in the firm\u2019s own words, which is what makes a pass legible to the founder receiving it.',
+        aiLabel:'Draft · pass reasons', aiCost:c4(runCost(5100, 500)),
+        aiBody:'For each stated exclusion, a short pass note a person can send: the reason, and where relevant a named firm better suited. Points to the floor as the most-used exclusion, and to the absent capabilities as the two worth revisiting if demand keeps arriving for them.',
+        aiAccept:'Accept drafts', aiFoot:'Reasons read from the fit rules.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ linkage:null, anti:null }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

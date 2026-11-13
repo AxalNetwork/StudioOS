@@ -1,0 +1,238 @@
+Design a customer-facing Brand & Pages template library for a premium tech startup platform.
+
+Goal:
+Create a scalable library of high-quality website/page templates for startups across different tech sectors. These are not investor dashboards or internal product screens. They are external-facing brand and marketing templates meant for customers, prospects, partners, recruits, and press.
+
+The template library should feel:
+- modern, premium, editorial, technical, credible
+- clean and structured, not generic SaaS
+- flexible across sectors, but with a strong shared design system
+- suitable for startup founders who need polished public-facing pages fast
+
+Core instruction:
+Design templates that can be reused by startups in these sectors:
+
+- AI / ML
+- B2B SaaS
+- Deep Tech
+- Fintech
+- Climate Tech
+- Health Tech
+- Enterprise Software
+- Developer Tools
+- Data Infrastructure
+- Robotics / Automation
+- Cybersecurity
+- Semiconductors / Hardware
+- Life Sciences Tech
+- Quantum / Advanced Computing
+- AI Infrastructure
+
+What to design:
+Create a library of customer-facing template archetypes, such as:
+- homepage / landing page
+- product page
+- solutions / use cases page
+- about page
+- pricing page
+- contact / demo request page
+- careers page
+- blog / insights page
+- case study page
+- docs / platform overview page
+- launch page
+- waitlist page
+- press / media page
+
+For each template, design it so it can be adapted to multiple sectors without losing sector relevance.
+
+Output structure:
+For each sector, provide:
+1. Brand direction
+2. Visual language
+3. Page template recommendations
+4. Content tone
+5. Key sections/modules
+6. Conversion goals
+7. Distinctive UI motifs
+8. What should be avoided
+
+Also define:
+- which templates are universal across all sectors
+- which templates need sector-specific variants
+- how the same design system should evolve by sector without fragmenting the library
+
+Design system expectations:
+Create one unified underlying design system, but vary the expression by sector:
+- typography system
+- color logic
+- grid and spacing
+- iconography style
+- illustration / diagram approach
+- motion principles
+- card and section patterns
+- CTA hierarchy
+- trust/social-proof blocks
+- navigation and footer systems
+
+The design system should support:
+- premium startup branding
+- strong readability
+- modular reusable blocks
+- elegant dark mode options where relevant
+- responsive marketing pages
+- easy variation by industry tone
+
+Sector guidance:
+Each sector should feel distinct.
+
+1. AI / ML
+- smart, forward-looking, elegant, abstract but useful
+- blend intelligence, automation, and product clarity
+- use visual systems that suggest models, inference, workflows, copilots, reasoning, or orchestration
+- avoid cliché glowing brains, neon gradients, and generic AI orbs
+
+2. B2B SaaS
+- sharp, clear, practical, polished
+- emphasize workflows, outcomes, ROI, and team productivity
+- should feel operational and adoption-friendly
+- avoid bland startup template sameness
+
+3. Deep Tech
+- advanced, credible, research-backed, technical
+- should feel precise, ambitious, and substantial
+- use system diagrams, technical storytelling, and structured layouts
+- avoid looking too academic or too inaccessible
+
+4. Fintech
+- trustworthy, sophisticated, high-clarity
+- balance modernity with confidence and control
+- emphasize security, transparency, speed, and financial workflows
+- avoid crypto-hype aesthetics unless explicitly stated
+
+5. Climate Tech
+- optimistic, grounded, systems-oriented
+- should feel like real infrastructure and measurable impact, not greenwashing
+- use operational visuals, maps, networks, energy systems, carbon/accountability cues
+- avoid overusing leafy eco clichés
+
+6. Health Tech
+- trustworthy, calm, precise, human-centered
+- balance clinical clarity with warmth
+- emphasize care delivery, patient outcomes, compliance, and usable intelligence
+- avoid sterile hospital genericity and stock-photo healthcare sameness
+
+7. Enterprise Software
+- robust, scalable, serious, efficient
+- emphasize operations, control, integration, governance, and performance
+- design for buyers who expect maturity and capability
+- avoid looking too startup-lightweight
+
+8. Developer Tools
+- technical, crisp, modular, confident
+- emphasize APIs, workflows, speed, extensibility, and technical craft
+- support docs-heavy and product-led growth patterns
+- avoid overdesigned marketing fluff
+
+9. Data Infrastructure
+- structured, systemic, reliable
+- represent flows, pipelines, observability, storage, sync, and scale
+- should feel foundational and mission-critical
+- avoid visual clutter that undermines clarity
+
+10. Robotics / Automation
+- dynamic, industrial, intelligent, real-world
+- show machines, workflows, precision, control loops, or autonomy in action
+- balance hardware realism with software intelligence
+- avoid sci-fi movie clichés
+
+11. Cybersecurity
+- controlled, trusted, resilient, high-signal
+- emphasize protection, visibility, governance, identity, threat detection
+- should feel calm and authoritative, not alarmist
+- avoid hacker-green clichés and fear-marketing overload
+
+12. Semiconductors / Hardware
+- engineered, exact, advanced, tactile
+- should feel materially grounded and technically sophisticated
+- use fabrication, components, system architecture, performance, and supply-chain cues
+- avoid generic software-only layouts
+
+13. Life Sciences Tech
+- scientific, refined, rigorous, translational
+- connect research, platform capability, and real-world therapeutic or scientific outcomes
+- can blend lab credibility with platform elegance
+- avoid biotech clichés and overcomplicated scientific visuals
+
+14. Quantum / Advanced Computing
+- conceptual, mathematical, frontier-grade
+- make highly advanced ideas feel understandable and credible
+- use structured abstraction, signal patterns, state systems, precision graphics
+- avoid visual nonsense or fake-science decoration
+
+15. AI Infrastructure
+- foundational, high-performance, systems-level
+- emphasize compute, orchestration, tooling, reliability, throughput, and deployment
+- should feel like the backbone layer behind AI products
+- avoid looking identical to generic cloud SaaS
+
+Template strategy:
+Design the library around reusable archetypes, not one-off pages.
+For example:
+- “Technical product launch”
+- “Trust-heavy fintech homepage”
+- “Docs-led developer tool page”
+- “Research-backed deep tech company page”
+- “Operational climate platform page”
+- “Enterprise platform overview”
+- “Infrastructure-grade cybersecurity page”
+
+For each sector, suggest:
+- 3 to 5 ideal template archetypes
+- the most important above-the-fold structure
+- the best trust elements
+- the right balance between narrative, product UI, diagrams, testimonials, metrics, and technical proof
+
+Customer-facing audience types:
+Support templates for these external audiences:
+- buyers / customers
+- users / operators
+- developers
+- enterprise teams
+- research or technical partners
+- job candidates
+- media / press
+
+Important:
+The pages should not all look the same with minor color swaps.
+They should share a design system, but each sector must have:
+- different pacing
+- different proof mechanisms
+- different visual metaphors
+- different information density
+- different trust language
+- different CTA priorities
+
+Brand architecture:
+The library should support:
+- startup brands at seed to growth stage
+- credible public launch presence
+- product marketing pages
+- company storytelling pages
+- platform explanation pages
+- recruiting pages
+- trust-building pages for enterprise buyers
+
+Quality bar:
+The output should feel like a design director creating a premium startup template system for a modern venture studio or product ecosystem.
+Avoid generic startup website advice.
+Be specific, visual, and systematic.
+
+Deliverable format:
+Return the answer as a structured template library blueprint with:
+- shared design system
+- sector-by-sector guidance
+- archetype recommendations
+- reusable page modules
+- visual differentiation rules
+- customer-facing conversion logic

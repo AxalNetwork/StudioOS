@@ -1,0 +1,934 @@
+/**
+ * The Learning center's pure half (D562): the tabs, how each live source's
+ * real shape becomes a row, and the derivations the presentational components
+ * share. No React and no fetch, so a test can read every rule here directly.
+ *
+ * EACH LIVE SOURCE IS READ IN THE SHAPE ITS ROUTE SENDS:
+ *
+ *   catalog       `GET /api/learning/catalog` (`routes/learning.ts`, D557),
+ *                 `{ items, sources, limit, offset }`: courses, videos and
+ *                 readings with articles, publications and events, and each
+ *                 source's own state;
+ *   courses, items, progress  `GET /api/learning/courses/:slug`,
+ *                 `/items/:uid`, `/me` and `POST /progress` (D557);
+ *   articles      `GET /api/articles` (`routes/articles.ts`), `{ items, total }`,
+ *                 each item `publicArticleShape`;
+ *   publications  `GET /api/market-intel-public/publications`
+ *                 (`routes/market_intel_public.ts`), `{ publications }`, each
+ *                 `{ slug, title, subtitle, section, published_at }`;
+ *   events        `GET /api/public/events` (`routes/events_public.ts`),
+ *                 `{ events }`, each `shapeEvent`, upcoming by default.
+ *
+ * STAGE 3 READS THE REST, each through its own module: programs
+ * (`programReads.js`, D558), exercises and exams (`assessmentReads.js`,
+ * D559), webinars (`webinarReads.js`, D560), and an uploaded video's upload
+ * and playback (`videoUpload.js`, `studioActions.js`, D561). Exercises and
+ * exams are listed on their own, and a member's submissions and attempts
+ * across them, since #4180 (D4180, `routes/learning_lists.ts`).
+ */
+import { titleCase } from '../../lib/absence';
+
+// D4478: share the footer's rules with routed headers and model callers.
+export { lessonPositionLine, markCompleteReason } from './lessonFooterModel';
+
+/** The one line the home's not-live tabs and sections carry (the brief's words). */
+export const NOT_LIVE_LINE = 'The course catalogue is not live yet.';
+
+/**
+ * The line each deeper surface carried until its store merged. Every store is
+ * live since stage 3; a component still takes its line as the default
+ * `reason`, drawn only when it is handed `status: 'unrecorded'`.
+ */
+export const NOT_LIVE = {
+  catalogue: NOT_LIVE_LINE,
+  progress: 'Learning progress is not recorded yet.',
+  webinars: 'Webinars are not live yet.',
+  exercises: 'Exercises are not live yet.',
+  exams: 'Exams are not live yet.',
+  programs: 'Regional programs are not live yet.',
+  studio: 'The learning studio is not live yet.',
+};
+
+/**
+ * The canvas's nine tabs, in its order. `live` marks the ones a route fills:
+ * All, Courses and Videos read D557's catalog; Webinars D560's list (stage
+ * 3); Articles, Publications and Events their own routes; Exercises and
+ * Exams their own lists (#4180).
+ */
+export const LEARNING_TABS = [
+  { key: 'all', label: 'All', live: true },
+  { key: 'courses', label: 'Courses', live: true },
+  { key: 'videos', label: 'Videos', live: true },
+  { key: 'webinars', label: 'Webinars', live: true },
+  { key: 'articles', label: 'Articles', live: true },
+  { key: 'publications', label: 'Publications', live: true },
+  { key: 'events', label: 'Events', live: true },
+  { key: 'exercises', label: 'Exercises', live: true },
+  { key: 'exams', label: 'Exams', live: true },
+];
+
+export const ARTICLES_PAGE_SIZE = 20;
+export const EVENTS_PAGE_SIZE = 20;
+/** How many rows All draws, the canvas's "1–24". */
+export const ALL_LIMIT = 24;
+
+/** Articles for a profile that sees "Coming soon"; All for everyone else. */
+export function defaultTab(gated) {
+  return gated ? 'articles' : 'all';
+}
+
+/** The tab the URL names, or the default when it names none of the nine. */
+export function resolveTab(requested, gated) {
+  return LEARNING_TABS.some((t) => t.key === requested) ? requested : defaultTab(gated);
+}
+
+/**
+ * What a tab draws: `live` (its list), `not_live` (the not-recorded line) or
+ * `coming_soon` (the card). A gated profile has one open tab, Articles.
+ */
+export function tabMode(key, gated) {
+  if (gated && key !== 'articles') return 'coming_soon';
+  return LEARNING_TABS.find((t) => t.key === key)?.live ? 'live' : 'not_live';
+}
+
+const clean = (value) => String(value ?? '').trim();
+
+/**
+ * An instant from what the routes send: SQLite's UTC text
+ * (`2026-10-01 12:00:00`), an ISO string with or without a zone, or a bare
+ * date. Text with no zone is UTC, which is what `datetime('now')` writes. Null
+ * for anything unparseable, so nothing renders "Invalid Date".
+ */
+export function parseInstant(value) {
+  if (value === null || value === undefined || value === '') return null;
+  let s = clean(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s = `${s}T00:00:00Z`;
+  else if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s = `${s.replace(' ', 'T')}Z`;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
+function format(value, options, timeZone) {
+  const d = parseInstant(value);
+  if (!d) return null;
+  try {
+    return new Intl.DateTimeFormat('en-GB', { ...options, ...(timeZone ? { timeZone } : {}) }).format(d);
+  } catch {
+    // A time zone Intl does not know: the reader's own zone, rather than nothing.
+    return new Intl.DateTimeFormat('en-GB', options).format(d);
+  }
+}
+
+/** "6 Oct 2026", or null when there is no date. */
+export function formatDay(value, timeZone) {
+  return format(value, { day: 'numeric', month: 'short', year: 'numeric' }, timeZone);
+}
+
+/** "Sat, 10 Oct 2026, 18:00 CEST": a start time in the zone it was set in. */
+export function formatWhen(value, timeZone) {
+  return format(value, {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
+  }, timeZone);
+}
+
+/** "12 min" or "1 h 05 min"; null for a length that is not a positive number. */
+export function durationLabel(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n <= 0) return null;
+  const minutes = Math.max(1, Math.round(n / 60));
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
+}
+
+/** "30 min" from a whole-minute column, null when absent. */
+export function minutesLabel(minutes) {
+  const n = Number(minutes);
+  if (minutes === null || minutes === undefined || minutes === '' || !Number.isFinite(n) || n <= 0) return null;
+  return durationLabel(n * 60);
+}
+
+/** "1–20 of 57" for a page of a list whose route sends a total. */
+export function rangeLabel(offset, count, total) {
+  if (!count) return null;
+  const from = offset + 1;
+  const to = offset + count;
+  return Number.isFinite(total) ? `${from}–${to} of ${total}` : `${from}–${to}`;
+}
+
+// ── The three live sources, read in their routes' own shapes ──────────────
+
+/**
+ * One published article (`publicArticleShape`). The reading time is the
+ * route's `read_minutes`, drawn only when it is a positive number; a missing
+ * author or date is said to be missing rather than left blank.
+ */
+export function articleRow(a) {
+  const minutes = Number(a?.read_minutes);
+  return {
+    kind: 'article',
+    key: `article:${a?.id ?? a?.slug}`,
+    title: clean(a?.title) || 'Untitled article',
+    href: clean(a?.slug) ? `/articles/${encodeURIComponent(clean(a.slug))}` : null,
+    summary: clean(a?.subtitle) || clean(a?.excerpt) || null,
+    author: clean(a?.author) || null,
+    role: clean(a?.author_role) ? titleCase(a.author_role) : null,
+    date: a?.published_at || null,
+    readMinutes: Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : null,
+  };
+}
+
+/**
+ * One published publication. The public list carries no file and no size, so
+ * a row links to the publication's public page; the PDF stays "not recorded"
+ * here (D562 GAPS).
+ */
+export function publicationRow(p) {
+  return {
+    kind: 'publication',
+    key: `publication:${p?.slug}`,
+    title: clean(p?.title) || 'Untitled publication',
+    href: clean(p?.slug) ? `/insights/public/${encodeURIComponent(clean(p.slug))}` : null,
+    summary: clean(p?.subtitle) || null,
+    section: clean(p?.section) ? titleCase(p.section) : null,
+    date: p?.published_at || null,
+  };
+}
+
+/** Where an event happens, from `location_kind` (`virtual`, `physical`, `hybrid`). */
+export function eventPlace(e) {
+  const where = clean(e?.location_text);
+  if (e?.location_kind === 'virtual') return 'Online';
+  if (e?.location_kind === 'hybrid') return where ? `${where} and online` : 'In person and online';
+  if (e?.location_kind === 'physical') return where || 'In person';
+  return where || null;
+}
+
+/**
+ * One upcoming event (`shapeEvent`). `icsUrl` is the client's own URL builder
+ * (`eventsPublic.icsUrl`), passed in so this module imports no client.
+ */
+export function eventRow(e, icsUrl) {
+  const slug = clean(e?.slug);
+  return {
+    kind: 'event',
+    key: `event:${e?.id ?? slug}`,
+    title: clean(e?.title) || 'Untitled event',
+    href: slug ? `/events/${encodeURIComponent(slug)}` : null,
+    summary: clean(e?.summary) || null,
+    type: clean(e?.type) ? titleCase(e.type) : null,
+    date: e?.starts_at || null,
+    timezone: clean(e?.timezone) || null,
+    place: eventPlace(e),
+    icsHref: slug && typeof icsUrl === 'function' ? icsUrl(slug) : null,
+  };
+}
+
+/** Whether a row answers a search, for the one list whose route takes no query. */
+export function matchesQuery(row, query) {
+  const needle = clean(query).toLowerCase();
+  if (!needle) return true;
+  return [row.title, row.summary, row.section].some((v) => String(v ?? '').toLowerCase().includes(needle));
+}
+
+const KIND_LABEL = {
+  course: 'Course', video: 'Video', reading: 'Reading', article: 'Article', publication: 'Publication', event: 'Event',
+};
+export const kindLabel = (kind) => KIND_LABEL[kind] || titleCase(kind);
+
+// ── The federated catalog (D557, `GET /api/learning/catalog`) ─────────────
+
+/** The six kinds the catalog reads, in its own order. */
+export const CATALOG_KINDS = ['course', 'video', 'reading', 'article', 'publication', 'event'];
+
+/** The tab a catalog kind belongs to, and back: All reads every kind. */
+export const TAB_KIND = { courses: 'course', videos: 'video' };
+
+/** Where a standalone item opens: a video at its own route, a reading at the catalog's. */
+export function itemHref(item) {
+  const uid = clean(item?.uid ?? item?.id);
+  if (!uid) return null;
+  return item?.kind === 'video' ? `/learning/videos/${encodeURIComponent(uid)}` : `/learning/items/${encodeURIComponent(uid)}`;
+}
+
+/**
+ * One catalog row, from the shape `readKind` returns: `kind`, `id` (a uid
+ * for an item, a slug otherwise), `title`, `summary`, `date`, plus the
+ * fields each kind adds. The href is built here from the id, so a video opens
+ * `/learning/videos/:uid` (the route this app serves; the catalog's own href
+ * for an item is `/learning/items/:uid`, which it also serves). A row whose
+ * status is not `published` is the Super Admin's draft, and says so.
+ */
+export { VIDEO_LENGTH_OPTIONS, videoCountLabel, transcriptHit, itemHrefAt, parseVideoTime } from './videoLibraryModel';
+
+export function catalogRow(r) {
+  const id = clean(r?.id);
+  const enc = encodeURIComponent;
+  const base = {
+    kind: r?.kind,
+    key: `${r?.kind}:${id}`,
+    title: clean(r?.title) || 'Untitled',
+    summary: clean(r?.summary) || null,
+    date: r?.date || null,
+    draft: r?.status && r.status !== 'published' ? titleCase(r.status) : null,
+  };
+  const level = clean(r?.level) ? titleCase(r.level) : null;
+  switch (r?.kind) {
+    case 'course':
+      return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
+    case 'video':
+    case 'reading':
+      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match), match: r.match || null, poster: clean(r.thumbnail_url) || null };
+    case 'article': {
+      const minutes = Number(r.read_minutes);
+      return {
+        ...base, href: id ? `/articles/${enc(id)}` : null,
+        author: clean(r.author?.name) || null,
+        role: clean(r.author?.role) ? titleCase(r.author.role) : null,
+        readMinutes: Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : null,
+      };
+    }
+    case 'publication':
+      return { ...base, href: id ? `/insights/public/${enc(id)}` : null, section: clean(r.section) ? titleCase(r.section) : null };
+    case 'event':
+      return { ...base, href: id ? `/events/${enc(id)}` : null, type: clean(r.event_type) ? titleCase(r.event_type) : null };
+    default:
+      return { ...base, href: null };
+  }
+}
+
+/**
+ * The catalog's per-source states, named: `ready` with a total,
+ * `unreadable` with the route's own reason, or `filtered_out`. A source that
+ * failed is never read as an empty list.
+ */
+export function sourceStates(sources) {
+  return CATALOG_KINDS
+    .filter((kind) => sources && sources[kind])
+    .map((kind) => ({ kind, ...sources[kind] }));
+}
+
+// ── Items: how a video plays (D557's allow-list; an uploaded file, D561) ──
+
+const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com'];
+const VIDEO_ID = /^[\w-]{6,32}$/;
+const STREAM_ID = /^[a-f0-9]{32}$/i;
+
+/** The one address an item's uploaded file plays from: D561's gated route for that item. */
+export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent(clean(uid))}/video`;
+
+/** #4176 (D4176): the words the integrated canvas gives a Stream video that is not ready. */
+export const STREAM_PROCESSING = 'This video is still processing.';
+export const STREAM_FAILED = 'This video could not be processed. Ask HQ to upload it again.';
+
+/**
+ * How a video item plays here. `{ src, embed: true }` is an iframe in the
+ * platform's own embed form; `{ src, embed: false }` is an uploaded file in
+ * the browser's own player; `{ reason, href }` is a video this page cannot
+ * play, with the reason and, for a link, the link itself.
+ *
+ *   - An uploaded file (D561) plays from `video_stream_url`, which the item
+ *     read sends in place of any bucket address: the path of `GET
+ *     /api/learning/items/:uid/video`. That route asks the same question as
+ *     the item read, takes the session cookie and answers HTTP Range, so a
+ *     same-origin `<video src>` plays it and can seek. Only that route, for
+ *     this item, is played: any other address is refused with its reason. An
+ *     upload whose read sent no address is "Not recorded", with the reason.
+ *   - YouTube (`watch?v=`, `youtu.be/`, `/embed/`, `/shorts/`, `/live/`) →
+ *     `www.youtube-nocookie.com/embed/<id>`;
+ *   - Vimeo (`vimeo.com/<id>`, `player.vimeo.com/video/<id>`) →
+ *     `player.vimeo.com/video/<id>`;
+ *   - Cloudflare Stream (`<customer>.cloudflarestream.com/<id>`,
+ *     `videodelivery.net/<id>`) → the `iframe` player for that id.
+ *
+ * Before all of these (#4176, D4176): a ready Stream video the item read sent
+ * in `video_stream` plays in Stream's own iframe, from its signed URL (minted
+ * after the access check); one still processing or failed says so in the
+ * canvas's words (`STREAM_PROCESSING`, `STREAM_FAILED`).
+ */
+export function videoPlayback(item) {
+  if (!item || item.kind !== 'video') return null;
+  const vs = item.video_stream;
+  if (vs && vs.state === 'ready') {
+    const iframe = clean(vs.iframe_url);
+    let u = null;
+    try { u = new URL(iframe); } catch { u = null; }
+    // The player only embeds Stream's own hosts.
+    if (u && u.protocol === 'https:' && (/^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'iframe.videodelivery.net')) {
+      return {
+        src: iframe, embed: true,
+        // #4178 (D4178): the Stream player's own source, so it can be seeked and timed; null keeps the plain iframe.
+        player: streamSourceOf(iframe),
+        stream: { hls: vs.hls_url || null, poster: vs.poster_url || null, preview: vs.preview_url || null, captions: Array.isArray(vs.captions) ? vs.captions : [], duration: vs.duration_seconds ?? null },
+      };
+    }
+    return { reason: 'The Stream address sent with this video is not Stream\'s own, so it is not played here.' };
+  }
+  if (vs && vs.state === 'processing') return { reason: STREAM_PROCESSING };
+  if (vs && vs.state === 'error') return { reason: STREAM_FAILED };
+  const stream = clean(item.video_stream_url);
+  if (stream) {
+    // A query string (a version, say) may follow; the path is what decides.
+    if (stream.split(/[?#]/)[0] === itemStreamPath(item.uid)) return { src: stream, embed: false };
+    return { reason: 'The stream address sent with this video is not this item’s own, so it is not played here.' };
+  }
+  if (item.video_source === 'r2') {
+    return { reason: 'This video was uploaded, but the page was not sent an address to stream it from.' };
+  }
+  const raw = clean(item.video_url);
+  if (!raw) return { reason: 'No video link is recorded for this item.' };
+  let u;
+  try { u = new URL(raw); } catch { return { reason: 'The video link cannot be read.' }; }
+  if (u.protocol !== 'https:') return { reason: 'The video link is not https, so it is not played here.' };
+  const host = u.hostname.toLowerCase();
+  const segments = u.pathname.split('/').filter(Boolean);
+  const embed = (src) => ({ src, embed: true });
+  if (YOUTUBE_HOSTS.includes(host)) {
+    const id = u.pathname === '/watch' ? u.searchParams.get('v')
+      : ['embed', 'shorts', 'live'].includes(segments[0]) ? segments[1] : null;
+    if (id && VIDEO_ID.test(id)) return embed(`https://www.youtube-nocookie.com/embed/${id}`);
+  }
+  if (host === 'youtu.be' && segments[0] && VIDEO_ID.test(segments[0])) {
+    return embed(`https://www.youtube-nocookie.com/embed/${segments[0]}`);
+  }
+  if ((host === 'vimeo.com' || host === 'www.vimeo.com') && /^\d+$/.test(segments[0] || '')) {
+    return embed(`https://player.vimeo.com/video/${segments[0]}`);
+  }
+  if (host === 'player.vimeo.com' && segments[0] === 'video' && /^\d+$/.test(segments[1] || '')) {
+    return embed(`https://player.vimeo.com/video/${segments[1]}`);
+  }
+  if (host.endsWith('.cloudflarestream.com') && STREAM_ID.test(segments[0] || '')) {
+    return embed(`https://${host}/${segments[0]}/iframe`);
+  }
+  if (host === 'videodelivery.net' && STREAM_ID.test(segments[0] || '')) {
+    return embed(`https://iframe.videodelivery.net/${segments[0]}`);
+  }
+  return { reason: 'This link cannot be played on this page.', href: u.toString() };
+}
+
+// ── Courses and lessons, from `GET /api/learning/courses/:slug` ──────────────
+
+/** Every lesson of a course, in module order then lesson order, with its module. */
+export function courseLessons(modules) {
+  return byPosition(modules).flatMap((m) => byPosition(m?.lessons).map((l) => ({ ...l, module: m })));
+}
+
+/** One lesson of a course, with the lessons either side of it. */
+export function findLesson(modules, uid) {
+  const all = courseLessons(modules);
+  const at = all.findIndex((l) => l.uid === uid);
+  if (at < 0) return null;
+  return { lesson: all[at], index: at, total: all.length, prev: all[at - 1] || null, next: all[at + 1] || null };
+}
+
+// ── The studio's helpers ──────────────────────────────────────────────────
+
+/**
+ * A length typed as `12` (minutes) or `12:05` (minutes and seconds), as whole
+ * seconds. `null` for an empty field; `undefined` for one that is not a length.
+ */
+export function parseLength(value) {
+  const s = clean(value);
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s) * 60;
+  const m = /^(\d+):([0-5]\d)$/.exec(s);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : undefined;
+}
+
+/** Whole seconds as the studio's `m:ss`, or '' when there is none. */
+export function formatLength(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n < 0) return '';
+  return `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, '0')}`;
+}
+
+/**
+ * A complete order with one uid moved a step up (-1) or down (+1), as the
+ * reorder routes take it; null when it is already at that end.
+ */
+export function moveInOrder(uids, uid, step) {
+  const at = uids.indexOf(uid);
+  const to = at + step;
+  if (at < 0 || to < 0 || to >= uids.length) return null;
+  const next = [...uids];
+  [next[at], next[to]] = [next[to], next[at]];
+  return next;
+}
+
+// ── Shared by the presentational components (planned shapes, #1158–#1162) ──
+
+/** The five lesson kinds `learning_lessons.kind` allows (#1158). */
+export const LESSON_KINDS = ['video', 'reading', 'exercise', 'exam', 'webinar'];
+export const lessonKindLabel = (kind) => (LESSON_KINDS.includes(kind) ? titleCase(kind) : 'Lesson');
+
+/**
+ * Where a lesson opens. A video or reading plays in the lesson player. An
+ * exercise or exam lesson points at its own page through `ref_uid`, with the
+ * course along as `?course=` so that page names the course and leads back to
+ * it (D559; `assessmentHref` builds the same address). A webinar lesson names
+ * an EVENT by its slug (D557: `checkRef` looks it up in `events`), so it
+ * opens the event's page (D562 departure 12).
+ */
+export function lessonHref(courseSlug, lesson) {
+  const slug = clean(courseSlug);
+  if (!lesson) return null;
+  if (lesson.kind === 'webinar') {
+    const ref = clean(lesson.ref_uid);
+    return ref ? `/events/${encodeURIComponent(ref)}` : null;
+  }
+  if (lesson.kind === 'exercise' || lesson.kind === 'exam') {
+    const ref = clean(lesson.ref_uid);
+    return ref ? `/learning/${lesson.kind}s/${encodeURIComponent(ref)}${slug ? `?course=${encodeURIComponent(slug)}` : ''}` : null;
+  }
+  const uid = clean(lesson.uid);
+  return slug && uid ? `/learning/courses/${encodeURIComponent(slug)}/${encodeURIComponent(uid)}` : null;
+}
+
+export const lessonDone = (lesson) => lesson?.progress?.status === 'completed';
+
+/** Lessons in their stored order. */
+export const byPosition = (rows) => [...(rows || [])].sort((a, b) => (Number(a?.position) || 0) - (Number(b?.position) || 0));
+
+/**
+ * A module's length is the sum of its lessons' lengths, and only when every
+ * lesson has one: a sum over the lessons that happen to be timed would be a
+ * shorter number presented as the whole.
+ */
+export function totalSeconds(lessons) {
+  const list = lessons || [];
+  if (!list.length) return null;
+  let sum = 0;
+  for (const l of list) {
+    const n = Number(l?.duration_seconds);
+    if (l?.duration_seconds === null || l?.duration_seconds === undefined || !Number.isFinite(n) || n <= 0) return null;
+    sum += n;
+  }
+  return sum;
+}
+
+/**
+ * The course's progress from the same ticks the outline draws, so the summary
+ * can never disagree with the rows under it.
+ */
+export function courseProgress(modules) {
+  const lessons = (modules || []).flatMap((m) => m?.lessons || []);
+  const done = lessons.filter(lessonDone).length;
+  return { done, total: lessons.length, percent: lessons.length ? Math.round((done / lessons.length) * 100) : null };
+}
+
+/** How long before a webinar's start its join link may show (#1161). */
+export const JOIN_LEAD_MS = 15 * 60 * 1000;
+
+/**
+ * Where a webinar stands: `cancelled`, `upcoming`, `live`, `past`, or
+ * `unknown` when a time it needs is not recorded.
+ */
+export function webinarPhase(webinar, now) {
+  if (webinar?.status === 'cancelled') return 'cancelled';
+  const start = parseInstant(webinar?.starts_at);
+  const end = parseInstant(webinar?.ends_at);
+  const t = Number(now);
+  if (!start || !Number.isFinite(t)) return 'unknown';
+  if (t < start.getTime()) return 'upcoming';
+  if (!end) return 'unknown';
+  return t < end.getTime() ? 'live' : 'past';
+}
+
+/**
+ * Whether the join link may show: the server sends `join_url` only to a
+ * registered member inside the window, and the page re-checks the window so a
+ * link read earlier is not offered after the event has ended.
+ */
+export function joinWindowOpen(webinar, now) {
+  const start = parseInstant(webinar?.starts_at);
+  const end = parseInstant(webinar?.ends_at);
+  const t = Number(now);
+  if (!start || !end || !Number.isFinite(t)) return false;
+  return t >= start.getTime() - JOIN_LEAD_MS && t < end.getTime();
+}
+
+/** Seconds left on an exam attempt, or null for an exam with no time limit. */
+export function secondsLeft(attempt, exam, now) {
+  const start = parseInstant(attempt?.started_at);
+  const limit = Number(exam?.time_limit_minutes);
+  if (!start || !Number.isFinite(limit) || limit <= 0 || !Number.isFinite(Number(now))) return null;
+  return Math.max(0, Math.floor((start.getTime() + limit * 60000 - Number(now)) / 1000));
+}
+
+/** "23:48" for a count of seconds. */
+export function formatClock(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Attempts left, or null when the exam records no limit. Never below zero. */
+export function attemptsLeft(exam, attempts) {
+  const max = Number(exam?.max_attempts);
+  if (exam?.max_attempts === null || exam?.max_attempts === undefined || !Number.isFinite(max)) return null;
+  return Math.max(0, max - (attempts || []).length);
+}
+
+/** `learning_exercise_submissions.status` (#1160), as a label and a pill tone. */
+export const SUBMISSION_STATUS = {
+  submitted: { label: 'Submitted', tone: 'info' },
+  accepted: { label: 'Accepted', tone: 'ok' },
+  needs_work: { label: 'Needs work', tone: 'warn' },
+};
+
+/** A content row's status, as a pill tone. */
+export const CONTENT_STATUS_TONE = { published: 'ok', draft: 'warn', archived: 'neutral', cancelled: 'danger' };
+
+// ---------------------------------------------------------------------------
+// D3726 (#3726) — the Learning on Stream canvas (`Learning Stream Page.dc.html`),
+// what the screens draw before the Stream and list tasks land.
+// ---------------------------------------------------------------------------
+
+/** The build tasks behind the boards this integration cannot fill yet. */
+export const LEARNING_STREAM_TASKS = {
+  stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181,
+};
+
+/** LR1 "New this week": the kinds it lists, and how far back a week reaches. */
+export const NEW_THIS_WEEK_KINDS = ['course', 'video', 'reading'];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * LR1 "New this week", newest first, from the catalog rows the All tab already
+ * reads (`catalogRow`): only courses, videos and readings dated within the
+ * last seven days, at most `max`. A row with no date is never "new".
+ */
+export function newThisWeek(rows, now = Date.now(), max = 4) {
+  const since = now - WEEK_MS;
+  return (rows || [])
+    .filter((r) => NEW_THIS_WEEK_KINDS.includes(r?.kind))
+    .map((r) => ({ r, t: Date.parse(r.date ?? '') }))
+    .filter(({ t }) => Number.isFinite(t) && t >= since && t <= now + 60_000)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, max)
+    .map(({ r }) => r);
+}
+
+/** LR1 "Recommended for you" (#4650, D4650): the next learning action and why, from `GET /api/learning/plan/next`. */
+export const RECOMMENDED_TITLE = 'Recommended for you';
+export const NEXT_UNREADABLE_CLAIM = 'This is not a claim that nothing is waiting.';
+/** What a next action's rule says beside its reason, in the member's words. */
+export const NEXT_RULE_LABEL = Object.freeze({ continue_course: 'Continue', program: 'From your program', plan: 'Planned' });
+/** The answer as the card draws it: the action, or the server's own empty state; null while there is nothing to draw. */
+export function nextView(answer) {
+  if (!answer || answer.status !== 'ready') return null;
+  if (answer.next) {
+    const n = answer.next;
+    return { kind: 'action', title: n.title, href: n.href, reason: n.reason, label: NEXT_RULE_LABEL[n.rule] || null, plan: n.plan || null };
+  }
+  return { kind: 'empty', text: answer.empty || 'Nothing is waiting.' };
+}
+
+/** LR4 chapters: the item has none recorded. */
+export const NO_CHAPTERS = 'No chapters';
+
+/** LR4b: a transcript with no caption cues is the plain text, and says so. */
+export const PLAIN_TRANSCRIPT_LINE = 'No caption cues, so the plain transcript is shown.';
+
+/**
+ * LR4's "Resume from [12:05]": the stored position, when there is one worth
+ * resuming — at least 5 s in and, when the length is known, more than 5 s
+ * before the end. Null otherwise.
+ */
+export function resumeAt(positionSeconds, durationSeconds = null) {
+  const p = Number(positionSeconds);
+  if (!Number.isFinite(p) || p < 5) return null;
+  const d = Number(durationSeconds);
+  if (Number.isFinite(d) && d > 0 && p >= d - 5) return null;
+  return Math.floor(p);
+}
+
+/**
+ * The player's position writes (LR4 resume): at most one every `every` ms
+ * while playing, and one on pause or end. `write(seconds, percent)` is the
+ * caller's; a write in flight is never doubled.
+ */
+export function positionWriter(write, { every = 15_000, now = () => Date.now() } = {}) {
+  let last = -Infinity;
+  let busy = false;
+  const send = (seconds, duration) => {
+    const s = Math.floor(Number(seconds));
+    if (!Number.isFinite(s) || s < 0 || busy) return false;
+    const d = Number(duration);
+    const percent = Number.isFinite(d) && d > 0 ? Math.min(100, Math.max(0, Math.floor((100 * s) / d))) : null;
+    busy = true;
+    last = now();
+    Promise.resolve().then(() => write(s, percent)).catch(() => {}).finally(() => { busy = false; });
+    return true;
+  };
+  return {
+    tick: (seconds, duration) => (now() - last >= every ? send(seconds, duration) : false),
+    flush: (seconds, duration) => send(seconds, duration),
+  };
+}
+
+// ── #4178 (D4178): the Stream player — its source, chapters and timed cues ──
+
+/**
+ * The Stream player's own source, from the signed `iframe_url` the item read
+ * sends (D4176): `{ src, customerCode }` for `@cloudflare/stream-react`, where
+ * `src` is the signed token. `customer-<code>.cloudflarestream.com/<token>/iframe`
+ * and `iframe.videodelivery.net/<token>` are read; anything else is null, so the
+ * page falls back to the plain iframe it already validated.
+ */
+export function streamSourceOf(iframeUrl) {
+  let u;
+  try { u = new URL(clean(iframeUrl)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const seg = u.pathname.split('/').filter(Boolean);
+  const token = /^[A-Za-z0-9._-]{16,4096}$/;
+  const m = /^customer-([a-z0-9]+)\.cloudflarestream\.com$/.exec(u.hostname);
+  if (m && seg.length === 2 && seg[1] === 'iframe' && token.test(seg[0])) return { src: seg[0], customerCode: m[1] };
+  if (u.hostname === 'iframe.videodelivery.net' && seg.length === 1 && token.test(seg[0])) return { src: seg[0], customerCode: null };
+  return null;
+}
+
+/** Chapters as the item read sends them, in time order, each with a title and a whole start second; anything else is dropped. */
+export function chaptersOf(item) {
+  const raw = Array.isArray(item?.chapters) ? item.chapters : [];
+  return raw
+    .map((c) => ({ start: Math.floor(Number(c?.start_seconds)), title: clean(c?.title) }))
+    .filter((c) => Number.isFinite(c.start) && c.start >= 0 && c.title)
+    .sort((a, b) => a.start - b.start);
+}
+
+/** The index of the chapter playing at `t` seconds: the last one that has started. -1 before the first. */
+export function chapterAt(chapters, t) {
+  const now = Number(t);
+  if (!Array.isArray(chapters) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < chapters.length; i += 1) if (chapters[i].start <= now) at = i;
+  return at;
+}
+
+const VTT_TIME = /^(?:(\d{1,3}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})$/;
+
+/** A WebVTT timestamp (`01:02:03.500` or `02:03.500`) as seconds, or null. */
+export function vttSeconds(stamp) {
+  const m = VTT_TIME.exec(String(stamp ?? '').trim());
+  if (!m) return null;
+  const [, h, min, sec, ms] = m;
+  if (Number(min) > 59 || Number(sec) > 59) return null;
+  return Number(h || 0) * 3600 + Number(min) * 60 + Number(sec) + Number(ms.padEnd(3, '0')) / 1000;
+}
+
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ', '&lrm;': '', '&rlm;': '' };
+
+/**
+ * A cue's words as plain text: entities decoded first, then every tag stripped
+ * until none is left, so an encoded `&lt;b&gt;` cannot come back as markup.
+ * (The page draws the text as text either way; this keeps it plain.)
+ */
+function cueText(raw) {
+  let text = String(raw).replace(/&(?:amp|lt|gt|quot|#39|nbsp|lrm|rlm);/g, (e) => ENTITIES[e]);
+  for (let before = ''; before !== text;) {
+    before = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  }
+  return text.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A caption file's cues, `[{ start, end, text }]` in time order, for the
+ * click-to-seek transcript. Tolerant by design: a block whose timing line is
+ * missing or unreadable, whose end is before its start, or whose text is empty
+ * is skipped, and the rest are kept. NOTE, STYLE and REGION blocks are not
+ * cues. Voice and styling tags are stripped. A file that does not start with
+ * WEBVTT has no cues.
+ */
+export function parseVtt(text) {
+  const src = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  if (!/^WEBVTT(?:[ \t].*)?(?:\n|$)/.test(src)) return [];
+  const cues = [];
+  for (const block of src.split(/\n[ \t]*\n+/).slice(1)) {
+    const lines = block.split('\n').filter((l) => l.trim() !== '');
+    if (!lines.length || /^(NOTE|STYLE|REGION)\b/.test(lines[0])) continue;
+    const at = lines.findIndex((l) => l.includes('-->'));
+    if (at < 0 || at > 1) continue;
+    const [left, right = ''] = lines[at].split('-->');
+    const start = vttSeconds(left);
+    const end = vttSeconds(right.trim().split(/\s+/)[0]);
+    if (start == null || end == null || end < start) continue;
+    const words = cueText(lines.slice(at + 1).join(' '));
+    if (words) cues.push({ start, end, text: words });
+  }
+  return cues.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/** The index of the cue showing at `t` seconds, or -1 between cues. */
+export function cueAt(cues, t) {
+  const now = Number(t);
+  if (!Array.isArray(cues) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < cues.length; i += 1) {
+    if (cues[i].start > now) break;
+    if (now < cues[i].end) at = i;
+  }
+  return at;
+}
+
+/** The ready captions the item read sends, as `{ language, label }` with a label to show. */
+export function captionChoices(video) {
+  const list = Array.isArray(video?.stream?.captions) ? video.stream.captions : [];
+  const seen = new Set();
+  return list
+    .map((c) => ({ language: clean(c?.language), label: clean(c?.label) }))
+    .filter((c) => c.language && !seen.has(c.language) && seen.add(c.language))
+    .map((c) => ({ ...c, label: c.label || c.language }));
+}
+
+/**
+ * lr7: a ready Stream video's hover preview (the signed `preview_url` the item
+ * read sends), or null — for anything not ready, or an address not on Stream's
+ * own hosts.
+ */
+export function previewOf(item) {
+  const vs = item?.video_stream;
+  if (!vs || vs.state !== 'ready') return null;
+  let u;
+  try { u = new URL(clean(vs.preview_url)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return /^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'videodelivery.net' ? u.toString() : null;
+}
+
+/** LR4b: the transcript panel's words when the captions could not be timed. */
+export const CUES_UNREADABLE = 'The captions could not be read, so the plain transcript is shown.';
+
+// ── #4180 (D4180): the list reads ───────────────────────────────────────────
+
+/** "04:12", or "1:02:03" past the hour; null when the time is not recorded. */
+export function clockLabel(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n < 0) return null;
+  const s = Math.floor(n);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
+}
+
+/** lr7: "Found in a transcript … at 04:12", or without the time when the transcript carries none; null when not a transcript match. */
+export function transcriptLine(match) {
+  if (!match || match.in !== 'transcript') return null;
+  const at = clockLabel(match.at_seconds);
+  return `Found in a transcript${match.snippet ? ` “${clean(match.snippet)}”` : ''}${at ? ` at ${at}` : ''}`;
+}
+
+const whereLine = (w) => (w && clean(w.title) ? `${w.kind === 'program' ? 'Programme' : 'Course'} · ${clean(w.title)}` : null);
+
+/** lr2a: an exercise row — title, the course or programme, your status, updated. */
+export function exerciseRow(x) {
+  return {
+    key: `exercise:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exercise',
+    where: whereLine(x?.where),
+    status: SUBMISSION_STATUS[x?.status] ? x.status : null,
+    updated: x?.updated_at || null,
+    href: x?.uid ? `/learning/exercises/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr2b: an exam row. A best score not recorded is null ("Score not recorded"), never 0; null attempts left is unlimited. */
+export function examRow(x) {
+  const best = x?.best_score_percent;
+  return {
+    key: `exam:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exam',
+    where: whereLine(x?.where),
+    questions: Number.isFinite(Number(x?.question_count)) ? Number(x.question_count) : null,
+    limit: minutesLabel(x?.time_limit_minutes) || 'Untimed',
+    passMark: x?.pass_mark_percent == null ? null : `${Number(x.pass_mark_percent)}% to pass`,
+    attemptsLeft: x?.attempts_left == null ? 'Unlimited attempts' : `${Number(x.attempts_left)} attempt${Number(x.attempts_left) === 1 ? '' : 's'} left`,
+    best: best === null || best === undefined || !Number.isFinite(Number(best)) ? null : `${Math.round(Number(best))}%`,
+    href: x?.uid ? `/learning/exams/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr12: My learning's exercises, one per exercise, the latest submission's status. */
+export function mySubmissionRows(submissions) {
+  const seen = new Set();
+  const out = [];
+  for (const s of Array.isArray(submissions) ? submissions : []) {
+    const uid = clean(s?.exercise?.uid);
+    if (!uid || seen.has(uid)) continue;
+    seen.add(uid);
+    out.push({ exercise_uid: uid, title: clean(s.exercise.title) || 'Untitled exercise', status: s.status ?? null, href: `/learning/exercises/${encodeURIComponent(uid)}` });
+  }
+  return out;
+}
+
+/** lr12: My learning's exam results, one per exam: the best submitted score, else the latest attempt with no score. */
+export function myAttemptRows(attempts) {
+  const by = new Map();
+  for (const a of Array.isArray(attempts) ? attempts : []) {
+    const uid = clean(a?.exam?.uid);
+    if (!uid) continue;
+    const score = a.score_percent == null ? null : Number(a.score_percent);
+    const was = by.get(uid);
+    if (!was || (score !== null && (was.score_percent === null || score > was.score_percent))) {
+      by.set(uid, { exam_uid: uid, title: clean(a.exam.title) || 'Untitled exam', score_percent: score, passed: a.passed ?? null, href: `/learning/exams/${encodeURIComponent(uid)}` });
+    }
+  }
+  return [...by.values()];
+}
+
+/**
+ * #4648: what each "Your progress" figure is: where it comes from, what it counts and over what time. Every tile carries
+ * its entry, and a test holds the two lists equal. There is no "watch time": the player saves where a video stopped (a
+ * resume position, which moves back on a rewind), not how long it was watched, so no duration is claimed (D4648).
+ */
+export const STAT_DEFINITIONS = Object.freeze({
+  courses: { source: 'your course progress records', definition: 'Courses you have started and not completed.', window: 'Right now' },
+  lessons: { source: 'your lesson progress records', definition: 'Lessons whose completion was recorded this month.', window: 'This calendar month (UTC)' },
+  videos: { source: 'where the video player saved your position', definition: 'Videos you played: each video whose position was saved this month, counted once. This is not time watched.', window: 'This calendar month (UTC)' },
+  exams: { source: 'your submitted exam attempts', definition: 'Exams you passed, of the exams you have submitted an attempt for.', window: 'All time' },
+});
+
+/** lr1: the "Your progress" strip's four figures; a figure not recorded reads "Not recorded", never 0. */
+export function statsTiles(stats) {
+  const nr = 'Not recorded';
+  const n = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? nr : String(Number(v)));
+  const exams = stats?.exams;
+  return [
+    { key: 'courses', label: 'Courses in progress', value: n(stats?.courses_in_progress) },
+    { key: 'lessons', label: 'Lessons completed this month', value: n(stats?.lessons_completed_this_month) },
+    { key: 'videos', label: 'Videos played this month', value: n(stats?.videos_played_this_month) },
+    { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
+  ].map((t) => ({ ...t, ...STAT_DEFINITIONS[t.key] }));
+}
+
+// ---------------------------------------------------------------------------
+// D4650 (#4650, part 2): a course's metadata, as the course page shows it
+// ---------------------------------------------------------------------------
+
+export const COURSE_AUDIENCE_LABEL = Object.freeze({ founder: 'Founders', investor: 'Investors', advisor: 'Advisors', partner: 'Partners' });
+export const ABOUT_NOT_RECORDED = 'Who this course is for, what it teaches and what it assumes are not recorded yet.';
+
+/**
+ * The course page's "About this course": one row per field the author
+ * recorded, in a fixed order, and `missing` naming each field that is not.
+ * Nothing is inferred from the summary: a field not filled is listed as not
+ * recorded, and a course with none recorded says so in one sentence.
+ */
+export function courseAbout(meta) {
+  const m = meta || {};
+  const rows = [];
+  const missing = [];
+  const audience = (Array.isArray(m.audience) ? m.audience : []).map((a) => COURSE_AUDIENCE_LABEL[a]).filter(Boolean);
+  if (audience.length) rows.push({ key: 'audience', label: 'For', value: audience.join(', ') }); else missing.push('who it is for');
+  if (m.stage) rows.push({ key: 'stage', label: 'Stage', value: m.stage }); else missing.push('stage');
+  const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+  if (outcomes.length) rows.push({ key: 'outcomes', label: "You'll be able to", list: outcomes }); else missing.push('outcomes');
+  const prerequisites = Array.isArray(m.prerequisites) ? m.prerequisites : [];
+  if (prerequisites.length) rows.push({ key: 'prerequisites', label: 'Before you start', list: prerequisites }); else missing.push('prerequisites');
+  if (m.practical_output) rows.push({ key: 'practical_output', label: "You'll leave with", value: m.practical_output }); else missing.push('what you leave with');
+  const people = [m.author ? `Written by ${m.author}` : null, m.reviewer ? `reviewed by ${m.reviewer}${m.reviewed_on ? ` on ${m.reviewed_on}` : ''}` : null].filter(Boolean);
+  if (people.length) rows.push({ key: 'people', label: 'Responsibility', value: people.join(', ') }); else missing.push('author and reviewer');
+  return { rows, missing, empty: rows.length === 0 };
+}

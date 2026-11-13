@@ -1,0 +1,1005 @@
+import { holdsLicence } from '../services/accountLicences';
+/**
+ * T12 — Co-founder matching (port of backend/app/api/routes/cofounder.py
+ * + backend/app/services/cofounder.py merged into one file for the worker).
+ *
+ * Mounted at /api/cofounder. Founders + admins only. Mutual-interest
+ * reveal pattern with auto-NDA on first connect:
+ *
+ *   1. Founder upserts a CofounderProfile.
+ *   2. Browse returns redacted cards (handle = `cofounder-<uid[:8]>`).
+ *   3. Express interest creates a directed signal. If the inverse
+ *      already exists, a CofounderConnection + two NDA Documents are
+ *      minted in `pending_nda` status.
+ *   4. After both sides sign, status flips to `active`.
+ *
+ * D610 (#1310) — WHAT THE CONNECTION READS SHOW OF THE OTHER PERSON
+ * (`serializeConnectionFor`, used by every connection read and write reply):
+ *   - their NAME at every status, `pending_nda` included: the NDA each side
+ *     signs names the counterparty (`renderNda` fills `{counterparty_name}`),
+ *     so the name is part of the document, not something it protects;
+ *   - their EMAIL only once BOTH signatures exist (`nda_signed_at_a` and
+ *     `nda_signed_at_b`), whatever the status. Until then it is null with
+ *     `email_withheld: 'until_both_sign'`, and a connection closed before both
+ *     signed keeps it hidden;
+ *   - an admin's read is unchanged: the email at every status.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAuth } from '../auth';
+import { clientIp } from '../util/clientIp';
+import { filterOptedInUserIds } from '../services/matchingConsent';
+import { logMatchListGeneration } from '../services/matchAudit';
+import { logActorAct } from '../services/actorLog';
+import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+/** The request's execution context, or none where the runtime gives none (a test's request). */
+const execCtx = (c: any) => { try { return c.executionCtx; } catch { return undefined; } };
+import {
+  loadUserVectors,
+  confidenceAdjustedAlignment,
+  skillComplementarity,
+  computeWatchOuts,
+  type UserVectors,
+} from '../services/matchingVectors';
+
+const cofounder = new Hono<{ Bindings: Env }>();
+
+// ---------------------------------------------------------------------------
+// Vocab + NDA template (copied verbatim from services/cofounder.py).
+// ---------------------------------------------------------------------------
+const SUGGESTED_SKILLS = [
+  'engineering', 'product', 'design', 'data', 'ai_ml', 'research',
+  'sales', 'marketing', 'growth', 'ops', 'finance', 'legal',
+  'hardware', 'biotech', 'community', 'fundraising',
+];
+const SUGGESTED_SECTORS = [
+  'fintech', 'saas', 'marketplace', 'consumer', 'ai', 'developer_tools',
+  'health', 'biotech', 'climate', 'deeptech', 'edtech', 'gaming',
+  'logistics', 'real_estate', 'media',
+];
+const ALLOWED_COMMITMENT = new Set(['full_time', 'part_time', 'exploring']);
+
+const COFOUNDER_NDA_TITLE = 'Co-founder Mutual Non-Disclosure Agreement';
+const COFOUNDER_NDA_BODY = `CO-FOUNDER MUTUAL NON-DISCLOSURE AGREEMENT
+
+This Mutual Non-Disclosure Agreement (the "Agreement") is entered into
+between {signer_name} ("Recipient") and {counterparty_name}
+("Discloser"), each a "Party", effective as of {today}.
+
+1. PURPOSE. The Parties wish to evaluate a potential co-founder
+   relationship and the formation of a startup (the "Purpose"). In
+   connection with the Purpose, each Party may disclose Confidential
+   Information to the other.
+
+2. CONFIDENTIAL INFORMATION. "Confidential Information" includes any
+   non-public business plan, product idea, customer list, technical
+   approach, source code sketch, financial model, fundraising plan,
+   personal contact, or other materials disclosed by one Party to the
+   other in connection with the Purpose.
+
+3. RECIPIENT OBLIGATIONS. Recipient shall (a) hold the Discloser's
+   Confidential Information in strict confidence, (b) not use it for any
+   purpose other than the Purpose, (c) not disclose it to any third
+   party without the Discloser's prior written consent, and (d) protect
+   it with at least the same degree of care it uses for its own
+   confidential information of similar sensitivity.
+
+4. EXCLUSIONS. The obligations in Section 3 do not apply to information
+   that (a) was lawfully known by Recipient prior to disclosure, (b)
+   becomes publicly available through no breach of this Agreement, (c)
+   is independently developed by Recipient without use of Discloser's
+   Confidential Information, or (d) is required to be disclosed by law,
+   provided Recipient gives Discloser prompt notice where permitted.
+
+5. NO LICENCE; NO PARTNERSHIP. Nothing in this Agreement grants either
+   Party any right or licence to the other Party's Confidential
+   Information except as expressly set out herein. This Agreement does
+   not create a partnership, joint venture, employment, or agency
+   relationship.
+
+6. TERM. Each Party's obligations of confidentiality survive for two
+   (2) years from the effective date.
+
+7. RETURN OR DESTRUCTION. Upon written request, Recipient shall
+   promptly destroy or return all Confidential Information received
+   from the other Party, except for one archival copy retained for legal
+   compliance.
+
+8. GOVERNING LAW. This Agreement is governed by the laws of the State
+   of Delaware, without regard to its conflict-of-laws principles.
+
+By signing below, Recipient acknowledges and agrees to the terms above.
+
+Signed: {signer_name} ({signer_email})
+Date:   {today}
+`;
+
+// ---------------------------------------------------------------------------
+// Tiny JSON helpers (mirror _loads/_dumps).
+// ---------------------------------------------------------------------------
+function loadList(s: string | null | undefined): string[] {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v.map((x) => String(x)) : [];
+  } catch { return []; }
+}
+function dumpList(items: any): string {
+  if (!Array.isArray(items)) return '[]';
+  const cleaned = items
+    .map((x) => String(x ?? '').trim())
+    .filter((x) => x.length > 0)
+    .slice(0, 32);
+  return JSON.stringify(cleaned);
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+type ProfileRow = {
+  id: number; uid: string; user_id: number;
+  skills_json: string; sectors_json: string; commitment: string;
+  location_city: string | null; location_country: string | null;
+  remote_ok: number;
+  equity_expectation_min: number | null; equity_expectation_max: number | null;
+  bio: string | null; looking_for: string | null;
+  listed: number;
+  created_at: string; updated_at: string;
+};
+type InterestRow = {
+  id: number; from_user_id: number; to_user_id: number;
+  message: string | null; status: string;
+  created_at: string; updated_at: string;
+};
+type ConnectionRow = {
+  id: number; uid: string; user_a_id: number; user_b_id: number;
+  nda_doc_a_id: number | null; nda_doc_b_id: number | null;
+  nda_signed_at_a: string | null; nda_signed_at_b: string | null;
+  nda_signed_ip_a: string | null; nda_signed_ip_b: string | null;
+  nda_signed_name_a: string | null; nda_signed_name_b: string | null;
+  status: string; closed_at: string | null; closed_reason: string | null;
+  created_at: string; updated_at: string;
+};
+type UserLite = { id: number; uid?: string | null; name: string | null; email: string; is_active: number };
+
+function role(u: { role: string }): string { return (u.role || '').toLowerCase(); }
+function isAdmin(u: { role: string }): boolean { return role(u) === 'admin'; }
+function canUseCofounder(u: { role: string }): boolean { return role(u) === 'admin' || holdsLicence(u, 'founder'); }
+// D219 — the local `function clientIp(` trusted X-Forwarded-For first and is gone.
+function gate(u: { role: string }): void {
+  if (!canUseCofounder(u)) {
+    const e = new Error('Co-founder matching is for founder accounts'); (e as any).status = 403; throw e;
+  }
+}
+
+async function getProfile(env: Env, userId: number): Promise<ProfileRow | null> {
+  return env.DB.prepare('SELECT * FROM cofounder_profiles WHERE user_id = ?')
+    .bind(userId).first<ProfileRow>();
+}
+
+async function loadUser(env: Env, userId: number): Promise<UserLite | null> {
+  return env.DB.prepare('SELECT id, uid, name, email, is_active FROM users WHERE id = ?')
+    .bind(userId).first<UserLite>();
+}
+async function loadUserByUid(env: Env, uid: string): Promise<UserLite | null> {
+  return env.DB.prepare('SELECT id, uid, name, email, is_active FROM users WHERE uid = ?')
+    .bind(uid).first<UserLite>();
+}
+
+function serializeProfilePublic(p: ProfileRow, userUid: string | null): any {
+  return {
+    uid: p.uid,
+    user_uid: userUid,
+    handle: `cofounder-${p.uid.slice(0, 8)}`,
+    skills: loadList(p.skills_json),
+    sectors: loadList(p.sectors_json),
+    commitment: p.commitment,
+    location_city: p.location_city,
+    location_country: p.location_country,
+    remote_ok: !!p.remote_ok,
+    equity_expectation_min: p.equity_expectation_min,
+    equity_expectation_max: p.equity_expectation_max,
+    bio: p.bio,
+    looking_for: p.looking_for,
+    listed: !!p.listed,
+  };
+}
+function serializeProfileSelf(p: ProfileRow, userUid: string | null): any {
+  return {
+    ...serializeProfilePublic(p, userUid),
+    created_at: p.created_at,
+    updated_at: p.updated_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Profile CRUD
+// ---------------------------------------------------------------------------
+cofounder.get('/me', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const p = await getProfile(c.env, user.id);
+  if (!p) return c.json({ detail: 'No co-founder profile yet' }, 404);
+  return c.json(serializeProfileSelf(p, user.uid || null));
+});
+
+cofounder.put('/me', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const body = await c.req.json().catch(() => ({}));
+  const commitment = String(body?.commitment || 'full_time').trim().toLowerCase();
+  if (!ALLOWED_COMMITMENT.has(commitment)) {
+    return c.json({ detail: `commitment must be one of ${[...ALLOWED_COMMITMENT].sort()}` }, 400);
+  }
+  const eqMin = body?.equity_expectation_min;
+  const eqMax = body?.equity_expectation_max;
+  for (const [label, v] of [['equity_expectation_min', eqMin], ['equity_expectation_max', eqMax]] as const) {
+    if (v != null) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 100) return c.json({ detail: `${label} must be a percent in [0, 100]` }, 400);
+    }
+  }
+  if (eqMin != null && eqMax != null && Number(eqMin) > Number(eqMax)) {
+    return c.json({ detail: 'equity_expectation_min cannot exceed equity_expectation_max' }, 400);
+  }
+  const bio = body?.bio ? String(body.bio).slice(0, 2000) : null;
+  const lookingFor = body?.looking_for ? String(body.looking_for).slice(0, 400) : null;
+  const now = new Date().toISOString();
+
+  const existing = await getProfile(c.env, user.id);
+  if (existing) {
+    await c.env.DB.prepare(
+      `UPDATE cofounder_profiles
+          SET skills_json = ?, sectors_json = ?, commitment = ?,
+              location_city = ?, location_country = ?, remote_ok = ?,
+              equity_expectation_min = ?, equity_expectation_max = ?,
+              bio = ?, looking_for = ?, listed = ?, updated_at = ?
+        WHERE user_id = ?`,
+    ).bind(
+      dumpList(body?.skills), dumpList(body?.sectors), commitment,
+      body?.location_city || null, body?.location_country || null,
+      body?.remote_ok === false ? 0 : 1,
+      eqMin != null ? Number(eqMin) : null, eqMax != null ? Number(eqMax) : null,
+      bio, lookingFor,
+      body?.listed === false ? 0 : 1, now, user.id,
+    ).run();
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO cofounder_profiles
+         (user_id, skills_json, sectors_json, commitment,
+          location_city, location_country, remote_ok,
+          equity_expectation_min, equity_expectation_max,
+          bio, looking_for, listed, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      user.id, dumpList(body?.skills), dumpList(body?.sectors), commitment,
+      body?.location_city || null, body?.location_country || null,
+      body?.remote_ok === false ? 0 : 1,
+      eqMin != null ? Number(eqMin) : null, eqMax != null ? Number(eqMax) : null,
+      bio, lookingFor,
+      body?.listed === false ? 0 : 1, now, now,
+    ).run();
+  }
+  const fresh = await getProfile(c.env, user.id);
+  return c.json(serializeProfileSelf(fresh as ProfileRow, user.uid || null));
+});
+
+/**
+ * "Unlist me". The profile stays, so listing again keeps it; browse stops
+ * showing it, and nobody can send new interest (POST /interest refuses an
+ * unlisted target). Interest already sent and connections already made stay.
+ */
+cofounder.delete('/me', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const existing = await getProfile(c.env, user.id);
+  if (!existing) {
+    return refuse(c, 404, { code: 'no_profile', message: 'You have no co-founder profile to unlist. Create one first.' });
+  }
+  await c.env.DB.prepare('UPDATE cofounder_profiles SET listed = 0, updated_at = ? WHERE user_id = ?')
+    .bind(new Date().toISOString(), user.id).run();
+  if (existing.listed) await logActorAct(c.env, user, 'cofounder_unlisted', { profile_uid: existing.uid });
+  return c.json({ ok: true, listed: false });
+});
+
+cofounder.get('/vocab', async (c) => {
+  await requireAuth(c);
+  return c.json({
+    skills: SUGGESTED_SKILLS,
+    sectors: SUGGESTED_SECTORS,
+    commitments: [...ALLOWED_COMMITMENT].sort(),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browse + scoring
+// ---------------------------------------------------------------------------
+/**
+ * Task #4 — Vector-augmented co-founder match scoring.
+ *
+ * Combines legacy profile signals (skills, sectors, commitment, location,
+ * equity) with canonical assessment vectors (values + skills) for richer
+ * complementarity and watch-out detection.
+ */
+interface ScoreMatchInput {
+  viewerProfile: ProfileRow;
+  candidateProfile: ProfileRow;
+  viewerVectors: UserVectors;
+  candidateVectors: UserVectors;
+}
+
+function scoreMatch(
+  { viewerProfile, candidateProfile, viewerVectors, candidateVectors }: ScoreMatchInput,
+): { score: number; why: string[]; watch_outs: string[]; breakdown: Record<string, number> } {
+  let score = 0;
+  const why: string[] = [];
+  const breakdown: Record<string, number> = {};
+
+  // 1. Legacy profile signals (keep existing bonuses)
+  const vSkills = new Set(loadList(viewerProfile.skills_json));
+  const cSkills = new Set(loadList(candidateProfile.skills_json));
+  const complementary = [...cSkills].filter((s) => !vSkills.has(s));
+  if (complementary.length) {
+    const bonus = Math.min(25, 5 * complementary.length);
+    score += bonus;
+    why.push(`complementary skills: ${complementary.sort().join(', ').slice(0, 80)}`);
+    breakdown.profile_skills = bonus;
+  }
+
+  const vSectors = new Set(loadList(viewerProfile.sectors_json));
+  const cSectors = new Set(loadList(candidateProfile.sectors_json));
+  const shared = [...vSectors].filter((s) => cSectors.has(s));
+  if (shared.length) {
+    const bonus = Math.min(30, 15 * shared.length);
+    score += bonus;
+    why.push(`sector overlap: ${shared.sort().join(', ')}`);
+    breakdown.profile_sectors = bonus;
+  }
+
+  if (viewerProfile.commitment === candidateProfile.commitment) {
+    score += 20;
+    why.push(`same commitment (${viewerProfile.commitment})`);
+    breakdown.profile_commitment = 20;
+  }
+
+  const vCity = (viewerProfile.location_city || '').trim().toLowerCase();
+  const cCity = (candidateProfile.location_city || '').trim().toLowerCase();
+  const vCountry = (viewerProfile.location_country || '').trim().toLowerCase();
+  const cCountry = (candidateProfile.location_country || '').trim().toLowerCase();
+  if (vCity && cCity && vCity === cCity) {
+    score += 15; why.push(`same city (${viewerProfile.location_city})`);
+    breakdown.profile_location = 15;
+  } else if (vCountry && cCountry && vCountry === cCountry) {
+    score += 5; why.push(`same country (${viewerProfile.location_country})`);
+    breakdown.profile_location = 5;
+  }
+
+  if (viewerProfile.remote_ok && candidateProfile.remote_ok) {
+    score += 5; why.push('both open to remote');
+    breakdown.profile_remote = 5;
+  }
+
+  const vLo = viewerProfile.equity_expectation_min, vHi = viewerProfile.equity_expectation_max;
+  const cLo = candidateProfile.equity_expectation_min, cHi = candidateProfile.equity_expectation_max;
+  if ([vLo, vHi, cLo, cHi].every((x) => x != null)) {
+    if (Math.max(vLo as number, cLo as number) <= Math.min(vHi as number, cHi as number)) {
+      score += 10; why.push('equity expectations overlap');
+      breakdown.profile_equity = 10;
+    }
+  }
+
+  // 2. Assessment vector signals
+  const valAlign = confidenceAdjustedAlignment(viewerVectors.values, candidateVectors.values);
+  if (valAlign.overlapCount > 0) {
+    const valScore = Math.round(((valAlign.score + 1) / 2) * 30); // 0..30
+    score += valScore;
+    if (valScore > 0) {
+      why.push(`values alignment: ${valScore} (confidence ${(valAlign.meanConfidence * 100).toFixed(0)}%)`);
+    }
+    breakdown.values_alignment = valScore;
+  }
+
+  const comp = skillComplementarity(viewerVectors.skills, candidateVectors.skills);
+  if (comp.score > 0) {
+    score += comp.score;
+    why.push(...comp.reasons);
+    breakdown.skill_complementarity = comp.score;
+  }
+
+  // 3. Watch-outs
+  const watch_outs = computeWatchOuts(
+    viewerVectors.values, candidateVectors.values,
+    viewerVectors.skills, candidateVectors.skills,
+  );
+
+  return { score: Math.max(0, Math.min(100, score)), why, watch_outs, breakdown };
+}
+
+cofounder.get('/browse', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  // Browse-first: founders may browse anonymized candidate cards WITHOUT a
+  // profile of their own. Match scoring needs the viewer's profile, so
+  // profile-less viewers get unscored cards (match_score: null) plus a
+  // `viewer_has_profile: false` flag the UI uses to prompt profile creation.
+  // Expressing interest (POST /interest) still requires a profile.
+  const viewerProfile = await getProfile(c.env, user.id);
+  const q = c.req.query('q')?.toLowerCase() || null;
+  const skill = c.req.query('skill')?.toLowerCase() || null;
+  const sector = c.req.query('sector')?.toLowerCase() || null;
+  const commitment = c.req.query('commitment') || null;
+  const remoteOnly = c.req.query('remote_only') === 'true' || c.req.query('remote_only') === '1';
+  const limit = Math.max(1, Math.min(100, Number(c.req.query('limit') ?? 50)));
+
+  let where = 'listed = 1 AND user_id <> ?';
+  const params: any[] = [user.id];
+  if (commitment) { where += ' AND commitment = ?'; params.push(commitment); }
+  if (remoteOnly) { where += ' AND remote_ok = 1'; }
+  const fetched = await c.env.DB.prepare(
+    `SELECT * FROM cofounder_profiles WHERE ${where} LIMIT ?`,
+  ).bind(...params, Math.max(limit * 4, 200)).all<ProfileRow>();
+  const rows = (fetched.results || []) as ProfileRow[];
+
+  const sentRows = await c.env.DB.prepare(
+    `SELECT * FROM cofounder_interests WHERE from_user_id = ? AND status = 'sent'`,
+  ).bind(user.id).all<InterestRow>();
+  const sent = new Set((sentRows.results || []).map((r: any) => r.to_user_id));
+  const recvRows = await c.env.DB.prepare(
+    `SELECT * FROM cofounder_interests WHERE to_user_id = ? AND status = 'sent'`,
+  ).bind(user.id).all<InterestRow>();
+  const received = new Set((recvRows.results || []).map((r: any) => r.from_user_id));
+  const closedRows = await c.env.DB.prepare(
+    `SELECT user_a_id, user_b_id FROM cofounder_connections
+       WHERE status = 'closed' AND (user_a_id = ? OR user_b_id = ?)`,
+  ).bind(user.id, user.id).all<{ user_a_id: number; user_b_id: number }>();
+  const closedIds = new Set<number>();
+  for (const r of (closedRows.results || []) as any[]) {
+    closedIds.add(r.user_a_id === user.id ? r.user_b_id : r.user_a_id);
+  }
+
+  const userIds = rows.map((p) => p.user_id);
+  const uidById = new Map<number, string>();
+  // T20 — exclude users who set show_in_directory=0 in user_settings.
+  // The table is created lazily; absence == default (visible).
+  const hiddenIds = new Set<number>();
+  // Task #19 — hard matching-consent filter. Co-founder browse is a people-match
+  // surface, so only users who explicitly opted into matching may be listed.
+  const optedIn = await filterOptedInUserIds(c.env, userIds);
+  if (userIds.length) {
+    const placeholders = userIds.map(() => '?').join(',');
+    const ures = await c.env.DB.prepare(
+      `SELECT id, uid FROM users WHERE id IN (${placeholders})`,
+    ).bind(...userIds).all<{ id: number; uid: string | null }>();
+    for (const u of (ures.results || []) as any[]) uidById.set(u.id, u.uid || '');
+    try {
+      const hres = await c.env.DB.prepare(
+        `SELECT user_id FROM user_settings WHERE show_in_directory = 0 AND user_id IN (${placeholders})`,
+      ).bind(...userIds).all<{ user_id: number }>();
+      for (const h of (hres.results || []) as any[]) hiddenIds.add(h.user_id);
+    } catch {}
+  }
+
+  // Load viewer vectors once.
+  const viewerVectors = await loadUserVectors(c.env, user.id);
+
+  // Batch-load candidate vectors for scoring.
+  const candidateIds = rows.map((p) => p.user_id);
+  const candidateVectorsMap = new Map<number, UserVectors>();
+  if (candidateIds.length) {
+    const placeholders = candidateIds.map(() => '?').join(',');
+    // Values
+    const vRes = await c.env.DB.prepare(
+      `SELECT uv.user_id, vd.slug, uv.score, uv.confidence
+         FROM user_values uv
+         JOIN value_dimensions vd ON vd.id = uv.dimension_id
+        WHERE uv.user_id IN (${placeholders})`,
+    ).bind(...candidateIds).all<{ user_id: number; slug: string; score: number; confidence: number }>();
+    for (const r of vRes.results || []) {
+      const m = candidateVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+      m.values[r.slug] = { score: Number(r.score) || 0, confidence: Number(r.confidence) || 0 };
+      candidateVectorsMap.set(r.user_id, m);
+    }
+    // Skills
+    const sRes = await c.env.DB.prepare(
+      `SELECT us.user_id, sc.slug, MAX(us.self_level) AS level
+         FROM user_skills us
+         JOIN skills s ON s.id = us.skill_id
+         JOIN skill_categories sc ON sc.slug = s.category_slug
+        WHERE us.user_id IN (${placeholders})
+        GROUP BY us.user_id, sc.slug`,
+    ).bind(...candidateIds).all<{ user_id: number; slug: string; level: number }>();
+    for (const r of sRes.results || []) {
+      const m = candidateVectorsMap.get(r.user_id) || { values: {}, skills: {} };
+      m.skills[r.slug] = Number(r.level) || 0;
+      candidateVectorsMap.set(r.user_id, m);
+    }
+  }
+
+  const scored: Array<{
+    score: number | null; why: string[]; watch_outs: string[]; breakdown: Record<string, number>; profile: ProfileRow;
+  }> = [];
+  for (const p of rows) {
+    if (closedIds.has(p.user_id)) continue;
+    if (hiddenIds.has(p.user_id)) continue;
+    if (!optedIn.has(p.user_id)) continue;
+    const cSkills = loadList(p.skills_json).map((s) => s.toLowerCase());
+    const cSectors = loadList(p.sectors_json).map((s) => s.toLowerCase());
+    if (skill && !cSkills.includes(skill)) continue;
+    if (sector && !cSectors.includes(sector)) continue;
+    if (q) {
+      const blob = [
+        p.bio || '', p.looking_for || '',
+        cSkills.join(' '), cSectors.join(' '),
+        p.location_city || '', p.location_country || '',
+      ].join(' ').toLowerCase();
+      if (!blob.includes(q)) continue;
+    }
+    if (!viewerProfile) {
+      // No viewer profile → nothing to score against. Cards stay browsable
+      // but unscored; scoreMatch would dereference viewer fields unguarded.
+      scored.push({ score: null, why: [], watch_outs: [], breakdown: {}, profile: p });
+      continue;
+    }
+    const candidateVectors = candidateVectorsMap.get(p.user_id) || { values: {}, skills: {} };
+    const { score, why, watch_outs, breakdown } = scoreMatch({
+      viewerProfile,
+      candidateProfile: p,
+      viewerVectors,
+      candidateVectors,
+    });
+    scored.push({ score, why, watch_outs, breakdown, profile: p });
+  }
+  scored.sort((a, b) => ((b.score ?? 0) - (a.score ?? 0)) || (a.profile.id - b.profile.id));
+  const cards = scored.slice(0, limit).map(({ score, why, watch_outs, breakdown, profile: p }) => {
+    const card: any = serializeProfilePublic(p, uidById.get(p.user_id) || null);
+    // Task #51 — surface integer user_id alongside the (already-public)
+    // user_uid so admin/investor/partner viewers' UserTrustBadge can call
+    // /api/trust/score/:userId. Mirrors the partners.ts non-admin LEFT
+    // JOIN: identity stays anonymized (no name/email leak); the trust
+    // endpoint itself enforces viewer-role access.
+    card.user_id = p.user_id;
+    card.match_score = score;
+    card.match_reasons = why;
+    card.watch_outs = watch_outs;
+    card.breakdown = breakdown;
+    card.interest_sent = sent.has(p.user_id);
+    card.interest_received = received.has(p.user_id);
+    card.mutual_interest = card.interest_sent && card.interest_received;
+    return card;
+  });
+  // Task #19 — audit when an admin browses the co-founder match list (no-op otherwise).
+  await logMatchListGeneration(c.env, user as any, 'cofounder_browse', {
+    result_count: cards.length,
+  });
+  return c.json({ items: cards, viewer_has_profile: !!viewerProfile });
+});
+
+// ---------------------------------------------------------------------------
+// Interest
+// ---------------------------------------------------------------------------
+function orderedPair(a: number, b: number): [number, number] {
+  return a < b ? [a, b] : [b, a];
+}
+
+async function getConnection(env: Env, x: number, y: number): Promise<ConnectionRow | null> {
+  const [lo, hi] = orderedPair(x, y);
+  return env.DB.prepare(
+    'SELECT * FROM cofounder_connections WHERE user_a_id = ? AND user_b_id = ?',
+  ).bind(lo, hi).first<ConnectionRow>();
+}
+
+/**
+ * D639 — a person's name for the NDA, or null when there is no real one: an
+ * empty name, or one defaulted from the email (the whole address, or the part
+ * before the @), which some sign-up paths store. An email never stands in for
+ * a name: printed in the counterparty's NDA, it would hand over their address
+ * before both have signed (D610).
+ */
+export function ndaName(u: Pick<UserLite, 'name' | 'email'>): string | null {
+  const name = String(u.name ?? '').trim();
+  if (!name) return null;
+  const email = String(u.email ?? '').trim().toLowerCase();
+  const n = name.toLowerCase();
+  if (email && (n === email || n === email.split('@')[0])) return null;
+  return name;
+}
+
+/** The labels the NDA uses where a party has no real name (D639). */
+export const NDA_NEUTRAL = { signer: 'the signing party', counterparty: 'your co-founder' } as const;
+
+export function renderNda(signer: UserLite, counterparty: UserLite): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return COFOUNDER_NDA_BODY
+    .replaceAll('{signer_name}', ndaName(signer) ?? NDA_NEUTRAL.signer)
+    .replaceAll('{signer_email}', signer.email)
+    .replaceAll('{counterparty_name}', ndaName(counterparty) ?? NDA_NEUTRAL.counterparty)
+    .replaceAll('{today}', today);
+}
+
+/** D639 — an NDA's title names its signer by uid, never by email. */
+export function ndaTitle(u: Pick<UserLite, 'uid'>): string {
+  return `${COFOUNDER_NDA_TITLE} — ${u.uid || 'member'}`;
+}
+
+async function ensureConnectionWithNdas(env: Env, ux: UserLite, uy: UserLite): Promise<ConnectionRow> {
+  const [lo, hi] = orderedPair(ux.id, uy.id);
+  const existing = await env.DB.prepare(
+    'SELECT * FROM cofounder_connections WHERE user_a_id = ? AND user_b_id = ?',
+  ).bind(lo, hi).first<ConnectionRow>();
+  if (existing) return existing;
+
+  // Race-safe: insert the connection FIRST (with NULL doc IDs). The
+  // UNIQUE(user_a_id, user_b_id) constraint is the race detector. Only
+  // after a successful insert do we mint the NDA documents and back-fill
+  // the FK columns — so a losing race never produces orphan documents.
+  // Only swallow UNIQUE-constraint errors; other failures must propagate.
+  try {
+    await env.DB.prepare(
+      `INSERT INTO cofounder_connections
+         (user_a_id, user_b_id, status)
+       VALUES (?, ?, 'pending_nda')`,
+    ).bind(lo, hi).run();
+  } catch (e: any) {
+    const msg = String(e?.message || e || '');
+    if (!/UNIQUE|constraint failed/i.test(msg)) throw e;
+    const conn = await env.DB.prepare(
+      'SELECT * FROM cofounder_connections WHERE user_a_id = ? AND user_b_id = ?',
+    ).bind(lo, hi).first<ConnectionRow>();
+    return conn as ConnectionRow;
+  }
+
+  const userA = lo === ux.id ? ux : uy;
+  const userB = hi === uy.id ? uy : ux;
+  const titleA = ndaTitle(userA);
+  const titleB = ndaTitle(userB);
+  const bodyA = renderNda(userA, userB);
+  const bodyB = renderNda(userB, userA);
+  const docARes = await env.DB.prepare(
+    `INSERT INTO documents (title, doc_type, status, content, template_name)
+     VALUES (?, 'other', 'generated', ?, 'nda_cofounder')`,
+  ).bind(titleA, bodyA).run();
+  const docBRes = await env.DB.prepare(
+    `INSERT INTO documents (title, doc_type, status, content, template_name)
+     VALUES (?, 'other', 'generated', ?, 'nda_cofounder')`,
+  ).bind(titleB, bodyB).run();
+  const docAId = (docARes.meta as any)?.last_row_id ?? null;
+  const docBId = (docBRes.meta as any)?.last_row_id ?? null;
+
+  await env.DB.prepare(
+    `UPDATE cofounder_connections
+        SET nda_doc_a_id = ?, nda_doc_b_id = ?, updated_at = datetime('now')
+      WHERE user_a_id = ? AND user_b_id = ? AND nda_doc_a_id IS NULL`,
+  ).bind(docAId, docBId, lo, hi).run();
+
+  const conn = await env.DB.prepare(
+    'SELECT * FROM cofounder_connections WHERE user_a_id = ? AND user_b_id = ?',
+  ).bind(lo, hi).first<ConnectionRow>();
+  return conn as ConnectionRow;
+}
+
+cofounder.post('/interest', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const body = await c.req.json().catch(() => ({}));
+  const targetUid = String(body?.user_uid || '');
+  if (!targetUid) return refuse(c, 400, { code: 'user_uid_required', message: 'Say whose profile the interest is for.' });
+  const target = await loadUserByUid(c.env, targetUid);
+  if (!target || !target.is_active) return refuse(c, 404, { code: 'user_not_found', message: 'That person is no longer on the platform.' });
+  if (target.id === user.id) return refuse(c, 400, { code: 'cannot_self_interest', message: 'You cannot send interest to your own profile.' });
+
+  const me = await getProfile(c.env, user.id);
+  if (!me) return refuse(c, 400, { code: 'viewer_has_no_profile', message: 'Create your own co-founder profile before sending interest.' });
+  const targetProfile = await getProfile(c.env, target.id);
+  if (!targetProfile || !targetProfile.listed) return refuse(c, 400, { code: 'target_not_listed', message: 'This profile is no longer listed, so it cannot receive interest.' });
+
+  const existingConn = await getConnection(c.env, user.id, target.id);
+  if (existingConn && existingConn.status === 'closed') {
+    return refuse(c, 400, { code: 'connection_closed', message: 'Your connection with this person was closed, so interest cannot be sent again.' });
+  }
+
+  const message = body?.message ? String(body.message).slice(0, 500) : null;
+  // Idempotent on (from, to) — UPSERT to flip a withdrawn row back to sent.
+  await c.env.DB.prepare(
+    `INSERT INTO cofounder_interests (from_user_id, to_user_id, message, status)
+       VALUES (?, ?, ?, 'sent')
+     ON CONFLICT(from_user_id, to_user_id) DO UPDATE SET
+       status = 'sent',
+       message = COALESCE(cofounder_interests.message, excluded.message),
+       updated_at = datetime('now')`,
+  ).bind(user.id, target.id, message).run();
+  const interest = await c.env.DB.prepare(
+    'SELECT * FROM cofounder_interests WHERE from_user_id = ? AND to_user_id = ?',
+  ).bind(user.id, target.id).first<InterestRow>();
+
+  // Detect mutual interest.
+  const inverse = await c.env.DB.prepare(
+    `SELECT * FROM cofounder_interests
+       WHERE from_user_id = ? AND to_user_id = ? AND status = 'sent'`,
+  ).bind(target.id, user.id).first<InterestRow>();
+  let connectionUid: string | null = null;
+  if (inverse) {
+    const me_user = await loadUser(c.env, user.id);
+    if (me_user) {
+      const conn = await ensureConnectionWithNdas(c.env, me_user, target);
+      connectionUid = conn.uid;
+    }
+  }
+  await logActorAct(c.env, user, 'cofounder_interest_sent', { to_user_id: target.id, mutual: !!inverse, connection_uid: connectionUid });
+  return c.json({
+    ok: true,
+    interest_id: interest?.id ?? null,
+    mutual: !!inverse,
+    connection_uid: connectionUid,
+  });
+});
+
+cofounder.delete('/interest/:user_uid', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const target = await loadUserByUid(c.env, c.req.param('user_uid'));
+  if (!target) return refuse(c, 404, { code: 'user_not_found', message: 'That person is no longer on the platform.' });
+  const interest = await c.env.DB.prepare(
+    'SELECT * FROM cofounder_interests WHERE from_user_id = ? AND to_user_id = ?',
+  ).bind(user.id, target.id).first<InterestRow>();
+  if (!interest || interest.status === 'withdrawn') return c.json({ ok: true, withdrew: false });
+  await c.env.DB.prepare(
+    `UPDATE cofounder_interests SET status = 'withdrawn', updated_at = datetime('now')
+       WHERE from_user_id = ? AND to_user_id = ?`,
+  ).bind(user.id, target.id).run();
+  await logActorAct(c.env, user, 'cofounder_interest_withdrawn', { to_user_id: target.id });
+  return c.json({ ok: true, withdrew: true });
+});
+
+/**
+ * D637 — the interest I have sent and not withdrawn, newest first, so each can
+ * be withdrawn. The other person's name and what they are looking for come
+ * from their profile; their email never does (D610 keeps it for a connection
+ * both have signed). `listed: false` says their profile has since been
+ * unlisted; `connection_uid` is set once the interest was mutual.
+ */
+cofounder.get('/interests/sent', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const rows = await c.env.DB.prepare(
+    `SELECT i.to_user_id, i.created_at, i.updated_at,
+            u.uid AS user_uid, u.name,
+            p.looking_for, p.listed
+       FROM cofounder_interests i
+       JOIN users u ON u.id = i.to_user_id
+       LEFT JOIN cofounder_profiles p ON p.user_id = i.to_user_id
+      WHERE i.from_user_id = ? AND i.status = 'sent'
+      ORDER BY i.updated_at DESC, i.id DESC`,
+  ).bind(user.id).all<any>();
+  const items = await Promise.all(((rows.results || []) as any[]).map(async (r) => {
+    const conn = await getConnection(c.env, user.id, Number(r.to_user_id));
+    return {
+      user_uid: r.user_uid,
+      name: r.name || null,
+      looking_for: r.looking_for || null,
+      listed: !!r.listed,
+      sent_at: r.updated_at || r.created_at,
+      connection_uid: conn ? conn.uid : null,
+    };
+  }));
+  return c.json({ items });
+});
+
+// ---------------------------------------------------------------------------
+// Connections + NDA
+// ---------------------------------------------------------------------------
+async function loadConnectionOr403(env: Env, uid: string, user: { id: number; role: string }):
+  Promise<{ ok: true; conn: ConnectionRow } | { ok: false; res: Response }> {
+  const conn = await env.DB.prepare('SELECT * FROM cofounder_connections WHERE uid = ?')
+    .bind(uid).first<ConnectionRow>();
+  if (!conn) return { ok: false, res: new Response(JSON.stringify({ detail: 'Connection not found' }), { status: 404, headers: { 'content-type': 'application/json' } }) };
+  if (conn.user_a_id !== user.id && conn.user_b_id !== user.id && !isAdmin(user)) {
+    return { ok: false, res: new Response(JSON.stringify({ detail: 'Not a party to this connection' }), { status: 403, headers: { 'content-type': 'application/json' } }) };
+  }
+  return { ok: true, conn };
+}
+
+/** D610 — the counterparty's email is shown only once both have signed the NDA (or to an admin). */
+export function emailVisible(c: Pick<ConnectionRow, 'nda_signed_at_a' | 'nda_signed_at_b'>, viewer: { role?: string | null }): boolean {
+  if (String(viewer.role ?? '').toLowerCase() === 'admin') return true;
+  return !!c.nda_signed_at_a && !!c.nda_signed_at_b;
+}
+
+async function serializeConnectionFor(env: Env, c: ConnectionRow, viewer: { id: number; role?: string | null }): Promise<any> {
+  const isA = c.user_a_id === viewer.id;
+  const otherId = isA ? c.user_b_id : c.user_a_id;
+  const other = await loadUser(env, otherId);
+  const otherProfile = await getProfile(env, otherId);
+  const mySigned = isA ? c.nda_signed_at_a : c.nda_signed_at_b;
+  const theirSigned = isA ? c.nda_signed_at_b : c.nda_signed_at_a;
+  const myDoc = isA ? c.nda_doc_a_id : c.nda_doc_b_id;
+  return {
+    uid: c.uid,
+    status: c.status,
+    created_at: c.created_at,
+    i_signed_at: mySigned,
+    they_signed_at: theirSigned,
+    my_nda_document_id: myDoc,
+    counterparty: {
+      user_id: otherId,
+      name: other?.name || null,
+      ...(emailVisible(c, viewer)
+        ? { email: other?.email || null }
+        : { email: null, email_withheld: 'until_both_sign' as const }),
+      profile: otherProfile ? serializeProfilePublic(otherProfile, other?.uid || null) : null,
+    },
+  };
+}
+
+cofounder.get('/connections', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM cofounder_connections WHERE user_a_id = ? OR user_b_id = ? ORDER BY created_at DESC',
+  ).bind(user.id, user.id).all<ConnectionRow>();
+  const items = await Promise.all(((rows.results || []) as ConnectionRow[]).map((r) => serializeConnectionFor(c.env, r, user)));
+  return c.json({ items });
+});
+
+cofounder.get('/connections/:uid', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
+  if (!r.ok) return r.res;
+  return c.json(await serializeConnectionFor(c.env, r.conn, user));
+});
+
+cofounder.get('/connections/:uid/nda', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
+  if (!r.ok) return r.res;
+  const isA = r.conn.user_a_id === user.id;
+  const docId = isA ? r.conn.nda_doc_a_id : r.conn.nda_doc_b_id;
+  if (!docId) return c.json({ detail: 'NDA document not found' }, 404);
+  const doc = await c.env.DB.prepare(
+    'SELECT id, title, content, status FROM documents WHERE id = ?',
+  ).bind(docId).first<{ id: number; title: string; content: string; status: string }>();
+  if (!doc) return c.json({ detail: 'NDA document not found' }, 404);
+  return c.json({ title: doc.title, body: doc.content, status: doc.status, document_id: doc.id });
+});
+
+cofounder.post('/connections/:uid/nda/sign', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const body = await c.req.json().catch(() => ({}));
+  if (!body?.accepted) return c.json({ detail: 'You must affirmatively accept the NDA terms' }, 400);
+  const signerName = String(body?.signer_name || '').trim();
+  if (!signerName || signerName.length > 200) return c.json({ detail: 'signer_name 1..200 chars required' }, 400);
+
+  const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
+  if (!r.ok) return r.res;
+  let conn = r.conn;
+  // D639 — only the connection's two members sign. The loader admits an admin
+  // to read any connection; signing is not reading, and an admin who is not a
+  // member used to be recorded as party B.
+  if (conn.user_a_id !== user.id && conn.user_b_id !== user.id) {
+    return refuse(c, 403, { code: 'not_a_party', message: 'Only the two people in this connection can sign its NDA. Nothing was signed.' });
+  }
+  if (conn.status === 'closed') return refuse(c, 400, { code: 'connection_closed', message: 'This connection is closed, so its NDA can no longer be signed.' });
+
+  const isA = conn.user_a_id === user.id;
+  const already = isA ? conn.nda_signed_at_a : conn.nda_signed_at_b;
+  if (!already) {
+    const now = new Date().toISOString();
+    const ip = clientIp(c.req.raw);
+    if (isA) {
+      await c.env.DB.prepare(
+        `UPDATE cofounder_connections
+            SET nda_signed_at_a = ?, nda_signed_name_a = ?, nda_signed_ip_a = ?, updated_at = ?
+          WHERE id = ?`,
+      ).bind(now, signerName.slice(0, 200), ip, now, conn.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `UPDATE cofounder_connections
+            SET nda_signed_at_b = ?, nda_signed_name_b = ?, nda_signed_ip_b = ?, updated_at = ?
+          WHERE id = ?`,
+      ).bind(now, signerName.slice(0, 200), ip, now, conn.id).run();
+    }
+    // Re-load to determine if both sides have now signed.
+    conn = await c.env.DB.prepare('SELECT * FROM cofounder_connections WHERE id = ?')
+      .bind(conn.id).first<ConnectionRow>() as ConnectionRow;
+    if (conn.nda_signed_at_a && conn.nda_signed_at_b && conn.status !== 'closed') {
+      await c.env.DB.prepare(
+        `UPDATE cofounder_connections SET status = 'active', updated_at = ? WHERE id = ?`,
+      ).bind(now, conn.id).run();
+      conn = { ...conn, status: 'active' };
+    }
+    const docId = isA ? conn.nda_doc_a_id : conn.nda_doc_b_id;
+    if (docId) {
+      await c.env.DB.prepare(
+        `UPDATE documents SET status = 'signed', signed_by = ?, signed_at = ?, updated_at = ?
+           WHERE id = ? AND status <> 'signed'`,
+      // D639 — the signer by uid, never by email.
+      ).bind(user.uid ?? null, now, now, docId).run();
+    }
+    await logActorAct(c.env, user, 'cofounder_nda_signed', { connection_uid: conn.uid, both_signed: conn.status === 'active' });
+  }
+  return c.json(await serializeConnectionFor(c.env, conn, user));
+});
+
+cofounder.delete('/connections/:uid', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const reason = c.req.query('reason')?.slice(0, 200) || null;
+  const r = await loadConnectionOr403(c.env, c.req.param('uid'), user);
+  if (!r.ok) return r.res;
+  let conn = r.conn;
+  if (conn.status !== 'closed') {
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      `UPDATE cofounder_connections
+          SET status = 'closed', closed_at = ?, closed_reason = ?, updated_at = ?
+        WHERE id = ?`,
+    ).bind(now, reason, now, conn.id).run();
+    conn = { ...conn, status: 'closed', closed_at: now, closed_reason: reason };
+    await logActorAct(c.env, user, 'cofounder_connection_closed', { connection_uid: conn.uid });
+  }
+  return c.json(await serializeConnectionFor(c.env, conn, user));
+});
+
+// #3938 part 4 (D1478 task 4, job NE1, the co-founder surface): the founder's press
+// orders the cards `GET /browse` answers (same query string, so the same filters,
+// consent, directory and closed-connection rules) by fit with what they are
+// looking for: retrieve (bge-m3), rank (the reranker), one line each
+// (`services/ai/matchRows.ts`). Cards stay anonymous: the text is the card's own
+// fields, never a name or email. Nothing here sends interest.
+cofounder.post('/browse/rank', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const typed = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  const own = typed ? null : await getProfile(c.env, user.id);
+  const query = typed || String(own?.looking_for ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!query) return refuse(c, 422, { code: 'query_missing', message: 'Say what you are looking for in a co-founder, or add it to your profile.' });
+  const browse = await cofounder.request(`/browse${new URL(c.req.url).search}`, { headers: c.req.raw.headers }, c.env, execCtx(c));
+  if (!browse.ok) return browse;
+  const cards = ((await browse.json()) as { items?: any[] }).items || [];
+  const candidates = cards.map((k) => ({
+    key: String(k.uid),
+    text: [
+      k.looking_for ? `Looking for: ${String(k.looking_for).slice(0, 300)}` : null,
+      Array.isArray(k.skills) && k.skills.length ? `Skills: ${k.skills.slice(0, 12).join(', ')}` : null,
+      Array.isArray(k.sectors) && k.sectors.length ? `Sectors: ${k.sectors.slice(0, 8).join(', ')}` : null,
+      k.commitment ? `Commitment: ${k.commitment}` : null,
+      k.remote_ok ? 'Open to remote' : null,
+      k.bio ? String(k.bio).slice(0, 400) : null,
+    ].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: 'Founder · Co-founder match', option: null });
+  const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.cofounderMatch, rail, guardText: query }, 'NE1');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'NE1', steps: res.steps, rows: res.rows.map((r) => ({ uid: r.key, position: r.position, line: r.line })) });
+});
+
+// Task #1 (AG) — spec-contract aliases.
+// POST /me/preferences mirrors PUT /me (preferences are part of the profile).
+cofounder.post('/me/preferences', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/cofounder/me';
+  url.search = '';
+  const body = await c.req.text();
+  const proxied = new Request(url, { method: 'PUT', headers: c.req.raw.headers, body });
+  return cofounder.fetch(proxied, c.env, c.executionCtx);
+});
+// GET /matches mirrors /browse (the discovery surface). Preserve query params
+// (e.g. ?stage=, ?skills=) by leaving url.search untouched and only swapping
+// the pathname — never concatenate `search` into `pathname`.
+cofounder.get('/matches', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/cofounder/browse';
+  return cofounder.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+
+export default cofounder;

@@ -1,0 +1,99 @@
+name: General compute preview (owner gated)
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact protected-main commit reviewed for this preview
+        required: true
+        type: string
+      approval_receipt:
+        description: Nonsecret owner approval receipt for scheduling, isolation, image and budget
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: agent-compute-preview
+  cancel-in-progress: false
+jobs:
+  gate:
+    if: github.ref == 'refs/heads/main' && github.actor == 'guillaumelauzier'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require explicit protected environment and exact main candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CANDIDATE: ${{ inputs.candidate_sha }}
+          RECEIPT: ${{ inputs.approval_receipt }}
+          GATE_ENABLED: ${{ vars.COMPUTE_PREVIEW_GATE_ENABLED }}
+        run: |
+          test "$GATE_ENABLED" = 'true'
+          test -n "$RECEIPT"
+          test "$CANDIDATE" = "$GITHUB_SHA"
+          gh api "repos/$REPOSITORY/environments/agent-compute-preview" > /tmp/compute-environment.json
+          python3 - <<'PY'
+          import json
+          env = json.load(open('/tmp/compute-environment.json'))
+          rules = env.get('protection_rules', [])
+          assert any(r.get('type') == 'required_reviewers' and r.get('reviewers') and r.get('prevent_self_review') is True for r in rules), 'Required independent environment reviewer missing'
+          PY
+  deploy_disabled_host:
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    needs: gate
+    environment: agent-compute-preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Verify reviewed image provenance and render isolated default-policy config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          IMAGE_REF: ${{ vars.COMPUTE_PREVIEW_IMAGE_REF }}
+          IMAGE_SIGNER_WORKFLOW: ${{ vars.COMPUTE_PREVIEW_IMAGE_SIGNER_WORKFLOW }}
+          HOST_NAME: ${{ vars.COMPUTE_PREVIEW_HOST_NAME }}
+          BROKER_NAME: ${{ vars.COMPUTE_PREVIEW_BROKER_NAME }}
+          DEFAULT_POLICY_REAFFIRMED: ${{ vars.COMPUTE_PREVIEW_DEFAULT_POLICY_REAFFIRMED }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          assert os.environ['DEFAULT_POLICY_REAFFIRMED'] == 'true', 'D4554 immutable scheduling decision is required'
+          image = os.environ['IMAGE_REF']
+          assert re.fullmatch(r'ghcr\.io/axalnetwork/studioos-agent-compute@sha256:[a-f0-9]{64}', image)
+          assert re.fullmatch(r'AxalNetwork/StudioOS/\.github/workflows/[a-z0-9_-]+\.yml', os.environ['IMAGE_SIGNER_WORKFLOW'])
+          for name in ['HOST_NAME', 'BROKER_NAME']:
+              assert re.fullmatch(r'studioos-[a-z0-9-]*preview[a-z0-9-]*', os.environ[name]), 'Only separately named preview Workers are eligible'
+          config = Path('wrangler.agent-compute.toml').read_text()
+          assert 'scheduling_policy = "default"' in config and 'COMPUTE_ENABLED = "off"' in config
+          config = config.replace('studioos-agent-compute-preview', os.environ['HOST_NAME']).replace('service = "studioos-preview"', 'service = "' + os.environ['BROKER_NAME'] + '"')
+          config = config.replace('image = "./agent-compute/Dockerfile"', 'image = "' + image + '"')
+          config = config.replace('image_build_context = "./agent-compute"\n', '')
+          Path('wrangler.agent-compute.approved.toml').write_text(config)
+          PY
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          gh attestation verify "oci://$IMAGE_REF" --repo "$REPOSITORY" --signer-workflow "$IMAGE_SIGNER_WORKFLOW" --source-digest "$GITHUB_SHA"
+      - name: Install locked tools and package the disabled Worker
+        run: |
+          npm ci --prefix cloudflare-worker
+          node scripts/build-generated.mjs
+          node scripts/build-agent-compute-types.mjs
+          cloudflare-worker/node_modules/.bin/tsc -p agent-compute/tsconfig.json --noEmit
+      - name: Deploy only the approved disabled preview host
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.agent-compute.approved.toml --env preview
+      - name: Clear preview registry credentials
+        if: always()
+        run: docker logout ghcr.io

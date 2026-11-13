@@ -1,0 +1,231 @@
+/**
+ * D535 (#1081), steps 4–5 — what the Funds pages derive from the directory
+ * API, as plain functions so the tests can read them without a DOM.
+ *
+ * Nothing here computes a figure the API did not return. A size is printed
+ * only when the row carries `size_currency: 'EUR'` (the EUR_SOURCE rule on the
+ * Worker); every other row reads "Not recorded" with the API's own reason.
+ * EIF and EIFO are true, false, or null — null is unknown, never "no".
+ */
+
+export const PAGE_SIZES = [25, 50, 100];
+
+export const SORT_OPTIONS = [
+  ['name', 'Name, A to Z'],
+  ['-name', 'Name, Z to A'],
+  ['-size', 'Size, largest first'],
+  ['size', 'Size, smallest first'],
+  ['-vintage', 'Vintage, newest first'],
+  ['vintage', 'Vintage, oldest first'],
+];
+
+/** The Worker's SIZE_BANDS, for the labels while the facets have not answered. */
+export const SIZE_BANDS = [
+  ['lt25', 'Under €25M'],
+  ['25-50', '€25–50M'],
+  ['50-100', '€50–100M'],
+  ['100-250', '€100–250M'],
+  ['250-500', '€250–500M'],
+  ['500+', '€500M and over'],
+];
+
+export const STAGE_REASON = 'The fund directory records no stage for any fund yet.';
+
+export const EMPTY_QUERY = Object.freeze({
+  q: '', hq_country: '', focus: '', size_band: '', vintage: '', eif: false, eifo: false,
+  sort: 'name', limit: 25, offset: 0,
+});
+
+/** The query string the Worker reads; empty filters are dropped by the client module. */
+export function toParams(query) {
+  return {
+    q: query.q.trim() || undefined,
+    hq_country: query.hq_country || undefined,
+    focus: query.focus || undefined,
+    size_band: query.size_band || undefined,
+    vintage: query.vintage || undefined,
+    eif: query.eif ? 1 : undefined,
+    eifo: query.eifo ? 1 : undefined,
+    sort: query.sort,
+    limit: query.limit,
+    offset: query.offset,
+  };
+}
+
+const num = (n) => Number(n).toLocaleString('en-US');
+
+/** "1–25 of 2,616", from the page the API answered. */
+export function rangeLabel(offset, count, total) {
+  if (!total || !count) return `0 of ${num(total || 0)}`;
+  return `${num(offset + 1)}–${num(offset + count)} of ${num(total)}`;
+}
+
+export function pageInfo(offset, limit, total) {
+  const pages = Math.max(1, Math.ceil((total || 0) / limit));
+  return { page: Math.floor(offset / limit) + 1, pages };
+}
+
+/** Page numbers to offer: the first, the last, and the current one with its neighbours. */
+export function pageList(page, pages) {
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((p) => p >= 1 && p <= pages));
+  const sorted = [...keep].sort((a, b) => a - b);
+  const out = [];
+  sorted.forEach((p, i) => {
+    if (i && p - sorted[i - 1] > 1) out.push('…');
+    out.push(p);
+  });
+  return out;
+}
+
+/** Euro cents → "€1,375M" / "€2.5M". Only ever called on a row the API marked EUR. */
+export function eurM(cents) {
+  const m = Number(cents) / 100 / 1_000_000;
+  return `€${m.toLocaleString('en-US', { maximumFractionDigits: m < 10 ? 1 : 0 })}M`;
+}
+
+/** The size to print, or null with the reason it is not recorded. */
+export function sizeOf(item) {
+  if (item && item.size_currency === 'EUR' && item.fund_size_cents != null) {
+    return { text: eurM(item.fund_size_cents), reason: null };
+  }
+  return { text: null, reason: item?.size_reason || 'Not recorded' };
+}
+
+/**
+ * EIF / EIFO as the notable LPs name them: the backers named, "neither" when
+ * the LPs are recorded and name neither, or "unknown" when no LPs are
+ * recorded — a 0 flag with no LP text is not a "no".
+ */
+export function backingOf(item) {
+  const named = [item?.eif === true && 'EIF', item?.eifo === true && 'EIFO'].filter(Boolean);
+  if (named.length) return { kind: 'named', named };
+  if (item?.eif === false && item?.eifo === false) return { kind: 'neither', named };
+  return { kind: 'unknown', named };
+}
+
+const has = (v) => typeof v === 'string' ? v.trim() !== '' : v != null;
+export const recorded = has;
+
+/** The filters in force, each with its label and the patch that removes it. */
+export function activeFilters(query, facets) {
+  const label = (list, value) => (list || []).find((x) => x.value === value)?.label || value;
+  const out = [];
+  if (query.hq_country) out.push({ key: 'hq_country', label: `HQ: ${label(facets?.hq_country, query.hq_country)}` });
+  if (query.focus) out.push({ key: 'focus', label: `Focus: ${label(facets?.focus, query.focus)}` });
+  if (query.size_band) out.push({ key: 'size_band', label: `Size: ${(SIZE_BANDS.find(([v]) => v === query.size_band) || [])[1] || query.size_band}` });
+  if (query.vintage) out.push({ key: 'vintage', label: `Vintage: ${query.vintage === 'none' ? 'not recorded' : query.vintage}` });
+  if (query.eif) out.push({ key: 'eif', label: 'EIF' });
+  if (query.eifo) out.push({ key: 'eifo', label: 'EIFO' });
+  return out;
+}
+
+/** The coverage bars, in the canvas's order, from the API's `coverage.fields`. */
+export function coverageRows(coverage) {
+  const f = coverage?.fields || {};
+  return [
+    ['Size in euros', f.size_eur],
+    ['HQ', f.hq],
+    ['Website', f.website],
+    ['Stated focus', f.sector_focus],
+    ['Vintage', f.fund_year],
+    ['Notable LPs', f.notable_lps],
+  ].map(([label, n]) => ({ label, n: Number(n || 0) }));
+}
+
+/** "2,616 funds from 2 public fund lists", from the API's own figures. */
+export function directoryLine(coverage, sources) {
+  const lists = (sources || []).length;
+  return `${num(coverage?.total || 0)} funds from ${lists} public fund ${lists === 1 ? 'list' : 'lists'}`;
+}
+
+/**
+ * D593 — the N in the Funds page's "Directory (N)" tab: the API's
+ * `coverage.total`, which counts the whole directory, never the filtered
+ * `total` of the page on screen. Null until a read has answered and after a
+ * failed one, so the tab reads "Directory" rather than a count it was not
+ * given. It follows the directory's own header line: a refetch keeps the
+ * answer already on screen until the new one arrives.
+ */
+export function directoryTotalOf(result) {
+  const n = result?.error ? null : result?.data?.coverage?.total;
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+/** "Directory (2,616)" once the directory has answered; "Directory" while it has not, or could not. */
+export function directoryTabLabel(total) {
+  return typeof total === 'number' && Number.isFinite(total) ? `Directory (${num(total)})` : 'Directory';
+}
+
+export { num as formatCount };
+
+/** The three terms verdicts migration 406 allows (D597), as the page prints them. */
+export const VERDICT_LABELS = Object.freeze({
+  'republish allowed': 'Republishing allowed',
+  'cite only': 'Cite only',
+  'not allowed': 'Not allowed',
+});
+
+const httpHref = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : null);
+
+/**
+ * D597 (#1232) — how a fund cites its list, from the API's `source`: the
+ * list's title (else its name), its publisher, the link to where it is
+ * published (else to where the row was read from), and its terms verdict.
+ * A publisher or verdict the API does not give reads "Not recorded"; the
+ * API's `reason` says why (terms not found, or never reviewed).
+ */
+export function citationOf(item) {
+  const s = item?.source || null;
+  const verdict = s?.verdict && VERDICT_LABELS[s.verdict] ? s.verdict : null;
+  return {
+    name: (has(s?.title) && s.title) || (has(s?.name) && s.name) || (has(item?.source_name) && item.source_name) || null,
+    publisher: has(s?.publisher) ? s.publisher : null,
+    href: httpHref(s?.url) || httpHref(item?.source_url),
+    verdict,
+    terms: verdict ? VERDICT_LABELS[verdict] : 'Not recorded',
+    reason: has(s?.reason) ? s.reason : null,
+  };
+}
+
+/**
+ * D4612 — the directory's search, filters, sort and page live in the address,
+ * so a direct link, a reload, opening a profile and Back all land on the same
+ * list. Only values that differ from `EMPTY_QUERY` are written; other
+ * parameters (`view`) are kept as they are.
+ */
+const TEXT_KEYS = ['q', 'hq_country', 'focus', 'size_band', 'vintage', 'sort'];
+export function queryFromSearch(params) {
+  const get = (k) => (typeof params?.get === 'function' ? params.get(k) : null);
+  const out = { ...EMPTY_QUERY };
+  for (const k of TEXT_KEYS) {
+    const v = get(k);
+    if (v != null && v !== '') out[k] = String(v).slice(0, 200);
+  }
+  out.eif = get('eif') === '1';
+  out.eifo = get('eifo') === '1';
+  const limit = Number(get('limit'));
+  if (Number.isInteger(limit) && limit > 0 && limit <= 100) out.limit = limit;
+  const offset = Number(get('offset'));
+  if (Number.isInteger(offset) && offset > 0) out.offset = offset;
+  return out;
+}
+
+export function searchFromQuery(query, base) {
+  const next = new URLSearchParams(base ? String(base) : '');
+  for (const k of [...TEXT_KEYS, 'eif', 'eifo', 'limit', 'offset']) next.delete(k);
+  for (const k of TEXT_KEYS) {
+    const v = String(query[k] ?? '').trim();
+    if (v && v !== EMPTY_QUERY[k]) next.set(k, v);
+  }
+  if (query.eif) next.set('eif', '1');
+  if (query.eifo) next.set('eifo', '1');
+  if (query.limit !== EMPTY_QUERY.limit) next.set('limit', String(query.limit));
+  if (query.offset) next.set('offset', String(query.offset));
+  return next;
+}
+
+/** The directory, filtered as a company profile's short list was. */
+export function directoryHref(filter = {}) {
+  const params = searchFromQuery({ ...EMPTY_QUERY, ...filter }, 'view=directory');
+  return `/research/funds?${params.toString()}`;
+}

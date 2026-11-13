@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="padding:56px;display:flex;flex-direction:column;gap:64px">
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="4">
+    <div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:600 11px 'Roboto Mono',monospace;padding:4px 8px;border-radius:5px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-weight:600;font-size:15px">{{ b.title }}</span><span style="font:500 12px 'Roboto Mono',monospace;color:#6b6577">{{ b.route }}</span></div>
+      <div style="display:flex;gap:28px;align-items:flex-start">
+        <div style="width:1440px;flex:none;border:1px solid #dedce4;border-radius:12px;overflow:hidden;background:#f4f3f7;box-shadow:0 18px 44px rgba(24,24,27,.07)"><dc-import name="Eadwyn Tickets Screen" screen="{{ b.screen }}" hint-size="1440px,1000px"></dc-import></div>
+        <div style="width:390px;height:844px;flex:none;border:10px solid #18181b;border-radius:40px;overflow:auto;background:#f4f3f7"><dc-import name="Eadwyn Tickets Screen" screen="{{ b.screen }}" hint-size="370px,844px"></dc-import></div>
+      </div>
+      <div style="font-size:13px;color:#6b6577;max-width:900px">{{ b.cap }}</div>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    return { boards: [
+      { id: 'T1', title: 'HQ Review queue · Feature requests', route: '/hq/review', screen: 'queue-features', cap: 'Super Admin only. Approve confirms and sends the request to the build queue; Decline needs a typed reason the user sees. Counts on each tab; the Unreadable state withholds the count.' },
+      { id: 'T1b', title: 'HQ Review queue · Suggested tasks', route: '/hq/review?tab=tasks', screen: 'queue-tasks', cap: 'Same layout with an audience picker. Approving publishes the task to the Task list and rewards the suggester 10 credits, stated on the button.' },
+      { id: 'T2', title: 'Eadwyn chat · Tasks panel', route: '/studio', screen: 'chat-tasks', cap: 'Approved community tasks with Start, the user\u2019s own suggestions with their state, and Suggest a task, which opens the ticket form with Type = Task.' },
+      { id: 'T3', title: 'Eadwyn chat · My tickets', route: '/studio', screen: 'chat-tickets', cap: 'A bug\u2019s bounty state on each ticket: Under review, Confirmed, Fixed with credits, Not a bug with the reason, Duplicate with the original. Credit balance links to Perks.' },
+    ] };
+  }
+}
+</script>
+</body></html>

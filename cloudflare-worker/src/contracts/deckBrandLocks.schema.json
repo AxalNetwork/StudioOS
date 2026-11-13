@@ -1,0 +1,33 @@
+{
+  "$id": "deckBrandLocks",
+  "title": "GET /api/decks/brand-kit/locks (D1572, #3819)",
+  "description": "The reply the deck v2 adapter's `brandLocks` method passes through: the venture, its brand kit's three locks (fonts, palette, logo), each null when unlocked or who locked it and when, whether this member may lock (the venture's admin, its owner), and pd31's line (`routes/deck_brand_kit.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "locks", "can_lock", "admins_only"],
+  "properties": {
+    "project_id": { "type": "integer", "minimum": 1 },
+    "locks": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fonts", "palette", "logo"],
+      "properties": {
+        "fonts": { "$ref": "#/$defs/lock" },
+        "palette": { "$ref": "#/$defs/lock" },
+        "logo": { "$ref": "#/$defs/lock" }
+      }
+    },
+    "can_lock": { "type": "boolean" },
+    "admins_only": { "type": "string" }
+  },
+  "$defs": {
+    "lock": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["part", "by", "at"],
+      "properties": {
+        "part": { "enum": ["fonts", "palette", "logo"] },
+        "by": { "type": ["string", "null"] },
+        "at": { "type": "string" }
+      }
+    }
+  }
+}

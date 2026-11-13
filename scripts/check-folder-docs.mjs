@@ -1,0 +1,419 @@
+#!/usr/bin/env node
+/**
+ * check-folder-docs — every folder that matters explains itself, and the
+ * explanation is checked against reality.
+ *
+ * The point is orientation. Someone (or something) dropped into this repo
+ * should be able to open the folder they landed in and learn what it holds and
+ * what the rule is for adding to it, without reading 150 files or asking.
+ *
+ * A README nobody verifies rots into a confident lie, which is worse than no
+ * README at all — the first run of this guard caught exactly that:
+ * `cloudflare-worker/src/routes/README.md` documented a mount for
+ * `market-intel.ts`, a file that exists nowhere in the repository (the real
+ * ones are `market_intel.ts` and `market_intel_public.ts`). A reader following
+ * the map would have gone looking for a file that has never existed.
+ *
+ * So three rules, in increasing order of how much they earn their keep:
+ *
+ *   1. COVERAGE   — a folder holding real weight must carry a README.
+ *   2. NAVIGATION — that README must name every immediate subfolder, because
+ *                   the subfolder is how you get to the next thing.
+ *   3. TRUTH      — anything the README names must exist. A `foo.ts` in
+ *                   backticks that resolves to nothing in the repo fails the
+ *                   build.
+ *
+ * Rule 3 deliberately checks the WHOLE repo, not just the folder: a README may
+ * legitimately point at `index.ts` one level up, or at a sibling module. What
+ * it may not do is name something that is not there at all.
+ *
+ *   5. GENERATED LISTS (#4104) — a README that holds `<!-- files:begin -->` and
+ *                   `<!-- files:end -->` gets its folder's file list generated
+ *                   between them (`lib/folderFiles.mjs`), one row per source file,
+ *                   described by the file's own header comment. Every such file
+ *                   must have one; a file without fails here by name. The list
+ *                   is NOT committed: `--write` fills it in the working tree for
+ *                   reading, `--clean` empties it, and a block that the index
+ *                   (what a commit holds) carries filled fails, so adding a file
+ *                   never edits a README.
+ *
+ *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
+ *                   two branches appending at the same spot never conflict.
+ *                   When two branches rewrote the same line, union keeps both
+ *                   versions; a README with a conflict marker, two rows for one
+ *                   name in one table, or the same substantial line twice within
+ *                   a few lines fails here (`lib/readmeUnion.mjs`). Keep one.
+ */
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { resolve, join, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { unionArtifacts } from './lib/readmeUnion.mjs';
+import { blockHoldsList, findBlock, listedFile, renderList, withBlock } from './lib/folderFiles.mjs';
+import { writeFileSync } from 'node:fs';
+
+const ROOT = resolve(process.cwd());
+// #4104: `--write` fills the generated file lists in the working tree; `--clean` empties them.
+const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes('--clean') ? 'clean' : 'check';
+
+// Folders that must explain themselves, and the one-line reason each is worth
+// a newcomer's attention. Adding a folder here is the cheap part; the README
+// it then demands is the point.
+const DOCUMENTED = new Map([
+  ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
+  ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
+  ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
+  ['cloudflare-worker/src/mcp/tools', 'the MCP server\'s tools (D666, D846), one file per group; D1588 adds the deck and raise tools'],
+  ['cloudflare-worker/src/contracts', 'deck v2 adapter reply contracts (D1511): one JSON Schema per swapped method, and their validator'],
+  ['cloudflare-worker/src/services/agents/skills', 'the Axal starter skill library (#3953, D1612): one SKILL.md per skill'],
+  ['cloudflare-worker/src/services/agents/skills/cases', 'one golden evaluation case per starter skill, for part D (#3954)'],
+  ['cloudflare-worker/src/services/agents/skills/scenarios', 'qualification scenarios for the first ten skills, with correct and targeted incorrect outputs (#4588, D4588)'],
+  ['frontend/src',                    'the SPA root — what each subtree is for'],
+  ['frontend/src/pages',              'one file per route; the biggest folder in the repo'],
+  ['frontend/src/components',         'shared presentational pieces'],
+  ['frontend/src/ui',                 'the design-system primitives everything else composes'],
+  ['frontend/src/pages/work',         'Work and company compliance (D1614): the board, backlog, burn-up, run sheet, activity feed and Workload, and the one adapter seam'],
+  ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
+  ['frontend/src/pages/hq/security', 'HQ › Security v2 (D4800, D4801): the workspace registry, the shared state vocabulary, the Overview, and the Access workspace with its Scope → Review → Result dialogs'],
+  ['frontend/src/pages/hq/team', 'HQ › Team (D5044): the one supervision read, the roster, the branch search, each action on its shared state model, and what each act invalidates'],
+  ['frontend/src/pages/hq/revenue', 'HQ › Revenue v2 (D5039): the read-only cockpit parts, its value-state vocabulary, the Data coverage drawer and the pure model they draw by'],
+  ['frontend/src/pages/hq/aiAgents', 'HQ › AI agents (D4137): the roster, the From Axal lifecycle (D4160), company skills, operations and the Policies controls (D4162), and the words for every refusal'],
+  ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
+  ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
+  ['frontend/src/lib/api',            'one module per API domain, re-exported through the generated apiModules.generated.js (D527, #4105)'],
+  ['frontend/src/hooks',              'shared React state'],
+  ['frontend/src/workspaces',         'the shell every workspace subpage sits in, and the config that drives it'],
+  ['frontend/src/workspaces/boards',  'one registry per composed bucket root — the sections a board draws and the store each reads'],
+  ['frontend/src/data',               'static reference data — NOT a place for fixtures'],
+  ['frontend/test',                   'what the frontend guarantees'],
+  ['cloudflare-worker/src',           'the production worker'],
+  ['cloudflare-worker/src/routes',    'the production API surface'],
+  ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
+  ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
+  ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
+  ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
+  ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
+  ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
+  ['cloudflare-worker/test',          'what the worker guarantees'],
+  ['scripts',                         'build, deploy and the CI guards'],
+  ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
+  ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
+  ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
+  ['documentation',                   'every hand-written document'],
+  ['design',                          'design sources, tokens, and the intake queue'],
+  ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],
+  ['merge-control',                   'the independent merge control Worker, its pure policies, audit and tests'],
+  ['meeting-bot',                     'the meeting bot runtime (D886): the core, its adapter contract and its tests'],
+  ['infra/branches',                  'one file per deployed branch — the only place a deployment is declared'],
+  ['design/incoming',                 'Claude Design exports waiting to be integrated'],
+  ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],
+  ['documentation/architecture',      'the maintained architecture set'],
+  ['documentation/architecture/decisions', 'one file per decision from D526 on — how to name and head one'],
+  ['documentation/architecture/route-map', 'the route map (D4102): one file per section and per canvas row, and the rules'],
+  ['documentation/architecture/route-map/canvases', 'one folder per canvas table, one file per row (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-1', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-2', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-3', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-4', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D4102)'],
+  ['documentation/audits',            'dated snapshots — true on their date only'],
+  ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
+  ['documentation/skill-drafts/D4526', 'newly authored HQ skill package staged outside deployment'],
+  ['documentation/skill-drafts/D4526/cases', 'synthetic evaluation cases for the staged HQ package'],
+  // Nested folders heavy enough to be opaque from their parent alone.
+  ['frontend/src/components/brand/templates', 'the landing-page template previews'],
+  ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
+  ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
+  ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],
+  ['frontend/src/components/products',        'the Plans and pricing storefront and its Token packs (D755)'],
+  ['frontend/src/components/deals',           'the deal room screens (D630)'],
+  ['frontend/src/components/scoring',         'the scoring engine UI'],
+  ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],
+  ['frontend/src/components/products',        'the Plans & Pricing storefront pieces (D755)'],
+  ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
+  ['frontend/src/pages/admin',                'the admin console'],
+  ['frontend/src/pages/admin/approvals',      'Admin › Approvals (D1038): the Inbox, Lanes, Decided and the three lane boards that decide (D1046)'],
+  ['frontend/src/pages/admin/advisors',       'Advisors & Partners under Community (D972)'],
+  ['frontend/src/pages/admin/community',      'the Community overview (D930)'],
+  ['frontend/src/pages/admin/community/model', 'the Community model, one module per domain (#4717 package 6)'],
+  ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
+  ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
+  ['frontend/src/pages/admin/events',         'the admin Events desk (D915): its tabs, the event page, the dialogs and the model they read'],
+  ['frontend/src/pages/admin/grants',         'Program grants under Licences (D981)'],
+  ['frontend/src/pages/admin/licences',       'the HQ licence page, split by domain (#4707)'],
+  ['frontend/src/pages/admin/kyc',            'KYC & KYB (D1228): its tabs, one person\'s case and its dialogs (D1233), Renewals and Audit (D1235), and the models they read'],
+  ['frontend/src/pages/subsidiary/licence',   'the Licences page\'s tabs, the Administrator\'s own licence (D800, D804, D988)'],
+  ['frontend/src/pages/admin/kyc',            'KYC & KYB under Approvals (D1228): People\'s case (D1233), Businesses and a business\'s case (D1234), their dialogs and models'],
+  ['frontend/src/pages/admin/lab',            'the Spin-Out Lab\'s admin page under Programs (D937)'],
+  ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
+  ['frontend/src/pages/admin/segments',       'Persona segments under Accounts (D997)'],
+  ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
+  ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
+  ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
+  ['frontend/src/pages/incorporate',       'Incorporate: the flow, its steps, the itemised quote, the timeline and the HQ read-only frame (D4357, D4360)'],
+  ['frontend/src/pages/influencer/section', 'the member\'s Influencer section (D4289 P7, #4296): the page, its six tabs, the model and the one read seam'],
+  ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
+  ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
+  ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
+  ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
+  ['frontend/src/pages/admin/contentQueue',   'Content queue (D1290): Pipeline (D1295), Calendar (D1296), Authors and Performance (D1297)'],
+  ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
+  ['frontend/src/pages/admin/accounts',       'Admin › Accounts: the Overview (D1304), All accounts (D1305), the account drawer (D1306) and its Licences block (D4473)'],
+  ['frontend/src/pages/account/builder',      'Account › Builder (D1315): MCP and services (D1331), API keys (D1317), API usage and Activity (D1320)'],
+  ['frontend/src/pages/account/companies',    'Companies and projects: the pane, its lightboxes and dialogs, and the moved settings (D1134, D1140)'],
+  ['frontend/src/pages/team',                 'Team (D1497): people and AI agents by scope, the agents seam, and Project settings › General'],
+  ['frontend/src/pages/studio',               'Studio modularity (D1419): the module grid every /studio draws, Customise, the module map, and the layout-proposals seam'],
+  ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
+  ['frontend/src/pages/cycles/distribution',  'Grow Distribution tabs (D4484): the shell, Channels (D4486), campaign plans (D4487), Ask drafts (D4488), Ads (D4490) and Inbox (D4494)'],
+  ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
+  ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
+  ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
+  ['frontend/src/pages/events',                 'event host tools and public/member detail'],
+  ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
+  ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
+  ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
+  ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
+  ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
+  ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],
+  ['frontend/src/pages/raise/caprel',         'the Capital relationships tool (D1188, D1192, D1193): its tabs inside the module page, the dialogs, and the models they read'],
+  ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
+  ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
+  ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
+  ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
+  ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
+  ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
+  ['frontend/src/pages/advisor',               'advisor workspace framing, public profiles and booking links'],
+  ['frontend/src/pages/advisor/expertise',     'one file per Expertise zone, the kit they share, and the pure modules they read'],
+  ['frontend/src/pages/advisor/practice',      'one file per Practice artboard, plus the pure module each keeps its derivations in'],
+  ['frontend/src/pages/advisor/advisory',      'the retained Clients and Contracts tabs, including private client notes'],
+  ['frontend/src/pages/advisor/cohorts',       'the Cohorts workspace: the selected-cohort provider, its model, and one file per section'],
+  ['frontend/src/templates/components',       'landing-page section blocks'],
+  ['cloudflare-worker/src/middleware',        'the gates every request passes'],
+  ['cloudflare-worker/src/util',              'small shared helpers'],
+  ['cloudflare-worker/src/integrations',      'the connector framework — registry, credentials, OAuth state, company scope, module doors'],
+  ['cloudflare-worker/src/integrations/providers', 'third-party provider clients'],
+  ['cloudflare-worker/src/services/advisor',  'the advisor state machine'],
+  ['cloudflare-worker/src/services/advisor/banks', 'its question banks'],
+  ['cloudflare-worker/src/services/email',    'transactional mail — canvas chrome, Gmail send, persona invites'],
+  ['cloudflare-worker/src/services/decks',    'deck assembly and export'],
+  ['cloudflare-worker/src/services/decks/prompts', 'the deck prompt registry (D1519)'],
+  ['cloudflare-worker/src/services/narrative', 'the Investor narrative stores, claims and check'],
+  ['cloudflare-worker/src/services/market_intel', 'market-intelligence ingestion'],
+  ['cloudflare-worker/src/services/market_intel/extractors', 'what is pulled out of a source'],
+  ['cloudflare-worker/src/services/market_intel/sources',    'where signals come from'],
+  ['cloudflare-worker/src/services/channels', 'D684 interview channels — the shared intake contract and one adapter per provider'],
+  ['cloudflare-worker/src/services/records', 'D690 cycle record services — one ModuleSpec per module, the owned-row check and the contract'],
+  ['cloudflare-worker/src/services/mail', 'Email (#3547): mailboxes and send, drafts and their context pack, address shares, and each profile\'s People pane'],
+  ['cloudflare-worker/src/services/mail/adapters', 'D1340 mailbox adapters, one per provider'],
+  ['cloudflare-worker/src/templates/legal',   'the legal document templates'],
+  ['cloudflare-worker/src/contracts',         'D1511: one JSON Schema per swapped deck v2 adapter method, checked against the real reply'],
+  ['cloudflare-worker/test/fixtures',         'recorded and synthetic inputs the worker tests read, the fake AI binding\'s recordings among them'],
+  ['frontend/tests/visual',                   'D1511: the Pitch deck editor\'s visual regression and axe suites, their server and baselines'],
+  ['frontend/src/routes',                     'one route module per area (D528): App.jsx collects them, and a new area is one file here'],
+]);
+
+// Trees inside which a heavy folder is expected to document itself.
+const COVERED_ROOTS = ['frontend/src', 'frontend/test', 'cloudflare-worker/src',
+  'cloudflare-worker/sql', 'cloudflare-worker/test', 'scripts', 'documentation',
+  'design'];
+// Below this a folder is small enough to read at a glance.
+const HEAVY_FILES = 8;
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'sections', 'migrations']);
+const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|sql|py|json|md|css)$/;
+
+const errors = [];
+const notes = [];
+
+/** Every filename anywhere in the repo, for the TRUTH rule. */
+function allFilenames() {
+  const names = new Set();
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        // docs/ is build output: thousands of hashed assets, nothing a README
+        // should ever be pointing at.
+        if (relative(ROOT, p) === 'docs') continue;
+        walk(p);
+      } else {
+        names.add(e.name);
+      }
+    }
+  };
+  walk(ROOT);
+  // Migrations are skipped above for speed but are legitimately citable.
+  const mig = join(ROOT, 'cloudflare-worker/sql/migrations');
+  if (existsSync(mig)) for (const f of readdirSync(mig)) names.add(f);
+  return names;
+}
+
+const REPO_FILES = allFilenames();
+
+function immediateSubdirs(dir) {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name))
+    .map((e) => e.name);
+}
+
+function fileCount(dir) {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && SOURCE_EXT.test(e.name) && e.name !== 'README.md').length;
+}
+
+// ── 1. COVERAGE ────────────────────────────────────────────────────────────
+for (const [dir, why] of DOCUMENTED) {
+  const abs = join(ROOT, dir);
+  if (!existsSync(abs)) { errors.push(`${dir}/ is listed as documented but does not exist`); continue; }
+  if (!existsSync(join(abs, 'README.md'))) {
+    errors.push(`${dir}/README.md is missing — ${why}`);
+  }
+}
+
+// A heavy folder nobody listed is the failure this rule exists to catch: the
+// next 150-file directory should not be able to appear undocumented.
+for (const root of COVERED_ROOTS) {
+  const absRoot = join(ROOT, root);
+  if (!existsSync(absRoot)) continue;
+  const walk = (dir) => {
+    const rel = relative(ROOT, dir);
+    if (fileCount(dir) >= HEAVY_FILES && !DOCUMENTED.has(rel)) {
+      errors.push(
+        `${rel}/ holds ${fileCount(dir)} source files and is not in DOCUMENTED — `
+        + 'add it there and write its README, or explain why it is exempt',
+      );
+    }
+    for (const sub of immediateSubdirs(dir)) walk(join(dir, sub));
+  };
+  walk(absRoot);
+}
+
+// ── 2. NAVIGATION + 3. TRUTH ───────────────────────────────────────────────
+for (const [dir] of DOCUMENTED) {
+  const abs = join(ROOT, dir);
+  const readmePath = join(abs, 'README.md');
+  if (!existsSync(readmePath)) continue;
+  const disk = readFileSync(readmePath, 'utf8');
+  // #4104: the README as a commit holds it, its generated list (if filled in the working tree) left out.
+  const block0 = findBlock(disk);
+  const src = block0 && !block0.broken ? withBlock(disk, '') : disk;
+
+  if (!/^#\s+\S/m.test(src)) errors.push(`${dir}/README.md has no heading`);
+
+  // NAVIGATION — every immediate subfolder is reachable from the text.
+  for (const sub of immediateSubdirs(abs)) {
+    if (!src.includes(`${sub}/`) && !src.includes(`\`${sub}\``)) {
+      errors.push(`${dir}/README.md never mentions its subfolder \`${sub}/\``);
+    }
+  }
+
+  // TRUTH — nothing named in backticks may be missing from the repo. Only
+  // bare filenames are checked; a path is a different kind of claim and is
+  // resolved directly.
+  // Grab the whole backticked token, then decide in JS whether it names a file.
+  // Matching the extension inside the pattern needs a repeated class that
+  // itself contains `.` followed by a required `\.`, which is ambiguous and
+  // backtracks polynomially — the shape CodeQL flags as a ReDoS. Splitting it
+  // in two removes the ambiguity entirely and reads better besides.
+  const CITED_EXT = /\.(?:ts|tsx|js|jsx|mjs|sql|py|md|css|json)$/;
+  const cited = new Set();
+  for (const m of src.matchAll(/`([^`\s]+)`/g)) {
+    if (CITED_EXT.test(m[1])) cited.add(m[1]);
+  }
+  // AND NOTHING IN A FENCED BLOCK EITHER. The pass above reads backticked
+  // tokens only, so a filename sitting bare inside a ``` fence was invisible to
+  // it — which is how `cloudflare-worker/src/routes/README.md`'s mount map came
+  // to point at `market-intel.ts`, a file that has never existed, for as long
+  // as this guard has been running over that folder. A mount map is the most
+  // load-bearing prose in the repository and was the one shape exempt from the
+  // rule written to protect it.
+  for (const fence of src.matchAll(/```[^\n]*\n([\s\S]*?)```/g)) {
+    // `*` IS PART OF THE TOKEN, deliberately. A tokenizer that drops it turns
+    // the glob `*.test.mjs` into the filename `test.mjs` and then reports it
+    // missing — so the wildcard is captured and the `NNN|<|\*` rule below
+    // does the excluding, rather than a second exclusion being written here.
+    // The leading class also forbids a bare `.`, so `.dc.html` named as an
+    // extension is not read as a file.
+    for (const m of fence[1].matchAll(/[A-Za-z0-9_*-][A-Za-z0-9_.*\-/]*/g)) {
+      if (CITED_EXT.test(m[0])) cited.add(m[0]);
+    }
+  }
+
+  for (const name of cited) {
+    // A naming pattern is not a claim. `NNN_short_name.sql` and
+    // `<Surface>.dc.html` describe how to name a new file; they are not
+    // assertions that one exists.
+    if (/NNN|<|\*/.test(name)) continue;
+    if (name.includes('/')) {
+      // A path is checked against the repo root first, then relative to this
+      // folder — READMEs here use both forms and both are legitimate.
+      if (existsSync(join(ROOT, name)) || existsSync(join(abs, name))) continue;
+      errors.push(`${dir}/README.md points at \`${name}\`, which does not exist`);
+    } else if (!REPO_FILES.has(name)) {
+      errors.push(`${dir}/README.md names \`${name}\`, which exists nowhere in the repo`);
+    }
+  }
+
+  const words = src.split(/\s+/).length;
+  if (words < 40) notes.push(`${dir}/README.md is very short (${words} words)`);
+}
+
+// ── 5. GENERATED LISTS (#4104) ─────────────────────────────────────────────
+/** The README as the index holds it (what a commit takes), or as it is on disk outside a checkout. */
+function indexed(file) {
+  try { return execFileSync('git', ['show', `:${file}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+  catch { return null; }
+}
+let listed = 0;
+for (const [dir] of DOCUMENTED) {
+  const abs = join(ROOT, dir);
+  const readmePath = join(abs, 'README.md');
+  if (!existsSync(readmePath)) continue;
+  const src = readFileSync(readmePath, 'utf8');
+  const block = findBlock(src);
+  if (!block) continue;
+  if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); continue; }
+  listed += 1;
+  const files = readdirSync(abs, { withFileTypes: true }).filter((e) => e.isFile() && listedFile(e.name))
+    .map((e) => ({ name: e.name, text: readFileSync(join(abs, e.name), 'utf8') }));
+  const list = renderList(files);
+  for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
+    const name = /^\| `([^`]+)`/.exec(row)[1];
+    errors.push(`${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
+  }
+  if (MODE === 'write') writeFileSync(readmePath, withBlock(src, list));
+  else if (MODE === 'clean') writeFileSync(readmePath, withBlock(src, ''));
+  // What a commit carries must hold no list: a committed list would make every new file a README edit.
+  const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
+  if (committed && !committed.broken && blockHoldsList(committed.content)) {
+    errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
+  }
+}
+
+// Rule 4: every tracked README.md, not only the documented folders' — union
+// merges them all. Outside a git checkout there is nothing union could have done.
+let readmes = [];
+try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
+for (const file of readmes) {
+  if (!existsSync(join(ROOT, file))) continue;
+  const text = readFileSync(join(ROOT, file), 'utf8');
+  const gen = findBlock(text);
+  for (const f of unionArtifacts(gen && !gen.broken ? withBlock(text, '') : text)) {
+    errors.push(f.kind === 'marker' ? `${file}:${f.line} still holds a conflict marker (${f.text})`
+      : f.kind === 'row' ? `${file}:${f.line} lists ${f.text} a second time in the same table — a union merge kept two versions; keep one`
+        : `${file}:${f.line} repeats a line from just above — a union merge kept two versions; keep one: "${f.text}"`);
+  }
+}
+
+if (errors.length) {
+  console.error('✖ check-folder-docs:\n' + errors.map((e) => `  - ${e}`).join('\n'));
+  process.exit(1);
+}
+for (const n of notes) console.log(`  note: ${n}`);
+if (MODE !== 'check') console.log(`  ${MODE === 'write' ? 'filled' : 'emptied'} ${listed} generated file list(s) in the working tree`);
+console.log(`✓ check-folder-docs: ${DOCUMENTED.size} folders documented; every name they cite resolves; ${listed} file list(s) generated, every file described.`);

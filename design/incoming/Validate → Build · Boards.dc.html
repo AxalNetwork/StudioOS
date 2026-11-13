@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Build · Plan</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Validate → Build</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The bridge from a Proceed to the build. StudioOS reads only what the founder accepted in Validate, proposes per Build module what to build, sends accepted items to the founder’s own tools with one press, and shows what comes back against the evidence that asked for it. The plan is prepared on 12 Oct 2026; progress is as of [30 Nov 2026]. The Send sheet, drawers and dialogs are centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="22">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Validate Build Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['VB1', 'Plan · Founder · desktop 1440 · light', 'What Validate proved on the left; one section per Build module in the centre, each proposal with its kind, the evidence it rests on and where it lands. Accepted items collapse to one line; three are selected for Send to….', [D('VB1')]],
+      ['VB2', 'Entry points', 'The Verdict record after a Proceed, and the Build overview with the plan waiting above its module cards.', [D('VB2a', 'Verdict record', 900), D('VB2b', 'Build overview', 1100)]],
+      ['VB3', 'Proposal card states', 'Every state a proposal can be in, including Eadwyn’s unsaved wording and a write the module refused.', [D('VB3', false, 1300)]],
+      ['VB4', 'Edit and accept', 'The item opens in its module’s own form. The evidence stays and cannot be removed.', [D('VB4')]],
+      ['VB5', 'Eadwyn words the plan', 'Eadwyn’s rail open. The brief and two cards show its wording on lavender beside the rule’s plain title; nothing is saved until Keep wording.', [D('VB5')]],
+      ['VB6', 'Send to… · Lovable', 'A centred lightbox rather than a side sheet. The drafted prompt, its length and the privacy check; Lovable opens with the founder’s own account.', [D('VB6')]],
+      ['VB7', 'Send to… · GitHub', 'One issue per accepted item, each carrying its marker. The second frame is GitHub not connected.', [D('VB7'), D('VB7n', 'GitHub not connected', 760)]],
+      ['VB8', 'Send to… · Notion and Vercel', 'Notion gets pages to paste; Vercel opens its own import page.', [D('VB8a', 'Notion', 760), D('VB8b', 'Vercel', 760)]],
+      ['VB9', 'Back in · link proposals', 'What arrived from the founder’s tools, each waiting for Link. The PostHog result asks Supports or Contradicts with nothing chosen.', [D('VB9')]],
+      ['VB10', 'Progress · Founder · light', 'Items by stage per module, items built per week, and every accepted item’s six stages with their sources.', [D('VB10')]],
+      ['VB11', 'Item · evidence trail', 'From 7 interviews to a passed prototype test, one node per step. The second frame is the same trail on 20 Oct, before Vercel was connected.', [D('VB11'), D('VB11b', 'A missing step', 760)]],
+      ['VB12', 'Progress · dark', 'VB10 in the dark colours; violet becomes #a78bfa.', [D('VB12')]],
+      ['VB13', 'New evidence since the plan', 'New evidence brings new proposals marked New. An accepted item whose evidence changed says so and is not changed by itself.', [D('VB13', false, 1100)]],
+      ['VB14', 'Verdict states', 'A withheld verdict, and a Stop that pauses the plan. Send to… gives way to a line that says why.', [D('VB14a', 'Withheld', 900), D('VB14b', 'Stop', 900)]],
+      ['VB15', 'Operating Partner', 'Progress only: what the founders accepted and what was built. No verdict, no proposals, no Send.', [D('VB15')]],
+      ['VB16', 'Admin and Super Admin', 'The plan read only, with no Accept and no Send, and the note on what changes if the owner allows admins to accept.', [D('VB16a', 'Admin'), D('VB16b', 'Super Admin')]],
+      ['VB17', 'Empty', 'Nothing accepted in Validate yet.', [D('VB17', false, 1440, 720)]],
+      ['VB18', 'Loading', 'Header and tabs at once; the strip, the left column and the modules read.', [D('VB18')]],
+      ['VB19', 'Error and partial', 'One module’s read failed while the rest renders, and GitHub’s feed failed on Progress.', [D('VB19a', 'One module could not be read', 1100), D('VB19b', 'A tool’s feed failed', 1300)]],
+      ['VB20', 'No permission and a Spin-Out Lab venture', 'Someone who is not a founder of the venture, and a Spin-Out Lab founder’s own plan.', [D('VB20a', 'Investor, Advisor or Explorer', 1440, 640), D('VB20b', 'Spin-Out Lab founder')]],
+      ['VB21', 'Plan · phone 390', 'Modules as accordions, cards full width with 44px buttons, Send to… sticky at the foot and full screen when opened.', [P('VB21a', 'Plan'), P('VB21b', 'Send to… · full screen')]],
+      ['VB22', 'Progress · phone 390', 'The chart full width, one card per item with its six stages as dots, and an item as its own page.', [P('VB22a', 'Progress'), P('VB22b', 'An item')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

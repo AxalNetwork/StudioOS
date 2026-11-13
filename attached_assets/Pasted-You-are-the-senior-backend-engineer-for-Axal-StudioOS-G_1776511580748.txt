@@ -1,0 +1,65 @@
+You are the senior backend engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (FastAPI backend with routers, D1 database with all tables, Cloudflare Workers, Replit Auth, RBAC, Partner Dashboard, Pipeline Board, decision gates, spin-out automation, Legal/Capital Engine, VC Fund, liquidity, Refer & Earn, etc.).
+
+Implement a complete **async job queue + background workers** so the platform can reliably handle hundreds of parallel projects, spin-outs, capital calls, AI scoring, and liquidity events.
+
+Exact requirements:
+
+1. **Database Model (D1)**
+   - Create a new table `job_queue` with these columns:
+     • id (PK, auto-increment)
+     • job_type (text: 'ai_scoring', 'traction_review', 'decision_gate_review', 'spinout_execute', 'capital_call', 'liquidity_match', 'returns_distribution', 'metrics_aggregation', etc.)
+     • payload (json) — all data needed for the job
+     • status (text: 'queued', 'processing', 'completed', 'failed')
+     • priority (integer, default 10)
+     • retry_count (integer, default 0)
+     • max_retries (integer, default 3)
+     • created_at, started_at, completed_at (timestamp)
+     • error_message (text, optional)
+   - Add proper indexes on status, job_type, created_at.
+
+2. **Job Queue System**
+   - Create a new file `backend/jobs.py` with:
+     • enqueue_job(job_type, payload, priority=10) helper
+     • process_job(job) function that dispatches to the correct handler
+   - Use the existing async job queue pattern (D1 + background task).
+
+3. **Background Workers**
+   - Create `backend/workers.py` with a background worker that:
+     • Polls the `job_queue` table every 5–10 seconds for 'queued' jobs (or use Cloudflare Queues binding if preferred).
+     • Processes jobs in parallel (up to 20 concurrent workers for high throughput).
+     • Marks job as 'processing' → runs the handler → marks as 'completed' or 'failed' with retry logic.
+     - Implement dead-letter logic (after max_retries → move to failed state with alert).
+
+4. **Integration with Existing Platform**
+   - Automatically enqueue jobs from key flows:
+     • After decision_gate becomes 'spinout_ready' → enqueue 'spinout_execute'
+     • After metrics snapshot → enqueue 'traction_review' / 'ai_scoring'
+     • After syndicate creation or LP commitment → enqueue 'capital_call'
+     • After liquidity listing → enqueue 'liquidity_match'
+     • After exit execution → enqueue 'returns_distribution'
+   - Update all relevant routers (pipeline.py, spinout.py, capital.py, liquidity.py, etc.) to use enqueue_job() instead of blocking calls.
+
+5. **Monitoring & Observability**
+   - Expose GET /api/infra/queue (admin-only) showing queued/processing/completed/failed counts and recent jobs.
+   - Integrate with existing Monitoring page and system_metrics table.
+   - Log every job lifecycle to activity_logs.
+
+6. **Frontend**
+   - Add a small "Jobs" status indicator in the Admin Console / Monitoring page showing current queue health (live count of queued jobs).
+
+7. **Security & Best Practices**
+   - All jobs run with proper RBAC checks inside their handlers.
+   - Rate-limit job enqueuing where needed.
+   - Use transactions in D1 for enqueue + status updates.
+   - Keep everything lightweight and edge-friendly (Cloudflare Workers compatible).
+
+Build this step-by-step:
+1. First create the `job_queue` D1 table + migration script.
+2. Then implement backend/jobs.py and the enqueue/process helpers.
+3. Then create the background worker in backend/workers.py.
+4. Then update all existing routers to enqueue jobs instead of blocking.
+5. Finally add the queue monitoring endpoint and frontend indicator.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

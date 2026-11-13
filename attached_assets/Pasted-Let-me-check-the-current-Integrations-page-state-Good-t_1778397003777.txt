@@ -1,0 +1,677 @@
+Let me check the current Integrations page state.
+
+Good — there's a stub catalogue and read endpoints, but writes return 501. Here are the prompts.
+
+---
+
+## Replit Prompt H — Integrations: bird's-eye view
+
+```
+Objective
+  Ship a real Integrations marketplace with 8 providers: HubSpot, Calendly,
+  Salesforce, Carta, Crunchbase, Slack, Affinity, DocuSign. Each integration
+  is one of three states:
+    LIVE         fully implemented end-to-end (connect, sync, push, webhooks)
+    BETA         partial (connect + 1 capability) — flagged "Beta" in UI
+    COMING SOON  catalogue card with feature preview, no auth flow, disabled
+                 connect button, "Notify me" capture
+  Tier gating (uses the subscription_tier from the earlier paywall prompt):
+    FREE         Slack (Beta), Calendly (Live)
+    GROWTH       + HubSpot (Live), Crunchbase (Beta)
+    STUDIO       + Salesforce (Live), Carta (Live), Affinity (Live),
+                 DocuSign (Live)
+  Admin/partner/investor/mentor roles bypass tier gating.
+
+Page header text (replaces current copy):
+  "Integrations
+   Connect your CRM, legal providers, and data feeds. Push deals out, receive
+   webhooks back."
+
+Architecture (shared across every integration)
+  Worker:
+    cloudflare-worker/src/integrations/registry.ts
+      Single source of truth for provider metadata: name, display_name,
+      integration_type, status (live|beta|coming_soon), required_tier,
+      auth_type (oauth2|api_key|webhook), capabilities, docs_url, icon_key.
+    cloudflare-worker/src/integrations/providers/
+      hubspot.ts, calendly.ts, salesforce.ts, carta.ts, crunchbase.ts,
+      slack.ts, affinity.ts, docusign.ts
+      Each exports:
+        oauthStart(c, userId)             → { redirect_url, state }
+        oauthCallback(c, code, state)     → persists tokens, returns integration row
+        sync(c, integration)              → pulls remote data; idempotent
+        push(c, integration, payload)     → outbound action
+        webhookHandler(c, integration)    → verifies signature, processes
+        capabilities                      → string[]
+    cloudflare-worker/src/integrations/secrets.ts
+      AES-GCM column cipher (reuses Prompt B). NEVER store provider keys
+      plaintext.
+    cloudflare-worker/src/integrations/oauth.ts
+      Generic PKCE + state flow shared across providers.
+    cloudflare-worker/src/routes/integrations.ts
+      Replace the 501 stubs:
+        GET    /api/integrations/available             — catalogue from registry
+                                                          tagged with current
+                                                          user's tier + role
+        GET    /api/integrations                       — user's integrations
+        POST   /api/integrations/oauth/:provider/start — returns redirect_url
+        GET    /api/integrations/oauth/:provider/callback
+                                                       — exchanges code, creates row
+        POST   /api/integrations/connect               — for api_key providers
+        POST   /api/integrations/:uid/sync             — manual sync trigger
+        POST   /api/integrations/:uid/push             — outbound action
+        DELETE /api/integrations/:uid                  — disconnect; revoke remote
+        POST   /api/integrations/webhook/:provider/:uid — inbound webhooks (HMAC
+                                                          verified per provider)
+        GET    /api/integrations/:uid/logs             — last 100 events
+        POST   /api/integrations/:provider/notify-me   — coming-soon waitlist
+
+  Schema (one new migration):
+    CREATE TABLE IF NOT EXISTS integrations (
+      uid TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      provider_name TEXT NOT NULL,
+      integration_type TEXT NOT NULL,
+      auth_type TEXT NOT NULL,
+      display_name TEXT,
+      access_token_ciphertext TEXT,
+      refresh_token_ciphertext TEXT,
+      api_key_ciphertext TEXT,
+      webhook_secret_ciphertext TEXT,
+      remote_account_id TEXT,
+      scope TEXT,
+      expires_at DATETIME,
+      status TEXT DEFAULT 'connected'
+        CHECK(status IN ('connected','expired','revoked','error')),
+      last_synced_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, provider_name, remote_account_id)
+    );
+    CREATE TABLE IF NOT EXISTS integration_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      integration_uid TEXT NOT NULL,
+      direction TEXT CHECK(direction IN ('inbound','outbound','sync')),
+      event TEXT NOT NULL,
+      status TEXT,
+      payload_redacted_json TEXT,
+      error TEXT,
+      latency_ms INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX idx_integration_logs_uid ON integration_logs(integration_uid, created_at DESC);
+    CREATE TABLE IF NOT EXISTS integration_waitlist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, provider_name)
+    );
+
+  Job queue (background sync):
+    Each LIVE integration registers a cron schedule via wrangler.toml (e.g.
+    every 30 min for HubSpot deals, every 15 min for Slack channels). The
+    cron handler enqueues an `integration_sync` job per active integration.
+    Worker queue consumer calls provider.sync() with retry + DLQ.
+
+  Frontend (frontend/src/pages/IntegrationsPage.jsx — full rewrite)
+    Header text exactly as quoted above.
+    Three sections:
+      "Connected"        — your active integrations with sync/disconnect
+      "Available"        — LIVE + BETA cards your tier can connect
+      "Coming Soon"      — locked cards (greyscale) + "Notify me" button
+    Cards above your tier show a small "Studio plan" or "Growth plan"
+    pill and clicking opens the paywall modal (reused from earlier prompt).
+    Beta cards show a yellow "Beta" pill.
+    Each card has a logo (lucide or local SVG), short description,
+    capabilities chips ("Push deals", "Webhook in", "OAuth"), and the
+    primary action button (Connect / Notify me / Upgrade).
+
+Status of each provider in this PR set
+  HubSpot      LIVE         (Prompt I)
+  Calendly     LIVE         (Prompt J)
+  Salesforce  LIVE         (Prompt K)
+  Carta        LIVE         (Prompt L)
+  Slack        BETA         (Prompt M)
+  DocuSign     LIVE         (Prompt N)
+  Crunchbase   BETA         (Prompt O)
+  Affinity     LIVE         (Prompt P)
+  Anything not finished by merge time ships as COMING SOON automatically
+  via the registry status flag.
+
+Order of merging
+  H (this prompt — registry + page shell + schema + 501 cleanup)
+  Then I, J, K, L, M, N, O, P can run in parallel.
+  Tier gating wires up after Prompt 4 (subscription tiers) is merged.
+```
+
+---
+
+## Replit Prompt I — HubSpot integration (LIVE, Growth tier)
+
+```
+Objective
+  Two-way sync between StudioOS deals and HubSpot deals. Push our pipeline
+  out, ingest HubSpot's contact and company updates back via webhooks.
+
+Auth
+  OAuth2 authorization-code flow with refresh token.
+  Scopes: crm.objects.deals.read, crm.objects.deals.write,
+          crm.objects.contacts.read, crm.objects.companies.read, oauth
+  Secrets: HUBSPOT_CLIENT_ID, HUBSPOT_CLIENT_SECRET (Wrangler secrets)
+
+Capabilities
+  Outbound:
+    - On every deal stage change in StudioOS, upsert the HubSpot deal
+      (mapped via remote_id stored in deals.hubspot_deal_id)
+    - On project create, create a HubSpot company + primary contact
+  Inbound (webhook):
+    - deal.propertyChange       → mirror stage onto our deal
+    - contact.creation          → optionally create/find a Founder
+  Sync (cron, every 30 min):
+    - Pull recent HubSpot deals modified since last_synced_at
+    - Reconcile any drifted stages
+
+Files
+  cloudflare-worker/src/integrations/providers/hubspot.ts
+  cloudflare-worker/src/integrations/mappings/hubspot_stages.ts
+    (axal stage ↔ hubspot pipeline + dealstage)
+  Migration: deals.hubspot_deal_id TEXT, projects.hubspot_company_id TEXT
+
+Frontend
+  Connected card: shows portal id, last sync, "Sync now" + "View logs"
+  buttons. Settings popover lets the user pick which HubSpot pipeline
+  StudioOS deals map to (saved in integration_logs metadata).
+
+Acceptance
+  - Connect flow completes via OAuth and stores tokens encrypted.
+  - Stage change in StudioOS appears in HubSpot within 5s.
+  - HubSpot stage change appears in StudioOS within webhook latency.
+  - Tokens auto-refresh before expiry.
+  - Disconnect revokes the access token via HubSpot revoke endpoint.
+```
+
+---
+
+## Replit Prompt J — Calendly integration (LIVE, Free tier)
+
+```
+Objective
+  Mentors and partners connect Calendly so booking links work inline on
+  Office Hours and Mentor profiles, and confirmed events flow back into the
+  Calendar page.
+
+Auth
+  OAuth2. Scopes: default. Personal access token also accepted (api_key flow)
+  for v1 simplicity — show both options on the connect modal.
+
+Capabilities
+  Outbound: none required
+  Inbound webhooks:
+    - invitee.created       → create a calendar_events row + notify host
+    - invitee.canceled      → cancel the event
+  Read APIs (sync):
+    - GET /scheduled_events?user=<user_uri>&min_start_time=now
+      Pulled every 15 min; populates the Calendar page even before webhooks
+      arrive.
+
+Files
+  cloudflare-worker/src/integrations/providers/calendly.ts
+  Migration: calendar_events.calendly_uri TEXT UNIQUE
+
+Frontend
+  - Mentor / Partner profile pages display "Book via Calendly" button if
+    integration connected and calendly_event_type_url set in profile.
+  - CalendarPage: events tagged with a small Calendly badge.
+
+Acceptance
+  - Connect with personal access token works.
+  - Booking via Calendly link adds the event to /api/calendar within 60s
+    (webhook path) and within 15 min (sync fallback).
+  - Cancel propagates to StudioOS calendar.
+  - Free tier users can connect.
+```
+
+---
+
+## Replit Prompt K — Salesforce integration (LIVE, Studio tier)
+
+```
+Objective
+  Push StudioOS Deals + Projects + Founders to Salesforce as Opportunities,
+  Accounts, and Contacts. Receive Opportunity stage changes back. Big-fund
+  partners use Salesforce as their system of record.
+
+Auth
+  OAuth2 (web server flow) against login.salesforce.com or test.salesforce.com
+  (the user picks Sandbox or Production at connect time).
+  Scopes: api refresh_token offline_access
+  Secrets: SF_CLIENT_ID, SF_CLIENT_SECRET
+
+Capabilities
+  Outbound:
+    - StudioOS deal stage change → Opportunity StageName update
+    - StudioOS project create     → Account + primary Contact create
+    - StudioOS commitment         → Opportunity LineItems / Custom field
+  Inbound:
+    - Salesforce Outbound Message OR Platform Event subscribed via
+      CometD-over-HTTP (Worker keeps a long-poll job in JOB_QUEUE; if too
+      heavy for v1, fall back to /services/data/vXX.X/sobjects polling)
+  Sync (cron, every 30 min):
+    - Last-modified Opportunity ingest
+    - Field mapping configurable in admin settings panel:
+      axal field → SF API name (defaults provided)
+
+Files
+  cloudflare-worker/src/integrations/providers/salesforce.ts
+  cloudflare-worker/src/integrations/mappings/salesforce_fields.ts
+  Migrations: deals.sf_opportunity_id, projects.sf_account_id,
+              founders.sf_contact_id
+
+Frontend
+  - Connect modal asks Sandbox vs Production.
+  - Settings panel inside the integration card lets the user choose which SF
+    org id and which Opportunity Record Type to use.
+
+Acceptance
+  - Studio-tier user can connect; Free / Growth users see the upgrade pill.
+  - Stage changes round-trip both directions.
+  - Refresh token used to extend session — no re-login for 90 days.
+  - Field mappings persist and respected on push.
+```
+
+---
+
+## Replit Prompt L — Carta integration (LIVE, Studio tier)
+
+```
+Objective
+  Sync our Cap Table page with the founder's real Carta cap table. Reduce the
+  manual data entry that currently makes Cap Table noisy.
+
+Auth
+  OAuth2 (Carta Public API). Scopes: read:cap_table read:stakeholders
+                                     read:securities (read-only v1).
+  Secrets: CARTA_CLIENT_ID, CARTA_CLIENT_SECRET
+
+Capabilities
+  Sync (cron, every 6 hours):
+    - Pull issuer + stakeholders + securities → upsert into our cap_table
+      tables with carta_id columns. Mark rows as `source = 'carta'` so the
+      UI distinguishes Carta-backed rows from manually-entered ones.
+  Outbound: none in v1 (Carta write APIs are limited and risky).
+  Inbound webhooks: cap_table.changed (if available on the user's Carta
+                                      plan) — falls back to sync.
+
+Files
+  cloudflare-worker/src/integrations/providers/carta.ts
+  Migrations:
+    cap_table_holders.carta_stakeholder_id, cap_table_securities.carta_id,
+    cap_table_holders.source TEXT DEFAULT 'manual'
+
+Frontend
+  - Cap Table page: rows from Carta show a small Carta logo and read-only
+    pencil. Manual rows still editable.
+  - Banner: "Synced from Carta — last sync 2 min ago".
+
+Acceptance
+  - Studio-tier connect works; non-Studio users see upgrade pill.
+  - First sync pulls cap table within 60s after connect.
+  - Manual edits to Carta-source rows are blocked with a tooltip
+    ("Edit in Carta — read-only here").
+  - Disconnect leaves the Carta-sourced rows in place but flips them to
+    source = 'manual' so the user can edit again.
+```
+
+---
+
+## Replit Prompt M — Slack integration (BETA, Free tier)
+
+```
+Objective
+  Slack notifications for the events users care about: contract signed, deal
+  stage changed, mentor session booked, scoring run completed, DD report
+  ready. v1 is one-way (Worker → Slack).
+
+Auth
+  Slack App OAuth (incoming-webhook scope).
+  Secrets: SLACK_CLIENT_ID, SLACK_CLIENT_SECRET
+
+Capabilities
+  Outbound:
+    - On any in-app notification with channel='slack' enabled in user
+      preferences, post a Block Kit message to the user's chosen channel.
+    - Channel chosen at connect time (the OAuth flow returns a webhook URL
+      bound to a channel).
+  Inbound: stub. Show "Slash commands & app mentions — Coming soon" in the
+  card UI.
+
+Files
+  cloudflare-worker/src/integrations/providers/slack.ts
+  Migration: user_settings.notif_categories_slack TEXT DEFAULT '{}'
+
+Frontend
+  - Settings > Notifications gains a "Slack" column next to Email/In-app.
+  - Integration card flagged BETA with explainer text:
+    "v1 sends one-way notifications. Two-way commands coming soon."
+
+Acceptance
+  - Free tier user can connect.
+  - Posting a contract triggers a Slack message in the chosen channel.
+  - Quiet-hours setting suppresses Slack notifications too.
+  - Disconnect removes the webhook and clears notif_categories_slack.
+```
+
+---
+
+## Replit Prompt N — DocuSign integration (LIVE, Studio tier)
+
+```
+Objective
+  Optional alternative to the in-house e-sign flow for users who already have
+  a DocuSign account. Send envelopes, track status, store the executed PDF
+  back in StudioOS R2 (encrypted per Prompt B).
+
+Auth
+  OAuth2 (DocuSign Authorization Code Grant) — JWT grant for service accounts
+  also supported.
+  Scopes: signature impersonation
+  Secrets: DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_SECRET, DOCUSIGN_RSA_PRIVATE_KEY
+
+Capabilities
+  Outbound:
+    - When the user picks "Send via DocuSign" on any contract template
+      (cofounder agreement, SAFE, NDA, 83(b), investment doc), Worker
+      builds an EnvelopeDefinition from the template + signers and POSTs
+      it to /accounts/{accountId}/envelopes.
+    - Status changes mirrored into the same esign_envelopes table from
+      Prompt C (with provider='docusign').
+  Inbound (webhook / Connect):
+    - envelope-completed         → fetch combined PDF, store in R2,
+                                   update esign_envelopes.signed_pdf_key
+    - envelope-declined / voided → mirror status
+
+Files
+  cloudflare-worker/src/integrations/providers/docusign.ts
+  esign_envelopes.provider TEXT DEFAULT 'native' (already exists?)
+                          ENUM: 'native','docusign'
+  esign_envelopes.docusign_envelope_id TEXT
+
+Frontend
+  - On any "Send for signature" button, add a provider picker:
+      ◉ StudioOS e-sign     (default, free)
+      ○ DocuSign            (uses your connected account)
+  - Studio tier required to enable DocuSign option.
+
+Acceptance
+  - Studio-tier user with DocuSign connected can send a contract that
+    appears in their DocuSign account and in Admin > Contracts.
+  - Completion webhook updates status + downloads signed PDF.
+  - Non-Studio users see a paywall pill on the DocuSign option.
+  - Admin > Contracts (Prompt C) shows DocuSign envelopes alongside native
+    ones with a small DocuSign badge.
+```
+
+---
+
+## Replit Prompt O — Crunchbase integration (BETA, Growth tier)
+
+```
+Objective
+  Pull market and competitive data into Project pages and Market Intelligence.
+  v1 is read-only profile lookup; full export of competitive sets is "Coming
+  Soon" inside the Beta card.
+
+Auth
+  API key (Crunchbase Basic API key).
+  Secret: CRUNCHBASE_API_KEY
+
+Capabilities
+  Read:
+    - GET /entities/organizations/{permalink}        — company snapshot
+    - GET /searches/organizations                    — by name / domain
+  Outbound: none.
+  Webhooks: not used.
+
+Where it shows up
+  - ProjectsPage: "Look up on Crunchbase" button next to project name. Result
+    populates: founded_year, hq, employee_count, last_funding_round,
+    total_funding, top_competitors (suggested via /searches).
+  - Market Intelligence: competitor block enriched with logos + funding
+    history.
+  - Due Diligence (Prompt D): adds a `crunchbase` external source card.
+
+Files
+  cloudflare-worker/src/integrations/providers/crunchbase.ts
+  Migration: projects.crunchbase_uuid TEXT, projects.crunchbase_data_json TEXT
+
+Frontend
+  - BETA pill on the integration card.
+  - "Lookup" button opens a slide-over with results, user picks the right
+    record, fields auto-fill.
+
+Acceptance
+  - Growth-tier user enters API key; lookup works.
+  - Project enrichment shows funding history and competitor list.
+  - Free user sees upgrade pill.
+  - Quota exhaustion (429) handled gracefully with a banner: "Crunchbase
+    daily limit reached — try again tomorrow."
+```
+
+---
+
+## Replit Prompt P — Affinity integration (LIVE, Studio tier)
+
+```
+Objective
+  Affinity is the dominant relationship-intelligence CRM among VC firms.
+  Push our pipeline + relationships out, pull Affinity list memberships and
+  notes back so investors see one combined view.
+
+Auth
+  API key (Affinity v2). Secret per user, encrypted.
+  Secret: per-user; no shared client secret needed.
+
+Capabilities
+  Outbound:
+    - Sync our deals → Affinity opportunity list "StudioOS Pipeline" (auto-
+      created on first sync if missing).
+    - Sync our founders → Affinity persons (matched by email).
+  Inbound:
+    - Sync (cron, hourly): pull Affinity notes mentioning matched persons,
+      surface them in the founder/partner profile pages as a "Recent
+      Affinity activity" panel (admin/investor only).
+  Webhooks: optional — Affinity supports webhooks on list changes; subscribe
+  if available, otherwise rely on hourly sync.
+
+Files
+  cloudflare-worker/src/integrations/providers/affinity.ts
+  Migration: founders.affinity_person_id, deals.affinity_opportunity_id
+
+Frontend
+  - Studio-tier integration card.
+  - Investor and Partner views: "Affinity activity" tab on founder profile
+    showing recent notes + last contact.
+
+Acceptance
+  - API key validated on connect with a /v2/auth/whoami call.
+  - First sync within 60s creates the StudioOS Pipeline list in Affinity.
+  - Notes for matched persons appear within an hour of being added in
+    Affinity.
+  - Disconnect deletes the API key but leaves the list in Affinity intact.
+```
+
+---
+
+# Due Diligence: extra data points
+
+These extend the DD module from earlier (Prompt D). Add them to the section taxonomy and each connector. Group them so Replit can wire them as `dd_findings.source_kind` values + UI cards.
+
+```
+Section: TEAM & FOUNDER
+  - Founder employment history & overlap (LinkedIn API + manual)
+  - Past venture outcomes (exits, shutdowns, % equity at exit)
+  - Co-founder tenure overlap & cohesion (months working together pre-Axal)
+  - Domain expertise score (years in the target sector)
+  - Educational background + verifications (NSC / DegreeVerify)
+  - Public reputation: Twitter/X follower-to-engagement ratio, signal/noise
+  - Conflict-of-interest disclosures (board seats, advisor roles, equity
+    holdings in competing ventures)
+  - Reference checks (3 minimum; structured rubric)
+  - Personality assessment (HEXACO / Big-5 short form, founder-only)
+  - Time-zone & availability commitment (full-time vs partial)
+
+Section: COMPANY & LEGAL
+  - Entity registration verified (Companies House / Delaware SOS / equivalent)
+  - Good-standing certificate fetched & date-stamped
+  - Cap table integrity vs Carta / Pulley / Pulley snapshot
+  - Outstanding SAFEs / convertibles list w/ valuation cap & MFN flags
+  - IP assignments executed for all founders & key contributors (PIIA on file)
+  - Trademark search (USPTO + EUIPO) for product name conflicts
+  - Domain & social handle ownership (DNS records, registrar, expiry)
+  - Privacy policy + ToS published & matching disclosure rules (GDPR/CCPA)
+  - Open litigation search (PACER + court records)
+  - Sanctions / PEP / adverse-media screening (OFAC, UN, EU, UK consolidated)
+  - Audit log of corporate documents (board consents, written shareholder
+    consents)
+  - 83(b) elections filed within 30-day window
+  - Section 1202 QSBS eligibility check
+
+Section: FINANCIAL
+  - Bank statement aggregation (Plaid / Stripe Financial Connections, last
+    12 months)
+  - Burn rate (3-month moving average) & runway (cash / burn)
+  - Revenue split (recurring vs one-off vs grant)
+  - MRR/ARR with churn & expansion (from Stripe + manual)
+  - Gross margin & contribution margin per product line
+  - Customer concentration (top 5 customers as % of revenue)
+  - AR aging & DSO
+  - AP aging & DPO
+  - Outstanding debt & covenants
+  - Tax filing status (current year + prior 2)
+  - Auditor or accountant attestation status
+  - Capitalised R&D spend & SR&ED / R&D credit eligibility (CA/UK/US)
+  - Founder salary & burn split (founder comp ratio)
+  - Convertible / SAFE waterfall scenarios (3 valuation outcomes)
+  - Stripe payouts dispute rate & chargeback ratio
+
+Section: TECHNICAL
+  - GitHub footprint: org age, contributors, stars, recent commit cadence
+  - Languages & framework breakdown vs declared stack
+  - Code quality signals: test coverage badge, CI green-rate, dependabot alerts
+  - Public security advisories on dependencies (npm audit / pip-audit / OSV)
+  - Cloud spend & run-rate (AWS Cost Explorer / GCP Billing — read-only)
+  - Architecture review summary (uploaded by founder + reviewed by Axal CTO)
+  - Uptime/SLA evidence (status page history, Cloudflare analytics)
+  - Bug-bounty / pen-test history
+  - Secrets-in-repo scan (gitleaks across all org repos)
+  - Open-source license compliance (no GPL leakage in proprietary stack)
+  - DPIA / data-flow diagram on file
+  - Incident & post-mortem log
+  - Patent filings & provisional applications
+
+Section: MARKET & TRACTION
+  - TAM / SAM / SOM with citation links
+  - Top-down vs bottom-up market sizing reconciliation
+  - Competitor landscape with funding history (Crunchbase + PitchBook + manual)
+  - Win/loss reasons (last 10 deals)
+  - NPS / CSAT / CES (3 months)
+  - Sales cycle length & ACV by segment
+  - CAC, payback period, LTV, LTV/CAC
+  - Cohort retention curves (m1 / m3 / m6 / m12)
+  - Organic vs paid acquisition share
+  - Referral coefficient (k-factor) where applicable
+  - Channel concentration (>40% of acquisition from a single channel = risk)
+  - Pricing experiments and elasticity evidence
+  - Geographic expansion gradient
+
+Section: PRODUCT & USAGE
+  - DAU/WAU/MAU by feature
+  - Stickiness ratio (DAU/MAU)
+  - Activation rate (defined per product)
+  - Time-to-value (median minutes from signup to first value event)
+  - Feature-adoption funnel
+  - Power-user share (top 10% of usage)
+  - Support ticket volume + median response time
+  - Public release cadence (changelog / Linear cycle data)
+  - Roadmap quality: % of OKRs completed last 2 quarters
+
+Section: CUSTOMER & GO-TO-MARKET
+  - Customer reference calls (3 minimum, structured rubric)
+  - Logo list with permission to disclose
+  - Sales pipeline coverage (3x next-quarter quota?)
+  - Sales-team productivity (rep ramp, attainment %)
+  - Partnership obligations & revenue-share commitments
+  - Marketing performance: organic search rank, brand mentions, share of voice
+
+Section: REPUTATION & MEDIA
+  - Adverse-media coverage in last 24 months
+  - Glassdoor / Trustpilot ratings + recent review delta
+  - Founder social: posting cadence, sentiment, controversies
+  - Press mentions tier-1 vs tier-2
+  - Public domain whois history (sudden owner changes flagged)
+
+Section: ESG & COMPLIANCE
+  - Diversity of leadership team (self-reported, optional)
+  - Pay-equity audit status
+  - Environmental impact disclosures (CO2/employee, if applicable)
+  - Code of conduct + whistleblower policy on file
+  - Data residency commitments (where the data physically lives)
+  - HIPAA / SOC 2 / ISO 27001 / PCI-DSS attestations
+  - Subprocessor list maintained & current
+  - Insurance: D&O, E&O, cyber liability — coverage levels
+
+Section: BEHAVIOURAL (founder-specific, opt-in)
+  - Response-time-to-Axal-comms (median hours, last 30d)
+  - Meeting-prep score (was a deck/agenda sent ≥1 day before?)
+  - Action-item completion rate (from prior mentor sessions)
+  - Stress-test rubric: how the founder handles a 60-min "what if" interview
+    with a partner
+
+Schema additions (extend dd_findings.source_kind, dd_sections.kind):
+  source_kind ENUM expanded:
+    'platform','public_web','registry','sanctions','court','news','social',
+    'github','expert','manual','financial_aggregator','accounting','plaid',
+    'stripe','linkedin','crunchbase','pitchbook','companies_registry',
+    'cloud_billing','glassdoor','trustpilot','status_page','npm_audit',
+    'osv','whois','dns','uspto','euipo','reference_call','psychometric',
+    'attestation','insurance'
+  Each has a connector (Worker job) or manual upload form.
+
+Risk score weights (default; admin-tunable per section)
+  TEAM 20  · LEGAL 15  · FINANCIAL 20  · TECHNICAL 15  · MARKET 10
+  PRODUCT 5  · CUSTOMER 5  · REPUTATION 5  · ESG 3  · BEHAVIOURAL 2
+
+Reporting
+  Each section in the Axal-VC PDF (Prompt D5) renders:
+    - Composite score for that section
+    - List of findings with severity colour bar
+    - "Confidence" indicator (% of expected data points present)
+    - Methodology footnote (which sources were checked, when)
+
+Acceptance for the data-points expansion
+  - dd_sections.kind enum expanded; existing cases auto-add new sections
+    when reopened.
+  - Each new connector is feature-flagged and behind a Wrangler secret.
+  - PDF report renders all populated sections; missing sections collapse
+    to "Insufficient data — methodology footnote".
+```
+
+---
+
+## Order summary
+
+```
+H  Integrations bird's-eye + page rewrite + schema      (foundation)
+After H merges, run in parallel:
+  I  HubSpot         (Live, Growth)
+  J  Calendly        (Live, Free)
+  K  Salesforce      (Live, Studio)
+  L  Carta           (Live, Studio)
+  M  Slack           (Beta, Free)
+  N  DocuSign        (Live, Studio)
+  O  Crunchbase      (Beta, Growth)
+  P  Affinity        (Live, Studio)
+DD data-points expansion runs alongside Prompt D (any time after D1).
+```
+
+Want me to write the HubSpot field-mapping defaults, the Carta JSON-shape adapter, or the Axal-VC PDF report Tailwind template next?

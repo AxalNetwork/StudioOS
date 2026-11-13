@@ -1,0 +1,35 @@
+# services/narrative — the Investor narrative's stores
+
+D908 (#2692), part 2 of #2454. These are the Worker stores and reads that the narrative's pages (parts 3 to 5) draw from, behind `/api/cycles/raise/narrative/*` (`../../routes/cycle_raise.ts`).
+
+| File | What it does |
+| --- | --- |
+| `claims.ts` | D912 (#2696): the narrative's claims and check. `narrativeClaims` reads a version's D1264 claims for the Claims tab with each one's section and best source, and for the founder both figures, the records, the Evidence candidates (`couldBack`: the pinned records of the figure's kind, and of its metric) and Eadwyn's open `raise:evidence-link` proposals. `narrativeCheckRows` compares each stated figure with the current deck's cards and the metrics, as "Check against" chooses; one place only is Not compared. |
+| `adminRead.ts` | D914 (#2698): an admin and the narrative. `narrativeAdminGate` refuses an admin's narrative writes (`admin_read_only`), and their reads until they give a reason (`read_reason_required`, 8 hours). It also holds the read reasons the founder sees (`giveReason`, `listReasons`) and the notes thread (`postNote`, `listNotes`), each writing one activity row that names neither's words. Migration 545. D1465 (#4020): `endRead` ends an admin's live read early (migration 761's `ended_at`; `activeReason` admits only reads not ended), and `ventureOf` names the venture and its one founder for the header before the reason. |
+| `positioningDraft.ts` | D911: Eadwyn's positioning proposal. `positioningMaterial` reads only qualitative records and holds back any with a digit; `screenAnswer` drops any answer field with a digit. The route stores each kept field as an `ai_rail_proposals` row. |
+| `objections.ts` | D913 (#2697): the objections investors raised, project-wide, from Capital relationships' `raise_prospect_feedback`. Rows that match once case and spacing are set aside are one objection, keyed by a hash of its words, counted per row and per investor, with the newest non-blank answer. It imports nothing of the store, so `raiseCycle.ts` reads it for Home's part. |
+| `arcs.ts` | D1522 (#3774): stage arcs, keyed by stage × investor type — each stage's card order, a "why this order" line per card, weights and the cards it requires; the investor type lifts its `AUDIENCE_EMPHASIS` lead cards. `proofOf` (a recorded deck source or a pinned item that backs the card; withheld or unreadable is "unchecked"), `planFor` (order and missing-proof warnings, "Seed deck with no traction slide") and `cutUnproven` (the one-click run's missing-data cut). Pure; cites no benchmark (D1589). |
+| `objectionDraft.ts` | D913: "Answer it". `objectionPrompt` asks Eadwyn to draft a section's words (D1114's masked `sectionMaterial`) so they answer one objection, with the objection and the founder's answer masked too. The route runs it under `draft:narrative-objection`, screens it with `screenSection` and writes nothing. |
+| `sectionDraft.ts` | D1114 (#2994): Story's "Ask Eadwyn ▾". `sectionMaterial` masks every figure in the founder's words as `[figure]`; `sectionPrompt` asks for draft, shorten or plain words; `screenSection` drops each sentence of the answer that holds a digit and counts it. The route runs it under `draft:narrative-section` and writes nothing. |
+| `coach.ts` | D1558 (#3805, deck v2 C10): "Deck ready to send" computed from the current deck's cards (no title, an empty area, placeholder text, an image area with no image, a figure no record backs), each row linking the editor to its card and Grid area; and the narrative coach's prompt (every figure masked) and its checks (a real section, card and area; no figure, link or promised return). |
+| `readers.ts` | D909 (#2693). Holds two answers for the narrative's Home, its versions table and New version. `deckReaders` says which cards of the venture's current pitch deck bind each version, through a binding whose `record_ref` is `narrative_version_meta:vN`. It also says whether the venture is a Spin-Out venture. `readBySentence` words the first: "Pitch deck v6 · cards 1, 2", or "No deck reads this version." |
+| `store.ts` | Holds four things. `NARRATIVE_SECTIONS` is the story's sections and where each one's words live. `readNarrative` returns a version's meta, sections, positioning and bindings, each part either `ok` or `unreadable`. `compareNarrative` gives two versions section by section. `saveNarrativeSection` and `savePositioning` write, each logging one `raise.investor-narrative` row. |
+
+## The rules
+
+**One sentence has one home.** A section's words live in one of three places:
+- a section with a deck key keeps them in the version's `spinout_deck_overrides` row;
+- Why now keeps them in `narrative_version_meta.why_now`;
+- every other section keeps them in `narrative_sections.body`.
+
+Never copy a sentence into a second store.
+
+**Version 0 is the live deck.** It is read here and never written here.
+
+**A failed read is `unreadable`, never an empty list.** Words nobody wrote are `null` ("Not recorded"), never `""` or `0`.
+
+**Eadwyn's wording carries no number.** A write whose source is `eadwyn` and whose words hold a digit is refused. A figure enters a section only as a binding, which uses D896's five fields (`source_key`, `record_ref`, `as_of`, `grade`, `snapshot_hash`).
+
+**Provenance follows #2431's names.** `source_kind` is eadwyn, connector or module, or null for typed. `source_label` is connector, document, recorded, signed or typed. `prior_value`, `undone_at` and `undone_by` support undo.
+
+**Read by is a binding, never a guess** (D909). A deck reads a version only when one of its current deck's cards binds that version's record. The marker's `deck_version` is the newest deck at save time, and it never counts as a reader.

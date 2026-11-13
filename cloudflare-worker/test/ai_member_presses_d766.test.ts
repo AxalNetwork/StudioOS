@@ -1,0 +1,274 @@
+// D766 (#2094) PR 1 — the member presses that called env.AI.run directly now
+// go through the router: Legal & Capital (the document's suggestions, the
+// diligence summary, the spin-out's equity split), Pipeline (the decision gate)
+// and Network Effects (the syndicate's recommendations, the marketplace match).
+// Each run is the pressing member's: held, guarded and charged, and logged with
+// D765's page, option and record. The switch answers 403, a budget stop 402 in
+// the budget's words, and a model that could not be reached keeps the route's
+// non-AI path. The AI's equity split is a proposal (D720 §9), and Eadwyn's
+// notes on a legal draft are a proposal in `ai_rail_proposals` (D780), never in
+// the document. Real SQLite
+// (`_ai_budget_fixture.mjs`); env.AI is stubbed with the guard stub. Each case
+// names the mutations it was checked against.
+//
+//   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+//     --test cloudflare-worker/test/ai_member_presses_d766.test.ts
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { SignJWT } from 'jose';
+import { Hono } from 'hono';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { ROUTE, ASSIST_OFF_MESSAGE, budgetRefusalMessage, __resetForTest } from '../src/services/aiRouter.ts';
+import legalcap from '../src/routes/legalcap.ts';
+import pipeline from '../src/routes/pipeline.ts';
+import networkfx from '../src/routes/networkfx.ts';
+
+const RAIL_PREFS = readFileSync(new URL('../sql/migrations/465_ai_rail_preferences.sql', import.meta.url), 'utf8');
+const RAIL_PROPOSALS = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
+const MEMBER = 2;
+
+function makeAI(handler: (model: string, payload: any) => any) {
+  const calls: Array<{ model: string; payload: any }> = [];
+  return { calls, async run(model: string, payload: any) { calls.push({ model, payload }); return handler(model, payload); } };
+}
+const reply = (text: string) => ({ response: text, usage: { prompt_tokens: 40, completion_tokens: 12 } });
+
+function world(ai: any, { balance = 5_000_000 } = {}) {
+  __resetForTest();
+  const f = aiBudgetFixture();
+  f.db.exec(RAIL_PREFS);
+  f.db.exec(RAIL_PROPOSALS);
+  f.db.exec(`CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, sector TEXT, stage TEXT, problem_statement TEXT, solution TEXT, score REAL, founder_id INTEGER, company_id INTEGER);
+             INSERT INTO projects(id,name,sector,stage) VALUES(7,'Harbour','logistics','mvp');
+             CREATE TABLE metrics_snapshots(id INTEGER PRIMARY KEY,deal_id INTEGER,snapshot_date TEXT,key_metrics TEXT,traction_score REAL,ai_review TEXT,created_by INTEGER);
+             INSERT INTO metrics_snapshots(deal_id,snapshot_date,key_metrics,traction_score) VALUES(7,'2026-10-24','{}',0);`);
+  f.db.prepare("UPDATE users SET role = 'partner' WHERE id = ?").run(MEMBER);
+  // D4676: a partner reviews a venture's gate only as an accepted owner or
+  // co-founder member of THAT venture. This file is about who is charged for
+  // the run, so the partner is given the membership the review now requires.
+  f.db.exec(`CREATE TABLE IF NOT EXISTS project_members(id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invitation_id INTEGER, cofounder_connection_id INTEGER, added_by_user_id INTEGER, accepted_at TEXT, removed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  f.db.prepare("INSERT INTO project_members(project_id,user_id,role,status) VALUES(7,?,'cofounder','accepted')").run(MEMBER);
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
+  f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(MEMBER, balance);
+  // What the guard was asked to check, as the guard stub hands it its input.
+  const guarded: string[] = [];
+  const env: any = { DB: f.DB, AI: withGuard(ai, (input: unknown) => { guarded.push(JSON.stringify(input)); return 'safe'; }), JWT_SECRET: 'd766-fixture-only-secret', ENVIRONMENT: 'development' };
+  return { f, env, guarded };
+}
+function app() {
+  const a = new Hono();
+  a.onError((e: any, c) => {
+    const status = AUTH_ERROR_STATUSES[e?.message];
+    return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error', m: String(e?.message) }, 500);
+  });
+  a.route('/api/legalcap', legalcap);
+  a.route('/api/pipeline', pipeline);
+  a.route('/api/networkfx', networkfx);
+  return a;
+}
+async function call(w: any, method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
+  const jwt = await new SignJWT({ user_id: MEMBER }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(w.env.JWT_SECRET));
+  const r = await app().request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json', ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body) }, w.env);
+  return { status: r.status, body: await r.json().catch(() => null) as any };
+}
+/** The router's rows (Llama Guard's own rows aside). */
+const rows = (w: any) => w.f.db.prepare('SELECT user_id, task, surface, rail_page, rail_option, record_ref, charged_microusd FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id').all().map((r: any) => ({ ...r }));
+const modelCalls = (ai: any) => ai.calls;
+
+/** Two members on the marketplace, so a match has something to rank. */
+function profiles(w: any) {
+  // The marketplace's own table (networkfx's ensureSchema makes the same) and two members on it.
+  w.f.db.exec(`CREATE TABLE IF NOT EXISTS marketplace_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, title TEXT, bio TEXT,
+    skills TEXT, hourly_rate_cents INTEGER, availability TEXT DEFAULT 'available', rating REAL DEFAULT 0, review_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  for (const [id, name, title, skills] of [[31, 'Lena Ops', 'Logistics operator', '["fleet","routing"]'], [32, 'Dev Design', 'Brand designer', '["brand"]']] as const) {
+    w.f.db.prepare("INSERT OR IGNORE INTO users (id, email, name, role) VALUES (?, ?, ?, 'partner')").run(id, `m${id}@example.test`, name);
+    w.f.db.prepare('INSERT INTO marketplace_profiles (user_id, title, skills, rating) VALUES (?, ?, ?, 4)').run(id, title, skills);
+  }
+}
+const embedReply = { data: [Array(1024).fill(0.01)] };
+
+// 1 ───────────────────────────────────────────────────────────────────────────
+test('marketplace match (#3938 NE1): retrieve, rank, then one line each — every run the member\'s, on rail_match\'s page and option', async () => {
+  // Mutations checked: userId 0 passed (a system run); the rail dropped; the surface dropped; the guard handed the profiles.
+  const ai = makeAI((model) => {
+    if (model === '@cf/baai/bge-reranker-base') return { response: [{ id: 0, score: 0.9 }, { id: 1, score: 0.2 }] };
+    if (model.includes('bge')) return embedReply;
+    return reply('1. Runs fleets and routing, which a logistics need asks for.\n2. A brand designer.');
+  });
+  const w = world(ai);
+  profiles(w);
+  const r = await call(w, 'POST', '/api/networkfx/marketplace/match', { need: 'A logistics operator' }, { 'X-Rail-Page': encodeURIComponent('Founder · Network') });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  // The plan's NE1 steps: bge-m3 for the need and each profile, the reranker, then the job's write model.
+  const models = modelCalls(ai).map((c: any) => c.model);
+  assert.deepEqual(models.slice(0, 3), ['@cf/baai/bge-m3', '@cf/baai/bge-m3', '@cf/baai/bge-m3']);
+  assert.equal(models[3], '@cf/baai/bge-reranker-base');
+  assert.equal(models.length, 5, 'one write after the rank');
+  assert.deepEqual(r.body.steps, { retrieved: true, ranked: true, written: true });
+  assert.equal(r.body.recommendations[0].reason, 'Runs fleets and routing, which a logistics need asks for.');
+  assert.ok(!JSON.stringify(r.body).includes('@example.test'), 'a person is named, never emailed');
+  for (const row of rows(w)) {
+    assert.equal(row.user_id, MEMBER);
+    assert.equal(row.surface, '/network-effects');
+    assert.deepEqual([row.rail_page, row.rail_option, row.record_ref], ['Founder · Network', 'match:marketplace', null]);
+  }
+  assert.ok(rows(w).some((row: any) => row.charged_microusd > 0), 'the member who pressed was charged');
+  const { guarded } = w;
+  assert.ok(guarded.some((p: string) => p.includes('A logistics operator')), 'the guard read the need');
+  assert.ok(!guarded.some((p: string) => p.includes('Brand designer')), 'and not the other members\' profiles');
+});
+
+// 2 ───────────────────────────────────────────────────────────────────────────
+test('the switch: a page turned off answers 403 in its words, with no model called and nothing held', async () => {
+  // Mutations checked: refuseRun answering assist_off as a fallback; the route ignoring `refused` (MatchRefused).
+  const ai = makeAI(() => reply('x'));
+  const w = world(ai);
+  profiles(w);
+  w.f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('off',?,'network-effects','','manual')").run(MEMBER);
+  const r = await call(w, 'POST', '/api/networkfx/marketplace/match', { need: 'A designer' });
+  assert.equal(r.status, 403);
+  assert.equal(r.body.error, 'assist_off');
+  assert.equal(r.body.message, ASSIST_OFF_MESSAGE);
+  assert.deepEqual(ai.calls, []);
+  assert.equal(w.f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n, 0);
+});
+
+// 3 ───────────────────────────────────────────────────────────────────────────
+test('a budget stop answers 402 in the budget\'s words; a model that cannot be reached keeps the gate\'s rule-based recommendation', async () => {
+  // Mutations checked: the budget refusal treated as a model failure; a model failure answered as a refusal.
+  const broke = world(makeAI(() => reply('x')), { balance: 0 });
+  const r = await call(broke, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(r.status, 402, JSON.stringify(r.body));
+  assert.equal(r.body.message, budgetRefusalMessage(r.body.error));
+  assert.equal(broke.f.db.prepare('SELECT COUNT(*) AS n FROM decision_gates').get().n, 0, 'no gate was opened');
+
+  const down = makeAI(() => { throw new Error('5007: model unavailable'); });
+  const w = world(down);
+  const ok = await call(w, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const gate = w.f.db.prepare('SELECT status, ai_recommendation, ai_explanation FROM decision_gates').get();
+  assert.equal(gate.status, 'pending', 'a gate is a recommendation for a person to decide');
+  assert.equal(gate.ai_recommendation, 'iterate', 'a recorded zero still supports the rule-based gate');
+  assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/110 \(formula v1\)/);
+  // #3938 (IN2): Clef decides first; with no decision there is nothing for gpt-oss-120b to explain.
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['module_decision', 'review:decision-gate', 'deal:7', '/pipeline']]);
+});
+
+test('#3938 IN2: Clef decides the gate with a probability, gpt-oss-120b explains it, and the gate keeps the probability', async () => {
+  // Mutations checked: the recommendation taken from gpt-oss's text again (the gate reads "iterate");
+  // the probability not stored (ai_confidence NULL); a choice outside the three options accepted.
+  const ai = makeAI((model) => model === '@cf/cloudflare/clef'
+    ? { answers: { gate: { type: 'choice', choice: 'continue', confidence: 0.72, probabilities: { spinout_ready: 0.08, continue: 0.72, iterate: 0.2 } } }, usage: { input_tokens: 120 } }
+    : reply('Recommendation: ITERATE. Traction is early.'));
+  const w = world(ai);
+  const r = await call(w, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ai_recommendation, 'continue', 'the decision is Clef\'s, not the explainer\'s');
+  assert.equal(r.body.ai_confidence, 0.72);
+  assert.equal(r.body.model, '@cf/cloudflare/clef');
+  const gate = w.f.db.prepare('SELECT ai_recommendation, ai_explanation, ai_confidence FROM decision_gates').get();
+  assert.deepEqual([gate.ai_recommendation, gate.ai_confidence], ['continue', 0.72]);
+  assert.equal(gate.ai_explanation, 'Recommendation: ITERATE. Traction is early.', 'gpt-oss-120b only explains');
+  const explain = ai.calls.find((x) => x.model === ROUTE.rail_reason.model)!;
+  assert.match(JSON.stringify(explain.payload), /CONTINUE: on track/, 'the explainer is told the decision');
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref]), [['module_decision', 'review:decision-gate', 'deal:7'], ['rail_reason', 'review:decision-gate', 'deal:7']]);
+
+  const odd = makeAI((model) => model === '@cf/cloudflare/clef'
+    ? { answers: { gate: { type: 'choice', choice: 'liquidate', confidence: 0.9 } }, usage: { input_tokens: 120 } }
+    : reply('x'));
+  const w2 = world(odd);
+  const r2 = await call(w2, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(r2.status, 200);
+  assert.deepEqual([r2.body.ai_recommendation, r2.body.ai_confidence, r2.body.model], ['iterate', null, 'rule-based'], 'an option not offered is no decision');
+});
+
+// 4 ───────────────────────────────────────────────────────────────────────────
+test('legal documents: the document is the filled template; Eadwyn\'s notes are a note in ai_rail_proposals, naming its run', async () => {
+  // D780 (#2105). Mutations checked: the notes written into the content again;
+  // the notes appended to the body; the note stored without its usage row; the
+  // note filed against the deal instead of the document.
+  const ai = makeAI(() => reply('- Add a pro-rata side letter.'));
+  const w = world(ai);
+  const r = await call(w, 'POST', '/api/legalcap/legal/generate', { deal_id: 7, type: 'SAFE', variables: { investor_name: 'Synthetic investor', amount: '123', valuation_cap: '1000000', discount_rate: '0', founder_title: 'Founder' } });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const stored = w.f.db.prepare('SELECT id, content FROM legal_documents').get();
+  const doc = JSON.parse(stored.content);
+  assert.deepEqual(Object.keys(doc).sort(), ['body', 'template', 'vars'], 'the document holds the filled template and nothing else');
+  assert.doesNotMatch(stored.content, /pro-rata side letter|AI-Generated Suggestions/);
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_page, x.rail_option, x.record_ref]), [['rail_legal', 'legal-capital', 'draft:legal/notes', 'deal:7']]);
+  const run = w.f.db.prepare('SELECT id FROM ai_usage_logs WHERE guard_for IS NULL').get();
+  const note = w.f.db.prepare('SELECT * FROM ai_rail_proposals').get();
+  assert.equal(note.user_id, MEMBER);
+  assert.equal(note.kind, 'note');
+  assert.equal(note.status, 'proposed');
+  assert.deepEqual([note.rail_page, note.rail_option, note.record_ref], ['legal-capital', 'draft:legal/notes', `legal_doc:${stored.id}`]);
+  assert.deepEqual(JSON.parse(note.payload_json), { text: '- Add a pro-rata side letter.', type: 'SAFE' });
+  assert.equal(note.model, ROUTE.rail_legal.model);
+  assert.equal(note.usage_log_id, run.id, 'the note names the run that wrote it');
+  assert.equal(r.body.notes.uid, note.uid);
+});
+
+// 5 ───────────────────────────────────────────────────────────────────────────
+test('the spin-out\'s equity split: asked of the AI it is a proposal and nothing is written; Save posts it back and writes it', async () => {
+  // Mutations checked: the proposal written to the subsidiary; Save refused after a proposal.
+  const ai = makeAI(() => reply('{"studio_pct":15,"founders_pct":70,"option_pool_pct":13,"advisors_pct":2}'));
+  const w = world(ai);
+  w.f.db.exec(`CREATE TABLE IF NOT EXISTS subsidiaries(id INTEGER PRIMARY KEY, deal_id INTEGER, spinout_status TEXT, equity_allocation_json TEXT, equity_allocated TEXT, updated_at TEXT);
+               INSERT INTO subsidiaries(id,deal_id,spinout_status) VALUES(3,7,'ip_transferred');`);
+  const proposed = await call(w, 'POST', '/api/legalcap/spinout/equity-allocate', { deal_id: 7 });
+  assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+  assert.equal(proposed.body.proposal, true);
+  assert.deepEqual(proposed.body.allocation, { studio_pct: 15, founders_pct: 70, option_pool_pct: 13, advisors_pct: 2 });
+  const before = w.f.db.prepare('SELECT spinout_status, equity_allocation_json FROM subsidiaries').get();
+  assert.deepEqual({ ...before }, { spinout_status: 'ip_transferred', equity_allocation_json: null }, 'the proposal wrote nothing');
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option]), [['rail_numbers', 'propose:spinout/equity']]);
+
+  const saved = await call(w, 'POST', '/api/legalcap/spinout/equity-allocate', { deal_id: 7, allocation: proposed.body.allocation, proposed: true });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.spinout_status, 'equity_allocated');
+  assert.equal(w.f.db.prepare('SELECT spinout_status FROM subsidiaries').get().spinout_status, 'equity_allocated');
+  assert.equal(modelCalls(ai).length, 1, 'Save runs no model');
+});
+
+// 6 ───────────────────────────────────────────────────────────────────────────
+test('no member route calls env.AI.run directly any more; the wizard\'s AI press saves nothing', () => {
+  // Mutations checked: a route reverted to env.AI.run; the wizard reloading over the proposal.
+  for (const f of ['legalcap', 'pipeline', 'networkfx']) {
+    const src = readFileSync(`cloudflare-worker/src/routes/${f}.ts`, 'utf8');
+    assert.doesNotMatch(src, /\benv\.AI\.run\(/, `${f}.ts still calls env.AI.run`);
+    assert.match(src, /rail: railFor\(c, \{ page: '[a-z-]+', option/, `${f}.ts passes no rail context`);
+  }
+  const wizard = readFileSync('frontend/src/components/SpinoutWizard.jsx', 'utf8');
+  const askAI = wizard.slice(wizard.indexOf('const askAI'), wizard.indexOf('const saveEquity'));
+  assert.doesNotMatch(askAI, /reload\(\)/, 'reloading would draw the saved split over the proposal');
+  assert.match(wizard, /api\.spinoutEquity\(\{ deal_id: deal\.id, allocation, proposed: aiRecommended \}\)/);
+});
+
+
+// D1214: execute the recommendation read with the model stubbed. Candidate
+// responses may name the member but never expose an address, even to the lead.
+for (const linked of [false, true]) test(`D1214: syndicate candidates omit emails (linked=${linked})`, async () => {
+  const ai = makeAI(() => reply('Synthetic rationale'));
+  const w = world(ai);
+  try {
+    w.f.db.exec("ALTER TABLE users ADD COLUMN kyc_status TEXT");
+    // Bootstrap through a read, then record a lead and a candidate.
+    await call(w, 'GET', '/api/networkfx/syndicates');
+    w.f.db.exec("INSERT INTO users(id,email,name,role,kyc_status,is_active) VALUES(90000,'candidate@example.invalid','Synthetic candidate','investor','approved',1)");
+    w.f.db.prepare("INSERT INTO syndicates(id,name,created_by,deal_id) VALUES(1,'Synthetic',?,?)").run(MEMBER,linked?7:null);
+    if(linked) {
+      w.f.db.exec("CREATE TABLE match_scores(user_id INTEGER,deal_id INTEGER,score_type TEXT,score REAL,explanation TEXT); INSERT INTO match_scores VALUES(90000,7,'deal_flow',75,'Synthetic fit')");
+    }
+    const r=await call(w,'POST','/api/networkfx/syndicates/1/recommendations',{});
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    assert.equal(r.body.candidates[0].name,'Synthetic candidate');
+    assert.equal('email' in r.body.candidates[0],false);
+    assert.equal(JSON.stringify(r.body).includes('candidate@example.invalid'),false);
+  } finally { w.f.db.close(); }
+});

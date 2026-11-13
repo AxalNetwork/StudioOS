@@ -1,0 +1,422 @@
+/**
+ * D1604 (#3716, pd11, pd3b) — selection on The Grid, pure. No React, no network.
+ *
+ *   areasOf        a card's areas: each block's range, then the free ranges the
+ *                  blocks leave, read row by row (`{ id, kind, grid, block? }`)
+ *   areaTitle      "Area 2 of 4 · c1–7 × r2–6 · Chart"
+ *   selectable     whether an area can be selected, and why not (locked or
+ *                  hidden areas never can; hovering says why)
+ *   pick           a click (one area) or a shift-click (add or take away one)
+ *   marquee        the areas a dragged rectangle touches
+ *   keyStep        the keyboard: arrows move, Space selects, Shift + arrow
+ *                  extends, Esc clears, Alt + arrow nudges a block one cell
+ *   moveTo         a block dragged to a free range, or the drop refused with
+ *                  the sentence that says why (never a silent no-op)
+ *   cellAt         the cell under a point, on the blocks layer's own geometry
+ *   liveFocus      the focus after the card changed under it
+ *   askTarget      what the selection's Ask opens: the area lightbox
+ *
+ * Areas are the input. D1499 (#3749) changed only `areasOf`: a card with a
+ * structure (`card.structure`, or its own `card.areas`) offers that
+ * structure's areas as its free ranges; a card without one keeps the
+ * row-by-row free ranges below. The divider drag is A4's (#3765). D1572
+ * (#3819): a brand lock locks a part of the kit (fonts, colour roles, logo),
+ * which the Worker enforces on save; an area is locked when its block says
+ * so (`locked: true`), and a locked area cannot be selected (`LOCKED_WHY`
+ * on hover).
+ *
+ * D1533 (#3777): multi-select reaches decor, `decor:<id>` beside the areas'
+ * ids (`arrangeModel.decorSel`), and a group selects together: a click on a
+ * grouped area or decor item selects the whole group (`pickGroup`,
+ * `groupSelection`); Shift still adds or takes away one. The Arrange set's
+ * Lock is `pinned` and leaves an area selectable, so it can be unlocked.
+ */
+
+import { areaLabel } from './deckV2Model.js';
+import { KIND_LABELS, placementProblem } from './editorModel.js';
+import { blockRefusal } from './deckAssistModel.js';
+import { SLIDE_SIZES, aspectOf, nearestCell, structureOf } from './gridModel.js';
+import { decorSel, isDecorOn, isDecorSel, itemsOf } from './arrangeModel.js';
+
+export const GRID = Object.freeze({ cols: 12, rows: 6 });
+
+/** The hint the stage shows while nothing is selected (plan §2.3). */
+export const STAGE_HINT = 'Select an area and press Ask to generate, change or check it.';
+/** The keyboard line under the stage (pd11, card 4). */
+export const KEYS_LINE = 'Arrows move · Space selects · Shift + arrow extends · Esc clears · Alt + arrow nudges a cell';
+export const LOCKED_WHY = 'This area is locked in the brand kit.';
+export const HIDDEN_WHY = 'This area is hidden.';
+
+const dims = (model) => ({ cols: model?.grid?.cols ?? GRID.cols, rows: model?.grid?.rows ?? GRID.rows });
+const validGrid = (g) => g && [g.c1, g.c2, g.r1, g.r2].every(Number.isInteger) && g.c2 >= g.c1 && g.r2 >= g.r1;
+
+const touches = (a, b) => a.c1 <= b.c2 && b.c1 <= a.c2 && a.r1 <= b.r2 && b.r1 <= a.r2;
+
+/** A free area's id: its top-left cell, stable while the blocks around it stay. */
+export const freeId = (g) => `free:${g.c1}-${g.r1}`;
+
+/** A structure area as a grid range, or null when it is not whole cells on the grid. */
+const rangeOf = (a, cols, rows) => {
+  const g = { c1: a?.c1, c2: a?.c2, r1: a?.r1, r2: a?.r2 };
+  return validGrid(g) && g.c1 >= 1 && g.r1 >= 1 && g.c2 <= cols && g.r2 <= rows ? g : null;
+};
+
+/**
+ * The structure areas a card offers (D1499): its own `areas` when it has
+ * them, else its structure's from the catalogue (`gridModel.STRUCTURES`), in
+ * their reading order. Null for a card with neither, or with `custom` and no
+ * areas, which keeps the row-by-row free ranges.
+ */
+export function structureAreas(card, model = null) {
+  const { cols, rows } = dims(model);
+  const own = Array.isArray(card?.areas) && card.areas.length ? card.areas : null;
+  const list = own || structureOf(card?.structure)?.areas || null;
+  if (!list) return null;
+  return [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((a) => rangeOf(a, cols, rows)).filter(Boolean);
+}
+
+/**
+ * The card's areas, blocks first (in their order), then the free ranges.
+ *
+ * With a structure (`structureAreas`), the free ranges are the structure's
+ * areas that no block touches, in the structure's order: "the structures
+ * replace only the area source" (plan §4.1). Without one, each uncovered
+ * cell, read row by row, starts a range as wide as the free run to its right
+ * and as tall as that whole run stays free. Null for a card with no blocks
+ * list (a card from before D898 draws its fields and has no Grid yet).
+ */
+export function areasOf(card, model = null) {
+  if (!Array.isArray(card?.blocks)) return null;
+  const { cols, rows } = dims(model);
+  const taken = Array.from({ length: rows + 1 }, () => new Array(cols + 1).fill(false));
+  const areas = [];
+  for (const b of card.blocks) {
+    if (!validGrid(b?.grid)) continue;
+    areas.push({ id: String(b.id), kind: 'block', grid: { ...b.grid }, block: b });
+    for (let r = Math.max(1, b.grid.r1); r <= Math.min(rows, b.grid.r2); r += 1) {
+      for (let c = Math.max(1, b.grid.c1); c <= Math.min(cols, b.grid.c2); c += 1) taken[r][c] = true;
+    }
+  }
+  const structured = structureAreas(card, model);
+  if (structured) {
+    const blocks = areas.map((a) => a.grid);
+    for (const grid of structured) {
+      if (blocks.some((g) => touches(g, grid))) continue;
+      areas.push({ id: freeId(grid), kind: 'free', grid });
+    }
+    // D1513 (#3765): the reading order is the structure's (`area.order`): each area takes the order of the
+    // structure area its top-left cell sits in, so the tab order, the screen reader and `nearest` follow it.
+    // An area outside every structure area keeps its place after them.
+    const orderOf = (g) => {
+      const i = structured.findIndex((s) => s.c1 <= g.c1 && g.c1 <= s.c2 && s.r1 <= g.r1 && g.r1 <= s.r2);
+      return i < 0 ? structured.length : i;
+    };
+    return areas
+      .map((a, i) => ({ a: { ...a, order: orderOf(a.grid) + 1 }, i }))
+      .sort((x, y) => x.a.order - y.a.order || x.i - y.i)
+      .map((x) => x.a);
+  }
+  for (let r = 1; r <= rows; r += 1) {
+    for (let c = 1; c <= cols; c += 1) {
+      if (taken[r][c]) continue;
+      let c2 = c;
+      while (c2 + 1 <= cols && !taken[r][c2 + 1]) c2 += 1;
+      let r2 = r;
+      const rowFree = (rr) => { for (let x = c; x <= c2; x += 1) if (taken[rr][x]) return false; return true; };
+      while (r2 + 1 <= rows && rowFree(r2 + 1)) r2 += 1;
+      for (let rr = r; rr <= r2; rr += 1) for (let x = c; x <= c2; x += 1) taken[rr][x] = true;
+      const grid = { c1: c, c2, r1: r, r2 };
+      areas.push({ id: freeId(grid), kind: 'free', grid });
+    }
+  }
+  return areas;
+}
+
+/** What an area is, in a word: the block's kind, a text block's style, or Empty. */
+export function areaKind(area) {
+  if (!area) return '';
+  if (area.kind === 'free') return 'Empty';
+  const b = area.block || {};
+  if (b.kind === 'text') return b.style === 'heading' ? 'Title' : b.style === 'list' ? 'Bullets' : 'Body';
+  return KIND_LABELS[b.kind] || 'Block';
+}
+
+/** "Area 2 of 4 · c1–7 × r2–6 · Chart". */
+export function areaTitle(area, index, count) {
+  return [`Area ${index + 1} of ${count}`, areaLabel(area?.grid), areaKind(area)].filter(Boolean).join(' · ');
+}
+
+/** `{ ok: true }`, or `{ ok: false, why }` for a locked or hidden area. */
+export function selectable(area) {
+  if (!area) return { ok: false, why: null };
+  if (area.block?.hidden === true) return { ok: false, why: HIDDEN_WHY };
+  if (area.block?.locked === true) return { ok: false, why: LOCKED_WHY };
+  return { ok: true };
+}
+
+const byId = (areas, id) => (areas || []).find((a) => a.id === id) || null;
+
+/**
+ * A click selects the one area; a shift-click adds it, or takes it away when
+ * it was selected. A locked or hidden area changes nothing.
+ */
+export function pick(selection, areas, id, { shift = false } = {}) {
+  const sel = Array.isArray(selection) ? selection : [];
+  const area = byId(areas, id);
+  if (!selectable(area).ok) return sel;
+  if (!shift) return [id];
+  return sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+}
+
+/** D1533: the ids a click on `sel` selects: its whole group (one layer: areas or decor), else just it. */
+export function groupSelection(card, sel) {
+  const [one] = itemsOf(card, [sel]);
+  if (!one?.group) return [sel];
+  const pool = one.tier === 'decor'
+    ? (card.decor || []).filter((d) => d?.group === one.group).map((d) => decorSel(d.id))
+    : (card.blocks || []).filter((b) => b?.group === one.group && b.hidden !== true && b.locked !== true).map((b) => String(b.id));
+  return pool.length ? pool : [sel];
+}
+
+/**
+ * D1533: `pick`, group-aware. A plain click on a grouped area selects its
+ * group; a decor item (`decor:<id>`, from the layers list) is picked the
+ * same way, alone or, with Shift, added or taken away.
+ */
+export function pickGroup(selection, areas, id, { shift = false } = {}, card = null) {
+  const sel = Array.isArray(selection) ? selection : [];
+  if (isDecorSel(id)) {
+    if (!isDecorOn(card, id)) return sel;
+    if (shift) return sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+    return groupSelection(card, id);
+  }
+  const next = pick(sel, areas, id, { shift });
+  return shift || next.length !== 1 || !card ? next : groupSelection(card, id);
+}
+
+/** The cell range two cells span, in either order. */
+export function spanOf(from, to) {
+  return { c1: Math.min(from.c, to.c), c2: Math.max(from.c, to.c), r1: Math.min(from.r, to.r), r2: Math.max(from.r, to.r) };
+}
+
+/**
+ * The marquee's selection: every selectable block it touches; when it touches
+ * no block, the free ranges it touches.
+ */
+export function marquee(areas, rect) {
+  if (!validGrid(rect)) return [];
+  const hit = (areas || []).filter((a) => selectable(a).ok && touches(a.grid, rect));
+  const blocks = hit.filter((a) => a.kind === 'block');
+  return (blocks.length ? blocks : hit).map((a) => a.id);
+}
+
+/**
+ * The cell under a point. `box` is the card face's own box (`{ left, top,
+ * width, height }`), the 16:9 or 4:3 slide GridStage places every area on
+ * with `gridModel.placeOf`. The point is read back onto the slide in slide
+ * pixels and looked up with `gridModel.nearestCell`, the inverse of `boxOf`:
+ * a point in a gutter belongs to the nearer track, one in a margin to the
+ * edge track. D1499: never a CSS padding or gap.
+ */
+export function cellAt(x, y, box, model = null, { aspect = '16:9' } = {}) {
+  if (!box || !(box.width > 0) || !(box.height > 0)) return null;
+  const { cols, rows } = dims(model);
+  const s = SLIDE_SIZES[aspectOf(aspect)];
+  const at = nearestCell(((x - box.left) / box.width) * s.width, ((y - box.top) / box.height) * s.height, aspect);
+  return { c: Math.min(cols, at.c), r: Math.min(rows, at.r) };
+}
+
+/**
+ * The focus as it stands on this card: the focused area when it is still
+ * there; when a block now covers a free range that had the focus, that block
+ * (or whichever area now holds that cell); otherwise null, so the stage falls
+ * back to its first selectable area and keeps one tab stop.
+ */
+export function liveFocus(areas, focus) {
+  const list = areas || [];
+  if (focus == null) return null;
+  if (list.some((a) => a.id === focus)) return focus;
+  const m = /^free:(\d+)-(\d+)$/.exec(String(focus));
+  if (!m) return null;
+  const c = Number(m[1]); const r = Number(m[2]);
+  const holder = list.find((a) => a.grid.c1 <= c && c <= a.grid.c2 && a.grid.r1 <= r && r <= a.grid.r2);
+  return holder && selectable(holder).ok ? holder.id : null;
+}
+
+const centre = (g) => ({ x: (g.c1 + g.c2) / 2, y: (g.r1 + g.r2) / 2 });
+const DIRS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+/** Lexicographic: the first place two ranks differ decides. */
+const before = (a, b) => { for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return a[i] < b[i]; return false; };
+
+/**
+ * The nearest selectable area from `fromId` in an arrow's direction, or null
+ * at an edge. It must lie beyond the area's edge that way; the one that
+ * shares rows (or columns, up and down) comes first, then the smallest gap,
+ * then a block before a free range, then the closest centre across.
+ */
+export function nearest(areas, fromId, key) {
+  const dir = DIRS[key];
+  const from = byId(areas, fromId);
+  if (!dir || !from) return null;
+  const f = from.grid;
+  const across = dir[0] !== 0;
+  let best = null;
+  for (const a of areas || []) {
+    if (a.id === fromId || !selectable(a).ok) continue;
+    const g = a.grid;
+    const gap = dir[0] === 1 ? g.c1 - f.c2 : dir[0] === -1 ? f.c1 - g.c2 : dir[1] === 1 ? g.r1 - f.r2 : f.r1 - g.r2;
+    if (gap < 1) continue;
+    const shares = across ? g.r1 <= f.r2 && f.r1 <= g.r2 : g.c1 <= f.c2 && f.c1 <= g.c2;
+    const off = across ? Math.abs(centre(g).y - centre(f).y) : Math.abs(centre(g).x - centre(f).x);
+    // D1513: a tie keeps the reading order (`order`, the structure's) before the distance across.
+    const rank = [shares ? 0 : 1, gap, a.kind === 'block' ? 0 : 1, a.order ?? 0, off];
+    if (!best || before(rank, best.rank)) best = { id: a.id, rank };
+  }
+  return best ? best.id : null;
+}
+
+/**
+ * One key on the stage. Answers `{ selection, focus, nudge? }`, or null when
+ * the key is not the stage's (so the page keeps it):
+ *   arrows        move the focus to the nearest area that way
+ *   Shift + arrow move it and add that area to the selection
+ *   Space, Enter  select the focused area alone (Shift: add or take it away)
+ *   Escape        clear the selection
+ *   Alt + arrow   `nudge: { id, dc, dr }` for the one selected block
+ */
+export function keyStep({ selection = [], focus = null }, areas, key, { shift = false, alt = false } = {}) {
+  const list = areas || [];
+  const first = list.find((a) => selectable(a).ok)?.id ?? null;
+  if (key === 'Escape') return { selection: [], focus };
+  if (DIRS[key] && alt) {
+    if (selection.length !== 1) return { selection, focus };
+    const one = byId(list, selection[0]);
+    if (one?.kind !== 'block') return { selection, focus };
+    return { selection, focus, nudge: { id: one.id, dc: DIRS[key][0], dr: DIRS[key][1] } };
+  }
+  if (DIRS[key]) {
+    if (!focus || !byId(list, focus)) return { selection, focus: first };
+    const to = nearest(list, focus, key) ?? focus;
+    if (shift) return { selection: selection.includes(to) ? selection : [...selection, to], focus: to };
+    return { selection, focus: to };
+  }
+  if (key === ' ' || key === 'Spacebar' || key === 'Enter') {
+    const at = focus ?? first;
+    if (!at) return { selection, focus };
+    return { selection: pick(selection, list, at, { shift }), focus: at };
+  }
+  return null;
+}
+
+/**
+ * Where a dragged block lands: its top-left on `at` (`{ c, r }`), its size
+ * kept. `{ grid }`, or `{ error }` with the sentence the stage shows ("That
+ * range overlaps the 3 × 2 metric tile. Pick a free range.").
+ */
+export function moveTo(card, blockId, at, model = null) {
+  const block = (card?.blocks || []).find((b) => String(b.id) === String(blockId));
+  if (!block?.grid || !at) return { error: 'That block is no longer on this card.' };
+  const w = block.grid.c2 - block.grid.c1;
+  const h = block.grid.r2 - block.grid.r1;
+  const grid = { c1: at.c, c2: at.c + w, r1: at.r, r2: at.r + h };
+  if (grid.c1 === block.grid.c1 && grid.r1 === block.grid.r1) return { grid, same: true };
+  const problem = placementProblem(card, grid, model, block.id);
+  if (!problem) return { grid };
+  const overlap = /^It overlaps (.+)\.$/.exec(problem);
+  return { error: overlap ? `That range overlaps ${overlap[1]}. Pick a free range.` : `${problem} Pick a free range.` };
+}
+
+/** A one-cell nudge, as a move. */
+export function nudge(card, blockId, dc, dr, model = null) {
+  const block = (card?.blocks || []).find((b) => String(b.id) === String(blockId));
+  if (!block?.grid) return { error: 'That block is no longer on this card.' };
+  return moveTo(card, blockId, { c: block.grid.c1 + dc, r: block.grid.r1 + dr }, model);
+}
+
+/**
+ * What the selection's Ask opens (plan §4.2):
+ *   `{ kind: 'areas', ids }`     "Generate into N areas" (`AreaLightbox.jsx`)
+ *                                for one area or several; each row says what
+ *                                runs on main and what waits for its issue
+ *   `{ kind: 'refused', why }`   the one area is a figure bound to a record,
+ *                                which only its record changes
+ *   `{ kind: 'off' }`            AI is paused on the page
+ */
+export function askTarget(areas, selection, { aiOn = true, items = [] } = {}) {
+  const chosen = (selection || []).map((id) => byId(areas, id)).filter(Boolean);
+  if (!chosen.length) return null;
+  if (!aiOn) return { kind: 'off' };
+  if (chosen.length === 1 && chosen[0].kind === 'block') {
+    const b = chosen[0].block;
+    if (b.kind === 'metric' || b.binding?.source_key) return { kind: 'refused', why: blockRefusal(b, items) };
+  }
+  return { kind: 'areas', ids: chosen.map((a) => a.id) };
+}
+
+// ─────────────────────────────────────────────────────────── D1513: dividers
+
+/**
+ * D1513 (#3765, pd12) — the dividers between two blocks that share an edge:
+ * a vertical one where one block ends a column before the next begins, rows
+ * overlapping; a horizontal one the same way down. `{ id, axis, a, b, at }`,
+ * `at` the first column (or row) of `b`.
+ */
+export function dividersOf(card) {
+  const blocks = (Array.isArray(card?.blocks) ? card.blocks : []).filter((x) => validGrid(x?.grid));
+  const out = [];
+  for (const a of blocks) {
+    for (const b of blocks) {
+      if (a === b) continue;
+      const rows = a.grid.r1 <= b.grid.r2 && b.grid.r1 <= a.grid.r2;
+      const cols = a.grid.c1 <= b.grid.c2 && b.grid.c1 <= a.grid.c2;
+      if (rows && a.grid.c2 + 1 === b.grid.c1) out.push({ id: `v:${a.id}|${b.id}`, axis: 'v', a: String(a.id), b: String(b.id), at: b.grid.c1 });
+      if (cols && a.grid.r2 + 1 === b.grid.r1) out.push({ id: `h:${a.id}|${b.id}`, axis: 'h', a: String(a.id), b: String(b.id), at: b.grid.r1 });
+    }
+  }
+  return out;
+}
+
+const blockOf = (card, id) => (card?.blocks || []).find((x) => String(x.id) === String(id)) || null;
+const sizeOf = (g, axis) => (axis === 'v' ? g.c2 - g.c1 + 1 : g.r2 - g.r1 + 1);
+
+/** The two ranges after the divider moves by `delta` cells (right or down is positive). */
+function moved(div, a, b, delta) {
+  if (div.axis === 'v') return [{ ...a.grid, c2: a.grid.c2 + delta }, { ...b.grid, c1: b.grid.c1 + delta }];
+  return [{ ...a.grid, r2: a.grid.r2 + delta }, { ...b.grid, r1: b.grid.r1 + delta }];
+}
+
+/** pd12's readout, "7 | 5 → 6 | 6": the two sizes across the divider, before and after. */
+export function dividerReadout(card, div, delta = 0) {
+  const a = blockOf(card, div?.a);
+  const b = blockOf(card, div?.b);
+  if (!a || !b) return '';
+  const [ga, gb] = moved(div, a, b, delta);
+  const before = `${sizeOf(a.grid, div.axis)} | ${sizeOf(b.grid, div.axis)}`;
+  return delta ? `${before} → ${sizeOf(ga, div.axis)} | ${sizeOf(gb, div.axis)}` : before;
+}
+
+/**
+ * The card with the divider moved by `delta` whole cells, both blocks resized
+ * together (one edit), or `{ error }` with the sentence the stage shows:
+ * neither block may vanish, each keeps its kind's minimum (`minSize`, pd12's
+ * "A chart needs at least 4 × 3 cells."), and both still pass
+ * `placementProblem` against the rest of the card.
+ */
+export function moveDivider(card, div, delta, model = null, minSize = () => null) {
+  const a = blockOf(card, div?.a);
+  const b = blockOf(card, div?.b);
+  if (!a || !b) return { error: 'Those blocks are no longer on this card.' };
+  if (!Number.isInteger(delta) || delta === 0) return { card, same: true };
+  const [ga, gb] = moved(div, a, b, delta);
+  if (sizeOf(ga, div.axis) < 1 || sizeOf(gb, div.axis) < 1) return { error: 'Each side keeps at least one cell.' };
+  const small = minSize(a, ga) || minSize(b, gb);
+  if (small) return { error: small };
+  const next = { ...card, blocks: card.blocks.map((x) => (x === a ? { ...a, grid: ga } : x === b ? { ...b, grid: gb } : x)) };
+  const problem = placementProblem(next, ga, model, a.id) || placementProblem(next, gb, model, b.id);
+  if (problem) return { error: problem };
+  return { card: next, grids: { [String(a.id)]: ga, [String(b.id)]: gb } };
+}
+
+/** The divider moved to the cell `at` (a pointer's column or row), as a whole-cell delta. */
+export const dividerDelta = (div, at) => (Number.isInteger(at) ? at - div.at : 0);
+

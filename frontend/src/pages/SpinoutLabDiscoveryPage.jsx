@@ -1,0 +1,1151 @@
+// Spin-Out Lab "Customer Discovery" tool page — structured interview evidence,
+// per the design handoff (attached_assets/Customer_Discovery.dc_*.html / repo
+// spin-out-lab-pipeline/project). Every number renders from live data:
+// interviews (GET /progress/discovery/:pid), the inbound waitlist CRM
+// (GET /progress/discovery/:pid/waitlist) and curated pain groups
+// (GET /progress/pain-groups/:pid). The design's mock content (fabricated
+// leads and interviewees, the hardcoded 30/22/17/11 funnel, the "X of 18"
+// pain-mention scale-up) is NOT reproduced — sections that have no real data
+// source are derived honestly from the interview log (hypothesis validation,
+// working definition, themes) or show explicit empty states.
+//
+// Interviews are now created, edited and deleted in place via
+// components/discovery/LogInterviewModal (api.createInterview /
+// updateInterview / deleteInterview). Those routes always existed; the page
+// just never called them, so "Log interview" bounced out to /build/discovery.
+// That link survives as a secondary "Full tool" affordance.
+//
+// ICP fit is a real stored field (D1 migration 161, dev parity in
+// ensure_interview_assessment_columns). It is NOT derived from
+// validation_rating: that column rates the SOLUTION, not the person's fit,
+// so reusing it would have produced a plausible number meaning something
+// else. A null icp_fit is "not yet assessed" and is excluded from the ICP
+// summary's denominator rather than counted as "not ICP".
+//
+// EVIDENCE STORES BOUND — D351 (derivations in ../lib/discoveryEvidence):
+//   * Per-pain severity is stored (migration 211, interview_pain_severities)
+//     as need or nice — two values, not the canvas's three. The pain bars split
+//     each theme's interviews into need / nice / not judged from the
+//     pain-groups view; "good-to-have" is not a value the store accepts, so it
+//     is shown Not recorded rather than drawn. Severity is set per pain in the
+//     log modal (PUT /founder/validate/interviews/:id/pain-severity).
+//   * Company is its own column (interviewee_company), no longer folded into
+//     the role; legacy "Role · Company" rows are split for display.
+//   * Recordings (migration 215): each log row shows whether audio is attached
+//     and can attach one; transcription stays on the Validate desk, where the
+//     "AI fills the blanks" switch lives.
+//   * CSV: "Export interviews" and "Export summary" are the Worker's
+//     /founder/validate/*/export.csv routes.
+//   * "Send to Problem slide" writes the deck-level override `problem.title`
+//     (migration 164) — the deck's wording, never the canonical problem field.
+//   * A failed read renders Unreadable with a retry, never an empty list.
+//
+// Still not recorded, because nothing stores them (listed on the page with the
+// reason): interview format and source, willingness-to-pay, must-have /
+// blocker, follow-up action, an ICP pre-score on leads, and lead
+// qualify / archive / route.
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  Check,
+  Download,
+  Mic,
+  Circle,
+  FileText,
+  Loader2,
+  MessagesSquare,
+  Pencil,
+  Plus,
+  Quote,
+  Trash2,
+} from 'lucide-react';
+import LogInterviewModal, { ICP_FIT_OPTIONS } from '../components/discovery/LogInterviewModal';
+import IcpDefinitionCard from '../components/discovery/IcpDefinitionCard';
+import { readIcpDefinition } from '../lib/icpDefinition';
+import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageShell from '../components/spinout/LabPageShell';
+import { api, spinoutLab } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
+import { reportError } from '../lib/log';
+import { markMilestone } from '../lib/spinoutLabHooks';
+import { pickLabProject } from './SpinoutLabStartupPage';
+import { TEMPLATES } from '../lib/brand/templates';
+import { Unrecorded, Unreadable } from '../ui';
+import {
+  evidenceRead,
+  followUpsAfter,
+  interviewsOf,
+  roleAndCompany,
+  severitySplit,
+  signupsOf,
+} from '../lib/discoveryEvidence';
+
+import { MIN_INTERVIEWS, labDiscoveryCounts } from '../lib/labDiscovery'; // program gate — week 1 requires 3 logged interviews
+
+// Which landing-page template a lead signed up through — template label first
+// (via the shared catalog), then the page name, then the raw source string
+// (legacy rows captured before the attribution JOIN existed).
+const leadTemplateLabel = (s) => TEMPLATES.find((t) => t.id === s.landing_template_kit)?.label
+  || s.landing_page_name
+  || s.source;
+
+const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
+const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / (60 * 24))}d ago`;
+}
+
+function shortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function initialsOf(name) {
+  return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '?';
+}
+
+const CRM_CHIP = {
+  new: { label: 'New', cls: 'bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' },
+  invited: { label: 'Invited', cls: 'bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300' },
+  followed_up: { label: 'Followed up', cls: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+  promoted: { label: 'Converted', cls: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
+};
+
+// The canvas's interview and lead fields that no table stores. Each needs a
+// store before it can be a control; until then it is named here with why.
+const NOT_RECORDED_FIELDS = [
+  { key: 'format', label: 'Interview format (call / in person)', reason: 'discovery_interviews has no format column.' },
+  { key: 'source', label: 'Interview source (warm intro, cold, …)', reason: 'Only a lead promoted from the waitlist is attributable; a manual interview records no source.' },
+  { key: 'wtp', label: 'Willingness to pay', reason: 'No column or table stores a willingness-to-pay answer.' },
+  { key: 'must-have', label: 'Must-have / blocker', reason: 'No column stores it; per-pain severity (need / nice) is the nearest recorded fact.' },
+  { key: 'follow-up', label: 'Follow-up action per interview', reason: 'No table stores interview follow-ups; lead follow-ups are the waitlist CRM’s.' },
+  { key: 'icp-prescore', label: 'ICP pre-score on leads', reason: 'Waitlist signups carry no ICP judgement until they become interviews.' },
+  { key: 'lead-triage', label: 'Qualify / archive / route a lead', reason: 'The customer waitlist has no qualify or archive state; manual leads live in the contacts hub, which this page does not write.' },
+];
+
+const isFromLeads = (iv) => (iv.notes || '').startsWith('Promoted from waitlist');
+
+// Recording on one interview (migration 215). Attaching audio is data entry,
+// so it lives here too; transcribing spends money and sits behind the
+// "AI fills the blanks" switch in Validate, so this cell links to the
+// interview's record on Customer research (D704), its venture kept, rather
+// than running a model from a page with no such switch.
+function RecordingCell({ interview, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const hasAudio = Boolean(interview?.recording_uploaded_at);
+  const dur = Number(interview?.recording_duration_sec);
+  const length = Number.isFinite(dur) && dur > 0 ? `${Math.floor(dur / 60)}:${String(Math.round(dur % 60)).padStart(2, '0')}` : null;
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setNote('');
+    try {
+      await api.uploadInterviewRecording(interview.id, file, null);
+      onChanged?.();
+    } catch (e) {
+      setNote(e?.message || 'The recording could not be attached.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (hasAudio) {
+    return (
+      <div className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap" data-testid={`recording-state-${interview.id}`}>
+        <Mic size={11} className="inline mr-1" />
+        {length || <Unrecorded reason="The browser reported no duration for this clip.">length not recorded</Unrecorded>}
+        {typeof interview.transcript === 'string' ? (
+          <span className="block text-[10px]">Transcript on file</span>
+        ) : (
+          <Link to={`/validate/customer-research/${interview.id}${interview.project_id ? `?project_id=${interview.project_id}` : ''}`} className="block text-[10px] font-semibold text-violet-700 dark:text-violet-300">Transcribe on Customer research →</Link>
+        )}
+      </div>
+    );
+  }
+  return (
+    <label className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 cursor-pointer whitespace-nowrap" data-testid={`recording-attach-${interview.id}`}>
+      <input
+        type="file"
+        accept="audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav"
+        className="hidden"
+        disabled={busy}
+        onChange={(e) => upload(e.target.files?.[0])}
+      />
+      {busy ? 'Attaching…' : <><Mic size={11} className="inline mr-1" />Attach</>}
+      {note && <span className="block text-[10px] font-normal text-red-700 dark:text-red-300">{note}</span>}
+    </label>
+  );
+}
+
+export default function SpinoutLabDiscoveryPage() {
+  const { user } = useAuth();
+  const [state, setState] = useState(null);
+  const [project, setProject] = useState(null);
+  const [interviews, setInterviews] = useState([]);
+  const [signups, setSignups] = useState([]);
+  const [painData, setPainData] = useState(null);
+  const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [logFilter, setLogFilter] = useState('all');
+  const [busyLead, setBusyLead] = useState(null);
+  const [leadMsg, setLeadMsg] = useState(null);
+  // null = closed; { interview: null } = create; { interview } = edit.
+  const [logModal, setLogModal] = useState(null);
+  const [rowBusy, setRowBusy] = useState(null);
+  // Which reads failed (D351). A failed read is drawn Unreadable, never as the
+  // empty list its state variable is left holding.
+  const [failed, setFailed] = useState({ interviews: false, waitlist: false, pains: false, overrides: false });
+  // Deck-level overrides (migration 164) — only `problem.title` is read here.
+  const [overrides, setOverrides] = useState(null);
+  const [deckBusy, setDeckBusy] = useState(null);
+  const [deckMsg, setDeckMsg] = useState(null);
+  const [exportBusy, setExportBusy] = useState(null);
+  const [exportMsg, setExportMsg] = useState(null);
+
+  const loadProjectData = useCallback(async (pid) => {
+    const [ivs, wl, pg, ov] = await Promise.all([
+      evidenceRead(api.listInterviews(pid)),
+      evidenceRead(api.listWaitlistCustomers(pid)),
+      evidenceRead(api.painGroups(pid)),
+      evidenceRead(api.spinoutDeckOverrides(pid)),
+    ]);
+    setInterviews(interviewsOf(ivs) || []);
+    setSignups(signupsOf(wl) || []);
+    setPainData(pg.ok ? pg.data : null);
+    setOverrides(ov.ok ? (ov.data?.overrides || {}) : null);
+    setFailed({ interviews: !ivs.ok, waitlist: !wl.ok, pains: !pg.ok, overrides: !ov.ok });
+  }, []);
+
+  // Mark the ordinal interview milestones from a FRESH server count, skipping
+  // keys already done. Identical rule to the lead-promotion path below — both
+  // create interviews, so both must advance the same W1 deliverables.
+  const markInterviewMilestones = useCallback(async (count) => {
+    const done = new Set((state?.milestones || []).map((m) => m?.key ?? m));
+    for (let k = 1; k <= Math.min(count, 5); k += 1) {
+      const key = `customer_interview_logged_${k}`;
+      if (!done.has(key)) await markMilestone(user, key);
+    }
+    spinoutLab.state().then(setState).catch(() => {});
+  }, [state, user]);
+
+  // Create/update through the real interview routes, then re-read so every
+  // derived block (funnel, pains, hypotheses, ICP split) recomputes from the
+  // server's copy rather than an optimistic guess.
+  // `severities` is the modal's second argument: { phrase: 'need' | 'nice' }
+  // for each pain the founder judged. Severity is per PAIN, so it is its own
+  // write after the interview exists (D351). A failed severity write is
+  // surfaced by the modal, not swallowed: the interview is saved, the judgement
+  // is not, and the founder is told which.
+  const writeSeverities = useCallback(async (interviewId, severities) => {
+    const entries = Object.entries(severities || {}).filter(([, v]) => v === 'need' || v === 'nice');
+    for (const [phrase, sev] of entries) {
+      await api.setInterviewPainSeverity(interviewId, phrase, sev);
+    }
+  }, []);
+
+  const saveInterview = useCallback(async (payload, severities) => {
+    if (!project) throw new Error('No project selected.');
+    const existing = logModal?.interview;
+    if (existing?.id) {
+      await api.updateInterview(existing.id, payload);
+      try {
+        await writeSeverities(existing.id, severities);
+      } finally {
+        await loadProjectData(project.id);
+      }
+      return;
+    }
+    const created = await api.createInterview(project.id, payload);
+    const createdId = created?.id ?? created?.interview?.id;
+    if (createdId) {
+      try {
+        await writeSeverities(createdId, severities);
+      } catch (e) {
+        await loadProjectData(project.id);
+        throw e;
+      }
+    }
+    // A failed recount marks nothing — it is not a count of zero.
+    const fresh = interviewsOf(await evidenceRead(api.listInterviews(project.id)));
+    await loadProjectData(project.id);
+    if (fresh) await markInterviewMilestones(fresh.length);
+  }, [project, logModal, loadProjectData, markInterviewMilestones, writeSeverities]);
+
+  // "Send to Problem slide" — a DECK-LEVEL override (migration 164). It sets
+  // the slide's title wording only; `projects.problem_statement` is untouched.
+  const sendToProblemSlide = useCallback(async (title) => {
+    if (!project) return;
+    setDeckBusy(title);
+    setDeckMsg(null);
+    try {
+      await api.saveSpinoutDeckOverrides(project.id, { 'problem.title': title });
+      setOverrides((o) => ({ ...(o || {}), 'problem.title': title }));
+      setDeckMsg({ kind: 'ok', text: `"${title}" is now the Problem slide's title.` });
+    } catch (e) {
+      setDeckMsg({ kind: 'error', text: e?.message || 'The Problem slide was not changed.' });
+    } finally {
+      setDeckBusy(null);
+    }
+  }, [project]);
+
+  const runExport = useCallback(async (kind) => {
+    if (!project) return;
+    setExportBusy(kind);
+    setExportMsg(null);
+    try {
+      const r = kind === 'summary'
+        ? await api.exportValidateSummary(project.id)
+        : await api.exportValidateInterviews(project.id);
+      setExportMsg({ kind: 'ok', text: `Downloaded ${r?.filename || 'the CSV'}.` });
+    } catch (e) {
+      setExportMsg({ kind: 'error', text: e?.message || 'The export did not download.' });
+    } finally {
+      setExportBusy(null);
+    }
+  }, [project]);
+
+  const removeInterview = useCallback(async (iv) => {
+    if (!project || !iv?.id) return;
+    setRowBusy(iv.id);
+    try {
+      await api.deleteInterview(iv.id);
+      await loadProjectData(project.id);
+    } catch (e) {
+      reportError('SpinoutLabDiscoveryPage:delete', e);
+    } finally {
+      setRowBusy(null);
+    }
+  }, [project, loadProjectData]);
+
+  // `projectsFailed` is its own state: a failed project list is NOT "no
+  // project", and routing it to "Create your startup record" would send a
+  // founder with a company to make a second one.
+  const [projectsFailed, setProjectsFailed] = useState(false);
+  const [loadNonce, setLoadNonce] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setStatus('loading');
+    Promise.all([spinoutLab.state().catch(() => null), evidenceRead(api.listProjects())])
+      .then(async ([s, projectsRead]) => {
+        if (!alive) return;
+        setState(s);
+        setProjectsFailed(!projectsRead.ok);
+        const p = projectsRead.ok ? pickLabProject(projectsRead.data, user) : null;
+        setProject(p);
+        if (p) await loadProjectData(p.id);
+        if (alive) setStatus('ready');
+      })
+      .catch((e) => {
+        if (!alive) return;
+        reportError('SpinoutLabDiscoveryPage:load', e);
+        setStatus('error');
+      });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadNonce]);
+  const retryLoad = () => setLoadNonce((n) => n + 1);
+  const retryProjectData = () => { if (project) loadProjectData(project.id); };
+
+  // The funnel, readiness and claim counts are `labDiscoveryCounts` (D659):
+  // the Validate cycle read computes the same three for this venture, and a
+  // Worker test holds the two equal.
+  const derived = useMemo(() => {
+    const base = labDiscoveryCounts({ interviews, signups, painData, minInterviews: MIN_INTERVIEWS });
+
+    // Working definition — derived live from the interview log.
+    const roleCounts = new Map();
+    base.ivs.forEach((iv) => {
+      // The role alone — a legacy "Role · Company" row would otherwise count
+      // each company as its own segment.
+      const r = roleAndCompany(iv).role;
+      if (r) roleCounts.set(r, (roleCounts.get(r) || 0) + 1);
+    });
+    const topRole = [...roleCounts.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+    const topPain = base.painRows[0] || null;
+
+    return { ...base, topRole, topPain };
+  }, [interviews, signups, painData]);
+
+  const icpDef = useMemo(() => readIcpDefinition(project?.icp_definition_meta), [project?.icp_definition_meta]);
+
+  // W1 deliverable — `icp_defined`.
+  useEffect(() => {
+    if (!state?.active) return;
+    // D353 — re-aimed at the STORED definition: a confirmed ICP (the Worker
+    // refuses to confirm one with a required answer missing) on top of the
+    // program's interview gate. A derived segment is evidence, not a
+    // definition, and no longer marks the deliverable by itself.
+    if (!failed.interviews && derived.ivs?.length >= MIN_INTERVIEWS && icpDef.state === 'confirmed') {
+      markMilestone(user, 'icp_defined');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.active, failed.interviews, derived.ivs?.length, icpDef.state]);
+
+  const leadAction = async (signup, kind) => {
+    if (!project) return;
+    setBusyLead(signup.id);
+    setLeadMsg(null);
+    try {
+      if (kind === 'promote') {
+        await api.promoteWaitlistCustomer(project.id, signup.id);
+        // Derive milestone ordinals from the FRESH server count (not the
+        // stale interviews state — concurrent promotes would double-mark one
+        // ordinal and skip another) and only mark keys not already done.
+        // A failed recount marks nothing — it is not a count of zero.
+        const fresh = interviewsOf(await evidenceRead(api.listInterviews(project.id)));
+        if (fresh) await markInterviewMilestones(fresh.length);
+        setLeadMsg({ kind: 'ok', text: `${signup.name || signup.email} converted to an interview.` });
+      } else if (kind === 'invite') {
+        await api.inviteWaitlistCustomer(project.id, signup.id);
+        setLeadMsg({ kind: 'ok', text: `Invitation sent to ${signup.email}.` });
+      } else {
+        await api.followUpWaitlistCustomer(project.id, signup.id);
+        // W2 deliverable — the 3rd real follow-up marks the map as done.
+        // D351 — counted from `followed_up_at`, a field the DTO carries. This
+        // read `s.status`, which it does not, so the count never passed one.
+        const followed = followUpsAfter(signups, signup.id);
+        if (followed >= 3) await markMilestone(user, 'discovery_followups_mapped');
+        setLeadMsg({ kind: 'ok', text: `Follow-up sent to ${signup.email}.` });
+      }
+      await loadProjectData(project.id);
+    } catch (e) {
+      reportError(`SpinoutLabDiscoveryPage:${kind}`, e);
+      setLeadMsg({ kind: 'error', text: `Couldn't ${kind === 'promote' ? 'convert' : kind === 'invite' ? 'invite' : 'follow up with'} ${signup.email}. Try again.` });
+    } finally {
+      setBusyLead(null);
+    }
+  };
+
+  if (status === 'loading') {
+    return (
+      <div className="flex items-center justify-center py-24" data-testid="discovery-loading">
+        <Loader2 className="animate-spin text-violet-600 dark:text-violet-400" size={28} />
+      </div>
+    );
+  }
+
+  if (status === 'error' || !state) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="discovery-error">
+        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Couldn&rsquo;t load Customer Discovery</div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Check your connection and try again.</p>
+        <button type="button" data-testid="button-retry-discovery" onClick={() => window.location.reload()} className="h-10 px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const isAdmin = user?.role === 'admin';
+  if (!state.active && !state.is_incorporated && !isAdmin) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="discovery-inactive">
+        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
+        <Link to="/spinout-lab" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold mt-3">
+          Go to Spin-Out Lab
+        </Link>
+      </div>
+    );
+  }
+
+  const week = state.is_incorporated ? 4 : Math.min(4, Math.max(1, Number(state.week) || 1));
+  const deckUnlocked = state.is_incorporated || week >= 2;
+  const {
+    ivs, hypTotal, hypValidated, hypInvalidated, hypInconclusive,
+    painRows, distinctPains, funnel, topRole, topPain, notesCount, readiness,
+  } = derived;
+  const maxFunnel = Math.max(1, ...funnel.map((f) => f.n));
+  const logRows = ivs.filter((iv) => {
+    if (logFilter === 'manual') return !isFromLeads(iv);
+    if (logFilter === 'leads') return isFromLeads(iv);
+    return true;
+  });
+  const readyCount = readiness.filter((r) => r.ok).length;
+
+  // ICP fit summary (D1 161). Percentages are over ASSESSED interviews only —
+  // an interview with icp_fit null is "not yet assessed", so counting it in
+  // the denominator would quietly depress every band as unrated rows pile up.
+  const icpSummary = (() => {
+    const assessed = ivs.filter((iv) => ICP_FIT_OPTIONS.some((o) => o.value === iv.icp_fit));
+    const n = assessed.length;
+    const count = (v) => assessed.filter((iv) => iv.icp_fit === v).length;
+    const pct = (v) => (n ? Math.round((count(v) / n) * 100) : 0);
+    return {
+      assessed: n,
+      unassessed: ivs.length - n,
+      // Confidence tracks how much evidence the split rests on, not how
+      // favourable it is. Same 5/3 thresholds the design uses.
+      confidence: n >= 5 ? 'High' : n >= 3 ? 'Medium' : 'Low',
+      bands: [
+        { key: 'strong', label: 'Strong fit', n: count('strong'), pct: pct('strong'), bar: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+        { key: 'partial', label: 'Partial fit', n: count('partial'), pct: pct('partial'), bar: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' },
+        { key: 'none', label: 'Not ICP', n: count('none'), pct: pct('none'), bar: 'bg-gray-400', text: 'text-gray-500 dark:text-gray-400' },
+      ],
+    };
+  })();
+  const icpLabel = (v) => ICP_FIT_OPTIONS.find((o) => o.value === v)?.label || null;
+
+  return (
+    <LabPageShell width="full" spaceY="" testId="page-spinout-discovery">
+      {/* Header */}
+      <LabPageHeader
+        className="mb-5"
+        icon={MessagesSquare}
+        title="Customer Discovery"
+        subtitle="Structured interview evidence — pain points, hypotheses, and deck-ready quotes."
+        status="Active"
+        actions={(
+          <>
+            <button
+              type="button"
+              onClick={() => setLogModal({ interview: null })}
+              disabled={!project}
+              title={project ? undefined : 'Create a startup record first'}
+              data-testid="button-log-interview"
+              className={labBtn('primary')}
+            >
+              <Plus size={LAB_ICON_SIZE} /> Log interview
+            </button>
+            {/* The Worker's CSV exports (D351): the interview log, and the
+                validation summary the canvas's "deck readiness · export" draws. */}
+            <button
+              type="button"
+              onClick={() => runExport('interviews')}
+              disabled={!project || exportBusy != null}
+              data-testid="button-export-interviews"
+              className={labBtn('ghost')}
+            >
+              {exportBusy === 'interviews' ? <Loader2 size={LAB_ICON_SIZE} className="animate-spin" /> : <Download size={LAB_ICON_SIZE} />} Export interviews
+            </button>
+            <button
+              type="button"
+              onClick={() => runExport('summary')}
+              disabled={!project || exportBusy != null}
+              data-testid="button-export-summary"
+              className={labBtn('ghost')}
+            >
+              {exportBusy === 'summary' ? <Loader2 size={LAB_ICON_SIZE} className="animate-spin" /> : <Download size={LAB_ICON_SIZE} />} Export summary
+            </button>
+          </>
+        )}
+      />
+
+      {exportMsg && (
+        <p
+          data-testid="export-message"
+          role={exportMsg.kind === 'error' ? 'alert' : 'status'}
+          className={`text-[12px] mb-4 ${exportMsg.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-300'}`}
+        >
+          {exportMsg.text}
+        </p>
+      )}
+
+      {projectsFailed ? (
+        <div className={`${CARD} py-8`} data-testid="discovery-projects-unreadable">
+          <Unreadable
+            what="Your startup record"
+            claim="This is not a claim that you have none — do not create a second one."
+            onRetry={retryLoad}
+          />
+        </div>
+      ) : !project ? (
+        <div className={`${CARD} text-center py-10`} data-testid="discovery-no-project">
+          <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your startup record first</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">Interviews attach to your company record — create it, then start logging.</p>
+          <Link to="/build?new=1" className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+            Create your startup record
+          </Link>
+        </div>
+      ) : (
+        <>
+          {/* KPI row — every figure is a count over the interview log, so a
+              failed interview read draws no figure at all (D351). */}
+          {failed.interviews ? (
+            <div className={`${CARD} mb-5`} data-testid="discovery-interviews-unreadable">
+              <Unreadable what="Your interview log" claim="This is not a claim that you have logged none." onRetry={retryProjectData} />
+            </div>
+          ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
+            {[
+              { label: 'Interviews logged', value: ivs.length, testid: 'kpi-interviews' },
+              { label: 'Distinct pains', value: distinctPains, testid: 'kpi-pains' },
+              { label: 'Hypotheses validated', value: `${hypValidated} of ${hypTotal}`, testid: 'kpi-hypotheses' },
+              { label: 'Minimum interviews', value: `${Math.min(ivs.length, MIN_INTERVIEWS)} of ${MIN_INTERVIEWS}`, ok: ivs.length >= MIN_INTERVIEWS, testid: 'kpi-minimum' },
+            ].map((k) => (
+              <div key={k.label} data-testid={k.testid} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3.5 shadow-sm">
+                <div className={`text-xl font-extrabold tracking-tight ${k.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-900 dark:text-gray-50'}`}>{k.value}</div>
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mt-0.5">{k.label}</div>
+                {k.ok !== undefined && (
+                  <div className="h-1 rounded-full bg-gray-100 dark:bg-gray-800 mt-2 overflow-hidden">
+                    <div className={`h-full rounded-full ${k.ok ? 'bg-emerald-500' : 'bg-violet-600'}`} style={{ width: `${Math.min(100, Math.round((ivs.length / MIN_INTERVIEWS) * 100))}%` }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5 items-start">
+            {/* LEFT column */}
+            <div className="flex flex-col gap-5 min-w-0">
+              {/* Funnel */}
+              <div className={CARD} data-testid="discovery-funnel">
+                <div className={`${LBL} mb-4`}>Discovery funnel · leads → solution-fit</div>
+                {failed.interviews || failed.waitlist ? (
+                  <Unreadable
+                    what={failed.interviews ? 'The interview log' : 'Your inbound leads'}
+                    claim="The funnel needs both reads, so no stage is drawn."
+                    onRetry={retryProjectData}
+                  />
+                ) : funnel[0].n === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">No contacts yet — log an interview or publish a landing page to start the funnel.</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2.5 items-end">
+                    {funnel.map((f, i) => (
+                      <div key={f.label} className="min-w-0">
+                        <div className="text-sm font-bold text-gray-900 dark:text-gray-50 text-center mb-1.5">{f.n}</div>
+                        <div
+                          className={`rounded-lg ${i === 0 ? 'bg-violet-600' : i === 1 ? 'bg-violet-500/80' : i === 2 ? 'bg-violet-400/70' : 'bg-violet-300/70 dark:bg-violet-500/40'}`}
+                          style={{ height: `${Math.max(14, Math.round((f.n / maxFunnel) * 88))}px` }}
+                        />
+                        <div className="text-[10.5px] font-semibold text-gray-600 dark:text-gray-300 text-center mt-1.5 truncate" title={f.sub}>{f.label}</div>
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 text-center">{f.pct}%</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pain point validation */}
+              <div className={CARD} data-testid="discovery-pains">
+                {/* "Curate groups" linked the Discovery editor's pain-group
+                    curation, which #2335 retired with /build/discovery. */}
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <div className={LBL}>Pain point validation</div>
+                </div>
+                <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-2">Ranked by mentions — the top pain anchors the deck&rsquo;s Problem slide.</p>
+                {/* Severity legend (D351). Two stored values; the canvas's
+                    third ("good-to-have") is not one the store accepts. */}
+                <div className="flex items-center gap-3 flex-wrap text-[10.5px] font-semibold mb-3.5" data-testid="pain-severity-legend">
+                  <span className="text-red-600 dark:text-red-400">● Need-to-have</span>
+                  <span className="text-gray-500 dark:text-gray-400">● Nice-to-have</span>
+                  <span className="text-gray-400 dark:text-gray-500">○ Not judged</span>
+                  <span className="text-gray-400 dark:text-gray-500">
+                    Good-to-have: <Unrecorded reason="The severity store accepts need or nice only; nothing records a third band." />
+                  </span>
+                </div>
+                {deckMsg && (
+                  <p
+                    data-testid="deck-override-message"
+                    role={deckMsg.kind === 'error' ? 'alert' : 'status'}
+                    className={`text-[11.5px] mb-3 ${deckMsg.kind === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-300'}`}
+                  >
+                    {deckMsg.text}
+                  </p>
+                )}
+                {failed.pains ? (
+                  <Unreadable what="Your pain groups" claim="This is not a claim that no pain was logged." onRetry={retryProjectData} />
+                ) : painData && !painData.severity_recorded && painRows.length > 0 ? (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-3" data-testid="pain-severity-unrecorded">
+                    <Unrecorded>No severity on file yet</Unrecorded> — judge each pain as a need or a nice-to-have when you log or edit an interview.
+                  </p>
+                ) : null}
+                {failed.pains ? null : painRows.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">No pains logged yet — every interview should capture at least one.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {painRows.slice(0, 5).map((p, i) => {
+                      const total = Math.max(1, painData?.interview_total ?? ivs.length);
+                      const sev = severitySplit(p, painData?.severity_recorded === true);
+                      const onSlide = overrides?.['problem.title'] === p.title;
+                      return (
+                        <div key={p.title} data-testid={`pain-row-${i}`}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`w-5 h-5 flex-none rounded-md text-[10.5px] font-bold flex items-center justify-center ${i === 0 ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>{i + 1}</span>
+                            <span className="text-[13px] font-semibold text-gray-900 dark:text-gray-50">{p.title}</span>
+                            {i === 0 && <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">Deck anchor</span>}
+                            {p.grouped && <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">Grouped</span>}
+                            <span className="ml-auto text-[11.5px] font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{p.count} of {total}</span>
+                          </div>
+                          {sev ? (
+                            <>
+                              <div
+                                className="flex h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden"
+                                style={{ width: `${Math.min(100, Math.round((p.count / total) * 100))}%` }}
+                                data-testid={`pain-severity-bar-${i}`}
+                              >
+                                <div className="bg-red-500" style={{ width: `${(sev.need / Math.max(1, sev.mentions)) * 100}%` }} title="Need-to-have" />
+                                <div className="bg-gray-400 dark:bg-gray-500" style={{ width: `${(sev.nice / Math.max(1, sev.mentions)) * 100}%` }} title="Nice-to-have" />
+                                <div className="bg-gray-200 dark:bg-gray-700" style={{ width: `${(sev.unjudged / Math.max(1, sev.mentions)) * 100}%` }} title="Not judged" />
+                              </div>
+                              <div className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-1 tabular-nums" data-testid={`pain-severity-${i}`}>
+                                {sev.need} need · {sev.nice} nice · {sev.unjudged} not judged
+                              </div>
+                            </>
+                          ) : (
+                            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 mt-1.5 overflow-hidden">
+                              <div className={`h-full rounded-full ${i === 0 ? 'bg-violet-600' : 'bg-amber-400'}`} style={{ width: `${Math.min(100, Math.round((p.count / total) * 100))}%` }} />
+                            </div>
+                          )}
+                          <div className="mt-1.5">
+                            {failed.overrides ? (
+                              <span className="text-[10.5px]" data-testid={`deck-override-unreadable-${i}`}>
+                                <Unrecorded reason="The deck overrides could not be read, so the slide's current title is unknown.">Problem slide unknown</Unrecorded>
+                              </span>
+                            ) : onSlide ? (
+                              <span className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid={`pain-on-slide-${i}`}>✓ On Problem slide</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => sendToProblemSlide(p.title)}
+                                disabled={deckBusy != null}
+                                data-testid={`button-send-problem-${i}`}
+                                className="text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 disabled:opacity-40"
+                              >
+                                {deckBusy === p.title ? 'Sending…' : 'Send to Problem slide'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Inbound leads */}
+              <div className={CARD} data-testid="discovery-leads">
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+                  <div className={LBL}>Inbound leads · Brand &amp; Pages</div>
+                  <Link to="/spinout-lab/brand" className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap">Open landing pages →</Link>
+                </div>
+                <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-3.5">Customer-intent signups from your landing pages route here for interviews.</p>
+                {leadMsg && (
+                  <div data-testid="lead-action-message" className={`text-[11.5px] rounded-lg px-3 py-2 mb-3 ${leadMsg.kind === 'ok' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
+                    {leadMsg.text}
+                  </div>
+                )}
+                {failed.waitlist ? (
+                  <Unreadable what="Your inbound leads" claim="This is not a claim that nobody signed up." onRetry={retryProjectData} />
+                ) : signups.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">No inbound leads yet — publish a landing page with a waitlist to collect them.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {signups.map((s) => {
+                      const chip = CRM_CHIP[s.crm_status] || CRM_CHIP.new;
+                      const busy = busyLead === s.id;
+                      const converted = s.crm_status === 'promoted';
+                      return (
+                        <div key={s.id} data-testid={`lead-${s.id}`} className="border border-gray-100 dark:border-gray-800 rounded-xl p-3.5">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 flex-none rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[11px] font-bold flex items-center justify-center">
+                              {initialsOf(s.name || s.email)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[13px] font-bold text-gray-900 dark:text-gray-50">{s.name || s.email}</span>
+                                <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${chip.cls}`}>{chip.label}</span>
+                              </div>
+                              <div className="text-[11.5px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+                                {/* Attribution: which landing-page template this
+                                    lead signed up through (template label →
+                                    page name → raw source, in that order). */}
+                                {[s.email, leadTemplateLabel(s), timeAgo(s.created_at)].filter(Boolean).join(' · ')}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-2.5 flex-wrap">
+                            <button
+                              type="button"
+                              data-testid={`button-convert-${s.id}`}
+                              disabled={busy || converted}
+                              onClick={() => leadAction(s, 'promote')}
+                              className="h-7 px-3 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                            >
+                              {busy ? <Loader2 size={11} className="animate-spin" /> : null}
+                              {converted ? 'Converted' : 'Convert to interview'}
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`button-invite-${s.id}`}
+                              disabled={busy || converted}
+                              onClick={() => leadAction(s, 'invite')}
+                              className="h-7 px-3 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Invite
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`button-followup-${s.id}`}
+                              disabled={busy || converted}
+                              onClick={() => leadAction(s, 'follow-up')}
+                              className="h-7 px-3 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Follow-up
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Interview log */}
+              <div className={CARD} data-testid="discovery-log">
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3.5">
+                  <div className={LBL}>Interview log · {ivs.length} of &ge;{MIN_INTERVIEWS} done</div>
+                  <div className="flex gap-1">
+                    {[['all', 'All'], ['manual', 'Manual'], ['leads', 'Brand & Pages']].map(([v, label]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        data-testid={`filter-log-${v}`}
+                        onClick={() => setLogFilter(v)}
+                        className={`h-7 px-3 rounded-full text-[11px] font-semibold ${logFilter === v ? 'bg-violet-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {failed.interviews ? (
+                  <Unreadable what="Your interview log" claim="This is not a claim that you have logged none." onRetry={retryProjectData} />
+                ) : logRows.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">
+                    {ivs.length === 0 ? 'No interviews yet — log your first to start building evidence.' : 'No interviews match this filter.'}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[560px]">
+                      <thead>
+                        <tr className="text-left">
+                          {['Contact', 'ICP fit', 'Hypotheses', 'Top pain', 'Source', 'Recording', ''].map((h) => (
+                            <th key={h} className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 pb-2 pr-3">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logRows.map((iv) => {
+                          const v = iv._hyps.filter((h) => h.status === 'validated').length;
+                          return (
+                            <tr key={iv.id} data-testid={`interview-row-${iv.id}`} className="border-t border-gray-100 dark:border-gray-800">
+                              <td className="py-2.5 pr-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 flex-none rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center">
+                                    {initialsOf(iv.interviewee_name)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-50 truncate">{iv.interviewee_name}</div>
+                                    <div className="text-[10.5px] text-gray-400 dark:text-gray-500 truncate">
+                                      {(() => {
+                                        const rc = roleAndCompany(iv);
+                                        return [rc.role, rc.company, shortDate(iv.interview_date)].filter(Boolean).join(' · ');
+                                      })()}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2.5 pr-3">
+                                {icpLabel(iv.icp_fit) ? (
+                                  <span
+                                    data-testid={`icp-fit-${iv.id}`}
+                                    className={`text-[10.5px] font-bold rounded-full px-2 py-0.5 ${
+                                      iv.icp_fit === 'strong'
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                        : iv.icp_fit === 'partial'
+                                          ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                                    }`}
+                                  >
+                                    {icpLabel(iv.icp_fit)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-gray-300 dark:text-gray-600" title="Not yet assessed">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 pr-3">
+                                {iv._hyps.length > 0 ? (
+                                  <span className={`text-[11px] font-semibold ${v > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'}`}>{v} of {iv._hyps.length} validated</span>
+                                ) : <span className="text-[11px] text-gray-300 dark:text-gray-600">—</span>}
+                              </td>
+                              <td className="py-2.5 pr-3">
+                                {iv._pains[0] ? (
+                                  <span className="text-[10.5px] font-semibold rounded-md px-2 py-0.5 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-100 dark:border-violet-800">{iv._pains[0]}</span>
+                                ) : <span className="text-[11px] text-gray-300 dark:text-gray-600">—</span>}
+                              </td>
+                              <td className="py-2.5 pr-3 text-[11.5px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{isFromLeads(iv) ? 'Brand & Pages' : 'Manual'}</td>
+                              <td className="py-2.5 pr-3">
+                                <RecordingCell interview={iv} onChanged={retryProjectData} />
+                              </td>
+                              <td className="py-2.5 text-right">
+                                {(iv.notes || '').trim() && !isFromLeads(iv) ? (
+                                  <span title={iv.notes}><Quote size={13} className="text-violet-400 dark:text-violet-500 inline" /></span>
+                                ) : null}
+                                <span className="inline-flex items-center gap-1 ml-2 align-middle">
+                                  <button
+                                    type="button"
+                                    onClick={() => setLogModal({ interview: iv })}
+                                    data-testid={`button-edit-interview-${iv.id}`}
+                                    aria-label={`Edit interview with ${iv.interviewee_name}`}
+                                    className="text-gray-400 hover:text-violet-600 dark:hover:text-violet-300"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeInterview(iv)}
+                                    disabled={rowBusy === iv.id}
+                                    data-testid={`button-delete-interview-${iv.id}`}
+                                    aria-label={`Delete interview with ${iv.interviewee_name}`}
+                                    className="text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 disabled:opacity-40"
+                                  >
+                                    {rowBusy === iv.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                  </button>
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT column */}
+            <div className="flex flex-col gap-5 min-w-0">
+              {/* ICP fit summary */}
+              <div className={CARD} data-testid="discovery-icp-summary">
+                <div className="flex items-center justify-between mb-1">
+                  <div className={LBL}>ICP fit summary</div>
+                  {icpSummary.assessed > 0 && (
+                    <span className="text-[10.5px] font-bold text-gray-500 dark:text-gray-400" data-testid="text-icp-confidence">
+                      {icpSummary.confidence} confidence
+                    </span>
+                  )}
+                </div>
+                {failed.interviews ? (
+                  <Unreadable what="ICP fit" claim="It is read from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : icpSummary.assessed === 0 ? (
+                  <p className="text-[12.5px] text-gray-400 dark:text-gray-500 py-3 text-center" data-testid="icp-summary-empty">
+                    {ivs.length === 0
+                      ? 'Log an interview to start tracking ICP fit.'
+                      : `No ICP fit recorded yet on ${ivs.length} interview${ivs.length === 1 ? '' : 's'}. Edit one to set it.`}
+                  </p>
+                ) : (
+                  <>
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3">
+                      Across {icpSummary.assessed} assessed interview{icpSummary.assessed === 1 ? '' : 's'}
+                    </div>
+                    <div className="space-y-2.5">
+                      {icpSummary.bands.map((b) => (
+                        <div key={b.key} data-testid={`icp-band-${b.key}`}>
+                          <div className="flex justify-between text-[12px] mb-1">
+                            <span className="text-gray-600 dark:text-gray-300">{b.label}</span>
+                            <span className={`font-bold tabular-nums ${b.text}`}>{b.pct}% <span className="text-gray-400 dark:text-gray-500 font-semibold">({b.n})</span></span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                            <div className={`h-full rounded-full ${b.bar}`} style={{ width: `${b.pct}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {icpSummary.unassessed > 0 && (
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3" data-testid="text-icp-unassessed">
+                        {icpSummary.unassessed} interview{icpSummary.unassessed === 1 ? '' : 's'} not yet assessed — excluded from these percentages.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Hypothesis validation */}
+              <div className={CARD} data-testid="discovery-hypotheses">
+                <div className={`${LBL} mb-3.5`}>Hypothesis validation</div>
+                {failed.interviews ? (
+                  <Unreadable what="Hypotheses" claim="They are read from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : hypTotal === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-2 text-center">No hypotheses logged yet — attach them to interviews.</p>
+                ) : (
+                  <>
+                    <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 mb-3">
+                      <div className="bg-emerald-500" style={{ width: `${(hypValidated / hypTotal) * 100}%` }} />
+                      <div className="bg-amber-400" style={{ width: `${(hypInconclusive / hypTotal) * 100}%` }} />
+                      <div className="bg-red-400" style={{ width: `${(hypInvalidated / hypTotal) * 100}%` }} />
+                    </div>
+                    {[
+                      ['Validated', hypValidated, 'bg-emerald-500'],
+                      ['Inconclusive', hypInconclusive, 'bg-amber-400'],
+                      ['Invalidated', hypInvalidated, 'bg-red-400'],
+                    ].map(([label, n, dot]) => (
+                      <div key={label} className="flex items-center gap-2 py-1">
+                        <span className={`w-2 h-2 rounded-full ${dot}`} />
+                        <span className="text-[12px] text-gray-600 dark:text-gray-300 flex-1">{label}</span>
+                        <span className="text-[12px] font-bold text-gray-900 dark:text-gray-50">{hypTotal ? Math.round((n / hypTotal) * 100) : 0}%</span>
+                      </div>
+                    ))}
+                    {ivs.length >= MIN_INTERVIEWS && hypValidated > 0 && (
+                      <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 rounded-lg px-3 py-2 mt-2.5 text-[11.5px] text-emerald-800 dark:text-emerald-300">
+                        Confidence: building — {ivs.length} interviews logged with validated evidence.
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Working definition — derived */}
+              <div className={CARD} data-testid="discovery-icp">
+                <div className={`${LBL} mb-3.5`}>ICP · working definition</div>
+                {failed.interviews ? (
+                  <Unreadable what="The working definition" claim="It is derived from the interview log, which did not load." onRetry={retryProjectData} />
+                ) : ivs.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-2 text-center">Derived from your interview log once interviews are in.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Segment · most interviewed</div>
+                      <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-50 mt-0.5">
+                        {topRole ? `${topRole[0]} (${topRole[1]} of ${ivs.length})` : 'Roles not recorded yet'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Primary pain</div>
+                      <div className="text-[13px] font-semibold text-gray-900 dark:text-gray-50 mt-0.5">{topPain ? topPain.title : 'No pains logged yet'}</div>
+                    </div>
+                    <p className="text-[10.5px] text-gray-400 dark:text-gray-500">Derived live from your logged interviews — refine it by logging more.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* The stored ICP definition (D353, migration 308). This branch
+                  only renders with a project, so no guard is needed here. */}
+              <IcpDefinitionCard
+                project={project}
+                canEdit={user?.role !== 'investor'}
+                onSaved={(updated) => setProject((p) => ({ ...p, ...(updated || {}) }))}
+              />
+
+              {/* Recurring themes */}
+              <div className={CARD} data-testid="discovery-themes">
+                <div className={`${LBL} mb-3`}>Recurring themes</div>
+                {failed.pains ? (
+                  <Unreadable what="Recurring themes" claim="This is not a claim that no pain repeats." onRetry={retryProjectData} />
+                ) : painRows.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">Themes surface as pains repeat across interviews.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {painRows.slice(0, 6).map((p) => (
+                      <span key={p.title} className="text-[11px] font-semibold rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                        {p.title} <span className="text-gray-400 dark:text-gray-500">{p.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Data room */}
+              <div className={CARD} data-testid="discovery-dataroom">
+                <div className={`${LBL} mb-3`}>Data room · discovery evidence</div>
+                {failed.interviews || failed.waitlist || failed.pains ? (
+                  <Unreadable what="The evidence inventory" claim="One of its three reads failed, so no row is marked Ready or Pending." onRetry={retryProjectData} />
+                ) : (<>
+                {[
+                  { name: 'Interview notes', meta: `${notesCount} of ${ivs.length} interviews`, ok: ivs.length > 0 && notesCount === ivs.length },
+                  { name: 'Inbound lead evidence', meta: `${signups.length} submissions`, ok: signups.length > 0 },
+                  { name: 'Pain groups curated', meta: `${(painData?.groups || []).length} groups`, ok: (painData?.groups || []).length > 0 },
+                ].map((d) => (
+                  <div key={d.name} className="flex items-center gap-2.5 py-2 border-t border-gray-100 dark:border-gray-800 first:border-t-0">
+                    <FileText size={14} className={d.ok ? 'text-violet-600 dark:text-violet-400 flex-none' : 'text-gray-300 dark:text-gray-600 flex-none'} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-100">{d.name}</div>
+                      <div className="text-[10.5px] text-gray-400 dark:text-gray-500">{d.meta}</div>
+                    </div>
+                    <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${d.ok ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}`}>
+                      {d.ok ? 'Ready' : 'Pending'}
+                    </span>
+                  </div>
+                ))}
+                {ivs.length > 0 && notesCount < ivs.length && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-lg px-3 py-2 mt-2.5 text-[11px] text-amber-800 dark:text-amber-300" data-testid="dataroom-notes-warning">
+                    {ivs.length - notesCount} of {ivs.length} interviews have no attached notes. Add notes to strengthen the evidence.
+                  </div>
+                )}
+                </>)}
+              </div>
+
+              {/* What the canvas draws that no store holds (D351). Listed with
+                  the reason rather than drawn as controls that would discard
+                  what the founder typed. */}
+              <div className={CARD} data-testid="discovery-not-recorded">
+                <div className={`${LBL} mb-2.5`}>Not recorded yet</div>
+                <ul className="space-y-1.5 text-[11.5px] text-gray-600 dark:text-gray-300">
+                  {NOT_RECORDED_FIELDS.map((f) => (
+                    <li key={f.key} data-testid={`not-recorded-${f.key}`}>
+                      {f.label}: <Unrecorded reason={f.reason} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Deck readiness */}
+              <div className={CARD} data-testid="discovery-deck-readiness">
+                <div className={`${LBL} mb-3`}>
+                  Deck readiness{failed.interviews || failed.pains ? '' : ` · ${readyCount} of ${readiness.length}`}
+                </div>
+                {failed.interviews || failed.pains ? (
+                  <Unreadable what="Deck readiness" claim="It is checked against the interview log and pain groups, and one did not load." onRetry={retryProjectData} />
+                ) : (
+                <div className="flex flex-col gap-2">
+                  {readiness.map((r) => (
+                    <div key={r.label} className="flex items-center gap-2.5">
+                      {r.ok
+                        ? <span className="w-4 h-4 flex-none rounded-full bg-emerald-500 text-white flex items-center justify-center"><Check size={10} /></span>
+                        : <Circle size={15} className="text-gray-300 dark:text-gray-600 flex-none" />}
+                      <span className={`text-[12px] ${r.ok ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}`}>{r.label}</span>
+                    </div>
+                  ))}
+                </div>
+                )}
+                {deckUnlocked ? (
+                  <Link
+                    to="/raise/pitch"
+                    data-testid="link-open-deck"
+                    className="mt-3.5 h-9 w-full rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5"
+                  >
+                    Open Pitch Deck Builder <ArrowRight size={13} />
+                  </Link>
+                ) : (
+                  <span
+                    data-testid="deck-locked-note"
+                    aria-disabled="true"
+                    className="mt-3.5 h-9 w-full rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 text-xs font-semibold inline-flex items-center justify-center select-none"
+                  >
+                    Pitch deck unlocks in Week 2
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <LogInterviewModal
+        open={Boolean(logModal)}
+        interview={logModal?.interview || null}
+        onClose={() => setLogModal(null)}
+        onSave={saveInterview}
+        severityControls
+      />
+    </LabPageShell>
+  );
+}
