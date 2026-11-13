@@ -70,7 +70,6 @@ import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 import { syncedWithOf } from '../integrations/providers/github/lovableMark';
-import '../integrations/providers/facebook';
 import { markProviderKeyUsed } from '../services/providerOauthKeys';
 
 const integrations = new Hono<{ Bindings: Env }>();
