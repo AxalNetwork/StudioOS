@@ -87,7 +87,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
   return (
     <header className="flex flex-col gap-1.5" data-testid="cycle-header">
       {record && <Link to={backHref} className="w-fit text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="record-back">‹ {moduleName}</Link>}
-      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.key === 'grow' ? growArea(active || '')?.name || 'Overview' : meta.question}</span>
+      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.key === 'grow' ? growArea(active || '')?.name || title || 'Overview' : meta.question}</span>
       <div className={`flex flex-wrap justify-between gap-3 ${record ? 'items-start' : 'items-end'}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{displayTitle || meta.name}</h1>
@@ -100,7 +100,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {!record && action?.onClick
             ? <button type="button" className={btn} onClick={action.onClick} disabled={!!action.disabled} data-testid="cycle-action">{label}</button>
             : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
-          {meta.key === 'grow' && !record ? <Link className="inline-flex min-h-[44px] items-center rounded-[9px] border border-axal-hairline px-3 py-2 text-[12px] font-bold text-axal-violet-deep dark:border-gray-700 dark:text-violet-300" to={reportingHref(search)} aria-label="Reporting utility">Reporting</Link> : null}
+          {meta.key === 'grow' && !record ? <Link className="inline-flex min-h-[44px] items-center rounded-[9px] border border-axal-hairline px-3 py-2 text-[12px] font-bold text-axal-violet-deep dark:border-gray-700 dark:text-violet-300" to={reportingHref(search)} aria-label="Reporting utility" aria-current={active === 'reporting' ? 'page' : undefined}>Reporting</Link> : null}
           {more}
           {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
