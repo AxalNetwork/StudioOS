@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Search, SlidersHorizontal } from 'lucide-react';
 import { Card, Skeleton, Unrecorded } from '../../ui';
@@ -9,6 +9,9 @@ import {
   activeFilters, backingOf, citationOf, coverageRows, directoryLine, directoryTotalOf, formatCount, pageInfo, pageList,
   queryFromSearch, rangeLabel, recorded, searchFromQuery, sizeOf, toParams,
 } from './fundDirectoryRead';
+import { canAddToResearch } from './researchComparisons.js';
+
+const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
 
 /**
  * Research · Funds — the fund directory, to `design/incoming/Research · Funds.dc.html`
@@ -448,7 +451,7 @@ export function FundDirectoryView({
   query, onQuery, search, onSearch, result, facets, selected, onSelect, onClose, drawer = { loading: false, error: null, data: null },
   onAdd = null, busy = null, isAdded = () => false, dossierOf = () => null, listState = 'ok', notice = null, band = null,
   filtersOpen = false, onToggleFilters = () => {},
-  onRetry = () => {}, onClear = () => {},
+  onRetry = () => {}, onClear = () => {}, onResearch = null,
 }) {
   const { loading, error, data } = result;
   const active = activeFilters(query, facets);
@@ -533,6 +536,7 @@ export function FundDirectoryView({
                       <th scope="col" className={`${TH} text-right`}>Vintage</th>
                       <th scope="col" className={TH}>Stated focus</th>
                       <th scope="col" className={TH}>EIF / EIFO</th>
+                      {onResearch ? <th scope="col" className={TH}><span className="sr-only">Research</span></th> : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
@@ -553,6 +557,13 @@ export function FundDirectoryView({
                           <td className="px-3 py-2.5 text-right">{x.fund_year != null ? <span className="font-mono">{x.fund_year}</span> : <Unrecorded>Not recorded</Unrecorded>}</td>
                           <td className="px-3 py-2.5 text-axal-muted">{recorded(x.sector_focus) ? x.sector_focus : <Unrecorded>Not recorded</Unrecorded>}</td>
                           <td className="px-3 py-2.5"><Backing item={x} /></td>
+                          {/* D5157 part 3 (RS-05 A): the row's Add to my research, in the founder shell. */}
+                          {onResearch ? (
+                            <td className="px-3 py-2.5 text-right">
+                              <button type="button" onClick={(e) => onResearch(x, e.currentTarget)} data-testid={`button-fund-research-${x.uid}`}
+                                className="whitespace-nowrap rounded-lg px-2 py-1 text-[12px] font-semibold text-axal-violet underline hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/30">Add to my research</button>
+                            </td>
+                          ) : null}
                         </tr>
                       );
                     })}
@@ -593,8 +604,11 @@ const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9
  */
 export default function FundDirectory({
   researchedNames = new Set(), onAdd = null, busy = null, dossierOf = null, listState = 'ok', notice = null,
-  onTotal = null, band = null,
+  onTotal = null, band = null, role = null,
 }) {
+  // D5157 part 3: Add to my research opens one panel, returning focus to its row's button.
+  const [researching, setResearching] = useState(null);
+  const researchOpener = useRef(null);
   // D4612: the list on screen is the one the address names, and every change
   // is written back (replacing the entry, so Back leaves the directory rather
   // than stepping through each filter).
@@ -658,15 +672,23 @@ export default function FundDirectory({
   };
 
   return (
-    <FundDirectoryView
-      query={query} onQuery={change} search={search} onSearch={setSearch}
-      result={result} facets={facets} selected={selected} onSelect={pick}
-      onClose={() => { pickSeq.current += 1; setSelected(null); }} drawer={drawer}
-      onAdd={onAdd} busy={busy}
-      isAdded={(x) => researchedNames.has(normalize(x.name))}
-      dossierOf={dossierOf || (() => null)} listState={listState} notice={notice} band={band}
-      filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
-      onRetry={load} onClear={clear}
-    />
+    <>
+      <FundDirectoryView
+        query={query} onQuery={change} search={search} onSearch={setSearch}
+        result={result} facets={facets} selected={selected} onSelect={pick}
+        onClose={() => { pickSeq.current += 1; setSelected(null); }} drawer={drawer}
+        onAdd={onAdd} busy={busy}
+        isAdded={(x) => researchedNames.has(normalize(x.name))}
+        dossierOf={dossierOf || (() => null)} listState={listState} notice={notice} band={band}
+        filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((o) => !o)}
+        onRetry={load} onClear={clear}
+        onResearch={canAddToResearch(role) ? (x, el) => { researchOpener.current = el; setResearching({ uid: x.uid, name: x.name }); } : null}
+      />
+      {researching ? (
+        <Suspense fallback={null}>
+          <AddToResearch kind="fund" items={[researching]} mode="add" returnFocusTo={researchOpener} onClose={() => setResearching(null)} />
+        </Suspense>
+      ) : null}
+    </>
   );
 }

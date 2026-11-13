@@ -67,7 +67,7 @@ test('evidence rows keep index state and answerability apart and name where each
   const progress = progressFractions(READ);
   assert.deepEqual(progress.answerable, { n: 1, of: 2 });
   assert.equal(progress.keyQuestions.state, 'not_recorded');
-  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence', 'findings']);
+  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence', 'findings', 'comparisons']);
 });
 
 test('the form: question required, title optional on create, empty text clears on edit', () => {

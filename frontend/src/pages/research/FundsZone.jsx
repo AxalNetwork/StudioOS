@@ -590,7 +590,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
       <div role="tabpanel" id="funds-panel-directory" aria-labelledby="funds-tab-directory" hidden={tab !== 'directory'}>
         <FundDirectory researchedNames={researchedNames} onAdd={addDirectoryFund} busy={directoryBusy}
           dossierOf={dossierOf} listState={listState} notice={directoryNote} onTotal={setDirectoryTotal}
-          band={directorySeen ? <MoneyBand /> : null} />
+          band={directorySeen ? <MoneyBand /> : null} role={role} />
       </div>
     </div>
   );

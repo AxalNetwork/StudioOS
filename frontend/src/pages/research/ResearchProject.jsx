@@ -14,9 +14,12 @@
  * `ProjectFindings.jsx`) and the Overview's Most recent findings, both from
  * one read of the findings store.
  *
- * WHAT IS NOT, and says so: Comparisons and the Brief have no store yet, so
- * their tabs are not links. Key questions are not stored, so no "2 of 5" is
- * drawn.
+ * Part 3 (D5157-p3): the Comparisons tab (`/research/projects/:uid/comparisons`,
+ * `ProjectComparisons.jsx`): the project's companies and funds and its
+ * comparisons, and the bar's Compare, which opens it.
+ *
+ * WHAT IS NOT, and says so: the Brief has no store yet, so its tab is not a
+ * link. Key questions are not stored, so no "2 of 5" is drawn.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -32,6 +35,9 @@ import { useProjectRead } from './MyResearch.jsx';
 import { ProjectFindings, RecentFindingsCard } from './ProjectFindings.jsx';
 import { researchProjectFindingsApi } from '../../lib/api/researchProjectFindings.js';
 import { findingsBadge } from './researchFindings.js';
+import { ProjectComparisons } from './ProjectComparisons.jsx';
+import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
+import { comparisonsBadge } from './researchComparisons.js';
 import {
   LIMITS, NOT_STORED, PROJECT_TABS, archiveScope, draftBody, draftErrors, evidenceRows, progressFractions, statusOf,
 } from './researchProjects.js';
@@ -43,12 +49,12 @@ const H2 = 'text-[14px] font-extrabold text-axal-ink dark:text-white';
 const MUTED = 'text-[12.5px] text-axal-muted dark:text-gray-400';
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
-function Tabs({ uid, current, evidenceCount, findingsCount }) {
+function Tabs({ uid, current, evidenceCount, findingsCount, comparisonsCount }) {
   return (
     <nav aria-label="Project" className="flex flex-wrap gap-1 border-b border-axal-hairline dark:border-gray-800" data-testid="project-tabs">
       {PROJECT_TABS.map((t) => {
         const base = 'inline-flex min-h-[44px] items-center gap-1.5 px-3 text-[13px] font-bold sm:min-h-[36px]';
-        const count = t.slug === 'evidence' ? evidenceCount : t.slug === 'findings' ? findingsCount : null;
+        const count = t.slug === 'evidence' ? evidenceCount : t.slug === 'findings' ? findingsCount : t.slug === 'comparisons' ? comparisonsCount : null;
         const badge = count != null ? <span className="rounded-full bg-axal-ground px-1.5 text-[11px] dark:bg-gray-800" data-testid={`project-tab-count-${t.slug}`}>{count}</span> : null;
         if (!t.built) {
           return <span key={t.slug} aria-disabled="true" title={NOT_STORED.tab} className={`${base} cursor-not-allowed text-axal-faint dark:text-gray-600`} data-testid={`project-tab-${t.slug}`}>{t.label}</span>;
@@ -343,6 +349,8 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   const [read, retry] = useProjectRead(() => researchProjectsApi.read(uid), `${uid}:${version}`);
   // Part 2: the findings are read once for the tab, its badge and the Overview card.
   const [findings, retryFindings] = useProjectRead(() => researchProjectFindingsApi.list(uid), `${uid}:${version}`);
+  // Part 3: the comparisons are read once for the tab and its badge.
+  const [compared, retryCompared] = useProjectRead(() => researchProjectComparisonsApi.list(uid), `${uid}:${version}`);
   const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get('add') === '1');
   const [archiving, setArchiving] = useState(false);
   const [restoreFailure, setRestoreFailure] = useState(null);
@@ -388,16 +396,21 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
                 <span>Saved {shortDate(item.updated_at)}</span>
                 <span>{(data.evidence || []).length} {(data.evidence || []).length === 1 ? 'source' : 'sources'}</span>
               </div>
-              {archived
-                ? <button type="button" className={SECONDARY} onClick={restore} data-testid="button-restore-project">Restore</button>
-                : <button type="button" ref={opener} className={SECONDARY} onClick={() => setArchiving(true)} data-testid="button-archive-project">Archive</button>}
+              <div className="flex flex-wrap gap-2">
+                {/* RS-02's bar: Compare opens the Comparisons tab, where a comparison is made. */}
+                {tab !== 'comparisons' ? <Link className={SECONDARY} to={`/research/projects/${encodeURIComponent(item.uid)}/comparisons`} data-testid="button-project-compare">Compare</Link> : null}
+                {archived
+                  ? <button type="button" className={SECONDARY} onClick={restore} data-testid="button-restore-project">Restore</button>
+                  : <button type="button" ref={opener} className={SECONDARY} onClick={() => setArchiving(true)} data-testid="button-archive-project">Archive</button>}
+              </div>
             </div>
             {archived ? <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-muted dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300" data-testid="project-archived-note">Archived {shortDate(item.archived_at)}. This project is read-only until you restore it.</p> : null}
             {restoreFailure ? <p role="alert" className="text-[12.5px] font-semibold text-red-700 dark:text-red-300">{restoreFailure}</p> : null}
-            <Tabs uid={item.uid} current={tab} evidenceCount={(data.evidence || []).length} findingsCount={findingsBadge(findings)} />
+            <Tabs uid={item.uid} current={tab} evidenceCount={(data.evidence || []).length} findingsCount={findingsBadge(findings)} comparisonsCount={comparisonsBadge(compared)} />
             {tab === 'evidence' ? <Evidence data={data} archived={archived} adding={adding} setAdding={setAdding} onChanged={reload} /> : null}
             {tab === 'findings' ? <ProjectFindings projectUid={item.uid} read={findings} retry={retryFindings} archived={archived} onChanged={reload} /> : null}
-            {tab !== 'evidence' && tab !== 'findings' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
+            {tab === 'comparisons' ? <ProjectComparisons projectUid={item.uid} read={compared} retry={retryCompared} archived={archived} onChanged={reload} /> : null}
+            {tab !== 'evidence' && tab !== 'findings' && tab !== 'comparisons' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
             {archiving ? <ArchiveDialog data={data} onClose={() => setArchiving(false)} onArchived={() => navigate('/research/projects')} /> : null}
           </>
         ) : null}
