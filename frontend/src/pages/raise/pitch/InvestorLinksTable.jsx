@@ -3,6 +3,8 @@ import { Lightbox } from '../../../ui';
 import * as v2 from './deckV2Adapter.js';
 import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
+import { deckRecordingsApi } from '../../../lib/api/deckRecordings.js';
+import { recordHref, walkthroughCell, walkthroughOf } from './walkthroughModel.js';
 import ViewerAnalyticsSheet from './ViewerAnalyticsSheet.jsx';
 import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './slideAnalyticsModel.js';
 
@@ -13,8 +15,14 @@ import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './
  *
  * Columns: Investor · Version (frozen, or the variant) · NDA · Expiry · View cap
  * · Time per slide · Analytics, with pd35's signal TAG ("Revisited after 48 h", D1568).
- * Walkthrough (#3837) is not read here, so it is not drawn. Withdraw asks first
- * ("Withdraw this link? Analytics so far are kept."), and a withdrawn row keeps its views.
+ * Withdraw asks first ("Withdraw this link? Analytics so far are kept."), and a
+ * withdrawn row keeps its views.
+ *
+ * D4599 part 2 (#4599, D1590 F11): pd35's Walkthrough column, from
+ * `deckV2Adapter.walkthrough`: "Attached · 3 slides" with Remove, Attach on a
+ * live link once a card is recorded, or "Record ›" (Present › Record). With
+ * HQ's `deck:walkthrough` off the column is not drawn; a failed read says
+ * "Could not be read" with Try again, never "Record ›".
  *
  * D1573 (#3820): the row's "Time per slide" switch (the link's consent,
  * `PUT …/investor-links/:shareId/time-per-slide`, written when it is pressed),
@@ -77,6 +85,33 @@ export const CHANGES_UNREAD = (deck) => `Changes since v${deck?.version ?? '?'} 
 export const signalTag = (signals) => (Array.isArray(signals) && signals.some((x) => x?.kind === 'revisit') ? 'Revisited after 48 h' : null);
 export const viewsWords = (a) => `${a?.views ?? 0} ${a?.views === 1 ? 'view' : 'views'}${a?.last_viewed_at ? ` · last ${day(a.last_viewed_at)}` : ''}`;
 
+export const WALKTHROUGH = 'Walkthrough';
+export const WALKTHROUGH_UNREAD = 'Could not be read';
+export const WALKTHROUGH_FAILED = 'The walkthrough could not be changed. Try again.';
+
+/** pd35's Walkthrough cell: reading, could not be read (Try again), or `walkthroughCell`'s answer. */
+function WalkthroughCell({ walk, read, row, href, busy, onAttach, onRetry }) {
+  if (!walk) return <span className={MUTED}>Reading…</span>;
+  if (!read) {
+    return (
+      <span className="flex flex-col items-start gap-1">
+        <span className={MUTED}>{WALKTHROUGH_UNREAD}</span>
+        <button type="button" className={GHOST} onClick={onRetry} data-testid={`investor-link-walkthrough-retry-${row.id}`}>Try again</button>
+      </span>
+    );
+  }
+  const cell = walkthroughCell(read, row);
+  if (cell.kind === 'record') return <a href={href} className="font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid={`investor-link-record-${row.id}`}>{cell.line}</a>;
+  if (cell.kind === 'none') return <span className={MUTED}>{cell.line}</span>;
+  return (
+    <span className="flex flex-col items-start gap-1">
+      {cell.kind === 'attached' ? <span className="text-axal-ink dark:text-gray-100">{cell.line}</span> : null}
+      <button type="button" className={GHOST} disabled={busy} onClick={() => onAttach(cell.kind !== 'attached')}
+        data-testid={`investor-link-${cell.kind === 'attached' ? 'detach' : 'attach'}-${row.id}`}>{cell.kind === 'attached' ? 'Remove' : cell.line}</button>
+    </span>
+  );
+}
+
 export default function InvestorLinksTable({ deck, projectId = null, refreshKey = 0 }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -86,6 +121,16 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
   const [sheet, setSheet] = useState(null);
   const [switching, setSwitching] = useState(null);
   const [switchFailed, setSwitchFailed] = useState(null);
+  // D4599 part 2: the walkthrough read, the link being attached or removed, and a refusal.
+  const [walk, setWalk] = useState(null);
+  const [attaching, setAttaching] = useState(null);
+  const [attachFailed, setAttachFailed] = useState(null);
+  const loadWalk = useCallback(() => {
+    if (!deck?.id) return;
+    setWalk(null);
+    v2.walkthrough(deck.id).then(setWalk);
+  }, [deck?.id]);
+  useEffect(() => { loadWalk(); }, [loadWalk, refreshKey]);
   useEffect(() => {
     if (!deck?.id) return undefined;
     let live = true;
@@ -119,6 +164,19 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
     } catch { setSwitchFailed(r.id); } finally { setSwitching(null); }
   };
 
+  const attach = async (r, on) => {
+    setAttaching(r.id); setAttachFailed(null);
+    try {
+      const res = await deckRecordingsApi.attach(deck.id, r.id, on);
+      setWalk((w) => (w?.available ? { ...w, value: { ...w.value, links: Array.isArray(res?.links) ? res.links : w.value?.links } } : w));
+    } catch (e) {
+      setAttachFailed({ id: r.id, message: (Number(e?.status) === 409 && typeof e?.message === 'string' && e.message) || WALKTHROUGH_FAILED });
+    } finally { setAttaching(null); }
+  };
+  // Drawn while it is read, when it is on, and when it could not be read; not drawn while HQ has it off.
+  const walkColumn = !walk || walk.available || walk.unreadable === true;
+  const walkRead = walk?.available ? walkthroughOf(walk.value) : null;
+
   if (!deck?.id) return null;
   if (!block) return <p className={`m-0 ${MUTED}`} data-testid="investor-links-reading">Reading the links…</p>;
   if (!block.available) {
@@ -137,7 +195,7 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12px]">
             <thead>
-              <tr className={EYE}>{['Investor', 'Version (frozen)', 'NDA', 'Expiry', 'View cap', TIME_PER_SLIDE, 'Analytics', ''].map((h) => <th key={h || 'actions'} scope="col" className="py-1 pr-2 font-semibold">{h || <span className="sr-only">Actions</span>}</th>)}</tr>
+              <tr className={EYE}>{['Investor', 'Version (frozen)', 'NDA', 'Expiry', 'View cap', TIME_PER_SLIDE, ...(walkColumn ? [WALKTHROUGH] : []), 'Analytics', ''].map((h) => <th key={h || 'actions'} scope="col" className="py-1 pr-2 font-semibold">{h || <span className="sr-only">Actions</span>}</th>)}</tr>
             </thead>
             <tbody>
               {rows.map((r) => (
@@ -160,6 +218,13 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
                     {r.time_per_slide === false ? <span className={`block ${MUTED}`}>{OFF_KEEPS}</span> : null}
                     {switchFailed === r.id ? <span role="alert" className="block text-[11.5px] text-axal-destructive dark:text-red-300">{SWITCH_FAILED}</span> : null}
                   </td>
+                  {walkColumn ? (
+                    <td className="py-1.5 pr-2" data-testid={`investor-link-walkthrough-${r.id}`}>
+                      <WalkthroughCell walk={walk} read={walkRead} row={r} href={recordHref(projectId, deck.id)} busy={attaching === r.id}
+                        onAttach={(on) => attach(r, on)} onRetry={loadWalk} />
+                      {attachFailed?.id === r.id ? <span role="alert" className="block text-[11.5px] text-axal-destructive dark:text-red-300">{attachFailed.message}</span> : null}
+                    </td>
+                  ) : null}
                   <td className="py-1.5 pr-2">
                     <button type="button" className="text-left text-axal-ink underline decoration-dotted underline-offset-2 hover:text-axal-violet dark:text-gray-100"
                       onClick={() => setSheet(r)} data-testid={`investor-link-analytics-${r.id}`}>{analyticsCellWords(r)}</button>
