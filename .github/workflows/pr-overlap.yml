@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
+      checks: read
       contents: read
       issues: write
       pull-requests: write
@@ -30,4 +32,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: node scripts/pr-overlap.mjs
+        # D5580: the dated advisory baseline snapshot; uploaded below, never committed.
+        run: |
+          stamp="$(date -u +%Y%m%dT%H%MZ)"
+          echo "PR_OVERLAP_STAMP=$stamp" >> "$GITHUB_ENV"
+          node scripts/pr-overlap.mjs "--snapshot=$RUNNER_TEMP/pr-overlap/pr-overlap-$stamp.json"
+      - name: Upload the advisory baseline snapshot
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-overlap-snapshot-${{ env.PR_OVERLAP_STAMP }}
+          path: ${{ runner.temp }}/pr-overlap/
+          retention-days: 30
+          if-no-files-found: warn

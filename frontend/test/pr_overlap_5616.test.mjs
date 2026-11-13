@@ -80,8 +80,9 @@ test('caps produce partial summaries and rate-limit headers stop further request
 test('workflow has exact read/comment permissions, pinned actions, and safe triggers',()=>{
   const source=readFileSync('.github/workflows/pr-overlap.yml','utf8');
   assert.match(source,/^permissions: \{\}$/m);
-  const permissions=[...source.matchAll(/^      (contents|issues|pull-requests): (\w+)$/gm)].map(m=>m.slice(1));
-  assert.deepEqual(permissions,[['contents','read'],['issues','write'],['pull-requests','write']]);
+  const permissions=[...source.matchAll(/^      ([a-z-]+): (\w+)$/gm)].map(m=>m.slice(1));
+  // D5580 adds read-only actions and checks for the queue-delay and required-check evidence.
+  assert.deepEqual(permissions,[['actions','read'],['checks','read'],['contents','read'],['issues','write'],['pull-requests','write']]);
   assert.doesNotMatch(source,/workflow_run|pull_request_target/);
   assert.match(source,/filter: blob:none/);assert.match(source,/if: github.ref == 'refs\/heads\/main'/);
   for(const match of source.matchAll(/uses: (\S+)/g))assert.match(match[1],/@[a-f0-9]{40}$/);
