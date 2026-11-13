@@ -167,13 +167,13 @@ jobs:
 
       - name: Run the D722 spec against the preview
         working-directory: frontend
-        run: npx --no-install playwright test tests/e2e/google_popup_signin.spec.js
+        run: npx --no-install playwright test tests/e2e/google_popup_signin.spec.js --retries=0
 
       # D753 (#1992): the Connectors hub, its filter menu, one connector's page
       # and the 390px check. Every /api/* call is stubbed in the spec.
       - name: Run the D753 Connectors spec against the preview
         working-directory: frontend
-        run: npx --no-install playwright test tests/e2e/integrations.spec.js
+        run: npx --no-install playwright test tests/e2e/integrations.spec.js --retries=0
 
   delete:
     name: delete the preview Worker
