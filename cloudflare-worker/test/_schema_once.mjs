@@ -132,6 +132,30 @@ export function copySchemaTo(dest, opts = {}) {
   return dest;
 }
 
+const openCopies = new Set();
+let exitCleanupInstalled = false;
+
+/** D5503: open a private file copy; closing the handle also removes its copy. */
+export function openSchema(opts = {}, databaseOptions = SCHEMA_OPTIONS) {
+  const source = schemaPath(opts);
+  const dir = mkdtempSync(join(opts.cacheDir ?? CACHE, 'copy-'));
+  try {
+    const file = join(dir, 'fixture.sqlite');
+    copyFileSync(source, file);
+    const db = new DatabaseSync(file, databaseOptions);
+    const close = db.close.bind(db);
+    db.close = () => { openCopies.delete(db); try { close(); } finally { rmSync(dir, { recursive: true, force: true }); } };
+    openCopies.add(db);
+    // Older memory-only fixtures did not close their handles. Retain explicit
+    // close ownership, with a process-exit fallback for those migrated callers.
+    if (!exitCleanupInstalled) {
+      exitCleanupInstalled = true;
+      process.once('exit', () => { for (const copy of openCopies) { try { copy.close(); } catch { /* best-effort process teardown */ } } });
+    }
+    return db;
+  } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error; }
+}
+
 const q = (name) => `"${String(name).replace(/"/g, '""')}"`;
 
 /**

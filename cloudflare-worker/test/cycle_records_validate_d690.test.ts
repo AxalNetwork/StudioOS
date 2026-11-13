@@ -1,8 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -12,43 +9,15 @@ import { ownedRow } from '../src/services/records/owned.ts';
 import type { RecordContent, RecordRegistry } from '../src/services/records/types.ts';
 import { RECORD_SPECS } from '../src/services/records/index.ts';
 import { MODULES, QUOTE_WITHHELD } from '../src/services/cycleValidate.ts';
-import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
+import { openSchema } from './_schema_once.mjs';
 
-const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
 const KEY = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
 const P = 1, OTHER_P = 2;
 const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring', 70: 'advisor' };
 
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'activity_logs', 'pain_groups', 'hypotheses', 'mvp_features', 'roadmap_okrs',
-    'discovery_interviews', 'hypothesis_pain_links', 'competitor_analyses', 'competitor_candidates', 'competitor_signals',
-    'waitlist_signups', 'metric_targets', 'interview_pain_severities', 'pain_group_aliases', 'competitor_sources',
-    'validate_proposals']) {
-    db.exec(tableFromBaseline(BASE, t));
-  }
-  db.exec(migration('311_revenue_entries.sql'));
-  db.exec(migration('440_validate_cycle_stores.sql'));
-  db.exec(migration('438_interview_sessions.sql'));
-  applySessionTranslationColumns(db); // D857: migration 527's segment columns
-  db.exec(migration('447_assistant_interviews.sql'));
-  db.exec(migration('453_interview_processing.sql'));
-  db.exec(migration('531_meeting_bots.sql'));
-  db.exec(migration('459_cycle_activity_convention.sql'));
-  // D690 (#1692): Validate's record stores, and what the interview record reads.
-  db.exec(migration('460_validate_record_stores.sql'));
-  db.exec(migration('755_posthog_metrics.sql')); // D4585: Add evidence offers valued PostHog metrics
-  db.exec(migration('439_validate_proposals_structuring.sql'));
-  db.exec(migration('446_interview_structure_receipts.sql'));
-  // D757 (#1925): "What it fed" reads a proposal's interview (246's
-  // `target_ref`), and the ICP, Market and Demand records read the findings store.
-  db.exec(migration('246_fills_the_blanks_everywhere.sql'));
-  db.exec(migration('489_interview_findings.sql'));
-  db.exec(migration('228_research_company_directory.sql'));
-  db.exec(migration('249_project_metrics.sql'));
+  const db = openSchema(); // D5503: current-schema isolated cached file copy.
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
     [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {

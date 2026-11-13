@@ -6,7 +6,6 @@
  * real routes over `_posthog_mcp_fake.mjs`. Every value is invented.
  */
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { createPosthogCycleRouter, createPosthogRouter } from '../src/routes/posthog.ts';
@@ -14,23 +13,15 @@ import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { INSIGHT_A, PROJECT_A, POSTHOG_MCP_URL, posthogFake } from './_posthog_mcp_fake.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
-import { loadSchema } from './_schema_once.mjs';
+import { openSchema } from './_schema_once.mjs';
 
 export const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
 export const FOUNDER = 10, COFOUNDER = 11, OTHER = 20, ADMIN = 30;
 export const P = 1, P_OTHER = 2, COMPANY = 77, PH = 40;
 export const TODAY = Date.parse('2026-10-31T12:00:00Z');
 
-const BUILT_DDL = (() => {
-  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  loadSchema(db);
-  return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
-    ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
-})();
-
 export async function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const s of BUILT_DDL) { try { db.exec(s); } catch { /* a view or trigger naming an object replayed later */ } }
+  const db = openSchema(); // D5503: current-schema isolated cached file copy.
   const add = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   add.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   add.run(COFOUNDER, 'founder', 'Cy Cofounder', 'cy@example.test', 1003);

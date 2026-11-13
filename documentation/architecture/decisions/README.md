@@ -111,3 +111,4 @@ and citations by number keep working.
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
 | `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
 | `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |
+| `D5503.md` | Current-schema licence/proposal/demand-signal fixture adoption with isolated cached handles. |
