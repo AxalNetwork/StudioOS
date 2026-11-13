@@ -122,7 +122,7 @@ import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileK
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
 import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
-import { hasActivePairNda, hasActiveVentureNda } from '../services/dealAccess';
+import { hasActiveVentureNda } from '../services/dealAccess';
 import { roomCan, roomCapabilities } from '../services/dataRoomCapabilities';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -213,19 +213,6 @@ export async function activeGrant(env: Env, projectId: number, userId: number): 
         AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(projectId, userId).first<GrantRow>();
   return row || null;
-}
-
-/**
- * Whether the NDA between the granting founder and this investor is live.
- *
- * Migration 025 fixes party_a as the founder and party_b as the investor, and
- * the seeder enforces it so the UNIQUE constraint works — so this is a direct
- * two-column lookup rather than an OR over both orderings. Checking both ways
- * round would quietly accept a row the rest of the system considers malformed.
- */
-export async function ndaActive(env: Env, founderUserId: number, investorUserId: number): Promise<boolean> {
-  // D4631 part 2: the shared NDA rule (services/dealAccess.ts), for this one pair.
-  return hasActivePairNda(env, founderUserId, investorUserId);
 }
 
 /**
@@ -1878,7 +1865,7 @@ r.post('/:projectUid/grants/:uid/nda', async (c) => {
     const existing = await c.env.DB.prepare(
       `SELECT status, valid_until FROM pairwise_ndas WHERE party_a_user_id = ? AND party_b_user_id = ?`,
     ).bind(founder.id, investorId).first<{ status: string; valid_until: string | null }>();
-    if (await projectNdaActive(c.env, project.id, investorId) || await ndaActive(c.env, founder.id, investorId)) {
+    if (await projectNdaActive(c.env, project.id, investorId)) {
       return c.json({ detail: 'An NDA with this investor is already in force. Nothing was sent.', code: 'nda_active' }, 409);
     }
     if (existing?.status === 'pending') {

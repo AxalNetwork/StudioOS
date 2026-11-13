@@ -16,7 +16,7 @@ import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { describe } from '../../scripts/d1-backup-manifest.mjs';
-import { keypair, fakeAws } from './_dr_fakes.mjs';
+import { bsdShellTools, keypair, fakeAws } from './_dr_fakes.mjs';
 
 const COPY = resolve(process.cwd(), 'scripts/dr-second-copy.sh');
 const DRILL = resolve(process.cwd(), 'scripts/dr-drill.sh');
@@ -39,6 +39,7 @@ function manifest(sql, { ageHours = 2 } = {}) {
 function world() {
   const dir = mkdtempSync(join(tmpdir(), 'd4558c-'));
   fakeAws(dir);
+  bsdShellTools(dir);
   writeFileSync(join(dir, 'calls.log'), '');
   const { id, recipient } = keypair(dir);
   const sqlPath = join(dir, 'backup.sql');

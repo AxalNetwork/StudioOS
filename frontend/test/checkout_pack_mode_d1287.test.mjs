@@ -76,7 +76,10 @@ test('each pack rule code maps to its sentence; the Worker’s own sentence wins
   assert.equal(packRule({}), null);
 });
 
-test('landing: Accepted only on credited; waiting is landing; overdue after an hour, with no retry', () => {
+test('landing: Accepted only on credited; waiting is landing; overdue after an hour, with no retry', (t) => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'Europe/Zurich';
+  t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   // Mutation checked: treat waiting as credited → "Tokens added." before the webhook; drop the hour → overdue never comes.
   assert.equal(landingView(order('credited').order, NOW).key, 'credited');
   assert.equal(landingView(order('credited').order, NOW).title, 'Tokens added.');

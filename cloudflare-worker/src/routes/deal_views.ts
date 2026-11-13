@@ -7,7 +7,7 @@ import { requireAuth, selectJwt } from '../auth';
 import { requireInvestorTier } from '../middleware/requireInvestorTier';
 import { resolveActiveCompany } from '../middleware/activeCompany';
 import { primaryCover } from './investor_seats';
-import { userReadableDealIds } from './deals';
+import { readableWorkspaceDealIds } from '../services/dealAccess';
 import { computeThesisFit, readFitGeographies, readThesis, type FitGeography } from '../services/thesisFit';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -304,7 +304,7 @@ r.get('/fit', async c => {
   }
   try {
     const wanted = [...new Set(ids.map(Number))];
-    const readable = await userReadableDealIds(c.env, user, wanted);
+    const readable = await readableWorkspaceDealIds(c.env, user, wanted);
     const unavailable = (id: number) => ({ deal_id: id, state: 'unavailable', label: 'Deal unavailable', score: null, confidence: null });
     if (!readable.size) return c.json({ items: wanted.map(unavailable) });
     const thesis = await readThesis(c.env, user.id);

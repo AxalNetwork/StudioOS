@@ -1,5 +1,7 @@
 export interface Env {
   TIKTOK_APP_APPROVED?: string;
+  FACEBOOK_APP_APPROVED?: string;
+  FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
   TIKTOK_CLIENT_SECRET?: string;
   // D666 (#1496): the StudioOS MCP server and its OAuth provider. Off unless

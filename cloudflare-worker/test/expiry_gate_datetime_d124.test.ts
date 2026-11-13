@@ -162,12 +162,12 @@ test('a data-room grant that expired today no longer lists files', () => onOneUt
 }));
 
 test('an NDA whose term ended today stops reading as active', () => onOneUtcDay((expired) => {
-  // D4631 part 2: the data room's pair check is the shared NDA rule in services/dealAccess.ts, which also needs
+  // The shared founder NDA rule in services/dealAccess.ts needs
   // party A to be an active account, so the parties are real users here.
   const d = db('pairwise_ndas', 'users');
-  for (const id of [1, 2, 3]) d.prepare(`INSERT INTO users (id, email, name, is_active) VALUES (?, ?, ?, 1)`).run(id, `p${id}@example.test`, `Party ${id}`);
+  for (const id of [1, 2, 3]) d.prepare(`INSERT INTO users (id, email, name, is_active, founder_id) VALUES (?, ?, ?, 1, ?)`).run(id, `p${id}@example.test`, `Party ${id}`, id);
   const sql = sqlAround(src('services/dealAccess.ts'),
-    'SELECT 1 AS ok FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id\n      WHERE n.party_a_user_id', 'dealAccess.ts');
+    'SELECT 1 AS ok FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id\n      WHERE owner.founder_id', 'dealAccess.ts');
   const ins = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
@@ -239,8 +239,6 @@ test('no access-control gate compares a bare timestamp column', () => {
   // D891 adds research's current room-grant expiry check to #2461's
   // project-founder NDA gates. D1102 adds the active/expired grant summary,
   // and D1104 the founder's NDA route's live-grant check in data_room.ts:
-  // eighteen normalised comparisons, all required. D4631 part 2 moves data_room.ts's two NDA reads into
-  // services/dealAccess.ts's shared rule, keyed three ways (founder id, project id, one pair): nineteen.
-  // D4672 adds research.ts's open proof-consent request (`datetime(k.expires_at) > datetime('now')`): twenty.
-  assert.equal(wrapped, 20, `expected 20 normalised comparisons across the gated files, found ${wrapped}`);
+  // D4631 keeps the two shared NDA reads by founder and project. D4672 adds the open proof-consent request.
+  assert.equal(wrapped, 19, `expected 19 normalised comparisons across the gated files, found ${wrapped}`);
 });

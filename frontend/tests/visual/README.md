@@ -52,6 +52,7 @@ and StudioHome at `/raise/pitch`).
 | `security.a11y.spec.mjs` | D4803 (#4803, #4800 §7): HQ › Security's seven workspaces at 1440, 768 and 390, light and dark — zero serious or critical axe violations, no page wider than its viewport; the workspace keys, the phone select and findings at 44 px, the revoke sheet's focus on a phone, and Eadwyn's security prompts; no screenshots |
 | `_security_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as a Super Admin: a failed restore drill, administrators without MFA, sessions, a deletion request near its date, ledger rows, a Trust Center draft, the backup heartbeats; made-up names |
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
+| `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 
 ### Run it
 

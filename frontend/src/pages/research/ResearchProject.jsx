@@ -18,8 +18,8 @@
  * `ProjectComparisons.jsx`): the project's companies and funds and its
  * comparisons, and the bar's Compare, which opens it.
  *
- * WHAT IS NOT, and says so: the Brief has no store yet, so its tab is not a
- * link. Key questions are not stored, so no "2 of 5" is drawn.
+ * Part 4 (D5157-p4): the Brief tab reads and saves the member's eight sections.
+ * Key questions are not stored, so no "2 of 5" is drawn.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -36,6 +36,8 @@ import { ProjectFindings, RecentFindingsCard } from './ProjectFindings.jsx';
 import { researchProjectFindingsApi } from '../../lib/api/researchProjectFindings.js';
 import { findingsBadge } from './researchFindings.js';
 import { ProjectComparisons } from './ProjectComparisons.jsx';
+import ProjectBrief from './ProjectBrief.jsx';
+import { researchProjectBriefsApi } from '../../lib/api/researchProjectBriefs.js';
 import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
 import { comparisonsBadge } from './researchComparisons.js';
 import {
@@ -351,6 +353,7 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   const [findings, retryFindings] = useProjectRead(() => researchProjectFindingsApi.list(uid), `${uid}:${version}`);
   // Part 3: the comparisons are read once for the tab and its badge.
   const [compared, retryCompared] = useProjectRead(() => researchProjectComparisonsApi.list(uid), `${uid}:${version}`);
+  const [brief, retryBrief] = useProjectRead(() => researchProjectBriefsApi.read(uid), `${uid}:${version}`);
   const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get('add') === '1');
   const [archiving, setArchiving] = useState(false);
   const [restoreFailure, setRestoreFailure] = useState(null);
@@ -410,7 +413,8 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
             {tab === 'evidence' ? <Evidence data={data} archived={archived} adding={adding} setAdding={setAdding} onChanged={reload} /> : null}
             {tab === 'findings' ? <ProjectFindings projectUid={item.uid} read={findings} retry={retryFindings} archived={archived} onChanged={reload} /> : null}
             {tab === 'comparisons' ? <ProjectComparisons projectUid={item.uid} read={compared} retry={retryCompared} archived={archived} onChanged={reload} /> : null}
-            {tab !== 'evidence' && tab !== 'findings' && tab !== 'comparisons' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
+            {tab === 'brief' ? <ProjectBrief uid={item.uid} read={brief} retry={retryBrief} archived={archived} /> : null}
+            {tab === 'overview' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
             {archiving ? <ArchiveDialog data={data} onClose={() => setArchiving(false)} onArchived={() => navigate('/research/projects')} /> : null}
           </>
         ) : null}
