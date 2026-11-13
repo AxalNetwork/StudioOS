@@ -89,7 +89,7 @@ function visibleFundsScope(user: any, opts: { includeLp: boolean }): { sql: stri
  */
 async function manageScope(c: any, user: any): Promise<{ sql: string; binds: Array<string | number> }> {
   // D4636 part 2: the scope lives beside `requireFundGp`, so `lp_reports` reads the same one.
-  return fundManageScope(c, user, 'f');
+  return fundManageScope(c, user);
 }
 
 /**

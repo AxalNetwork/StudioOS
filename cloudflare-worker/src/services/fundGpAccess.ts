@@ -98,7 +98,7 @@ export async function requireFundGp(
 
 /**
  * The funds `requireFundGp` would let this caller operate, as a SQL clause on
- * `vc_funds <alias>` — the operating gate's own scope, for reads that list
+ * `vc_funds f` — the operating gate's own scope, for reads that list
  * (D371's `can_manage`, D4636). An admin: every fund. Anyone else: nothing
  * below the institutional tier, else the funds they are GP of record for under
  * their verified active company. Evaluated per request from the stored rows,
@@ -107,13 +107,13 @@ export async function requireFundGp(
 export async function fundManageScope(
   c: Context<{ Bindings: Env }>,
   user: any,
-  alias = 'f',
 ): Promise<{ sql: string; binds: Array<string | number> }> {
-  if (user?.role === 'admin') return fundGpScope(user, null, alias);
+  // The alias is a literal: lp_membership_consolidated's guard requires every scope call site to pass one.
+  if (user?.role === 'admin') return fundGpScope(user, null, 'f');
   if (!userMeetsInvestorTier(user as any, 'institutional')) return NO_ROWS;
   const companyId = await activeCompany(c, user);
   if (companyId !== null) await ensureFundGpColumns(c.env);
-  return fundGpScope(user as any, companyId, alias);
+  return fundGpScope(user as any, companyId, 'f');
 }
 
 /**

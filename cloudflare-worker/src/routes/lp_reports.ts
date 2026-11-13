@@ -79,7 +79,7 @@ async function visibleFundIds(env: Env, user: User): Promise<number[] | 'all'> {
  * under another active company) reads it as an LP or not at all.
  */
 async function managedFundIds(c: any, user: User): Promise<number[]> {
-  const scope = await fundManageScope(c, user, 'f');
+  const scope = await fundManageScope(c, user);
   const rows = await c.env.DB.prepare(`SELECT f.id FROM vc_funds f WHERE ${scope.sql}`)
     .bind(...scope.binds).all();
   return ((rows.results || []) as Array<{ id: number }>).map((row) => Number(row.id));
