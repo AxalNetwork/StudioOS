@@ -132,25 +132,46 @@ export function judge(expect: CaseExpect, output: string, input: CaseInput | nul
 /** The run, behind a seam the tests replace; production is `aiRouter.run`. */
 export const EVAL_DEPS: { run: (env: Env, opts: RunOptions) => Promise<RunResult> } = { run: aiRun };
 
-/** One case on one model, through `run()`, charged to the admin who pressed Re-run (HQ). */
-export async function runCase(env: Env, p: DraftParts, input: CaseInput, expect: CaseExpect, model: string, adminId: number):
-  Promise<{ result: 'pass' | 'fail' | 'not_run'; detail: string | null; usage_log_id: number | null }> {
+/** The most a case run may write, in tokens. */
+export const CASE_MAX_TOKENS = 900;
+
+/** What a case run sends: the skill as its system prompt and the case's made-up records. */
+export function casePrompt(p: DraftParts, input: CaseInput, expect: CaseExpect): { system: string; user: string } {
   const system = [
     `You are running the skill "${p.name}": ${p.purpose}`,
     `Propose ${expect.output === 'record_change' ? 'a record change' : `a ${expect.output}`}; a named person decides. Never invent a figure: say "Not recorded" for anything the records do not hold.`,
     'Steps:', ...p.steps.map((s, i) => `${i + 1}. ${s}`),
   ].join('\n');
+  return { system, user: `Records (made up, for a golden case):\n${JSON.stringify(input.records, null, 2)}` };
+}
+
+/**
+ * One case on one model, through `run()`: the output, or why there is none. The output is the
+ * caller's to judge and drop; nothing here stores it. D4531 part 5's rubric passes its own surface,
+ * so its spend is read apart from the evaluation's.
+ */
+export async function caseOutput(env: Env, p: DraftParts, input: CaseInput, expect: CaseExpect, model: string, adminId: number, surface = '/hq/ai-agents'):
+  Promise<{ ok: true; output: string; usage_log_id: number | null } | { ok: false; detail: string; usage_log_id: number | null }> {
+  const { system, user } = casePrompt(p, input, expect);
   let r: RunResult;
   try {
     r = await EVAL_DEPS.run(env, {
-      task: 'module_chat', model, pinned: true, userId: adminId, surface: '/hq/ai-agents', systemPrompt: system, maxTokens: 900, temperature: 0,
-      messages: [{ role: 'user', content: `Records (made up, for a golden case):\n${JSON.stringify(input.records, null, 2)}` }],
+      task: 'module_chat', model, pinned: true, userId: adminId, surface, systemPrompt: system, maxTokens: CASE_MAX_TOKENS, temperature: 0,
+      messages: [{ role: 'user', content: user }],
     });
   } catch {
-    return { result: 'not_run', detail: 'The run failed before the model answered.', usage_log_id: null };
+    return { ok: false, detail: 'The run failed before the model answered.', usage_log_id: null };
   }
-  if (!r.ok || typeof r.output !== 'string') return { result: 'not_run', detail: r.refusal ? `The run was refused: ${r.refusal}.` : 'The model gave no answer.', usage_log_id: r.usageLogId ?? null };
-  return { ...judge(expect, r.output, input), usage_log_id: r.usageLogId ?? null };
+  if (!r.ok || typeof r.output !== 'string') return { ok: false, detail: r.refusal ? `The run was refused: ${r.refusal}.` : 'The model gave no answer.', usage_log_id: r.usageLogId ?? null };
+  return { ok: true, output: r.output, usage_log_id: r.usageLogId ?? null };
+}
+
+/** One case on one model, through `run()`, charged to the admin who pressed Re-run (HQ). */
+export async function runCase(env: Env, p: DraftParts, input: CaseInput, expect: CaseExpect, model: string, adminId: number):
+  Promise<{ result: 'pass' | 'fail' | 'not_run'; detail: string | null; usage_log_id: number | null }> {
+  const r = await caseOutput(env, p, input, expect, model, adminId);
+  if (!r.ok) return { result: 'not_run', detail: r.detail, usage_log_id: r.usage_log_id };
+  return { ...judge(expect, r.output, input), usage_log_id: r.usage_log_id };
 }
 
 // ── Release evidence (D4533) ────────────────────────────────────────────────

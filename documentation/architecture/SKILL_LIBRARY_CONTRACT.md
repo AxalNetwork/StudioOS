@@ -262,7 +262,13 @@ proposal under the names above (`evidence`, `refusal`, `structure`, `claims`,
 provenance fields, `evaluation_type`, adversarial
 scenario metadata and the named judge rubric. Case-level identity is
 implemented differently, by D5336 (`case_id` + `revision`, above). The shapes
-below are the old proposal and are not accepted as written.
+below are the old proposal and are not accepted as written. The judge rubric is
+built beside the cases rather than inside `expect` (D4531 part 5,
+`services/agents/skillRubric.ts`): a pinned judge model scores a synthetic
+golden case's output from 1 to 5, each result keeps the score, the rubric
+version and the judge model but never the output, and no rubric result counts
+toward the 9-of-10 publish bar until HQ's calibration labels agree and the
+owner turns it on.
 
 ```json
 {
