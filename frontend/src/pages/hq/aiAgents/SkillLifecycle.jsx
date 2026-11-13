@@ -5,7 +5,7 @@ import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { REASON_MAX, REASON_MIN, bulkLine, skillRefusal } from './refusals.js';
 import {
   CASES_MAX, OUTPUT_KINDS, RELEASE_NOTE_MAX, actionsFor, blankCase, caseToForm, casesPayload, diffChoices, diffRows, evalLine, isAskedReviewer,
-  publishState, reasonFits, releaseNotePayload, releaseNoteText,
+  publishState, reasonFits, releaseNotePayload, releaseNoteText, reusedLine,
 } from './skillLifecycleModel.js';
 
 /**
@@ -229,6 +229,7 @@ function PublishPanel({ data, reload }) {
   const [problem, setProblem] = useState('');
   const write = useWrite();
   const state = publishState(data.freshness);
+  const reused = reusedLine(data.freshness);
   const next = (Number(data.skill.version) || 0) + 1;
   const go = async () => {
     const p = releaseNotePayload(note);
@@ -240,6 +241,7 @@ function PublishPanel({ data, reload }) {
     <Card className="space-y-2 px-4 py-4" data-testid="skill-publish">
       <h3 className={H3}>Publish</h3>
       <p className={MUTED} data-testid="skill-publish-state">{state.ready ? `The draft can be published as v${next}.` : state.why ?? 'The server decides whether this draft can be published.'}</p>
+      {reused ? <p className={MUTED} data-testid="skill-publish-reused">{reused}</p> : null}
       <label className={LABEL}>Release note · optional
         <textarea value={note} onChange={(e) => { setNote(e.target.value); setProblem(''); }} rows={3} maxLength={RELEASE_NOTE_MAX} className={FIELD} data-testid="skill-release-note" />
         <span className={MUTED}>What changed in v{next} and why, up to {RELEASE_NOTE_MAX} characters. It is kept with the version and cannot be edited after publishing.</span>

@@ -113,3 +113,29 @@ test('an unknown score is Unscored, never 0; a score with no deal links to no pr
 test('an administrator’s preview still withholds the module', () => {
   assert.equal(tilesFor({ previewing: true }).scored_opportunities.state, 'withheld');
 });
+
+// D4623 part 2: the quick stats' "Avg AI match" averages the same historical rows, so it is labelled the same way.
+test('part 2: the quick stats’ Avg AI match is marked Historical; a missing average is Not recorded, never 0', async () => {
+  const { StatGroup } = await import('../src/pages/investor/investorStudioParts.jsx');
+  const draw = (dashboard, extra = {}) => renderedText(html(React.createElement(StatGroup, {
+    group: quickStats({ dashboard, lifecycle, dealCount: 3, ...extra }).dealFlow, what: 'x', claim: 'y', onRetry: () => {},
+  })));
+  const scored = draw({ quick_stats: { ai_score_avg: 75 }, source_status: { scoresMine: 'ready' } });
+  assert.match(scored, /Avg AI match\s*Historical · 75/);
+  // The deal-flow total is not a historical figure, and is not marked.
+  assert.match(scored, /Deals in flow\s*3/);
+  assert.doesNotMatch(scored, /Deals in flow\s*Historical/);
+  const markup = html(React.createElement(StatGroup, { group: quickStats({ dashboard: { quick_stats: { ai_score_avg: 75 } }, lifecycle, dealCount: 3 }).dealFlow, what: 'x', claim: 'y' }));
+  assert.match(markup, /data-testid="text-investor-stat-avg-ai-match-historical"/);
+  // None recorded: Not recorded with its reason, no Historical figure and no 0.
+  const none = draw({ quick_stats: { ai_score_avg: null } });
+  assert.match(none, /Avg AI match\s*Not recorded/);
+  assert.doesNotMatch(none, /Avg AI match\s*Historical|Avg AI match\s*0\b/);
+  const reason = quickStats({ dashboard: { quick_stats: {} }, lifecycle, dealCount: 3 }).dealFlow.rows.find(([label]) => label === 'Avg AI match')[2];
+  assert.match(reason, /historical match score/i);
+  assert.doesNotMatch(reason, /\byet\b/, 'nothing calculates a new score, so none is promised');
+  // A read that failed says so, and is not marked historical either.
+  const failed = draw({ quick_stats: { ai_score_avg: null }, source_status: { scoresMine: 'unreadable' } });
+  assert.match(failed, /Avg AI match\s*Could not be read/);
+  assert.doesNotMatch(failed, /Historical/);
+});

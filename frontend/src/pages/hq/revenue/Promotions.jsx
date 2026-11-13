@@ -266,7 +266,7 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
       )}
 
       {ready && (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className={TABLE}>
             <caption className="sr-only">Promotion ceilings for {periodLabel(period)}</caption>
             <thead>

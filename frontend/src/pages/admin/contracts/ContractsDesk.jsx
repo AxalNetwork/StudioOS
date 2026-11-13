@@ -27,7 +27,10 @@ import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
-const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention', 'open'];
+// D5051: the D5050 licence-agreement filters are kept in the address too, so a licence's "Open in Contracts"
+// link lands on its agreements, and a filter chosen in the list survives the URL round trip.
+const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention', 'open',
+  'agreement_type', 'agreement_status', 'licence', 'program', 'package'];
 /**
  * `section="governance"` (D4563, #4563) draws Corporate Governance, the tab at its own
  * address `/admin/contracts/governance` (tabs are paths), after Templates. HQ only.

@@ -107,7 +107,7 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
       )}
 
       {rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className={TABLE}>
             <caption className="sr-only">Billing exceptions: open disputes and refunds HQ issued in the last 30 days</caption>
             <thead>
@@ -143,7 +143,7 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
       )}
       {refundsReady && open && rows.length === 0 && (
         <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-exceptions-empty">
-          No refund was issued through HQ in the last {refunds.window_days} days and no dispute is open in Stripe.
+          No billing exceptions
         </p>
       )}
       <p className="mt-2 text-[12.5px] text-axal-muted dark:text-gray-400">

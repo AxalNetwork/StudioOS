@@ -45,6 +45,7 @@ and StudioHome at `/raise/pitch`).
 | `approvals.a11y.spec.mjs` | D4814 (#4814, part 7): Approvals (Inbox, an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px phone targets, the lane chart inside its box; part 8: the boards' selection bar and ⋯, and a last row's ⋯ clickable; no screenshots |
 | `_approvals.mjs` | The reads Approvals makes, answered for that spec: the glance, inbox, item, weekly, Decided and the boards, as the Worker answers them; made-up names |
 | `pitch_draft_recovery_5349.spec.mjs` | D5349: draft autosave, reload, offline recovery, stale revisions and storage refusal in Chromium at 1440 and 390 px, using a synthetic Worker-backed deck |
+| `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 
 ### Run it
 

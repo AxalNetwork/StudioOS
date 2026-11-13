@@ -206,8 +206,8 @@ export const createSkill = (kind, id, body) => (kind === 'company'
   : Promise.resolve(notCompany()));
 /** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
 export const updateSkill = (uid, patch) => throughSkill(() => teamAgentsApi.updateSkill(uid, toWorkerSkill(patch)));
-/** `POST /api/teams/skills/:uid/publish` → `{ skill }` (no body: the Worker publishes the draft). */
-export const publishSkill = (uid) => throughSkill(() => teamAgentsApi.publishSkill(uid));
+/** `POST /api/teams/skills/:uid/publish` → `{ skill }`: the Worker publishes the draft, with its optional release note (D4533 B1). */
+export const publishSkill = (uid, { releaseNote = null } = {}) => throughSkill(() => teamAgentsApi.publishSkill(uid, { releaseNote }));
 /** `POST /api/teams/skills { scope: 'company', company, skill_md }` → 201 `{ skill }`, always a draft. There is no import route. */
 export const importSkill = (kind, id, markdown) => (kind === 'company'
   ? throughSkill(() => teamAgentsApi.createSkill({ scope: 'company', company: id, skill_md: markdown }))

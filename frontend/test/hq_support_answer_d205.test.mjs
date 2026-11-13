@@ -12,7 +12,7 @@
  *  - the two outcomes HQ records, and never the branch's `withdrawn`;
  *  - a reason is required before anything is sent;
  *  - a failure with no status is "not known", never "nothing was changed";
- *  - the result is two facts, recorded and delivered, with no retry button;
+ *  - the result is two facts, recorded and delivered, with a manual retry for unsuccessful or unknown delivery;
  *  - HQ Home's answer link lands on a page that can answer.
  */
 import test from 'node:test';
@@ -196,7 +196,7 @@ test('a decision that did not reach the branch says so, and Send again is beside
     onResend: () => {},
   });
   const t = renderedText(html);
-  assert.match(t, /Recorded at HQ at 10:15 UTC as answered\./);
+  assert.match(t, /Recorded at HQ at 2026-09-23 10:15 UTC as answered\./);
   assert.match(t, /Not on fr: No branch Worker is bound for fr/);
   assert.match(t, /Nothing sends it again on its own\./);
   assert.match(html, /<button[^>]*>Send again<\/button>/);
@@ -206,7 +206,7 @@ test('a decision that did not reach the branch says so, and Send again is beside
 
 test('a delivered decision says the branch received it; an unreported one says so', () => {
   const got = renderedText(render(RecordedOutcome, { rec: { ...REC, pushed: { ok: true } } }));
-  assert.match(got, /Recorded at HQ at 10:15 UTC as answered\./);
+  assert.match(got, /Recorded at HQ at 2026-09-23 10:15 UTC as answered\./);
   assert.match(got, /fr received it\./);
 
   // No `pushed`, and a `pushed` with no boolean `ok`, are both "not reported" —
@@ -223,22 +223,41 @@ test('a delivered decision says the branch received it; an unreported one says s
   assert.match(declined, /Recorded at HQ as declined\./, 'a time it could not read was printed anyway');
 });
 
-test('the session record takes the server’s answer over the item it answered', () => {
-  const r = recordOf(ITEM, 'declined', { branch_code: 'fr', subject: 'Four more seats', status: 'declined', answered_at: REC.answered_at, pushed: { ok: true } });
-  assert.deepEqual(r, { uid: 'esc_1', branch_code: 'fr', subject: 'Four more seats', status: 'declined', answered_at: REC.answered_at, pushed: { ok: true } });
+test('legacy branch decisions can be retried and HQ-tier decisions have no branch retry', () => {
+  const legacy = render(RecordedOutcome, { rec: { ...REC, pushed: { ok: null } }, onResend: noop });
+  assert.match(legacy, /data-delivery="unreported"/);
+  assert.match(legacy, /data-testid="hq-support-resend"/);
+  const hq = render(RecordedOutcome, { rec: { ...REC, branch_code: 'hq' }, onResend: noop });
+  assert.match(renderedText(hq), /HQ request · branch delivery does not apply/);
+  assert.doesNotMatch(hq, /data-testid="hq-support-resend"|received it|Not on hq/);
+});
+
+test('the immediate decision result takes the server’s answer over the item it answered', () => {
+  const r = recordOf(ITEM, 'declined', { branch_code: 'fr', subject: 'Four more seats', status: 'declined', answer: 'No seats remaining.', answered_by_name: 'HQ admin', answered_at: REC.answered_at, pushed: { ok: true } });
+  assert.deepEqual(r, { uid: 'esc_1', branch_code: 'fr', subject: 'Four more seats', status: 'declined', answer: 'No seats remaining.', answered_by_name: 'HQ admin', answered_at: REC.answered_at, pushed: { ok: true } });
   const bare = recordOf(ITEM, 'answered', null);
   assert.equal(bare.status, 'answered');
   assert.equal(bare.answered_at, null);
   assert.equal(bare.pushed, undefined);
 });
 
-test('the session list says it is only for this session, and why', () => {
-  assert.equal(render(RecordedList, { recorded: [] }), '', 'an empty session draws an empty card');
-  const t = renderedText(render(RecordedList, { recorded: [{ ...REC, pushed: { ok: true } }] }));
-  assert.match(t, /Recorded this session/);
-  assert.match(t, /Shown until you leave this page/);
-  assert.match(t, /whether the last push reached the branch is stored on that row/);
-  assert.match(t, /Send again sends that stored decision, not a new one/);
+test('the Queue shows recent decisions from HQ, with who decided, when and why', () => {
+  const history = { available: true, items: [] };
+  assert.equal(render(RecordedList, { recorded: [], history }), '');
+  const t = renderedText(render(RecordedList, { recorded: [{
+    ...REC, answer: 'Four seats approved.', answered_by_name: 'Alex',
+    pushed: { ok: true, push_at: '2026-09-24T10:15:00.000Z' },
+  }], history }));
+  assert.match(t, /Recent decisions/);
+  assert.match(t, /Recorded at HQ at 2026-09-23 10:15 UTC as answered. Decided by Alex/);
+  assert.match(t, /Four seats approved/);
+  const zoned = renderedText(render(RecordedOutcome, { rec: {
+    ...REC, answered_at: '2026-09-23T23:30:00-02:00', pushed: { ok: false, push_at: '2026-09-24 01:35:00' },
+  } }));
+  assert.match(zoned, /Recorded at HQ at 2026-09-24 01:30 UTC/);
+  assert.match(zoned, /Last attempt at 2026-09-24 01:35 UTC/);
+  assert.match(t, /Last attempt at 2026-09-24 10:15 UTC/);
+  assert.match(renderedText(render(RecordedList, { recorded: [], history: { available: false, reason: 'HQ timed out.' } })), /Recent decisions could not be read. HQ timed out/);
 });
 
 // ───────────────────────────────────────────────────────── the queue rows ──
@@ -276,21 +295,19 @@ test('without `decide` the rows stay plain text, as the queue draws on its own',
 
 // ──────────────────────────────────────────────────────────────── the page ──
 
-test('the page wires the panel, keeps the session list, and reloads quietly after a decision', () => {
+test('the page wires the panel, shows recent decisions, and reloads quietly after a decision', () => {
   // D5034 (#5034) — the escalations are Support v2's banded rows, and each row's Review opens the same panel.
   assert.match(CODE, /<EscalationQueue[\s\S]*?decide=\{decide\}/, 'the escalation rows are drawn without their panels');
-  assert.ok(CODE.includes('<RecordedList'), 'the session list is not drawn');
+  assert.ok(CODE.includes('<RecordedList'), 'recent decisions are not drawn');
   assert.match(CODE, /<RecordedList\s+recorded=\{recorded\}\s+onResend=\{/);
   const at = CODE.indexOf('const onRecorded = useCallback(');
   assert.ok(at > 0);
-  const fn = CODE.slice(at, CODE.indexOf('}, [fetchSupport]);', at));
+  const fn = CODE.slice(at, CODE.indexOf('}, [fetchSupport, updateDecision]);', at));
   // D5034 part 2 — the sheet stays open on its outcome (recorded, then
   // delivered or not), so recording does not close it; closing is the
   // operator's, and focus then moves to the next row.
   assert.ok(!fn.includes('setOpen(null)'), 'the sheet closes before its outcome is shown');
   assert.ok(fn.includes('fetchSupport(false)'), 'the refresh after a decision blanks the page');
-  const close = CODE.slice(CODE.indexOf('const closeSheet = useCallback('), CODE.indexOf('}, [open]);'));
-  assert.ok(close.includes('if (decided && open?.next) setFocusAfter(open.next);'), 'after a decision, focus does not move to the next row');
   assert.ok(!fn.includes('load()'), 'the refresh after a decision blanks the page');
   // D5031 (#5031) — two reads now, HQ's own desk and the branch hosts; each
   // blanks only on a retry, never after a decision.
