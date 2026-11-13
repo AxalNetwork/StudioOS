@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { getCurrentUser, requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { AdvisorValidationError, PROFILE_LIMITS, boundedList, boundedText, hourlyRate } from '../services/advisorLimits';
+import { advisorDto, loadAdvisorById, profileWriteFields } from '../services/advisorProfile';
 import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
@@ -94,40 +94,6 @@ type SlotRow = {
 };
 
 /**
- * The 202 profile fields, kept separate from `advisorDto` on purpose.
- *
- * `stages` and `languages` return NULL — not `[]` — when the advisor has never
- * answered. The two are different facts and the product renders them
- * differently: an unanswered question shows "Not recorded", an answered one
- * that happens to be empty shows an empty list. `expertise` and `sectors`
- * above collapse both to `[]` because their columns default to '[]' and
- * predate that distinction; the new fields do not repeat it.
- */
-function advisorProfileDto(m: AdvisorRow): any {
-  return {
-    headline: m.headline ?? null,
-    stages: m.stages_json == null ? null : jload(m.stages_json, [] as string[]),
-    languages: m.languages_json == null ? null : jload(m.languages_json, [] as string[]),
-    country: m.country ?? null,
-    timezone: m.timezone ?? null,
-    availability_note: m.availability_note ?? null,
-    headshot_url: m.headshot_url ?? null,
-  };
-}
-
-function advisorDto(m: AdvisorRow): any {
-  return {
-    id: m.id, uid: m.uid, user_id: m.user_id,
-    display_name: m.display_name, email: m.email, bio: m.bio,
-    expertise: jload(m.expertise_json, [] as string[]),
-    sectors: jload(m.sectors_json, [] as string[]),
-    linkedin_url: m.linkedin_url, hourly_rate_usd: m.hourly_rate_usd,
-    is_active: !!m.is_active,
-    created_at: m.created_at, updated_at: m.updated_at,
-    ...advisorProfileDto(m),
-  };
-}
-/**
  * #4715 — an advisor as the directory and the match list show them to another
  * member. The account's email is the advisor's own; the public profile
  * (`GET /:uid`) never carried it either. `id` and `user_id` stay: the pages key
@@ -173,10 +139,6 @@ export function offerSnapshot(t: {
 async function loadAdvisorByUid(env: Env, uid: string): Promise<AdvisorRow | null> {
   return env.DB.prepare('SELECT * FROM advisors WHERE uid = ?').bind(uid).first<AdvisorRow>();
 }
-async function loadAdvisorById(env: Env, id: number): Promise<AdvisorRow | null> {
-  return env.DB.prepare('SELECT * FROM advisors WHERE id = ?').bind(id).first<AdvisorRow>();
-}
-
 async function takenForSlot(env: Env, slotId: number): Promise<number> {
   const r = await env.DB.prepare(
     `SELECT COUNT(*) as c FROM advisor_bookings
@@ -242,60 +204,6 @@ advisors.get('/me', async (c) => {
     return c.json(advisorDto(m));
   } catch (e) { return mapError(c, e); }
 });
-
-/**
- * Resolve the 202 profile fields for a write, MERGING rather than replacing.
- *
- * This is the one thing that must not be got wrong. Core profile fields and the expanded fields both preserve omissions.
- * Explicit null still clears nullable text and rates. The seven below are written by different surfaces at
- * different times — `/office-hours`'s ProfileCard sends `headline` and
- * `timezone` and knows nothing about stages or languages — so replacing the
- * whole set on every POST would mean each surface silently blanked the fields
- * the other owns. A key that is absent from the body keeps whatever is stored.
- *
- * An EXPLICIT null still clears: `{"headshot_url": null}` removes the photo.
- * That is the difference between "I did not mention this" and "I am removing
- * this", and only checking key presence can tell them apart.
- */
-function mergeProfileFields(existing: AdvisorRow | null, body: any) {
-  const text = (key: string, max: number): string | null => {
-    if (!(key in body)) return (existing?.[key as keyof AdvisorRow] as string | null) ?? null;
-    const v = body[key];
-    if (v == null) return null;
-    return boundedText(key, v, max);
-  };
-  const list = (key: string, col: keyof AdvisorRow): string | null => {
-    if (!(key in body)) return (existing?.[col] as string | null) ?? null;
-    const v = body[key];
-    // Null clears the answer entirely; an empty array is a recorded empty
-    // answer. Storing '[]' for both would lose which one the advisor meant.
-    if (v == null) return null;
-    return JSON.stringify(boundedList(key, v));
-  };
-  return {
-    headline: text('headline', PROFILE_LIMITS.headline),
-    stages_json: list('stages', 'stages_json'),
-    languages_json: list('languages', 'languages_json'),
-    country: text('country', PROFILE_LIMITS.country),
-    timezone: text('timezone', PROFILE_LIMITS.timezone),
-    availability_note: text('availability_note', PROFILE_LIMITS.availability_note),
-    headshot_url: text('headshot_url', PROFILE_LIMITS.headshot_url),
-  };
-}
-
-function profileWriteFields(existing: AdvisorRow | null, body: Record<string, any>, fallbackName: string) {
-  const has = (key: string) => Object.hasOwn(body, key);
-  const display_name = has('display_name') || !existing
-    ? boundedText('display_name', body.display_name || fallbackName, PROFILE_LIMITS.display_name)
-    : existing.display_name;
-  if (!display_name) throw new AdvisorValidationError('display_name_required', 'A profile needs a display name.');
-  const bio = has('bio') ? boundedText('bio', body.bio, PROFILE_LIMITS.bio) : (existing?.bio ?? null);
-  const linkedin_url = has('linkedin_url') ? boundedText('linkedin_url', body.linkedin_url, PROFILE_LIMITS.linkedin_url) : (existing?.linkedin_url ?? null);
-  const hourly_rate_usd = has('hourly_rate_usd') ? hourlyRate(body.hourly_rate_usd) : (existing?.hourly_rate_usd ?? null);
-  const expertise_json = has('expertise') ? JSON.stringify(boundedList('expertise', body.expertise)) : (existing?.expertise_json ?? '[]');
-  const sectors_json = has('sectors') ? JSON.stringify(boundedList('sectors', body.sectors)) : (existing?.sectors_json ?? '[]');
-  return { display_name, bio, linkedin_url, hourly_rate_usd, expertise_json, sectors_json, ...mergeProfileFields(existing, body) };
-}
 
 /**
  * D4670 (#4670): only an Advisor (a primary or an additional licence, D4472)
@@ -382,96 +290,6 @@ advisors.post('/me', async (c) => {
     const fresh = await loadAdvisorById(c.env, newId);
     return c.json(advisorDto(fresh!));
   } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
-});
-
-type ProfileDraftRow = { revision: string; base_revision: string; fields_json: string; updated_at: string };
-
-function loadProfileDraft(env: Env, advisorId: number) {
-  return env.DB.prepare('SELECT revision, base_revision, fields_json, updated_at FROM advisor_profile_drafts WHERE advisor_id = ?')
-    .bind(advisorId).first<ProfileDraftRow>();
-}
-
-function profileDraftDto(row: ProfileDraftRow, published: AdvisorRow) {
-  const { fields_json, ...metadata } = row;
-  return { ...metadata, stale: row.base_revision !== published.updated_at,
-    profile: advisorDto({ ...published, ...JSON.parse(fields_json) }) };
-}
-
-const DRAFT_CHANGED = { code: 'profile_draft_conflict', message: 'The profile or draft changed. Reopen the draft before continuing.' } as const;
-const DRAFT_STALE = { code: 'profile_draft_stale', message: 'The published profile changed after this draft was saved. Discard the draft to start from the current profile.' } as const;
-
-advisors.get('/me/profile-draft', async (c) => {
-  try {
-    const advisor = await requireMyAdvisor(c, await requireAuth(c));
-    const row = await loadProfileDraft(c.env, advisor.id);
-    return c.json({ draft: row ? profileDraftDto(row, advisor) : null });
-  } catch (e) { return mapError(c, e); }
-});
-
-advisors.patch('/me/profile-draft', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const advisor = await requireMyAdvisor(c, user);
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return refuse(c, 400, { code: 'profile_draft_required', message: 'Send the profile fields you want to save.' });
-    }
-    const current = await loadProfileDraft(c.env, advisor.id);
-    const expected = sentRevision(body);
-    if ((current?.revision ?? null) !== expected) return refuse(c, 409, DRAFT_CHANGED);
-    if (current && current.base_revision !== advisor.updated_at) return refuse(c, 409, DRAFT_STALE);
-    const source = current ? { ...advisor, ...JSON.parse(current.fields_json) } : advisor;
-    const fields = profileWriteFields(source, body, user.name || user.email);
-    const draft = { revision: newUid(), base_revision: advisor.updated_at,
-      fields_json: JSON.stringify(fields), updated_at: nowIso() };
-    const saved = await c.env.DB.prepare(
-      `INSERT INTO advisor_profile_drafts (advisor_id, revision, base_revision, fields_json, updated_at)
-       SELECT id, ?, updated_at, ?, ? FROM advisors
-        WHERE id = ? AND user_id = ? AND updated_at IS ?
-          AND (? IS NULL OR EXISTS (
-            SELECT 1 FROM advisor_profile_drafts d WHERE d.advisor_id = advisors.id AND d.revision = ?
-          ))
-       ON CONFLICT(advisor_id) DO UPDATE SET revision = excluded.revision, fields_json = excluded.fields_json,
-         updated_at = excluded.updated_at WHERE advisor_profile_drafts.revision IS ?`
-    ).bind(draft.revision, draft.fields_json, draft.updated_at, advisor.id, user.id, advisor.updated_at,
-      expected, expected, expected).run();
-    if (!saved.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
-    return c.json({ draft: profileDraftDto(draft, advisor) });
-  } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
-});
-
-advisors.post('/me/profile-draft/publish', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const advisor = await requireMyAdvisor(c, user);
-    const revision = sentRevision(await c.req.json().catch(() => null));
-    const draft = await loadProfileDraft(c.env, advisor.id);
-    if (!draft || revision !== draft.revision) return refuse(c, 409, DRAFT_CHANGED);
-    if (draft.base_revision !== advisor.updated_at) return refuse(c, 409, DRAFT_STALE);
-    const now = nowIso();
-    const publishedAt = now === advisor.updated_at ? new Date(Date.parse(now) + 1).toISOString() : now;
-    const result = await c.env.DB.prepare(
-      `UPDATE advisor_profile_drafts SET publish_requested_at = ?
-        WHERE advisor_id = ? AND revision = ? AND EXISTS (
-          SELECT 1 FROM advisors a WHERE a.id = advisor_profile_drafts.advisor_id
-            AND a.user_id = ? AND a.updated_at IS advisor_profile_drafts.base_revision
-        )`
-    ).bind(publishedAt, advisor.id, revision, user.id).run();
-    if (!result.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
-    const published = await loadAdvisorById(c.env, advisor.id);
-    return c.json(advisorDto(published!));
-  } catch (e) { return mapError(c, e); }
-});
-
-advisors.delete('/me/profile-draft', async (c) => {
-  try {
-    const advisor = await requireMyAdvisor(c, await requireAuth(c));
-    const revision = sentRevision(await c.req.json().catch(() => null));
-    const result = await c.env.DB.prepare('DELETE FROM advisor_profile_drafts WHERE advisor_id = ? AND revision = ?')
-      .bind(advisor.id, revision).run();
-    if (!result.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
-    return c.json({ draft: null });
-  } catch (e) { return mapError(c, e); }
 });
 
 // ---------------------------------------------------------------------------

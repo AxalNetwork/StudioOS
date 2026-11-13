@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Hono } from 'hono';
 import advisors from '../src/routes/advisors.ts';
+import { mount as profileDraftMount } from '../src/routes/advisors_profile_draft.ts';
+import { attachRouteRegistry } from '../src/util/routeRegistry.ts';
 import { attestationMailer, claimSha256, consentState, maskEmail, newCode } from '../src/services/advisorProofAttestation.ts';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
@@ -59,12 +62,18 @@ function fixture() {
   return { db, env: { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any };
 }
 
+const app = new Hono();
+const registry = attachRouteRegistry(app, [{ file: 'advisors_profile_draft.ts', mount: profileDraftMount }]);
+app.route('/api/advisors', advisors);
+app.route('/api/mentors', advisors);
+registry.mountRemaining();
+
 const jwt = (id: number, role: string) => new SignJWT({ user_id: id, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 async function call(env: any, method: string, path: string, who: [number, string] | null, body?: unknown) {
   const headers: Record<string, string> = {};
   if (who) headers.Authorization = `Bearer ${await jwt(who[0], who[1])}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await advisors.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env, { waitUntil() {}, passThroughOnException() {} } as any);
+  const res = await app.request(path.startsWith('/api/') ? path : '/api/advisors' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env, { waitUntil() {}, passThroughOnException() {} } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any, headers: res.headers };
 }
 const ada: [number, string] = [ADA, 'advisor'];
@@ -400,7 +409,7 @@ test('only published services appear publicly and hiding is reversible', async (
 
 test('profile drafts remain private and publish exactly the selected revision', async () => {
   const { env, db } = fixture();
-  const path = '/me/profile-draft';
+  const path = '/api/mentors/me/profile-draft';
   db.prepare('UPDATE advisors SET bio = ? WHERE id = 1').run('Published bio');
   assert.deepEqual((await call(env, 'GET', path, ada)).body, { draft: null });
   const save = await call(env, 'PATCH', path, ada, { display_name: 'Private name', bio: null });
