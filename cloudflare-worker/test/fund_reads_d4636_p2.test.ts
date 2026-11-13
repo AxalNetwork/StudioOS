@@ -118,8 +118,9 @@ test('positions list, marks, analytics and KPI compliance: an admin reads the bo
   assert.equal((await call(db, HOLDER, '/positions/analytics')).body.position_count, 1);
   assert.deepEqual(pids((await call(db, HOLDER, '/positions/kpi-compliance?as_of=2026-11-12')).body.companies), [7]);
 
-  // A GP or LP of the fund that recorded the positions holds no company by that alone (D1057's held scope).
-  for (const who of [STRANGER, GP, LP]) {
+  // An LP of the fund that recorded the positions holds no company by that alone (D1057's held scope).
+  // The fund's GP of record reads them through the GP arm (D4636 part 3, fund_reads_d4636_p3).
+  for (const who of [STRANGER, LP]) {
     assert.deepEqual((await call(db, who, '/positions')).body.items, [], `list ${who}`);
     assert.deepEqual((await call(db, who, '/positions/marks')).body.items, [], `marks ${who}`);
     assert.equal((await call(db, who, '/positions/analytics')).body.position_count, 0, `analytics ${who}`);
@@ -154,7 +155,7 @@ test('position detail: a holder reads their company in the investor projection; 
 
   assert.equal((await call(db, HOLDER, '/positions/p8')).status, 403, 'a company the holder does not hold');
   assert.equal((await call(db, STRANGER, '/positions/p7')).status, 403);
-  assert.equal((await call(db, GP, '/positions/p7')).status, 403);
+  assert.equal((await call(db, LOW_GP, '/positions/p7')).status, 403);
 });
 
 test('positions: a withdrawn commitment applies to the next read', async () => {
@@ -167,13 +168,13 @@ test('positions: a withdrawn commitment applies to the next read', async () => {
 
 // ── /api/portfolio ──────────────────────────────────────────────────────────
 
-test('portfolio health: admin and partner read every venture, an investor the related ones, a founder their own; an advisor is refused', async () => {
+test('portfolio health: an admin reads every venture, an investor the related ones, a founder their own; an advisor is refused', async () => {
   const db = fixture();
-  for (const who of [ADMIN, PARTNER]) {
-    const r = await call(db, who, '/portfolio/health');
-    assert.equal(r.status, 200);
-    assert.deepEqual(pids(r.body.items), [7, 8], `health ${who}`);
-  }
+  const admin = await call(db, ADMIN, '/portfolio/health');
+  assert.equal(admin.status, 200);
+  assert.deepEqual(pids(admin.body.items), [7, 8]);
+  // A partner reads the ventures where they hold an accepted seat (D4636 part 3, fund_reads_d4636_p3); PARTNER holds none.
+  assert.deepEqual((await call(db, PARTNER, '/portfolio/health')).body.items, []);
   assert.deepEqual(pids((await call(db, HOLDER, '/portfolio/health')).body.items), [7]);
   assert.deepEqual(pids((await call(db, FOUNDER, '/portfolio/health')).body.items), [7]);
   assert.deepEqual((await call(db, STRANGER, '/portfolio/health')).body.items, []);
@@ -182,7 +183,7 @@ test('portfolio health: admin and partner read every venture, an investor the re
   assert.equal((await call(db, HOLDER, '/portfolio/health/p7')).status, 200);
   assert.equal((await call(db, HOLDER, '/portfolio/health/p8')).status, 403);
   assert.equal((await call(db, FOUNDER, '/portfolio/health/p8')).status, 403);
-  assert.equal((await call(db, PARTNER, '/portfolio/health/p8')).status, 200);
+  assert.equal((await call(db, PARTNER, '/portfolio/health/p8')).status, 403);
   assert.equal((await call(db, ADVISOR, '/portfolio/health/p7')).status, 403);
 });
 

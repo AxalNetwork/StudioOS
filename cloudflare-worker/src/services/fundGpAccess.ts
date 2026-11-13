@@ -117,6 +117,24 @@ export async function fundManageScope(
 }
 
 /**
+ * The ids of the funds `fundManageScope` admits: every fund for an admin, else
+ * the funds this caller runs as GP of record at the institutional tier under
+ * their verified active company. Read on every request (D4636 parts 2 and 3:
+ * the LP report reads and the GP arm of `/api/positions*`), so a GP who is
+ * reassigned, drops below the tier or switches company reads as manager no
+ * longer on the next request.
+ */
+export async function managedFundIds(
+  c: Context<{ Bindings: Env }>,
+  user: any,
+): Promise<number[]> {
+  const scope = await fundManageScope(c, user);
+  const rows = await c.env.DB.prepare(`SELECT f.id FROM vc_funds f WHERE ${scope.sql}`)
+    .bind(...scope.binds).all();
+  return ((rows.results || []) as Array<{ id: number }>).map((row) => Number(row.id));
+}
+
+/**
  * The tier + auth half, for the one control that has no fund yet.
  *
  * POST /funds creates the fund, so there is nothing to own at call time. The
