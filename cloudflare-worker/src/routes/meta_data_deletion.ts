@@ -1,3 +1,4 @@
+/** D5292: authenticated-by-signature Meta deletion callback and completion receipt. */
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from '../types';
