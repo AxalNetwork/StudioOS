@@ -67,9 +67,11 @@ export const STEPS = [
     anchor: 'account-menu',
     page: true,
     title: 'Your account',
+    // D4623 part 2: the anchor is the phone band's initials or, on the desktop header, the button with
+    // your name (App.jsx's UserDropdown), so the anchored copy names neither: "This button".
     body: (role) => (role === 'admin'
-      ? 'Your initials open the Account menu, with your account settings.'
-      : 'Your initials open the Account menu: your licences, billing and account settings. You can run this tour again from Onboarding in your account settings.'),
+      ? 'This button opens the Account menu, with your account settings.'
+      : 'This button opens the Account menu: your licences, billing and account settings. You can run this tour again from Onboarding in your account settings.'),
     pageBody: (role) => (role === 'admin'
       ? 'Your account settings live in the Account menu, under your name at the top right.'
       : 'Your licences, billing and account settings live in the Account menu, under your name at the top right. You can run this tour again from Onboarding in your account settings.'),

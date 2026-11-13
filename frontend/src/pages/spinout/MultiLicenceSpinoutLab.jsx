@@ -19,7 +19,13 @@
  * (`../studio/LicenceBlocks`). No block header switches licence (#3704, rules
  * 1 and 6), and the page adds no AIRail.
  *
- * WITH ONE HELD LICENCE it is exactly today's page, with no block chrome.
+ * The Lab block tells `SpinoutLabPage` it is not the investor view
+ * (`investorView={false}`, D4623 part 2), so an Investor-primary member who
+ * also holds a Lab licence gets the Apply call to action there, not the LP
+ * section the Investor block already shows.
+ *
+ * WITH ONE HELD LICENCE it is exactly today's page, with no block chrome, and
+ * no `investorView`: the page keeps its own `user.role` rule.
  */
 import React, { lazy } from 'react';
 import { orderedLicences } from '../../lib/licenceSidebar.js';
@@ -41,7 +47,10 @@ export default function MultiLicenceSpinoutLab({ licences, activeRole, pages = S
   }
   const render = (block) => {
     const Page = pages[block.key];
-    return <Page />;
+    // D4623 part 2: the Lab block serves Founder, Advisor and Operating Partner; Investor has its own block.
+    // So the Lab page in it is never the investor view, whatever the primary role: it offers Apply, and the
+    // LP section appears once, in the Investor block.
+    return block.key === 'lab' ? <Page investorView={false} /> : <Page />;
   };
   return (
     <div className="space-y-6" data-testid="multi-licence-spinout-lab">
