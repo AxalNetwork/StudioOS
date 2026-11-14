@@ -12,7 +12,8 @@ const SOURCES = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/servi
 
 test('every lane the worker sends has an entry in LANE_CONSOLE', () => {
   // A lane missing here would render "no console" on real work that HAS one.
-  const keys = [...SOURCES.matchAll(/^\s{4}key: '([a-z_]+)',$/gm)].map((m) => m[1]);
+  // D5879: each source names its lane as `...studioSource('<key>')`; its facts are the registry's.
+  const keys = [...SOURCES.matchAll(/^\s{4}\.\.\.studioSource\('([a-z_]+)'\),$/gm)].map((m) => m[1]);
   // D1041 (#2889) adds eight to D215's eleven, and D1132 (#3012) Product testers.
   assert.equal(keys.length, 20, `expected twenty lanes, found ${keys.join(', ')}`);
   const block = PAGE.slice(PAGE.indexOf('const LANE_CONSOLE'), PAGE.indexOf('const VIEWS'));

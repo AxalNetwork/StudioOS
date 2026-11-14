@@ -15,6 +15,7 @@
 import type { Env } from '../types';
 import { APPROVAL_SOURCES, countLanes, type ApprovalSource } from './approvalSources';
 import { pressureOf } from './branchHome';
+import { hqSource } from './approvalLaneRegistry';
 
 export type HqLaneKey =
   | 'testing_programs' | 'learning' | 'tickets' | 'payouts' | 'ai_runs'
@@ -25,8 +26,7 @@ export type HqApprovalSource = ApprovalSource & { key: HqLaneKey; scope: 'hq' };
 
 export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
   {
-    key: 'testing_programs',
-    label: 'Testing programs sent to HQ',
+    ...hqSource('testing_programs'),
     // A partner's programme sent for review: the console's "waiting" rule
     // (`status === 'submitted' && owner_kind === 'partner'`), which
     // services/testing.ts enforces on approve. `updated_at` is stamped by the
@@ -41,13 +41,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'LEFT JOIN users u ON u.id = t.created_by '
       + "WHERE t.status = 'submitted' AND t.owner_kind = 'partner' "
       + 'ORDER BY julianday(COALESCE(t.updated_at, t.created_at)) ASC LIMIT ?',
-    scope: 'hq',
-    notifies: 'The partner',
-    decidedOn: 'Platform › Product testing',
   },
   {
-    key: 'learning',
-    label: 'Learning exercises to review',
+    ...hqSource('learning'),
     // `submitted` is the one undecided state (accepted and needs_work are the
     // review's two answers); the reviewer's Review button shows on it.
     countSql:
@@ -59,13 +55,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM learning_exercise_submissions s LEFT JOIN learning_exercises x ON x.id = s.exercise_id '
       + 'LEFT JOIN users u ON u.id = s.user_id '
       + "WHERE s.status = 'submitted' ORDER BY julianday(s.submitted_at) ASC LIMIT ?",
-    scope: 'hq',
-    notifies: 'Nobody yet',
-    decidedOn: 'Learning studio',
   },
   {
-    key: 'tickets',
-    label: 'Features and tasks',
+    ...hqSource('tickets'),
     // TWO STORES, ONE LANE, each on HQ review's own predicate
     // (routes/admin_ticket_reviews.ts): a feature ticket with no review row,
     // and a pending community task whose ticket is a task. The route reads the
@@ -90,13 +82,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM community_tasks ct JOIN tickets t ON t.id = ct.ticket_id LEFT JOIN users u ON u.id = t.user_id '
       + "WHERE ct.status = 'pending' AND t.type = 'task'"
       + ') ORDER BY julianday(created_at) ASC LIMIT ?',
-    scope: 'hq',
-    notifies: 'The member',
-    decidedOn: 'HQ review',
   },
   {
-    key: 'payouts',
-    label: 'Payout requests',
+    ...hqSource('payouts'),
     // The Commissions page's Open tab (`requested`, `processing`), which is
     // also the process route's own guard. A payout writes an activity row for
     // the member, which is not a notice.
@@ -109,13 +97,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'p.created_at AS created_at '
       + 'FROM payouts p LEFT JOIN users u ON u.id = p.user_id '
       + "WHERE p.status IN ('requested', 'processing') ORDER BY julianday(p.created_at) ASC LIMIT ?",
-    scope: 'hq',
-    notifies: 'Nobody yet',
-    decidedOn: 'Commissions',
   },
   {
-    key: 'ai_runs',
-    label: 'Held AI runs',
+    ...hqSource('ai_runs'),
     // `review` is a reservation held for HQ (`listAiBudgetReviews`). The table
     // keys on `uid`, so a row's number is SQLite's `rowid`.
     countSql:
@@ -126,13 +110,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + "'Held AI run · ' || r.month_key AS what, r.created_at AS created_at "
       + 'FROM ai_budget_reservations r LEFT JOIN users u ON u.id = r.user_id '
       + "WHERE r.status = 'review' ORDER BY julianday(r.created_at) ASC LIMIT ?",
-    scope: 'hq',
-    notifies: 'Nobody yet',
-    decidedOn: 'Platform › AI allowances',
   },
   {
-    key: 'notices',
-    label: 'Notice responses',
+    ...hqSource('notices'),
     // A licensee answered and HQ owes the review: `responded` is the review
     // route's guard and the ladder's `awaiting_review` rung.
     countSql:
@@ -144,13 +124,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM admin_notices n LEFT JOIN territory_licences l ON l.id = n.licence_id '
       + 'LEFT JOIN users u ON u.id = n.user_id '
       + "WHERE n.status = 'responded' ORDER BY julianday(COALESCE(n.responded_at, n.created_at)) ASC LIMIT ?",
-    scope: 'hq',
-    notifies: 'The studio',
-    decidedOn: 'Licences',
   },
   {
-    key: 'support',
-    label: 'Requests from studios',
+    ...hqSource('support'),
     // `hq_escalations` with `status = 'open'`, Support's own summary
     // (`openEscalationSummary`). `raised_by_branch_user_id` is a branch's id,
     // never joined to HQ's users; the name and the branch code are the copy.
@@ -167,13 +143,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + "FROM hq_escalations e WHERE e.status = 'open' "
       + "AND e.kind NOT IN ('program_grant', 'program_terms_change', 'program_end') "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
-    scope: 'hq',
-    notifies: 'The studio',
-    decidedOn: 'Support',
   },
   {
-    key: 'proposals',
-    label: 'Program proposals',
+    ...hqSource('proposals'),
     // `sent` is the decide route's guard; HQ's queue also shows decided ones.
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(sent_at, created_at))) AS oldest FROM program_proposals '
@@ -185,13 +157,9 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM program_proposals pp LEFT JOIN territory_licences l ON l.uid = pp.licence_uid '
       + 'LEFT JOIN users u ON u.id = pp.created_by_user_id '
       + "WHERE pp.status = 'sent' ORDER BY julianday(COALESCE(pp.sent_at, pp.created_at)) ASC LIMIT ?",
-    scope: 'hq',
-    notifies: 'Nobody yet',
-    decidedOn: 'Programs › Proposals',
   },
   {
-    key: 'grants',
-    label: 'Program-grant requests',
+    ...hqSource('grants'),
     // D1132 (#3012): a studio's program request (D983, migration 259), an
     // `hq_escalations` row of one of `PROGRAM_REQUEST_KINDS`, waiting while
     // `open`: the answer routes write only `WHERE … AND status = 'open'`
@@ -206,9 +174,6 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + "FROM hq_escalations e WHERE e.status = 'open' "
       + "AND e.kind IN ('program_grant', 'program_terms_change', 'program_end') "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
-    scope: 'hq',
-    notifies: 'The studio',
-    decidedOn: 'Licences › Program grants › Requests',
   },
 ];
 
