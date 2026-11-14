@@ -29,7 +29,7 @@ import { Availability, Modules, OnRegistry, Settings } from './ProgramShellSecti
 import { shellModules } from './genericProgramModel';
 import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
-import { EndAccessDialog, GiveAccessDialog, InvestorOverview, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
+import { EndAccessDialog, GiveAccessDialog, InvestorOverview, InvestorParticipation, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
 import { InvestorTabs } from './ProgramTabs';
 import { SUB, Tile } from './parts';
 import { STATUS_WORD } from './catalogueModel';
@@ -131,10 +131,16 @@ function InvestorCohorts({ tab, superAdmin }) {
     <ProgramFrame detail={detail} program="investor-cohorts" superAdmin={superAdmin} status={status} tabs={<InvestorTabs />}
       actions={<button type="button" onClick={() => desk.setDialog({ kind: 'give' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-investor-give">Give access</button>}>
       {tab === 'overview' ? (
-        <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open}
-          how={<PlaybookEditor program="investor-cohorts" superAdmin={superAdmin} detail={detail} testId="programs-investor-how" />} />
+        <>
+          <InvestorOverview reads={reads} running={status === 'Live'} tick={desk.tick} open={open} />
+          <Modules modules={shellModules('investor-cohorts', detail.read)} />
+        </>
       ) : null}
+      {tab === 'how' ? <PlaybookEditor program="investor-cohorts" superAdmin={superAdmin} detail={detail} testId="programs-investor-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <InvestorParticipation summary={reads.summary} onRetry={desk.reload} /> : null}
       {tab === 'activity' ? <ActivityTab program="investor-cohorts" testId="programs-investor-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="investor-cohorts" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
       {d?.kind === 'give' ? <GiveAccessDialog reads={reads} onClose={desk.close} onGiven={desk.reload} /> : null}
       {d?.kind === 'end' ? <EndAccessDialog grant={d.grant} onClose={desk.close} onEnded={desk.reload} /> : null}
       {d?.kind === 'nda' ? <NdaSendDialog grant={d.grant} onClose={desk.close} onSent={desk.reload} /> : null}
