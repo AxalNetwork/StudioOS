@@ -136,6 +136,9 @@ const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => 
 /** D4484: a module may replace its cycle's primary without changing its neighbours. */
 export function primaryForModule(cycle, slug, search = '', open) {
   const def = Object.hasOwn(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
+  // D5077 (#5077, BD7, BD8): a cycle whose modules lead with their own work keeps its action off the
+  // module's header; the module page offers it in its Sources region instead (`moduleSources`).
+  if (slug && def?.modulePrimary === false) return fnOf(def?.actions, slug)?.(search, open) ?? null;
   return fnOf(def?.actions, slug)?.(search, open) ?? def?.action(search, open);
 }
 
@@ -723,6 +726,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
   const action = primaryForModule(cycle, slug, q, openAction);
   const Mount = def.Mount || null;
+  // D5077 (#5077, BD21): a module's own Eadwyn asks (the rail's prompts, with its AI settings folded),
+  // and its own rail sentence in place of the desk's; neither for an admin reading the narrative.
+  const moduleAsks = slug && !narrativeAdmin && def.asks && Object.hasOwn(def.asks, slug) ? def.asks[slug] : null;
+  const moduleNote = slug && def.railNotes && Object.hasOwn(def.railNotes, slug) ? def.railNotes[slug] : undefined;
   const rail = (
     <WorkerRail
       workspace={name}
@@ -731,6 +738,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       stance="Evidence-led view"
       fills
       note={ASSIST_SURFACES.workspace.desks[name]?.fills}
+      {...(moduleNote !== undefined ? { note: moduleNote } : {})}
+      prompts={moduleAsks}
+      foldSettings={Boolean(moduleAsks)}
       coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
       footer="Traceable surface · no unsupported automated actions"
     />
@@ -885,6 +895,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
     const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
+    // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
+    // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
+    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null }) : null;
+    const moduleSources = def.sourcesRegion ? parts : null;
     body = (
       <ModulePage
         cycle={cycle}
@@ -925,6 +939,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
           : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
+        sources={moduleSources}
+        sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
+        asks={moduleAsks}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
@@ -952,7 +969,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             onDiscard={(id) => interviewSessionsApi.discard(id).then(() => setReload((n) => n + 1))}
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
+        {def.sourcesRegion ? null : parts}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>

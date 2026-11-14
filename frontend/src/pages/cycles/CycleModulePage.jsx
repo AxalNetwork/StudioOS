@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { FillMark } from '../../ui/FillMark.jsx';
@@ -9,6 +9,7 @@ import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, s
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -217,24 +218,91 @@ function RowAction({ action }) {
 }
 
 /**
- * D5076: before the first record, the connector and Eadwyn parts are a closed
- * "Sources" region under the first action: still one click away, never the
- * page's first read (BD7, BD8: Sources below the core work).
+ * D5077 (#5077; Build v2 boards BD7, BD8, BD18 A) — THE SOURCES REGION: what the
+ * venture's tools report for this module, below the module's own work and never
+ * above it. Its one action, "Connect or manage tools", opens Connect a tool (the
+ * cycle's action, which no longer sits in a Build module's header). Each part
+ * keeps its own boundary (`buildParts.jsx`), so one failing tool reads
+ * Unreadable with its own Retry and the others stay drawn.
+ *
+ * Before the first record (D5076, BD18 A) the region is one closed line, so a
+ * page with nothing recorded shows no connector state; it is still one press
+ * away. From the first record it is an open section under the records.
  */
-export function Sources({ children, phone = false }) {
+export function Sources({ children, phone = false, zero = false, action = null, drafts = false }) {
+  const manage = <ManageTools action={action} />;
+  if (zero) {
+    return (
+      <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources" data-stage="zero">
+        <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
+          <span>{drafts ? 'Sources and Eadwyn drafts' : 'Sources'}</span>
+          <span className="text-[11.5px] font-normal text-axal-faint dark:text-gray-500">What your tools report appears here once the first record exists</span>
+        </summary>
+        <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{manage}{children}</div>
+      </details>
+    );
+  }
   return (
-    <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources">
-      <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
-        Bring it in from your tools
-      </summary>
-      <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{children}</div>
-    </details>
+    <section className={`flex min-w-0 flex-col gap-3 ${phone ? 'mt-[22px]' : ''}`.trim()} aria-labelledby="module-sources-title" data-testid="module-sources" data-stage="open">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="module-sources-title" className="m-0 text-[13.5px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">Sources · what your tools report</h2>
+        {manage}
+      </div>
+      {children}
+    </section>
   );
+}
+
+/** The Sources region's one action: Connect a tool, as a dialog over the page where the cycle offers one. */
+function ManageTools({ action }) {
+  const href = safeHref(action?.href);
+  if (!href) return null;
+  return (
+    <Link to={href} data-testid="module-sources-manage" aria-haspopup={action.onOpen ? 'dialog' : undefined}
+      onClick={action.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}
+      className="text-[12px] font-bold text-axal-violet-deep hover:underline dark:text-violet-300">Connect or manage tools →</Link>
+  );
+}
+
+/**
+ * D5077 (BD18 A): Ask Eadwyn on a module with nothing recorded yet: the module's
+ * own asks, which never run on their own. Each opens the one Ask panel with its
+ * words in the composer; the box opens it empty. No model, price or allowance is
+ * drawn here: those stay in the rail's AI settings (BD21 A).
+ */
+export function ModuleAskView({ asks, available, onAsk }) {
+  const list = Array.isArray(asks) ? asks.filter((a) => typeof a === 'string' && a.trim()) : [];
+  if (!available || list.length === 0 || typeof onAsk !== 'function') return null;
+  const chip = 'rounded-full border border-axal-lavender-edge bg-white px-3 py-1.5 text-[12px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30';
+  return (
+    <section className="flex flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900" aria-label="Ask Eadwyn about this module" data-testid="module-ask">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <b className="text-[13px] text-axal-ink dark:text-gray-100">Ask Eadwyn</b>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Suggestions never run on their own</span>
+      </div>
+      <button type="button" onClick={() => onAsk('')} data-testid="module-ask-open"
+        className="min-h-[40px] rounded-[9px] border border-axal-hairline bg-axal-ground/60 px-3 text-left text-[13px] text-axal-muted hover:border-axal-lavender-edge dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400">
+        Ask about this module…
+      </button>
+      <div className="flex flex-wrap gap-1.5">
+        {list.map((a) => <button key={a} type="button" className={chip} onClick={() => onAsk(a)} data-testid="module-ask-chip">{a}</button>)}
+      </div>
+    </section>
+  );
+}
+
+/** `ModuleAskView` where the rail's Ask serves this viewer; nothing where it does not (a support session, an Explorer). */
+export function ModuleAsk({ asks }) {
+  const ask = useAskPanel();
+  return <ModuleAskView asks={asks} available={ask.available} onAsk={(q) => openAskPanel(undefined, q)} />;
 }
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
+  // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
+  sources = null, sourcesAction = null, asks = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -254,6 +322,8 @@ export default function CycleModulePage({
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
+  // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
+  const hasChildren = Children.toArray(children).length > 0;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined}>
       {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
@@ -303,7 +373,11 @@ export default function CycleModulePage({
             progressive={progressive}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />}
-          {zero && children ? <Sources>{children}</Sources> : children}
+          {/* D5077 (BD18 A): before the first record, the module's own asks; the rail carries them after. */}
+          {zero && <ModuleAsk asks={asks} />}
+          {zero
+            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+            : <>{children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}</>}
         </>
       )}
     </div>
