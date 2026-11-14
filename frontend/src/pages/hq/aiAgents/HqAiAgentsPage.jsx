@@ -13,9 +13,10 @@ import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
 import { DefinitionEditor } from './DefinitionEditor.jsx';
+import { ReleaseEvidence } from './ReleaseEvidence.jsx';
 import { definitionEditable } from './definitionModel';
 import {
-  COMPANY_COLUMNS, FROM_AXAL_VC, NOT_RECORDED, REASON_MIN,
+  COMPANY_COLUMNS, FROM_AXAL_VC, lineageLine, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, skillRow, viewFor,
   AREAS, EVAL_STATE, SKILL_FILTERS, SOURCE, STATUS, filterSkills, roleOptions, sourceOnlyRows,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
@@ -560,13 +561,21 @@ export function Editor({ view, viewerUid }) {
         <h3 className={H2}>Output kind</h3><p className={MUTED}>{show(data.skill.output_kind)}</p>
       </Card>
       {definitionEditable(data.skill.status) ? <DefinitionEditor skill={data.skill} onSaved={() => setAttempt(n => n + 1)} /> : null}
-      {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ['Published versions', data.versions], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
+      {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
         <h3 className={H2}>{title}</h3>
         <div className={MUTED}><SkillRecord value={value} /></div>
       </Card>)}
+      {/* D4537: the release decision and each version's manifest, in words (replaces the raw versions record). */}
+      <ReleaseEvidence freshness={data.freshness} versions={data.versions} />
       <SkillLifecycle data={data} viewerUid={viewerUid ?? user?.uid} reload={() => setAttempt(n => n + 1)} />
     </>}
   </div>;
+}
+
+/** D4538 part 3: "Based on <HQ name> v<n>" on an extension, "Base not readable" when it cannot be read, nothing when standalone. */
+function Lineage({ basedOn }) {
+  const line = lineageLine(basedOn);
+  return line ? <p className={MUTED} data-testid="ai-agents-company-lineage">{line}</p> : null;
 }
 
 function CompanySkills() {
@@ -612,7 +621,7 @@ function CompanySkills() {
       <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm" data-testid="ai-agents-company-table">
         <thead><tr>{COMPANY_COLUMNS.map(c => <th key={c} className="text-left p-2">{c}</th>)}</tr></thead>
         <tbody>{data.skills.map(s => <tr key={s.uid}>
-          <td className="p-2"><button className="text-violet-700 underline" disabled={busy} onClick={() => open(s.uid)}>{s.name}</button></td>
+          <td className="p-2"><button className="text-violet-700 underline" disabled={busy} onClick={() => open(s.uid)}>{s.name}</button><Lineage basedOn={s.based_on} /></td>
           <td>{s.company?.name || NOT_RECORDED}</td><td>{s.author?.name || NOT_RECORDED}</td><td>{s.area?.label || NOT_RECORDED}</td><td>{s.tools?.join(', ') || 'No tools'}</td><td>{s.status}</td>
         </tr>)}{!data.skills.length && <tr><td colSpan={COMPANY_COLUMNS.length} className="p-6 text-center">No company skills match these filters.</td></tr>}</tbody>
       </table></div>
@@ -621,6 +630,8 @@ function CompanySkills() {
     {actionError && <p role="alert" className="text-red-700">{actionError}</p>}
     {detail && <Card className="space-y-3 p-4">
       <h2 className={H2}>{detail.skill.name} · {detail.skill.status}</h2>
+      <Lineage basedOn={detail.skill.based_on} />
+      {detail.skill.based_on && detail.skill.fork_reason ? <p className={MUTED} data-testid="ai-agents-company-fork-reason">Why the company extended it: {detail.skill.fork_reason}</p> : null}
       <pre className="whitespace-pre-wrap break-words text-sm">{detail.skill.skill_md}</pre>
       {detail.moderation && <p>{detail.moderation.action} · {detail.moderation.by?.name || NOT_RECORDED} · {detail.moderation.at}: {detail.moderation.reason}</p>}
       <div className="flex gap-2">{['flag', 'suspend', ...(detail.moderation ? ['clear'] : [])].map(v => <button key={v} className={BTN} disabled={busy} onClick={() => { setAction(v); setReason(''); }}>{v === 'clear' ? 'Clear moderation' : v === 'flag' ? 'Flag' : 'Suspend'}</button>)}<button className={BTN} disabled={busy} onClick={() => setDetail(null)}>Close</button></div>

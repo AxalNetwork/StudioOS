@@ -275,6 +275,32 @@ function triggersOf(src: string): string[] {
   return out;
 }
 
+test('general compute deploys only the disabled preview through the reviewed owner gate', () => {
+  const preview = WORKFLOWS.find(workflow => workflow.file === 'agent-compute-preview.yml')!.src;
+  const image = WORKFLOWS.find(workflow => workflow.file === 'agent-compute-image.yml')!.src;
+  assert.doesNotMatch(image, /CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|packages:\s*write|docker login/);
+  for (const line of deployLines(image)) assert.match(line, /--dry-run --containers-rollout none/);
+
+  const config = read('wrangler.agent-compute.toml');
+  for (const name of ['vars', 'env.preview.vars']) {
+    const section = parseToml(config).sections.find(item => item.name === name);
+    assert.ok(section, name);
+    assert.equal(unq(section.kv.get('COMPUTE_ENABLED')), 'off', name);
+  }
+  assert.doesNotMatch(config, /\[env\.production(?:\.|\])/);
+
+  assert.match(preview, /^    if: github\.ref == 'refs\/heads\/main' && github\.actor == 'guillaumelauzier'$/m);
+  assert.match(preview, /^    environment: agent-compute-preview$/m);
+  assert.match(preview, /^    needs: gate$/m);
+  assert.match(preview, /--signer-workflow "\$IMAGE_SIGNER_WORKFLOW" --source-digest "\$GITHUB_SHA"/);
+  assert.match(preview, /COMPUTE_ENABLED = "off"/);
+  assert.match(preview, /prevent_self_review.*is True/);
+  for (const line of deployLines(preview)) {
+    assert.match(line, /--config wrangler\.agent-compute\.approved\.toml --env preview$/);
+    assert.doesNotMatch(line, /--env production|--config wrangler\.toml/);
+  }
+});
+
 test('exactly the listed workflows run wrangler deploy, and nothing deploys any other way', () => {
   const deploying = WORKFLOWS.filter((w) => deployLines(w.src).length > 0).map((w) => w.file);
   assert.deepEqual(deploying, DEPLOY_WORKFLOWS.map((w) => w.file).sort());
@@ -336,11 +362,11 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   assert.match(read('cloudflare-worker/src/routes/admin_deployments.ts'), /export const PROVISION_WORKFLOW = 'branch-provision\.yml';/);
 });
 
-test('by hand, npm run deploy migrates and then deploys HQ, and nothing deploys a branch', () => {
+test('by hand, npm run deploy dispatches the verified HQ release', () => {
   const root = JSON.parse(read('package.json')).scripts as Record<string, string>;
   const worker = JSON.parse(read('cloudflare-worker/package.json')).scripts as Record<string, string>;
-  assert.match(root.predeploy, /\bmigrate-d1\.mjs --remote\b/, 'predeploy applies the pending migrations');
-  assert.match(root.deploy, /wrangler deploy --config \.\.\/wrangler\.toml --env production/, 'deploy ships HQ');
+  assert.equal(root.deploy, 'gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main');
+  assert.equal(root.predeploy, undefined);
   assert.match(DEPLOY_BY_HAND, /npm run deploy/);
   assert.match(DEPLOY_BY_HAND, /migrations/);
   assert.match(DEPLOY_BY_HAND, /Nothing deploys a branch by hand\./);
@@ -351,7 +377,7 @@ test('by hand, npm run deploy migrates and then deploys HQ, and nothing deploys 
 
 // ── 4 · what writes to Cloudflare, and what Access guards ───────────────────
 
-test('the screens that write Worker secrets are the three setSecret callers, and none deploys', () => {
+test('Worker secret writers remain declared and deployment inventory is read-only', () => {
   const SCREEN_OF: Record<string, string> = {
     'routes/admin_integration_keys.ts': 'Integration keys',
     'routes/admin_github.ts': 'GitHub Sync',
@@ -360,9 +386,14 @@ test('the screens that write Worker secrets are the three setSecret callers, and
   const callers = [...new Set(callSites('setSecret').map((s) => s.file))].sort();
   assert.deepEqual(callers, Object.keys(SCREEN_OF).sort(), 'a new setSecret caller is a new screen that writes to Cloudflare');
   assert.deepEqual(SECRET_WRITERS.map((s) => s.screen).sort(), Object.values(SCREEN_OF).sort());
-  // The Cloudflare API calls this Worker makes: the secrets endpoint and the AE
-  // SQL API. Neither is a deployment, a version or a rollback.
+  // D5673 reads deployment/version inventory through its GET-only adapter.
+  // Other Worker sources still cannot call the publish/rollback API paths.
   for (const { file, code } of CODE) {
+    if (file === 'services/cloudflareDeployments.ts') {
+      assert.match(code, /\btransport\(url,\s*\{\s*method:\s*['"]GET['"]/, 'the source adapter explicitly reads with GET');
+      assert.doesNotMatch(code, /\bmethod\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/, 'the source adapter cannot mutate Cloudflare');
+      continue;
+    }
     assert.doesNotMatch(code, /\/workers\/scripts\/[^'"`\n]*\/(?:deployments|versions)\b/, `${file} calls the Cloudflare deployments API`);
   }
 });
@@ -458,7 +489,8 @@ test('three places write the dataset, and the branch code rides in the sixth blo
   assert.doesNotMatch(deck, /_KIND = '\//, 'a deck kind never starts with a slash');
   const obs = CODE.find((f) => f.file === 'middleware/observability.ts')!.code;
   const call = bodyAfter(obs, '.writeDataPoint(');
-  assert.match(call, /indexes:\s*\[path\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
+  // D4672: the path is recorded with any credential parameter replaced (`recorded`); still one index, the route path.
+  assert.match(call, /indexes:\s*\[recorded\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
   const blobs = /blobs:\s*\[([\s\S]*?)\]/.exec(call);
   assert.ok(blobs, 'the request row writes blobs');
   const slots = blobs![1].split('\n').map((l) => l.replace(/\/\/.*$/, '').trim()).join(' ').split(',').map((x) => x.trim()).filter(Boolean);

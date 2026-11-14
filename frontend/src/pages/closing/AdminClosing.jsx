@@ -20,10 +20,12 @@ import { BTN } from '../account/AccountCenter';
 import ActivityDrawer, { ActivityRow } from './ActivityDrawer';
 import { CompleteDialog, CountersignDialog, RouteDialog, WithdrawLineDialog } from './ClosingDialogs';
 import PaperDrawer from './PaperDrawer';
+import PaperState from './PaperState';
 import { FundCard, SyndicatePanel, ThirdPartyDrawer } from './RoutePanels';
 import {
-  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, lineStatus, moneyCents, paperWord, routeWord,
+  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, envelopesOf, lineStatus, moneyCents, paperEnvelopes, routeWord,
 } from './deskModel';
+import { closingPaperLifecycle } from '../../lib/contractLifecycle';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const Money = ({ cents, currency, reason }) => {
@@ -56,7 +58,8 @@ function usePaper(lines, tick) {
     for (const l of lines) {
       if (!l.commitment_id) continue;
       stagedSigningApi.line(l.commitment_id).then(
-        (d) => { if (live) setPaper((p) => ({ ...p, [l.uid]: { status: 'ok', envelopes: Array.isArray(d?.envelopes) ? d.envelopes : [] } })); },
+        // D4811 part 24: an answer with no list is Unreadable, never "No paper sent".
+        (d) => { if (live) setPaper((p) => ({ ...p, [l.uid]: envelopesOf(d) ? { status: 'ok', envelopes: envelopesOf(d) } : { status: 'error', envelopes: [] } })); },
         () => { if (live) setPaper((p) => ({ ...p, [l.uid]: { status: 'error', envelopes: [] } })); },
       );
     }
@@ -176,7 +179,7 @@ export default function AdminClosing({ summary, onChanged }) {
                       <td className="py-1.5 font-semibold">{l.investor_name || 'Name not recorded'}</td>
                       <td><Money cents={l.amount_cents} currency={l.currency || currency} reason="No amount is recorded on this line." /></td>
                       <td data-testid={`closing-line-route-${l.uid}`}>{routeWord(l.route) || <Unrecorded reason="No capital route is chosen for this line.">No route chosen</Unrecorded>}{l.vehicle_ref && l.route !== 'direct' ? <span className="block text-[11px] text-gray-500 dark:text-gray-400">{l.vehicle_ref}</span> : null}</td>
-                      <td data-testid={`closing-line-paper-${l.uid}`}>{p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : paperWord(p.envelopes)}</td>
+                      <td data-testid={`closing-line-paper-${l.uid}`}>{p.status === 'none' ? <Unrecorded reason="A Raise prospect has no commitment, so its paper is not read here.">Not read here</Unrecorded> : p.status === 'loading' ? 'Reading…' : p.status === 'error' ? <span className="text-red-700 dark:text-red-300">Unreadable</span> : <PaperState state={closingPaperLifecycle(p.envelopes)} />}</td>
                       <td data-testid={`closing-line-status-${l.uid}`}>{lineStatus(l.status)}</td>
                       <td className="flex flex-wrap justify-end gap-1.5 py-1">
                         {live && <button type="button" className={BTN.ghost} onClick={() => setOpen({ kind: 'route', line: l })} data-testid={`closing-line-route-btn-${l.uid}`}>Choose the route</button>}
@@ -207,9 +210,9 @@ export default function AdminClosing({ summary, onChanged }) {
           : <ul className="m-0 flex list-none flex-col p-0">{activity.slice(0, 5).map((r) => <ActivityRow key={r.key} r={r} />)}</ul>}
       </section>
 
-      {open?.kind === 'route' && <RouteDialog closing={closing} line={open.line} envelopes={paper[open.line.uid]?.envelopes} onClose={() => setOpen(null)} onSaved={done} />}
+      {open?.kind === 'route' && <RouteDialog closing={closing} line={open.line} envelopes={paperEnvelopes(paper[open.line.uid])} onClose={() => setOpen(null)} onSaved={done} />}
       {open?.kind === 'paper' && <PaperDrawer closing={closing} company={company} line={open.line} founderUserId={founderUserId} onClose={() => setOpen(null)} onSent={done} />}
-      {open?.kind === 'third' && <ThirdPartyDrawer closing={closing} line={open.line} envelopes={paper[open.line.uid]?.envelopes} onClose={() => setOpen(null)} onSaved={done} />}
+      {open?.kind === 'third' && <ThirdPartyDrawer closing={closing} line={open.line} envelopes={paperEnvelopes(paper[open.line.uid])} onClose={() => setOpen(null)} onSaved={done} />}
       {open?.kind === 'withdraw' && <WithdrawLineDialog closing={closing} line={open.line} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'complete' && <CompleteDialog closing={closing} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'countersign' && <CountersignDialog envelope={open.envelope} onClose={() => setOpen(null)} onDone={() => setRev((n) => n + 1)} />}

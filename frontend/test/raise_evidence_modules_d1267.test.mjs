@@ -16,6 +16,7 @@ import {
 } from '../src/pages/cycles/evidence/moduleEvidence.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { sourcesCard } from '../src/pages/raise/pitch/PitchEditor.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -117,8 +118,8 @@ test('VR7 rendered: the slide’s chips, the share-link note, the Sources previe
 });
 
 test('the wiring: every Raise module page mounts the part; the editor mounts the chips', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.ok(route.includes("import EvidencePart from './evidence/EvidencePart';"));
+  const route = cycleRouteText();
+  assert.ok(route.includes("import EvidencePart from '../evidence/EvidencePart';"));
   assert.ok(route.includes('<EvidencePart slug={m.slug} projectId={ctx.projectId} />'), 'the generic part, for every module');
   for (const s of ['investor-narrative', 'fundraising-readiness', 'capital-relationships']) assert.ok(route.includes(`<EvidencePart slug="${s}" projectId={ctx.projectId} />`), s);
   const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');

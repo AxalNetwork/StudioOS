@@ -56,7 +56,7 @@ const Facts = ({ rows }) => (
     ))}
   </dl>
 );
-const Reading = () => <p className="text-[12px] text-axal-faint dark:text-gray-400">Reading…</p>;
+const Reading = () => <p className="text-[12px] text-axal-muted dark:text-gray-400">Reading…</p>;
 const Unread = ({ reason }) => <p className="text-[12px] text-axal-muted dark:text-gray-300">{reason} This is not a zero.</p>;
 
 export default function TrustWorkspace({ overview, unreadable, onRetry, api = trustCenterAdminApi, children }) {
@@ -137,11 +137,16 @@ export default function TrustWorkspace({ overview, unreadable, onRetry, api = tr
                     <StatusBadge state={r.state} label={r.word} />
                   </span>
                   <small className="text-axal-muted dark:text-gray-300">{r.counts.map(([a, b]) => `${a} ${b}`).join(' · ')}</small>
+                  {r.notes.length > 0 && (
+                    <ul className="list-disc pl-4 text-[12px] text-axal-ink dark:text-gray-200" data-testid={`trust-notice-notes-${r.uid}`}>
+                      {r.notes.map((t) => <li key={t}>{t}</li>)}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
           )}
-          {n.rows.length > 0 && <p className="text-[11.5px] text-axal-faint dark:text-gray-400">Sent means the mail provider accepted it. Whether it reached an inbox is not recorded.</p>}
+          {n.rows.length > 0 && <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Sent means the mail provider accepted it. Whether it reached an inbox is not recorded.</p>}
         </Block>
 
         <section aria-labelledby="trust-obligations-h" className={`${CARD} flex flex-col gap-2 lg:col-span-2`} data-testid="trust-obligations">

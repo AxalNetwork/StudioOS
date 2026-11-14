@@ -21,6 +21,8 @@
  *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
  *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
  *   POST   /queue/:proposalUid/decide          accept, edit or discard it once (manage, or the sponsor)
+ *   GET    /skills/inputs                      D4667: the first ten skills' input matrix: each input, its read and whether a reader is built
+ *   GET    /agents/:uid/skills/:slug/readiness?project=&from=&to=  D4667: the preflight for one skill, read as the agent's sponsor
  *
  * `:scope` is `company` (by uid) or `project` (by numeric id). Every route is
  * 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is "true".
@@ -58,6 +60,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
+import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
 import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
@@ -82,6 +85,9 @@ import {
 export { agentModels, planOk } from '../services/agents/modelOffers';
 
 type C = Context<{ Bindings: Env }>;
+
+const managesAgents = (c: C, scope: NonNullable<Awaited<ReturnType<typeof loadScope>>>, user: User) =>
+  canManage(c.env, scope, user, { agentRoster: true });
 
 export const teamAgentsEnabled = (env: Env) => env.TEAM_AGENTS_ENABLED === 'true';
 export const NAME_MAX = 40;
@@ -350,13 +356,52 @@ router.post('/queue/:proposalUid/decide', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-router.get('/agents/:uid', async (c) => {
+// ── Skill readiness (D4667) ─────────────────────────────────────────────────
+// For the HQ flow (#4537) and discovery (#4538): what each of the first ten skills needs, and, for one agent and
+// one venture, which of it the readers can supply now. Statuses and reasons only: never a record's figures or text.
+
+router.get('/skills/inputs', async (c) => {
+  try {
+    await requireAuth(c);
+    return c.json({ skills: inputMatrix() });
+  } catch (e) { return mapError(c, e); }
+});
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
   try {
     const user = await requireAuth(c);
     const a = await agentByUid(c.env, c.req.param('uid'));
     const s = a && await scopeOfAgent(c.env, a);
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
     if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
+    const slug = c.req.param('slug');
+    if (!FIRST_TEN_SLUGS.includes(slug)) return say(c, 404, 'unknown_skill', 'There is no such skill in the first ten.');
+    const from = c.req.query('from') || null;
+    const to = c.req.query('to') || null;
+    if ((from && !DAY_RE.test(from)) || (to && !DAY_RE.test(to)) || (from && to && from > to)) return say(c, 400, 'invalid_period', 'Give the period as two dates, YYYY-MM-DD, the first not after the second.');
+    // The venture: a project agent's own; a company agent's only when the project is the company's (the loop's rule).
+    let projectId: number | null = s.kind === 'project' ? s.id : null;
+    const asked = c.req.query('project');
+    if (s.kind === 'company' && asked) {
+      if (!/^[1-9][0-9]{0,15}$/.test(asked)) return say(c, 400, 'invalid_project', 'The project is a number.');
+      const p = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND company_id = ?').bind(Number(asked), s.id).first<{ id: number }>();
+      if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
+      projectId = p.id;
+    }
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } });
+    return c.json({ readiness: r });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/agents/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const a = await agentByUid(c.env, c.req.param('uid'));
+    const s = a && await scopeOfAgent(c.env, a);
+    if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
+    const manage = await managesAgents(c, s, user);
+    if (!manage && !(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
     const book = await effectiveBook(c.env, s, a.role_key);
     const matrix = MODULES.map((m) => {
       const read = book.rules.works_in.includes(m.key);
@@ -378,7 +423,7 @@ router.get('/agents/:uid', async (c) => {
     const agent = await agentDto(c.env, a);
     return c.json({
       agent,
-      can_manage: await canManage(c.env, s, user),
+      can_manage: manage,
       rulebook: { effective: book.rules, version: book.version },
       matrix,
       cap_microusd: a.source === 'mcp_client' ? null : a.monthly_cap_microusd,
@@ -402,8 +447,7 @@ router.patch('/agents/:uid', async (c) => {
     const a = await agentByUid(c.env, c.req.param('uid'));
     const s = a && await scopeOfAgent(c.env, a);
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
-    if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can change its agents.');
+    if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can change its agents.');
     if (a.status === 'removed') return say(c, 409, 'removed', 'This agent was removed.');
     const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send what to change.');
@@ -467,8 +511,10 @@ async function managed(c: C, user: User) {
   const a = await agentByUid(c.env, c.req.param('uid') ?? '');
   const s = a && await scopeOfAgent(c.env, a);
   if (!a || !s) return { refusal: say(c, 404, 'not_found', 'There is no such agent.') };
-  if (!(await canRead(c.env, s, user))) return { refusal: say(c, 403, 'not_member', 'Only the team can see its agents.') };
-  if (!(await canManage(c.env, s, user))) return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  if (!(await managesAgents(c, s, user))) {
+    if (!(await canRead(c.env, s, user))) return { refusal: say(c, 403, 'not_member', 'Only the team can see its agents.') };
+    return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  }
   if (a.status === 'removed') return { refusal: say(c, 409, 'removed', 'This agent was removed.') };
   return { agent: a, scope: s };
 }
@@ -558,8 +604,7 @@ router.delete('/agents/:uid', async (c) => {
     const a = await agentByUid(c.env, c.req.param('uid'));
     const s = a && await scopeOfAgent(c.env, a);
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
-    if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can remove its agents.');
+    if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can remove its agents.');
     if (a.source === 'mcp_client') {
       const binding = await outsideBindingForAgent(c.env, a.id);
       if (!binding) return say(c, 503, 'connection_unreadable', 'This agent’s connection could not be read. Try again shortly.');
@@ -601,8 +646,8 @@ router.get('/:scope/:id/agents', async (c, next) => {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     if (!s) return notFound(c);
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
-    const manage = await canManage(c.env, s, user);
+    const manage = await managesAgents(c, s, user);
+    if (!manage && !(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
     const [companyId, projectId] = scopeCols(s);
     const rows = (await c.env.DB.prepare(
       `SELECT * FROM team_agents WHERE status <> 'removed' AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ? ORDER BY id`,
@@ -703,8 +748,7 @@ router.post('/:scope/:id/agents', async (c) => {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     if (!s) return notFound(c);
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
-    if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can add agents.');
+    if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can add agents.');
     if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
     const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send the role, the model and the monthly cap.');
@@ -786,7 +830,7 @@ router.get('/:scope/:id/rulebooks/:role', async (c) => {
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     const role = roleOf(c.req.param('role'));
     if (!s || !role) return notFound(c);
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its rule books.');
+    if (!(await canRead(c.env, s, user)) && !(await managesAgents(c, s, user))) return say(c, 403, 'not_member', 'Only the team can see its rule books.');
     const rows = await bookRows(c.env, s, role.key);
     const book = await effectiveBook(c.env, s, role.key);
     return c.json({
@@ -807,8 +851,7 @@ router.put('/:scope/:id/rulebooks/:role', async (c) => {
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
     const role = roleOf(c.req.param('role'));
     if (!s || !role) return notFound(c);
-    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its rule books.');
-    if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can change a rule book.');
+    if (!(await managesAgents(c, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can change a rule book.');
     const b = await readBody(c);
     const check = checkRules(b?.rules);
     if (!check.ok) return say(c, 422, check.code, check.message, { section: check.section });

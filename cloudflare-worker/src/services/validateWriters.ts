@@ -43,10 +43,13 @@ import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './stor
 export class WriterError extends Error {
   status: number;
   sentence: string;
-  constructor(status: number, sentence: string) {
+  /** D5375: fields a caller may add to the refusal body, e.g. `code` and `current_revision` of a stale write. */
+  extra?: Record<string, unknown>;
+  constructor(status: number, sentence: string, extra?: Record<string, unknown>) {
     super(sentence);
     this.status = status;
     this.sentence = sentence;
+    this.extra = extra;
   }
 }
 
@@ -298,6 +301,8 @@ export type DemandSignalInput = {
   interview_id?: unknown;
   session_id?: unknown;
   note?: unknown;
+  /** D5352: internal accept retry key; never taken from an HTTP body. */
+  sourceProposalId?: number | null;
 };
 
 export async function writeDemandSignal(env: Env, input: DemandSignalInput): Promise<{ id: number }> {
@@ -343,13 +348,21 @@ export async function writeDemandSignal(env: Env, input: DemandSignalInput): Pro
     if (!iv) throw new WriterError(404, 'Interview not found on this project');
   }
   const sessionId = input.session_id != null && Number.isInteger(Number(input.session_id)) ? Number(input.session_id) : null;
+  const sourceProposalId = Number.isSafeInteger(input.sourceProposalId) && Number(input.sourceProposalId) > 0
+    ? Number(input.sourceProposalId) : null;
+  if (sourceProposalId != null) {
+    const existing = await env.DB.prepare(
+      'SELECT id FROM demand_signals WHERE project_id = ? AND source_proposal_id = ?',
+    ).bind(input.projectId, sourceProposalId).first<{ id: number }>();
+    if (existing) return { id: Number(existing.id) };
+  }
   const row = await env.DB.prepare(
     `INSERT INTO demand_signals
-       (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+       (project_id, kind, who, amount_cents, currency, period, signal_date, status, source_kind, interview_id, session_id, note, created_by, source_proposal_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   ).bind(
     input.projectId, kind, trimOrNull(input.who, 200), amount, currency, period, date, status, sourceKind,
-    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId,
+    interviewId, sessionId, trimOrNull(input.note, 1000), input.userId, sourceProposalId,
   ).first<{ id: number }>();
   if (!row) throw new WriterError(500, 'The signal was not written');
   await recordActor(env, input.userId, input.projectId, 'demand-signals', `signal-${row.id}`, 'demand_signal_written', `Signal ${kind} ${status}`);

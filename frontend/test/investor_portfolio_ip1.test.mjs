@@ -46,7 +46,8 @@ const RESEARCH = read('cloudflare-worker/src/routes/research.ts');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const ACTIONS = read('frontend/src/workspaces/investorZoneActions.js');
 const API = read('frontend/src/lib/api.js');
-const CANVAS = read('design/canvases/integrated/Pages · Investor Portfolio.dc.html');
+const V2 = read('design/incoming/Portfolio v2 Page.dc.html');
+const MODEL = codeOnly(read('frontend/src/pages/portfolio/portfolioModel.js'));
 
 /**
  * The page with its JSX comments removed — what a reader actually sees.
@@ -69,15 +70,6 @@ function panel() {
   return P.slice(a, b > a ? b : P.length);
 }
 
-/** The IP1 fixture object alone, bounded at both ends. */
-function ip1() {
-  const a = CANVAS.indexOf("id:'ip1'");
-  assert.ok(a >= 0, 'the IP1 artboard is gone from the canvas');
-  const b = CANVAS.indexOf("id:'ip2'", a);
-  assert.ok(b > a, 'IP2 no longer follows IP1 — this slice would run past the artboard');
-  return CANVAS.slice(a, b);
-}
-
 test('portfolio_marks is a history table, which is the premise of everything below', () => {
   // THE SCHEMA FIRST. If the store ever collapses to one row per project, the
   // old reason becomes true again and these guards should fail loudly rather
@@ -98,6 +90,23 @@ test('portfolio_marks is a history table, which is the premise of everything bel
   }
 });
 
+/**
+ * D4636 part 4: `positionScope` is the licence gate of the position reads.
+ * `canViewLpData` readers are scoped as before; a caller without it reads no
+ * held rows (the held read is null, every row, for a non-investor) and is
+ * refused unless they run a fund.
+ */
+function assertScopeGate() {
+  const at = POSITIONS.indexOf('async function positionScope(');
+  assert.ok(at >= 0, 'positionScope is gone');
+  const body = POSITIONS.slice(at, POSITIONS.indexOf('\n}\n', at));
+  assert.match(body, /const licensed = canViewLpData\(user\);/, 'positionScope no longer asks for the licence');
+  assert.match(body, /const held = licensed \? await investorHeldProjectIds\([^)]*\)[^:]*: \[\];/,
+    'a caller without the licence could read the held scope, which is every row for them');
+  assert.match(body, /if \(!licensed && funds\.length === 0\) return null;/,
+    'a caller with neither the licence nor a fund is no longer refused');
+}
+
 test('the history was already served to this reader before the button existed', () => {
   // The second half of the finding, and the more damning one: no new access is
   // granted here. `GET /positions/:projectUid` returns the same rows under the
@@ -105,8 +114,14 @@ test('the history was already served to this reader before the button existed', 
   const at = POSITIONS.indexOf("r.get('/:projectUid'");
   assert.ok(at > 0, 'the per-project read is gone');
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /canViewLpData\(user\)/, 'the per-project read changed its gate');
-  assert.match(handler, /FROM portfolio_marks WHERE project_id = \?/,
+  // D4636 part 4: the gate is `positionScope`, which admits `canViewLpData`
+  // readers and a GP of record for their own funds, and is null (403) for anyone else.
+  assert.match(handler, /const scope = await positionScope\(c, user\);\s*if \(!scope\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/,
+    'the per-project read changed its gate');
+  assert.ok(handler.indexOf('if (!scope)') < handler.indexOf('FROM projects'),
+    'the per-project read looks the company up before its gate');
+  assertScopeGate();
+  assert.match(handler, /FROM portfolio_marks\s+WHERE project_id = \?/,
     'the per-project read no longer returns the mark history');
   assert.match(handler, /as_of_date, fmv, post_money, event, basis, source, note/,
     'the per-project read stopped returning the columns this panel shows');
@@ -238,12 +253,20 @@ test('an empty accessible set reads as empty, never as every row', () => {
   // Getting this wrong is a cross-tenant leak that looks like a working page.
   const at = POSITIONS.indexOf("r.get('/marks'");
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /canViewLpData\(user\)/, 'the marks route lost its gate');
+  assert.match(handler, /const scope = await positionScope\(c, user\);\s*if \(!scope\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/,
+    'the marks route lost its gate');
+  assertScopeGate();
   // D1057: positions read the held scope (the relationship scope narrowed to confirmed commitments).
-  assert.match(handler, /investorHeldProjectIds\(/, 'the marks route is not scoped');
-  assert.match(handler, /projectIds != null && projectIds\.length === 0/,
+  // D4636 part 3: the handler reads it through `positionScope`, which adds the
+  // companies the caller reaches only as GP of record.
+  assert.match(handler, /positionScope\(c, user\)/, 'the marks route is not scoped');
+  const scopeAt = POSITIONS.indexOf('async function positionScope(');
+  assert.ok(scopeAt >= 0, 'positionScope is gone');
+  assert.match(POSITIONS.slice(scopeAt, POSITIONS.indexOf('\n}\n', scopeAt)), /investorHeldProjectIds\(/,
+    'positionScope no longer reads the held scope');
+  assert.match(handler, /scope\.held != null && scope\.held\.length === 0 && scope\.gpOnly\.length === 0/,
     'an empty accessible set is not short-circuited, so it would read as unscoped');
-  const guardAt = handler.indexOf('projectIds.length === 0');
+  const guardAt = handler.indexOf('scope.held.length === 0');
   assert.ok(guardAt > 0 && guardAt < handler.indexOf('FROM portfolio_marks'),
     'the empty-set guard runs after the query rather than before it');
   // Same short-circuit in the AI gather, for the same reason.
@@ -270,8 +293,12 @@ test('a mark with no basis is unrecorded, never the column’s default', () => {
   assert.match(handler, /basis: m\.basis \?\? null,/, 'the route defaults an absent basis');
   assert.ok(!/basis:\s*m\.basis\s*\|\|\s*'gp_estimate'/.test(handler),
     'an absent basis is reported as a GP estimate, which invents the provenance');
-  assert.match(P, /m\.basis \? title\(m\.basis\) : 'Not recorded'/,
+  // D4817 part 2 (#5311, PF-02): one basis vocabulary (audit F-24), and the
+  // model's word for a missing basis is null, so the call site's fallback runs.
+  assert.match(P, /basisLabel\(m\.basis\) \|\| NOT_RECORDED/,
     'the panel renders an absent basis as something other than unrecorded');
+  assert.match(MODEL, /if \(basis == null \|\| String\(basis\)\.trim\(\) === ''\) return null;/,
+    'basisLabel invents a word for a missing basis');
   // And the AI instruction refuses the same substitution.
   const surface = RESEARCH.slice(RESEARCH.indexOf("'portfolio/positions': {"),
     RESEARCH.indexOf('\n  },', RESEARCH.indexOf("'portfolio/positions': {")));
@@ -301,31 +328,30 @@ test('the false card is gone and the eyebrow with it', () => {
     'the card refusing the AI narrative is back, and the band is mounted');
   // And the band it refused is actually mounted.
   assert.match(shown, /surface="portfolio\/positions"/, 'the artboard’s AI band is not on the page');
-  assert.match(P, /Every valuation and ownership write is an admin action/);
+  // #5365 (F-09) rewords the card for an investor: the writes go through the governed workflow, with their source kept.
+  assert.match(P, /Every valuation and ownership change keeps its source\./);
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Positions eyebrow is back');
-  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
-  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Positions book"/, 'the heading went with the eyebrow');
+  // D4817 part 2 (#5311, PF-02): the heading and local navigation are the Portfolio frame's.
+  assert.match(P, /<PortfolioFrame\s+tab="positions"/, 'the heading went with the eyebrow');
 });
 
-test('the strip and the instrument still match the artboard, column for column', () => {
-  const board = ip1();
-  const head = /head:\[([^\]]*)\]/.exec(board);
-  assert.ok(head, 'the IP1 artboard no longer declares an instrument head');
-  const columns = head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(columns, ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Health', 'Last update']);
-  for (const col of columns) {
-    assert.ok(P.includes(`<th>${col}</th>`), `the positions table lost its ${col} column`);
+test('the counts and the register match the PF-02 board, column for column', () => {
+  // D4817 part 2 (#5311): IP1's artboard gave way to the Portfolio v2 board
+  // PF-02 (`positions()` in the canvas). Its register's columns, in its order.
+  const at = V2.indexOf('const positions = (drawer) =>');
+  assert.ok(at > 0, 'the PF-02 board is gone from the canvas');
+  const board = V2.slice(at, V2.indexOf('const markDrawer', at));
+  const columns = [...board.slice(board.indexOf('<thead>'), board.indexOf('</thead>')).matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(columns, ['Company', 'Invested', 'Ownership', 'Latest FMV', 'Multiple', 'Mark date', 'Basis', 'Reporting', 'Health']);
+  const start = P.indexOf('<table className="pf-table pf-register">');
+  assert.ok(start > 0, 'the register table is gone');
+  const drawn = [...P.slice(start, P.indexOf('</thead>', start)).matchAll(/<th scope="col"[^>]*>([^<{]*)/g)].map((m) => m[1]);
+  assert.deepEqual(drawn, columns, 'the register does not draw the board\'s columns in its order');
+  // The board's counts, kept separate: coverage, stale marks, and the marks the book cannot use.
+  for (const label of ['Mark coverage', 'Stale marks (older than two quarters)', 'Marks that cannot be used']) {
+    assert.ok(P.includes(`label="${label}"`), `the counts lost ${label}`);
   }
-  // The artboard's own four tiles.
-  for (const label of ['Invested', 'Current FMV', 'TVPI', 'Needs attention']) {
-    assert.ok(P.includes(`label="${label}`), `the strip lost its ${label} tile`);
-  }
-  // TVPI and DPI are reported separately — the artboard's note is explicit that
-  // an unrealised multiple is a mark and a realised one is cash.
-  assert.match(board, /reported separately rather than blended/);
-  assert.match(P, /DPI \$\{ratio\(state\.analytics\?\.dpi\)\}/,
-    'DPI is no longer reported beside TVPI');
   const surface = RESEARCH.slice(RESEARCH.indexOf("'portfolio/positions': {"),
     RESEARCH.indexOf('\n  },', RESEARCH.indexOf("'portfolio/positions': {")));
   assert.match(surface, /Never blend an unrealised multiple with a realised one/);

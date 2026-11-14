@@ -1,6 +1,7 @@
+import { growTabs, reportingHref } from '../cycles/growOverviewModel';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
+import { AlertCircle, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
 import { api, jobs as jobsApi } from '../../lib/api';
 import { growTalentApi } from '../../lib/api/growTalent';
 import RankByFit from '../../ui/RankByFit';
@@ -13,6 +14,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { LensLink } from '../../workspaces/lens';
+import GrowOverviewLink from './GrowOverviewLink';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -100,10 +102,10 @@ export default function FounderGrowTalent() {
   const applicantCount = applications.length;
   const shortlistCount = applications.filter(shortlisted).length;
   const selectedJob = jobs.find((job) => String(job.id) === String(view)) || jobs[0];
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = growTabs(query, 'talent').map((tab) => [tab.name, tab.href]);
 
   return <main className="a5-grow fg-talent" data-testid="founder-grow-talent"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-talent-crumb"><GrowOverviewLink /><span>‹</span><b>Talent</b></div><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</LensLink>)}</nav><nav aria-label="Grow utilities"><LensLink to={reportingHref(query)}>Reporting</LensLink></nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/talent', { value: view, onChange: setView, dynamic: { roles: jobs.slice(0, 3).map((job) => ({ key: String(job.id), label: text(job.title, 'Untitled role') })) } })}
               actions={founderZoneActions('grow/talent', { query, view: { scope: project?.name, header: ['Candidate', 'Applied', 'Status'], rows: visible, cells: (r) => [r.name || r.member?.name, r.created_at, r.status] } })}

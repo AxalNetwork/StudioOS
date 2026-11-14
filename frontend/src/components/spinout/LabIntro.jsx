@@ -167,9 +167,12 @@ export function LabHero({ surface, cohort, applyHref, briefHref }) {
             have an entity.
           </p>
           <div className="mt-7 flex flex-wrap gap-2.5">
-            <Link className={LAB_BTN_ON_DARK} to={applyHref}>
-              {applyLabelFor(cohort)} →
-            </Link>
+            {/* No `applyHref` (D4623 part 3): the viewer may not apply, so the hero offers the brief alone. */}
+            {applyHref ? (
+              <Link className={LAB_BTN_ON_DARK} to={applyHref}>
+                {applyLabelFor(cohort)} →
+              </Link>
+            ) : null}
             <Link className={LAB_BTN_GHOST_ON_DARK} to={briefHref}>
               Download the programme brief
             </Link>
@@ -678,6 +681,12 @@ export function LabApplyBand({ cohort, applyHref, briefHref, track }) {
  *
  * Everything else is identical, which is what makes this one design in two
  * places rather than two designs that happen to rhyme.
+ *
+ * `canApply` (D4623 part 3) is separate from `surface`: it defaults to true,
+ * and the signed-in Lab page passes false for a viewer the apply endpoint
+ * refuses (one who holds neither Founder nor an exploring account). The hero
+ * then drops its Apply button and the closing apply band is not drawn. No
+ * canvas defines a line in place of Apply, so none is drawn.
  */
 export default function LabIntro({
   surface,
@@ -691,11 +700,12 @@ export default function LabIntro({
   directory,
   shipped,
   preselectNote = null,
+  canApply = true,
   children = null,
 }) {
   return (
     <div className={LAB_SURFACE}>
-      <LabHero surface={surface} cohort={cohort} applyHref={applyHref} briefHref={briefHref} />
+      <LabHero surface={surface} cohort={cohort} applyHref={canApply ? applyHref : null} briefHref={briefHref} />
       <div className="mx-auto max-w-[1240px] px-6 sm:px-10">
         {preselectNote && (
           <p className="mt-8 inline-flex items-center gap-2.5 rounded-axal-sm border border-violet-200 bg-axal-lavender px-3 py-2 text-[12.5px] text-gray-700 dark:border-violet-900 dark:bg-violet-950/30 dark:text-gray-300">
@@ -709,7 +719,7 @@ export default function LabIntro({
         <LabJurisdictionCard value={jurisdiction} onChange={onJurisdiction} track={track} />
         <LabCommunity surface={surface} directory={directory} shipped={shipped} />
         {children}
-        <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} track={track} />
+        {canApply ? <LabApplyBand cohort={cohort} applyHref={applyHref} briefHref={briefHref} track={track} /> : null}
       </div>
     </div>
   );

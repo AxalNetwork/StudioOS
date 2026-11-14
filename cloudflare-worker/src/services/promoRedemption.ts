@@ -56,15 +56,16 @@
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { quarterKey } from './statements';
+import { stripeCall } from '../routes/billing';
 import {
-  validatePromoForProduct,
+  computeDiscount, getPromoByCode, validatePromoForProduct, STRIPE_MIN_CHARGE_CENTS,
   type PromoBuyer, type PromoRejectReason, type PromoRow, type PromoValidation,
 } from './promos';
 
 /** An abandoned checkout stops holding the ceiling after this long. */
 export const RESERVATION_TTL_MS = 60 * 60 * 1000;
 
-export type CeilingRefusal = 'ceiling_exceeded' | 'ceiling_unreadable';
+export type CeilingRefusal = 'ceiling_exceeded' | 'ceiling_unreadable' | 'usage_limit_unreadable';
 export type RedeemRefusalReason = PromoRejectReason | CeilingRefusal;
 
 /** Our sentence for each reason: what is wrong and what the member can do. */
@@ -82,6 +83,7 @@ export const REFUSAL_MESSAGES: Record<RedeemRefusalReason, string> = {
   first_purchase_unreadable: 'We could not confirm this is your first purchase. Try again in a moment.',
   ceiling_exceeded: 'This code\'s discount is more than this licence\'s promotion budget has left. Pay without it, or ask the licence holder to ask HQ to raise the ceiling.',
   ceiling_unreadable: 'This licence\'s promotion budget could not be read, so no discount was given. Try again in a moment.',
+  usage_limit_unreadable: 'This code\'s remaining uses could not be checked, so no discount was given. Try again in a moment.',
 };
 
 export interface RedeemRequest {
@@ -135,6 +137,22 @@ export type CanRedeem = Allowed | Refusal;
 export type Reserved = Allowed & { reservation: { ref: string; reused: boolean } | null };
 export type ReserveResult = Reserved | Refusal;
 
+/** The promo a live reservation already holds for this checkout reference. */
+export async function livePromoReservationPromoId(env: Env, reference: string, userId: number, nowMs: number = Date.now()): Promise<string | null> {
+  try {
+    const prefix = `${reference}#`;
+    const row = await env.DB.prepare(
+      `SELECT promo_id FROM promo_ceiling_reservations
+        WHERE substr(ref, 1, ?) = ? AND user_id = ?
+          AND (state = 'committed' OR (state = 'reserved' AND expires_at > ?))
+        ORDER BY created_at DESC LIMIT 1`,
+    ).bind(prefix.length, prefix, userId, new Date(nowMs).toISOString()).first<{ promo_id: string }>();
+    return row?.promo_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const refusal = (reason: RedeemRefusalReason, extra: { remaining_cents?: number; currency?: string } = {}): Refusal => ({
   ok: false, reason, message: REFUSAL_MESSAGES[reason], ...extra,
 });
@@ -157,7 +175,7 @@ export function promoRefusalBody(r: Refusal): Record<string, unknown> {
 //   (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))
 
 /** The ceiling in force, `null` where HQ has recorded none for this period, or a refusal where it cannot be read. */
-async function readCeiling(env: Env, now: number, ownRefPrefix?: string): Promise<CeilingFigures | Refusal | null> {
+export async function readCeiling(env: Env, now: number, ownRefPrefix?: string): Promise<CeilingFigures | Refusal | null> {
   // The prefix of this checkout's own hold ("<reference>#<discount>"); a sentinel no ref starts with when it has none.
   const own = ownRefPrefix === undefined ? '\u0001' : `${ownRefPrefix}#`;
   try {
@@ -191,7 +209,12 @@ export async function canRedeemPromo(env: Env, req: RedeemRequest, nowMs: number
     ...v, ok: true, promo: v.promo as PromoRow, discountedAmount: v.discountedAmount ?? req.amountCents, discountCents, ceiling, noCeiling,
   });
   // HQ has no licence and so no ceiling; a discount of nothing spends nothing.
-  if (branchOf(env) === null || discountCents <= 0) return allowed(null);
+  if (discountCents <= 0) return allowed(null);
+  if (branchOf(env) === null) {
+    return allowed(null, promoNeedsHold(v.promo)
+      ? { period: quarterKey(new Date(nowMs)), currency: String(req.currency ?? '').toUpperCase() }
+      : null);
+  }
   const ceiling = await readCeiling(env, nowMs, req.reference);
   if (ceiling === null) return allowed(null, { period: quarterKey(new Date(nowMs)), currency: String(req.currency ?? '').toUpperCase() });
   if ('ok' in ceiling) return ceiling;
@@ -212,6 +235,52 @@ const syncIssued = (env: Env, nowIso: string) => env.DB.prepare(
    ) WHERE id = 1`,
 ).bind(nowIso);
 
+const promoNeedsHold = (promo: PromoRow) => promo.max_redemptions != null
+  && (promo.duration === 'repeating' || promo.duration === 'forever');
+
+/** A renewal stays reserved until Stripe confirms payment or voids the invoice. */
+export async function reservePromoRenewal(env: Env, input: {
+  invoiceId: string; promoId: string; userId: number; currency: string;
+  discountCents: number; stripeUses: number;
+}, nowMs = Date.now()): Promise<boolean> {
+  const { invoiceId, promoId, userId, discountCents, stripeUses } = input;
+  const currency = input.currency.toUpperCase();
+  const now = new Date(nowMs);
+  const nowIso = now.toISOString();
+  const period = quarterKey(now);
+  const ref = `renewal:${invoiceId}`;
+  const [insert] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO promo_ceiling_reservations
+         (ref, period, currency, amount_cents, promo_id, user_id, state, expires_at, created_at, updated_at)
+       SELECT ?, ?, ?, ?, p.id, ?, 'reserved', '9999-12-31T23:59:59.999Z', ?, ?
+         FROM promo_codes p
+        WHERE p.id = ? AND p.duration IN ('repeating', 'forever')
+          AND (p.max_redemptions IS NULL OR
+            MAX(p.times_redeemed + ?, (SELECT COUNT(*) FROM promo_ceiling_reservations c
+              WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref NOT LIKE 'renewal:%'))
+            + (SELECT COUNT(*) FROM promo_ceiling_reservations c
+              WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref LIKE 'renewal:%')
+            + (SELECT COUNT(*) FROM promo_ceiling_reservations h
+              WHERE h.promo_id = p.id AND h.state = 'reserved' AND h.expires_at > ?) < p.max_redemptions)
+          AND (? = 1 OR NOT EXISTS (
+            SELECT 1 FROM branch_promo_ceiling c WHERE c.id = 1 AND c.period = ?
+             AND (upper(c.currency) <> ? OR c.ceiling_cents < ? + (
+               SELECT COALESCE(SUM(r.amount_cents), 0) FROM promo_ceiling_reservations r
+                WHERE r.period = c.period AND r.currency = upper(c.currency)
+                  AND (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))))))
+       ON CONFLICT(ref) DO NOTHING`,
+    ).bind(ref, period, currency, discountCents, userId, nowIso, nowIso, promoId,
+      stripeUses, nowIso, branchOf(env) === null ? 1 : 0, period, currency, discountCents, nowIso),
+    syncIssued(env, nowIso),
+  ]);
+  if (insert.meta.changes === 1) return true;
+  return Boolean(await env.DB.prepare(
+    `SELECT 1 AS hit FROM promo_ceiling_reservations WHERE ref = ? AND promo_id = ?
+       AND user_id = ? AND amount_cents = ? AND currency = ? AND state IN ('reserved', 'committed')`,
+  ).bind(ref, promoId, userId, discountCents, currency).first());
+}
+
 /**
  * Permit the redemption and take its discount out of the ceiling, atomically.
  * `reference` names this checkout (its idempotency key or order id): the same
@@ -221,14 +290,45 @@ const syncIssued = (env: Env, nowIso: string) => env.DB.prepare(
 export async function reservePromo(
   env: Env, req: RedeemRequest & { reference: string }, nowMs: number = Date.now(), checked?: Allowed,
 ): Promise<ReserveResult> {
+  const nowIso = new Date(nowMs).toISOString();
+  // Idempotency comes before revalidation. A retry owns the live hold it made,
+  // even when another checkout has since taken the code's final available use.
+  const priorPromo = await getPromoByCode(env, req.code).catch(() => null);
+  if (priorPromo) {
+    const priorDiscount = computeDiscount(priorPromo, req.amountCents);
+    const priorRef = `${req.reference}#${priorDiscount.discountCents}`;
+    try {
+      const held = await env.DB.prepare(
+        `SELECT 1 AS hit FROM promo_ceiling_reservations r
+          WHERE r.ref = ? AND r.promo_id = ? AND r.user_id IS ? AND r.amount_cents = ?
+            AND (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))`,
+      ).bind(priorRef, priorPromo.id, req.buyer.userId, priorDiscount.discountCents, nowIso).first<{ hit: number }>();
+      if (held) return {
+        ok: true, promo: priorPromo, ...priorDiscount,
+        free: priorDiscount.discountedAmount < STRIPE_MIN_CHARGE_CENTS,
+        ceiling: null, noCeiling: null, reservation: { ref: priorRef, reused: true },
+      };
+    } catch { /* the normal validation path below gives the safe refusal */ }
+  }
   // `checked`: the answer `canRedeemPromo` gave this same request earlier in the
   // handler. The code's terms are not asked twice; the write below still tests
   // the ceiling itself, so a stale figure cannot overspend.
   const can = checked ?? await canRedeemPromo(env, req, nowMs);
   if (!can.ok) return can;
   const { ceiling, promo, discountCents } = can;
+  let stripeUses = 0;
+  if (promoNeedsHold(promo)) {
+    try {
+      const code = await stripeCall<{ times_redeemed: number }>(
+        env, `/promotion_codes/${promo.id}`, {}, { method: 'GET' },
+      );
+      if (!Number.isSafeInteger(code.times_redeemed) || code.times_redeemed < 0) return refusal('usage_limit_unreadable');
+      stripeUses = code.times_redeemed;
+    } catch {
+      return refusal('usage_limit_unreadable');
+    }
+  }
   const ref = `${req.reference}#${discountCents}`;
-  const nowIso = new Date(nowMs).toISOString();
   const until = new Date(nowMs + RESERVATION_TTL_MS).toISOString();
   if (!ceiling) {
     if (!can.noCeiling) return { ...can, reservation: null };
@@ -240,21 +340,33 @@ export async function reservePromo(
         env.DB.prepare(
           `INSERT INTO promo_ceiling_reservations
              (ref, period, currency, amount_cents, promo_id, user_id, state, expires_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?)
+           SELECT ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?
+            WHERE (SELECT p.max_redemptions IS NULL OR
+                    MAX(p.times_redeemed + ?, (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref NOT LIKE 'renewal:%'))
+                      + (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref LIKE 'renewal:%')
+                      + (SELECT COUNT(*) FROM promo_ceiling_reservations h WHERE h.promo_id = p.id AND h.state = 'reserved' AND h.expires_at > ?)
+                      < p.max_redemptions
+                   FROM promo_codes p WHERE p.id = ?)
            ON CONFLICT(ref) DO UPDATE SET
              state = 'reserved', period = excluded.period, currency = excluded.currency,
              amount_cents = excluded.amount_cents, promo_id = excluded.promo_id, user_id = excluded.user_id,
              expires_at = excluded.expires_at, updated_at = excluded.updated_at
            WHERE promo_ceiling_reservations.state = 'released'
               OR (promo_ceiling_reservations.state = 'reserved' AND promo_ceiling_reservations.expires_at <= ?)`,
-        ).bind(ref, period, currency, discountCents, promo.id, req.buyer.userId, until, nowIso, nowIso, nowIso),
+        ).bind(ref, period, currency, discountCents, promo.id, req.buyer.userId, until, nowIso, nowIso, stripeUses, nowIso, promo.id, nowIso),
         syncIssued(env, nowIso),
       ]);
-      return { ...can, reservation: { ref, reused: (insert.meta?.changes ?? 0) !== 1 } };
+      if ((insert.meta?.changes ?? 0) === 1) return { ...can, reservation: { ref, reused: false } };
+      const held = await env.DB.prepare(
+        `SELECT 1 AS hit FROM promo_ceiling_reservations r WHERE r.ref = ? AND r.amount_cents = ? AND r.promo_id = ?
+          AND (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))`,
+      ).bind(ref, discountCents, promo.id, nowIso).first<{ hit: number }>();
+      if (held) return { ...can, reservation: { ref, reused: true } };
+      return refusal('usage_limit_reached');
     } catch {
       // A count only: no names, no figures.
       console.error('[promo-ceiling] ledger write failed with no ceiling in force', { failed: 1 });
-      return { ...can, reservation: null };
+      return promo.max_redemptions == null ? { ...can, reservation: null } : refusal('usage_limit_unreadable');
     }
   }
 
@@ -272,6 +384,12 @@ export async function reservePromo(
           WHERE (SELECT COALESCE(SUM(r.amount_cents), 0) FROM promo_ceiling_reservations r
                   WHERE r.period = ? AND r.currency = ? AND (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))) + ?
                 <= (SELECT c.ceiling_cents FROM branch_promo_ceiling c WHERE c.id = 1 AND c.period = ? AND upper(c.currency) = ?)
+            AND (SELECT p.max_redemptions IS NULL OR
+                  MAX(p.times_redeemed + ?, (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref NOT LIKE 'renewal:%'))
+                    + (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref LIKE 'renewal:%')
+                    + (SELECT COUNT(*) FROM promo_ceiling_reservations h WHERE h.promo_id = p.id AND h.state = 'reserved' AND h.expires_at > ?)
+                    < p.max_redemptions
+                 FROM promo_codes p WHERE p.id = ?)
          ON CONFLICT(ref) DO UPDATE SET
            state = 'reserved', period = excluded.period, currency = excluded.currency,
            amount_cents = excluded.amount_cents, promo_id = excluded.promo_id, user_id = excluded.user_id,
@@ -280,7 +398,7 @@ export async function reservePromo(
             OR (promo_ceiling_reservations.state = 'reserved' AND promo_ceiling_reservations.expires_at <= ?)`,
       ).bind(
         ref, ceiling.period, ceiling.currency, discountCents, promo.id, req.buyer.userId, until, nowIso, nowIso,
-        ceiling.period, ceiling.currency, nowIso, discountCents, ceiling.period, ceiling.currency, nowIso,
+        ceiling.period, ceiling.currency, nowIso, discountCents, ceiling.period, ceiling.currency, stripeUses, nowIso, promo.id, nowIso,
       ),
       syncIssued(env, nowIso),
     ]);
@@ -296,6 +414,14 @@ export async function reservePromo(
     `SELECT 1 AS hit FROM promo_ceiling_reservations r WHERE r.ref = ? AND r.amount_cents = ? AND r.promo_id = ? AND (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))`,
   ).bind(ref, discountCents, promo.id, nowIso).first<{ hit: number }>();
   if (held) return { ...can, reservation: { ref, reused: true } };
+  const cap = await env.DB.prepare(
+    `SELECT p.max_redemptions AS max_redemptions,
+       MAX(p.times_redeemed + ?, (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref NOT LIKE 'renewal:%'))
+         + (SELECT COUNT(*) FROM promo_ceiling_reservations c WHERE c.promo_id = p.id AND c.state = 'committed' AND c.ref LIKE 'renewal:%')
+         + (SELECT COUNT(*) FROM promo_ceiling_reservations h WHERE h.promo_id = p.id AND h.state = 'reserved' AND h.expires_at > ?) AS used
+       FROM promo_codes p WHERE p.id = ?`,
+  ).bind(stripeUses, nowIso, promo.id).first<{ max_redemptions: number | null; used: number }>();
+  if (cap?.max_redemptions != null && Number(cap.used) >= Number(cap.max_redemptions)) return refusal('usage_limit_reached');
   const after = await readCeiling(env, nowMs);
   // A ceiling that was in force a moment ago and is now unreadable or gone: do not guess.
   if (after === null) return refusal('ceiling_unreadable');

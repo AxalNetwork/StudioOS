@@ -20,6 +20,13 @@ export function requirePreview(test) {
   }
 }
 
+// For preview specs that stub their external services. Page routes can still
+// fulfill explicit fixtures (such as the Google script) before this fallback.
+export async function isolatePreviewTraffic(context, baseURL) {
+  const origin = new URL(baseURL).origin;
+  await context.route((url) => url.origin !== origin, (route) => route.abort('blockedbyclient'));
+}
+
 export async function loginAs(page, who = 'founder') {
   const email = who === 'admin'
     ? process.env.PLAYWRIGHT_ADMIN_EMAIL

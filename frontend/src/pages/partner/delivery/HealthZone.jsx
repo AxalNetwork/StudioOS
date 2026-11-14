@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutations, useZoneRead, signature } from './useZoneMutations';
+import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
 import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { api } from '../../../lib/api';
+import { partnerDeliveryReviewsApi } from '../../../lib/api/partnerDeliveryReviews';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and one of its tiles has to draw an absence rather than a number.
-  Section, Field, SaveNote, NotComputable, SeamRead,
+  Section, Field, NotComputable, SeamRead,
   NoPartnerProfile, isNoPartnerProfile,
-  inputClass, buttonClass, ghostButtonClass,
+  inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
@@ -17,7 +18,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
 import FounderReviews from './FounderReviews';
-import { BlockerRow, blockerDeleteQuestion } from './deliveryEdits';
+import { BlockerRow, blockerDeleteQuestion, DeliveryNote } from './deliveryEdits';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -164,7 +165,7 @@ function StatedFacts({ row, roster, busy, onSave, note }) {
           </button>
         </div>
       </div>
-      <SaveNote note={note} />
+      <DeliveryNote note={note} />
     </div>
   );
 }
@@ -221,6 +222,8 @@ function MilestoneEditor({ engagementId, pending, mutate }) {
   // `mutate` resolves true only for a confirmed write. The list re-reads on
   // that and on nothing else, and a form resets on that and on nothing else.
   const change = async (key, fn) => {
+    // #5314 part 3: Reload or Keep my edits on a conflict re-reads this list too.
+    fn.after = load;
     const ok = await mutate(key, fn);
     if (ok) await load();
     return ok;
@@ -250,8 +253,9 @@ function MilestoneEditor({ engagementId, pending, mutate }) {
           <button
             type="button" className={`${ghostButtonClass} ml-auto`}
             aria-disabled={pending(`ms:${m.id}`) || undefined}
-            onClick={() => change(`ms:${m.id}`, () => api.updatePartnerMilestone(m.id, {
+            onClick={() => change(`ms:${m.id}`, (rev) => api.updatePartnerMilestone(m.id, {
               completed_at: m.completed_at ? null : new Date().toISOString(),
+              expected_revision: stated(rev, m.revision),
             }))}
           >
             {m.completed_at ? 'Reopen' : 'Complete'}
@@ -259,7 +263,7 @@ function MilestoneEditor({ engagementId, pending, mutate }) {
           <button
             type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`}
             aria-disabled={pending(`ms:${m.id}`) || undefined}
-            onClick={() => change(`ms:${m.id}`, () => api.deletePartnerMilestone(m.id))}
+            onClick={() => change(`ms:${m.id}`, (rev) => api.deletePartnerMilestone(m.id, stated(rev, m.revision)))}
           >
             Remove
           </button>
@@ -324,6 +328,8 @@ function BlockerEditor({ engagementId, pending, mutate }) {
   }
   if (!ready) return <p className="text-[12px] text-axal-faint">Loading…</p>;
   const act = async (key, fn) => {
+    // #5314 part 3: Reload or Keep my edits on a conflict re-reads this list too.
+    fn.after = load;
     const ok = await mutate(key, fn);
     if (ok) await load();
     return ok;
@@ -342,9 +348,9 @@ function BlockerEditor({ engagementId, pending, mutate }) {
       {rows.map((b) => (
         <BlockerRow
           key={b.id} b={b} busy={pending(`bl:${b.id}`)}
-          onClear={() => act(`bl:${b.id}`, () => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString() }))}
-          onReopen={() => act(`bl:${b.id}`, () => api.updatePartnerBlocker(b.id, { cleared_at: null }))}
-          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(`bl:${b.id}`, () => api.deletePartnerBlocker(b.id)); }}
+          onClear={() => act(`bl:${b.id}`, (rev) => api.updatePartnerBlocker(b.id, { cleared_at: new Date().toISOString(), expected_revision: stated(rev, b.revision) }))}
+          onReopen={() => act(`bl:${b.id}`, (rev) => api.updatePartnerBlocker(b.id, { cleared_at: null, expected_revision: stated(rev, b.revision) }))}
+          onDelete={() => { if (window.confirm(blockerDeleteQuestion(b))) act(`bl:${b.id}`, (rev) => api.deletePartnerBlocker(b.id, stated(rev, b.revision))); }}
         />
       ))}
       <div className="mt-2 grid gap-2 md:grid-cols-3">
@@ -374,6 +380,67 @@ function BlockerEditor({ engagementId, pending, mutate }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * #5314 part 2: what the client said, each time it was recorded. Read from the
+ * append-only history; an unreadable read says Unreadable, and a score saved
+ * before the history was kept says earlier reviews are Not recorded.
+ */
+export function reviewHistoryView(read) {
+  if (!read) return { kind: 'loading', items: [] };
+  if (read?.error || read?.available === false) {
+    return { kind: 'unreadable', items: [], text: read?.reason || 'Unreadable: the review history could not be read.' };
+  }
+  const items = Array.isArray(read?.items) ? read.items : [];
+  return {
+    kind: items.length ? 'list' : 'empty',
+    items: items.map((r) => ({
+      key: r.id,
+      score: r.cleared ? 'Score cleared' : `${Number(r.satisfaction).toFixed(1)} / 5`,
+      source: r.source || null,
+      said: r.said_at || null,
+      recorded: r.recorded_at,
+      by: r.recorded_by_name || null,
+    })),
+    earlier: read?.earlier_not_recorded ? (read?.earlier_note || 'Not recorded: earlier reviews were not kept.') : null,
+  };
+}
+
+function ReviewHistory({ engagementId, seed }) {
+  // null while the read is out; reviewHistoryView draws that as loading.
+  const [reviews, setReviews] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setReviews(null);
+    partnerDeliveryReviewsApi.partnerEngagementReviews(engagementId)
+      .then((r) => { if (live) setReviews(r || { available: false }); })
+      .catch(() => { if (live) setReviews({ error: true }); });
+    return () => { live = false; };
+  }, [engagementId, seed]);
+  const view = reviewHistoryView(reviews);
+  if (view.kind === 'loading') return <p className="text-[12px] text-axal-faint">Reading the history…</p>;
+  if (view.kind === 'unreadable') return <p className="text-[12px] text-red-700 dark:text-red-300">{view.text}</p>;
+  return (
+    <div className="space-y-1">
+      {view.kind === 'empty' && !view.earlier && (
+        <p className="text-[12px] text-axal-faint">No client review recorded yet.</p>
+      )}
+      {view.kind === 'list' && (
+        <ul className="space-y-1 text-[12px] text-axal-muted">
+          {(Array.isArray(view?.items) ? view.items : []).map((r) => (
+            <li key={r.key}>
+              <span className="font-bold tabular-nums">{r.score}</span>
+              {r.source && <> · {r.source}</>}
+              {r.said && <span className="text-axal-faint"> · said {formatDay(r.said)}</span>}
+              <span className="text-axal-faint"> · recorded {formatDay(r.recorded)}{r.by ? ` by ${r.by}` : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {view.earlier && <p className="text-[11.5px] text-axal-faint">{view.earlier}</p>}
     </div>
   );
 }
@@ -481,7 +548,18 @@ function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
               />
             </div>
           </div>
-          <SaveNote note={note?.scope === `eng:${row.engagement_id}` ? note : null} />
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              Client review history
+            </div>
+            <div className="mt-1">
+              <ReviewHistory
+                engagementId={row.engagement_id}
+                seed={`${row.satisfaction ?? ''}|${row.satisfaction_source ?? ''}|${row.satisfaction_at ?? ''}`}
+              />
+            </div>
+          </div>
+          <DeliveryNote note={note?.scope === `eng:${row.engagement_id}` ? note : null} />
         </div>
       )}
     </div>
@@ -518,11 +596,19 @@ export default function PartnerHealthZone() {
     const r = await runMutation(key, fn);
     if (r.skipped) return false;
     if (!r.ok) {
-      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => act(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
       return false;
     }
     setNote({ ok: true, text: ok, scope });
     load();
+    if (fn.retried) fn.after?.();
     return true;
   }, [runMutation, load]);
 
@@ -788,7 +874,9 @@ export default function PartnerHealthZone() {
                   mutate={(k, fn) => act(`${row.engagement_id}:${k}`, fn, 'Saved.', `eng:${row.engagement_id}`)}
                   onSaveFacts={(r, data) => act(
                     `${r.engagement_id}:facts`,
-                    () => api.savePartnerEngagementHealth(r.engagement_id, data),
+                    (rev) => api.savePartnerEngagementHealth(r.engagement_id, {
+                      ...data, expected_revision: stated(rev, r.health_revision ?? null),
+                    }),
                     'Saved.', `facts:${r.engagement_id}`,
                   )}
                 />

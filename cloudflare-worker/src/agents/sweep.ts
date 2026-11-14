@@ -243,6 +243,7 @@ export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>
 export async function sweepAgentDuties(env: Env, now: Date, deps?: Partial<DutyDeps> & { runtime?: () => Promise<AgentRuntime> }) {
   // The retention (Q6 A) applies even while halted: it only forgets.
   try { await purgeExpired(env, now); } catch { console.warn('[agents] purge_failed'); }
+  try { await (await import('../services/agents/computeBridge')).sweepComputeObjects(env); } catch { console.warn('[agents] compute_purge_failed'); }
   if (await haltedAll(env)) return null;
   const mode = await engineMode(env);
   if (mode === 'off') return null;

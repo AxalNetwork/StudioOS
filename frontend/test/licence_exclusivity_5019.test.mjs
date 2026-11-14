@@ -11,12 +11,12 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import { Exclusivity } from '../src/pages/admin/licences/Exclusivity.jsx';
-import { NOT_RECORDED, buildSave, yearLine } from '../src/pages/admin/licences/exclusivityModel.js';
+import { NOT_RECORDED, buildSave, minimumText, yearLine } from '../src/pages/admin/licences/exclusivityModel.js';
 
 const h = React.createElement;
 const VIEW = {
   licence_uid: 'lic_a',
-  operating: { territory: ['FR'], annual_fee_cents: 5_000_000, revenue_share_bps: 600, currency: 'EUR' },
+  operating: { territory: ['FR'], annual_fee_cents: 5_000_000, revenue_share_bps: 600, currency: 'EUR', minimum_guarantee_cents: 1_200_000 },
   exclusivity: {
     uid: 'x1', revision: 2, scope_type: 'country_exclusive', territory: { countries: ['FR'], regions: [] }, parent_licence_uid: null, child_licence_uids: [],
     state: 'at_risk', contractual: true, cure_until: null, targets: [], starts_on: null, ends_on: null, review_on: '2027-01-01', cure_period_days: 90,
@@ -42,6 +42,14 @@ test('a target year reads its progress, or Not recorded, never 0', () => {
   assert.equal(y2.metrics[0].text, `Cohorts: ${NOT_RECORDED} of 3`);
 });
 
+test('D5019 part 2: the operating minimum is the schedule\'s Minimum Guarantee, or Not recorded, or Unreadable; never 0', () => {
+  // Mutations checked: a missing minimum drawn as 0; an unreadable schedule drawn as Not recorded.
+  assert.equal(minimumText({ minimum_guarantee_cents: 1_200_000, currency: 'EUR' }), 'EUR 12,000');
+  assert.equal(minimumText({ minimum_guarantee_cents: null, currency: 'EUR' }), NOT_RECORDED);
+  assert.equal(minimumText({ currency: 'EUR' }), NOT_RECORDED);
+  assert.equal(minimumText({ minimum_guarantee_cents: 'unreadable', currency: 'EUR' }), 'Unreadable');
+});
+
 test('a save names the revision it read, a reason, and only the targets filled in', () => {
   // Mutations checked: the revision left out; an empty target year sent; a save without a reason allowed.
   const form = {
@@ -50,12 +58,12 @@ test('a save names the revision it read, a reason, and only the targets filled i
       { year: 2, period_start: '', period_end: '', min_revenue: '', min_cohorts: '', min_active_members: '' },
     ],
   };
-  assert.ok(buildSave({ form, revision: 2 }).errors.reason);
-  const ok = buildSave({ form: { ...form, reason: 'Split the US market' }, revision: 2 });
+  assert.ok(buildSave({ form, revision: 2, currency: 'EUR' }).errors.reason);
+  const ok = buildSave({ form: { ...form, reason: 'Split the US market' }, revision: 2, currency: 'EUR' });
   assert.equal(ok.body.expected_revision, 2);
   assert.deepEqual(ok.body.territory, { countries: [], regions: ['US-CA', 'US-NYC'] });
   assert.deepEqual(ok.body.targets, [{ year: 1, period_start: '2027-01-01', period_end: '2027-12-31', min_revenue_cents: 10_000_000, min_cohorts: 2, min_active_members: null, min_network: null }]);
-  assert.ok(buildSave({ form: { ...form, regions: '', reason: 'x y z' }, revision: 2 }).errors.regions);
+  assert.ok(buildSave({ form: { ...form, regions: '', reason: 'x y z' }, revision: 2, currency: 'EUR' }).errors.regions);
   const master = buildSave({ form: { scope_type: 'master_franchise', countries: 'BE', children: 'lic_B, lic_C', reason: 'Benelux master', targets: [] }, revision: 0 });
   assert.deepEqual(master.body.child_licence_uids, ['lic_B', 'lic_C'], 'licence ids keep their case');
 });
@@ -79,6 +87,7 @@ test('the panel: operating licence apart, an open review shows its consequence b
   const by = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '');
   assert.match(text(by('exclusivity-operating')), /Paying this fee grants no exclusivity/);
+  assert.match(text(by('exclusivity-operating')), /Annual fee EUR 50,000 · royalty 6% · minimum guarantee EUR 12,000/, 'the operating licence shows fee, royalty and minimum (D5019 part 2)');
   assert.match(text(by('exclusivity-scope-card')), /At risk — HQ review/);
   assert.match(text(by('exclusivity-commitments')), /Year 1 target.*Missed — HQ review/);
   assert.ok(by('exclusivity-review'));

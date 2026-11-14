@@ -9,13 +9,10 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 
 1. **The Cloudflare Worker is the production API at `axal.vc`.** Source of
    truth lives in `cloudflare-worker/src/index.ts` and `cloudflare-worker/src/routes/*.ts`.
-   Wrangler config: `wrangler.toml`. Deploy with **`npm run deploy`**, which is
-   `wrangler deploy --config ../wrangler.toml --env production` — `--env
-   production` IS correct (`documentation/architecture/PRODUCTION.md`, verified 2026-05-06: the
-   `[env.production]` block redeclares every binding, confirmed against the
-   live worker's bindings API). Do not run `npx wrangler deploy` by hand: it
-   skips the `predeploy` hook that applies D1 migrations, so the worker ships
-   ahead of its schema.
+   Wrangler config: `wrangler.toml`. **`npm run deploy`** dispatches the
+   production release workflow on `main`. It verifies the exact candidate,
+   checks queues and Worker startup, applies D1 migrations and deploys with
+   `--env production`. Use the workflow to preserve these release gates.
 2. **D1 (`studioos-db`) is the canonical user store.** Every production user
    account lives in D1. The dev FastAPI uses a separate SQLite file
    (`backend/app.db`) and is **not** kept in sync.
@@ -31,7 +28,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    `not_found_handling = "single-page-application"`) plus the `/api/*`
    handlers. One build sits behind both hosts and ships on every `wrangler
    deploy` — `.github/workflows/cloudflare-worker-deploy.yml` on each push to
-   `main` (build → D1 migrations → deploy), or `npm run deploy` by hand —
+   `main` or an operator dispatch (admission → build and preflight → D1 migrations → deploy) —
    so the two hosts always carry the same build. This has been so since
    2026-09-01: `1d320dda9` ("Remove stale documentation asset files", author
    Replit Agent) replaced the Pages cutover's three path routes (`e1de44c2f`,
@@ -80,7 +77,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
-| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — **not deployed yet**; B8 packages it for the host B0 chooses |
+| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — deployed as its own Worker and Cloudflare Container (#3588), `MEETING_BOT=canary` (Super Admins only); the live Meet/Zoom check is open on #3588 |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
@@ -115,19 +112,27 @@ header comment fails the build (#4104). Adding such a file edits no README.
 - **Do not add a `/api/*` method to `frontend/src/lib/api.js`, or to a module
   under `frontend/src/lib/api/`,** without a matching mounted worker route. A
   new API domain goes in its own module there (D527); `node
-  scripts/build-api-index.mjs` regenerates `frontend/src/lib/apiModules.generated.js`,
+  scripts/build-api-index.mjs` generates `frontend/src/lib/apiModules.generated.js`,
   which `api.js` re-exports with one fixed line, so nobody edits `api.js`'s
   module list by hand (#4105). The drift smoke test (`npm run test:drift`)
-  enforces both on every PR, and fails while the generated index is stale.
+  enforces both on every PR.
 - **A new Worker router mounts itself; a new route area collects itself**
   (#4105). A new `cloudflare-worker/src/routes/<name>.ts` exports `mount`
   (`{ path, router, before?: [routers it must precede] }`, see
   `cloudflare-worker/src/util/routeRegistry.ts`) and `node
-  scripts/build-route-registry.mjs` regenerates `routes/_registry.ts`; do not
+  scripts/build-route-registry.mjs` generates `routes/_registry.ts`; do not
   add an `app.route(...)` line to `index.ts`. A new
   `frontend/src/routes/<area>.jsx` is picked up by `App.jsx`'s glob with no
   edit there (`frontend/src/routes/README.md`). The mounts already in
   `index.ts` and the routes already in `App.jsx` stay where they are.
+- **Never commit a generated module** (D5612). `routes/_registry.ts`,
+  `frontend/src/lib/apiModules.generated.js` and
+  `cloudflare-worker/src/services/agents/skillLibrary.generated.ts` are
+  gitignored; `node scripts/build-generated.mjs` writes all three before every
+  build, typecheck and test (the `npm run build`, `dev`, `test:*` and `lint`
+  hooks and each CI job run it), so a new route, API module or skill is one
+  new file and nothing else. Each generator's `--check` fails if one is
+  tracked again.
 - **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
   entry. FastAPI is not deployable on Workers.
 - **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
@@ -145,11 +150,16 @@ header comment fails the build (#4104). Adding such a file edits no README.
   are the ones issues handed out before that, and keep them.
   `node scripts/check-decision-ids.mjs` reads both places and fails on a
   number used twice, or a D4000+ heading that does not cite its own issue.
-- **A new migration is named by its UTC minute** (D4106):
-  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<slug>.sql`. It sorts after
-  every numbered file and applies once like any other; numbered files stop at
-  799. `scripts/check-sql-migrations.mjs` fails on a shared number or stamp,
-  naming both files.
+- **A new migration is named by its UTC minute and its issue** (D4106, D5398):
+  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<issue>_<slug>.sql`. It sorts
+  after every numbered file and applies once like any other; numbered files
+  stop at 799. Two PRs writing in the same minute twice turned main red
+  (D5398), so from 2026-11-11 00:00 UTC the issue number is required; a file
+  stamped earlier keeps its name. `scripts/check-sql-migrations.mjs` fails on a
+  shared number or identity, naming both files.
+- **A red main gets one repair, not one per branch** (D5398). Read
+  `AGENTS.md` § "Red main and a backed-up queue" before you merge main into a
+  PR, port a fix or re-run CI.
 
 ## Why this doc exists
 

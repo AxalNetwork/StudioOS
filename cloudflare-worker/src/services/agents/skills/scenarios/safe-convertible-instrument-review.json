@@ -410,7 +410,7 @@
     },
     {
       "case_id": "safe-convertible-instrument-review-conditional",
-      "revision": 1,
+      "revision": 2,
       "name": "SAFE review: no financing recorded yet",
       "covers": "conditional calculations only, stated as conditional, when the trigger has not occurred",
       "input": {
@@ -471,6 +471,11 @@
             {
               "subject": "conversion",
               "object": "pending"
+            },
+            {
+              "subject": "SAFE",
+              "object": "convert",
+              "conditional": true
             }
           ],
           "forbidden": [
@@ -519,15 +524,27 @@
                 ""
               ]
             ]
+          },
+          {
+            "targets": "\"SAFE … convert\" as fact",
+            "edit": [
+              [
+                "- If a 3,000,000 USD round closed at a pre-money of 12,000,000 USD, the SAFE would convert at the cap.",
+                "- On a 3,000,000 USD round at a pre-money of 12,000,000 USD, the SAFE will convert at the cap."
+              ]
+            ]
+          },
+          {
+            "targets": "\"SAFE … convert\" as conditional",
+            "edit": [
+              [
+                "- If a 3,000,000 USD round closed at a pre-money of 12,000,000 USD, the SAFE would convert at the cap.\n",
+                ""
+              ]
+            ]
           }
         ]
-      },
-      "staged": [
-        {
-          "assertion": "a calculation stated only as conditional is required to stay conditional",
-          "reason": "Conditional statements are skipped by the number and claim checks; no assertion requires a statement to be conditional (#4531)."
-        }
-      ]
+      }
     },
     {
       "case_id": "safe-convertible-instrument-review-embedded-instruction",

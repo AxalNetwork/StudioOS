@@ -137,7 +137,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
   },
   experiments: {
     title: 'Hypotheses', cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
-    filters: [['status', 'Status', ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded', 'retired']],
+    filters: [['status', 'Status', ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded', 'retired']],
       ['sprint', 'Sprint', ['Sprint 2', 'Sprint 3']], ['strength', 'Strength', ['anecdote', 'pattern', 'measured', 'not_recorded']],
       ['moved', 'Recently moved', ['recent']], ['history', 'History', ['last_week', 'this_month']]],
     sorts: ['updated', 'status', 'code'],
@@ -370,7 +370,8 @@ test('D690 decision 16: experiments\' stats count the whole venture, with more t
   for (let i = 0; i < 5; i += 1) interview(db, { pains: ['slow dispatch'], fit: 'strong' });
   interview(db, { pains: ['billing errors'] });
   interview(db, { pains: [] });
-  // 3 supported (dispatch at the bar), 4 withheld (billing, a fit unrecorded), 20 untested.
+  // 3 supported (dispatch at the bar), 4 testing (billing: one interview of unrecorded fit, which under D4586 v2
+  // cannot change "below the bar", so the status stands rather than being withheld), 20 untested.
   for (let i = 1; i <= 27; i += 1) claim(db, i, `H${i}`);
   for (let i = 1; i <= 3; i += 1) db.prepare("INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction) VALUES (?, 500, 'supports')").run(i);
   for (let i = 4; i <= 7; i += 1) db.prepare("INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction) VALUES (?, 501, 'supports')").run(i);
@@ -380,7 +381,7 @@ test('D690 decision 16: experiments\' stats count the whole venture, with more t
     // D704 decision 7: the read records each live claim, so the venture's history starts with its first read.
     const { history_since: since, history_coverage: coverage, history_filter_available: filterAvailable, ...stats } = r.body.parts.stats;
     assert.deepEqual(stats, {
-      hypotheses: 27, supported: 3, refuted: 0, awaiting: 20, withheld: 4, fit_not_recorded: 2, bar: 5, status_basis: 'interviews',
+      hypotheses: 27, supported: 3, contested: 0, refuted: 0, awaiting: 24, withheld: 0, fit_not_recorded: 2, bar: 5, status_basis: 'interviews',
     }, q || 'page 1');
     assert.match(String(since), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'the first read wrote the first observations');
     assert.equal(coverage.status, 'complete');

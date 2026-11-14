@@ -6,7 +6,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/team_page_d1497.test.mjs
-import test from 'node:test';
+import test, { after, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import React, { act } from 'react';
@@ -39,6 +39,11 @@ const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const TEAM = 'frontend/src/pages/team';
 const NOW = new Date('2026-10-31T12:00:00Z');
+// The page reads the clock, and invitation i1 expires 2026-11-11 10:00 UTC: after that the real clock reads it as expired
+// and its Revoke button goes. So the clock is NOW (D5398: a test never depends on the day it runs; found by the +7-day
+// run).
+before(() => mock.timers.enable({ apis: ['Date'], now: NOW.getTime() }));
+after(() => mock.timers.reset());
 
 // ---------------------------------------------------------------- fixtures (the canvas's samples)
 
@@ -454,6 +459,24 @@ test('a project under a company is forwarded to Company settings › Projects, a
     assert.match(w.text(), /This project sits under \[Northwind Labs\]\. Its own Owner manages this team today\./);
     assert.equal(w.has('company-editors'), false, 'not drawn until a read supplies them');
   } finally { await w.close(); }
+});
+
+test('the project Team draws company authority and editor names from settings scope', async () => {
+  const handle = worker({
+    'GET /api/account/settings-scope': () => response({
+      scope: 'company_project', company: { uid: 'nw1', name: 'Northwind' },
+      project: { id: 5, name: 'Atlas' }, my_authority: 'company_editor',
+      company_editors: [{ name: 'Eve Editor' }],
+    }),
+    'GET /api/projects/5': () => response({ error: 'forbidden' }, 403),
+  });
+  const v = await mount('/account/companies/nw1/settings/projects/5/team', '/account/companies/:uid/settings/projects/:id/team', h(TeamAgentsPage, { form: 'company_project' }), { handle });
+  try {
+    assert.match(v.text(), /Managed under Northwind's authority/);
+    assert.match(v.text(), /You manage this project through Northwind/);
+    assert.match(v.text(), /Company editors with access.*Eve Editor/);
+    assert.equal(v.keys().includes('GET /api/projects/5'), false);
+  } finally { await v.close(); }
 });
 
 test('Project settings › General: standalone offers Move under a company, only to companies you edit; no Legal', async () => {

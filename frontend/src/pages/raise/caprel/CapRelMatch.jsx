@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
@@ -9,6 +10,7 @@ import { DraftDialog } from './CapRelOutreach';
 import { tabHref, TABS } from './capRelModel';
 import { FIT_FILTERS, FIT_WORDS, MATCH_PAGE, MATCH_SORTS, fundSize, matchQuery, pageLine, verifiedLine } from './capRelTabsModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { MATCH_FILTERS, useTabFilters } from './capRelUrlFilters';
 
 /**
  * D1193 (#3127, CRL7) — Match: the fund directory against this venture
@@ -26,9 +28,9 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-axal-muted dark:text-gray-400';
-const BTN_S = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_S = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[32px] justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const FIT_TONE = {
   fits: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
   outside: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -47,8 +49,10 @@ function Facet({ label, name, value, options = [], onChange, none = 'Any' }) {
 }
 
 export default function CapRelMatch({ projectId, search = '' }) {
-  const [f, setF] = useState({ q: '', hq_country: '', focus: '', size_band: '', fit: '', warm: false, sort: 'name', offset: 0 });
-  const [typed, setTyped] = useState('');
+  // D5377: the filters, sort and offset are the address's, read through MATCH_FILTERS' allowed sets.
+  const [f, setF] = useTabFilters(MATCH_FILTERS, projectId);
+  const [typed, setTyped] = useState(f.q);
+  useEffect(() => { setTyped(f.q); }, [f.q]);
   const [n, setN] = useState(0);
   const [read, setRead] = useState({ status: 'loading', data: null, error: '' });
   const [adding, setAdding] = useState(null);
@@ -64,14 +68,14 @@ export default function CapRelMatch({ projectId, search = '' }) {
   }, [projectId, f, n]);
   // A new read (filters, page, retry) is a new list: its order is the read's again.
   useEffect(() => { setRank(null); }, [projectId, f, n]);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v, offset: 0 }));
+  const set = (k, v, opts) => setF({ [k]: v }, opts);
   const d = read.data;
   const shown = applyRank(d?.items || [], (fund) => fund.uid, rank);
   const items = shown.list;
   const network = items.flatMap((fund) => (fund.warm_paths || []).map((w) => ({ ...w, fund: fund.name, fundRow: fund, prospectId: fund.in_pipeline?.prospect_id ?? null, key: `${fund.uid}:${w.name}` })));
   const outreach = TABS.find((t) => t.id === 'outreach');
   return (
-    <div className="flex flex-col gap-4" data-testid="caprel-match">
+    <div className="flex min-w-0 flex-col gap-4" data-testid="caprel-match">
       <p className={`m-0 rounded-xl border border-violet-200 bg-axal-lavender px-4 py-2.5 text-[12.5px] ${INK} dark:border-violet-900 dark:bg-violet-950/30`}>
         Match reads each fund’s stated focus against your venture. It never shows another venture’s data.
       </p>
@@ -92,7 +96,7 @@ export default function CapRelMatch({ projectId, search = '' }) {
           <section className={`${CARD} flex min-w-0 flex-col`} data-testid="caprel-match-funds">
             <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
               <h3 className={`m-0 mr-auto text-[14px] font-extrabold ${INK}`}>From the fund directory</h3>
-              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); set('q', typed); }}>
+              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); set('q', typed, { replace: true }); }}>
                 <input className={`${FIELD} w-48`} placeholder="Search funds" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Search funds" data-testid="caprel-match-search" />
               </form>
               <select className={`${FIELD} w-auto`} value={f.sort} onChange={(e) => set('sort', e.target.value)} aria-label="Sort" data-testid="caprel-match-sort">
@@ -110,32 +114,34 @@ export default function CapRelMatch({ projectId, search = '' }) {
             {read.status === 'unreadable' ? <div className="px-4 py-3"><Unreadable what="The fund directory" claim="This is not a claim that no fund fits." onRetry={() => setN((x) => x + 1)} /></div> : null}
             {read.status === 'loading' && !d ? <div className="m-4 h-40 animate-pulse rounded-lg bg-axal-ground dark:bg-gray-800" data-testid="caprel-match-loading" /> : null}
             {d ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
-                  <thead><tr className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
-                    {['Fund · focus', 'Geography', 'Fund size', 'Fit', 'Warm path', ''].map((h) => <th key={h} className="px-3 py-2 font-extrabold">{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {items.map((fund) => (
-                      <tr key={fund.uid} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-match-row">
-                        <td className="px-3 py-2.5"><div className={`font-bold ${INK}`}>{fund.name}</div><div className={MUTED}>Focus: {fund.sector_focus || 'Not recorded'}</div>
-                          {shown.lineFor(fund) ? <div className="mt-1 text-[11.5px] text-violet-800 dark:text-violet-300" data-testid="caprel-match-rank-line">{shown.lineFor(fund)}</div> : null}</td>
-                        <td className={`px-3 py-2.5 ${INK}`}>{fund.hq || 'Not recorded'}</td>
-                        <td className={`px-3 py-2.5 font-mono ${fund.fund_size_cents != null ? INK : MUTED}`} data-testid="caprel-match-size">{fundSize(fund)}</td>
-                        <td className="px-3 py-2.5">
-                          <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${FIT_TONE[fund.fit?.code] || FIT_TONE.unclear}`} data-testid="caprel-match-fit">{fund.fit?.label || FIT_WORDS[fund.fit?.code] || 'Unclear'}</span>
-                          <div className={`mt-1 text-[11.5px] ${MUTED}`}>Their focus: {fund.fit?.their_focus || 'not recorded'}. Your sector: {fund.fit?.your_sector || 'not recorded'}.</div>
-                        </td>
-                        <td className={`px-3 py-2.5 ${fund.warm_paths?.length ? INK : MUTED}`}>{fund.warm_paths?.length ? fund.warm_paths.map((w) => w.sentence).join('; ') : '—'}</td>
-                        <td className="px-3 py-2.5 text-right">
-                          {fund.in_pipeline
-                            ? <span className={`text-[12px] font-semibold ${MUTED}`} data-testid="caprel-match-tracked">In your pipeline</span>
-                            : <button type="button" className={BTN_S} onClick={() => setAdding(fund)} data-testid="caprel-match-add">Add to pipeline</button>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div>
+                <ResponsiveRecords>
+                  <table role="table" className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
+                    <thead role="rowgroup"><tr role="row" className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
+                      {['Fund · focus', 'Geography', 'Fund size', 'Fit', 'Warm path', ''].map((h) => <th role="columnheader" key={h} className="px-3 py-2 font-extrabold">{h}</th>)}
+                    </tr></thead>
+                    <tbody role="rowgroup">
+                      {items.map((fund) => (
+                        <tr role="row" key={fund.uid} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-match-row">
+                          <td role="cell" className="px-3 py-2.5"><RecordLabel>Fund</RecordLabel><div className={`font-bold ${INK}`}>{fund.name}</div><div className={MUTED}>Focus: {fund.sector_focus || 'Not recorded'}</div>
+                            {shown.lineFor(fund) ? <div className="mt-1 text-[11.5px] text-violet-800 dark:text-violet-300" data-testid="caprel-match-rank-line">{shown.lineFor(fund)}</div> : null}</td>
+                          <td role="cell" className={`px-3 py-2.5 ${INK}`}><RecordLabel>Geography</RecordLabel>{fund.hq || 'Not recorded'}</td>
+                          <td role="cell" className={`px-3 py-2.5 font-mono ${fund.fund_size_cents != null ? INK : MUTED}`} data-testid="caprel-match-size"><RecordLabel>Fund size</RecordLabel>{fundSize(fund)}</td>
+                          <td role="cell" className="px-3 py-2.5"><RecordLabel>Fit</RecordLabel>
+                            <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${FIT_TONE[fund.fit?.code] || FIT_TONE.unclear}`} data-testid="caprel-match-fit">{fund.fit?.label || FIT_WORDS[fund.fit?.code] || 'Unclear'}</span>
+                            <div className={`mt-1 text-[11.5px] ${MUTED}`}>Their focus: {fund.fit?.their_focus || 'not recorded'}. Your sector: {fund.fit?.your_sector || 'not recorded'}.</div>
+                          </td>
+                          <td role="cell" className={`px-3 py-2.5 ${fund.warm_paths?.length ? INK : MUTED}`}><RecordLabel>Warm path</RecordLabel>{fund.warm_paths?.length ? fund.warm_paths.map((w) => w.sentence).join('; ') : '—'}</td>
+                          <td role="cell" className="px-3 py-2.5 text-right">
+                            {fund.in_pipeline
+                              ? <span className={`text-[12px] font-semibold ${MUTED}`} data-testid="caprel-match-tracked">In your pipeline</span>
+                              : <button type="button" className={BTN_S} onClick={() => setAdding(fund)} data-testid="caprel-match-add">Add to pipeline</button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ResponsiveRecords>
                 {!items.length ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="caprel-match-none">No fund in the directory matches these filters.</p> : null}
               </div>
             ) : null}
@@ -143,8 +149,8 @@ export default function CapRelMatch({ projectId, search = '' }) {
               <div className="flex items-center justify-between gap-2 border-t border-axal-hairline px-4 py-2.5 text-[12px] dark:border-gray-800">
                 <span className={MUTED} data-testid="caprel-match-count">{pageLine(f.offset, items.length, d.total)}</span>
                 <span className="flex gap-2">
-                  <button type="button" className={BTN_S} disabled={f.offset === 0} onClick={() => setF((x) => ({ ...x, offset: Math.max(0, x.offset - MATCH_PAGE) }))}>Previous</button>
-                  <button type="button" className={BTN_S} disabled={f.offset + items.length >= d.total} onClick={() => setF((x) => ({ ...x, offset: x.offset + MATCH_PAGE }))} data-testid="caprel-match-next">Next</button>
+                  <button type="button" className={BTN_S} disabled={f.offset === 0} onClick={() => setF({ offset: Math.max(0, f.offset - MATCH_PAGE) })}>Previous</button>
+                  <button type="button" className={BTN_S} disabled={f.offset + items.length >= d.total} onClick={() => setF({ offset: f.offset + MATCH_PAGE })} data-testid="caprel-match-next">Next</button>
                 </span>
               </div>
             ) : null}

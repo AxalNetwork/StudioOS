@@ -183,7 +183,7 @@ test('every investor row lands on its own workspace overview', () => {
   // D4815 (canvas DX1): the root is My Deal Flow. It WAS the zones' bucket
   // board, which read as three mini-apps under the flow; the zones are now one
   // "Other deal activity" line inside DealFlow, each linking to its route.
-  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} more=\{more\} \/>/,
+  assert.match(dealsShell, /<DealFlow view=\{view\} scope=\{scope\} \/>/,
     'the /deals root no longer renders Deal flow');
   assert.doesNotMatch(dealsShell, /<BucketBoard|<BucketOverview/,
     'the /deals root stacks the zone mini-boards under Deal flow again');
@@ -204,7 +204,13 @@ test('an investor pill navigates — it is not an anchor onto the page', () => {
   // `workspace_shell_routes.test.mjs` already asserts every zone route in that
   // config is registered in App.jsx. Both are checked.
   for (const [name, prefix] of Object.entries(OVERVIEWS)) {
-    const page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    let page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    // D4817 part 1 (#5311): the Portfolio Overview draws in the shared
+    // Portfolio frame, which owns the zone row for every Portfolio board.
+    if (name === 'InvestorPortfolioCanvas') {
+      assert.match(page, /<PortfolioFrame\b/, 'the Portfolio Overview must draw in the Portfolio frame');
+      page = codeOnly(read('frontend/src/pages/portfolio/PortfolioFrame.jsx'));
+    }
     assert.match(page, /<ZoneNav /, `${name} must render the shared zone row`);
     assert.ok(page.includes(`bucketForPath('investor', '${prefix}')`),
       `${name} must take its zone row's targets from the shell config`);

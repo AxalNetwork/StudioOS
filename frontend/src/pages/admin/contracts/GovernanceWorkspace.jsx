@@ -7,6 +7,8 @@ import { LifecycleBadge } from './LifecycleBadge';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, button, card, date } from './parts';
 import { dayLabel, fileKind, fileSize, statusLabel } from './governanceModel';
+import RelatedDocuments, { RelatedBanner } from './RelatedDocuments';
+import LegalReviewPanel, { LastReview } from './LegalReviewPanel';
 
 /**
  * D4811 (#4811) part 5 — one governance record's workspace (board CT-07), at
@@ -14,8 +16,10 @@ import { dayLabel, fileKind, fileSize, statusLabel } from './governanceModel';
  * Legal Review · Activity · Related, the tab in `?tab=`. Read-only: changes
  * still go through the record's side panel ("Edit in panel"), which keeps
  * every D4563 rule. A confidential record answers 404 to anyone but the
- * Super Admin, and the page says it is not available. Legal Review and
- * Related say Not recorded and why: neither store exists yet.
+ * Super Admin, and the page says it is not available. Legal Review says
+ * Not recorded and why: its store does not exist yet. Related (part 8) lists
+ * the documents the record governs and raises the CT-11 banner when they may
+ * require review.
  */
 export const WORKSPACE_TABS = Object.freeze([
   ['overview', 'Overview'], ['document', 'Document'], ['versions', 'Versions'],
@@ -27,6 +31,7 @@ export function versionMarkers(document, version, latestVersion) {
   const out = [];
   if (document?.executed_version === version.version) out.push('In force');
   if (version.version === latestVersion) out.push('Latest');
+  if (version.counsel_approved === true) out.push('Approved');
   if (version.signed) out.push('Signed copy');
   return out;
 }
@@ -55,7 +60,15 @@ export default function GovernanceWorkspace({ uid, categories = [], entities = [
   const entity = entities.find((e) => e.key === d?.entity_key);
   const category = categories.find((c) => c.key === d?.category)?.label;
   const badge = d ? governanceLifecycle(d.status) : null;
-  const go = (key) => { const next = new URLSearchParams(params); if (key === 'overview') next.delete('tab'); else next.set('tab', key); setParams(next); };
+  const [relRev, setRelRev] = useState(0);
+  const related = useRead(() => adminGovernanceApi.related(uid), [uid, relRev]);
+  const relCount = related.data?.dependants?.length;
+  const go = (key, extra = {}) => {
+    const next = new URLSearchParams(params); next.delete('affected');
+    if (key === 'overview') next.delete('tab'); else next.set('tab', key);
+    for (const [k, v] of Object.entries(extra)) next.set(k, v);
+    setParams(next);
+  };
   return <section aria-label="Governance record" className="space-y-4" data-testid="governance-workspace">
     <nav aria-label="Breadcrumb" className="text-[11px] font-bold uppercase tracking-widest text-axal-faint">
       <Link to="/admin/contracts">Contracts</Link> › <Link to="/admin/contracts/governance">Corporate Governance</Link>
@@ -76,18 +89,21 @@ export default function GovernanceWorkspace({ uid, categories = [], entities = [
           <button type="button" className={`${button} min-h-[44px] md:min-h-0`} onClick={onEdit}>Edit in panel</button>
         </div>
       </header>
+      <RelatedBanner uid={uid} banner={related.data?.banner} onReview={() => go('related', { affected: '1' })} onDismissed={() => setRelRev((n) => n + 1)} />
       <div role="tablist" aria-label="Record workspace" className="flex gap-1 overflow-x-auto border-b border-axal-hairline">
         {WORKSPACE_TABS.map(([key, label]) => <button key={key} type="button" role="tab" id={`gw-tab-${key}`} aria-selected={tab === key} aria-controls={`gw-panel-${key}`}
           className={`min-h-[44px] whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${tab === key ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`}
-          onClick={() => go(key)}>{label}{key === 'versions' && <span className="ml-1 font-mono text-[11px] text-axal-muted">{versions.length}</span>}</button>)}
+          onClick={() => go(key)}>{label}{key === 'versions' && <span className="ml-1 font-mono text-[11px] text-axal-muted">{versions.length}</span>}{key === 'related' && relCount != null && <span className="ml-1 font-mono text-[11px] text-axal-muted">{relCount}</span>}</button>)}
       </div>
       <div role="tabpanel" id={`gw-panel-${tab}`} aria-labelledby={`gw-tab-${tab}`} data-testid={`governance-workspace-${tab}`}>
         {tab === 'overview' && <Overview d={d} versions={versions} entity={entity} category={category} />}
         {tab === 'document' && <DocumentTab uid={uid} d={d} versions={versions} />}
         {tab === 'versions' && <VersionsTab uid={uid} d={d} versions={versions} />}
-        {tab === 'legal-review' && <div className={`${card} p-4 text-[12.5px]`}><Missing reason="The legal-review record (reviewer, type, jurisdiction, version reviewed, findings, sources, decision) is not built yet. It waits on who records counsel approval (D4811 question C). A record's review state is its In review status for now." /></div>}
+        {/* D4811 part 16: the legal-review record (CT-08), bound to the reviewed version's hash. */}
+        {tab === 'legal-review' && <LegalReviewPanel kind="governance" refId={uid} />}
         {tab === 'activity' && <ActivityTab uid={uid} />}
-        {tab === 'related' && <div className={`${card} p-4 text-[12.5px]`}><Missing reason="Links between documents (governs, depends on) are not recorded yet, so no related document or change warning can be shown. Nothing is guessed from titles." /></div>}
+        {tab === 'related' && <RelatedDocuments uid={uid} read={related} entities={entities} recordTitle={d.title} onChanged={() => setRelRev((n) => n + 1)}
+          affectedOnly={params.get('affected') === '1'} onShowAll={() => go('related')} />}
       </div>
     </>}</ReadState>
   </section>;
@@ -103,8 +119,7 @@ function Overview({ d, versions, entity, category }) {
     ['Effective date', dayLabel(d.effective_date), 'No effective date was entered.'],
     ['Latest version', latest ? `v${latest.version} · ${date(latest.created_at) || 'upload date not recorded'}` : null, 'No file uploaded yet.'],
     ['Executed version', executedLine(d), d.status === 'executed' ? 'Executed, but neither evidence field is set.' : 'Not executed.'],
-    ['Last review', null, 'The legal-review record is not built yet (D4811 question C).'],
-    ['Reviewer', null, 'The legal-review record is not built yet (D4811 question C).'],
+    ['Last review', <LastReview kind="governance" refId={d.uid} />, null],
     ['Linked template', d.template_slug || null, 'No template linked.'],
     ['Linked envelope', d.envelope_id != null ? `#${d.envelope_id}` : null, 'No envelope linked.'],
   ];

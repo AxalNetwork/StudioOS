@@ -24,9 +24,11 @@
  *      208:160 is explicit that a partner-side write to either would be the
  *      firm reporting a metric about itself. No route here accepts them, on
  *      create or on patch, and a test sends both and asserts the row is
- *      unchanged. The consequence is real and goes on the page rather than
- *      being hidden: on this build every deliverable reads *Unopened* forever,
- *      and the read says why.
+ *      unchanged. The client sets `opened_at` through its own route,
+ *      `POST /api/client/deliverables/:uid/open` (#5314 part 1,
+ *      `client_deliverables.ts`), once, when it opens the shared link; a
+ *      deliverable whose open could not have been recorded reads
+ *      "Not recorded", and the read says why.
  *
  * UTILISATION IS READ, NOT RECOMPUTED. `/health` imports the same
  * `utilisationFor` that `/api/partner/pipeline/retainers` uses. The Health
@@ -47,9 +49,9 @@ import {
 } from './_t13t14t15_helpers';
 import type { ReadTracking } from './_partner_workspace_helpers';
 import {
-  currentMonthlyCents, daysBetween, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
-  periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
-  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
+  daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
+  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, weeklyFromMonthly, WEEKS_PER_MONTH,
 } from './_partner_workspace_helpers';
 import { logActorAct } from '../services/actorLog';
 import { statusReportAccess } from '../services/statusReportAccess';
@@ -89,13 +91,46 @@ function deliveryChanged(c: any, what: string, current?: { revision?: unknown } 
     detail: `That ${what} changed while you were editing it. Reload it and try again.`,
     code: 'delivery_changed',
     revision: current?.revision == null ? null : Number(current.revision),
+    // #5314 part 3: the same number under the name the conflict state reads.
+    current_version: current?.revision == null ? null : Number(current.revision),
   }, 409);
 }
 
-/** The revision a caller says it read, if it says one. */
-function expectedRevision(b: any): number | null {
-  const n = b?.expected_revision;
-  return n == null || !Number.isInteger(Number(n)) ? null : Number(n);
+/**
+ * #5314 part 3 (D4822) — the revision a caller STATED, keyed on whether it
+ * stated one at all.
+ *
+ * `undefined`: it said nothing (a page opened before this build); the write
+ * keeps D4682's guard on the row it read itself. `null`: it read NO row (an
+ * upsert's first write), so the write inserts only while there still is none.
+ * A number: the revision it read; any other revision is a conflict and the
+ * write changes nothing. Anything else is refused, rather than read as silence.
+ */
+function statedRevision(src: any): number | null | undefined {
+  if (!src || !Object.prototype.hasOwnProperty.call(src, 'expected_revision')) return undefined;
+  const v = src.expected_revision;
+  if (v === null || v === 'none') return null;
+  const n = Number(v);
+  if (v === '' || typeof v === 'boolean' || !Number.isInteger(n) || n < 0) {
+    throw new Response(JSON.stringify({
+      detail: 'expected_revision is the revision you read: a whole number, or null when you read no record',
+      code: 'bad_expected_revision',
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  return n;
+}
+
+/** A DELETE states its revision in the query: `?expected_revision=3` (or `none`). */
+function queryRevision(c: any): number | null | undefined {
+  const q = c.req.query('expected_revision');
+  return q === undefined ? undefined : statedRevision({ expected_revision: q });
+}
+
+/** Whether a stated revision disagrees with the row as it is (`cur` null: no row). */
+function staleAgainst(stated: number | null | undefined, cur: { revision?: unknown } | null | undefined): boolean {
+  if (stated === undefined) return false;
+  if (!cur) return stated !== null;
+  return stated !== Number(cur.revision);
 }
 
 /**
@@ -115,11 +150,11 @@ async function patchCurrent(opts: {
   write: (merged: any, row: any) => Promise<any>;
 }): Promise<{ ok: true; merged: any; before: any } | { ok: false; current: any }> {
   const first = await opts.read();
-  const want = expectedRevision(opts.body);
-  if (want != null && Number(first.revision) !== want) return { ok: false, current: first };
+  const want = statedRevision(opts.body);
+  if (staleAgainst(want, first)) return { ok: false, current: first };
   const merged0 = mergePatch(first, opts.body, opts.fields);
   if (changedOne(await opts.write(merged0, first))) return { ok: true, merged: merged0, before: first };
-  if (want != null) return { ok: false, current: await opts.read().catch(() => first) };
+  if (want !== undefined) return { ok: false, current: await opts.read().catch(() => first) };
   const fresh = await opts.read().catch(() => null);
   if (!fresh) return { ok: false, current: null };
   for (const f of opts.fields) {
@@ -244,7 +279,7 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -283,7 +318,7 @@ partnerDelivery.get('/board', async (c) => {
     const reportByEng = new Map<number, any>((reports.results || []).map((r: any) => [Number(r.engagement_id), r]));
 
     const group = groupByEngagement;
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
     const seatByEng = group(seats.results || []);
     const msByEng = group(milestones.results || []);
     const blByEng = group(blockers.results || []);
@@ -323,7 +358,7 @@ partnerDelivery.get('/board', async (c) => {
       const bl = allBl.filter((b: any) => !b.cleared_at);
       const dl = dlByEng.get(id) || [];
       const proj = retainerProjection(
-        e.retainer_id ? e : null,
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
         e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
         now,
       );
@@ -334,7 +369,7 @@ partnerDelivery.get('/board', async (c) => {
       const hrs = (hrByEng.get(id) || [])
         .filter((h: any) => inPeriod.includes(String(h.period)))
         .reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
-      const recurring = currentMonthlyCents(e.retainer_id ? e : null, now);
+      const recurring = proj.retainer?.current_monthly_cents ?? null;
       const h = healthFor({
         milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
         openBlockers: bl.map((b: any) => ({ side: b.side })),
@@ -490,7 +525,7 @@ partnerDelivery.get('/health', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -510,7 +545,7 @@ partnerDelivery.get('/health', async (c) => {
     // stated — and all three are absent until they do.
     const stated = await c.env.DB.prepare(
       `SELECT h.engagement_id, h.owner_user_id, h.scope_state, h.scope_note,
-              h.satisfaction, h.satisfaction_source, h.satisfaction_at,
+              h.satisfaction, h.satisfaction_source, h.satisfaction_at, h.revision,
               o.name AS owner_name
          FROM partner_engagement_health h
          JOIN engagements e ON e.id = h.engagement_id
@@ -535,7 +570,7 @@ partnerDelivery.get('/health', async (c) => {
     // THE WHOLE COLLECTION, not the first row (#4690): `seatStateFor` is the one
     // definition the Board and Capacity use too.
     const seatsByEng = groupByEngagement(seats.results || []);
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
 
     const by = groupByEngagement;
     const msByEng = by(milestones.results || []);
@@ -564,7 +599,7 @@ partnerDelivery.get('/health', async (c) => {
       // The same projection Pipeline · Retainers returns: cadence-aware period,
       // ended retainers excluded.
       const proj = retainerProjection(
-        e.retainer_id ? e : null,
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
         e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
         now,
       );
@@ -635,6 +670,9 @@ partnerDelivery.get('/health', async (c) => {
         satisfaction: st?.satisfaction == null ? null : Number(st.satisfaction),
         satisfaction_source: st?.satisfaction_source ?? null,
         satisfaction_at: st?.satisfaction_at ?? null,
+        // #5314 part 3: the stated row's revision, or null while nothing is
+        // stated. A save sends it back as `expected_revision`.
+        health_revision: st ? Number(st.revision ?? 0) : null,
         // Marked as a READ on the page, and it is one: the same helper the
         // Retainers zone calls, not a second computation of the same ratio.
         utilisation_source: 'pipeline_retainers',
@@ -717,7 +755,7 @@ partnerDelivery.get('/health', async (c) => {
  */
 partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -770,33 +808,131 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
     const at = has('satisfaction_at')
       ? trimOrNull(b.satisfaction_at, 40) : (current?.satisfaction_at ?? null);
 
-    await c.env.DB.prepare(
-      `INSERT INTO partner_engagement_health
-         (engagement_id, owner_user_id, scope_state, scope_note,
-          satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (engagement_id) DO UPDATE SET
-         owner_user_id = excluded.owner_user_id,
-         scope_state = excluded.scope_state,
-         scope_note = excluded.scope_note,
-         satisfaction = excluded.satisfaction,
-         satisfaction_source = excluded.satisfaction_source,
-         satisfaction_at = excluded.satisfaction_at,
-         updated_at = excluded.updated_at`,
-    ).bind(
-      engagementId, ownerId, scopeState, scopeNote,
-      satisfaction, source, at, nowIso(), nowIso(),
-    ).run();
+    // #5314 part 3 (D4822): the row the person was shown, or none. Omitted
+    // keys above are merged from `current`, so the write is guarded on that
+    // read's revision whether or not the caller stated one: a request that
+    // merged over an older row changes nothing.
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'engagement health', current);
+    const write = current
+      ? c.env.DB.prepare(
+        `UPDATE partner_engagement_health
+            SET owner_user_id = ?, scope_state = ?, scope_note = ?,
+                satisfaction = ?, satisfaction_source = ?, satisfaction_at = ?,
+                updated_at = ?, revision = revision + 1
+          WHERE engagement_id = ? AND revision = ?`,
+      ).bind(
+        ownerId, scopeState, scopeNote, satisfaction, source, at, nowIso(),
+        engagementId, Number(current.revision),
+      )
+      : c.env.DB.prepare(
+        `INSERT INTO partner_engagement_health
+           (engagement_id, owner_user_id, scope_state, scope_note,
+            satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (engagement_id) DO NOTHING`,
+      ).bind(
+        engagementId, ownerId, scopeState, scopeNote,
+        satisfaction, source, at, nowIso(), nowIso(),
+      );
+
+    // #5314 part 2 — A CHANGED REVIEW IS APPENDED, IN THE SAME BATCH. The
+    // health row keeps only the latest score; the history keeps each one as
+    // it was recorded, so a later edit no longer erases what the client said
+    // before. A save that leaves the review as it was appends nothing, and
+    // `changes() = 1` ties the append to the guarded write above: a stale
+    // write (part 3) changes no row, so it appends no review either.
+    let wrote: any;
+    if (!sameReview(current, { satisfaction, source, at })) {
+      const [w] = await c.env.DB.batch([
+        write,
+        c.env.DB.prepare(
+          `INSERT INTO engagement_client_reviews
+             (engagement_id, satisfaction, source, said_at, recorded_at, recorded_by)
+           SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1`,
+        ).bind(engagementId, satisfaction, source, at, nowIso(), user.id),
+      ]);
+      wrote = w;
+    } else {
+      wrote = await write.run();
+    }
+    const saved = await c.env.DB.prepare(
+      'SELECT revision FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'engagement health', saved);
 
     return c.json({
       ok: true,
       engagement_id: engagementId,
+      revision: Number(saved?.revision ?? 0),
       owner_user_id: ownerId,
       scope_state: scopeState,
       scope_note: scopeNote,
       satisfaction,
       satisfaction_source: source,
       satisfaction_at: at,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Whether a health save leaves the client's review (score, source, when) as it was. */
+function sameReview(current: any, next: { satisfaction: any; source: any; at: any }) {
+  const s = (v: any) => (v == null ? null : Number(v));
+  const t = (v: any) => (v == null ? null : String(v));
+  return s(current?.satisfaction) === s(next.satisfaction)
+    && t(current?.satisfaction_source) === t(next.source)
+    && t(current?.satisfaction_at) === t(next.at);
+}
+
+/**
+ * #5314 part 2 — the client's reviews of one engagement, oldest first.
+ *
+ * Before this history began only the latest score was kept, so an engagement
+ * whose current score is on no history row says so (`earlier_not_recorded`).
+ * An unreadable history is `available: false` with the reason — never an
+ * empty list standing for "no reviews".
+ */
+partnerDelivery.get('/engagements/:engagementId/reviews', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    let rows: any[];
+    try {
+      const r = await c.env.DB.prepare(
+        `SELECT r.id, r.satisfaction, r.source, r.said_at, r.recorded_at, u.name AS recorded_by_name
+           FROM engagement_client_reviews r
+           LEFT JOIN users u ON u.id = r.recorded_by
+          WHERE r.engagement_id = ?
+          ORDER BY r.id`,
+      ).bind(engagementId).all<any>();
+      rows = r.results || [];
+    } catch (e) {
+      console.error('[delivery] client review history unreadable', e);
+      return c.json({
+        engagement_id: engagementId, available: false, items: null,
+        reason: 'Unreadable: the review history could not be read.',
+      });
+    }
+    const current = await c.env.DB.prepare(
+      'SELECT satisfaction FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    const earlierNotRecorded = current?.satisfaction != null && rows.length === 0;
+    return c.json({
+      engagement_id: engagementId,
+      available: true,
+      items: rows.map((r) => ({
+        id: Number(r.id),
+        satisfaction: r.satisfaction == null ? null : Number(r.satisfaction),
+        cleared: r.satisfaction == null,
+        source: r.source ?? null,
+        said_at: r.said_at ?? null,
+        recorded_at: r.recorded_at,
+        recorded_by_name: r.recorded_by_name ?? null,
+      })),
+      earlier_not_recorded: earlierNotRecorded,
+      earlier_note: earlierNotRecorded
+        ? 'Not recorded: the current score was saved before review history was kept, so earlier reviews are not on record.'
+        : null,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -818,6 +954,7 @@ partnerDelivery.get('/engagements/:engagementId/milestones', async (c) => {
         id: Number(r.id), uid: r.uid, title: r.title,
         due_at: r.due_at ?? null, completed_at: r.completed_at ?? null,
         days_overdue: !r.completed_at && r.due_at ? daysBetween(r.due_at) : null,
+        revision: Number(r.revision ?? 0),
       })),
     });
   } catch (e) { return mapError(c, e); }
@@ -889,6 +1026,8 @@ partnerDelivery.delete('/milestones/:id', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'milestone', row);
     const del = await c.env.DB.prepare('DELETE FROM engagement_milestones WHERE id = ? AND revision = ?')
       .bind(id, Number(row.revision)).run();
     if (!changedOne(del)) return deliveryChanged(c, 'milestone');
@@ -913,6 +1052,7 @@ partnerDelivery.get('/engagements/:engagementId/blockers', async (c) => {
         id: Number(r.id), uid: r.uid, side: r.side, summary: r.summary,
         raised_at: r.raised_at, cleared_at: r.cleared_at ?? null,
         days_open: r.cleared_at ? null : daysBetween(r.raised_at),
+        revision: Number(r.revision ?? 0),
       })),
     });
   } catch (e) { return mapError(c, e); }
@@ -939,7 +1079,7 @@ partnerDelivery.post('/engagements/:engagementId/blockers', async (c) => {
     await logActorAct(c.env, user, 'delivery_blocker_raised', { blocker_id: Number(row.id), engagement_id: engagementId, side });
     return c.json({
       id: Number(row.id), uid: row.uid, side: row.side, summary: row.summary,
-      raised_at: row.raised_at, cleared_at: null,
+      raised_at: row.raised_at, cleared_at: null, revision: Number(row.revision ?? 0),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -995,6 +1135,8 @@ partnerDelivery.delete('/blockers/:id', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'blocker', row);
     const del = await c.env.DB.prepare('DELETE FROM engagement_blockers WHERE id = ? AND revision = ?')
       .bind(id, Number(row.revision)).run();
     if (!changedOne(del)) return deliveryChanged(c, 'blocker');
@@ -1022,7 +1164,25 @@ async function bookReadTracking(env: Env, partnerId: number): Promise<ReadTracki
       WHERE e.partner_id = ? AND d.opened_at IS NOT NULL
       LIMIT 1`,
   ).bind(partnerId).first<any>();
-  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : []);
+  // #5314 part 1: once the client-open route records, the answer is "yes, from then".
+  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : [], undefined, await deliverableReadsSince(env));
+}
+
+/**
+ * #5314 part 1: the median days from send to the client's first open, over the
+ * opens actually recorded. Fewer than MIN_OPENS_FOR_MEDIAN opens is not a
+ * median anybody should plan by, so it stays null and says how many there are.
+ */
+const MIN_OPENS_FOR_MEDIAN = 3;
+function medianDaysToOpen(items: any[]): { value: number | null; opens: number } {
+  const days = items
+    .filter((d) => d.sent_at && d.opened_at)
+    .map((d) => daysBetween(d.sent_at, String(d.opened_at)))
+    .filter((n): n is number => n != null && n >= 0)
+    .sort((a, b) => a - b);
+  if (days.length < MIN_OPENS_FOR_MEDIAN) return { value: null, opens: days.length };
+  const mid = Math.floor(days.length / 2);
+  return { value: days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2, opens: days.length };
 }
 
 function deliverableDto(r: any, tracking: ReadTracking) {
@@ -1040,11 +1200,28 @@ function deliverableDto(r: any, tracking: ReadTracking) {
     opened_at: r.opened_at ?? null,
     signed_off_at: r.signed_off_at ?? null,
     days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
+    // #5314 part 1: which version the client opened. `opened_current` is false
+    // when the firm edited the deliverable after the open, so the open is not
+    // passed off as a read of what the row says now.
+    opened_version: r.opened_at ? (r.opened_version ?? null) : null,
+    opened_current: r.opened_at && r.opened_revision != null
+      ? Number(r.opened_revision) === Number(r.revision ?? 0)
+      : null,
     // Derived, not stored: sent and not opened — and NULL, not true, where
-    // opens cannot be observed (#4690): "not recorded" is not "unopened".
-    is_unopened: !r.sent_at ? false : (tracking.available ? !r.opened_at : null),
+    // this row's open cannot be observed (#4690, #5314): "not recorded" is not
+    // "unopened".
+    is_unopened: unopenedFlag(r, tracking),
     read_state: readStateFor(r, tracking),
+    // #5314 part 3: what an edit or delete sends back as `expected_revision`.
+    revision: Number(r.revision ?? 0),
   };
+}
+
+function unopenedFlag(r: any, tracking: ReadTracking): boolean | null {
+  const state = readStateFor(r, tracking);
+  if (state === 'unopened') return true;
+  if (state === 'not_recorded') return null;
+  return false;
 }
 
 partnerDelivery.get('/deliverables', async (c) => {
@@ -1064,26 +1241,38 @@ partnerDelivery.get('/deliverables', async (c) => {
     const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
     const sent = items.filter((d: any) => d.sent_at);
     const unopened = items.filter((d: any) => d.is_unopened === true);
+    const unobserved = sent.filter((d: any) => d.read_state === 'not_recorded');
+    const median = medianDaysToOpen(items);
     return c.json({
       items,
       sent_count: sent.length,
       // NULL, NOT 0, while opens cannot be observed: zero would claim every
       // client opened everything, and the true count would claim they ignored it.
       unopened_count: readTracking.available ? unopened.length : null,
+      // #5314 part 1: sent rows whose open cannot be observed — sent before
+      // opens were recorded, or with no link for the client to open.
+      not_recorded_count: readTracking.available ? unobserved.length : null,
       read_tracking: readTracking,
-      // NULL, not a number, and this is the whole reason the column exists in
-      // the response at all. `opened_at` is the client's to set and nothing in
-      // this product sets it, so on this build every sent deliverable is
-      // unopened — which makes the count TRUE and the median MEANINGLESS.
-      median_days_to_open: null,
-      median_days_to_open_note:
-        // D4822: product copy, so no column names. Read time is the client's to record, and nowhere lets them yet.
-        'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.',
+      // Over the opens actually recorded, and null below a sample worth a
+      // median: an open is the client's act, and a median of one or two would
+      // look like a metric it is not.
+      median_days_to_open: readTracking.available ? median.value : null,
+      median_days_to_open_note: !readTracking.available
+        // D4822: product copy, so no column names.
+        ? 'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.'
+        : (median.value == null
+          ? `Not recorded yet: ${median.opens} client open${median.opens === 1 ? '' : 's'} recorded, and a median needs ${MIN_OPENS_FOR_MEDIAN}.`
+          : `Across ${median.opens} recorded client opens.`),
       unopened_note: !readTracking.available
         ? (sent.length
           ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
           : null)
-        : (unopened.length ? `${unopened.length} sent and not marked opened.` : null),
+        : ([
+          unopened.length ? `${unopened.length} sent and not yet opened by the client.` : null,
+          unobserved.length
+            ? `${unobserved.length} sent ${unobserved.length === 1 ? 'reads' : 'read'} "Not recorded": sent before client opens were recorded, or with no link for the client to open.`
+            : null,
+        ].filter(Boolean).join(' ') || null),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1160,6 +1349,8 @@ partnerDelivery.delete('/deliverables/:id', async (c) => {
     const { user, partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'deliverable', row);
     const del = await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ? AND revision = ?')
       .bind(id, Number(row.revision)).run();
     if (!changedOne(del)) return deliveryChanged(c, 'deliverable');
@@ -1206,10 +1397,11 @@ async function requireOwnHolder(env: Env, partnerId: number, userId: number) {
 partnerDelivery.get('/capacity', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    // THE TIME BASIS (#4690). Hours are logged per MONTH (`YYYY-MM`); a cap is
-    // stated per WEEK. They are never compared as written: the cap is scaled to
-    // the days in the month the hours cover (`periodCapHours`). A period that is
-    // not a month is refused, not silently compared against the wrong cap.
+    // ONE BASIS: HOURS A WEEK (#5314 part 4). Hours are logged per MONTH
+    // (`YYYY-MM`); a cap is stated per WEEK. Every hour figure is converted to
+    // hours a week (`weeklyFromMonthly`, × 12 ÷ 52) and compared with the cap
+    // as stated. The monthly figures stay in the response, labelled. A period
+    // that is not a month is refused, not converted with the wrong factor.
     const periodArg = c.req.query('period');
     const parsedPeriod = parsePeriod(periodArg || currentPeriod(), 'monthly');
     if ('error' in parsedPeriod) return c.json({ detail: parsedPeriod.error }, 400);
@@ -1217,7 +1409,7 @@ partnerDelivery.get('/capacity', async (c) => {
 
     const seats = await c.env.DB.prepare(
       `SELECT s.id, s.uid, s.engagement_id, s.holder_user_id, s.scope,
-              s.granted_at, s.revoked_at,
+              s.granted_at, s.revoked_at, s.revision,
               u.name AS holder_name, u.email AS holder_email,
               e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
          FROM engagement_seats s
@@ -1246,7 +1438,7 @@ partnerDelivery.get('/capacity', async (c) => {
     // draws three columns because they answer three different questions, and
     // only their sum is the week.
     const internal = await c.env.DB.prepare(
-      `SELECT i.person_user_id, i.hours, i.note, u.name AS person_name
+      `SELECT i.person_user_id, i.hours, i.note, i.revision, u.name AS person_name
          FROM partner_internal_hours i
          LEFT JOIN users u ON u.id = i.person_user_id
         WHERE i.partner_id = ? AND i.period = ?`,
@@ -1258,18 +1450,20 @@ partnerDelivery.get('/capacity', async (c) => {
     // answer and stays a real one: `cap_hours` comes back null and nothing is
     // marked over anything.
     const caps = await c.env.DB.prepare(
-      `SELECT person_user_id, weekly_hours, note FROM partner_capacity WHERE partner_id = ?`,
+      `SELECT person_user_id, weekly_hours, note, revision FROM partner_capacity WHERE partner_id = ?`,
     ).bind(partnerId).all<any>();
     let firmCap: number | null = null;
     let firmCapNote: string | null = null;
-    const personCap = new Map<number, { hours: number; note: string | null }>();
+    let firmCapRevision: number | null = null;
+    const personCap = new Map<number, { hours: number; note: string | null; revision: number }>();
     for (const row of caps.results || []) {
       if (row.person_user_id === null || row.person_user_id === undefined) {
         firmCap = Number(row.weekly_hours);
         firmCapNote = row.note ?? null;
+        firmCapRevision = Number(row.revision ?? 0);
       } else {
         personCap.set(Number(row.person_user_id), {
-          hours: Number(row.weekly_hours), note: row.note ?? null,
+          hours: Number(row.weekly_hours), note: row.note ?? null, revision: Number(row.revision ?? 0),
         });
       }
     }
@@ -1288,6 +1482,7 @@ partnerDelivery.get('/capacity', async (c) => {
           seat_hours: 0,
           internal_hours: null as number | null,
           internal_note: null as string | null,
+          internal_revision: null as number | null,
           live_seats: 0,
           revoked_seats: 0,
           seat_places: [] as any[],
@@ -1333,6 +1528,7 @@ partnerDelivery.get('/capacity', async (c) => {
       const p = ensure(Number(row.person_user_id), row.person_name);
       p.internal_hours = Number(row.hours || 0);
       p.internal_note = row.note ?? null;
+      p.internal_revision = Number(row.revision ?? 0);
     }
 
     // THE WEEK IS THE SUM OF THREE COLUMNS, and it exists only if at least one
@@ -1341,16 +1537,21 @@ partnerDelivery.get('/capacity', async (c) => {
     const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
     const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
     const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
-    // The weekly cap restated for the period the hours cover.
-    const periodCapOf = (p: any) => periodCapHours(capOf(p), period);
+    // The month's total as hours a week — the figure compared with the cap.
+    const weeklyTotalOf = (p: any) => (measured(p) ? weeklyFromMonthly(totalOf(p)) : null);
     const overOf = (p: any) => {
-      const cap = periodCapOf(p);
+      const cap = capOf(p);
       // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
       // so a person nobody logged against is not under cap either — they are
       // unmeasured, and this stays null for them.
       if (cap === null || !measured(p)) return null;
-      return totalOf(p) > cap;
+      return (weeklyTotalOf(p) as number) > cap;
     };
+    const everyone = [...people.values()];
+    const internalStated = (internal.results || []).length > 0;
+    const projectTotal = everyone.reduce((a, p) => a + p.project_hours, 0);
+    const seatTotal = everyone.reduce((a, p) => a + p.seat_hours, 0);
+    const internalTotal = internalStated ? everyone.reduce((a, p) => a + (p.internal_hours ?? 0), 0) : null;
 
     return c.json({
       period,
@@ -1370,7 +1571,18 @@ partnerDelivery.get('/capacity', async (c) => {
           seat_hours: p.hours_recorded ? p.seat_hours : null,
           internal_hours: p.internal_hours,
           internal_note: p.internal_note,
+          // #5314 part 3: the revision each stated row was read at, or null
+          // where nothing is stated (a save then sends `expected_revision: null`).
+          internal_revision: p.internal_revision,
+          cap_revision: personCap.get(p.user_id)?.revision ?? null,
           total_hours: measured(p) ? totalOf(p) : null,
+          // THE SAME COLUMNS AS HOURS A WEEK (#5314 part 4), null where the
+          // monthly figure is null. These are what the page draws and what
+          // `over_committed` compares with the cap.
+          project_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.project_hours) : null,
+          seat_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.seat_hours) : null,
+          internal_hours_per_week: weeklyFromMonthly(p.internal_hours),
+          total_hours_per_week: weeklyTotalOf(p),
           live_seats: p.live_seats,
           revoked_seats: p.revoked_seats,
           // WHERE THE SEAT IS, not just how many. A seat register that counted
@@ -1382,11 +1594,9 @@ partnerDelivery.get('/capacity', async (c) => {
           // none — and none is not zero. A person with no cap is not over any
           // threshold, because there is no threshold.
           cap_hours: capOf(p),
-          // `cap_hours` is PER WEEK (as stated). `period_cap_hours` is the same
-          // cap over this response's period, the figure `total_hours` and
-          // `over_committed` are compared with.
+          // `cap_hours` is PER WEEK, as stated, and is compared as stated with
+          // `total_hours_per_week`.
           cap_unit: 'hours_per_week',
-          period_cap_hours: periodCapOf(p),
           cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
           cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
           over_committed: overOf(p),
@@ -1407,6 +1617,7 @@ partnerDelivery.get('/capacity', async (c) => {
         // is the point of `revoked_at` being a column rather than a delete.
         revoked_at: s.revoked_at ?? null,
         days_held: daysBetween(s.granted_at, s.revoked_at || undefined),
+        revision: Number(s.revision ?? 0),
       })),
       // WHAT THE FIRM SET, OR NULL — and null keeps the refusal that stood
       // here, verbatim, because it is still what an unconfigured firm must be
@@ -1414,14 +1625,16 @@ partnerDelivery.get('/capacity', async (c) => {
       // whatever THIS firm wrote down, and until they write one there is no
       // threshold to be over.
       cap_hours: firmCap,
-      // THE UNITS, stated so no reader has to guess: hours here are per
-      // calendar month, the cap is per week, and the comparison uses the cap
-      // over `period_days / 7` weeks.
+      // #5314 part 3: the firm cap row's revision, null while none is set.
+      cap_revision: firmCapRevision,
+      // THE UNITS, stated so no reader has to guess (#5314 part 4): capacity is
+      // read in hours a week. The cap is per week as stated; every `*_per_week`
+      // figure is the month's hours × 12 ÷ 52; the unsuffixed hour fields are
+      // the monthly totals as logged (`hours_unit`).
+      basis: 'hours_per_week',
+      weeks_per_month: Math.round(WEEKS_PER_MONTH * 100) / 100,
       cap_unit: 'hours_per_week',
       hours_unit: 'hours_per_month',
-      period_days: daysInPeriod(period),
-      period_weeks: daysInPeriod(period) === null ? null : Math.round((daysInPeriod(period)! / 7) * 100) / 100,
-      period_cap_hours: periodCapHours(firmCap, period),
       cap_source: firmCap === null ? null : 'firm',
       cap_note: firmCap === null
         // D4822: the canvas's state for an unconfigured firm, in product words, with what setting one unlocks.
@@ -1433,14 +1646,15 @@ partnerDelivery.get('/capacity', async (c) => {
       // THE STRIP'S THREE HOUR TILES, summed over the whole roster rather than
       // over whatever the chips left visible — a firm's project hours do not
       // change because the reader narrowed to seat-holders.
-      project_hours_total: [...people.values()].reduce((a, p) => a + p.project_hours, 0),
-      seat_hours_total: [...people.values()].reduce((a, p) => a + p.seat_hours, 0),
+      project_hours_total: projectTotal,
+      seat_hours_total: seatTotal,
+      project_hours_total_per_week: weeklyFromMonthly(projectTotal),
+      seat_hours_total_per_week: weeklyFromMonthly(seatTotal),
       // NULL, NOT ZERO, when nobody has stated any internal time. Summing
       // absent rows to zero would tell a firm its people spend no time on the
       // firm, which is the one thing that is certainly false.
-      internal_hours_total: (internal.results || []).length === 0
-        ? null
-        : [...people.values()].reduce((a, p) => a + (p.internal_hours ?? 0), 0),
+      internal_hours_total: internalTotal,
+      internal_hours_total_per_week: weeklyFromMonthly(internalTotal),
       live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
       // THE SAME SEAT STATE the Board and Health return per engagement (#4690),
       // from the same helper over the whole collection of that engagement's
@@ -1493,19 +1707,33 @@ partnerDelivery.put('/capacity/cap', async (c) => {
       if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
     }
 
+    // #5314 part 3 (D4822): the cap the person was shown, or none. Two literal
+    // reads for the reason the inserts below are two literals.
+    const readCap = () => (personId === null
+      ? c.env.DB.prepare(
+        'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL',
+      ).bind(partnerId).first<any>()
+      : c.env.DB.prepare(
+        'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?',
+      ).bind(partnerId, personId).first<any>());
+    const current = await readCap();
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'capacity limit', current);
+
     if (b.weekly_hours === null) {
       // CLEARING IS A DELETE, not a zero. Zero hours would say this person
       // works no hours, which is a claim; no row says nobody has stated a cap.
-      if (personId === null) {
-        await c.env.DB.prepare(
-          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL',
-        ).bind(partnerId).run();
-      } else {
-        await c.env.DB.prepare(
-          'DELETE FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?',
-        ).bind(partnerId, personId).run();
+      // The delete names the row and revision read, so an edit that landed
+      // since keeps the cap. Clearing a cap nobody set changes nothing.
+      if (current) {
+        const del = await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE id = ? AND revision = ?',
+        ).bind(current.id, Number(current.revision)).run();
+        if (!changedOne(del)) {
+          const now = await readCap();
+          if (now) return deliveryChanged(c, 'capacity limit', now);
+        }
       }
-      return c.json({ ok: true, weekly_hours: null });
+      return c.json({ ok: true, weekly_hours: null, revision: null });
     }
 
     const hours = Number(b.weekly_hours);
@@ -1513,25 +1741,36 @@ partnerDelivery.put('/capacity/cap', async (c) => {
       return c.json({ detail: 'A weekly cap is a number of hours between 0 and 168' }, 400);
     }
     const note = trimOrNull(b.note, 300);
-    // Two literal statements rather than one with an interpolated predicate:
-    // `check-sql-prepare` refuses a `${}` inside `DB.prepare`, and the partial
-    // unique indexes migration 230 declares need the NULL case spelled out.
-    if (personId === null) {
-      await c.env.DB.prepare(
+    // An existing cap is updated at the revision read; a first one is inserted
+    // only while there is still none. Two literal inserts rather than one with
+    // an interpolated predicate: `check-sql-prepare` refuses a `${}` inside
+    // `DB.prepare`, and the partial unique indexes migration 230 declares need
+    // the NULL case spelled out.
+    let wrote: any;
+    if (current) {
+      wrote = await c.env.DB.prepare(
+        `UPDATE partner_capacity SET weekly_hours = ?, note = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ?`,
+      ).bind(hours, note, nowIso(), current.id, Number(current.revision)).run();
+    } else if (personId === null) {
+      wrote = await c.env.DB.prepare(
         `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
          VALUES (?, NULL, ?, ?, ?, ?)
-         ON CONFLICT (partner_id) WHERE person_user_id IS NULL
-         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+         ON CONFLICT (partner_id) WHERE person_user_id IS NULL DO NOTHING`,
       ).bind(partnerId, hours, note, nowIso(), nowIso()).run();
     } else {
-      await c.env.DB.prepare(
+      wrote = await c.env.DB.prepare(
         `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT (partner_id, person_user_id) WHERE person_user_id IS NOT NULL
-         DO UPDATE SET weekly_hours = excluded.weekly_hours, note = excluded.note, updated_at = excluded.updated_at`,
+         ON CONFLICT (partner_id, person_user_id) WHERE person_user_id IS NOT NULL DO NOTHING`,
       ).bind(partnerId, personId, hours, note, nowIso(), nowIso()).run();
     }
-    return c.json({ ok: true, weekly_hours: hours, person_user_id: personId, note });
+    const saved = await readCap();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'capacity limit', saved);
+    return c.json({
+      ok: true, weekly_hours: hours, person_user_id: personId, note,
+      revision: Number(saved?.revision ?? 0),
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1564,11 +1803,24 @@ partnerDelivery.put('/capacity/internal-hours', async (c) => {
     const parsed = parsePeriod(b.period, 'monthly');
     if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
 
+    // #5314 part 3 (D4822): the statement the person was shown, or none.
+    const readInternal = () => c.env.DB.prepare(
+      'SELECT * FROM partner_internal_hours WHERE partner_id = ? AND person_user_id = ? AND period = ?',
+    ).bind(partnerId, personId, parsed.period).first<any>();
+    const current = await readInternal();
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'internal hours entry', current);
+
     if (b.hours === null) {
-      await c.env.DB.prepare(
-        'DELETE FROM partner_internal_hours WHERE partner_id = ? AND person_user_id = ? AND period = ?',
-      ).bind(partnerId, personId, parsed.period).run();
-      return c.json({ ok: true, hours: null, period: parsed.period });
+      if (current) {
+        const del = await c.env.DB.prepare(
+          'DELETE FROM partner_internal_hours WHERE id = ? AND revision = ?',
+        ).bind(current.id, Number(current.revision)).run();
+        if (!changedOne(del)) {
+          const now = await readInternal();
+          if (now) return deliveryChanged(c, 'internal hours entry', now);
+        }
+      }
+      return c.json({ ok: true, hours: null, period: parsed.period, revision: null });
     }
 
     const hours = Number(b.hours);
@@ -1576,14 +1828,21 @@ partnerDelivery.put('/capacity/internal-hours', async (c) => {
       return c.json({ detail: 'Internal hours are a number of hours in a month' }, 400);
     }
     const note = trimOrNull(b.note, 300);
-    await c.env.DB.prepare(
-      `INSERT INTO partner_internal_hours (partner_id, person_user_id, period, hours, note, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (partner_id, person_user_id, period)
-       DO UPDATE SET hours = excluded.hours, note = excluded.note, updated_at = excluded.updated_at`,
-    ).bind(partnerId, personId, parsed.period, hours, note, nowIso(), nowIso()).run();
+    const wrote = current
+      ? await c.env.DB.prepare(
+        `UPDATE partner_internal_hours SET hours = ?, note = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ?`,
+      ).bind(hours, note, nowIso(), current.id, Number(current.revision)).run()
+      : await c.env.DB.prepare(
+        `INSERT INTO partner_internal_hours (partner_id, person_user_id, period, hours, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (partner_id, person_user_id, period) DO NOTHING`,
+      ).bind(partnerId, personId, parsed.period, hours, note, nowIso(), nowIso()).run();
+    const saved = await readInternal();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'internal hours entry', saved);
     return c.json({
       ok: true, hours, note, period: parsed.period, person_user_id: personId,
+      revision: Number(saved?.revision ?? 0),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1611,6 +1870,7 @@ partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
       id: Number(row.id), uid: row.uid, engagement_id: engagementId,
       holder_user_id: Number(row.holder_user_id), holder_name: holder.name ?? null,
       scope: row.scope ?? null, granted_at: row.granted_at, revoked_at: null,
+      revision: Number(row.revision ?? 0),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1625,14 +1885,21 @@ partnerDelivery.post('/seats/:id/revoke', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
     if (row.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
+    // #5314 part 3: revoking the seat the person was shown, at that revision.
+    const want = statedRevision(await body<any>(c));
+    if (staleAgainst(want, row)) return deliveryChanged(c, 'seat', row);
     const now = nowIso();
     // Revoking states that the seat is still live: a second revoke, or one
     // racing a scope edit, changes nothing and does not move `revoked_at`.
     const rev = await c.env.DB.prepare(
       `UPDATE engagement_seats SET revoked_at = ?, updated_at = ?, revision = revision + 1
-        WHERE id = ? AND revoked_at IS NULL`,
-    ).bind(now, now, id).run();
-    if (!changedOne(rev)) return c.json({ detail: 'That seat is already revoked' }, 400);
+        WHERE id = ? AND revoked_at IS NULL AND revision = ?`,
+    ).bind(now, now, id, Number(row.revision)).run();
+    if (!changedOne(rev)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?').bind(id).first<any>();
+      if (cur?.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
+      return deliveryChanged(c, 'seat', cur);
+    }
     await logActorAct(c.env, user, 'delivery_seat_revoked', { seat_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true, id, revoked_at: now });
   } catch (e) { return mapError(c, e); }
@@ -1693,7 +1960,7 @@ partnerDelivery.get('/capacity/hours', async (c) => {
     if ('error' in p) return c.json({ detail: p.error }, 400);
     const periods = [p.period, periodMinus(p.period, 1), periodMinus(p.period, 2)];
     const rows = await c.env.DB.prepare(
-      `SELECT h.engagement_id, h.person_user_id, h.period, h.hours,
+      `SELECT h.engagement_id, h.person_user_id, h.period, h.hours, h.revision,
               u.name AS person_name, n.title AS need_title, f.name AS founder_name
          FROM engagement_hours h
          JOIN engagements e ON e.id = h.engagement_id
@@ -1711,9 +1978,12 @@ partnerDelivery.get('/capacity/hours', async (c) => {
           engagement_id: Number(r.engagement_id), person_user_id: Number(r.person_user_id),
           person_name: r.person_name ?? null, client: r.founder_name ?? null, need_title: r.need_title ?? null,
           hours: Object.fromEntries(periods.map((x) => [x, null])),
+          // #5314 part 3: per month, the entry's revision, or null with no entry.
+          revisions: Object.fromEntries(periods.map((x) => [x, null])),
         });
       }
       byPair.get(key).hours[r.period] = Number(r.hours);
+      byPair.get(key).revisions[r.period] = Number(r.revision ?? 0);
     }
     return c.json({ periods, entries: [...byPair.values()] });
   } catch (e) { return mapError(c, e); }
@@ -1733,23 +2003,27 @@ partnerDelivery.put('/engagements/:engagementId/hours/:personId/:period', async 
     if ('error' in h) return c.json({ detail: h.error }, 400);
     if (h.hours === null) return c.json({ detail: 'Hours is required' }, 400);
 
-    const existing = await c.env.DB.prepare(
-      'SELECT id FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
+    // #5314 part 3 (D4822): the entry the person was shown, or none.
+    const readEntry = () => c.env.DB.prepare(
+      'SELECT id, revision FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
     ).bind(engagementId, holder.id, p.period).first<any>();
-    if (existing) {
-      await c.env.DB.prepare(
-        'UPDATE engagement_hours SET hours = ?, updated_at = ? WHERE id = ?',
-      ).bind(h.hours, nowIso(), existing.id).run();
-    } else {
-      await c.env.DB.prepare(
+    const existing = await readEntry();
+    if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'hours entry', existing);
+    const wrote = existing
+      ? await c.env.DB.prepare(
+        'UPDATE engagement_hours SET hours = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?',
+      ).bind(h.hours, nowIso(), existing.id, Number(existing.revision)).run()
+      : await c.env.DB.prepare(
         `INSERT INTO engagement_hours (engagement_id, person_user_id, period, hours, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (engagement_id, person_user_id, period) DO NOTHING`,
       ).bind(engagementId, holder.id, p.period, h.hours, nowIso(), nowIso()).run();
-    }
+    const saved = await readEntry();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'hours entry', saved);
     await logActorAct(c.env, user, 'delivery_hours_logged', { engagement_id: engagementId, person_user_id: Number(holder.id), period: p.period });
     return c.json({
       ok: true, engagement_id: engagementId, person_user_id: Number(holder.id),
-      period: p.period, hours: h.hours,
+      period: p.period, hours: h.hours, revision: Number(saved?.revision ?? 0),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1768,11 +2042,21 @@ partnerDelivery.delete('/engagements/:engagementId/hours/:personId/:period', asy
     if ('error' in p) return c.json({ detail: p.error }, 400);
     // A real delete rather than writing zero: zero hours is the claim that they
     // did none, which is not the same as nobody having logged any.
+    const entry = await c.env.DB.prepare(
+      'SELECT id, revision FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
+    ).bind(engagementId, personId, p.period).first<any>();
+    if (!entry) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+    // #5314 part 3: the entry the person was shown, at that revision.
+    if (staleAgainst(queryRevision(c), entry)) return deliveryChanged(c, 'hours entry', entry);
     const res = await c.env.DB.prepare(
-      'DELETE FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
-    ).bind(engagementId, personId, p.period).run();
-    const deleted = Number((res as any)?.meta?.changes ?? 0) > 0;
-    if (!deleted) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+      'DELETE FROM engagement_hours WHERE id = ? AND revision = ?',
+    ).bind(entry.id, Number(entry.revision)).run();
+    if (!changedOne(res)) {
+      const now = await c.env.DB.prepare('SELECT id, revision FROM engagement_hours WHERE id = ?')
+        .bind(entry.id).first<any>();
+      if (!now) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+      return deliveryChanged(c, 'hours entry', now);
+    }
     await logActorAct(c.env, user, 'delivery_hours_deleted', { engagement_id: engagementId, person_user_id: personId, period: p.period });
     return c.json({ ok: true, deleted: true });
   } catch (e) { return mapError(c, e); }
@@ -1812,6 +2096,33 @@ function reportDto(r: any) {
     sent_at: r.sent_at ?? null,
     revision: Number(r.revision ?? 0),
     sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
+    ...blockedSection(r),
+  };
+}
+
+/**
+ * #5314 part 2 — THE REPORT'S BLOCKED SECTION, AS WRITTEN. Words the firm
+ * wrote, like Shipped and Next; the live blockers stay evidence beside it.
+ * A report saved before the section existed (or saved without stating it)
+ * has no `blocked_recorded_at` and reads "Not recorded" — never "nothing
+ * blocked", which would be a claim nobody made. A recorded section with no
+ * words is the firm stating that nothing is blocked.
+ */
+export function blockedSection(r: any) {
+  const recordedAt = r?.blocked_recorded_at ?? null;
+  if (!recordedAt) {
+    return {
+      blocked: null,
+      blocked_recorded: false,
+      blocked_recorded_at: null,
+      blocked_state_note: 'Not recorded: this report was saved without a Blocked section.',
+    };
+  }
+  return {
+    blocked: r.blocked ?? null,
+    blocked_recorded: true,
+    blocked_recorded_at: recordedAt,
+    blocked_state_note: null,
   };
 }
 
@@ -1909,7 +2220,7 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
     const readTracking = await bookReadTracking(c.env, partnerId);
     const [deliverables, blockers, milestones, existing] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT title, version, sent_at, opened_at FROM engagement_deliverables
+        `SELECT title, version, sent_at, opened_at, link_url FROM engagement_deliverables
           WHERE engagement_id = ? AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50`,
       ).bind(engagementId).all<any>(),
       c.env.DB.prepare(
@@ -1939,7 +2250,8 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
           title: d.title, version: d.version ?? null, sent_at: d.sent_at,
           // NULL where opens cannot be observed: false would read as "the
           // client did not open it" in a report going to that client.
-          opened: d.opened_at ? true : (readTracking.available ? false : null),
+          // #5314: false only where this row's open could have been recorded.
+          opened: d.opened_at ? true : (readStateFor(d, readTracking) === 'unopened' ? false : null),
         })),
       next_from_milestones: (milestones.results || []).map((m: any) => ({
         title: m.title, due_at: m.due_at ?? null,
@@ -1978,6 +2290,7 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
     const existing = await c.env.DB.prepare(
       'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
     ).bind(engagementId, p.period).first<any>();
+    const hasBlocked = b != null && Object.prototype.hasOwnProperty.call(b, 'blocked');
 
     // A SENT REPORT IS FROZEN. It is a thing a client has already read; editing
     // it in place would make the record disagree with what they received, and
@@ -1998,29 +2311,42 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       // REVISION READ. A send that lands between the read above and this write
       // wins: the report the client received is not edited afterwards, and a
       // second edit that read an older draft does not overwrite a newer one.
-      const want = expectedRevision(b);
-      if (want != null && want !== Number(existing.revision)) return deliveryChanged(c, 'report', existing);
+      if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'report', existing);
+      // #5314 part 2: an omitted `blocked` leaves the section as it was; a
+      // present one (null included) records it now.
+      const blockedNow = hasBlocked
+        ? [trimOrNull(b.blocked, 4000), nowIso()]
+        : [existing.blocked ?? null, existing.blocked_recorded_at ?? null];
       const upd = await c.env.DB.prepare(
         `UPDATE engagement_status_reports
-            SET shipped = ?, next_up = ?, updated_at = ?, revision = revision + 1
+            SET shipped = ?, next_up = ?, blocked = ?, blocked_recorded_at = ?,
+                updated_at = ?, revision = revision + 1
           WHERE id = ? AND state = 'draft' AND revision = ?`,
-      ).bind(trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), existing.id, Number(existing.revision)).run();
+      ).bind(
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), ...blockedNow,
+        nowIso(), existing.id, Number(existing.revision),
+      ).run();
       if (!changedOne(upd)) {
         const now = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
           .bind(existing.id).first<any>();
         return now?.state === 'sent' ? c.json(SENT_NOW, 409) : deliveryChanged(c, 'report', now);
       }
     } else {
+      // #5314 part 3: a save that read a draft which has since been deleted.
+      if (staleAgainst(statedRevision(b), null)) return deliveryChanged(c, 'report', null);
       // The unique (engagement, period) index makes a concurrent first save
       // lose cleanly instead of making a second row.
       const ins = await c.env.DB.prepare(
         `INSERT INTO engagement_status_reports
-           (uid, engagement_id, period, state, shipped, next_up, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
+           (uid, engagement_id, period, state, shipped, next_up, blocked, blocked_recorded_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
          ON CONFLICT (engagement_id, period) DO NOTHING`,
       ).bind(
         newUid(), engagementId, p.period,
-        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), nowIso(),
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000),
+        hasBlocked ? trimOrNull(b.blocked, 4000) : null, hasBlocked ? nowIso() : null,
+        nowIso(), nowIso(),
       ).run();
       if (!changedOne(ins)) {
         const now = await c.env.DB.prepare(
@@ -2064,8 +2390,7 @@ partnerDelivery.post('/status-reports/:id/send', async (c) => {
     };
     if (row.state === 'sent') return alreadySent(row);
     // The caller may name the revision it showed the person who pressed Send.
-    const want = expectedRevision(b);
-    if (want != null && want !== Number(row.revision)) return deliveryChanged(c, 'report', row);
+    if (staleAgainst(statedRevision(b), row)) return deliveryChanged(c, 'report', row);
     if (!trimOrNull(row.shipped, 4000) && !trimOrNull(row.next_up, 4000)) {
       return c.json({ detail: 'An empty report has nothing to send' }, 400);
     }
@@ -2101,12 +2426,17 @@ partnerDelivery.delete('/status-reports/:id', async (c) => {
       detail: 'That report was sent. Deleting it would erase a record of what the client received.',
     };
     if (row.state === 'sent') return c.json(SENT, 409);
-    // The delete repeats the draft state, so a send that landed since the read
-    // keeps the report.
+    // #5314 part 3: the draft the person chose to delete, at the revision shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'report', row);
+    // The delete repeats the draft state and the revision, so a send or an
+    // edit that landed since the read keeps the report.
     const del = await c.env.DB.prepare(
-      "DELETE FROM engagement_status_reports WHERE id = ? AND state = 'draft'",
-    ).bind(id).run();
-    if (!changedOne(del)) return c.json(SENT, 409);
+      "DELETE FROM engagement_status_reports WHERE id = ? AND state = 'draft' AND revision = ?",
+    ).bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?').bind(id).first<any>();
+      return cur?.state === 'sent' || !cur ? c.json(SENT, 409) : deliveryChanged(c, 'report', cur);
+    }
     await logActorAct(c.env, user, 'delivery_report_deleted', { report_id: id, engagement_id: Number(row.engagement_id) });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }

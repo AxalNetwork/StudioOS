@@ -1,4 +1,5 @@
 import { heldLicences } from '../services/accountLicences';
+import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
  * `/api/research/*` — the document library, and Ask over it.
  *
@@ -49,9 +50,9 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
-import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
@@ -66,6 +67,7 @@ import { perkLifecycle } from './perks';
 // calls this first; the KPI draft surface is a consumer.
 import { ensureProjectMetricsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
+import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner_workspace_helpers';
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
@@ -81,6 +83,7 @@ import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -185,11 +188,91 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   in_ask: source === 'own' && ANSWERABLE_STATES.includes(r.index_state),
 });
 
-/** Always scoped to the caller. There is no route here that reads another user's row. */
+/**
+ * The caller's OWN row. Every WRITE path here uses this and must keep using it:
+ * metadata, re-index and delete are the owner's, which is exactly what
+ * `read_only` means on a shared row.
+ */
 async function ownDoc(env: Env, userId: number, uid: string): Promise<DocRow | null> {
   return env.DB.prepare(
     `SELECT * FROM research_documents WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, userId).first<DocRow>();
+}
+
+/**
+ * #4610 — A DOCUMENT THIS CALLER MAY READ: their own, or one an ACTIVE share
+ * opens to them. Read authorization only, and deliberately a separate function
+ * from `ownDoc` rather than a flag on it.
+ *
+ * THE BUG. `GET /documents` lists shared documents on purpose — that is what
+ * `source: 'client'` and the "From Verwood" chip are for — and `LibraryZone`
+ * drew an `Open` button on every row. `Open` called the download route, which
+ * resolved through `ownDoc`, so for a shared row it 404'd. The adjacent comment
+ * in that page argues that "a client's document offers neither" Metadata nor
+ * Re-index nor Remove "because drawing either would be a control that cannot
+ * act", and `research_library_shares.test.mjs` asserts that rule by name — and
+ * `Open` sat outside the guard both of them describe. A reader was listed a
+ * document, told where it came from, given a button, and refused. The phone
+ * cards drew no `Open` at all, so the two viewports disagreed about whether the
+ * feature existed.
+ *
+ * WHY A SEPARATE FUNCTION. Read and write are different permissions and the
+ * only safe way to keep them different is for them to be different lookups. If
+ * this were `ownDoc(…, { orShared: true })` then every existing caller would
+ * be one argument away from granting a recipient the owner's delete. There is
+ * no such argument: `PATCH`, `DELETE` and the re-index queue still call
+ * `ownDoc` and are unreachable through a share.
+ *
+ * THE SHARE MUST BE LIVE, not merely to have existed. A revoke is
+ * `status = 'revoked'`, never a delete (migration 218), so `status = 'active'`
+ * is the whole of it and a revoked share stops reading the moment it is
+ * revoked — the same predicate the list uses, so a row that is listed is a row
+ * that opens and the reverse.
+ *
+ * INDEXING IS NOT IMPLIED AND IS NOT TOUCHED. The current policy is that a
+ * client's share is readable but is not indexed into the recipient's Ask
+ * namespace, which is why `dto()` computes `in_ask` as `source === 'own' && …`.
+ * This grants a download; it says nothing about Ask, and `in_ask` is unchanged.
+ */
+/*
+ * LIVE SHARE GRANT (written out in each query below so the SQL stays literal).
+ * A share reads only through the newest LIVE grant the share's advisor holds
+ * over a project of the document's owner. Live means `status = 'active'` and
+ * not past `expires_at`, the predicate `advisor_grants.ts`'s `activeGrant`
+ * uses. `projects.founder_id` names a founders row, so the owner is matched
+ * through `users.founder_id`, as the brief does. A share whose grant is revoked
+ * or expired matches nothing and is neither listed nor read.
+ */
+async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row: DocRow; source: 'own' | 'client'; projectId: number | null } | null> {
+  const own = await ownDoc(env, userId, uid);
+  if (own) return { row: own, source: 'own', projectId: null };
+  // The project the share came through, by the SAME correlated subquery the
+  // list uses for its "From Verwood" chip — the newest active grant this reader
+  // holds over a project belonging to the document's owner. It is what the
+  // founder's own access log is keyed on, and it is read here rather than
+  // stored on the share so a project renamed after the share still resolves.
+  const shared = await env.DB.prepare(
+    `SELECT d.*, (
+              SELECT g.project_id
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS grant_project_id
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+      WHERE d.uid = ? AND s.advisor_user_id = ? AND s.status = 'active'
+      LIMIT 1`
+  ).bind(uid, userId).first<DocRow & { grant_project_id: number | null }>();
+  // A share is only as live as the grant it was made under. No live grant over
+  // a project of the document's owner, no read.
+  if (!shared || shared.grant_project_id == null) return null;
+  const projectId = Number.isSafeInteger(Number(shared.grant_project_id)) ? Number(shared.grant_project_id) : null;
+  return { row: shared, source: 'client', projectId };
 }
 
 // ---------------------------------------------------------------------------
@@ -216,19 +299,33 @@ research.get('/documents', async (c) => {
   // project belonging to the document's owner, which is the client the file
   // came from.
   const shared = await c.env.DB.prepare(
-    `SELECT d.*, (
+    `SELECT * FROM (
+       SELECT d.*, (
+              SELECT g.project_id
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS grant_project_id, (
               SELECT p.name
                 FROM advisor_client_grants g
                 JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
                WHERE g.advisor_user_id = s.advisor_user_id
                  AND g.status = 'active'
-                 AND p.founder_id = d.owner_user_id
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
                ORDER BY g.id DESC LIMIT 1
             ) AS project_name
-       FROM advisor_client_document_shares s
-       JOIN research_documents d ON d.id = s.document_id
-      WHERE s.advisor_user_id = ? AND s.status = 'active'
-      ORDER BY d.created_at DESC LIMIT 200`
+         FROM advisor_client_document_shares s
+         JOIN research_documents d ON d.id = s.document_id
+        WHERE s.advisor_user_id = ? AND s.status = 'active'
+     ) WHERE grant_project_id IS NOT NULL
+     ORDER BY created_at DESC LIMIT 200`
   ).bind(user.id).all<DocRow & { project_name: string | null }>();
 
   const items = [
@@ -239,6 +336,23 @@ research.get('/documents', async (c) => {
     items,
     // The library's own reach, stated rather than left for a reader to count.
     // D4605: `indexed` counts what Ask can answer from, a partly indexed document included.
+    //
+    // #4610 — `answerable` IS `in_ask`, THE SAME FIELD THE ROWS CARRY.
+    // `indexed` counted `ANSWERABLE_STATES.includes(index_state)` over every
+    // item including SHARED ones, while each row's own `in_ask` is
+    // `source === 'own' && …`. So an indexed client share was counted in
+    // "N answerable" and then labelled, correctly, "Indexed in their library,
+    // not yours" on its own row — the header pill and the row disagreed about
+    // the same document, and an account holding only shares was told it had
+    // answerable documents when Ask could use none of them. `answerable` is
+    // now the count of rows whose `in_ask` is true, so the two cannot differ:
+    // one field, counted, not a second rule that happens to resemble it.
+    //
+    // `indexed` is kept, unchanged, beside it: it is a true statement about
+    // INDEX STATE, which is a different question from answerability and is the
+    // one the Index-state column answers. The page reads whichever it means.
+    answerable: items.filter((i) => i.in_ask === true).length,
+    not_answerable: items.filter((i) => i.in_ask !== true).length,
     indexed: items.filter((i) => ANSWERABLE_STATES.includes(i.index_state)).length,
     not_indexed: items.filter((i) => !ANSWERABLE_STATES.includes(i.index_state)).length,
     // D4612: still being read, so the page knows to keep watching and Re-index leaves it alone.
@@ -285,9 +399,9 @@ research.post('/documents/:uid/reindex', async (c) => {
   try {
     await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
   } catch {
-    // The hourly sweep walks `index_state` past a watermark and will catch it,
-    // which is why the upload path swallows this too. The row is already
-    // 'pending', so the page reports the truth either way.
+    // #5350's hourly recovery picks up a pending row after 60 minutes when no
+    // live job exists. The row is already 'pending', so the page reports the
+    // truth while that bounded retry waits.
   }
   const fresh = await ownDoc(c.env, user.id, doc.uid);
   return c.json({ item: fresh ? dto(fresh) : null });
@@ -354,7 +468,9 @@ research.post('/documents', async (c) => {
   // useful (listed, downloadable) while `index_state` is 'pending'.
   const id = (ins as any).meta?.last_row_id;
   if (id) {
-    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch { /* the hourly sweep will catch it */ }
+    // A failed producer write leaves the row pending; #5350's hourly recovery
+    // enqueues it after 60 minutes when no live job exists.
+    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch {}
   }
 
   await noteStorageLanded(c.env, storage);
@@ -391,8 +507,13 @@ research.patch('/documents/:uid', async (c) => {
 
 research.get('/documents/:uid/download', async (c) => {
   const user = await requireAuth(c);
-  const row = await ownDoc(c.env, user.id, c.req.param('uid'));
-  if (!row) return c.json({ detail: 'Not found' }, 404);
+  // #4610: ownership OR an active permitted share. A document that is neither
+  // is 404 in the same words whether it belongs to somebody else or does not
+  // exist, so the refusal confirms nothing — and a revoked share is in that
+  // same 404 the instant it is revoked.
+  const readable = await readableDoc(c.env, user.id, c.req.param('uid'));
+  if (!readable) return c.json({ detail: 'Not found' }, 404);
+  const row = readable.row;
   // The shipped, audited path: one-time HMAC token, TTL clamped to 300s, jti
   // consumed in KV, every hit written to activity_logs by routes/files.ts.
   // Deliberately NOT an S3 presigned URL — wrangler.toml says why for this
@@ -404,6 +525,26 @@ research.get('/documents/:uid/download', async (c) => {
     userId: user.id,
     ttlSec: 120,
   });
+  /**
+   * #4610 — THE FOUNDER'S OWN RECORD OF THE READ, for a shared document only.
+   *
+   * `advisor_client_access_log` was built by migration 218 as "the founder's
+   * own record of an advisor's reading", `open_document` is one of the two
+   * actions it declares, and `GET /:projectUid/access-log` already LEFT JOINs
+   * `research_documents` to name the file — waiting for rows nothing wrote.
+   * Opening somebody else's document is exactly the event that table exists
+   * for, and until now the only trace was a `signed_download` row in
+   * `activity_logs`, which the founder cannot see.
+   *
+   * Best-effort, after the token is minted: an audit write must not be able to
+   * deny a reader a file they are authorized to read. Own documents write
+   * nothing here — there is no third party whose record it would be.
+   */
+  if (readable.source === 'client' && readable.projectId != null) {
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_client_access_log (project_id, advisor_user_id, action, document_id) VALUES (?, ?, 'open_document', ?)`,
+    ).bind(readable.projectId, user.id, row.id).run().catch(() => {});
+  }
   return c.json({ url: `/api/files/dl/${token}`, expires_at, name: row.title });
 });
 
@@ -472,6 +613,14 @@ interface AskAnswerRow {
   cached: number; cost_micro_usd: number; saved: number; discarded?: number; use_note?: string | null; created_at: string;
 }
 
+/** The stored citations JSON as an array; a malformed value is no citations. */
+function storedCitations(raw: string | null | undefined): Array<{ n?: number | null }> {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x === 'object') : [];
+  } catch { return []; }
+}
+
 const answerDto = (r: AskAnswerRow) => ({
   uid: r.uid,
   question: r.question,
@@ -482,12 +631,11 @@ const answerDto = (r: AskAnswerRow) => ({
   // Stored as text, returned as the array the page renders. A malformed value
   // degrades to no citations rather than failing the whole thread — the answer
   // is still worth reading, and an exception here would take the session with it.
-  citations: ((): unknown[] => {
-    try {
-      const parsed = JSON.parse(r.citations || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  })(),
+  // D4613: each citation says whether the answer cites it, so retrieved
+  // context and cited support are told apart on every read, old rows included.
+  citations: markCited(r.answer, storedCitations(r.citations)),
+  // D4613: the answer's bracketed references checked against its own sources.
+  reference_check: referenceCheck(r.answer, storedCitations(r.citations)),
   model: r.model,
   prompt_tokens: r.prompt_tokens,
   completion_tokens: r.completion_tokens,
@@ -503,7 +651,70 @@ const answerDto = (r: AskAnswerRow) => ({
 });
 
 /**
+ * #4610 — THE SCOPE'S WHOLE TOTALS, FROM SQL, NOT FROM THE PAGE.
+ *
+ * `askTotals` below counts whatever array it is handed. That was the only
+ * totals function, and it was handed the 200-row slice — so `asked`, `saved`
+ * and `cost_usd` plateaued at 200 and then stopped moving for ever, while the
+ * Library's "Questions asked" tile and Ask's own strip printed them as the
+ * reader's whole history. A reader with 340 questions was told 200, and the
+ * number stayed 200 no matter how many more they asked.
+ *
+ * These come from one aggregate over the whole selected scope, so they do not
+ * change when the page does — the acceptance criterion in one sentence. The
+ * `discarded` scope is counted here too, which it could not be before: Archived
+ * was a client-side filter over `scope=all`'s 200 rows, so an archived answer
+ * past that window was unreachable from the tab that exists to find it.
+ *
+ * ONE STATEMENT PER SCOPE, no spliced predicate — the rule the three read
+ * queries below already follow, and for the same reason.
+ */
+async function scopeTotals(env: Env, userId: number, scope: string, sessionId: number | null) {
+  const SUMS = `COUNT(*) AS asked,
+        COUNT(CASE WHEN reason = 'answered' THEN 1 END) AS answered,
+        COUNT(CASE WHEN reason = 'no_source' THEN 1 END) AS no_source,
+        COUNT(CASE WHEN reason = 'model_unavailable' THEN 1 END) AS model_unavailable,
+        COUNT(CASE WHEN reason = 'retrieval_unavailable' THEN 1 END) AS retrieval_unavailable,
+        COUNT(CASE WHEN saved = 1 THEN 1 END) AS saved,
+        COUNT(CASE WHEN discarded = 1 THEN 1 END) AS discarded,
+        COALESCE(SUM(cost_micro_usd), 0) AS cost_micro_usd`;
+  type Row = {
+    asked: number; answered: number; no_source: number; model_unavailable: number;
+    retrieval_unavailable: number; saved: number; discarded: number; cost_micro_usd: number;
+  };
+  let row: Row | null = null;
+  if (scope === 'saved') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1`).bind(userId).first<Row>();
+  } else if (scope === 'discarded') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
+  } else if (scope === 'all') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+  } else if (sessionId != null) {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
+  } else {
+    // No session yet is not a failed read: a reader who has never asked has no
+    // thread, and zero is the true answer for a scope that is genuinely empty.
+    return { asked: 0, answered: 0, no_source: 0, model_unavailable: 0, retrieval_unavailable: 0, saved: 0, discarded: 0, cost_usd: 0 };
+  }
+  // AN UNREADABLE AGGREGATE IS NOT ZERO. D1 throws on a failed read, so a null
+  // row means the statement answered without its columns. Throwing sends the
+  // page to its unavailable state instead of letting it print eight zeroes and
+  // a cost of nothing over a history that exists.
+  if (!row || !Number.isSafeInteger(Number(row.asked))) throw new Error('Ask totals unreadable');
+  return {
+    asked: Number(row.asked), answered: Number(row.answered), no_source: Number(row.no_source),
+    model_unavailable: Number(row.model_unavailable), retrieval_unavailable: Number(row.retrieval_unavailable),
+    saved: Number(row.saved), discarded: Number(row.discarded),
+    // Summed in whole micro-dollars by SQLite and divided once, for the same
+    // reason `askTotals` sums in micros: a long history's total must not be the
+    // accumulated error of N float additions.
+    cost_usd: Number(row.cost_micro_usd || 0) / 1e6,
+  };
+}
+
+/**
  * Totals for the header strip, counted over whatever slice is being returned.
+ * `page_totals` in the response; `totals` is `scopeTotals` above.
  *
  * `answered` and `asked` are separate figures rather than one ratio because
  * the artboard prints "2 of 3" and a single number cannot say that. `no_source`
@@ -624,36 +835,118 @@ research.get('/ask/sessions', async (c) => {
     ).bind(user.id).first<AskSessionRow>();
   }
 
-  // THREE WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
-  // `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
-  // value is a literal chosen by a ternary, and it is right to: the next person
-  // to add a fourth scope reaches for the same seam with a variable in hand.
-  // The `saved = 1` predicate is written out where it applies.
+  /**
+   * #4610 — FOUR WHOLE STATEMENTS, AND EACH IS A KEYSET PAGE.
+   *
+   * FOUR, NOT THREE: `discarded` is a server scope now. Archived was a
+   * client-side filter over `scope=all`'s window, so an archived answer past
+   * the 200th was unreachable from the one tab that exists to find it.
+   *
+   * WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
+   * `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
+   * value is a literal chosen by a ternary, and it is right to: the next person
+   * to add a fifth scope reaches for the same seam with a variable in hand.
+   * The `saved = 1` and `discarded = 1` predicates are written out where they
+   * apply.
+   *
+   * THE 200 WAS A CAP, NOT A PAGE. It truncated silently in both directions:
+   * `saved` and `all` are `id DESC`, so they dropped the OLDEST answers, while
+   * `session` is `id ASC` and dropped the NEWEST — a reader whose thread passed
+   * 200 exchanges stopped seeing the answer they had just been given. Nothing
+   * told them either way, and `research_ask_session.test.mjs` pinned the three
+   * statements' shape without pinning what the bound did to the reader.
+   *
+   * The cursor is the row id, which is unique and monotonic, so the ordering is
+   * already total and no tiebreaker is needed.
+   *
+   * EVERY SCOPE READS NEWEST-FIRST, INCLUDING `session`, AND THAT IS THE POINT.
+   * The session read was `id ASC`, which with a bare cap dropped the newest
+   * exchanges — and simply paginating an ASC read would have made it worse, not
+   * better: the first page a reader is handed would be their OLDEST two hundred
+   * questions and the answer they had just been given would be several pages
+   * away. So the SQL walks back from the newest row in every scope, and the
+   * session's page is reversed below for display, which is where the thread's
+   * oldest-first reading order belongs. "The newest successfully written answer
+   * appears after submission" is then true of the first page by construction,
+   * rather than true only while the history is short.
+   */
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const limit = listLimit(c.req.query('limit'));
+  // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
+  // `index.ts` turns into that response. This handler answers it itself rather
+  // than relying on that plumbing: a cursor read as "the first page" would
+  // restart a walk the caller believes is advancing, so the refusal must be
+  // the one thing that cannot go missing here.
+  let after: ReturnType<typeof decodeCursor> = null;
+  try { after = decodeCursor(c.req.query('cursor'), 1); } catch {
+    return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+  }
+  const from = after ? Number(after[0]) : null;
+  if (after && !Number.isSafeInteger(from)) return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+
   let rows: { results: AskAnswerRow[] };
   if (scope === 'saved') {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT 200`
-    ).bind(user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'discarded') {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (scope === 'all') {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT 200`
-    ).bind(user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (session) {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id ASC LIMIT 200`
-    ).bind(session.id, user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, from, limit + 1).all<AskAnswerRow>();
   } else {
     rows = { results: [] };
   }
-
-  const items = (rows.results || []).map(answerDto);
+  const read = trimPage((rows.results || []), limit);
+  // The cursor is always the OLDEST row of the page, because every scope walked
+  // back from the newest. That is `read.rows`'s last element before the session
+  // scope is reversed, so it is taken here and not after.
+  const last = read.rows[read.rows.length - 1];
+  // A thread reads oldest-first on screen while being read newest-first from
+  // the store, so the session scope's page is reversed for display. Every other
+  // scope is a log and stays newest-first, as it was.
+  const page = scopeOrder === 'asc' ? [...read.rows].reverse() : read.rows;
+  const items = page.map(answerDto);
   return c.json({
     scope,
     session: session ? { uid: session.uid, created_at: session.created_at, last_asked_at: session.last_asked_at } : null,
     items,
-    totals: askTotals(items),
-    // The count of sessions the reader has, so the page can say whether `All
-    // history` would show anything this thread does not.
+    // #4610: `totals` IS THE WHOLE SELECTED SCOPE, from its own aggregate, so
+    // it does not move when the page does. `page_totals` is this page, kept so
+    // a caller that wants the slice's own figures has them under a name that
+    // says which they are — the defect was one object serving as both.
+    totals: await scopeTotals(c.env, user.id, scope, session?.id ?? null),
+    page_totals: askTotals(items),
+    page_size: items.length,
+    has_more: read.hasMore,
+    next_cursor: read.hasMore && last ? encodeCursor([Number(last.id)]) : null,
+    limit,
+    // The scope's order, so a reader paging `session` knows the cursor walks
+    // forward in time while every other scope walks back.
+    order: scopeOrder,
     score_floor: SCORE_FLOOR,
   });
 });
@@ -946,7 +1239,9 @@ research.post('/ask', async (c) => {
     question,
     answer,
     reason: 'answered',
-    citations,
+    // D4613: the same marking and check the history read applies.
+    citations: markCited(answer, citations),
+    reference_check: referenceCheck(answer, citations),
     score_floor: SCORE_FLOOR,
     session_uid: session.uid,
     answer_uid,
@@ -954,399 +1249,8 @@ research.post('/ask', async (c) => {
   });
 });
 
-
-// ---------------------------------------------------------------------------
-// Market readings — comparable ranges for the firm's own service lines (223)
-// ---------------------------------------------------------------------------
-//
-// THE ROWS ARE THE CATALOG, joined to the newest reading for each. An offering
-// with no reading is the artboard's "never run" row and its `Retainer rate ·
-// Not recorded` tile — a fact about the firm's own record, which is why it is
-// returned rather than filtered out.
-
-interface ReadingRow {
-  id: number; uid: string; owner_user_id: number; offering_id: number | null;
-  metric: string; range_low_cents: number; range_high_cents: number;
-  comparable_count: number; ran_at: string; scope: string | null;
-  created_at: string; updated_at: string;
-}
-
-const readingDto = (r: ReadingRow) => ({
-  uid: r.uid,
-  offering_uid: null as string | null,
-  metric: r.metric,
-  range_low_cents: r.range_low_cents,
-  range_high_cents: r.range_high_cents,
-  comparable_count: r.comparable_count,
-  ran_at: r.ran_at,
-  scope: r.scope,
-});
-
-/**
- * Every service line, with the newest reading for it — and every reading that
- * is not for a service line.
- *
- * TWO READS RATHER THAN ONE OUTER JOIN, because the interesting row is the one
- * with nothing on the other side and an outer join makes that row's absence
- * indistinguishable from a row that was never selected. The page needs both
- * halves named.
- */
-research.get('/market-readings', async (c) => {
-  const user = await requireAuth(c);
-  const offerings = await c.env.DB.prepare(
-    `SELECT id, uid, title, price_usd, price_cents FROM service_offerings
-      WHERE owner_user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 200`
-  ).bind(user.id).all<{ id: number; uid: string; title: string; price_usd: number | null; price_cents: number | null }>();
-  const readings = await c.env.DB.prepare(
-    `SELECT * FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 500`
-  ).bind(user.id).all<ReadingRow>();
-
-  // Newest first out of the query, so the first one seen per offering is the
-  // newest — no comparison, no tie-break, no chance of picking the wrong run.
-  const newest = new Map<number, ReadingRow>();
-  const loose: ReadingRow[] = [];
-  for (const r of readings.results || []) {
-    if (r.offering_id == null) { loose.push(r); continue; }
-    if (!newest.has(r.offering_id)) newest.set(r.offering_id, r);
-  }
-
-  const items = [
-    ...(offerings.results || []).map((o) => {
-      const r = newest.get(o.id);
-      return {
-        offering_uid: o.uid,
-        metric: o.title,
-        // NULL, NOT ZERO, AND THIS IS THE ROW THE ARTBOARD IS ABOUT. A service
-        // line nobody has priced the market for reads "Not recorded"; a zero
-        // would say the firm looked and found the work is worth nothing.
-        ...(r ? { ...readingDto(r), offering_uid: o.uid, metric: o.title } : {
-          uid: null, range_low_cents: null, range_high_cents: null,
-          comparable_count: null, ran_at: null, scope: null,
-        }),
-        // The catalog's own price, so the page can say when a service line is
-        // unpriced AND unread — the two halves of the same gap. Cents are
-        // canonical; a pre-227 row still has only dollars. Neither is folded
-        // into the comparable range.
-        catalogued: catalogPriceCents(o.price_cents, o.price_usd) != null,
-      };
-    }),
-    ...loose.map((r) => ({ ...readingDto(r), catalogued: false })),
-  ];
-  return c.json({ items });
-});
-
-research.post('/market-readings', async (c) => {
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const low = Number(body?.range_low_cents);
-  const high = Number(body?.range_high_cents);
-  const n = Number(body?.comparable_count);
-  const ranAt = String(body?.ran_at || '').trim().slice(0, 32);
-  let metric = String(body?.metric || '').trim().slice(0, 200);
-
-  let offeringId: number | null = null;
-  if (body?.offering_uid) {
-    const o = await c.env.DB.prepare(
-      `SELECT id, title FROM service_offerings WHERE uid = ? AND owner_user_id = ?`
-    ).bind(String(body.offering_uid), user.id).first<{ id: number; title: string }>();
-    if (!o) return c.json({ detail: 'not_found' }, 404);
-    offeringId = o.id;
-    // The offering's own title, so a reading cannot be filed under a name the
-    // catalog does not use — the page joins the two and a second label would be
-    // the place they disagree.
-    metric = o.title;
-  }
-  if (!metric) return c.json({ detail: 'metric_required' }, 400);
-  // EVERY ONE OF THESE IS REFUSED RATHER THAN DEFAULTED. A range with no
-  // comparable count is a number a client will ask about and the firm cannot
-  // answer; a range with no run date cannot age, and age is what this zone
-  // gates attachment on. `research_benchmarks` refuses a peer figure on exactly
-  // these grounds and its schema carries the same CHECK.
-  if (!Number.isInteger(low) || !Number.isInteger(high) || low < 0 || high < low) {
-    return c.json({ detail: 'range_required' }, 400);
-  }
-  if (!Number.isInteger(n) || n < 1) return c.json({ detail: 'comparable_count_required' }, 400);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(ranAt)) return c.json({ detail: 'ran_at_required' }, 400);
-
-  const uid = newUid();
-  await c.env.DB.prepare(
-    `INSERT INTO research_market_readings
-       (uid, owner_user_id, offering_id, metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(uid, user.id, offeringId, metric, low, high, n, ranAt,
-    body?.scope ? String(body.scope).slice(0, 200) : null).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<ReadingRow>();
-  return c.json({ item: row ? readingDto(row) : null }, 201);
-});
-
-/**
- * One reading, for `/research/markets/:uid`.
- *
- * THE LIST KEEPS THE NEWEST PER OFFERING. This read is the row itself, including
- * an older run the list no longer shows. Catalog price comes back beside the
- * range and is not added into it. Attachments carry the need's title when the
- * quote has one, and null when it does not — a quote stores no title of its own.
- */
-research.get('/market-readings/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const uid = c.req.param('uid');
-  const row = await c.env.DB.prepare(
-    `SELECT r.*, o.uid AS offering_uid, o.price_usd AS price_usd, o.price_cents AS price_cents
-       FROM research_market_readings r
-       LEFT JOIN service_offerings o ON o.id = r.offering_id AND o.owner_user_id = r.owner_user_id
-      WHERE r.uid = ? AND r.owner_user_id = ?`
-  ).bind(uid, user.id).first<ReadingRow & {
-    offering_uid: string | null; price_usd: number | null; price_cents: number | null;
-  }>();
-  if (!row) return c.json({ detail: 'not_found' }, 404);
-
-  const attached = await c.env.DB.prepare(
-    `SELECT a.uid AS uid, a.quote_id AS quote_id, a.created_at AS created_at, n.title AS need_title
-       FROM research_attachments a
-       JOIN quotes q ON q.id = a.quote_id
-       LEFT JOIN founder_needs n ON n.id = q.need_id
-      WHERE a.owner_user_id = ? AND a.kind = 'reading' AND a.ref_key = ?
-      ORDER BY a.id DESC LIMIT 50`
-  ).bind(user.id, uid).all<{ uid: string; quote_id: number; created_at: string; need_title: string | null }>();
-
-  // Proposals the caller can attach to: quotes their partner record owns.
-  // A licence with no partner profile has none, and an admin does not see
-  // every firm's quotes from this page.
-  const proposals = user.partner_id
-    ? await c.env.DB.prepare(
-      `SELECT q.id AS id, q.status AS status, n.title AS need_title
-         FROM quotes q
-         LEFT JOIN founder_needs n ON n.id = q.need_id
-        WHERE q.partner_id = ?
-        ORDER BY q.created_at DESC LIMIT 100`
-    ).bind(user.partner_id).all<{ id: number; status: string; need_title: string | null }>()
-    : { results: [] as { id: number; status: string; need_title: string | null }[] };
-
-  return c.json({
-    item: {
-      ...readingDto(row),
-      offering_uid: row.offering_uid ?? null,
-      catalog_price_cents: catalogPriceCents(row.price_cents, row.price_usd),
-    },
-    attachments: (attached.results || []).map((a) => ({
-      uid: a.uid,
-      quote_id: a.quote_id,
-      created_at: a.created_at,
-      proposal_name: proposalName(a.need_title),
-    })),
-    proposals: (proposals.results || []).map((q) => ({
-      id: q.id,
-      status: q.status,
-      proposal_name: proposalName(q.need_title),
-    })),
-  });
-});
-
-research.delete('/market-readings/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
-  return c.json({ ok: true });
-});
-
-// ---------------------------------------------------------------------------
-// Brief notes — the firm's own half of a client brief (migration 222)
-// ---------------------------------------------------------------------------
-//
-// THE SECOND SOURCE. `ClientPrepZone`'s rows are all `source: 'client'` — the
-// founder's record, quoted — so the `pr2` artboard's `Ours only` chip matched
-// nothing and `Founder-sourced` matched everything. These are the rows that
-// make the axis real, and `open` is the fourth chip: only a note the firm wrote
-// can be marked settled, because ticking off a fact the CLIENT recorded would
-// be editing someone else's record.
-
-interface BriefNoteRow {
-  id: number; uid: string; owner_user_id: number; project_id: number;
-  section: string; body: string; open: number; created_at: string; updated_at: string;
-}
-
-const noteDto = (r: BriefNoteRow) => ({
-  uid: r.uid,
-  section: r.section,
-  body: r.body,
-  open: r.open === 1,
-  // The axis the chips filter on. Stated by the route so the page never has to
-  // decide what its own rows are — the brief's other rows say `'client'` and
-  // these say `'ours'`, and one place decides both.
-  source: 'ours' as const,
-  created_at: r.created_at,
-  updated_at: r.updated_at,
-});
-
-/**
- * The project a note may be written against: one the caller holds a LIVE grant
- * over.
- *
- * A firm that never held a grant has no business keeping a file on that founder
- * inside this product, and a revoked grant is the founder taking that back —
- * which is why the check is on `status = 'active'` and not merely on the grant
- * having once existed. Returns the project's id, or null.
- */
-async function grantedProjectId(c: { env: Env }, userId: number, projectUid: string) {
-  const row = await c.env.DB.prepare(
-    `SELECT p.id AS id
-       FROM advisor_client_grants g
-       JOIN projects p ON p.id = g.project_id
-      WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
-      ORDER BY g.id DESC LIMIT 1`
-  ).bind(userId, projectUid).first<{ id: number }>();
-  return row?.id ?? null;
-}
-
-research.get('/brief-notes', async (c) => {
-  const user = await requireAuth(c);
-  const projectUid = String(c.req.query('project') || '');
-  if (!projectUid) return c.json({ detail: 'project_required' }, 400);
-  const projectId = await grantedProjectId(c, user.id, projectUid);
-  // NOT FOUND RATHER THAN FORBIDDEN, and deliberately: whether a given founder
-  // exists is not something a firm without a grant may learn by probing.
-  if (!projectId) return c.json({ detail: 'not_found' }, 404);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_brief_notes WHERE owner_user_id = ? AND project_id = ? ORDER BY id ASC LIMIT 200`
-  ).bind(user.id, projectId).all<BriefNoteRow>();
-  return c.json({ items: (rows.results || []).map(noteDto) });
-});
-
-research.post('/brief-notes', async (c) => {
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const projectUid = String(body?.project || '');
-  const section = String(body?.section || '').trim().slice(0, 120);
-  const text = String(body?.body || '').trim().slice(0, 4000);
-  if (!projectUid || !section || !text) return c.json({ detail: 'section_and_body_required' }, 400);
-  const projectId = await grantedProjectId(c, user.id, projectUid);
-  if (!projectId) return c.json({ detail: 'not_found' }, 404);
-
-  const uid = newUid();
-  await c.env.DB.prepare(
-    `INSERT INTO research_brief_notes (uid, owner_user_id, project_id, section, body, open)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(uid, user.id, projectId, section, text, body?.open === false ? 0 : 1).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<BriefNoteRow>();
-  return c.json({ item: row ? noteDto(row) : null }, 201);
-});
-
-/** Settle a note, or reopen it. The only field the artboard's chips act on. */
-research.patch('/brief-notes/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  if (typeof body?.open !== 'boolean') return c.json({ detail: 'open_required' }, 400);
-  const res = await c.env.DB.prepare(
-    `UPDATE research_brief_notes SET open = ?, updated_at = datetime('now')
-      WHERE uid = ? AND owner_user_id = ?`
-  ).bind(body.open ? 1 : 0, c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).first<BriefNoteRow>();
-  return c.json({ item: row ? noteDto(row) : null });
-});
-
-research.delete('/brief-notes/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_brief_notes WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
-  return c.json({ ok: true });
-});
-
-// ---------------------------------------------------------------------------
-// Attachments — `Attach to proposal`, on two artboards (migration 222)
-// ---------------------------------------------------------------------------
-//
-// The op was `unbuilt:` on both Client prep and Market for the want of an EDGE,
-// never for the want of a proposal: `quotes` is live and `api.myQuotes()` reads
-// it. One table serves both, keyed by `kind`.
-
-const ATTACH_KINDS = new Set(['brief', 'reading']);
-
-interface AttachmentRow {
-  id: number; uid: string; owner_user_id: number; kind: string;
-  ref_key: string; quote_id: number; created_at: string;
-}
-
-research.get('/attachments', async (c) => {
-  const user = await requireAuth(c);
-  const kind = String(c.req.query('kind') || '');
-  if (!ATTACH_KINDS.has(kind)) return c.json({ detail: 'unknown_kind' }, 400);
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM research_attachments WHERE owner_user_id = ? AND kind = ? ORDER BY id DESC LIMIT 500`
-  ).bind(user.id, kind).all<AttachmentRow>();
-  return c.json({
-    items: (rows.results || []).map((r) => ({
-      uid: r.uid, kind: r.kind, ref_key: r.ref_key, quote_id: r.quote_id, created_at: r.created_at,
-    })),
-  });
-});
-
-research.post('/attachments', async (c) => {
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const kind = String(body?.kind || '');
-  const refKey = String(body?.ref_key || '').trim().slice(0, 200);
-  const quoteId = Number(body?.quote_id);
-  if (!ATTACH_KINDS.has(kind) || !refKey || !Number.isInteger(quoteId)) {
-    return c.json({ detail: 'kind_ref_and_quote_required' }, 400);
-  }
-  // THE QUOTE MUST BE THE CALLER'S OWN. Attaching a market reading to somebody
-  // else's proposal would put the firm's reasoning behind a number they did not
-  // quote — and would tell them a figure exists that they cannot see.
-  //
-  // Ownership is `partner_id`. That is the column `POST /needs/:id/quotes`
-  // writes. `provider_user_id` is not a column on the live `quotes` table
-  // (schema_baseline plus the later ALTERs), so a predicate on it matches
-  // nothing and the insert never runs.
-  if (!user.partner_id) return c.json({ detail: 'not_found' }, 404);
-  const quote = await c.env.DB.prepare(
-    `SELECT id FROM quotes WHERE id = ? AND partner_id = ?`
-  ).bind(quoteId, user.partner_id).first<{ id: number }>();
-  if (!quote) return c.json({ detail: 'not_found' }, 404);
-
-  if (kind === 'reading') {
-    const reading = await c.env.DB.prepare(
-      `SELECT ran_at FROM research_market_readings WHERE uid = ? AND owner_user_id = ?`
-    ).bind(refKey, user.id).first<{ ran_at: string }>();
-    if (!reading) return c.json({ detail: 'not_found' }, 404);
-    // AGE IS A GATE. A stale reading is blocked from a proposal, not merely
-    // labelled. The page hides Attach; this is the same refusal if it is called.
-    if (readingIsStale(reading.ran_at)) return c.json({ detail: 'reading_stale' }, 409);
-  }
-
-  const uid = newUid();
-  await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO research_attachments (uid, owner_user_id, kind, ref_key, quote_id)
-     VALUES (?, ?, ?, ?, ?)`
-  ).bind(uid, user.id, kind, refKey, quoteId).run();
-  // `OR IGNORE` because attaching the same thing to the same proposal twice is
-  // not a second fact — the row's own UNIQUE says so — and a 409 here would
-  // make a reader think the first attachment had failed.
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_attachments
-      WHERE owner_user_id = ? AND kind = ? AND ref_key = ? AND quote_id = ?`
-  ).bind(user.id, kind, refKey, quoteId).first<AttachmentRow>();
-  return c.json({ item: row ? { uid: row.uid, kind: row.kind, ref_key: row.ref_key, quote_id: row.quote_id, created_at: row.created_at } : null }, 201);
-});
-
-research.delete('/attachments/:uid', async (c) => {
-  const user = await requireAuth(c);
-  const res = await c.env.DB.prepare(
-    `DELETE FROM research_attachments WHERE uid = ? AND owner_user_id = ?`
-  ).bind(c.req.param('uid'), user.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'not_found' }, 404);
-  return c.json({ ok: true });
-});
+// Market readings, brief notes and proposal attachments (migrations 222 and 223)
+// live in `research_client_prep.ts` (#4574 part 8), mounted just ahead of this router.
 
 // ---------------------------------------------------------------------------
 // Zone drafts — the AI band every Research and Network artboard ends with
@@ -1502,13 +1406,12 @@ const DRAFT_SURFACES: Record<string, {
       ).bind(session.id, userId).all<{ question: string; answer: string | null; reason: string; citations: string }>();
       return (rows.results || []).map((r) => {
         if (r.reason !== 'answered') return `Q: ${r.question}\nA: (no retrievable source — unanswered)`;
-        let cites = '';
-        try {
-          const list = JSON.parse(r.citations || '[]');
-          if (Array.isArray(list) && list.length) {
-            cites = `\nSources: ${list.map((x: any) => `[${x.n}] ${x.title}`).join(', ')}`;
-          }
-        } catch { /* a malformed citation list costs the brief its sources, not its answer */ }
+        // D4613: only the sources the answer actually cites carry through as
+        // its sources; a passage it was given and never cited is not support.
+        // A malformed citation list costs the brief its sources, not its answer.
+        const list = markCited(r.answer, storedCitations(r.citations) as Array<{ n?: number | null; title?: string; cited?: boolean }>);
+        const cited = list.filter((x) => x.cited);
+        const cites = cited.length ? `\nSources: ${cited.map((x) => `[${x.n}] ${x.title}`).join(', ')}` : '';
         return `Q: ${r.question}\nA: ${r.answer}${cites}`;
       });
     },
@@ -1572,7 +1475,9 @@ const DRAFT_SURFACES: Record<string, {
                 g.scope_project AS scope_project
            FROM advisor_client_grants g
            JOIN projects p ON p.id = g.project_id
-          WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+          WHERE g.advisor_user_id = ? AND g.status = 'active'
+            AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+            AND p.uid = ?
           ORDER BY g.id DESC LIMIT 1`
       ).bind(userId, scope).first<{
         id: number; name: string; sector: string | null; stage: string | null; scope_project: number;
@@ -1741,15 +1646,20 @@ const DRAFT_SURFACES: Record<string, {
     // client opened the file: `opened_at` is theirs to set and nothing writes it.
     instruction: [
       'Draft one short chase note per unopened deliverable below: the item, when it went out, and what reviewing it unblocks.',
-      'Never say or imply the client ignored it: this product records no opens at all, so an unopened row means we have not heard, not that they did not look.',
+      'Never say or imply the client ignored it: an unopened row means the client has not opened the shared link here yet, not that they did not look.',
       'State the milestone consequence plainly and assign no blame. These are drafts for a person to send.',
     ].join(' '),
     gather: async (c, userId) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // #5314 part 1: only a deliverable whose open could have been recorded is
+      // chased; one sent before opens were recorded, or with no link, is
+      // "Not recorded", and there is nothing to chase.
+      const tracking = readTrackingFor([], undefined, await deliverableReadsSince(c.env));
+      if (!tracking.available) return [];
       const rows = await c.env.DB.prepare(
-        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at,
+        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at, d.link_url AS link_url,
                 n.title AS need_title, f.name AS client,
                 (SELECT COUNT(*) FROM engagement_milestones m
                   WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS open_milestones
@@ -1760,12 +1670,12 @@ const DRAFT_SURFACES: Record<string, {
           WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
           ORDER BY d.sent_at ASC LIMIT 100`
       ).bind(me.partner_id).all<{
-        title: string; version: string | null; sent_at: string;
+        title: string; version: string | null; sent_at: string; link_url: string | null;
         need_title: string | null; client: string | null; open_milestones: number;
       }>();
-      return (rows.results || []).map((r) =>
+      return (rows.results || []).filter((r) => readStateFor({ ...r, opened_at: null }, tracking) === 'unopened').map((r) =>
         `${r.client || 'client not recorded'} — "${r.title}"${r.version ? ` v${r.version}` : ''}, `
-        + `sent ${String(r.sent_at).slice(0, 10)}, not acknowledged here; `
+        + `sent ${String(r.sent_at).slice(0, 10)}, not yet opened by the client; `
         + `${r.need_title ? `engagement: ${r.need_title}; ` : ''}`
         + `${r.open_milestones} milestone${r.open_milestones === 1 ? '' : 's'} still open on it`);
     },
@@ -2448,10 +2358,16 @@ const DRAFT_SURFACES: Record<string, {
       if (!me?.partner_id) return [];
       const rows = await c.env.DB.prepare(
         `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                -- D4672: a consent counts only about the claim as it now reads (its pinned
+                -- hash is the item's current one), and an ask is pending only while its
+                -- link is live and about that same revision.
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL) AS live,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256) AS live,
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL) AS pending,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256
+                    AND (k.expires_at IS NULL OR datetime(k.expires_at) > datetime('now'))) AS pending,
                 (SELECT COUNT(*) FROM partner_proof_consents k
                   WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
            FROM partner_proof_items p
@@ -2991,7 +2907,7 @@ const DRAFT_SURFACES: Record<string, {
         + `; kind ${s.kind || 'not recorded'}`
         // The price is spelled as unset rather than zeroed: 0 is a price an
         // advisor may genuinely mean, and the instruction turns on this word.
-        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; price ${s.price_cents == null ? 'NOT SET' : suffixAmount(Number(s.price_cents), String(s.currency || 'USD').toUpperCase(), { trimWhole: true })}`
         + `; duration ${s.duration_note || 'not recorded'}`
         + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
       ));
@@ -3845,13 +3761,15 @@ research.delete('/drafts/:uid', async (c) => {
 const FUND_STAGE_FIT = new Set(['right', 'wrong']);
 const FUND_PATH = new Set(['warm', 'cold']);
 const FUND_STATUS = new Set(['researching', 'passed']);
+/** D4613: a fund-directory uid, as the directory writes them. */
+const CATALOGUE_UID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 interface FundRow {
   id: number; uid: string; owner_user_id: number; project_id: number | null;
   name: string; cheque_min_cents: number | null; cheque_max_cents: number | null;
   stage_fit: string | null; path: string | null; status: string;
   pass_reason: string | null; thesis: string | null; note: string | null;
-  source_url: string | null; created_at: string; updated_at: string;
+  source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
 }
 
 const fundDto = (r: FundRow) => ({
@@ -3870,6 +3788,8 @@ const fundDto = (r: FundRow) => ({
   thesis: r.thesis,
   note: r.note,
   source_url: r.source_url,
+  // D4613: the fund-directory row this came from; null for a hand-written fund.
+  catalogue_uid: r.catalogue_uid ?? null,
   created_at: r.created_at,
   // The dossier's "Last updated" tile. Every write to the row stamps it —
   // PATCH, and a brief accepted into the note.
@@ -4075,25 +3995,41 @@ research.post('/funds', async (c) => {
   const body = await c.req.json<any>().catch(() => ({}));
   const name = clampText(body.name, 200);
   if (!name) return c.json({ detail: 'A fund needs a name' }, 400);
+  // D4613: an add from the fund directory names the directory row it came
+  // from. Checked against a fixed character set before it reaches SQL (bound
+  // there regardless), and absent for a fund typed in by hand.
+  const rawCatalogue = body.catalogue_uid;
+  const catalogueUid = rawCatalogue == null || rawCatalogue === '' ? null : String(rawCatalogue);
+  if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
+    return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+  }
   const uid = newUid();
   const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_funds
+  // D4613: INSERT OR IGNORE against the partial unique index on (owner,
+  // catalogue_uid). A repeat of the same catalogue add — a double click, or a
+  // retry after a lost response — writes nothing and answers with the row the
+  // first one wrote. A hand-written fund (NULL catalogue_uid) never collides.
+  const write = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_funds
        (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
-        stage_fit, path, status, pass_reason, thesis, note, source_url, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, clampInt(body.project_id), name,
     clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
     oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
     oneOf(body.status, FUND_STATUS) || 'researching',
     clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
-    clampText(body.note, 2000), clampText(body.source_url, 500), now, now,
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
   ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow), 201);
+  const created = Number(write.meta?.changes ?? 1) > 0;
+  const row = created
+    ? await c.env.DB.prepare(`SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`).bind(uid, user.id).first<FundRow>()
+    : await c.env.DB.prepare(`SELECT * FROM research_funds WHERE owner_user_id = ? AND catalogue_uid = ?`).bind(user.id, catalogueUid).first<FundRow>();
+  if (!row) return c.json({ detail: 'The fund did not save' }, 500);
+  // 201 for the row this request wrote, 200 for the one an earlier request
+  // wrote. `existing` says which, so the page can say "already on My funds".
+  return c.json({ ...fundDto(row), existing: !created }, created ? 201 : 200);
 });
 
 // ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ const PROVIDER_LABELS = {
   carta: 'Carta',
   github: 'GitHub',
   vercel: 'Vercel',
+  tiktok: 'TikTok',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
@@ -326,6 +327,8 @@ export function IntegrationKeysPanel() {
 export function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = null, envNames = [], onClose, onSaved }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  // D5304: only the date the provider's own console shows; blank records no expiry.
+  const [expiresAt, setExpiresAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState(null);
   useEscapeClose(onClose);
@@ -350,9 +353,9 @@ export function IntegrationKeysEditModal({ provider, mode = 'configure', callbac
     setSaving(true);
     try {
       if (isRotate) {
-        await api.adminRotateIntegrationKeys(provider, clientSecret.trim());
+        await api.adminRotateIntegrationKeys(provider, clientSecret.trim(), expiresAt);
       } else {
-        await api.adminSetIntegrationKeys(provider, clientId.trim(), clientSecret.trim());
+        await api.adminSetIntegrationKeys(provider, clientId.trim(), clientSecret.trim(), expiresAt);
       }
       onSaved();
     } catch (e) {
@@ -404,6 +407,17 @@ export function IntegrationKeysEditModal({ provider, mode = 'configure', callbac
           spellCheck={false}
           className="w-full px-3 py-2 mb-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono"
           placeholder="••••••••••••••••" />
+        <label htmlFor={`integration-key-expiry-${provider}`} className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Expires on (optional)</label>
+        <input
+          id={`integration-key-expiry-${provider}`}
+          type="date"
+          value={expiresAt}
+          onChange={(e) => setExpiresAt(e.target.value)}
+          data-testid="integration-keys-expiry"
+          className="w-full px-3 py-2 mb-1 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">
+          Only if {label}&apos;s console shows an expiry for this key. Leave it blank otherwise: the platform then records none.
+        </p>
         {/* D227 — what a save does now, not what the database store did. */}
         <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4" data-testid="integration-keys-save-effect">
           {isRotate ? SAVE_EFFECT.rotate : SAVE_EFFECT.configure}

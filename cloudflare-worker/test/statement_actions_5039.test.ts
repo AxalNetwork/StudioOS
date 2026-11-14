@@ -27,6 +27,10 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import adminStatements, { PICKER_PAGE_MAX } from '../src/routes/admin_statements.ts';
+import adjustments from '../src/routes/admin_statement_adjustments.ts';
+import promoReadback from '../src/routes/admin_promo_readback.ts';
+import { promoCeilingReadback } from '../src/services/promoCeilingReadback.ts';
+import { statementOverdue, validDueDate } from '../src/services/statementAdjustments.ts';
 import { planStatementAction, STEP_UP_ACTIONS } from '../src/services/statementActions.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -91,6 +95,7 @@ function app() {
   // The shipped DDL, not a retyped copy of it.
   db.exec(migration('260_subsidiary_statements.sql'));
   db.exec(migration('202611090909_statement_actions.sql'));
+  db.exec(migration('202611132151_5039_statement_adjustments.sql'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(HOLDER, 'admin', 'Sue', 'sue@axal.example');
@@ -120,9 +125,11 @@ function app() {
   st.run('st_issued', 'lic_uk', '2026-Q3', 400_000, 3000, 120_000, 'GBP', 0, 0, 'issued');
   st.run('st_floor', 'lic_de', '2026-Q3', 100_000, 3000, 30_000, 'EUR', 2, 0, 'draft');
 
-  const env = { DB: makeD1(db), JWT_SECRET, ENVIRONMENT: 'development' };
+  const env: any = { DB: makeD1(db), JWT_SECRET, ENVIRONMENT: 'development' };
   const r = new Hono<any>();
   r.route('/api/admin', adminStatements);
+  r.route('/api/admin', adjustments);
+  r.route('/api/admin', promoReadback);
   const call = async (path: string, init: RequestInit = {}, userId: number | null = HOLDER) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (userId !== null) {
@@ -143,7 +150,7 @@ function app() {
     } catch { return []; }
   };
   let seq = 0;
-  const post = (uid: string, kind: 'issue' | 'payments' | 'void', body: Record<string, unknown> = {}, userId: number | null = HOLDER) =>
+  const post = (uid: string, kind: 'issue' | 'payments' | 'void' | 'disputes' | 'due-date', body: Record<string, unknown> = {}, userId: number | null = HOLDER) =>
     call(`/statements/${uid}/${kind}`, {
       method: 'POST',
       body: JSON.stringify({
@@ -151,7 +158,7 @@ function app() {
         idempotency_key: `k-${(seq += 1)}-abcdef`, ...body,
       }),
     }, userId);
-  return { db, call, row, actions, audit, post };
+  return { db, env, call, row, actions, audit, post };
 }
 
 /* ── the rules, without a database ─────────────────────────────────────── */
@@ -257,7 +264,7 @@ test('an action from a status it cannot start from is refused with 409 and the s
 test('a stale revision is 409 changed_since_open with the row as it stands, and writes nothing', async () => {
   const t = app();
   // Somebody records a dispute after this admin opened the drawer at revision 0.
-  const d = await t.call('/statements/st_issued', { method: 'PATCH', body: JSON.stringify({ disputed_cents: 1_000, dispute_note: 'a fee we contest' }) });
+  const d = await t.post('st_issued', 'disputes', { disputed_cents: 1_000 });
   assert.equal(d.status, 200);
   assert.equal(t.row('st_issued').revision, 1);
   const stale = await t.post('st_issued', 'payments', { amount_cents: 500, expected_revision: 0 });
@@ -266,7 +273,7 @@ test('a stale revision is 409 changed_since_open with the row as it stands, and 
   assert.equal(stale.body.current_revision, 1);
   assert.equal(stale.body.current.disputed_cents, 1_000);
   assert.equal(t.row('st_issued').paid_cents, 0);
-  assert.equal(t.actions().length, 0);
+  assert.equal(t.actions().length, 1, 'only the earlier dispute receipt remains');
   // Re-read, and the same action lands.
   const fresh = await t.post('st_issued', 'payments', { amount_cents: 500, expected_revision: 1 });
   assert.equal(fresh.status, 200);
@@ -402,4 +409,171 @@ test('the picker searches by name, reference, entity or an exact country, and pa
   assert.equal((await t.call('/licence-picker?limit=10000')).body.limit, PICKER_PAGE_MAX);
   const bad = await t.call('/licence-picker?cursor=not-a-cursor');
   assert.deepEqual([bad.status, bad.body.error], [400, 'bad_cursor']);
+});
+
+/* D5039 part 3: the remaining governed actions and actual source reads. */
+test('adjustments require elevation and recent authentication; the retired PATCH writes nothing', async () => {
+  const t = app();
+  for (const kind of ['disputes', 'due-date'] as const) {
+    for (const [user, status] of [[null, 401], [PLAIN, 403], [STALE, 403]] as const) {
+      const r = await t.post('st_issued', kind, { disputed_cents: 100, due_on: '2026-12-01' }, user);
+      assert.equal(r.status, status);
+    }
+  }
+  const r = await t.call('/statements/st_issued', { method: 'PATCH', body: JSON.stringify({ disputed_cents: 100, dispute_note: 'bypass' }) });
+  assert.deepEqual([r.status, r.body.error, t.row('st_issued').revision, t.actions().length], [409, 'governed_action_required', 0, 0]);
+});
+
+test('dispute replaces and clears the total with receipts, replay, reason and revision checks', async () => {
+  const t = app();
+  const body = { disputed_cents: 3000, expected_revision: 0, idempotency_key: 'dispute-replay-5039' };
+  const first = await t.post('st_issued', 'disputes', body);
+  assert.equal(first.status, 200);
+  assert.deepEqual([first.body.before.disputed_cents, first.body.after.disputed_cents, first.body.after.outstanding_cents], [0, 3000, 117000]);
+  assert.equal(t.row('st_issued').dispute_note, 'Agreed on the call with the branch CFO');
+  const replay = await t.post('st_issued', 'disputes', body);
+  assert.deepEqual([replay.status, replay.body.replayed, t.row('st_issued').revision, t.actions().length], [200, true, 1, 1]);
+  assert.equal((await t.post('st_issued', 'disputes', { ...body, disputed_cents: 4000 })).body.error, 'idempotency_key_reused');
+  assert.equal((await t.post('st_issued', 'disputes', { disputed_cents: 0, expected_revision: 0 })).body.error, 'changed_since_open');
+  assert.equal((await t.post('st_issued', 'disputes', { disputed_cents: 0, reason: '' })).status, 400);
+  assert.equal(t.row('st_issued').disputed_cents, 3000);
+  assert.equal((await t.post('st_issued', 'disputes', { disputed_cents: 0 })).status, 200);
+  assert.deepEqual([t.row('st_issued').disputed_cents, t.row('st_issued').dispute_note, t.actions().length, t.audit().length], [0, null, 2, 2]);
+});
+
+test('adjustments refuse unknown figures, invalid totals and settled/void claims', async () => {
+  const t = app();
+  for (const v of [-1, 1.5, '100', null, 120001]) assert.notEqual((await t.post('st_issued', 'disputes', { disputed_cents: v })).status, 200);
+  t.db.exec("UPDATE subsidiary_statements SET paid_cents = 119900 WHERE uid = 'st_issued'");
+  assert.equal((await t.post('st_issued', 'disputes', { disputed_cents: 101 })).body.error, 'over_owed');
+  for (const status of ['paid', 'void']) {
+    t.db.prepare("UPDATE subsidiary_statements SET status = ? WHERE uid = 'st_issued'").run(status);
+    assert.equal((await t.post('st_issued', 'due-date', { due_on: '2026-12-01' })).body.error, 'invalid_status');
+  }
+  t.db.exec("UPDATE subsidiary_statements SET status = 'issued', owed_cents = 'unknown' WHERE uid = 'st_issued'");
+  assert.equal((await t.post('st_issued', 'due-date', { due_on: null })).body.error, 'figures_unreadable');
+  assert.equal(t.actions().length, 0);
+});
+
+test('due dates validate real days, can be cleared explicitly, and determine Overdue without defaults', async () => {
+  const t = app();
+  assert.equal(t.row('st_issued').due_on, null);
+  for (const due_on of ['2026-02-30', '2026-13-01', '', 0, undefined]) assert.equal((await t.post('st_issued', 'due-date', { due_on })).status, 400);
+  const first = await t.post('st_issued', 'due-date', { due_on: '2020-02-29', idempotency_key: 'due-replay-5039', expected_revision: 0 });
+  assert.deepEqual([first.status, first.body.before.due_on, first.body.after.due_on], [200, null, '2020-02-29']);
+  assert.equal((await t.call('/statements')).body.items.find((x: any) => x.uid === 'st_issued').overdue, true);
+  assert.equal((await t.post('st_issued', 'due-date', { due_on: '2020-02-29', idempotency_key: 'due-replay-5039', expected_revision: 0 })).body.replayed, true);
+  assert.equal((await t.post('st_issued', 'due-date', { due_on: null })).status, 200);
+  assert.equal((await t.call('/statements')).body.items.find((x: any) => x.uid === 'st_issued').overdue, null);
+  const row = { status: 'issued', owed_cents: 100, paid_cents: 0, disputed_cents: 0, due_on: '2026-11-13' };
+  assert.equal(statementOverdue(row, '2026-11-13'), false);
+  assert.equal(statementOverdue(row, '2026-11-14'), true);
+  assert.equal(statementOverdue({ ...row, status: 'paid' }, '2026-11-14'), false);
+  assert.equal(statementOverdue({ ...row, disputed_cents: 100 }, '2026-11-14'), false);
+  assert.equal(statementOverdue({ ...row, due_on: null }), null);
+  assert.equal(validDueDate('2024-02-29'), true);
+  assert.equal(validDueDate('2025-02-29'), false);
+});
+
+test('an adjustment losing its CAS or failing its receipt insert never leaves a partial update', async () => {
+  for (const mode of ['race', 'receipt-failure']) {
+    const t = app();
+    const original = t.db.prepare.bind(t.db);
+    let changed = false;
+    (t.db as any).prepare = (sql: string) => {
+      if (!changed && /UPDATE subsidiary_statements SET disputed_cents/.test(sql)) {
+        changed = true;
+        if (mode === 'race') original("UPDATE subsidiary_statements SET revision = revision + 1 WHERE uid = 'st_issued'").run();
+      }
+      if (mode === 'receipt-failure' && /INSERT INTO subsidiary_statement_actions/.test(sql)) return { run: () => { throw new Error('SQLITE_ERROR: injected receipt failure'); } };
+      return original(sql);
+    };
+    const r = await t.post('st_issued', 'disputes', { disputed_cents: 300 });
+    assert.equal(r.status, mode === 'race' ? 409 : 500);
+    assert.equal(t.row('st_issued').disputed_cents, 0);
+    assert.equal(t.actions().length, 0);
+  }
+});
+
+test('history is permission-gated, scoped and paged; unreadable is never an empty success', async () => {
+  const t = app();
+  assert.equal((await t.call('/statements/st_issued/actions', {}, PLAIN)).status, 403);
+  assert.equal((await t.call('/statements/missing/actions')).status, 404);
+  assert.equal((await t.call('/statements/st_issued/actions?cursor=no')).status, 400);
+  assert.deepEqual((await t.call('/statements/st_issued/actions')).body.items, []);
+  await t.post('st_draft', 'due-date', { due_on: '2027-01-01' });
+  for (let i = 0; i < 27; i++) assert.equal((await t.post('st_issued', 'disputes', { disputed_cents: i })).status, 200);
+  const a = (await t.call('/statements/st_issued/actions')).body;
+  const b = (await t.call(`/statements/st_issued/actions?cursor=${a.next_cursor}`)).body;
+  assert.deepEqual([a.items.length, b.items.length, b.next_cursor], [25, 2, null]);
+  assert.equal(new Set([...a.items, ...b.items].map((x: any) => x.uid)).size, 27);
+  assert.equal(a.items[0].after.disputed_cents, 26);
+  assert.equal(a.items[0].actor_user_id, HOLDER);
+  assert.equal('idempotency_key' in a.items[0], false);
+  assert.equal(a.items.some((x: any) => x.action === 'set_due_date'), false);
+  // Corruption in the final returned receipt must be Unreadable, not a 400
+  // blaming the caller, a partial empty success, or a skipped cursor row.
+  const boundary = a.items[a.items.length - 1];
+  for (const response of ['{', 'null', '{}']) {
+    t.db.prepare('UPDATE subsidiary_statement_actions SET response_json = ? WHERE uid = ?').run(response, boundary.uid);
+    const broken = await t.call('/statements/st_issued/actions');
+    assert.equal(broken.status, 500);
+    assert.equal(Array.isArray(broken.body.items), false);
+  }
+  t.db.exec('DROP TABLE subsidiary_statement_actions');
+  assert.equal((await t.call('/statements/st_issued/actions')).status, 500);
+});
+
+test('migration preserves existing receipt IDs, keys and responses', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(migration('260_subsidiary_statements.sql'));
+  db.exec(migration('202611090909_statement_actions.sql'));
+  db.exec(`INSERT INTO subsidiary_statement_actions
+    (uid,statement_uid,action,actor_user_id,idempotency_key,request_hash,reason,from_status,to_status,from_revision,to_revision,response_json)
+    VALUES ('old','s','issue',7,'old-key-5039','hash','Existing reason','draft','issued',0,1,'{"outcome":"applied"}')`);
+  const before = db.prepare('SELECT * FROM subsidiary_statement_actions').get();
+  db.exec(migration('202611132151_5039_statement_adjustments.sql'));
+  assert.deepEqual(db.prepare('SELECT * FROM subsidiary_statement_actions').get(), before);
+  assert.throws(() => db.exec(`INSERT INTO subsidiary_statement_actions SELECT * FROM subsidiary_statement_actions`), /UNIQUE/);
+  db.close();
+});
+
+test('promotion read-back uses the checkout calculation and distinguishes no ceiling from unreadable', async (ctx) => {
+  ctx.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 22) });
+  const t = app();
+  t.env.BRANCH_CODE = 'fr';
+  t.db.exec(`CREATE TABLE branch_promo_ceiling (id INTEGER PRIMARY KEY, period TEXT, ceiling_cents INTEGER, currency TEXT);
+    CREATE TABLE promo_ceiling_reservations (period TEXT, currency TEXT, state TEXT, expires_at TEXT, ref TEXT, amount_cents INTEGER);`);
+  assert.equal((await promoCeilingReadback(t.env)).ceiling, null);
+  const period = `${new Date().getUTCFullYear()}-Q${Math.floor(new Date().getUTCMonth() / 3) + 1}`;
+  t.db.prepare('INSERT INTO branch_promo_ceiling VALUES (1,?,1000,?)').run(period, 'EUR');
+  t.db.prepare("INSERT INTO promo_ceiling_reservations VALUES (?, 'EUR', 'committed', NULL, 'spent', 300)").run(period);
+  const read: any = await promoCeilingReadback(t.env);
+  assert.deepEqual([read.branch, read.ceiling.ceiling_cents, read.ceiling.spent_cents, read.ceiling.remaining_cents], ['fr', 1000, 300, 700]);
+  t.db.exec('DROP TABLE promo_ceiling_reservations');
+  assert.equal((await promoCeilingReadback(t.env)).ceiling?.ok, false);
+});
+
+test('HQ read-back verifies bound identity, amount, currency and freshness, never push acceptance', async (ctx) => {
+  ctx.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 13, 22) });
+  const t = app();
+  const period = `${new Date().getUTCFullYear()}-Q${Math.floor(new Date().getUTCMonth() / 3) + 1}`;
+  t.db.prepare('INSERT INTO licence_promo_ceilings (licence_uid,period,ceiling_cents,currency) VALUES (?,?,1000,?)').run('lic_fr', period, 'EUR');
+  t.db.exec("INSERT INTO licence_deployments (licence_uid, code) VALUES ('lic_fr', 'fr')");
+  const path = `/promo-ceilings/lic_fr/read-back?period=${period}`;
+  assert.equal((await t.call(path, {}, PLAIN)).status, 403);
+  assert.equal((await t.call(path)).body.state, 'not_deployed');
+  let read: any = { branch: 'fr', as_of: new Date().toISOString(), ceiling: { period, ceiling_cents: 1000, currency: 'EUR', spent_cents: 300, remaining_cents: 700 } };
+  t.env.BRANCH_FR = { promoCeilingReadback: async () => read };
+  assert.equal((await t.call(path)).body.state, 'verified');
+  read = { ...read, ceiling: { ...read.ceiling, ceiling_cents: 900 } };
+  assert.equal((await t.call(path)).body.state, 'mismatch');
+  read = { ...read, branch: 'uk' };
+  assert.equal((await t.call(path)).body.state, 'unreadable');
+  read = { branch: 'fr', as_of: new Date(Date.now() - 120_000).toISOString(), ceiling: null };
+  assert.equal((await t.call(path)).body.state, 'unreadable');
+  read = { branch: 'fr', as_of: new Date().toISOString(), ceiling: null };
+  assert.equal((await t.call(path)).body.state, 'no_ceiling');
+  t.env.BRANCH_FR.promoCeilingReadback = async () => { throw new Error('branch offline'); };
+  assert.equal((await t.call(path)).body.state, 'unreadable');
 });

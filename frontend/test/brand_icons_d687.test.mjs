@@ -83,7 +83,7 @@ const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'Clipboar
 // ── 1. Every key is classified ──────────────────────────────────────────────
 
 test('1. every key the app draws is classified, exactly once', () => {
-  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'beehiiv'], 'the Worker registry\'s 20 keys, figma\'s one-line entry included (D1385 adds PostHog, D2407 Beehiiv)');
+  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'facebook', 'tiktok', 'beehiiv'], 'the Worker registry\'s 22 keys, figma\'s one-line entry included (D1385 adds PostHog, #5291 TikTok, #5292 Facebook, D2407 Beehiiv)');
   for (const key of ALL_KEYS) {
     const c = canon(key);
     const homes = Object.entries(TABLES).filter(([, t]) => Object.hasOwn(t, c)).map(([n]) => n);

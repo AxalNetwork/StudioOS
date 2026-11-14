@@ -48,6 +48,10 @@ regexes = [
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
   '''\bsynthetic-d1135-secret\b''',
+  # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
+  # every Stripe call in that suite goes to an in-test fake. Pinned as the
+  # literal, as D1135 is, rather than rewriting the PR branch's history.
+  '''\bsk_test_d4570_fixture\b''',
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
@@ -141,6 +145,13 @@ regexes = [
   # the Worker's JWT_SECRET. The commit that added it stays in this pull
   # request's scan range, so the literal is pinned here rather than rewritten.
   '''\bsynthetic-d1588-secret-0123456789abcdef\b''',
+  # D4834 (#4834): the synthetic JWT signing seed first committed in
+  # cloudflare-worker/test/practice_earnings_4834.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The test now uses the shared unit-test seed, but
+  # the commit that added this one stays in the pull request's scan range, so
+  # it is pinned here rather than rewritten.
+  '''\btest-secret-for-practice-earnings-4834\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

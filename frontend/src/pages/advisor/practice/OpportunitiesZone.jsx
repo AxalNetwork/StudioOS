@@ -4,9 +4,10 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   NothingYet, Pill, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass, money,
+  buttonClass, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import { bookingView, formatDateTime, offerLine } from '../advisory/kit';
+import { requestMinutes, waitingFor } from './opportunityCard';
 import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
 import { partialLine, readEveryPage } from './everyPage';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -76,8 +77,11 @@ export default function OpportunitiesZone() {
       // The templates are a SECOND source and must not take the page down with
       // them: an advisor with no service definitions still has a decision log.
       const services = await api.listMyAdvisorServices().catch(() => null);
+      // #4830 (D4830): the advisor's own uid, for PX-02b's "Preview profile". Optional: without it the link is left out.
+      const me = await api.getMyAdvisor().catch(() => null);
       setState({
         loading: false, error: '',
+        uid: me?.uid || null,
         bookings: bookings?.items || [],
         partial: partialLine(bookings),
         services: services?.items || [],
@@ -85,7 +89,7 @@ export default function OpportunitiesZone() {
       });
     } catch (error) {
       setState({
-        loading: false, error: error?.message || 'The request log could not be read.',
+        loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'),
         bookings: [], services: [], servicesUnavailable: true,
       });
     }
@@ -152,11 +156,24 @@ export default function OpportunitiesZone() {
       isEmpty={!state.loading && !state.error && rows.length === 0}
       onRetry={load}
       empty={<NothingYet
-        title="No request has ever arrived"
-        body="This log fills as founders book your published office-hour slots. It is empty because nothing has been requested, not because anything was lost — and with no availability published there is nothing to request."
-        action={<Link to="/practice/sessions#publish-availability" className="text-emerald-700 underline dark:text-emerald-300">Publish availability →</Link>}
+        title="No requests yet"
+        body="Publish a booking link or share your advisor profile to receive requests."
+        action={(
+          <span className="flex flex-wrap gap-3" data-testid="opportunities-empty-actions">
+            <Link to="/practice/sessions#booking-links" className="font-semibold text-emerald-700 underline dark:text-emerald-300">Create booking link</Link>
+            {state.uid ? <Link to={`/advisors/${encodeURIComponent(state.uid)}`} className="font-semibold text-emerald-700 underline dark:text-emerald-300">Preview profile</Link> : null}
+          </span>
+        )}
       />}
     >
+      {/* #4830 (D4830), board PX-02: the zone's two actions over the populated log; the empty state (PX-02b) has its own. */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3" data-testid="opportunities-header">
+        <p className="m-0 max-w-2xl text-[12.5px] text-axal-muted dark:text-gray-400">Everything asking for your time, before it becomes committed work.</p>
+        <span className="flex flex-wrap gap-2">
+          <Link to="/practice/sessions#booking-links" className={buttonClass} data-testid="opportunities-share-link">Share booking link</Link>
+          <Link to="/practice/sessions#publish-availability" className={ghostButtonClass} data-testid="opportunities-set-availability">Set availability</Link>
+        </span>
+      </div>
       <ZoneToolbar
         className="mb-3"
         role="advisor"
@@ -214,13 +231,19 @@ export default function OpportunitiesZone() {
                   {r.raw.offer && <p data-testid={`request-offer-${r.raw.id}`} className="mt-1 text-[12px] font-medium">{offerLine(r.raw.offer)}</p>}
                   <p className="mt-1 text-[11px] text-axal-faint">
                     Arrived {formatDateTime(r.raw.created_at)} · slot {r.startsAt ? formatDateTime(r.startsAt) : 'not recorded'}
+                    {requestMinutes(r) ? ` · ${requestMinutes(r)} min` : ''}
+                  </p>
+                  {/* #4830: the state in words, with how long it has waited; never colour alone. */}
+                  <p className="mt-1 text-[11.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid={`request-waiting-${r.raw.id}`}>
+                    Awaiting you{waitingFor(r.raw.created_at, now) ? ` · waiting ${waitingFor(r.raw.created_at, now)}` : ''}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button type="button" className={buttonClass} disabled={busy === r.raw.id}
                     onClick={() => decide(r, 'accept')}>Accept</button>
                   <button type="button" className={ghostButtonClass} disabled={busy === r.raw.id}
-                    onClick={() => { setDeclining(declining === r.raw.id ? null : r.raw.id); setReason(''); }}>Decline</button>
+                    aria-expanded={declining === r.raw.id}
+                    onClick={() => { setDeclining(declining === r.raw.id ? null : r.raw.id); setReason(''); }}>Decline…</button>
                 </div>
               </div>
               {declining === r.raw.id && (

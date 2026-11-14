@@ -43,6 +43,7 @@
  * errors are codes.
  */
 import type { Env } from '../../types';
+import { metaApp } from '../meta/app';
 import { PROVIDER_DOWNLOAD_MS, boundedDownload, providerJson, type AudioContainer } from './providerHttp';
 import { CHANNEL_AUDIO_MAX_BYTES } from './channelAudio';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
@@ -102,7 +103,7 @@ async function hmacHex(secret: string, raw: ArrayBuffer): Promise<string> {
  * not reproduce it.
  */
 export async function verifyWhatsAppSignature(env: Env, raw: ArrayBuffer, header: string | null | undefined): Promise<SecretCheck> {
-  const secret = String(env.WHATSAPP_APP_SECRET ?? '');
+  const { webhookSecret: secret } = metaApp(env);
   if (!secret.trim()) return 'unconfigured';
   const m = /^sha256=([0-9a-fA-F]{64})$/.exec(String(header ?? '').trim());
   if (!m) return header ? 'mismatch' : 'missing';
@@ -689,8 +690,7 @@ const hexUid = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => 
  * another member is refused (the partial unique index decides the race).
  */
 export async function completeEmbeddedSignup(env: Env, userId: number, input: SignupInput): Promise<ConnectOutcome> {
-  const appId = String(env.WHATSAPP_APP_ID ?? '').trim();
-  const appSecret = String(env.WHATSAPP_APP_SECRET ?? '').trim();
+  const { appId, appSecret } = metaApp(env);
   if (!appId || !appSecret) return { ok: false, status: 503, code: 'not_configured' };
 
   const axalNumber = String(env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? '').trim();

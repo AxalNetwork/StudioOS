@@ -70,6 +70,23 @@ export function periodWindow(view, now) {
 
   const utc = (y, monthIndex) => new Date(Date.UTC(y, monthIndex, 1)).toISOString();
 
+  // #4834 (D4834): Practice v2's selector (PX-07). A month is chosen locally,
+  // like a quarter, and its bounds are UTC; `last_month` wraps at January.
+  if (view === 'this_month' || view === 'last_month') {
+    const back = view === 'last_month' ? 1 : 0;
+    const mi = d.getMonth() - back;
+    const ty = mi < 0 ? year - 1 : year;
+    const tm = mi < 0 ? 11 : mi;
+    return {
+      key: monthKey(ty, tm + 1),
+      label: `${MONTHS_LONG[tm]} ${ty}`,
+      from: utc(ty, tm),
+      until: utc(ty, tm + 1),
+    };
+  }
+  if (view === 'quarter') return periodWindow('this_quarter', d);
+  if (view === 'year') return { ...periodWindow('ytd', d), label: String(year) };
+
   if (view === 'all') {
     return { key: 'all', label: 'All time', from: null, until: null };
   }
@@ -293,4 +310,180 @@ export function noteIsDirty(note, draft) {
   const typed = String(draft ?? '').trim();
   if (!typed) return false;
   return typed !== String(note?.body ?? '').trim();
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+// #4834 (D4834) — Practice v2 Earnings (PX-07, PX-08).
+//
+// NOTHING BELOW IS CALLED "RECEIVED". The store records what the advisor
+// billed and what they marked collected; whether money reached them is a
+// payout, and a payout is its own row (`advisor_payouts`). So the cards say
+// "Recorded billed" and "Recorded collected", and "Paid out" appears only over
+// paid payout rows. Every figure is the Worker's, in cents; this module only
+// chooses labels and says what each figure is built from.
+// ───────────────────────────────────────────────────────────────────────────
+
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+
+/** The five periods Practice v2 draws, in its order. */
+export const PERIOD_VIEWS = ['this_month', 'last_month', 'quarter', 'year', 'custom'];
+
+/** `2026-11` — a month's note key. */
+export function monthKey(year, month1) {
+  return `${year}-${String(month1).padStart(2, '0')}`;
+}
+
+/**
+ * A custom range from two calendar days (`YYYY-MM-DD`, both inclusive), or
+ * null when either is missing, malformed or the range runs backwards.
+ *
+ * IT HAS NO KEY. A note is the advisor's word on a named period; a range typed
+ * today is not one, so nothing is filed against it (the Worker stores month,
+ * quarter, year and all-time keys only).
+ */
+export function customWindow(fromDay, untilDay) {
+  const parse = (v) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    if (!m) return null;
+    const [y, mo, da] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const t = Date.UTC(y, mo - 1, da);
+    const back = new Date(t);
+    if (back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== da) return null;
+    return { y, mo, da, t };
+  };
+  const a = parse(fromDay);
+  const b = parse(untilDay);
+  if (!a || !b || a.t > b.t) return null;
+  const short = (p) => `${MONTHS[p.mo - 1]} ${p.da}`;
+  const label = a.y === b.y
+    ? `${short(a)} – ${short(b)}, ${b.y}`
+    : `${short(a)}, ${a.y} – ${short(b)}, ${b.y}`;
+  return {
+    key: null,
+    label,
+    from: new Date(a.t).toISOString(),
+    // Inclusive of the last day: the half-open bound is the next midnight.
+    until: new Date(b.t + 86_400_000).toISOString(),
+  };
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * What "Recorded billed" is built from, in the canvas's words: "From 12 priced
+ * sessions · 1 session has no recorded price." Null when there are no totals —
+ * a sentence about nothing would be a claim.
+ *
+ * #5316 (D5316): sessions recorded as included in an engagement are named here
+ * too. They are in no money figure (the engagement's fee covers them) and are
+ * not unpriced, so the line says where they went rather than dropping them.
+ */
+export function pricedBasis(totals) {
+  if (!totals || totals.priced_sessions == null) return null;
+  const priced = Number(totals.priced_sessions);
+  const unpriced = Number(totals.unpriced_sessions || 0);
+  const included = Number(totals.included_sessions || 0);
+  const parts = [`From ${plural(priced, 'priced session', 'priced sessions')}`];
+  if (unpriced) parts.push(`${plural(unpriced, 'session has', 'sessions have')} no recorded price`);
+  if (included) parts.push(`${plural(included, 'session', 'sessions')} included in an engagement, not billed`);
+  return `${parts.join(' · ')}.`;
+}
+
+/**
+ * The cards for one window, from the ledger response. Each is `{ key, label,
+ * cents, basis }`; `cents` null renders "Not recorded", never $0.
+ *
+ * "PAID OUT" IS A CARD ONLY OVER RECORDED PAYOUTS: when the Worker counted at
+ * least one paid payout in the window. None recorded is no card at all (a $0
+ * card would read as "paid nothing"); an unreadable payout table is a card
+ * that says so (`unread: true`), never a zero.
+ */
+export function earningsCards(ledger) {
+  const t = ledger?.totals;
+  const s = ledger?.states;
+  if (!t || !s) return [];
+  const unfrozen = Number(ledger?.lines?.unfrozen || 0);
+  const writtenOff = Number(s.written_off?.sessions || 0);
+  const cards = [
+    {
+      key: 'billed',
+      label: 'Recorded billed',
+      cents: t.gross_cents ?? null,
+      basis: [pricedBasis(t), writtenOff ? `Includes ${plural(writtenOff, 'session', 'sessions')} written off.` : null]
+        .filter(Boolean).join(' '),
+    },
+    {
+      key: 'collected',
+      label: 'Recorded collected',
+      cents: s.collected?.gross_cents ?? null,
+      basis: `Sessions you marked collected · ${plural(Number(s.collected?.sessions || 0), 'session', 'sessions')}.`,
+    },
+    {
+      key: 'outstanding',
+      label: 'Outstanding',
+      cents: s.billed?.gross_cents ?? null,
+      basis: `Billed, not marked collected · ${plural(Number(s.billed?.sessions || 0), 'session', 'sessions')}.`,
+    },
+    {
+      key: 'fees',
+      label: 'Platform fees',
+      cents: t.cut_cents ?? null,
+      basis: unfrozen
+        ? `On priced records, at each record’s own rate · ${plural(unfrozen, 'record', 'records')} priced before rates were recorded ${unfrozen === 1 ? 'is' : 'are'} counted at today’s rate.`
+        : 'On priced records, at each record’s own rate.',
+    },
+  ];
+  if (s.paid_out_cents == null) {
+    cards.push({ key: 'paid_out', label: 'Paid out', cents: null, unread: true, basis: 'Payout information could not be read.' });
+  } else if (Number(s.paid_out_count || 0) > 0) {
+    cards.push({
+      key: 'paid_out',
+      label: 'Paid out',
+      cents: s.paid_out_cents,
+      basis: `${plural(Number(s.paid_out_count), 'payout', 'payouts')} with a paid date in this period.`,
+    });
+  }
+  return cards;
+}
+
+/** A line's billing state, as a word and a shape: status is never colour alone. */
+export const BILLING_STATE = {
+  unpriced: { label: 'Unpriced', tone: 'neutral', mark: '○' },
+  billed: { label: 'Billed', tone: 'warn', mark: '◐' },
+  collected: { label: 'Collected', tone: 'ok', mark: '●' },
+  written_off: { label: 'Written off', tone: 'danger', mark: '✕' },
+  // #5316 (D5316): covered by the engagement's fee; no price, in no money total.
+  included: { label: 'Included', tone: 'neutral', mark: '◇' },
+};
+
+/** A stored rate as a percent, or null when the line has none of its own. */
+export function ratePct(bps) {
+  if (bps == null || bps === '' || !Number.isFinite(Number(bps))) return null;
+  const pct = Number(bps) / 100;
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
+}
+
+/**
+ * The day a ledger line shows: the session's own start, else the day it was
+ * booked, said as such. Both are instants (`nowIso()` / slot `starts_at`), so
+ * the reader's own formatter is right for either.
+ */
+export function lineWhen(line) {
+  const fmt = (v) => {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    try { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return null; }
+  };
+  const session = line?.session_at ? fmt(line.session_at) : null;
+  if (session) return { text: session, kind: 'session' };
+  const booked = line?.created_at ? fmt(line.created_at) : null;
+  if (booked) return { text: `Booked ${booked}`, kind: 'booked' };
+  return { text: null, kind: 'none' };
+}
+
+/** True when a failed read means this account has no advisor profile at all. */
+export function noAdvisorProfile(err) {
+  return /no advisor profile/i.test(String(err?.message || err || ''));
 }

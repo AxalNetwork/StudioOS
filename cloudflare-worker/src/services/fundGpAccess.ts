@@ -37,8 +37,8 @@
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ensureInvestorTier } from '../middleware/requireInvestorTier';
-import { fundGpScope } from './tenancyScope';
+import { ensureInvestorTier, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
+import { fundGpScope, NO_ROWS } from './tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureFundGpColumns } from './fundGpSchema';
 
@@ -94,6 +94,44 @@ export async function requireFundGp(
 
   if (!fund) throw notFound();
   return { user, fund, viaAdmin, companyId };
+}
+
+/**
+ * The funds `requireFundGp` would let this caller operate, as a SQL clause on
+ * `vc_funds f` — the operating gate's own scope, for reads that list
+ * (D371's `can_manage`, D4636). An admin: every fund. Anyone else: nothing
+ * below the institutional tier, else the funds they are GP of record for under
+ * their verified active company. Evaluated per request from the stored rows,
+ * so a changed relationship applies to the next read.
+ */
+export async function fundManageScope(
+  c: Context<{ Bindings: Env }>,
+  user: any,
+): Promise<{ sql: string; binds: Array<string | number> }> {
+  // The alias is a literal: lp_membership_consolidated's guard requires every scope call site to pass one.
+  if (user?.role === 'admin') return fundGpScope(user, null, 'f');
+  if (!userMeetsInvestorTier(user as any, 'institutional')) return NO_ROWS;
+  const companyId = await activeCompany(c, user);
+  if (companyId !== null) await ensureFundGpColumns(c.env);
+  return fundGpScope(user as any, companyId, 'f');
+}
+
+/**
+ * The ids of the funds `fundManageScope` admits: every fund for an admin, else
+ * the funds this caller runs as GP of record at the institutional tier under
+ * their verified active company. Read on every request (D4636 parts 2 and 3:
+ * the LP report reads and the GP arm of `/api/positions*`), so a GP who is
+ * reassigned, drops below the tier or switches company reads as manager no
+ * longer on the next request.
+ */
+export async function managedFundIds(
+  c: Context<{ Bindings: Env }>,
+  user: any,
+): Promise<number[]> {
+  const scope = await fundManageScope(c, user);
+  const rows = await c.env.DB.prepare(`SELECT f.id FROM vc_funds f WHERE ${scope.sql}`)
+    .bind(...scope.binds).all();
+  return ((rows.results || []) as Array<{ id: number }>).map((row) => Number(row.id));
 }
 
 /**

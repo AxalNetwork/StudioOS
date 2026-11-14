@@ -20,13 +20,17 @@ export const PRIMARY_OF = Object.freeze({
 });
 export const BUILD_YOUR_DECK = 'Build your deck';
 
+/** D4599: what an import gives, in the canvas's words (Pitch Studio v2, "Import a deck or document"). */
+export const IMPORT_LINE = 'A .pptx becomes editable cards. A PDF, DOCX or pasted text becomes an outline you approve card by card.';
 export const NO_DECK_TITLE = 'Build the deck you’ll pitch from';
 export const NO_DECK_ITEMS = Object.freeze([
   { id: 'records', title: 'Start from your records', line: 'A first deck from what StudioOS already knows. Every figure shows its source.' },
   { id: 'template', title: 'Pick a template', line: 'Start from a layout, then fill it from your records.' },
+  // D4599 (#4599): the first-use import, the Pitch Studio v2 canvas's third way in. It opens the
+  // Decks tile's own sheet (`DocumentImport.jsx`, #3810) under the same `importDocument` gate. The
+  // line says what each kind gives: a .pptx is cards; a PDF is an outline, never a copy of its slides.
+  { id: 'import', title: 'Import a deck or document', line: IMPORT_LINE, adapter: 'importDocument' },
 ]);
-// ps2's third way in, "Import a deck (PDF, PPTX)", is left out: main has no
-// import flow to open, and a door to nothing is not drawn (gap filed on #4274).
 
 /** What Pitch does, under the no-deck panel: no numbers, only what each part is for. */
 export const WHAT_PITCH_DOES = Object.freeze([

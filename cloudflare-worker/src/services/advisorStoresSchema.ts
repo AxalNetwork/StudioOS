@@ -233,6 +233,40 @@ const TABLES = [
    BEGIN
        SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
    END`,
+
+  // D5315: cancellation evidence and credential revocation are one write.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_cancellations (
+     consent_id   INTEGER PRIMARY KEY,
+     cancelled_by INTEGER NOT NULL,
+     cancelled_at TEXT NOT NULL
+   )`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_revoke
+   AFTER INSERT ON advisor_proof_consent_cancellations
+   BEGIN
+     UPDATE advisor_proof_consents SET request_token = NULL, updated_at = NEW.cancelled_at
+      WHERE id = NEW.consent_id;
+     UPDATE advisor_proof_consent_codes SET used_at = NEW.cancelled_at
+      WHERE consent_id = NEW.consent_id AND used_at IS NULL;
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_update
+   BEFORE UPDATE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_delete
+   BEFORE DELETE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  // D5315: private profile drafts and atomic publication.
+  `CREATE TABLE IF NOT EXISTS advisor_profile_drafts (
+     advisor_id           INTEGER PRIMARY KEY REFERENCES advisors(id) ON DELETE CASCADE,
+     revision             TEXT NOT NULL,
+     base_revision        TEXT NOT NULL,
+     fields_json          TEXT NOT NULL CHECK (json_valid(fields_json)),
+     updated_at           TEXT NOT NULL,
+     publish_requested_at TEXT
+   )`,
 ];
 
 /** 202611062216 (D4670) — the claim a confirmation was asked about. */
@@ -374,6 +408,21 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
     await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
     await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisor_services', [
+      ['publication_state', `ALTER TABLE advisor_services ADD COLUMN publication_state TEXT NOT NULL DEFAULT 'draft'  CHECK (publication_state IN ('draft', 'published', 'hidden'))`],
+    ]);
+    await addMissingColumns(env, 'advisor_proof_items', [
+      ['published_consent_id', 'ALTER TABLE advisor_proof_items ADD COLUMN published_consent_id INTEGER'],
+    ]);
+    // SQLite validates existing trigger bodies during ALTER TABLE. Install
+    // this after the legacy renames and after its target column exists.
+    await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_proof_withdrawal_unpublishes
+   AFTER UPDATE OF consent_given, withdrawn_at ON advisor_proof_consents
+   WHEN NEW.consent_given <> 1 OR COALESCE(NEW.withdrawn_at, '') <> ''
+   BEGIN
+     UPDATE advisor_proof_items SET published_consent_id = NULL
+      WHERE id = NEW.proof_item_id AND published_consent_id = NEW.id;
+   END`).run();
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
     await addMissingColumns(env, 'advisor_deliverables', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
@@ -384,6 +433,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
       ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
       ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
+      // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
+      ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
+      ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
     ]);
     await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
@@ -391,10 +443,48 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisor_bookings', [
       ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
       ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
+      // #5316 / migration 202611110746: a session recorded as included in an engagement.
+      ['included_at', 'ALTER TABLE advisor_bookings ADD COLUMN included_at TEXT'],
+      ['included_by_user_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_by_user_id INTEGER'],
+      ['included_engagement_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_engagement_id INTEGER'],
     ]);
     await addMissingColumns(env, 'advisor_booking_links', [
       ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
     ]);
+    // #5316 / migration 202611110734: why a signed engagement ended (bare here;
+    // the CHECK is the migration's, the route validates every write).
+    await addMissingColumns(env, 'advisor_engagements', [
+      ['end_reason', 'ALTER TABLE advisor_engagements ADD COLUMN end_reason TEXT'],
+    ]);
+    // Install after legacy renames and column upgrades, as for proof withdrawal.
+    await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_profile_drafts_publish
+   AFTER UPDATE OF publish_requested_at ON advisor_profile_drafts
+   WHEN NEW.publish_requested_at IS NOT NULL
+   BEGIN
+     UPDATE advisors SET
+       display_name = json_extract(NEW.fields_json, '$.display_name'),
+       bio = json_extract(NEW.fields_json, '$.bio'),
+       linkedin_url = json_extract(NEW.fields_json, '$.linkedin_url'),
+       hourly_rate_usd = json_extract(NEW.fields_json, '$.hourly_rate_usd'),
+       expertise_json = json_extract(NEW.fields_json, '$.expertise_json'),
+       sectors_json = json_extract(NEW.fields_json, '$.sectors_json'),
+       headline = json_extract(NEW.fields_json, '$.headline'),
+       stages_json = json_extract(NEW.fields_json, '$.stages_json'),
+       languages_json = json_extract(NEW.fields_json, '$.languages_json'),
+       country = json_extract(NEW.fields_json, '$.country'),
+       timezone = json_extract(NEW.fields_json, '$.timezone'),
+       availability_note = json_extract(NEW.fields_json, '$.availability_note'),
+       headshot_url = json_extract(NEW.fields_json, '$.headshot_url'),
+       updated_at = NEW.publish_requested_at
+     WHERE id = NEW.advisor_id AND updated_at IS NEW.base_revision;
+
+     DELETE FROM advisor_profile_drafts
+      WHERE advisor_id = NEW.advisor_id AND revision = NEW.revision
+        AND EXISTS (
+          SELECT 1 FROM advisors
+           WHERE id = NEW.advisor_id AND updated_at = NEW.publish_requested_at
+        );
+   END`).run();
     READY.set(key, true);
   } catch (e) {
     // Not fatal, and deliberately not swallowed silently: on a database that

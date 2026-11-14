@@ -18,6 +18,7 @@ import { Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useGovernedAction } from './governedAction';
 import ActionNotice from './ActionNotice';
+import { escapeCloses, useFocusOnMount } from './actionFocus';
 
 export const SIGN_OUT_REASON_MIN = 8;
 
@@ -36,6 +37,7 @@ export default function SignOutAccountAction({ row, onDone, onCancel }) {
     { fallback: 'Request failed', translate: totpSentence, tag: 'hq-team:revoke', initial: 'open' },
   );
   const busy = signOut.busy;
+  const firstField = useFocusOnMount();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -44,10 +46,11 @@ export default function SignOutAccountAction({ row, onDone, onCancel }) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-2 py-2" data-testid="hq-team-revoke-form" data-state={signOut.state}>
+    <form onSubmit={submit} onKeyDown={escapeCloses(busy, onCancel)} className="space-y-2 py-2" data-testid="hq-team-revoke-form" data-state={signOut.state}>
       <label className="block text-[11px] font-semibold text-axal-muted">
         Reason · required, stored with the action
         <input
+          ref={firstField}
           value={reason}
           disabled={busy}
           onChange={(e) => setReason(e.target.value)}

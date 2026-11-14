@@ -19,7 +19,7 @@ import { checkCase, judge, type CaseExpect, type CaseInput } from '../src/servic
 import {
   ASSERTION_KEYS, JUDGE_VERSION, citations, headingOf, missingDataMiss, numberMiss, resolves, statements,
 } from '../src/services/agents/skillAssertions.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 
 const RECORDS = {
   'mercury.balances': { cash_usd: 500000 },
@@ -40,8 +40,8 @@ const refused = (expect: Record<string, unknown>, message: RegExp | string) => {
   }
 };
 
-test('the evaluator is version 3 and names its assertion keys', () => {
-  assert.equal(JUDGE_VERSION, 3);
+test('the evaluator is version 4 (D4531 part 4 extends claims) and names its assertion keys', () => {
+  assert.equal(JUDGE_VERSION, 4);
   assert.deepEqual([...ASSERTION_KEYS], ['numbers', 'output_schema', 'structure', 'evidence', 'refusal', 'claims']);
 });
 
@@ -333,7 +333,8 @@ test('version 2 results are unchanged: every library case on a battery of output
     return { result: 'pass', detail: null };
   };
   let judged = 0, passed = 0;
-  for (const entry of SKILL_LIBRARY) for (const k of entry.cases as any[]) {
+  // The v1 golden cases only: #4588's scenarios, packed beside them since D5336, are written for judge version 3.
+  for (const entry of SKILL_LIBRARY) for (const k of (entry.cases as any[]).filter((x) => !x.case_id)) {
     const c = checkCase({ name: entry.slug, input: k.input, expect: k.expect });
     assert.ok(c.ok, entry.slug);
     if (!c.ok) continue;

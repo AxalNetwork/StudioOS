@@ -289,3 +289,12 @@ de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_
 # af4b56516d's first wording of this comment quoted that fixture and so matched
 # the same rule; its one finding is listed too.
 af4b56516d9a4bdbd3751b585de0c943cd275ab2:.gitleaksignore:generic-api-key:283
+# #5524: the old D5352 signing fixture was used by the signer and Worker
+# verifier in the in-memory test. The test now generates its key at runtime.
+e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_accept_idempotent_d5352.test.ts:generic-api-key:17
+# #4662: an in-memory mail test used a synthetic replay identifier. The fixture
+# now generates its identifier at runtime. Scope this to the original finding.
+25221cd018338be7d3de1fc71696bd28c1b5debc:cloudflare-worker/test/mail_conversation_history_4662.test.ts:generic-api-key:94
+# #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
+# credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
+19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32

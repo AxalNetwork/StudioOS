@@ -22,7 +22,7 @@ import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { checkSourceCatalogue, persistedManifest, reconcile, summary, type Finding } from '../src/services/agents/skillCatalogue.ts';
 import { seedLibrary } from '../src/services/agents/skillLibrarySeed.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
@@ -33,22 +33,24 @@ const MD = REAL.definitions[`${SLUG}.md`];
 const CASE = REAL.cases[`${SLUG}.json`];
 
 /** A one-skill catalogue, mutated by `over`. */
-async function check(over: { definitions?: Record<string, string>; cases?: Record<string, string>; fresh?: boolean; generated?: any[] } = {}) {
+async function check(over: { definitions?: Record<string, string>; cases?: Record<string, string>; sound?: boolean; generated?: any[] } = {}) {
   const definitions = over.definitions ?? { [`${SLUG}.md`]: MD };
   const cases = over.cases ?? { [`${SLUG}.json`]: CASE };
   const generated = over.generated ?? Object.keys(definitions).sort().map((f) => f.slice(0, -3))
     .map((s) => ({ slug: s, skill_md: definitions[`${s}.md`], cases: [] }));
-  return checkSourceCatalogue({ definitions, cases, generated, generatedFresh: over.fresh ?? true, taxonomy: TAXONOMY });
+  return checkSourceCatalogue({ definitions, cases, generated, generatedSound: over.sound ?? true, taxonomy: TAXONOMY });
 }
 const errors = (fs: Finding[]) => fs.filter((f) => f.level === 'error');
 const rules = (fs: Finding[]) => errors(fs).map((f) => f.rule);
 
 test('the committed library passes with no error, and the manifest covers every source file', async () => {
-  const { findings, manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
+  const { findings, manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedSound: true, taxonomy: TAXONOMY });
   assert.deepEqual(errors(findings), []);
   assert.equal(manifest.length, Object.keys(REAL.definitions).length, 'one line per definition, whatever the total');
-  assert.ok(manifest.every((m) => m.draft_hash && m.cases.length === 1));
-  assert.equal(new Set(manifest.flatMap((m) => m.cases.map((c) => c.case_id))).size, manifest.length, 'distinct case identities');
+  // D5336: every skill has its golden case; a skill with a scenario pack has its scenarios too, each a case of its own.
+  assert.ok(manifest.every((m) => m.draft_hash && m.cases.length >= 1 && m.cases[0].revision === null));
+  const all = manifest.flatMap((m) => m.cases.map((c) => c.key));
+  assert.equal(new Set(all).size, all.length, 'distinct case identities');
   // `refuse_when` is carried but never evaluated: a warning, so nobody reads it as an assertion.
   assert.ok(findings.some((f) => f.rule === 'expect_key_unknown' && f.field === 'expect.refuse_when'));
   // #4531: `numbers` is judged, so a case that asserts one is not told it proves nothing.
@@ -96,7 +98,7 @@ test('each targeted defect fails with its own rule, file and slug', async () => 
     ['a missing case', { cases: {} }, 'case_missing'],
     ['an orphan case', { cases: { [`${SLUG}.json`]: CASE, 'no-such-skill.json': CASE } }, 'case_orphan'],
     ['a duplicate slug', { definitions: { [`${SLUG}.md`]: MD, 'board-meeting-brief-copy.md': MD }, cases: { [`${SLUG}.json`]: CASE, 'board-meeting-brief-copy.json': CASE } }, 'duplicate_slug'],
-    ['a stale generated module', { fresh: false }, 'generated_stale'],
+    ['an unsound generated module (tracked, not deterministic, or not this build)', { sound: false }, 'generated_unsound'],
     ['a generated module out of order', { generated: [{ slug: 'zz', skill_md: '', cases: [] }, { slug: SLUG, skill_md: MD, cases: [] }] }, 'generated_order'],
   ];
   for (const [what, over, rule] of cases) {
@@ -107,7 +109,7 @@ test('each targeted defect fails with its own rule, file and slug', async () => 
   }
   // A first tag with no radar area: a taxonomy whose category is not an axis.
   const odd = new Map(TAXONOMY); odd.set(firstTag, 'not_an_axis');
-  const area = await checkSourceCatalogue({ definitions: { [`${SLUG}.md`]: MD }, cases: { [`${SLUG}.json`]: CASE }, generated: [{ slug: SLUG, skill_md: MD, cases: [] }], generatedFresh: true, taxonomy: odd });
+  const area = await checkSourceCatalogue({ definitions: { [`${SLUG}.md`]: MD }, cases: { [`${SLUG}.json`]: CASE }, generated: [{ slug: SLUG, skill_md: MD, cases: [] }], generatedSound: true, taxonomy: odd });
   assert.deepEqual(rules(area.findings), ['area_unknown']);
   // An unknown frontmatter key is a warning, not a failure.
   const extra = await check(md('version: 1', 'version: 1\nowner: someone'));
@@ -123,6 +125,7 @@ function world() {
   for (const m of ['199_super_admin', '089_skills_values_taxonomy', '090_seed_skills_values_taxonomy', '712_team_agents', '759_agent_skills',
     '202611022046_ai_admin_audit', '202611022055_agent_skill_moderation', '202611022140_hq_skill_lifecycle']) db.exec(sql(`migrations/${m}.sql`));
     db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611100853_skill_case_source_identity.sql')); // D5336: the source identity a seeded case came from
   db.prepare("INSERT INTO users (id, uid, email, name, role) VALUES (1, 'u-super', 'super@example.test', 'Sue Super', 'admin')").run();
   db.exec("INSERT INTO company_profiles (id, uid, company_name) VALUES (7, 'co-7', 'Acme')");
   return { db, env: { DB } as any };
@@ -137,7 +140,7 @@ test('reconciliation on a local D1: every class, HQ scope only, and nothing writ
   const { manifest } = await checkSourceCatalogue({
     definitions: Object.fromEntries(three.map((e) => [`${e.slug}.md`, e.skill_md])),
     cases: Object.fromEntries(three.map((e) => [`${e.slug}.json`, JSON.stringify(e.cases[0])])),
-    generated: three, generatedFresh: true, taxonomy: TAXONOMY,
+    generated: three, generatedSound: true, taxonomy: TAXONOMY,
   });
   const [a, b, c, d] = three.map((e) => e.slug);
   const before = tableCounts(w.db);

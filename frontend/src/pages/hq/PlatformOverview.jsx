@@ -6,6 +6,11 @@
  * blocks, operational activity and the consoles grouped by domain, with
  * Event syndication under Preview / Planned.
  *
+ * Since D4860 part 4 the overview also reads `health` from the summary
+ * (D4854): the incidents the Worker detects enter Needs attention at the
+ * Worker's severity, with their console and runbook, and the Incidents block
+ * counts them apart from the incidents an operator published by hand.
+ *
  * Every word and figure comes from `platformOverviewModel.js`, over the reads
  * PlatformPage.jsx already makes. Like that page, this draws no handler: every
  * action is a link to the console that does it, and every caveat sits behind
@@ -16,11 +21,15 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Unrecorded } from '../../ui';
 import { builtRelease, releaseBadge } from '../../lib/release';
+import { GUIDE_PREFIX } from '../../lib/integrationKeys';
 import {
   STATUS, SEVERITY_SYM, signals, platformHealth, healthLine, attention, unknownSignals,
   coverage, activity, switchRows, webhookHealth, keyLevels, channelState, utcStamp,
-  CONSOLE_GROUPS, PREVIEW_CONSOLES, WEBHOOK_SILENCE_HOURS, WEBHOOK_CRITICAL_RUN, DLQ_CRITICAL, CATALOG_STALE_DAYS, stampDate,
+  CONSOLE_GROUPS, PREVIEW_CONSOLES, WEBHOOK_SILENCE_HOURS, WEBHOOK_CRITICAL_RUN, WEBHOOK_REFUSED_RUN, DLQ_HIGH, CATALOG_STALE_DAYS, stampDate,
+  KEY_EXPIRY_WARN_DAYS, expirySummary, detectedIncidents, consoleState,
 } from './platformOverviewModel';
+import { outsidePlatform } from '../../lib/hqStrips';
+import { ElsewhereInHq } from '../../components/HqSubNavStrip';
 
 const TONE = {
   ok: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
@@ -45,6 +54,8 @@ const SEV_TONE = {
 };
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 dark:focus-visible:outline-emerald-400';
 const CARD = 'rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
+/** A runbook's repo-relative path, as a link to where the repository is read (as PlatformPage's `runbookHref`). */
+const runbookHref = (doc) => (typeof doc === 'string' && doc ? `${GUIDE_PREFIX}${doc.replace(/^documentation\//, '')}` : null);
 const DISC = `cursor-pointer select-none text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300 ${FOCUS}`;
 
 /** A status, drawn as its symbol and its words — never colour alone. */
@@ -131,12 +142,14 @@ export function HealthHeader({ health, line }) {
       </ul>
       <p className="mt-1.5 text-[12px] leading-relaxed text-axal-ink dark:text-gray-200" data-testid="hq-platform-confidence">{health.confidence}</p>
       <How>
-        Critical when a known capability is failing: a branch whose database fails, a webhook refused {WEBHOOK_CRITICAL_RUN} times in a row with no
-        success since, a dead-letter backlog of {DLQ_CRITICAL} or more, or the AI budget tripped. Unknown when the summary, or both the scheduled
-        jobs and the dead-letter queue, cannot be read. Degraded when anything else is wrong, or when a core signal (telemetry, jobs,
-        dead letters, integrations, the Stripe webhook) cannot be read: an unread signal lowers confidence and never counts as zero.
-        Healthy only when every core signal was read on this visit and is healthy. An unset optional key or an unbound channel is a
-        configuration item in Needs attention and does not lower health. Scheduled jobs are one signal among these, not the verdict.
+        Severities are the Worker&apos;s, the same ones it detects incidents with. Critical when a known capability is failing: an incident
+        the Worker detects as critical (the Stripe webhook refused {WEBHOOK_CRITICAL_RUN} times in a row with no success since), or the AI
+        budget tripped. {WEBHOOK_REFUSED_RUN} refusals in a row, a dead-letter backlog ({DLQ_HIGH} or more is High), a failed or late
+        job, a branch reported unhealthy and unreadable telemetry are Degraded. Unknown when the summary, or both the scheduled jobs and
+        the dead-letter queue, cannot be read. A core signal (telemetry, jobs, dead letters, integrations, the Stripe webhook) that
+        cannot be read lowers confidence and never counts as zero. Healthy only when every core signal was read on this visit and is
+        healthy. An unset optional key, an unbound channel, webhook silence and a branch nobody checked are Low items in Needs attention
+        and do not lower health on their own. Scheduled jobs are one signal among these, not the verdict.
       </How>
     </section>
   );
@@ -151,6 +164,14 @@ function AttentionRow({ it, first, mobileFold }) {
       <div className="min-w-0">
         <span className="block text-[13px] font-bold text-axal-ink dark:text-white">{it.title}</span>
         <span className="block text-[11.5px] leading-snug text-axal-muted">{it.detail}</span>
+        {it.detected && (
+          <span className="mt-0.5 flex flex-wrap gap-x-3 text-[10.5px] text-axal-faint" data-testid="hq-attention-detected">
+            <span>Detected by the platform</span>
+            {runbookHref(it.runbook?.doc) && (
+              <a href={runbookHref(it.runbook.doc)} target="_blank" rel="noreferrer" className={`font-bold text-emerald-800 underline dark:text-emerald-300 ${FOCUS}`} data-testid="hq-attention-runbook">{it.runbook.label}</a>
+            )}
+          </span>
+        )}
       </div>
       <div className="flex flex-col items-start gap-1 text-[10.5px] text-axal-faint">
         <Status s={it.state} />
@@ -194,14 +215,14 @@ export function NeedsAttention({ items, unknown, loading }) {
       ) : (
         <ol className="mt-1" data-testid="hq-attention-list">
           {items.map((it, i) => (
-            <AttentionRow key={`${it.signal}:${it.title}`} it={it} first={i === 0} mobileFold={it.severity === 'Low' || it.severity === 'Info'} />
+            <AttentionRow key={`${it.signal}:${it.key || it.title}`} it={it} first={i === 0} mobileFold={it.severity === 'Low' || it.severity === 'Info'} />
           ))}
         </ol>
       )}
       {folded.length > 0 && (
         <details className="mt-1 border-t border-axal-hairline pt-2 md:hidden dark:border-gray-800" data-testid="hq-attention-folded">
           <summary className={`${DISC} min-h-[44px]`}>{folded.length} more · Low and Info</summary>
-          <ol>{folded.map((it) => <AttentionRow key={`m:${it.signal}:${it.title}`} it={it} first={false} mobileFold={false} />)}</ol>
+          <ol>{folded.map((it) => <AttentionRow key={`m:${it.signal}:${it.key || it.title}`} it={it} first={false} mobileFold={false} />)}</ol>
         </details>
       )}
     </section>
@@ -342,6 +363,7 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
   const okJobs = jobs ? jobs.triggers.filter((j) => j.state === 'ok').length : null;
   const lastRun = jobs ? jobs.triggers.map((j) => stampDate(j.last_started_at)).filter(Boolean).sort((a, b) => b - a)[0] : null;
   const incidents = d?.monitoring?.incidents;
+  const det = detectedIncidents(d);
   const pay = d?.payments_catalog;
   const cat = pay?.catalog?.available ? pay.catalog : null;
   const wh = loading ? null : webhookHealth(pay, now);
@@ -362,7 +384,7 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
           <KV k="Telemetry"><Status s={sig(sigs, 'telemetry').status} label={sig(sigs, 'telemetry').status === 'Unknown' ? 'Unavailable' : undefined} /></KV>
           <KV k="DLQ depth">{d?.monitoring?.dlq?.available ? d.monitoring.dlq.total : <Unrecorded reason={d?.monitoring?.dlq?.reason}>Unreadable</Unrecorded>}</KV>
           <KV k="Cloudflare Queue">{row('cf_queue') ? <Status s={row('cf_queue').state} /> : <Unrecorded />}</KV>
-          <KV k="Detected incidents" ><Status s="Not recorded" label="Not recorded" /></KV>
+          <KV k="Detected incidents">{det?.available ? <a href="#hq-incidents" className={`underline ${FOCUS}`} data-testid="hq-detected-count">{det.items.length}</a> : <Unrecorded reason={det?.reason} />}</KV>
           <KV k="Published status incidents">{incidents?.available ? `${incidents.count} · last ${incidents.window_days} d` : <Unrecorded reason={incidents?.reason}>Unreadable</Unrecorded>}</KV>
         </>
       ),
@@ -375,9 +397,10 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
       how: (
         <How title={sig(sigs, 'telemetry').status === 'Unknown' ? 'Why this may be unknown' : 'How this is measured'} testid="hq-system-infrastructure-how">
           {sig(sigs, 'telemetry').status === 'Unknown' && <><b>{sig(sigs, 'telemetry').why}</b> Worker error rates and traffic depend on it, so they show Unknown rather than 0. Cron and dead letters are read separately and stay known. </>}
-          Detected operational incidents are not recorded: nothing detects incidents from health signals yet (#4854). Published status
-          incidents count only incidents an operator entered for the status page in the last {incidents?.window_days ?? 7} days, so 0 says
-          nothing about whether anything went wrong.
+          Detected incidents are what the Worker finds in its own health signals on every read of the summary; they are listed under
+          Incidents and in Needs attention. Published status incidents count only incidents an operator entered for the status page in
+          the last {incidents?.window_days ?? 7} days, so 0 says nothing about whether anything went wrong, and they never raise or clear
+          the state.
         </How>
       ),
       link: <Link to="/monitoring" className={`text-[12px] font-bold text-emerald-800 dark:text-emerald-300 ${FOCUS}`}>Monitoring →</Link>,
@@ -438,6 +461,7 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
         <>
           <KV k="Required keys">{lv ? (lv.Required.total ? `${lv.Required.set} / ${lv.Required.total} set` : 'none declared') : <Unrecorded reason={d?.integration_keys?.reason} />}</KV>
           <KV k="Recommended keys">{lv ? `${lv.Recommended.set} / ${lv.Recommended.total} set` : <Unrecorded />}</KV>
+          <KV k="Key expiry">{lv ? expirySummary(d.integration_keys, now) : <Unrecorded />}</KV>
           <KV k="Optional keys">{lv ? `${lv.Optional.set} / ${lv.Optional.total} set · the rest not configured` : <Unrecorded />}</KV>
           <KV k="Broadcast">{tg ? `${chStates.filter((s) => s === 'Verified recently').length} verified · ${chStates.filter((s) => s === 'Unbound').length} unbound · ${tg.channels.length} Telegram` : <Unrecorded reason={d?.broadcast?.telegram?.reason} />}</KV>
         </>
@@ -447,7 +471,9 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
         <How title="How keys are levelled" testid="hq-keys-levels-how">
           Required, Recommended and Optional are D4860&apos;s levels for the fourteen managed keys, for the owner to confirm. None is
           Required: each enables one integration or channel. An Optional key that is not set is not configured, which is a choice, not a
-          problem. A key&apos;s value is never read here, and nothing records when a key expires, rotates or was last used, so none is drawn.
+          problem. A key&apos;s value is never read here. An expiry is drawn only where the provider reported one, and a key within{' '}
+          {KEY_EXPIRY_WARN_DAYS} days of it, or past it, joins Needs attention; last use is the last successful call with the key,
+          stamped at most hourly. Either one not recorded reads Not recorded. Rotation is not recorded beyond the console&apos;s last save.
         </How>
       ),
       link: <Link to="/admin/integration-keys" className={`text-[12px] font-bold text-emerald-800 dark:text-emerald-300 ${FOCUS}`}>Integration keys →</Link>,
@@ -487,6 +513,75 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
   );
 }
 
+/* ── incidents: detected, apart from published (D4854, D4860 part 4) ──── */
+
+const SEV_WORD_ORDER = ['Critical', 'High', 'Medium', 'Low'];
+
+/**
+ * The incidents the Worker detects, counted by severity and listed, beside the
+ * incidents an operator published by hand. A Worker that does not report
+ * `health` reads Not recorded, never 0; a signal it could not judge is named.
+ */
+export function Incidents({ data, loading, UNAVAILABLE }) {
+  const d = data && data !== UNAVAILABLE ? data : null;
+  const det = detectedIncidents(d);
+  const published = d?.monitoring?.incidents;
+  const counts = det?.available ? SEV_WORD_ORDER.map((s) => [s, det.items.filter((i) => i.severity === s).length]).filter(([, n]) => n > 0) : [];
+  return (
+    <section id="hq-incidents" aria-labelledby="inc-h" className={CARD} data-testid="hq-overview-incidents">
+      <h2 id="inc-h" className="text-[14.5px] font-extrabold tracking-tight text-axal-ink dark:text-white">Incidents</h2>
+      <div className="mt-2 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div data-testid="hq-incidents-detected">
+          <h3 className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint">Detected by the platform</h3>
+          {loading ? (
+            <p className="mt-1 text-[12.5px] text-axal-muted">Reading…</p>
+          ) : !det?.available ? (
+            <p className="mt-1 text-[12.5px]" data-testid="hq-incidents-not-recorded"><Unrecorded reason={det?.reason || 'The platform summary could not be read.'} /></p>
+          ) : det.items.length === 0 ? (
+            <p className="mt-1 text-[12.5px] text-axal-muted" data-testid="hq-incidents-none">
+              None detected{det.unknown.length ? `, among the signals that could be judged` : ''}.
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-[12.5px]" data-testid="hq-incidents-summary">
+                <b>{det.items.length}</b> detected · {counts.map(([s, n]) => `${n} ${s}`).join(' · ')}
+              </p>
+              <ol className="mt-1">
+                {det.items.map((i) => (
+                  <li key={i.key} className="grid gap-1 border-t border-axal-hairline py-1.5 text-[11.5px] dark:border-gray-800 md:grid-cols-[88px_minmax(0,1fr)_auto] md:items-baseline" data-testid="hq-incidents-item" data-severity={i.severity}>
+                    <span><Severity s={i.severity} /></span>
+                    <span className="min-w-0">
+                      <span className="font-semibold">{i.title}</span>
+                      <span className="block text-[10.5px] text-axal-faint">since {i.since ? `${i.since} UTC` : 'not recorded'}</span>
+                    </span>
+                    <Link to={i.link.to} className={`text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300 ${FOCUS}`}>{i.link.label} →</Link>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          {det?.available && det.unknown.length > 0 && (
+            <ul className="mt-1 space-y-0.5 text-[11px] text-axal-muted" data-testid="hq-incidents-unknown">
+              {det.unknown.map((u) => <li key={u.signal}><Status s="Unknown" label="Could not be judged" /> {u.signal}: {u.reason}</li>)}
+            </ul>
+          )}
+        </div>
+        <div data-testid="hq-incidents-published">
+          <h3 className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint">Published on the status page</h3>
+          <p className="mt-1 text-[12.5px]">
+            {loading ? 'Reading…' : published?.available ? `${published.count} in the last ${published.window_days} d, entered by hand` : <Unrecorded reason={published?.reason}>Unreadable</Unrecorded>}
+          </p>
+        </div>
+      </div>
+      {det?.available && det.notDetected.length > 0 && (
+        <How title="What is not detected" testid="hq-incidents-not-detected">
+          {det.notDetected.map((n) => <span key={n.signal} className="block"><b>{n.signal}</b>: {n.reason}</span>)}
+        </How>
+      )}
+    </section>
+  );
+}
+
 /* ── 4 · Operational activity ────────────────────────────────────────── */
 
 export function OperationalActivity({ events, loading }) {
@@ -511,8 +606,8 @@ export function OperationalActivity({ events, loading }) {
       )}
       <How title="What this feed covers">
         Events with a stored time in the reads above: webhook deliveries, the catalog mirror&apos;s last write, failed scheduled jobs, HQ
-        switch throws and releases, key saves, failed ticket mirrors and branches not answering. Deployments of HQ itself and detected
-        incidents are not recorded here.
+        switch throws and releases, key saves, failed ticket mirrors and branches not answering. Deployments of HQ itself are not
+        recorded. Detected incidents are listed under Incidents, not here.
       </How>
     </section>
   );
@@ -520,12 +615,12 @@ export function OperationalActivity({ events, loading }) {
 
 /* ── 6 · Detailed consoles ───────────────────────────────────────────── */
 
-export function ConsoleGroups({ sigs }) {
+export function ConsoleGroups({ sigs, summaryDown = false }) {
   return (
     <section aria-labelledby="dc-h" data-testid="hq-console-groups">
       <div className="mb-2 flex items-baseline gap-3">
         <h2 id="dc-h" className="text-[14.5px] font-extrabold tracking-tight text-axal-ink dark:text-white">Detailed consoles</h2>
-        <span className="text-[11px] text-axal-faint">grouped by domain</span>
+        <span className="text-[11px] text-axal-faint">grouped by domain, across HQ</span>
       </div>
       <nav aria-labelledby="dc-h" className="grid gap-3 sm:grid-cols-2">
         {CONSOLE_GROUPS.map(([group, links]) => (
@@ -533,13 +628,12 @@ export function ConsoleGroups({ sigs }) {
             <h3 className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint">{group}</h3>
             <ul className="mt-1">
               {links.map(([label, to, k]) => {
-                const s = k ? sigs.find((x) => x.key === k) : null;
-                const showState = s && !['Healthy', 'Reading'].includes(s.status);
+                const state = consoleState(sigs, k, { summaryDown });
                 return (
                   <li key={to + label}>
                     <Link to={to} className={`flex min-h-[32px] items-center justify-between gap-2 border-t border-axal-hairline py-1 text-[12px] font-semibold text-axal-ink first:border-t-0 dark:border-gray-800 dark:text-white ${FOCUS}`}>
-                      <span>{label}</span>
-                      {showState ? <Status s={s.status} /> : <span aria-hidden="true" className="text-axal-faint">›</span>}
+                      <span>{label}{outsidePlatform(to) && <ElsewhereInHq to={to} />}</span>
+                      {state ? <Status s={state} /> : <span aria-hidden="true" className="text-axal-faint">›</span>}
                     </Link>
                   </li>
                 );
@@ -586,9 +680,10 @@ export default function PlatformOverview({ data, deps, traffic, build, observed,
         </div>
       </div>
       <CoreSystems data={data} sigs={sigs} rows={rows} now={now} observedAt={observed?.summary} UNAVAILABLE={UNAVAILABLE} />
+      <Incidents data={data} loading={loading} UNAVAILABLE={UNAVAILABLE} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <OperationalActivity events={activity({ data, deps, UNAVAILABLE })} loading={loading} />
-        <ConsoleGroups sigs={sigs} />
+        <ConsoleGroups sigs={sigs} summaryDown={data === UNAVAILABLE} />
       </div>
       <p className="text-[11px] text-axal-faint">The detail every block summarises follows below, one zone per store.</p>
     </div>

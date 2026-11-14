@@ -107,12 +107,22 @@ function fmtBytes(n) {
 const LIBRARY_STRIP = {
   advisor: [
     { label: 'Documents', value: (x) => x.total, note: (x) => `${x.clientDocs} client, ${x.reusable} reusable` },
-    { label: 'Indexed', value: (x) => x.indexed, note: () => 'answerable in Ask' },
-    { label: 'Not indexed', value: (x) => x.notIndexed, note: () => 'invisible to Ask until indexed' },
-    { label: 'From clients', value: (x) => x.fromClients, note: () => 'read-only, opened to you through a grant' },
+    // #4610 — THE LABELS ARE THE ARTBOARD'S; WHAT CHANGED IS WHAT THEY COUNT.
+    // The note under this tile has always read "answerable in Ask", and the
+    // figure was `index_state`-derived over every item INCLUDING shares — so it
+    // counted a client's indexed share as answerable while the row beside it
+    // said "Indexed in their library, not yours". Both now read the Worker's
+    // `in_ask`, the one field the rows show, so the tile and its own note and
+    // the rows cannot disagree. #3701 owns these labels; this is not a relabel.
+    // Null, never 0, until the read succeeds.
+    { label: 'Indexed', value: (x) => (x.indexed == null ? 'Unreadable' : x.indexed), note: (x) => (x.indexed == null ? 'the library could not be read' : 'answerable in Ask') },
+    { label: 'Not indexed', value: (x) => (x.notIndexed == null ? 'Unreadable' : x.notIndexed), note: (x) => (x.notIndexed == null ? 'the library could not be read' : 'invisible to Ask until indexed') },
+    // #4610: null until the library read succeeds, so the tile says Unreadable
+    // rather than asserting "0 from clients" about a read that never happened.
+    { label: 'From clients', value: (x) => (x.fromClients == null ? 'Unreadable' : x.fromClients), note: (x) => (x.fromClients == null ? 'the library could not be read; that is not a count of zero' : 'read-only, opened to you through a grant') },
   ],
   founder: [
-    { label: 'Documents', value: (x) => x.total, note: (x) => `${x.indexed} answerable by Ask` },
+    { label: 'Documents', value: (x) => x.total, note: (x) => (x.indexed == null ? 'how many Ask can answer from could not be read' : `${x.indexed} answerable by Ask`) },
     { label: 'Primary sources', value: (x) => x.primary, note: () => 'classified as primary by their owner' },
     // D4612: a failed read of the Ask history is Unreadable, never "0 asked".
     {
@@ -312,12 +322,27 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // COUNTED OVER THE WHOLE LIBRARY, NEVER OVER `visible`. A tile that changes
   // because you clicked a chip is not reporting what it claims to — the same
   // rule `SignalsPage`'s age bands follow, and for the same reason.
+  /**
+   * #4610 — A COUNT NOBODY READ IS NULL, NEVER 0.
+   *
+   * `payload?.indexed ?? 0` turned a failed or absent library read into three
+   * confident zeroes — "0 answerable", "0 not indexed", "0 from clients" — in
+   * the same tiles that print real figures when the read works. The Ask-history
+   * read beside them had this right already (D4612: `askState === 'ready' ?
+   * … : null`), so one strip held both conventions, and the honest one was the
+   * newer one. `payload` is null until a read succeeds, so `?? null` is the
+   * whole fix and the tiles' own absence handling does the rest.
+   */
   const ctx = {
     primary: items.filter((d) => d.kind === 'primary').length,
     total: items.length,
-    indexed: payload?.indexed ?? 0,
-    notIndexed: payload?.not_indexed ?? 0,
-    fromClients: payload?.from_clients ?? 0,
+    // `answerable` is the Worker's `in_ask` count — the same field each row
+    // carries — so the strip and the rows cannot disagree about whether a
+    // client's indexed share is answerable here. It is not.
+    indexed: payload?.answerable ?? null,
+    notIndexed: payload?.not_answerable ?? null,
+    indexState: payload?.indexed ?? null,
+    fromClients: payload?.from_clients ?? null,
     clientDocs: items.filter((d) => d.kind === 'client').length,
     reusable: items.filter((d) => d.kind === 'playbook').length,
     // Null, never 0, until the Ask history has been read (D4612).
@@ -380,10 +405,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
       <ZoneHeading
         title="Evidence Library"
         blurb="Your documents. Only indexed documents can be cited in Ask."
-        action={payload ? (
-          <Pill tone={payload.not_indexed > 0 ? 'warn' : 'ok'}>
-            {payload.indexed} answerable
-            {payload.not_indexed > 0 ? ` · ${payload.not_indexed} not` : ''}
+        /* #4610: the pill counts what Ask can answer from — `in_ask`, the
+           field the rows show — not what is indexed. An indexed client share
+           is indexed and is not answerable here, and this pill used to count
+           it as both. */
+        action={payload && Number.isFinite(Number(payload.answerable)) ? (
+          <Pill tone={payload.not_answerable > 0 ? 'warn' : 'ok'}>
+            {payload.answerable} answerable
+            {payload.not_answerable > 0 ? ` · ${payload.not_answerable} not` : ''}
           </Pill>
         ) : null}
       />
@@ -448,7 +477,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           actually carry both marks. A legend over rows that are all one source
           explains a distinction the reader cannot see, which is the same defect
           as a filter chip that selects everything. */}
-      {ctx.fromClients > 0 && (
+      {ctx.fromClients != null && ctx.fromClients > 0 && (
         <SourceLegend
           theirs="From a client"
           theirsNote="read-only — opened to you through a grant"
@@ -565,7 +594,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         Retry
                       </button>
                     ) : null}
-                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
+                    {/* #4610: `Open` DRAWS WHEREVER IT CAN ACT, which now
+                        includes a client's share — the download route resolves
+                        ownership OR an active share, so the button that used to
+                        404 on a shared row works. It is still conditional,
+                        because `read_only` is about writing and `Open` is a
+                        read: the condition is whether this reader may read the
+                        file, which the row says. */}
+                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)} data-testid={`library-open-${d.uid}`}>
                       Open
                     </button>
                     {/* A CLIENT'S DOCUMENT OFFERS NEITHER. Removing it is not
@@ -573,7 +609,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         not in their own set — and re-indexing it would index
                         into a namespace it does not belong to. Drawing either
                         would be a control that cannot act. */}
-                    {d.source !== 'client' && (
+                    {d.source !== 'client' && d.read_only !== true && (
                       <>
                         <DocumentMetadata document={d} onSaved={load} />
                         {problem?.action === 'retry' ? null : (
@@ -598,7 +634,9 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             ],
             };
           })}
-          note={`Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
+          note={ctx.indexed == null
+            ? 'How many of your documents Ask can reach could not be read, so this table cannot say. That is a failed read, not a library with nothing answerable in it.'
+            : `Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
         />
         </div>
 

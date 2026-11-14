@@ -1,0 +1,3 @@
+{
+  "where.join(' AND ') @ services/legalTemplateStore.ts": 1
+}

@@ -65,7 +65,7 @@ export function ReasonDialog({ title, body, button, danger = false, reasonLabel 
         </div>
       )}>
       <div className="flex flex-col gap-3">
-        {body ? <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{body}</p> : null}
+        {body ? <div className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{body}</div> : null}
         <Reason value={reason} onChange={setReason} label={reasonLabel} testId={`${testId}-reason`} />
         <span className={SUB}>{STEP_UP}</span>
         {frozen ? <p role="alert" className={`m-0 font-semibold ${ERR}`} data-testid={`${testId}-frozen`}>{frozen}</p> : null}
@@ -113,7 +113,7 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
     const from = mode === 'change' ? grant?.terms || {} : { ...Object.fromEntries(keys.map((k) => [k, d[k] ?? null])), ...(startTerms || {}) };
     return Object.fromEntries(keys.map((k) => [k, from[k] ?? null]));
   }, [mode, grant, startTerms, defaults, keys]);
-  const [form, setForm] = useState(() => Object.fromEntries(keys.map((k) => [k, termField(k, base[k])])));
+  const [form, setForm] = useState(() => Object.fromEntries(keys.map((k) => [k, termField(k, base[k], base.currency)])));
   const [note, setNote] = useState(mode === 'change' ? grant?.note || '' : '');
   const [reason, setReason] = useState('');
   const [step, setStep] = useState('edit');
@@ -139,7 +139,7 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
     if (lock.current || !ready) return;
     lock.current = true; setBusy(true); setRefusal('');
     try {
-      const priced = buildPricing({ mode: priceMode, rec: price?.recommendation, form: priceForm, snapshotUid: price?.snapshot_uid });
+      const priced = buildPricing({ mode: priceMode, rec: price?.recommendation, form: priceForm, snapshotUid: price?.snapshot_uid, currency: form.currency ?? base.currency });
       if (!priced.ok) { setPriceErr(priced.error); setStep('edit'); return; }
       setPriceErr('');
       const terms = mode === 'change' ? { ...payload } : Object.fromEntries(keys.map((k) => [k, current[k]]));
@@ -305,7 +305,7 @@ export function AnswerDialog({ row, onClose, onDone }) {
  */
 export function DefaultsDialog({ card, onClose, onDone }) {
   const keys = useMemo(() => TERM_ORDER.filter((k) => k in (card.terms || {})), [card]);
-  const [form, setForm] = useState(() => Object.fromEntries(keys.map((k) => [k, termField(k, card.terms[k])])));
+  const [form, setForm] = useState(() => Object.fromEntries(keys.map((k) => [k, termField(k, card.terms[k], card.terms.currency)])));
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');

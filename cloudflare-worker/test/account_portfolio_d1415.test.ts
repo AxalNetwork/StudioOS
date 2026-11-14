@@ -80,6 +80,13 @@ test('settings scope: company, project in a company, and a standalone project', 
   assert.equal(inCompany.body.scope, 'company_project');
   assert.equal(inCompany.body.open_tab, `projects:${VENTURE}`);
   assert.equal(inCompany.body.project.path, '/c/northwind/p/venture');
+  assert.equal(inCompany.body.my_authority, 'project_member');
+  assert.deepEqual(inCompany.body.company_editors, [{ name: 'Ada Made-up' }]);
+  assert.doesNotMatch(inCompany.text, /@example\.test/);
+  const editor = await call(env, ADA, 'GET', `/api/account/settings-scope?project=${VENTURE}`);
+  assert.equal(editor.body.my_authority, 'company_editor');
+  const owner = await call(env, ADA, 'GET', `/api/account/settings-scope?project=${DOCK}`);
+  assert.equal(owner.body.my_authority, 'project_owner');
   const projectOnly = await call(env, BEN, 'GET', `/api/account/settings-scope?project=${VENTURE}`);
   assert.equal(projectOnly.body.scope, 'company_project', 'a project in the caller\'s company opens in its company\'s settings');
 
@@ -91,6 +98,19 @@ test('settings scope: company, project in a company, and a standalone project', 
 
   const elsewhere = await call(env, BEN, 'GET', `/api/account/settings-scope?project=${DOCK}`);
   assert.equal(elsewhere.body.scope, 'project', 'a seat on a project in someone else\'s company gives project settings only');
+});
+
+test('a company editor loses project settings authority when the project moves out', async () => {
+  const db = fixture();
+  const env = envOf(db);
+  db.prepare("UPDATE user_company_links SET role_in_company = 'Admin' WHERE company_id = ? AND user_id = ?").run(NORTH, BEN);
+  db.prepare('DELETE FROM project_members WHERE project_id = ? AND user_id = ?').run(VENTURE, BEN);
+  const roster = await call(env, BEN, 'GET', `/api/projects/${VENTURE}/members`);
+  assert.deepEqual([roster.status, roster.body.can_manage, roster.body.can_edit], [200, true, false]);
+  assert.equal((await call(env, BEN, 'PUT', `/api/projects/${VENTURE}/slug`, { slug: 'venture' })).status, 200);
+  assert.equal((await call(env, BEN, 'PUT', `/api/projects/${SOLO}/slug`, { slug: 'solo' })).status, 403);
+  assert.equal((await call(env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null })).status, 200);
+  assert.equal((await call(env, BEN, 'PUT', `/api/projects/${VENTURE}/slug`, { slug: 'venture' })).status, 403);
 });
 
 test('settings scope: a missing scope is 400, a mismatched pair 409, and anything the caller cannot see 404', async () => {
@@ -126,6 +146,7 @@ test('POST /api/projects: company_id null is standalone even with a company sele
   assert.equal(refused.body.error, 'company_not_found');
   assert.equal((db.prepare("SELECT COUNT(*) n FROM projects WHERE name = 'Wrong Home'").get() as any).n, 0, 'nothing created');
 
+  // D5525 (owner decision A): a plain Member seat may create a project in its company.
   const placed = await call(env, ADA, 'POST', '/api/projects', { name: 'Placed', company_id: SOUTH }, header);
   assert.equal(placed.status, 201, placed.text);
   assert.equal(placed.body.company_id, SOUTH, 'an explicit company the caller belongs to wins over the header');

@@ -1,6 +1,7 @@
 import { parseStamp } from '../../../ui/parseStamp.js';
 import { NONE_CLAIM, NOT_READ_YET, NOT_RECORDED, HQ_READS_MONEY, isFailed, isLoading, isReady } from './programsModel.js';
 import { refusalSentence } from './programPagesModel.js';
+import { exponentOf, formatMinorOrCount, parseMinor, toMajorString } from '../../../lib/money.js';
 
 /**
  * D963 (#2796, Programs part 10) — Referral partners (PG7) and Custom terms
@@ -73,12 +74,8 @@ export const UNRECORDED_OUTCOMES = 'In conversation and Closed are Refer & Earn�
 export function money(cents, currency) {
   const n = Number(cents);
   if (!Number.isFinite(n)) return NOT_RECORDED;
-  const cur = /^[A-Z]{3}$/.test(String(currency || '')) ? currency : 'USD';
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: n % 100 ? 2 : 0 }).format(n / 100);
-  } catch {
-    return `${cur} ${(n / 100).toFixed(2)}`;
-  }
+  // D5373: at the currency's own decimals; a missing or unlisted currency names the stored count, it is not read as USD.
+  return formatMinorOrCount(n, currency, { locale: 'en-US', trimWhole: true });
 }
 
 /** Is this money block one the viewer may read? */
@@ -212,6 +209,10 @@ export function commissionChart(read, currency = null) {
   const currencies = currenciesOf(c);
   if (!currencies.length) return { ...base, state: 'unrecorded', word: 'None yet', reason: 'No commission was accrued or paid in the last 12 months.', currencies };
   const cur = currencies.includes(currency) ? currency : currencies[0];
+  // D5373: the chart plots major units at the currency's own decimals (JPY none, KWD three). A currency the layer does not
+  // list is not plotted at a guessed factor; the table names the stored count.
+  const exp = exponentOf(cur);
+  if (exp === null) return { ...base, state: 'unreadable', reason: `The commission could not be charted: "${cur}" is not a currency we can price in. ${NONE_CLAIM}`, currencies };
   const months = monthsFrom(read.data.months_from);
   const pick = (list) => months.map((mo) => (list || []).filter((x) => x.month === mo && x.currency === cur).reduce((t, x) => t + (Number(x.cents) || 0), 0));
   const accrued = pick(c.accrued);
@@ -222,7 +223,7 @@ export function commissionChart(read, currency = null) {
     ...base, state: 'ready', currency: cur, currencies,
     chart: {
       type: 'lines', labels,
-      series: [{ label: 'Accrued', tone: 'violet', values: accrued.map((x) => x / 100) }, { label: 'Paid', tone: 'sky', dash: true, values: paid.map((x) => x / 100) }],
+      series: [{ label: 'Accrued', tone: 'violet', values: accrued.map((x) => x / 10 ** exp) }, { label: 'Paid', tone: 'sky', dash: true, values: paid.map((x) => x / 10 ** exp) }],
       table: { head: ['Month', `Accrued (${cur})`, `Paid (${cur})`], rows: months.map((mo, i) => [mo, money(accrued[i], cur), money(paid[i], cur)]) },
     },
     axis: cur,
@@ -320,7 +321,7 @@ export function termsInDialog(items) {
   return { mode: 'new', terms: null };
 }
 
-const dollars = (cents) => (cents == null ? '' : String(Number(cents) / 100));
+const dollars = (cents, currency) => (cents == null ? '' : toMajorString(Number(cents), currency) ?? '');
 /** A terms row as the form holds it: dollars and percents as text. */
 export function formOf(terms) {
   const t = terms || {};
@@ -329,10 +330,10 @@ export function formOf(terms) {
     triggers: (t.triggers?.length ? t.triggers : [{ rule_key: FIRING_TRIGGERS[0].key, amount_cents: null, percentage_bps: null }]).map((g) => ({
       rule_key: g.rule_key,
       kind: g.percentage_bps != null ? 'share' : 'flat',
-      value: g.percentage_bps != null ? String(Number(g.percentage_bps) / 100) : dollars(g.amount_cents),
+      value: g.percentage_bps != null ? String(Number(g.percentage_bps) / 100) : dollars(g.amount_cents, t.currency || 'USD'),
     })),
-    cap_per_intro: dollars(t.cap_per_intro_cents),
-    overall_cap: dollars(t.overall_cap_cents),
+    cap_per_intro: dollars(t.cap_per_intro_cents, t.currency || 'USD'),
+    overall_cap: dollars(t.overall_cap_cents, t.currency || 'USD'),
     currency: t.currency || 'USD',
     starts_on: t.starts_on || '',
     ends_on: t.ends_on || '',
@@ -340,12 +341,12 @@ export function formOf(terms) {
   };
 }
 
-const toCents = (v) => {
+// D5373: an amount typed in the terms' currency, at that currency's own decimals (JPY has none, KWD has three).
+const toCents = (v, currency) => {
   const s = String(v ?? '').trim();
   if (!s) return null;
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return 'bad';
-  const c = Math.round(Number(s) * 100);
-  return c > 0 ? c : 'bad';
+  const r = parseMinor(s, currency);
+  return r.ok && r.minor > 0 ? r.minor : 'bad';
 };
 const toBps = (v) => {
   const s = String(v ?? '').trim();
@@ -360,6 +361,8 @@ const toBps = (v) => {
  * per trigger, so the body carries exactly one of the two.
  */
 export function termsBody(form) {
+  const currency = String(form.currency || '').trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return { error: 'The currency is a three-letter code, such as USD.' };
   const triggers = [];
   for (const g of form.triggers || []) {
     const def = FIRING_TRIGGERS.find((t) => t.key === g.rule_key);
@@ -370,18 +373,16 @@ export function termsBody(form) {
       if (bps === 'bad') return { error: 'A share is a percent from 0.01 to 100.' };
       triggers.push({ rule_key: g.rule_key, amount_cents: null, percentage_bps: bps });
     } else {
-      const c = toCents(g.value);
+      const c = toCents(g.value, currency);
       if (c === null || c === 'bad') return { error: 'A flat amount is above 0, in the terms’ currency.' };
       triggers.push({ rule_key: g.rule_key, amount_cents: c, percentage_bps: null });
     }
   }
   if (!triggers.length) return { error: 'Name at least one trigger the terms pay on.' };
   if (new Set(triggers.map((t) => t.rule_key)).size !== triggers.length) return { error: 'Name each trigger once.' };
-  const perIntro = toCents(form.cap_per_intro);
-  const overall = toCents(form.overall_cap);
+  const perIntro = toCents(form.cap_per_intro, currency);
+  const overall = toCents(form.overall_cap, currency);
   if (perIntro === 'bad' || overall === 'bad') return { error: 'A cap is an amount above 0, or left empty.' };
-  const currency = String(form.currency || '').trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return { error: 'The currency is a three-letter code, such as USD.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(form.starts_on || '')) return { error: 'Give the date the terms start.' };
   if (form.ends_on && (!/^\d{4}-\d{2}-\d{2}$/.test(form.ends_on) || form.ends_on < form.starts_on)) return { error: 'The end date is on or after the start date.' };
   const sectors = String(form.sectors || '').split(',').map((s) => s.trim()).filter(Boolean);

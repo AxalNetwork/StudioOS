@@ -69,9 +69,10 @@ test('a cleared blocker stays on record, with Reopen and Delete', () => {
 
 test('the Health page wires Clear, Reopen and Delete to different calls', () => {
   const src = read('pages/partner/delivery/HealthZone.jsx');
-  assert.match(src, /onClear=\{\(\) => act\(`bl:\$\{b\.id\}`, \(\) => api\.updatePartnerBlocker\(b\.id, \{ cleared_at: new Date\(\)\.toISOString\(\) \}\)\)\}/);
-  assert.match(src, /onReopen=\{\(\) => act\(`bl:\$\{b\.id\}`, \(\) => api\.updatePartnerBlocker\(b\.id, \{ cleared_at: null \}\)\)\}/);
-  assert.match(src, /onDelete=\{\(\) => \{ if \(window\.confirm\(blockerDeleteQuestion\(b\)\)\) act\(`bl:\$\{b\.id\}`, \(\) => api\.deletePartnerBlocker\(b\.id\)\); \}\}/);
+  // #5314 part 3: each states the revision the blocker was read at.
+  assert.match(src, /onClear=\{\(\) => act\(`bl:\$\{b\.id\}`, \(rev\) => api\.updatePartnerBlocker\(b\.id, \{ cleared_at: new Date\(\)\.toISOString\(\), expected_revision: stated\(rev, b\.revision\) \}\)\)\}/);
+  assert.match(src, /onReopen=\{\(\) => act\(`bl:\$\{b\.id\}`, \(rev\) => api\.updatePartnerBlocker\(b\.id, \{ cleared_at: null, expected_revision: stated\(rev, b\.revision\) \}\)\)\}/);
+  assert.match(src, /onDelete=\{\(\) => \{ if \(window\.confirm\(blockerDeleteQuestion\(b\)\)\) act\(`bl:\$\{b\.id\}`, \(rev\) => api\.deletePartnerBlocker\(b\.id, stated\(rev, b\.revision\)\)\); \}\}/);
   assert.match(src, /Blockers could not be read just now\./);
   assert.match(src, /onClick=\{load\}>Try again</);
   assert.match(src, /role="alert" className="text-red-700 dark:text-red-300">Blockers could not be read just now\./, '#4698: the unreadable line is announced');
@@ -96,7 +97,7 @@ test('a live seat edits its scope in place; a revoked seat does not', () => {
   assert.equal(toggleScope('Board, KPIs', 'Roadmap'), 'Board, KPIs, Roadmap');
   assert.equal(toggleScope('Board, KPIs', 'kpis'), 'Board');
   assert.deepEqual(scopeParts(' Board , ,KPIs '), ['Board', 'KPIs']);
-  assert.match(read('pages/partner/delivery/CapacityZone.jsx'), /api\.updatePartnerSeat\(s\.id, \{ scope: scope \|\| null \}\)/);
+  assert.match(read('pages/partner/delivery/CapacityZone.jsx'), /api\.updatePartnerSeat\(s\.id, \{ scope: scope \|\| null, expected_revision: stated\(rev, s\.revision\) \}\)/);
 });
 
 const PERIODS = ['2026-10', '2026-09', '2026-08'];
@@ -124,7 +125,7 @@ test('hours by entry: loading, empty and unreadable', () => {
 
 test('the Capacity page deletes an entry, never saves 0 for it', () => {
   const src = read('pages/partner/delivery/CapacityZone.jsx');
-  assert.match(src, /api\.deletePartnerHours\(e\.engagement_id, e\.person_user_id, p\)/);
+  assert.match(src, /api\.deletePartnerHours\(e\.engagement_id, e\.person_user_id, p, stated\(rev, e\.revisions\?\.\[p\]\)\)/);
   assert.match(src, /api\.listPartnerHourEntries\(period\)/);
   assert.match(src, /The month then reads Not recorded, not 0\./);
 });

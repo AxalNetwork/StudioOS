@@ -202,6 +202,31 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  facebook: {
+    tagline: 'Connect the Facebook Pages you manage.',
+    long_description: ['Sign in with Facebook and choose the Pages for this company. Grow imports are planned separately.'],
+    tools: [], prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
+    never_does: ['StudioOS does not publish or comment on Facebook.'],
+    service: { name: 'Facebook', href: 'https://www.facebook.com' },
+    sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },
+    endpoints: { sign_in: 'https://www.facebook.com/v26.0/dialog/oauth', api: 'https://graph.facebook.com/v26.0' },
+    added: '2026-11', links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business' }, verified_on: null,
+  },
+  tiktok: {
+    tagline: 'Connect your TikTok account with read-only access.',
+    long_description: ['Sign in with TikTok to grant access to your basic profile, audience counts and public videos. This release connects your account. Grow imports come later.'],
+    tools: [],
+    never_does: ['StudioOS does not upload videos or post to TikTok.'],
+    prompts: [],
+    prompts_reason: notRead('TikTok'),
+    made_by: AXAL,
+    service: { name: 'TikTok', href: 'https://www.tiktok.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with TikTok', key_help_href: null },
+    endpoints: { sign_in: 'https://www.tiktok.com/v2/auth/authorize/', api: 'https://open.tiktokapis.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
+    verified_on: null,
+  },
   lovable: {
     tagline: 'Works without signing in. Launch links and app links for your venture.',
     long_description: [
@@ -769,8 +794,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   },
 };
 
-/** Connectors with a page but no registry row (D753 decision 2). */
-export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
+/** Connectors with a page but no registry row (D753 decision 2). D5810: Microsoft Teams too. */
+export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage; teams: ConnectorPage } = {
   linkedin: {
     // D1352 (#3567): true, and no more. No line claims API access; part 5 (#3569) adds one only when it is live.
     tagline: 'Sign in with LinkedIn, then import your connections from LinkedIn\'s data download.',
@@ -793,6 +818,31 @@ export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
     links: { ...NO_LINKS, developer_docs: null },
     verified_on: null,
   },
+  // D5810 (#5810): Microsoft Teams, a page of its own on the member's one Microsoft
+  // connection (`microsoft_oauth_tokens`), the grant Microsoft 365's page manages too.
+  teams: {
+    tagline: 'Create Microsoft Teams meetings for your interviews, on your Microsoft connection.',
+    long_description: [
+      'Microsoft Teams uses the same Microsoft connection as Microsoft 365: one sign-in serves both pages, and disconnecting one disconnects the other.',
+      'With a work or school Microsoft 365 account, Axal VC can create a Teams meeting starting now when you record a session. A personal Microsoft account cannot: create the meeting in Teams and paste its link.',
+      'Whether Eadwyn AI can join a Teams call is a separate setting of this deployment, shown below. Axal VC does not import a Teams transcript after the call: upload the recording or paste the transcript instead.',
+    ],
+    tools: [
+      tool('read_profile', 'your profile', 'read', 'Reads your email address and name, when you sign in.', null, ['`${MICROSOFT_GRAPH}/me`, {']),
+      tool('create_teams_meeting', 'Teams meetings', 'write', 'Adds a Teams meeting starting now to your calendar, when you ask Axal VC to create one.', null, ["graph(token, '/me/events', {"]),
+      tool('remove_unusable_event', 'calendar events', 'write', 'Removes that event again when Microsoft gives it no Teams meeting (a personal account).', null, ['`/me/events/${encodeURIComponent(event.id)}`']),
+    ],
+    never_does: ['Read your Teams chats or channels.', 'Import a Teams transcript or recording.'],
+    prompts: [],
+    prompts_reason: notRead('Microsoft Teams'),
+    made_by: AXAL,
+    service: { name: 'Microsoft', href: 'https://www.microsoft.com/microsoft-teams' },
+    sign_in: { kind: 'first_party', label: 'Sign in with Microsoft', key_help_href: null },
+    endpoints: { sign_in: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize', api: 'https://graph.microsoft.com/v1.0' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: null },
+    verified_on: null,
+  },
 };
 
 /**
@@ -803,13 +853,21 @@ export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
  * `configured`) and no `already_connected` (the SPA keeps reading that route).
  */
 export interface FirstPartyCard {
-  key: 'linkedin'; display_name: string; category: ConnectorCategory; status: 'live'; tier: 'free';
-  auth_type: 'oauth2'; supports_pat: false; docs_url: null; first_party: true; connection_source: 'users';
+  key: 'linkedin' | 'teams'; display_name: string; category: ConnectorCategory; status: 'live'; tier: 'free';
+  auth_type: 'oauth2'; supports_pat: false; docs_url: null; first_party: true; connection_source: 'users' | 'microsoft_oauth_tokens';
+  /** D5810: the page key whose connection this card shares; none for a connection of its own. */
+  shares_connection?: 'microsoft';
 }
-export const FIRST_PARTY_CARDS: { readonly linkedin: Readonly<FirstPartyCard> } = Object.freeze({
+export const FIRST_PARTY_CARDS: { readonly linkedin: Readonly<FirstPartyCard>; readonly teams: Readonly<FirstPartyCard> } = Object.freeze({
   linkedin: Object.freeze({
     key: 'linkedin', display_name: 'LinkedIn', category: 'Data', status: 'live', tier: 'free',
     auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'users',
+  } as const),
+  // D5810 (#5810): no grant of its own. Its connection is Microsoft 365's row in `microsoft_oauth_tokens`.
+  teams: Object.freeze({
+    key: 'teams', display_name: 'Microsoft Teams', category: 'Calendar and workspace', status: 'live', tier: 'free',
+    auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'microsoft_oauth_tokens',
+    shares_connection: 'microsoft',
   } as const),
 });
 
@@ -885,7 +943,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing', 'Social',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */
@@ -909,7 +967,7 @@ const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPag
 /** The page for a key (registry or page key) and an optional Mercury variant: a role. */
 function pageFor(key: string, variant?: string): ConnectorPage | null {
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
-  if (k === 'linkedin') return FIRST_PARTY_PAGES.linkedin;
+  if (k === 'linkedin' || k === 'teams') return FIRST_PARTY_PAGES[k];
   if (Object.hasOwn(CHANNEL_PAGES, k)) return CHANNEL_PAGES[k as keyof typeof CHANNEL_PAGES];
   if (!Object.hasOwn(CONNECTOR_PAGES, k)) return null;
   const entry = CONNECTOR_PAGES[k];
@@ -958,7 +1016,7 @@ const HUB = '/account/connectors';
 export function connectorPagePath(key: string): string {
   if (typeof key !== 'string' || !PAGE_KEY_RE.test(key)) return HUB;
   const pageKey = key === PAGE_ALIAS.google ? 'google' : key === PAGE_ALIAS.microsoft ? 'microsoft' : key;
-  const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CHANNEL_PAGES, pageKey) || Object.hasOwn(CONNECTOR_PAGES, pageKey);
+  const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || pageKey === 'teams' || Object.hasOwn(CHANNEL_PAGES, pageKey) || Object.hasOwn(CONNECTOR_PAGES, pageKey);
   return known ? `${HUB}/${pageKey}` : HUB;
 }
 
@@ -988,8 +1046,8 @@ export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>,
   if (typeof key !== 'string') return null;
   let page: ConnectorPage | null = null;
   let variant: string | undefined;
-  if (key === 'linkedin') {
-    page = FIRST_PARTY_PAGES.linkedin;
+  if (key === 'linkedin' || key === 'teams') {
+    page = FIRST_PARTY_PAGES[key];
   } else if (Object.hasOwn(CHANNEL_PAGES, key)) {
     page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {

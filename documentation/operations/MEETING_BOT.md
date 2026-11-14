@@ -1,10 +1,10 @@
 # Eadwyn AI meeting bot: set up, check and switch off
 
-D886 B9, #2587; part of #2577. **Implementation runbook, verified against merged code 2026-10-23.**
-This page describes the bot being built in B0–B10. It does not certify a
-production deployment or a successful real call. Record only counts and
-states in #1008: never a meeting link, passcode, participant name, screenshot
-of a roster, transcript, credential or signed callback.
+Implementation runbook for D886 B9 (#2587), part of #2577.
+Production deployment and real calls require the evidence in §4 and §7.
+Post only counts, states and codes on the live-check issues and link them
+from #1008. Keep meeting links, passcodes, participant names, roster
+screenshots, transcripts, credentials and signed callbacks private.
 
 ## 1. Readiness and the rollout switch
 
@@ -15,14 +15,25 @@ of a roster, transcript, credential or signed callback.
 - `canary`: Super Admins only, hydrated through the existing elevation check.
 - `on`: eligible founders, with the same consent, ownership and budget gates.
 
+**Teams has its own switch** (D1451, #5297). `MEETING_BOT_TEAMS` is also a
+var, not a secret, and ships `off` in `[vars]`, `[env.production.vars]` and
+preview. Only the exact value `on` lets the bot take a Teams link; missing or
+anything else is off. While it is off, `GET /api/founder/validate/meetings/bot`
+reports `platforms.teams: false` (Zoom and Meet keep their own answers), and a
+send with a Teams link answers `503 bot_unavailable` before any `meeting_bots`
+row or token hold. It narrows `MEETING_BOT`, never widens it: with
+`MEETING_BOT` `off` Teams is off too, and under `canary` it still reaches Super
+Admins only. It stays `off` until the bot's Teams page driver (D1451 part 2)
+and the live check in §4 pass; the owner turns it on in its own PR.
+
 B1 (#2579) owns these checks on both immediate and scheduled runs. Changing
 the var alone does not install the control plane or runtime. It also does
 not prove that an already running bot has left; §6 requires Stop separately.
 `canary` is the issue's configured default, not permission to skip readiness:
 B1's supervisor checks the shared `MEETING_BOT_NOTICE_PUBLISHED` gate before
-any paid hold or runtime call. Immediate dispatch currently returns HTTP 202
-with a failed run (`notice_unpublished`); HTTP acceptance is not proof that the
-bot started. A scheduled dispatch waits as `queued` and checks the gate again
+any paid hold or runtime call. With publication off, immediate dispatch can
+return HTTP 202 with a failed run (`notice_unpublished`). Verify the run state
+after HTTP acceptance. A scheduled dispatch waits as `queued` and checks the gate again
 when due. The runtime independently calls gated `meetingBotNotice` and refuses
 an unpublished or mismatched start notice before constructing an adapter.
 
@@ -49,11 +60,9 @@ call.** It does not select or supply consent itself. B1 refuses a dispatch
 without recorded agreement, even if a client bypasses the control.
 
 The owner approved the exact version-2 wording with **venture attribution**
-on **2026-10-22**, recorded by S1 on #2587. Wording approval and publication
-are separate: the publication setting remains null and the derived gate false.
-B1 resolves that
-venture through the authorized project, rather than accepting a display name
-as authority. B2 imports `meetingBotNotice` and `MEETING_BOT_NAME` from
+on **2026-10-22**, recorded by S1 on #2587. The owner merged that date into
+the shared source for the restricted canary in #3624. B1 resolves the venture
+through the authorized project. B2 imports `meetingBotNotice` and `MEETING_BOT_NAME` from
 `meeting-bot/notice.mjs`. The function returns one plain-text announcement,
 naming the venture, recording/transcription, participant display names and
 who spoke when, how to stop and ask for deletion, and `/privacy/interviews`.
@@ -67,17 +76,12 @@ objects, the founder presses Stop or the host removes the bot. A new or
 late participant must be informed and agreement checked before continuing.
 Phone participants and hidden chat panels need the founder's spoken notice.
 
-`/privacy/interviews` keeps its current version 1 unchanged. The bot text
-is prepared as `MEETING_BOT_INTERVIEW_NOTICE`, candidate version 2, outside
-the live version map; even `?n=2` cannot publish it. The runtime's gated
-announcement also names version 2 and links with `?n=2`. After the checks above
-pass, the owner publishes through the single PR in §7. That PR records the
-actual approval date (`2026-10-22`, as recorded on #2587) in
-`MEETING_BOT_NOTICE_APPROVED_AT`. Publication derives from that setting: a valid
-date opens the runtime gate, adds version 2 to the page's map, makes it current
-and supplies its update date together. A missing or invalid date keeps it
-unpublished. Version 1 remains available for old chat-consent links. This
-verification PR does not change the publication setting.
+`MEETING_BOT_NOTICE_APPROVED_AT` drives both the runtime announcement and
+`/privacy/interviews`. The date on `main` opens the source-level gate, makes
+version 2 current and supplies its update date. The announcement links to
+`/privacy/interviews?n=2`, and `?n=1` preserves the original wording for old
+consent links. A missing or invalid date keeps version 2 unpublished. Verify
+the deployed page, Worker and runtime against the same revision during §7.
 
 ## 3. Owner setup by platform
 
@@ -123,18 +127,25 @@ must permit the guest to request admission and admit Eadwyn AI from the
 lobby. Tenant policies can refuse guest access. Do not grant a Graph
 application recording permission as an assumed prerequisite for this path.
 
-## 4. Live check: repeat on Zoom, Google Meet and Teams
+The join path is the browser guest (D1451, owner Q1 = C). The Graph
+Communications media bot (Azure Bot registration, tenant admin consent,
+Windows media hosting) is not built; it is decided after a month of blocked
+counts once Teams is on. The live check uses a separate Microsoft 365 trial or
+developer tenant plus one Teams free link (Q2 = B), so anonymous join and
+`BlockDetectedBots` can be toggled without touching a real tenant. Meeting
+links are accepted on `teams.microsoft.com`, `teams.cloud.microsoft` (both
+work or school) and `teams.live.com` (Teams free), `https` only. Until
+`MEETING_BOT_TEAMS` is `on` (§1), the bot takes no Teams link.
 
-Use a consenting host and another participant in a dedicated test meeting,
-on a free provider account for each platform. These checks remain UNVERIFIED
-until actually run. The public production gate stays false during preparation.
-The owner must use an isolated release-candidate deployment/image with the
-approved notice published there for the live checks: the normal unpublished
-production build deliberately cannot join. Review that candidate change,
-restrict access to Super Admins (`canary`), and keep its public release separate.
-Use the same notice module and candidate privacy page; add no environment
-bypass or alternate announcement. Record the candidate revision/image in the
-private evidence, with only counts and states in #1008.
+## 4. Live check for each adapter before its rollout
+
+The current owner check is Google Meet and Zoom under #3588. Teams remains
+off and follows its separate owner check under #3709. For each platform,
+use a consenting host and another participant in a dedicated test meeting.
+Record the canary revision and runtime image in private evidence. Keep
+`MEETING_BOT` at `canary` and verify that the Worker, privacy page and
+runtime use the same approved notice source before testing. Record only
+counts, states and codes on #3588 or #3709 and link those results from #1008.
 
 1. Confirm missing consent refuses dispatch and creates no runtime recording.
    Then record prior agreement; verify the visible-bot sentence before Send.
@@ -157,16 +168,17 @@ private evidence, with only counts and states in #1008.
    Check one settlement in AI tokens, including a duplicate completion.
 7. Verify D877: audio-only deletion removes playback and leaves text;
    session deletion removes audio and transcript. Test both sides of the
-   chosen retention boundary, including a Teams bot session. The merged purge
+   chosen retention boundary for the adapter under review. The merged purge
    explicitly selects `submitted_via = 'meeting_bot'` even without a provider
    ref. It uses the newest chunk and the member's setting (30 days by default,
    or keep-until-deleted), and waits while processing moves. Audio-only removal
    retains text and encrypted final participants; whole-session deletion
    removes transcript, staged text, bot row/final participants and encrypted
    roster/speaker events. Confirm a late upload cannot recreate removed audio.
-8. Report per-platform pass/fail states and counts in #1008. Mark everything
-   not exercised **UNVERIFIED**. Do not expand to `on` while a platform's
-   notice, consent, retention, stop or metering check is unresolved.
+8. Report per-platform pass/fail states and counts on its live-check issue.
+   Mark unexercised checks **UNVERIFIED**. Expansion to `on` requires the
+   owner to accept the notice, consent, retention, stop and metering evidence
+   for the adapters being enabled.
 
 Call audio defaults to 30 days under D877; the founder can choose a different
 period or keep-until-deleted and can delete sooner. Retention removes audio,
@@ -212,6 +224,85 @@ consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
   reporting gap, not a failed check: the container sends every stage again with
   each later report and once more after the check ends (D4857), so press Try
   again, and read the host's log for `diagnose_delivery_failed`.
+
+## 4b. Teams deployment matrix and preflight (#5815, D5815)
+
+Teams uses the same two bot hosts as Meet and Zoom. Nothing about its
+deployment is Teams-only except the switch and, once #5812 lands, the page
+driver inside the one image. `node scripts/check-meeting-bot-teams.mjs` checks
+the matrix below offline, from `wrangler.toml`, `wrangler.meeting-bot.toml`,
+`meeting-bot-deploy.yml`, the image's Dockerfile and lockfile manifest and
+the host's container source. It prints `pass`/`FAIL` per row and never a
+value, and it runs in `npm run test:guards` on every PR.
+
+| Row | Production | Preview | Checked by |
+|---|---|---|---|
+| Site → host binding | `studioos` binds `MEETING_BOT_CONTAINER` to `studioos-meeting-bot` | `studioos-preview` binds it to `studioos-meeting-bot-preview` | `site_binds_its_own_bot_host` |
+| Run state | `MEETING_BOT_RUN` (`MeetingBotRun`) on the site, never on the host | same | `site_has_run_state_object` |
+| Chunk store | site's private `FILES` bucket, reached only through the one-use chunk PUT | the preview site's own `FILES` bucket | `site_has_private_files_bucket`, `environments_distinct`, `host_holds_no_member_oauth` |
+| Callback origin | host `APP_URL` is exactly the production app origin | host `APP_URL` is the preview site's `workers.dev` origin | `host_callback_origin_is_this_site` |
+| Signing context | no audience var; `MEETING_BOT_SECRET` set per host | `CF_BOT_AUDIENCE = "preview"`; its own `MEETING_BOT_SECRET` and `MEETING_BOT_PREVIEW_SECRET` | `host_signing_audience_scoped` (secrets: presence only, below) |
+| Container | `MeetingBotContainer` class, its Durable Object and migration, image from `meeting-bot/Dockerfile` | same, separate application and namespace | `host_container_declared` |
+| Image and browser | exact Playwright version from the lockfile; Chromium installed from it; one Node major | same image | `browser_pinned` |
+| Readiness and egress | `standard-2`, egress on, `/healthz` ready and version before the signed command | same | `container_readiness_and_egress` |
+| Revisions | `MEETING_BOT_VERSION` = the deployed commit; promoted only after the preview receipt | `MEETING_BOT_VERSION` = the same commit, deployed and verified first | `revision_stamped_and_preview_first` |
+| Member OAuth | Microsoft, Google and Zoom member credentials stay on the site; the host binds no bucket, database or KV | same | `host_holds_no_member_oauth` |
+| Switches | `MEETING_BOT = "canary"`, `MEETING_BOT_TEAMS = "off"` | `MEETING_BOT = "off"`, `MEETING_BOT_TEAMS = "off"` | `meeting_bot_switch_valid`, `teams_switch_valid`, `teams_never_wider_than_bot` |
+
+A switch value outside its allowed exact set fails the check, because the
+code reads anything but `on` as off and a typo would hide silently.
+
+**Secrets, by presence only.** `MEETING_BOT_SECRET` must be set on the site
+and on its host, with the same value per environment and different values
+between environments. Check presence with `wrangler secret list` for each of
+the four scripts; never print or post a value. Row 1 of §4a
+(`secret_missing`, `runtime_refused`) is the live confirmation that a pair
+matches. Rotation: set the new value on the host first, then on its site, in
+one maintenance window with no run active (`runtime_refused` in between is
+expected); then run §4a row 1 and the preview receipt again.
+
+### Off, canary and the Teams pilot
+
+- **Teams off** (`MEETING_BOT_TEAMS` anything but `on`): the capabilities
+  read reports `teams.can_join_as_bot: false`, `GET /meetings/bot` reports
+  `platforms.teams: false`, and a Teams send answers `503 bot_unavailable`
+  before any `meeting_bots` row, charge or token hold. Meet and Zoom keep
+  their own answers. `cloudflare-worker/test/meeting_bot_teams_d1451.test.ts`
+  pins the availability and the refusal (no row, no reservation, no start, and
+  a Meet send on the same session still queues); the capabilities row reads
+  the same `platforms.teams` (`founder_validate_meetings.ts`).
+- **Teams canary** (`MEETING_BOT = "canary"` and `MEETING_BOT_TEAMS = "on"`):
+  Super Admins only, under every consent, notice and budget gate.
+- **Positive testing** happens only in an isolated preview pilot or an owner
+  pilot: the preview site and host with `MEETING_BOT` and `MEETING_BOT_TEAMS`
+  set for that run, a Microsoft 365 developer tenant (§3), one run at a time,
+  the plan's 30-minute limit, and the preview `FILES` bucket. Turning Teams on
+  in production is the owner's separate rollout issue, not this runbook.
+- **Version check** before and after any pilot: the host's `/health` and
+  §4a row 1 report the commit; it must equal the site's deployed commit and
+  the preview receipt's `revision`.
+- **Failure signals:** §4a's stage codes, §5's failure codes, the preview
+  receipt's `state`/`stage` (`[cf][preview][studioos-meeting-bot-preview]`,
+  #5675) and production alerting (#5674). `platform_blocked` on Teams means
+  the tenant's guest policy, `BlockDetectedBots` or a CAPTCHA.
+- **Rollback to Teams off:** set `MEETING_BOT_TEAMS = "off"` in the
+  environment's vars and ship through `DEPLOY.md`; press Stop on any Teams run
+  (§6). Then send one Meet or Zoom run under canary to confirm another
+  provider still works.
+
+### Stage results
+
+Record each environment's result here as states and codes only: environment,
+site commit, host commit, image digest prefix, stage, `pass`/`fail`/`UNVERIFIED`.
+
+| Environment | Stage | State | Evidence |
+|---|---|---|---|
+| both | offline matrix (`check-meeting-bot-teams.mjs`) | pass, 24 of 24 rows | this PR's CI |
+| preview | signed preview receipt (#5675) | UNVERIFIED | waits on #5675's isolated callback |
+| preview | Teams driver fixture in the packaged image | UNVERIFIED | waits on #5812 |
+| preview | host → signed callback → upload → assembly, synthetic session | UNVERIFIED | waits on #5812 and #5675 |
+| preview | corrupted, replayed and wrong-environment delivery refused or deduplicated | UNVERIFIED live; forged, stale and path-swapped events pinned offline by `meeting_bot_control_d886.test.ts`, replayed sequences by `meeting_bot_privacy_d886.test.ts` | waits on #5675 |
+| production | preflight (bindings, secrets present, `/health` commit, Teams off) | UNVERIFIED | owner step after the preview receipt |
 
 ## 5. Failure codes and operator response
 
@@ -288,40 +379,32 @@ arbitrary 409 as successful storage, or log a body/token to diagnose it.
 4. After a fix and the checks above, return to `canary` first. Expanding to
    `on` is the owner's rollout decision. This task performs no live rollout.
 
-## 7. The owner's publication PR
+## 7. Owner acceptance and rollout
 
-This is a later, owner-merged PR. The wording approval on 2026-10-22 does not
-clear the remaining gates. S28's automated verification keeps publication off.
+The owner merged the approved notice date for restricted canary testing in
+#3624. Meet and Zoom acceptance and measured supplier cost remain open.
 
-1. Link the live check for **each** of Zoom, Meet and Teams on #1008 (counts
-   and pass/fail states only). Include admission, exactly one visible notice
-   before capture, chat refusal, Stop/withdrawal, final upload/assembly,
-   retention/deletion, and one settlement. Keep personal evidence private.
-   Resolve every failed/unexercised privacy gate before publication.
-2. Record D886 §7's measured supplier cost and image/resource measurements;
-   apply B1's measured **bot-only** cost and existing ×1.25 pricing. The canary
-   ceiling is not the measured public price. Confirm the target image, Worker
-   binding, migrations 531/532 and runtime command/callback secret alignment
-   on the chosen host. B8 confirms its deployment and shutdown procedure.
-3. Branch from current `main`. In the single publication PR set only the
-   shared `meeting-bot/notice.mjs` approval setting to its actual recorded date,
-   `2026-10-22`. The derived `MEETING_BOT_NOTICE_PUBLISHED` must become true;
-   do not introduce a second flag or independently publish the page. Record
-   the evidence and date in D886 and this runbook. If wording changes, obtain
-   a new explicit wording approval first; do not reuse the old approval.
-4. Keep `MEETING_BOT = "canary"` for the first production verification and
-   preview `off`. Build the SPA **and** runtime image from that same published
-   source. Verify canonical `/privacy/interviews` and `?n=2` show version 2,
-   `?n=1` keeps the original wording and links to current version 2, and the
-   runtime's start notice exactly matches the server-authorized venture.
-5. Run root build/full drift and the B9 privacy, B1 control, B6 assembly, runtime
-   and public-notice tests. All CI and independent review must be green. The
-   owner merges and confirms the normal deploy plus a restricted live check;
-   public access (`on`) is a separate owner rollout decision.
-6. If a privacy or runtime check fails, keep or restore the shared setting to
-   null in a reviewed rollback and execute §6 (`MEETING_BOT = "off"` plus
-   verified Stop). Rebuild both artifacts. Removing publication alone is not
-   proof that a bot already in a call has left. Keep old consent-version links.
+1. Run the owner check on Meet and Zoom in #3588 and link the results from
+   #1008. Record admission, exactly one visible notice before capture, chat
+   refusal, Stop/withdrawal, final upload and assembly, retention and deletion,
+   and one settlement. Keep personal evidence private. Teams follows the
+   same privacy checks separately under #3709 before its switch can be enabled.
+2. Record D886 §7's measured supplier cost and image/resource measurements.
+   Apply B1's measured bot-only cost and existing ×1.25 pricing after review.
+   Confirm the target image, Worker binding, migrations 531/532 and runtime
+   callback alignment on the chosen host. B8 documents deployment and shutdown.
+3. Verify that the canary Worker, SPA and runtime image come from the same
+   source revision. Confirm canonical `/privacy/interviews` and `?n=2` show
+   version 2, `?n=1` preserves the original wording and links to version 2,
+   and the runtime names the server-authorized venture. A wording change needs
+   new owner approval in the shared notice module.
+4. Before any rollout change, run the build, full drift suite and notice,
+   control, assembly and runtime tests. The owner reviews the live evidence,
+   merges the rollout PR and verifies the deployment. Keep preview `off`.
+5. If a privacy or runtime check fails, follow §6 to switch dispatch off and
+   verify Stop. If the owner withdraws publication, clear the shared approval
+   setting in a reviewed rollback and rebuild the SPA and runtime. Preserve
+   the older consent-version links.
 
 Automated evidence: `cloudflare-worker/test/meeting_bot_privacy_d886.test.ts`
 uses the real signed B2 callback client, B1 supervisor/routes, B6 processing and

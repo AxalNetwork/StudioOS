@@ -20,6 +20,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import BuildPlan, { VerdictRecordWithPlan } from '../src/pages/cycles/BuildPlan.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 import {
   acceptAllLine, becauseChips, dayTime, decidedLine, editPayload, landsIn, moduleItems, planCounts, planScope, planSearch, sinceLine, ventureSearch, verdictState, writeRefusal,
 } from '../src/pages/cycles/buildPlanModel.js';
@@ -46,7 +47,8 @@ const PLAN = (o = {}) => ({
   brief: { audience: [{ key: 'segment-1', label: 'Small ops teams' }], problems: [{ key: 'theme-1', label: 'Setup takes weeks' }], positioning: { valueProp: 'Set up in a day' }, replaces: [{ key: 'finding-1', label: 'Spreadsheets' }] },
   modules: {
     'solution-design': [
-      { uid: DONE, kind: 'feature', status: 'accepted', payload: { title: 'Live ETA panel' }, evidence: [PAIN], decided_at: '2026-10-12 15:00:00' },
+      // D4602 (#4602): an accepted item records the row it landed in, so Open reaches that record.
+      { uid: DONE, kind: 'feature', status: 'accepted', payload: { title: 'Live ETA panel' }, evidence: [PAIN], decided_at: '2026-10-12 15:00:00', landed_table: 'mvp_features', landed_id: '5' },
       { uid: FEAT, kind: 'feature', status: 'proposed', payload: { title: 'One-day setup wizard', description: 'A guided setup.', added_value: 'High', effort: 'M' }, evidence: [PAIN, H1] },
       { uid: RISK, kind: 'risk', status: 'proposed', payload: { title: 'Test the price objection', severity: 'high' }, evidence: [{ kind: 'finding', ref: '3', label: 'price objection', source_label: 'Recorded' }] },
       { uid: GONE, kind: 'feature', status: 'discarded', payload: { title: 'Driver mobile app' }, evidence: [PAIN], decided_at: '2026-10-12 15:10:00' },
@@ -96,6 +98,9 @@ async function mounted({ handle = handler(), props = {}, el = null } = {}) {
     requests, flush, has: (id) => Boolean(byId(id)), textOf: (id) => text(byId(id)), props: (id) => props_(byId(id)), all: () => text(container),
     ids: (prefix) => nodes().map((n) => props_(n)['data-testid']).filter((x) => typeof x === 'string' && x.startsWith(prefix)),
     click: async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props_(n).onClick({ preventDefault() {} }); }); await flush(); },
+    // D4602 (#4602): a choice is a native `<input type="radio">` now, which the
+    // browser drives through `change`, not `click`.
+    pick: async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props_(n).onChange({ target: { value: props_(n).value } }); }); await flush(); },
     type: async (id, value) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props_(n).onChange({ target: { value } }); }); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -156,8 +161,10 @@ test('VB1 mounted: the strip, each module\'s cards with kind, Because and where 
     assert.match(card, /Recorded · Problem discovery · Setup takes weeks.*Typed · Hypothesis/);
     assert.match(card, /Lands in Solution design › Features/);
     assert.match(r.textOf(`plan-item-${MUST}`), /Document · Demand · 3 confirmed signals/);
-    assert.equal(r.textOf(`plan-done-${DONE}`), '✓Live ETA panelAccepted 12 Oct · Solution design › FeaturesOpen');
-    assert.equal(r.props(`plan-done-open-${DONE}`).href, '/build/solution-design?project_id=3');
+    // D4602 (#4602): Open reaches the landed record, and its label says so.
+    assert.equal(r.textOf(`plan-done-${DONE}`), '✓Live ETA panelAccepted 12 Oct · Solution design › FeaturesOpen the record');
+    assert.equal(r.props(`plan-done-open-${DONE}`).href, '/build/solution-design/5?project_id=3');
+    assert.equal(r.props(`plan-done-open-${DONE}`).title, "Opens this item's record in Solution design");
     assert.match(r.textOf(`plan-done-${GONE}`), /Driver mobile appDismissed 12 Oct · it will not be proposed again$/);
     assert.ok(!r.has(`plan-done-open-${GONE}`), 'a dismissed item opens nothing');
     assert.match(r.textOf(`plan-item-${OLD}`), /↺ Withdrawn.*A newer decision replaced this plan\./);
@@ -200,7 +207,7 @@ test('VB4: Edit and accept in the module\'s own fields, the evidence kept, only 
     assert.match(r.textOf('plan-edit'), /Feature · One-day setup wizard.*The evidence stays with the item\. It cannot be removed here\..*Recorded · Problem discovery/s);
     for (const id of ['plan-edit-title', 'plan-edit-description', 'plan-edit-added_value-High', 'plan-edit-effort-XL']) assert.ok(r.has(id), id);
     await r.type('plan-edit-title', 'Setup wizard');
-    await r.click('plan-edit-added_value-Medium');
+    await r.pick('plan-edit-added_value-Medium');
     await r.click('plan-edit-accept');
     assert.equal(r.textOf('plan-edit-refused'), 'title is not a value this item takes.');
     assert.ok(r.has('plan-edit'), 'the dialog stays open on a refusal');
@@ -365,7 +372,7 @@ test('VB2a: the Verdict record says Plan the build with the plan\'s own count, a
 });
 
 test('wiring: CycleRoute hands the plan the viewer\'s role and Lab flag and draws the Verdict record with its panel; no browser pop-up', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   const at = route.indexOf('<BuildPlan tab={buildPlan}');
   assert.ok(at > 0);
   assert.ok(route.slice(at, route.indexOf('/>', at)).includes("role={user?.role ?? null} lab={user?.spinout_lab_active === 1 && user?.role !== 'admin'}"));

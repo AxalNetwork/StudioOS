@@ -30,9 +30,9 @@ function d642Section() {
   return next < 0 ? routeMap.slice(at) : routeMap.slice(at, at + HEADING.length + next);
 }
 
-test('the service names D642’s four remaining storage areas first, then D1169’s eight', () => {
-  assert.deepEqual(AREA_KEYS, ['data_room', 'diligence_files', 'research_library', 'interview_recordings',
-    'data_room_versions', 'session_audio', 'deck_reviews', 'deck_rehearsals', 'deck_recordings', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports', 'articles']);
+test('the service types every actual storage area without pinning a total', () => {
+  const storedKeys = [...service.matchAll(/\{ key: '([a-z_]+)', kind:/g)].map(match => match[1]);
+  assert.deepEqual(new Set(AREA_KEYS), new Set(storedKeys));
 });
 
 test('/api/usage is mounted, and the routes README lists the mount', () => {

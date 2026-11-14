@@ -5,8 +5,8 @@
  *
  * Fixtures are built in the shape the Worker routes send, and the first tests
  * hold them to it: each fixture's keys are read against the DTO in
- * `cloudflare-worker/src/routes/advisors.ts` or `advisor_grants.ts`, so a
- * fixture cannot carry a field no route returns. The components are then
+ * the advisor routes, the shared advisor profile service or the grants router,
+ * so a fixture cannot carry a field no route returns. The components are then
  * rendered from those fixtures, in every state.
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/advisor_practice_d571.test.mjs
@@ -47,6 +47,7 @@ const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;|&rsquo;|�
 
 // #4715: the advisor router is advisors.ts plus the route modules it mounts.
 const ADVISORS = advisorRoutesSource();
+const PROFILE = read('cloudflare-worker/src/services/advisorProfile.ts');
 const GRANTS = read('cloudflare-worker/src/routes/advisor_grants.ts');
 const API = read('frontend/src/lib/api.js');
 const APP = read('frontend/src/App.jsx');
@@ -72,8 +73,8 @@ const DELIVERABLE_KEYS = keysBetween(ADVISORS, 'const items = (rows.results || [
 const TYPE_KEYS = keysBetween(ADVISORS, 'function sessionTypeDto(r: SessionTypeRow): any {\n  return {', '\n  };');
 const LINK_KEYS = keysBetween(ADVISORS, 'function bookingLinkDto(r: BookingLinkRow): any {\n  return {', '\n  };');
 const ADVISOR_KEYS = new Set([
-  ...keysBetween(ADVISORS, 'function advisorDto(m: AdvisorRow): any {\n  return {', '...advisorProfileDto(m),'),
-  ...keysBetween(ADVISORS, 'function advisorProfileDto(m: AdvisorRow): any {\n  return {', '\n  };'),
+  ...keysBetween(PROFILE, 'function advisorDto(m: AdvisorRow): any {\n  return {', '...advisorProfileDto(m),'),
+  ...keysBetween(PROFILE, 'function advisorProfileDto(m: AdvisorRow): any {\n  return {', '\n  };'),
 ]);
 const SHARED_KEYS = keysBetween(GRANTS.slice(GRANTS.indexOf("grants.get('/shared/list'")),
   'items: (rows.results || []).map((r: any) => ({', '\n    })),');
@@ -92,6 +93,8 @@ const deliverable = (over = {}) => ({
   // #4684: the latest sent version's recipient, which a nudge reaches; null until something is sent.
   recipient_email: null,
   state: 'not_started', due_date: null, manual_status: null, version_count: 1,
+  // #5316 (D5316): the unsent version marked ready to send, or null.
+  ready_version: null,
   latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });
@@ -108,7 +111,7 @@ const logRow = (over = {}) => ({
   advisor_name: 'Ada Advisor', document_uid: null, document_title: null, ...over,
 });
 const shared = (over = {}) => ({
-  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', scope_project: true,
+  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', granted_by_user_id: 12, scope_project: true,
   scope_data_room: false, scope_sessions: false, expires_at: null, created_at: '2026-09-01 08:00:00', ...over,
 });
 const advisor = (over = {}) => ({
@@ -327,7 +330,7 @@ test('A2: the canvas rule — no price, not bookable — in the body, the switch
   assert.equal(sessionTypeBody({ name: '', mode: 'free' }).error, 'A session type needs a name.');
   assert.equal(sessionTypeBody({ name: 'X', mode: 'free', duration: '0' }).error, 'Length is whole minutes, from 1 to 1440.');
   assert.deepEqual(parseAmount('12.345'), { error: 'Enter an amount like 150 or 150.50' });
-  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.5', bookable: true, note: '' });
+  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.50', bookable: true, note: '' });
 });
 
 test('A2: the table — switch disabled where the rule forbids it, the contradiction flagged, bookings Not recorded', () => {
@@ -552,9 +555,12 @@ test('the canvas addresses land on the zone sections, behind the zones\' own gua
   assert.match(APP, /const AdvisorProfilePage = lazy\(\(\) => import\('\.\/pages\/advisor\/AdvisorProfilePage'\)\);/);
 
   const delivery = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-  assert.match(delivery, /const VIEWS = new Set\(\['all', 'by_client', 'unopened', 'opened', 'draft'\]\);/);
+  // #4833 (D4833): `by_client` is still an address the page opens on; it
+  // groups the v2 cards rather than being a chip.
+  assert.match(delivery, /const VIEWS = new Set\(\[[^\]]*'by_client'[^\]]*\]\);/);
   assert.match(delivery, /VIEWS\.has\(searchParams\.get\('view'\)\)/);
-  assert.match(delivery, /filter === 'by_client'\s*\n?\s*\? <DeliverablesByClient/);
+  assert.match(delivery, /useState\(initialView === 'by_client'\)/);
+  assert.match(delivery, /grouped\s*\n?\s*\? <Card padding="md"><DeliverablesByClient/);
   assert.match(delivery, /api\.updateMyAdvisorDeliverable\(item\.id, body\)/);
   const sessions = codeOnly(read('frontend/src/pages/advisor/practice/SessionsZone.jsx'));
   assert.match(sessions, /id="session-types"/);

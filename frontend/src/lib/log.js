@@ -58,6 +58,19 @@ export function redact(value) {
   return s;
 }
 
+// The authenticated shell may be absent during boot, sign-out or an error boundary.
+const MEMBER_ROLES = ['founder', 'investor', 'advisor', 'partner'];
+const BROWSER_SHELLS = new Set([...MEMBER_ROLES, 'admin', 'super_admin', 'branch_admin', 'exploring']);
+function browserSectionContext() {
+  try {
+    if (typeof document === 'undefined') return undefined;
+    const data = document.querySelector('[data-error-shell]')?.dataset;
+    if (!data || !BROWSER_SHELLS.has(data.errorShell)) return undefined;
+    const roles = String(data.errorLicences || '').split(' ');
+    return { shell: data.errorShell, licences: MEMBER_ROLES.filter(role => roles.includes(role)), sidebar: data.errorSidebar === '1' };
+  } catch { return undefined; }
+}
+
 // Build a sanitized, serializable entry. Only ever reads known-safe fields —
 // deliberately NOT the user object, tokens, cookies, or the full URL (query
 // strings can carry magic-link / oauth params). `pathname` only.
@@ -87,6 +100,7 @@ function toEntry(scope, err, level) {
     message: clip(redact(isErrObj ? (err.message ?? String(err)) : err), MSG_MAX),
     stack: isErrObj ? clip(redact(err.stack), STACK_MAX) : undefined,
     path: redact((typeof window !== 'undefined' && window.location) ? window.location.pathname : undefined),
+    sectionContext: browserSectionContext(),
     ts: Date.now(),
   };
 }
@@ -122,7 +136,7 @@ function beacon(entry) {
   try {
     if (typeof fetch !== 'function') return;
     if (_beaconCount >= _BEACON_MAX) return;
-    const key = `${entry.scope}|${entry.message}`;
+    const key = JSON.stringify([entry.scope, entry.message, entry.path, entry.sectionContext]);
     const now = Date.now();
     if (now - (_recentBeacons.get(key) || 0) < _DEDUPE_MS) return;
     _recentBeacons.set(key, now);

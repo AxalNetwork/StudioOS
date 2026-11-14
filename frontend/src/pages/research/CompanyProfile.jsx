@@ -31,6 +31,9 @@ import {
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useResearchLinks } from './researchLinks.js';
 import { directoryHref } from './fundDirectoryRead';
+import { formatMinorOrCount } from '../../lib/money';
+import ResearchActions from './ResearchActions.jsx';
+import { canAddToResearch } from './researchComparisons.js';
 
 const SECTIONS = [
   ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
@@ -213,7 +216,7 @@ function FundList({ title, read, more, canOpen = true }) {
                   {canOpen
                     ? <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="text-[12.5px] font-semibold text-axal-violet underline">{f.name}</Link>
                     : <span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{f.name}</span>}
-                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? money(f.fund_size_cents / 100, f.size_currency) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
+                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? formatMinorOrCount(f.fund_size_cents, f.size_currency, { trimWhole: true }) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
                 </li>
               ))}
             </ul>
@@ -343,7 +346,7 @@ export const UNSOURCED = [
 ];
 
 /** The header: identity, sector label and tracked sector, and the directory record. */
-export function CompanyHeader({ item, tracked }) {
+export function CompanyHeader({ item, tracked, research = null }) {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0">
@@ -363,6 +366,7 @@ export function CompanyHeader({ item, tracked }) {
       </div>
       <div className="flex shrink-0 flex-col gap-2 lg:w-72">
         <Link to={analysisHref(item)} className="inline-flex items-center justify-center rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white hover:bg-violet-800">Run competitor analysis →</Link>
+        {research}
         <Card padding="sm" className="space-y-1">
           <div className="text-[11px] font-bold text-axal-muted">Directory record</div>
           <div className="text-[12px] text-axal-ink dark:text-gray-100">{recordSource(item).label}</div>
@@ -398,7 +402,8 @@ export default function CompanyProfile({ role }) {
   return (
     <div data-testid="company-profile" className="space-y-6">
       <nav aria-label="Breadcrumb" className="text-[12px] text-axal-muted"><Link to="/research/companies" className="underline">Companies</Link> / <span className="text-axal-ink dark:text-gray-100">{d.item.name}</span></nav>
-      <CompanyHeader item={d.item} tracked={tracked} />
+      <CompanyHeader item={d.item} tracked={tracked}
+        research={canAddToResearch(role) ? <ResearchActions kind="company" item={{ uid: d.item.uid || uid, name: d.item.name }} /> : null} />
       <nav aria-label="Sections" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
         {SECTIONS.map(([id, name]) => <a key={id} href={`#${id}`} className="whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:hover:text-gray-100">{name}</a>)}
       </nav>

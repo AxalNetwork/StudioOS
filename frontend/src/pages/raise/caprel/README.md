@@ -14,6 +14,9 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 | `CapRelActivity.jsx` | D1193 (CRL12): every logged change across investors, the round and its closes, with who, when and its source; Export saves the rows on screen. |
 | `CapRelProposals.jsx` | D1193 (CRL11): Eadwyn's proposals from a note, each beside its words, accepted, edited or dismissed by a person. |
 | `capRelTabsModel.js` | D1193: pure rules for Match, Outreach, Commitments, the proposals and Activity. |
+| `capRelUrlFilters.js` | D5377 (#5377): each tab's filters, sort and page in the address — the allowed values, defaults kept out, the page reset on a filter change, cleared on a venture switch — and `useTabFilters`, which Match, Activity, Commitments and Pipeline's Passed column read through. |
+| `CapRelExportMenu.jsx` | D6078 (#6078, CRL16a): the More menu for Pipeline and Commitments. |
+| `capRelExports.js` | D6078 (#6078): spreadsheet-safe rows for the two CSV downloads. |
 
 ## Where the tool lives
 
@@ -28,6 +31,7 @@ The tool is the Capital relationships module, not a page beside it.
 ## The rules for adding here
 
 - **Every row comes from a mounted read.** A read that fails says so where its block would be. A value nobody recorded says "Not recorded", never 0.
+- **A refusal is not a failed read** (D5079, #5079). Overview mapped every failure, a 403 included, to Unreadable — "This is not a claim that nobody has committed" — which claims the store could not be read when it was simply not shown. `useProspects` now answers `refused` through `raiseReadState`, Overview draws `REFUSED_LINE` for it, and it reports the refusal to the module page through `onRefused`, which then draws none of the pipeline's card, records, bands or Evidence.
 - **A commitment with no status is not counted as committed** (#2457 owner question 4).
 - **Every write goes through the one writer** (`cloudflare-worker/src/services/raiseWriters.ts`, `cyclesWrite.raise.*`, or the record's own actions), never `contacts.ts`' older PUT.
 - **Eadwyn proposes next steps, stage moves and message drafts.** It never writes an amount, a status or a Fit.

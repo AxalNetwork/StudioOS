@@ -85,6 +85,7 @@ import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCamp
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
+import { growAttention, unreadableGrowAttention } from '../services/growAttention';
 import { hasRecords } from '../services/records';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { publishPart } from '../services/publishSources';
@@ -100,6 +101,7 @@ import {
 } from '../services/beehiiv/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
+import { codeAmount } from '../../../frontend/src/lib/money.js';
 import {
   CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
   readCalendar, readFromGoogle, syncMetricsSheets,
@@ -149,7 +151,10 @@ r.get('/overview', async (c) => {
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
     // D1333 (#3481): Publish to… from Overview, and what was published from here.
     const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
-    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, ...(await growPhone(x, user, figures, cards)) });
+    let attention;
+    try { attention = await growAttention(x, !(await isSupportSession(c)) && await writes(c, user, pid), { user, figures, cards }); }
+    catch { console.warn('[cycle_grow] attention availability unreadable'); attention = unreadableGrowAttention(x); }
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, attention, ...(await growPhone(x, user, figures, cards)) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -201,7 +206,7 @@ export function dueWindow(due: string, status: string, on: string): string | nul
 export function termsLine(p: Row): string | null {
   if (p.terms_kind == null) return (p.terms as string | null) ?? null;
   const amount = p.terms_pct != null ? `${p.terms_pct}%`
-    : p.terms_amount_cents != null ? `${String(p.terms_currency ?? 'usd').toUpperCase()} ${(Number(p.terms_amount_cents) / 100).toLocaleString('en-US')}` : null;
+    : p.terms_amount_cents != null ? codeAmount(Number(p.terms_amount_cents), String(p.terms_currency ?? 'usd').toUpperCase()) : null;
   return [LABEL[String(p.terms_kind)] ?? String(p.terms_kind), amount].filter(Boolean).join(' · ');
 }
 

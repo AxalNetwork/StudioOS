@@ -17,11 +17,32 @@
  * two messages, and everyone has one place to look instead of opening fixes.
  */
 
+import { infraFingerprint } from './ciClassify.mjs';
+import { SCAN_ALERT_TITLE } from './scanScope.mjs';
+
 export const ALERT_KINDS = Object.freeze({
   'main-red': { title: '[alert] main is red', label: 'main CI' },
   'review-blocked': { title: '[alert] the PR reviewer is not reviewing', label: 'PR reviewer' },
   queue: { title: '[alert] the Actions queue is backed up', label: 'Actions queue' },
+  'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
+  scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
+  // D5398: the nightly future-clock run is stateful too. It used to post on every failing night and keep no issue,
+  // so a date-bound test was announced again each night and nothing said when it was fixed.
+  'future-clock': { title: '[alert] future-clock tests failing', label: 'Future-clock tests' },
 });
+
+/** Newest completed run first. Only a green run clears an existing stall. */
+export function queueStallState(runs) {
+  const [latest, previous] = (runs || []).filter(r => r.event === 'merge_group' && r.status === 'completed')
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  if (latest?.conclusion === 'success') return { active: false, fingerprint: null };
+  const fingerprint = latest?.conclusion === 'failure' ? infraFingerprint(latest.jobs) : null;
+  if (fingerprint && previous?.conclusion === 'failure' && latest.head_sha && previous.head_sha
+      && latest.head_sha !== previous.head_sha && fingerprint === infraFingerprint(previous.jobs)) {
+    return { active: true, fingerprint };
+  }
+  return { active: null, fingerprint: null };
+}
 
 /** Reviewer outcomes that mean no model was called because of setup, not because of the PR. */
 export const REVIEW_BLOCKED_OUTCOMES = Object.freeze(['budget_refused', 'configuration_error']);
@@ -29,6 +50,11 @@ export const REVIEW_BLOCKED_OUTCOMES = Object.freeze(['budget_refused', 'configu
 export const REVIEW_OK_OUTCOMES = Object.freeze(['reviewed', 'duplicate']);
 
 export const QUEUE_DEFAULTS = Object.freeze({ queued: 40, oldestMinutes: 45 });
+/**
+ * D5398: hysteresis. An open queue alert clears only once both figures are below this share of their thresholds, so
+ * a queue hovering at the line does not open and close the alert (and post to the channel) every hour.
+ */
+export const QUEUE_CLEAR_RATIO = 0.5;
 
 /**
  * What to do given whether the condition holds now and whether its issue is
@@ -61,12 +87,14 @@ export function reviewState(outcome) {
  * The queue from the Actions API's queued runs: how many, and how long the
  * oldest has waited. Backed up when either is over its threshold.
  */
-export function queueState({ queued, oldestCreatedAt, now = Date.now(), thresholds = QUEUE_DEFAULTS }) {
+export function queueState({ queued, oldestCreatedAt, now = Date.now(), thresholds = QUEUE_DEFAULTS, issueOpen = false }) {
   const t = Date.parse(oldestCreatedAt || '');
   const waitedMin = Number.isFinite(t) ? Math.max(0, Math.round((now - t) / 60_000)) : 0;
   const count = Number(queued) || 0;
+  // D5398: open at the thresholds; once open, stay open until both are under QUEUE_CLEAR_RATIO of them.
+  const k = issueOpen ? QUEUE_CLEAR_RATIO : 1;
   return {
-    active: count >= thresholds.queued || waitedMin >= thresholds.oldestMinutes,
+    active: count >= thresholds.queued * k || waitedMin >= thresholds.oldestMinutes * k,
     queued: count,
     waitedMin,
   };
@@ -89,13 +117,21 @@ export function message(kind, action, facts = {}) {
   const run = facts.runUrl ? ` <${facts.runUrl}|run>` : '';
   if (action === 'close') return `:white_check_mark: *${k.label} recovered.*${run}${issue} Closing the alert.`;
   if (kind === 'main-red') {
-    return `:red_circle: *main is red.* CI failed on \`${String(facts.sha || '').slice(0, 8)}\`${facts.title ? ` (${facts.title})` : ''}.${run}${issue}\nEvery PR that merges main will fail the same way until it is fixed. One fix, on the issue; please don't open duplicates.`;
+    return `:red_circle: *main is red.* CI failed on \`${String(facts.sha || '').slice(0, 8)}\`${facts.title ? ` (${facts.title})` : ''}.${run}${issue}\nEvery PR inherits it until main is fixed. One repair PR, linked on the issue. Don't port it, merge main into open PRs or re-run for it (AGENTS.md, D5398).`;
   }
   if (kind === 'review-blocked') {
     return `:warning: *The PR reviewer called no model* (\`${facts.outcome}\`)${facts.pr ? ` on #${facts.pr}` : ''}.${run}${issue}\nIts check still passes, so PRs are going unreviewed. The step summary says why (often the monthly budget: \`CLAUDE_REVIEW_MONTHLY_BUDGET_USD\`).`;
   }
   if (kind === 'queue') {
-    return `:hourglass: *The Actions queue is backed up:* ${facts.queued} runs queued, the oldest waiting ${facts.waitedMin} min.${issue}\nCI results will be slow; avoid mass branch updates until it drains.`;
+    return `:hourglass: *The Actions queue is backed up:* ${facts.queued} runs queued, the oldest waiting ${facts.waitedMin} min.${issue}\nCI results will be slow. Until it drains: no branch updates, no bulk re-runs, no ports of a main fix (AGENTS.md, D5398).`;
+  }
+  if (kind === 'queue-stalled') {
+    return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
+  }
+  if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
+  if (kind === 'future-clock') {
+    const text = Number.isSafeInteger(facts.failedCount) ? `:alarm_clock: *${facts.failedCount} verified test failures with the clock ${facts.days} days ahead.*${run}` : facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
+    return `${text}${issue}`;
   }
   return '';
 }

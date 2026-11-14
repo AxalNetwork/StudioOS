@@ -112,6 +112,7 @@ export type EraseWhere = { scope: { kind: 'company' | 'project'; id: number } } 
  * Queued tasks (agent tasks not done) are cancelled; nothing left to run.
  */
 export async function eraseAgentData(env: Env, where: EraseWhere): Promise<void> {
+  await (await import('./computeBridge')).eraseComputeData(env, where);
   // One literal statement set per case; the scope's kind picks which, never splices.
   const kind = 'scope' in where ? where.scope.kind : 'account';
   const bind = 'scope' in where ? where.scope.id : where.userId;

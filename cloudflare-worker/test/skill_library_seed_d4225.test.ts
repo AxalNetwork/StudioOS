@@ -19,9 +19,9 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { mount } from '../src/routes/admin_hq_skills.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
-import { checkLibrary, readLibrarySkill } from '../src/services/agents/skillLibrarySeed.ts';
+import { areaAndLevel, mount } from '../src/routes/admin_hq_skills.ts';
+import { SKILL_LIBRARY, assetsForSkillLibrary } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
+import { areaOf, checkLibrary, readLibrarySkill } from '../src/services/agents/skillLibrarySeed.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const BASELINE = sql('schema_baseline.sql');
@@ -42,11 +42,12 @@ function world() {
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql'));
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
   db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611100853_skill_case_source_identity.sql')); // D5336: the source identity a seeded case came from
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, 'admin', 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super');
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
-  const env: any = { DB, JWT_SECRET: 'd4225-fixture-only-secret', ENVIRONMENT: 'development' };
+  const env: any = { DB, ASSETS: assetsForSkillLibrary(), JWT_SECRET: 'd4225-fixture-only-secret', ENVIRONMENT: 'development' };
   return { db, env };
 }
 type W = ReturnType<typeof world>;
@@ -75,7 +76,7 @@ const n = (w: W, q: string) => (w.db.prepare(q).get() as { n: number }).n;
 test('every library file passes the store\'s own draft and case checks', () => {
   const tax = new Set(sql('migrations/090_seed_skills_values_taxonomy.sql').match(/\('([a-z_]+)',/g)!.map((m) => m.slice(2, -2)));
   assert.ok(SKILL_LIBRARY.length >= 70, `${SKILL_LIBRARY.length} skills`);
-  for (const x of checkLibrary(tax)) assert.ok(x.ok, `${x.entry.slug}: ${x.ok ? '' : `${x.code} ${x.message}`}`);
+  for (const x of checkLibrary(tax, SKILL_LIBRARY)) assert.ok(x.ok, `${x.entry.slug}: ${x.ok ? '' : `${x.code} ${x.message}`}`);
   for (const e of SKILL_LIBRARY) assert.ok(readLibrarySkill(e.skill_md), `${e.slug}: does not parse`);
 });
 
@@ -166,4 +167,25 @@ test('GET /library: every skill with its area and level, ten or more per area, a
   await call(w, SUPER, 'POST', `${LIB}/seed`, { reason: REASON });
   const after = await call(w, SUPER, 'GET', LIB);
   assert.ok(after.body.skills.every((s: any) => s.in_store === 'draft'));
+});
+
+test('D5334: source, seed and HQ list use the same primary tag area and that tag\'s level', () => {
+  const w = world();
+  const rows = w.db.prepare('SELECT slug, category_slug AS category FROM skills WHERE is_active = 1').all() as Array<{ slug: string; category: string }>;
+  const category = new Map(rows.map((row) => [row.slug, row.category]));
+  const checked = checkLibrary(new Set(category.keys()), SKILL_LIBRARY);
+  for (const item of checked) {
+    assert.equal(item.ok, true, item.entry.slug);
+    if (!item.ok) continue;
+    const raw = readLibrarySkill(item.entry.skill_md)! as any;
+    const source = areaOf(raw.tags, (slug) => category.get(slug) ?? null);
+    const seeded = areaOf(item.draft.tags, (slug) => category.get(slug) ?? null);
+    const listed = areaAndLevel(item.draft, category);
+    assert.deepEqual(seeded, source, `${item.entry.slug}: seed differs from source`);
+    assert.deepEqual({ area: listed.area?.slug ?? null, level: listed.level }, source, `${item.entry.slug}: HQ list differs from source`);
+  }
+  // Mutation checked: taking the highest level across all tags changes this from the mapped first tag's `working`.
+  const caseStudy = checked.find((item) => item.entry.slug === 'case-study-draft');
+  assert.ok(caseStudy?.ok, 'the committed differing-level fixture is present');
+  if (caseStudy?.ok) assert.deepEqual(areaOf(caseStudy.draft.tags, (slug) => category.get(slug) ?? null), { area: 'marketing_brand', level: 'working' });
 });

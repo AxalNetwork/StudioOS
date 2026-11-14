@@ -1,3 +1,4 @@
+import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -98,7 +99,7 @@ function FitTile({ label, value, note, nr = false }) {
 function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   const [kind, setKind] = useState(initial?.kind || 'best_fit');
   const [floor, setFloor] = useState(
-    initial?.floor_cents != null ? String(initial.floor_cents / 100) : '',
+    centsToInput(initial?.floor_cents),
   );
   const [value, setValue] = useState(initial?.value || '');
   const [statement, setStatement] = useState(initial?.statement || '');

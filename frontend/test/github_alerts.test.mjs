@@ -76,11 +76,12 @@ test('messages: one per transition, recovery for every kind, nothing for a clean
   assert.match(futureClockMessage({ days: 7, failures: { names: ['a'], more: 2 } }), /3 test\(s\) fail with the clock 7 days ahead[\s\S]*• a[\s\S]*2 more/);
 });
 
+// The Date-only mode, with no libfaketime, also when this suite itself runs under the nightly libfaketime job.
 test('future-clock.mjs moves Date.now() and new Date() ahead, and leaves new Date(x) alone', () => {
   const code = 'const a=Date.now();const b=new Date().getTime();const c=new Date(0).getTime();console.log(JSON.stringify({a,b,c,real:performance.timeOrigin+performance.now()}))';
   const loader = resolve(root, 'scripts/future-clock.mjs');
   const run = (days) => {
-    const r = spawnSync(process.execPath, [`--import=${loader}`, '-e', code], { env: { ...process.env, FUTURE_CLOCK_DAYS: days }, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [`--import=${loader}`, '-e', code], { env: { ...process.env, FUTURE_CLOCK_DAYS: days, LD_PRELOAD: '', FAKETIME: '' }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     return JSON.parse(r.stdout);
   };
@@ -102,17 +103,30 @@ test('the workflow wires each alert, and the reviewer alert sits in claude-revie
   assert.match(wf, /--import=\$GITHUB_WORKSPACE\/scripts\/future-clock\.mjs/);
   assert.match(wf, /FUTURE_CLOCK_DAYS: '7'/);
   assert.match(wf, /SLACK_GITHUB_WEBHOOK_URL: \$\{\{ secrets\.SLACK_GITHUB_WEBHOOK_URL \}\}/);
-  // Every CI test part runs ahead: the matrix names the same parts CI does.
-  const parts = /part: \[([^\]]+)\]/.exec(wf)[1].split(',').map((s) => s.trim());
-  assert.deepEqual(parts.filter((p) => /^(frontend|worker)-/.test(p)).length, 8);
+  // Every test part comes from the shared generator; the nightly run omits rest.
+  assert.match(wf, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
+  assert.match(wf, /--plan test-timings\.json --without-rest/);
 
   const review = read('.github/workflows/claude-review.yml');
   assert.match(review, /outcome: \$\{\{ steps\.review\.outputs\.outcome \}\}/);
   assert.match(review, /node scripts\/github-alerts\.mjs review-blocked/);
+  // #6363: the serialised alert job starts only when there is an alert to open or close, so
+  // pushes to many PRs at once no longer cancel each other's alert job and mark the PRs red.
+  const gate = review.split('  alert-needed:\n')[1].split('\n  alert:\n')[0], alert = review.split('\n  alert:\n')[1];
+  assert.doesNotMatch(gate, /concurrency:/, 'the gate is outside the group, or it would be cancelled the same way');
+  assert.match(gate, /permissions:\n\s+issues: read\n/);
+  assert.doesNotMatch(gate, /issues: write|SLACK_GITHUB_WEBHOOK/);
+  assert.ok(gate.includes(`"\\[alert\\] the PR reviewer is not reviewing"`), 'the gate looks for the alert by its exact title');
+  assert.ok(gate.includes(ALERT_KINDS['review-blocked'].title.replace('[alert]', '\\[alert\\]')), 'and that title is the one the reporter opens');
+  assert.match(gate, /else open=unknown; fi/, 'an unreadable issue list counts as needed');
+  assert.match(gate, /grep -c [^\n]+ \|\| true\)/, 'and no match is a count of 0, not a failure');
+  assert.match(gate, /\*\) needed=true/, 'a blocked or unknown outcome always reaches the reporter');
+  assert.match(alert, /needs: \[review, alert-needed\]\n\s+if: \$\{\{ always\(\) && needs\.alert-needed\.outputs\.needed == 'true' \}\}/);
+  assert.match(alert, /group: github-health-review-blocked\n\s+cancel-in-progress: false/);
 });
 
-test('an alert never fails its run: the CLI catches and exits 0', () => {
+test('a trusted reporter fails visibly without changing the watched run', () => {
   const r = spawnSync(process.execPath, [resolve(root, 'scripts/github-alerts.mjs'), 'nonsense'], { env: { ...process.env, GITHUB_TOKEN: '', SLACK_GITHUB_WEBHOOK_URL: '' }, encoding: 'utf8' });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /::warning::github-alerts: unknown mode/);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /::error::github-alerts observation or persistence unavailable/);
 });

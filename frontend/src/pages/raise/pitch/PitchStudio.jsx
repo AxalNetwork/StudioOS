@@ -87,13 +87,20 @@ const settle = (alive, set, key) => (p) => p.then(
 );
 
 /**
+ * D4599: the tabs that draw nothing from the Raise module read (the links table and the views card,
+ * `reads.module`). Only Decks (`StudioHome`) and Share & analytics draw it, so these tabs leave it
+ * idle and it is read when one of those opens. A tab not listed here reads it, as before.
+ */
+export const NO_MODULE_TABS = Object.freeze(['overview', 'script', 'review', 'notes']);
+
+/**
  * The studio's reads. The venture comes from `?project_id=` (else the first
  * one, written back); each read answers alone, and `reload()` reads them again.
  * A re-read of the same venture (Try again, a page of links, the re-read after
  * a Withdraw) keeps the tab on screen until it answers. A run that has been
  * superseded writes nothing, so a late answer never overwrites a newer one.
  */
-function useStudioReads() {
+function useStudioReads(tab) {
   const [params, setParams] = useSearchParams();
   const requested = params.get('project_id');
   const [projects, setProjects] = useState(loading);
@@ -140,13 +147,16 @@ function useStudioReads() {
     return () => { live = false; };
   }, [projectId, tick]);
 
+  const needsModule = !NO_MODULE_TABS.includes(tab);
   useEffect(() => {
     if (projectId == null) { setModule(idle); return undefined; }
+    // A read this venture finished is kept (a tab that draws it reads again on arrival); anything else is idle.
+    if (!needsModule) { setModule((m) => (m.status === 'ok' && m.for === projectId ? { ...m, reading: false } : idle)); return undefined; }
     let live = true;
     setModule(again(projectId));
     settle(() => live, setModule, projectId)(cyclesApi.module('raise', projectId, 'pitch-deck', { page }));
     return () => { live = false; };
-  }, [projectId, page, tick]);
+  }, [projectId, page, tick, needsModule]);
 
   // Stable, and a no-op for the page already asked for, so the pager's own
   // effect cannot loop while the page it asked for is still being read.
@@ -164,7 +174,7 @@ function useStudioReads() {
 export default function PitchStudio({ tab = 'overview' }) {
   const { user } = useAuth() || {};
   const readOnly = isReadOnly(user);
-  const reads = useStudioReads();
+  const reads = useStudioReads(tab);
   const projectId = reads.project?.id || null;
   // Until the ventures read answers, or when it fails, the venture in the
   // address: a tab never drops it and lands on another one.

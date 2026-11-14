@@ -26,7 +26,7 @@ import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
 import RailSteps from './RailSteps.jsx';
-import { FOUNDER_RECORD_OFF } from './reasonGate';
+import { FOUNDER_RECORD_OFF } from './reasonGate.js';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -499,6 +499,12 @@ export default function WorkerRail({
    */
   steps = null,
   /**
+   * D5034 part 4 (#5034): a page's own prompts, drawn first among the Ask
+   * panel's chips; pressing one fills the composer with its words and sends
+   * nothing. Without it, nothing changes.
+   */
+  prompts = null,
+  /**
    * D1463 (#3713, Q1 A pending owner): 'founder-record' while an admin reads a
    * founder's private record behind a reason. The rail keeps who and where,
    * and draws no AI switch, no suggestions, no spend and no usage, no Ask and
@@ -756,6 +762,7 @@ export default function WorkerRail({
       label={askState.label}
       crumb={section}
       options={rail.options}
+      prompts={prompts}
       aiOn={aiOn}
       layout={askAt}
       onClose={(why) => askPanelEvent({ type: why || 'close' })}

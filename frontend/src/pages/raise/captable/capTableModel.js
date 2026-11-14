@@ -33,6 +33,8 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { exponentOf, formatMinorOrCount } from '../../../lib/money.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 
 export const SLUG = 'cap-table';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -82,34 +84,72 @@ export const HOLDER_ID = /^h-[1-9]\d*$/;
  */
 export const isCapTableTab = (slug, id) => slug === SLUG && (TAB_WORDS.has(String(id ?? '')) || HOLDER_ID.test(String(id ?? '')));
 
-/** The query a tab keeps: the venture only. */
+/**
+ * D5074 slice 2 (#5074): who the viewer is on this cap table, from the record read's `capabilities` alone
+ * (`services/capTableCapabilities.ts`, the map every record write refuses from). Nothing here reads the account's
+ * role, its plan or the grants read: a control is drawn when the Worker's map allows it.
+ *   - `can(key)`: true only for a `true` in the map (no map, an unknown key or any other value allows nothing);
+ *   - `role`: 'owner' records, 'cofounder' proposes, 'reader' does neither (an ordinary admin is a reader who
+ *     corrects, with `admin` true and a reason the founder reads);
+ *   - `plan`: the Studio plan; a write is drawn only with it, and the plan's gate only without it.
+ */
+export function recordStanding(record) {
+  const caps = record?.status === 'ready' && record.data && typeof record.data.capabilities === 'object' ? record.data.capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  const admin = can('correct') && can('admin_reason_required');
+  const role = admin ? 'reader' : can('record') ? 'owner' : can('propose') ? 'cofounder' : 'reader';
+  return { known: !!caps, can, plan: can('plan'), role, admin, writes: (can('record') || can('propose')) && can('plan') };
+}
+
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
 }
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-/** "$500,000" from whole dollars (the model's unit). Missing is "Not recorded", never $0. */
-export function dollars(v) {
+/**
+ * D5373: the currency code a cap-table figure is shown in: a bare code, a read's `{ code }`, or USD (the venture default
+ * when none is recorded). Upper-cased, as `money()` reads it.
+ */
+export function codeOf(currency) {
+  const c = currency && typeof currency === 'object' ? currency.code : currency;
+  return String(c || 'USD').toUpperCase();
+}
+
+/**
+ * D5497: the currency a cap-table figure is in. A saved model (and any scenario that starts from it) is whole US dollars by
+ * contract; a figure that comes from the RECORD (Today, a recorded instrument, a scenario that starts from Today) is in the
+ * record's own currency. `fromRecord` says which; where it cannot be told, the caller passes false and the figure is USD.
+ */
+export const sourceCurrency = (fromRecord, recordCurrency) => (fromRecord ? codeOf(recordCurrency) : 'USD');
+
+/** The mark that goes before an amount: "$" for USD, the code and a space for any other currency (as the option pool does). */
+export const symbolOf = (currency) => { const c = codeOf(currency); return c === 'USD' ? '$' : `${c} `; };
+
+/**
+ * "$500,000" from whole major units (the model's unit), in the venture's currency (D5373): USD prints exactly as it
+ * always did; any other code prints "EUR 5,000", "JPY 5,000", "KWD 1.25" at that currency's own decimals (JPY none, KWD
+ * up to three, else up to two). The value is already whole major units, so nothing is converted here. A code the layer
+ * does not list prints the number as stored beside the code, with no decimals guessed. Missing is "Not recorded", never 0.
+ */
+export function dollars(v, currency = 'USD') {
   const n = num(v);
   if (n == null) return NOT_RECORDED;
-  return `$${n.toLocaleString('en-US', { maximumFractionDigits: n % 1 ? 2 : 0 })}`;
+  const code = codeOf(currency);
+  const exp = exponentOf(code);
+  if (exp === null) return `${code} ${n}`;
+  return `${symbolOf(code)}${n.toLocaleString('en-US', { maximumFractionDigits: n % 1 ? exp : 0 })}`;
 }
 
 /** An amount in the currency's smallest unit (SAFE issuances), in its own currency. */
 export function money(cents, currency = 'USD') {
   const n = num(cents);
   if (n == null) return NOT_RECORDED;
-  const code = /^[A-Za-z]{3}$/.test(String(currency || '')) ? String(currency).toUpperCase() : 'USD';
-  try {
-    return (n / 100).toLocaleString('en-US', { style: 'currency', currency: code, maximumFractionDigits: n % 100 ? 2 : 0 });
-  } catch {
-    return `${(n / 100).toLocaleString('en-US')} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a missing currency is the issuance's USD default, an unlisted code names the count.
+  return formatMinorOrCount(n, String(currency || 'USD').toUpperCase(), { locale: 'en-US', trimWhole: true });
 }
 
 /** "61.54%" to two places; missing is "Not recorded". */
@@ -140,6 +180,7 @@ export function harbour(read) {
     state: String(st.state || 'none'),
     reason: st.reason || NOT_RECORDED,
     expires: day(st.expires_on),
+    // A 409A valuation is a US tax valuation: `valuations_409a` has no currency column, so the FMV is US dollars by contract.
     fmv: c && num(c.fmv_per_share) != null ? `$${c.fmv_per_share.toFixed(2)}` : NOT_RECORDED,
     provider: c?.provider || NOT_RECORDED,
     valued: day(c?.valuation_date),
@@ -158,7 +199,9 @@ export function foundersAfter(result) {
 }
 
 /** One scenario card (CT6), every figure Modelled. The saved model is "Cap table · model" (CT19b). */
-export function scenarioCard(s, { model = false } = {}) {
+export function scenarioCard(s, { model = false, currency = 'USD' } = {}) {
+  // `currency` is the RECORD's; only a scenario that starts from Today is in it (the saved model and model scenarios are USD, D5497).
+  const cur = sourceCurrency(!model && !!s?.inputs?.start, currency);
   const round = s?.inputs?.rounds?.[0];
   const after = foundersAfter(s?.result);
   return {
@@ -168,7 +211,7 @@ export function scenarioCard(s, { model = false } = {}) {
     // D1024: where the scenario starts — the record (D1018's `start`), or a model typed by hand.
     start: model ? 'Your saved model' : s?.inputs?.start ? 'Starts from Today' : 'Starts from your model',
     round: round
-      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money)} · raise ${dollars(round.investment)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
+      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money, cur)} · raise ${dollars(round.investment, cur)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
       : 'No round is planned.',
     founders: after == null ? NOT_RECORDED : pct(after),
     changed: day(s?.updated_at),
@@ -177,11 +220,11 @@ export function scenarioCard(s, { model = false } = {}) {
 }
 
 /** The compare read as cards: the model first, then the variants, newest first as the Worker sends them. */
-export function scenarioCards(read) {
+export function scenarioCards(read, currency = 'USD') {
   if (!read) return [];
   const out = [];
-  if (read.canonical) out.push(scenarioCard(read.canonical, { model: true }));
-  for (const v of Array.isArray(read.variants) ? read.variants : []) out.push(scenarioCard(v));
+  if (read.canonical) out.push(scenarioCard(read.canonical, { model: true, currency }));
+  for (const v of Array.isArray(read.variants) ? read.variants : []) out.push(scenarioCard(v, { currency }));
   return out;
 }
 

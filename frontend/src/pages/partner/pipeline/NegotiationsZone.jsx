@@ -505,7 +505,8 @@ export default function PartnerNegotiationsZone() {
           <NegotiationTile
             label="Live negotiations"
             value={String(d?.live_count ?? open.length)}
-            note={`${moneyDollars(d?.live_value_dollars ?? 0)} carried`}
+            // D4838: money only over negotiations that exist; none live is not "$0 carried".
+            note={(d?.live_count ?? open.length) ? `${moneyDollars(d?.live_value_dollars ?? 0)} carried` : 'nothing carried'}
           />
           <NegotiationTile
             label="Awaiting you"

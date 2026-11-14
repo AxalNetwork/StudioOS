@@ -351,7 +351,7 @@ test('a renewal adds a cycle; ending one records the loss and closes the lane', 
   assert.equal(renewed.body.renewal_note, 'Fifth cycle. Longest-running.');
   assert.equal(renewed.body.term_ends_at, '2027-02-04');
 
-  const ended = await decide(e, row.id, ada, { decision: 'ended', note: 'Two cycles, then they hired in-house. Good outcome.' });
+  const ended = await decide(e, row.id, ada, { decision: 'ended', end_reason: 'did_not_renew', note: 'Two cycles, then they hired in-house. Good outcome.' });
   assert.equal(ended.status, 200);
   assert.equal(ended.body.lane, 'ended');
   assert.equal(ended.body.outcome, 'ended');
@@ -376,7 +376,7 @@ test('an unsigned engagement has no renewal to decide', async () => {
 test('an engagement that has ended is terminal on both verbs', async () => {
   const e = env(freshDb());
   const row = await sign(e);
-  await decide(e, row.id, ada, { decision: 'ended' });
+  await decide(e, row.id, ada, { decision: 'ended', end_reason: 'did_not_renew' });
   const lane = await call(e, 'POST', `/me/engagements/${row.id}/advance`, ada, { lane: 'signed' });
   assert.equal(lane.status, 409, 'a recorded outcome cannot be quietly un-recorded');
   const again = await decide(e, row.id, ada, { decision: 'renewed' });
@@ -393,7 +393,7 @@ test('the renewal rate counts its failures, and reports nothing before the first
   }
   for (const name of ['Solano Health', 'Brackish']) {
     const row = await sign(e, ada, { client_name: name });
-    await decide(e, row.id, ada, { decision: 'ended' });
+    await decide(e, row.id, ada, { decision: 'ended', end_reason: 'did_not_renew' });
   }
   // Plus a draft and a signed-but-undecided row, neither of which is a decision.
   await create(e, ada, { client_name: 'Kelp Bio' });
@@ -430,7 +430,7 @@ test('Active counts lanes, not outcomes', async () => {
   await decide(e, renewed.id, ada, { decision: 'renewed' });
   // ...and one that ended, which is in neither count.
   const gone = await sign(e, ada, { client_name: 'Solano Health', shape: 'retainer' });
-  await decide(e, gone.id, ada, { decision: 'ended' });
+  await decide(e, gone.id, ada, { decision: 'ended', end_reason: 'other' });
 
   const t = (await call(e, 'GET', '/me/engagements', ada)).body.totals;
   // The canvas comment, enforced: "A draft that was never sent and a proposal
@@ -644,7 +644,8 @@ test('an account with no advisor profile cannot reach the store at all', async (
     ['POST', '/me/engagements', { client_name: 'X' }],
   ] as const) {
     const r = await call(e, method, path, fran, body);
-    assert.equal(r.status, 400, `${method} ${path}`);
-    assert.match(String(r.body.detail), /No advisor profile/);
+    // #5363: a founder holds no Advisor licence, so the coded licence refusal.
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.error, 'advisor_licence_required');
   }
 });

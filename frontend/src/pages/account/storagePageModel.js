@@ -21,6 +21,8 @@
  * here that meets a full or over plan says what is kept.
  */
 
+import { formatStripeAmount } from '../../lib/money.js';
+
 export const STORAGE_PAGE = Object.freeze({
   title: 'Storage',
   sub: 'How much you keep on StudioOS, across all your companies.',
@@ -104,10 +106,9 @@ function monthly(plans, key) {
   const row = (Array.isArray(plans?.plans) ? plans.plans : []).find((p) => p?.catalogue?.key === key && p.monthly);
   const m = row?.monthly;
   if (!m || !isCount(m.unit_amount)) return null;
-  try {
-    const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: String(m.currency || 'usd').toUpperCase(), minimumFractionDigits: m.unit_amount % 100 ? 2 : 0 }).format(m.unit_amount / 100);
-    return `${money} a month`;
-  } catch { return null; }
+  // D5373: Stripe's amount at the price's own currency decimals; the plans are sold in USD unless the price names another.
+  const money = formatStripeAmount(m.unit_amount, m.currency || 'usd', { locale: 'en-US', trimWhole: true });
+  return money === null ? null : `${money} a month`;
 }
 
 /**
@@ -289,6 +290,7 @@ export const AREA_PLACE = Object.freeze({
   brand_files: ['your account', '/account'],
   csv_imports: ['your imports', null],
   articles: ['your articles', '/articles/draft'],
+  agent_compute: ['your agent results', null],
 });
 
 function day(iso) {

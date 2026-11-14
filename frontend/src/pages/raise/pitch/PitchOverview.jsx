@@ -10,6 +10,9 @@ import { DeckCard } from './StudioHome';
 import { useDeckChecks } from './DeckVersions';
 import { useDeckSources } from './SourcesBoards';
 import { DraftDialog } from '../caprel/CapRelOutreach';
+import DocumentImport from './DocumentImport';
+import { availability } from './deckV2Adapter';
+import { LATER } from './deckV2Model';
 import { NEW_PATH } from './newDeckModel';
 import { TEMPLATES_PATH } from './templatesModel';
 import { NOT_RECORDED, NOTES_PATH, REVIEW_PATH, asList, currentVersion, dayLabel, readerStats } from './pitchStudioModel';
@@ -74,7 +77,8 @@ export default function PitchOverview({ reads, readOnly, q }) {
   const current = currentVersion(versions);
   const projectId = reads.project?.id ?? null;
   const deckId = current?.id ?? null;
-  const checks = useDeckChecks(reads.versions.status === 'ok' ? projectId : null, versions.length);
+  // D4599: the check pills are drawn on the deck card only, so no deck is no checks read.
+  const checks = useDeckChecks(current ? projectId : null, versions.length);
   const sources = useDeckSources(projectId);
   const rehearsals = useVersionRead(deckId, listRehearsals, 'rehearsals');
   const comments = useVersionRead(deckId, listComments, 'comments');
@@ -91,7 +95,7 @@ export default function PitchOverview({ reads, readOnly, q }) {
       </div>
     );
   }
-  if (!current) return <NoDeck q={q} readOnly={readOnly} />;
+  if (!current) return <NoDeck q={q} readOnly={readOnly} projectId={projectId} />;
 
   return (
     <div className="flex flex-col gap-3.5" data-testid="pitch-overview">
@@ -230,25 +234,58 @@ function HqNote({ read, q }) {
   );
 }
 
-/** ps2: no deck yet. The ways in that exist, and what Pitch does; no numbers. */
-function NoDeck({ q, readOnly }) {
+/**
+ * ps2: no deck yet. The ways in that exist, and what Pitch does; no numbers.
+ * D4599: the import is the third way in. It opens the Decks tile's sheet in place, so a founder
+ * on a phone or a desktop imports from the first screen. Off on this Worker, it says so and opens nothing.
+ */
+function NoDeck({ q, readOnly, projectId }) {
+  const [importing, setImporting] = useState(false);
   const to = { records: `${NEW_PATH}${q}`, template: `${TEMPLATES_PATH}${q}` };
+  const head = (it, i) => (
+    <>
+      <span className={`text-[14px] font-extrabold ${INK}`}>{it.title}</span>
+      <span className={MUTED}>{it.line}</span>
+      {i === 0 ? <span className={`${PRIMARY} mt-1 self-start`}>Start</span> : null}
+    </>
+  );
   return (
     <div className="flex flex-col gap-3.5" data-testid="pitch-overview-no-deck">
       <section className={`${CARD} flex flex-col gap-4 p-6`}>
         <h2 className={`m-0 text-[18px] font-extrabold ${INK}`}>{NO_DECK_TITLE}</h2>
         {readOnly ? <span className={MUTED}>The founders haven’t built a deck yet.</span> : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {NO_DECK_ITEMS.map((it, i) => (
-              <Link key={it.id} to={to[it.id]} className={`${CARD} flex flex-col gap-1.5 p-4 hover:border-axal-violet`} data-testid={`pitch-overview-start-${it.id}`}>
-                <span className={`text-[14px] font-extrabold ${INK}`}>{it.title}</span>
-                <span className={MUTED}>{it.line}</span>
-                {i === 0 ? <span className={`${PRIMARY} mt-1 self-start`}>Start</span> : null}
-              </Link>
-            ))}
+          <div className="grid gap-3 md:grid-cols-3">
+            {NO_DECK_ITEMS.map((it, i) => {
+              if (!it.adapter) {
+                return (
+                  <Link key={it.id} to={to[it.id]} className={`${CARD} flex flex-col gap-1.5 p-4 hover:border-axal-violet`} data-testid={`pitch-overview-start-${it.id}`}>
+                    {head(it, i)}
+                  </Link>
+                );
+              }
+              const off = availability(it.adapter);
+              if ((off && off.available !== true) || projectId == null) {
+                return (
+                  <div key={it.id} className={`${CARD} flex flex-col gap-1.5 p-4`} aria-disabled="true" title={off?.reason || undefined} data-testid={`pitch-overview-start-${it.id}`}>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[14px] font-extrabold text-axal-muted dark:text-gray-500">{it.title}</span>
+                      <span className="font-mono text-[10px] text-axal-muted dark:text-gray-500" data-testid={`pitch-overview-start-${it.id}-off`}>{LATER}</span>
+                    </span>
+                    <span className={MUTED}>{it.line}</span>
+                  </div>
+                );
+              }
+              return (
+                <button key={it.id} type="button" onClick={() => setImporting(true)}
+                  className={`${CARD} flex min-h-[44px] flex-col gap-1.5 p-4 text-left hover:border-axal-violet`} data-testid={`pitch-overview-start-${it.id}`}>
+                  {head(it, i)}
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
+      {importing ? <DocumentImport projectId={projectId} q={q} onClose={() => setImporting(false)} /> : null}
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4" data-testid="pitch-overview-what">
         {WHAT_PITCH_DOES.map(([t, line]) => (
           <section key={t} className={`${CARD} flex flex-col gap-1 p-4`}>

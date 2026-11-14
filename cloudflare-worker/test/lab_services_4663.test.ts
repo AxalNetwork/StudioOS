@@ -34,11 +34,11 @@ import { reportingWorld, meteredD1, worldNow } from './_lab_reporting_world.ts';
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
 import { isLabGraduate, weekMet } from '../src/services/spinoutLabCatalog.ts';
-import { completeLabMilestone, reconcileLabProgress } from '../src/services/labProgress.ts';
+import { completeLabMilestone, issueIfGraduated, reconcileLabProgress } from '../src/services/labProgress.ts';
 import { graduationOf } from '../src/services/labGraduation.ts';
 import { getLabState } from '../src/services/labLifecycle.ts';
 import { GRADUATES_SHOWN, COHORT_ACTIVE_SHOWN, COHORT_GRADUATES_SHOWN } from '../src/services/labReporting.ts';
-import { backfillCertificates } from '../src/services/certificateIssuance.ts';
+import { backfillCertificates, runCertificateBackfillTick } from '../src/services/certificateIssuance.ts';
 import { getSQL } from '../src/db.ts';
 
 afterAll(() => removeMigratedDatabases());
@@ -68,7 +68,9 @@ function world(): DatabaseSync {
   return db;
 }
 
-const envOf = (db: DatabaseSync, DB: any = d1Over(db)) => ({ JWT_SECRET, ENVIRONMENT: 'development', DB }) as any;
+/** D5360: set to `{ BRANCH_CODE }` by a test that runs as a branch; HQ otherwise. */
+let BRANCH: Record<string, string> = {};
+const envOf = (db: DatabaseSync, DB: any = d1Over(db)) => ({ JWT_SECRET, ENVIRONMENT: 'development', DB, ...BRANCH }) as any;
 const quiet = async <T>(fn: () => Promise<T>) => {
   const w = console.warn, e = console.error, i = console.info; console.warn = () => {}; console.error = () => {}; console.info = () => {};
   try { return await fn(); } finally { console.warn = w; console.error = e; console.info = i; }
@@ -175,11 +177,42 @@ test('#4663 two requests at once: one step records and pays once; the last two s
     assert.equal(all(db, `SELECT 1 FROM spinout_lab_milestones WHERE user_id = ? AND milestone_key = 'okrs_created'`, F).length, 1);
     // Everything but the last two required steps, then both at once.
     for (const k of ORDERED.slice(0, -2)) { proveMilestone(db, F, k); assert.equal((await step(db, F, k)).status, 200, k); }
-    const [a, b] = ORDERED.slice(-2);
-    proveMilestone(db, F, a); proveMilestone(db, F, b);
-    const both = await Promise.all([step(db, F, a), step(db, F, b)]);
-    assert.deepEqual(both.map((r) => r.status), [200, 200]);
+    const [lastStep, incorporationKey] = ORDERED.slice(-2);
+    proveMilestone(db, F, lastStep);
+    proveMilestone(db, F, incorporationKey);
+    const creditReached = Promise.withResolvers<void>();
+    const releaseCredit = Promise.withResolvers<void>();
+    const real = d1Over(db);
+    const delayed = { ...real, prepare(sql: string) {
+      const stmt = real.prepare(sql);
+      if (!sql.startsWith('INSERT OR IGNORE INTO perk_credit_ledger')) return stmt;
+      return { ...stmt, bind(...args: unknown[]) {
+        const bound = stmt.bind(...args);
+        if (args[2] !== `lab:${F}:${incorporationKey}`) return bound;
+        return { ...bound, async run() {
+          creditReached.resolve();
+          await releaseCredit.promise;
+          return bound.run();
+        } };
+      } };
+    } };
+    const incorporation = step(db, F, incorporationKey, delayed);
+    try {
+      // The incorporation milestone is visible while its credit is in flight.
+      await Promise.race([creditReached.promise, incorporation.then(() => {
+        assert.fail('incorporation returned before reaching its credit write');
+      })]);
+      const finalStep = await step(db, F, lastStep);
+      assert.equal(finalStep.status, 200);
+      assert.equal(issued(db, F).length, 1);
+      assert.ok(!grants(db, F).includes(`lab:${F}:graduation`), 'incorporation credit has not landed');
+    } finally {
+      releaseCredit.resolve();
+      await incorporation;
+    }
+    assert.equal((await incorporation).status, 200);
     assert.equal(await agree(db, F, 'Lab Venture', 'Old Side Project'), true);
+    assert.equal(await issueIfGraduated(envOf(db), F), null, 'a retry returns no new bonus');
     assert.equal(grants(db, F).filter((g) => g.endsWith(':graduation')).length, 1);
   } finally { db.close(); }
 });
@@ -354,3 +387,65 @@ test('#4663 a graduate\'s unrelated project never adds to the money raised', asy
   } finally { db.close(); }
 });
 
+
+// ---------------------------------------------------------------- D5360 ----
+// #5360: the final milestone (and the reconciler's `issueIfGraduated`) asks the
+// same hold the admin routes and the scheduled backfill ask. A frozen or
+// ungranted branch, or one whose grants cannot be read, records the step but
+// issues no credential and no bonus; the first tick after the hold lifts issues
+// both, once. HQ stays ungated (every test above runs as HQ and issues).
+const LAB_HELD = JSON.stringify({ grants: [{ uid: 'g-lab', program_key: 'spinout-lab', state: 'granted', schedule_signed_at: '2026-09-01 10:00:00' }], offered: {} });
+for (const [label, status, programs, held] of [
+  ['a suspended branch', 'suspended', null, 'frozen'],
+  ['a licence that does not hold the Spin-Out Lab', 'active', JSON.stringify({ grants: [], offered: {} }), 'not_granted'],
+  ['grants that cannot be read', 'active', 'not json', 'grants_unreadable'],
+] as const) {
+  // Mutation checked: the hold removed from `issueIfGraduated` (the final step issues: fails for
+  // all three); a 503 refusal mapped to `not_granted` (the unreadable case's tick status: fails);
+  // the `branchOf` short-circuit inverted (HQ held: every HQ test above fails).
+  test(`#5360 the final milestone on ${label} records the step, issues nothing, and the next tick after the hold lifts issues once`, async () => {
+    const db = world();
+    BRANCH = { BRANCH_CODE: 'fr' };
+    try {
+      db.prepare(`INSERT INTO branch_licence (id, licence_uid, status, pushed_at, program_grants_json) VALUES (1, 'lic-synthetic', ?, '2026-11-01 00:00:00', ?)`)
+        .run(status, programs);
+      for (const k of ORDERED) { proveMilestone(db, F, k); assert.equal((await step(db, F, k)).status, 200, k); }
+      assert.equal(isLabGraduate(recorded(db, F)), true, 'every step is recorded');
+      assert.equal((await graduationOf(envOf(db), F)).by_rule, true);
+      assert.deepEqual(issued(db, F), [], 'no credential on a held branch');
+      assert.ok(!grants(db, F).includes(`lab:${F}:graduation`), 'no bonus on a held branch');
+      // The reconciler's path asks the same hold.
+      assert.equal(await quiet(() => issueIfGraduated(envOf(db), F)), null);
+      assert.deepEqual(issued(db, F), []);
+      // The scheduled backfill is held the same way.
+      const heldTick = await quiet(() => runCertificateBackfillTick(envOf(db)));
+      assert.deepEqual([heldTick.status, heldTick.issued], [held, 0]);
+      // The hold lifts: the next tick issues the credential and its bonus, once.
+      db.prepare(`UPDATE branch_licence SET status = 'active', program_grants_json = ? WHERE id = 1`).run(LAB_HELD);
+      const lifted = await quiet(() => runCertificateBackfillTick(envOf(db)));
+      assert.deepEqual([lifted.status, lifted.issued], ['done', 1]);
+      assert.deepEqual(issued(db, F), [{ project_id: VENTURE, public_company: 'Lab Venture' }]);
+      const again = await quiet(() => runCertificateBackfillTick(envOf(db)));
+      assert.deepEqual([again.scanned, again.bonus.scanned], [0, 0]);
+      assert.equal(grants(db, F).filter((g) => g === `lab:${F}:graduation`).length, 1, 'one bonus');
+    } finally { BRANCH = {}; db.close(); }
+  });
+}
+
+test('#5360 the admin issue and backfill routes refuse on an ungranted licence through the same hold', async () => {
+  const db = world();
+  BRANCH = { BRANCH_CODE: 'fr' };
+  try {
+    db.prepare(`INSERT INTO branch_licence (id, licence_uid, status, pushed_at, program_grants_json) VALUES (1, 'lic-synthetic', 'active', '2026-11-01 00:00:00', 'not json')`).run();
+    db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (900, 'admin', 'Synthetic Admin', 'a@example.test', 1)`).run();
+    const token = await new SignJWT({ user_id: 900, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    for (const path of ['/certificates', '/certificates/backfill']) {
+      const res = await quiet(() => certificates.request(path, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: F }),
+      }, envOf(db)));
+      assert.equal(res.status, 503, path);
+      assert.equal(((await res.json()) as any).code, 'program_grants_unreadable', path);
+    }
+  } finally { BRANCH = {}; db.close(); }
+});

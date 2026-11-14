@@ -110,7 +110,7 @@ test('provider chips show their status; Connect links to Connectors; importing f
   const text = renderedText(video);
   // D1346 (#3554): Eadwyn AI joins Meet as a guest, so the chip never asks for a connection.
   assert.ok(!text.includes('Google Meet · Connect'), 'no Connect on the Meet chip');
-  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Coming soon', 'WhatsApp · Coming soon', 'Telegram · Coming soon', 'Signal · Coming soon', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
+  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Checking', 'WhatsApp · Coming soon', 'Telegram · Coming soon', 'Signal · Coming soon', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));
@@ -350,6 +350,40 @@ test('a refused Start prints the Worker\'s words, deletes nothing, and keeps its
     refuse = false;
     await m.click('record-start');
     assert.equal(s.calls.open[1].client_key, s.calls.open[0].client_key, 'the same Start, so a lost answer is not a second interview');
+    assert.equal(s.calls.started.length, 1);
+  } finally { await m.unmount(); }
+});
+
+test('D5353: a 202 setup_incomplete keeps the form open and retries the same client key without starting capture', async () => {
+  const s = spies();
+  let attempt = 0;
+  s.props.sessions.open = async (body) => {
+    s.calls.open.push(body);
+    attempt += 1;
+    return attempt === 1
+      ? { detail: 'setup_incomplete', message: 'This session was opened but its setup has not finished.', session: { id: 501, setup_complete_at: null } }
+      : { session: { id: 501, interview_id: 41 }, interview: { id: 41, interviewee_name: body.interviewee.name, interviewee_company: body.interviewee.company } };
+  };
+  const capture = { prepared: 0, released: 0, begun: 0 };
+  const recorder = {
+    prepare() { capture.prepared += 1; }, release() { capture.released += 1; }, begin() { capture.begun += 1; },
+    isCapturing: () => false, getSnapshot: () => ({}),
+  };
+  const m = await mount({ ...s.props, recorder });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.type('record-company', 'Acme');
+    await m.click('record-consents-written');
+    await m.click('record-start');
+    assert.equal(capture.begun, 0, 'the recorder began on an unfinished session');
+    assert.equal(s.calls.started.length, 0, 'the unfinished session was opened as usable');
+    assert.equal(m.text(m.by('record-start')), 'Try again');
+    assert.match(m.text(m.by('record-error')), /setup has not finished/);
+    assert.equal(m.pr(m.by('record-name')).value, 'Dana', 'the entered person was cleared');
+    assert.equal(m.pr(m.by('record-company')).value, 'Acme', 'the entered company was cleared');
+    await m.click('record-start');
+    assert.equal(s.calls.open[1].client_key, s.calls.open[0].client_key, 'retry changed the setup key');
+    assert.equal(capture.begun, 1);
     assert.equal(s.calls.started.length, 1);
   } finally { await m.unmount(); }
 });

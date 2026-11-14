@@ -1,6 +1,8 @@
+import { growTabs, reportingHref } from '../cycles/growOverviewModel';
+import { GrowSubsections } from '../cycles/CycleOverview';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, RefreshCw, Sparkles, Users } from 'lucide-react';
+import { AlertCircle, BarChart3, ChevronRight, RefreshCw, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
@@ -10,6 +12,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { LensLink } from '../../workspaces/lens';
+import GrowOverviewLink from './GrowOverviewLink';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -95,10 +98,11 @@ export default function FounderGrowCustomers() {
     const rows = customers.filter((row) => sourceLabel(row.source) === source);
     return { source, rows, latest: rows[0], stages: [...new Set(rows.map((row) => statusLabel(row.crm_status)))] };
   }), [customers, sources]);
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = growTabs(query, 'customers').map((tab) => [tab.name, tab.href]);
 
   return <main className="a5-grow fg-customers" data-testid="founder-grow-customers"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-customers-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Customers</b></div><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-customers-crumb"><GrowOverviewLink /><span>‹</span><b>Customers</b></div><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</LensLink>)}</nav><nav aria-label="Grow utilities"><LensLink to={reportingHref(query)}>Reporting</LensLink></nav>
+    <GrowSubsections search={query || params} active="customers" />
     <ZoneToolbar
               filters={founderZoneFilters('grow/customers', { value: view, onChange: setView, dynamic: { sources: sources.map((source) => ({ key: source, label: source })) } })}
               actions={founderZoneActions('grow/customers', { query, view: { scope: project?.name, header: ['Account', 'Email', 'Source', 'Recorded stage', 'Captured'], rows: visible, cells: (r) => [r.name, r.email, r.source, r.crm_status, r.created_at] } })}

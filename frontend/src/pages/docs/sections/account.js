@@ -11,6 +11,7 @@ export default {
       howto: [
         'Profile — name, headline, avatar, timezone, locale, pronouns, archetype character, and your public profile slug.',
         'Account — email change, account deletion request, data export.',
+        'Program access — open your Account profile to see which programs your licences make you eligible for, whether access is in force, and what is still required.',
         'Security — TOTP setup, recovery codes, active sessions, password-less login configuration.',
         'Notifications — per-channel email and in-app toggles plus quiet hours and digest cadence.',
         'Privacy — visibility (public / network / private), Public Directory opt-in, advisor discoverability.',
@@ -36,72 +37,103 @@ export default {
     },
     {
       id: 'tiers',
-      title: 'Subscription tiers (founders)',
+      title: 'Founder plans and access',
       overview:
-        "StudioOS has three commercial tiers tuned to where you are: Free for browsing and applying, Growth for active founders, and Studio for studio operators and committed LPs. Your tier determines which sidebar groups and features unlock.",
+        'Founder plans are Free, Validate + Build, and Raise + Grow. The public Pricing page reads current offers from the subscription catalogue; a technical tier key is not a separate plan name.',
       howto: [
-        'Free — browse Marketplace, submit your idea, view basic dashboards.',
-        'Growth — full Build, Validate & Grow, and Capital tooling for founders running an active venture.',
-        'Studio — full investor and operator tooling: funds, waterfall, portfolio health.',
+        'Open /pricing?for=founder to compare the currently offered founder plans and any trial terms.',
+        'Free supports starting validation on one idea; Validate + Build covers the founder build workflow; Raise + Grow adds the fundraising and growth features shown in the current catalogue.',
+        'Before upgrading, open /pricing/products to confirm the live plan name, billing interval, included items and AI allowance. A member with more than one licence should check which licence owns the feature.',
+        'Review your active subscription and invoices in Account → Billing. If access disagrees with the paid licence, contact support with the affected feature and transaction reference (never a payment credential).',
       ],
       tips: [
-        'Tier upgrades take effect immediately; downgrades preserve your data but lock the gated features.',
-        'Studio operators with a license get a branded instance and a custom domain.',
+        'A paid subscription is not an unlimited AI balance; see AI allowance, tokens, introductions and Perks for the separate counters.',
+        'Annual versus monthly billing can alter both the price and monthly included AI allowance. Use the live catalogue figures; this guide deliberately does not repeat them.',
       ],
       pitfalls: [
-        'Downgrading mid-fundraise can lock the dataroom view for invited investors — finish the round first.',
-        'Trial extensions are a one-time courtesy; plan to upgrade before the trial ends.',
+        'Do not infer availability from a marketing feature list alone. A missing licence, company scope, provider setup or usage limit can also prevent an action.',
+        'Do not assume that changing subscription or cancelling takes effect immediately: confirm the effective date in your billing/checkout record.',
       ],
       related: [
-        { label: 'Settings → Billing', href: '#account/settings-overview' },
-        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
+        { label: 'AI allowance, tokens, introductions and Perks', href: '#account/balances' },
         { label: 'Paywalls', href: '#account/paywalls' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
+      ],
+    },
+    {
+      id: 'balances',
+      title: 'AI allowance, tokens, introductions and Perks',
+      overview:
+        'Your subscription, included AI allowance, purchased AI tokens, introduction allowance and Perks are different entitlements. They cannot be treated as one spendable balance.',
+      howto: [
+        'Subscription/licence — the active plan controls paid features and eligibility. Compare the authoritative plan catalogue at /pricing/products and your purchased licence in Account → Billing.',
+        'Included AI allowance — shown in Account → Usage → AI tokens (/account/usage/ai-tokens); it is calculated from the current paid-plan read. Without a paid plan there is no included monthly AI balance. An unreadable balance is not zero.',
+        'Purchased AI tokens — the separate token balance on Account → Usage → AI tokens. A run uses eligible included allowance first and then tokens; purchased tokens do not expire. See /pricing?for=models for the currently offered packs, if configured.',
+        'Introduction allowance — a separate quota enforced when requesting or accepting introductions. Consult the current introduction view for remaining capacity and its period; it does not purchase AI use.',
+        'Perks credits — a partner-perk redemption mechanism, not AI tokens or introduction allowance. Check your Perks surface for its own balance and terms.',
+        'For a failed or unknown AI run or token top-up, inspect the usage/transaction history. An unconfirmed payment is not an available token balance; if still missing, report the transaction reference through Help without payment details.',
+      ],
+      tips: [
+        'Spend and reset statements come from your live subscription and usage reads, not from static screenshots or this guide.',
+        'Feature access, available funds and whether a provider is configured are separate questions.',
+      ],
+      pitfalls: [
+        'Do not retry a paid AI action repeatedly when its first outcome is unknown; check usage and pending holds first.',
+        'Refund/chargeback and downgraded-plan behavior depend on the purchased product and applicable policy. Review the checkout terms or ask support; do not assume automatic credits.',
+      ],
+      related: [
+        { label: 'Founder plans and access', href: '#account/tiers' },
+        { label: 'Investor plans and billing', href: '#account/investor-billing' },
+        { label: 'Privacy & data export', href: '#account/privacy' },
       ],
     },
     {
       id: 'investor-billing',
-      title: 'Investor billing & tiers',
+      title: 'Investor plans and billing',
       overview:
-        "Investors have their own pricing tied to dealroom access, portfolio size, and Trust Center features. Limited-volume angels see a metered plan; institutional investors get an enterprise tier with no dealroom cap.",
+        'Investor Free, Investor Plus, Investor Pro and negotiated institutional access have distinct capabilities and research allowances. Check the current catalogue rather than assuming a flat, uncapped institutional or metered offer.',
       howto: [
-        'Open Settings → Billing on an investor account.',
-        'Pick the plan that matches your active dealroom count and portfolio size.',
-        'Add a payment method; invoices appear in the same tab.',
+        'Open /pricing?for=investor and /pricing/products for the currently available investor licences, checkout prices and billing intervals.',
+        'Check the active investor licence in Account → Billing before using gated research, deal or portfolio features.',
+        'Check Account → Usage → AI tokens for included AI budget, any purchased tokens and the current ability to run AI work.',
+        'If your licence is not recognized or a payment failed, use Help → Your tickets with a nonsensitive transaction reference.',
       ],
       tips: [
-        'Cap-bumps are billed pro-rata — moving to a higher tier mid-month only charges the difference.',
-        'Institutional plans include export tooling; ask the studio if you need bulk extracts.',
+        'Investor research capacity, AI allowance and workspace permissions are separate entitlements; avoid assuming one pays for another.',
+        'For multiple licences, each paid feature follows the licence that grants it; compare the account-specific entitlement rather than a guessed global tier.',
       ],
       pitfalls: [
-        'Hitting your dealroom cap silently locks new invites — keep the cap above your active count.',
-        'A failed renewal downgrades you to a read-only investor view until the card is updated.',
+        'Do not assume a pro-rata amount, refund policy, unconditional bulk export or unlimited dealroom access without confirmation from checkout and the live entitlement.',
+        'An invoice or failed payment does not by itself prove the effective access state; check the updated licence read.',
       ],
       related: [
-        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
-        { label: 'Paywalls', href: '#account/paywalls' },
+        { label: 'Founder plans and access', href: '#account/tiers' },
+        { label: 'AI allowance, tokens, introductions and Perks', href: '#account/balances' },
       ],
     },
     {
       id: 'paywalls',
-      title: 'Paywalls — what unlocks at each tier',
+      title: 'Why an action may require a plan',
       overview:
-        "Paywalls show up as a friendly banner explaining what you’re trying to do and which tier unlocks it. They never silently fail; you can always preview the gated feature and upgrade in two clicks.",
+        'A paywall or access message indicates an entitlement or usage check. It does not necessarily mean a payment failed or a product is offered in your location.',
       howto: [
-        'When you hit a paywall, read the banner — it lists the exact tier and what it unlocks.',
-        'Click "Compare plans" to see the full grid before deciding.',
-        'Click "Upgrade" to switch tier and return to the same screen with the feature unlocked.',
+        'Read the required licence and the exact reason shown on the blocked action.',
+        'Compare currently offered products at /pricing/products, then check your active licence and account scope in Account → Billing.',
+        'If the issue is a depleted AI allowance, check /account/usage/ai-tokens before purchasing tokens. A token purchase does not grant a higher subscription tier.',
+        'If payment or activation has not been confirmed, check the checkout outcome and avoid repeating the payment without reconciling the first attempt.',
+        'If access remains inconsistent, open a Help ticket with the feature, licence and time; do not include card data.',
       ],
       tips: [
-        'Some features (e.g. extra dealrooms) are metered add-ons rather than tier upgrades — the banner says which.',
-        'You can request a specific feature; the studio team prioritizes by demand.',
+        'Limits and plan names are read from catalogue and entitlement enforcement; avoid relying on an old Help screenshot.',
+        'Some paid services require separate provider availability or permissions even when your licence includes the feature.',
       ],
       pitfalls: [
-        'Refreshing the page mid-upgrade can re-trigger the paywall — wait for the upgrade confirmation toast.',
-        'Sharing a paywalled link with a free-tier teammate shows them the same paywall, not the feature.',
+        'A temporary read failure is not proof that you have no balance or a free plan.',
+        'Do not assume all upgrades, cancellations or refunds happen instantly; use the applicable checkout agreement and Account status.',
       ],
       related: [
-        { label: 'Subscription tiers (founders)', href: '#account/tiers' },
-        { label: 'Investor billing & tiers', href: '#account/investor-billing' },
+        { label: 'Founder plans and access', href: '#account/tiers' },
+        { label: 'AI allowance, tokens, introductions and Perks', href: '#account/balances' },
       ],
     },
     {
@@ -129,27 +161,28 @@ export default {
     },
     {
       id: 'privacy',
-      title: 'Privacy & data export',
+      title: 'Privacy, visibility and data export',
       overview:
-        "You control who can see your profile, whether you appear in the Public Directory, and whether advisors can discover you. You can export everything we hold about you as a JSON file at any time and request account deletion.",
+        'Profile visibility and directory discoverability are separate controls. The Download my data JSON is a defined account snapshot, not an export of everything stored in every Axal VC subsystem.',
       howto: [
-        'Open Settings → Privacy.',
-        'Pick visibility: Public (anyone with the address) / Members only (signed-in Axal VC members) / Hidden (only you). Until you choose, your profile is public.',
-        'Toggle Public Directory and advisor discoverability independently.',
-        'Open Settings → Account → Download my data to export.',
-        'Request account deletion from the same tab — there’s a 30-day grace period before hard delete.',
+        'Open Account → Privacy (or /profile/visibility where available) and choose Public, Members only or Hidden. The corresponding stored values are public, network and private.',
+        'Until you choose, your profile is public. The visibility options are Public (anyone with the address) / Members only (signed-in Axal VC members) / Hidden (only you).',
+        'Open Account → Account & data → Download my data (JSON). The current file includes your selected user profile fields, recent activity up to 500 records and an agents export when readable.',
+        'The downloaded file does not contain the full deals, projects or KYC datasets; private relationship notes are not included in this endpoint. For data held in other subsystems or a full access request, contact support/privacy through the approved channel.',
+        'Request account deletion from Account & data if appropriate. The request is reviewable and cancellable in the interface; do not treat the request itself as proof that all records were erased.',
       ],
       tips: [
-        'Export downloads as a single JSON file; keep it somewhere safe.',
-        'Some records (signed contracts, capital call records) are preserved by law for 7 years even after deletion.',
+        'Inspect the JSON contents and exported_at field before relying on it for an archive; a failed agents export is marked unavailable rather than silently complete.',
+        'The deletion form currently describes a 30-day grace period. Legal retention and actual erasure scope require review against the Privacy Policy and data-subject request status.',
       ],
       pitfalls: [
-        'Setting visibility to Private hides you from co-founder match results too — toggle Network if you still want introductions.',
-        'Export is a snapshot; later changes won’t appear without a re-export.',
+        'Do not confuse the label Members only with a public listing or with a permission to access someone else’s private company records.',
+        'Do not assume signed contracts, KYC files or other regulated records can be instantly deleted or are automatically included in the account JSON.',
       ],
       related: [
-        { label: 'Public Directory', href: '#network/directory' },
-        { label: 'Settings overview', href: '#account/settings-overview' },
+        { label: 'Relationships', href: '#network/relationships' },
+        { label: 'AI allowance, tokens, introductions and Perks', href: '#account/balances' },
+        { label: 'Contact support', href: '#troubleshooting/contact-support' },
       ],
     },
     {
@@ -182,9 +215,9 @@ export default {
       overview:
         "If you lose access to your authenticator app, you have two recovery paths: the ten single-use recovery codes you saved when you set up two-factor, or a trusted contact you nominated in advance who can vouch for you to the studio team.",
       howto: [
-        'On the sign-in page, click "Lost your device?".',
-        'Pick "Use a recovery code" and paste one of the ten codes you saved.',
-        'If you have no codes, pick "Ask a trusted contact" — the studio team will reach out to your nominated contact for verification.',
+        'From /login, follow the Account recovery link to /auth/recover.',
+        'The recovery page shows only the recovery methods enabled on your account. If backup codes are available, use a saved one.',
+        'If trusted contacts or another recovery method are enabled, follow the on-screen steps; otherwise use the offered admin-review path.',
         'Once verified, you\'re prompted to set up a fresh authenticator on your new device.',
       ],
       tips: [

@@ -114,7 +114,8 @@ test('2b. Discard saves nothing; a refusal is said in the Worker\'s words', asyn
   const r = await mount({}, { quote: () => QUOTE, make: () => { throw Object.assign(new Error('Your balance does not cover this voice-over.'), { status: 402 }); } });
   try {
     await r.click('pitch-voice-make');
-    assert.equal(r.text('pitch-voice-error'), 'Your balance does not cover this voice-over.');
+    // D5070 (#5376): a code-less 402 reads as the plan taxonomy's sentence.
+    assert.equal(r.text('pitch-voice-error'), 'This needs a plan that includes it.');
     assert.ok(!r.by('pitch-voice-made'));
   } finally { await r.done(); }
 });

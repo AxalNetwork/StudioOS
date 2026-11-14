@@ -1,9 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
+import { adminMfaPolicyApi } from '../../lib/api/adminMfaPolicy';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import { SECURITY_PROMPTS, SECURITY_USAGE_AT } from './security/securityPrompts.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import SecurityTabs from './security/SecurityTabs.jsx';
 import OverviewWorkspace from './security/OverviewWorkspace.jsx';
@@ -18,6 +22,7 @@ import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
 import TrustWorkspace from './security/TrustWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
+import { changeMfaPolicy } from './security/mfaPolicyModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
 
 /**
@@ -119,7 +124,7 @@ function Zone({ title, sub, children, tone = '' }) {
     <Card className={tone}>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 className="text-[14.5px] font-extrabold tracking-tight">{title}</h2>
-        {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
+        {sub && <span className="text-[11.5px] text-axal-muted">{sub}</span>}
       </div>
       {children}
     </Card>
@@ -223,7 +228,7 @@ export function AiSafety({ block }) {
       {e?.available && e.breakdown_available === false && (
         <div className="mt-3" data-testid="hq-ai-safety-rules-unreadable">
           <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
-          <p className="mt-1 text-[11px] text-axal-faint">
+          <p className="mt-1 text-[11px] text-axal-muted">
             Unreadable — {e.breakdown_reason || 'the breakdown by rule could not be read.'} The totals above were read.
           </p>
         </div>
@@ -234,24 +239,24 @@ export function AiSafety({ block }) {
           {e.rules?.length ? (
             <ul className="mt-1 space-y-0.5">
               {e.rules.map((rr) => (
-                <li key={rr.category} className="text-[11px] text-axal-faint tabular-nums">
+                <li key={rr.category} className="text-[11px] text-axal-muted tabular-nums">
                   <b className="text-axal-muted">{rr.category}</b> — {num(rr.turns)} {rr.turns === 1 ? 'turn' : 'turns'}
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-rules-none">
+            <div className="mt-1 text-[11px] text-axal-muted" data-testid="hq-ai-safety-rules-none">
               No turn in this window named a violated rule.
             </div>
           )}
           {e.unclassified > 0 && (
-            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-unclassified">
+            <div className="mt-1 text-[11px] text-axal-muted" data-testid="hq-ai-safety-unclassified">
               {num(e.unclassified)} {e.unclassified === 1 ? 'turn was' : 'turns were'} recorded without a
               category. Turns written before the category was stored carry none — that is not a turn judged safe.
             </div>
           )}
           {e.states?.length > 0 && (
-            <div className="mt-1 text-[11px] text-axal-faint" data-testid="hq-ai-safety-states">
+            <div className="mt-1 text-[11px] text-axal-muted" data-testid="hq-ai-safety-states">
               Classification outcomes: {e.states.map((ss) => `${ss.category} ${ss.turns}`).join(' · ')}. These
               describe the check itself, not a rule that fired.
             </div>
@@ -280,7 +285,7 @@ export function AiSafety({ block }) {
       {(block?.not_counted || []).length > 0 && (
         <ul className="mt-3 space-y-1.5" data-testid="hq-ai-safety-not-counted">
           {block.not_counted.map((n) => (
-            <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+            <li key={n.what} className="text-[11px] leading-relaxed text-axal-muted">
               <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
             </li>
           ))}
@@ -325,7 +330,7 @@ export function TokenAnomalies({ block }) {
       {block.rows.length > 0 && (
         <ul className="mt-1.5 space-y-0.5" data-testid="hq-token-anomaly-rows">
           {block.rows.map((a) => (
-            <li key={a.user_id} className="text-[11px] text-axal-faint tabular-nums">
+            <li key={a.user_id} className="text-[11px] text-axal-muted tabular-nums">
               <b className="text-axal-muted">{a.name || a.email || `user ${a.user_id}`}</b> — {num(a.tokens_24h)} tokens
               in 24 hours, {a.ratio}× an average day of {num(a.daily_avg_baseline)}
             </li>
@@ -333,13 +338,13 @@ export function TokenAnomalies({ block }) {
         </ul>
       )}
       {block.no_baseline > 0 && (
-        <p className="mt-1 text-[11px] text-axal-faint" data-testid="hq-token-anomalies-no-baseline">
+        <p className="mt-1 text-[11px] text-axal-muted" data-testid="hq-token-anomalies-no-baseline">
           {num(block.no_baseline)} account{block.no_baseline === 1 ? '' : 's'} crossed the floor with no usage in the
           {' '}{block.baseline_days} days before, so there is no usual to compare with. Not counted as anomalies, and
           not hidden: a dormant account waking up looks exactly like this.
         </p>
       )}
-      <p className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">{block.how}</p>
+      <p className="mt-1 text-[10.5px] leading-relaxed text-axal-muted">{block.how}</p>
     </div>
   );
 }
@@ -354,7 +359,7 @@ export function NotRecordedList({ items, testid }) {
   return (
     <ul className="mt-2 space-y-1.5" data-testid={testid}>
       {items.map((n) => (
-        <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
+        <li key={n.what} className="text-[11px] leading-relaxed text-axal-muted">
           <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
         </li>
       ))}
@@ -372,7 +377,7 @@ export function DsrSubject({ row }) {
   return (
     <span className="min-w-0 truncate">
       <b>{row.name || row.email}</b>{' '}
-      <span className="text-axal-faint">
+      <span className="text-axal-muted">
         · {titleCase(row.role)} · {row.kind || <Unrecorded>kind not recorded</Unrecorded>}
       </span>
     </span>
@@ -393,6 +398,18 @@ export function DsrKindsNotRecorded({ kinds }) {
  * makes leaves this page by one door (`security/README.md`: no request from
  * the workspace files).
  */
+/**
+ * D4699 — whether the operator is still signed in once `kind` succeeds, so the page may re-read.
+ * Emergency re-authentication signs everyone out; signing out an account signs out its holder, so
+ * the operator's own account counts as signed out. Revoking their own current session is refused
+ * by the server, and ending a support session never ends the operator's.
+ */
+export function actLeavesOperatorSignedIn(kind, arg, ownUserId) {
+  if (kind === 'emergency') return false;
+  if (kind === 'sign_out') return ownUserId != null && Number(arg) !== Number(ownUserId);
+  return kind === 'revoke' || kind === 'revoke_selected' || kind === 'end';
+}
+
 export async function runSessionAct(client, kind, arg, reason) {
   if (kind === 'revoke') return client.hqRevokeSession(arg, reason);
   if (kind === 'revoke_selected') return client.hqRevokeSessions(arg, reason);
@@ -417,9 +434,9 @@ export function SessionsPanel(props) {
 function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white', unread = false }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
+      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-muted">{label}</div>
       <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? (unread ? <StatusBadge state="unavailable" /> : <Unrecorded />)}</div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
+      {note && <div className="mt-0.5 text-[10px] text-axal-muted">{note}</div>}
     </div>
   );
 }
@@ -474,7 +491,7 @@ export function Sanctions({ block, unreadable }) {
           claim="This is not a claim that nothing happened."
         />
       )
-      : <p className="text-[12px] text-axal-faint">Loading…</p>;
+      : <p className="text-[12px] text-axal-muted">Loading…</p>;
   }
   if (!block.available) {
     return (
@@ -491,7 +508,7 @@ export function Sanctions({ block, unreadable }) {
         <Stat label="Hits" value={num(block.hits_total)} note="runs that matched a list" tone={block.hits_total ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
         <Stat label="Unreviewed hits" value={num(block.unreviewed_hits)} note="awaiting a reviewer's note" tone={block.unreviewed_hits ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+      <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
         {block.how} <a href={block.path} className="underline">Open the Trust Center →</a>
       </p>
     </div>
@@ -578,13 +595,13 @@ export function BackupDr({ block, unreadable }) {
           claim="This is not a claim that nothing happened."
         />
       )
-      : <p className="text-[12px] text-axal-faint">Loading…</p>;
+      : <p className="text-[12px] text-axal-muted">Loading…</p>;
   }
   const b = block.backup;
   return (
     <div className="space-y-2" data-testid="hq-backup-dr">
       <div>
-        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Nightly export</div>
+        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted">Nightly export</div>
         {b?.available && b.fresh !== false ? (
           <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat" data-state={b.state || 'fresh'}>
             {backupSentence(b)}
@@ -596,7 +613,7 @@ export function BackupDr({ block, unreadable }) {
         )}
       </div>
       <div>
-        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Restore drill</div>
+        <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted">Restore drill</div>
         <div className="mt-0.5" data-testid="hq-restore-drill">
           <DrillState drill={block.drill} />
         </div>
@@ -632,10 +649,20 @@ export default function HqSecurityPage() {
   const [readAt, setReadAt] = useState({ overview: null, feed: null });
   const stampRead = (k) => setReadAt((cur) => ({ ...cur, [k]: new Date().toISOString() }));
 
+  // D4699 — each read is numbered, and only the newest answer lands. A slow first read that answers
+  // after a retry (or after a filter changed) is dropped instead of overwriting the newer one.
+  const seq = useRef({ overview: 0, sessions: 0, feed: 0, mfaPolicy: 0 });
+  const latest = (k) => { const n = ++seq.current[k]; return () => n === seq.current[k]; };
+
   const [data, setData] = useState(null);
-  const load = useCallback(() => {
-    setData(null);
-    api.hqSecurityOverview().then((r) => { setData(r); stampRead('overview'); }, (e) => { reportError('hq-security', e); setData(UNAVAILABLE); });
+  // `soft === true` only: `load` is also an onClick handler, and an event is not a soft re-read.
+  const load = useCallback((soft) => {
+    const current = latest('overview');
+    if (soft !== true) setData(null);
+    api.hqSecurityOverview().then(
+      (r) => { if (current()) { setData(r); stampRead('overview'); } },
+      (e) => { reportError('hq-security', e); if (current() && soft !== true) setData(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -643,16 +670,64 @@ export default function HqSecurityPage() {
   // zone acts on, and an unreadable list must cost that zone alone.
   const [sessionList, setSessionList] = useState(null);
   const loadSessions = useCallback(() => {
+    const current = latest('sessions');
     setSessionList(null);
-    api.hqSecuritySessions().then(setSessionList, (e) => { reportError('hq-sessions', e); setSessionList(UNAVAILABLE); });
+    api.hqSecuritySessions().then(
+      (r) => { if (current()) setSessionList(r); },
+      (e) => { reportError('hq-sessions', e); if (current()) setSessionList(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
-  // D4801 — the act alone; NOTHING IS RE-READ BEHIND IT. The workspace marks
+
+  // D5249 — "Require MFA for admins". The read is Super Admin only, so a plain
+  // admin never asks for it and sees no control. The state shown is the
+  // server's last answer: a change lands only from its reply, never optimistically.
+  const isSuper = isSuperAdminUser(useAuth()?.user);
+  const [mfaPolicy, setMfaPolicy] = useState(null);
+  const loadMfaPolicy = useCallback(() => {
+    if (!isSuper) return;
+    const current = latest('mfaPolicy');
+    setMfaPolicy(null);
+    adminMfaPolicyApi.get().then(
+      (r) => { if (current()) setMfaPolicy(r); },
+      (e) => { reportError('hq-mfa-policy', e); if (current()) setMfaPolicy(UNAVAILABLE); },
+    );
+  }, [isSuper]);
+  useEffect(() => { loadMfaPolicy(); }, [loadMfaPolicy]);
+  const onSetMfaPolicy = useCallback(
+    (enabled, reason) => changeMfaPolicy({ put: adminMfaPolicyApi.set, setPolicy: setMfaPolicy, reload: loadMfaPolicy }, enabled, reason),
+    [loadMfaPolicy],
+  );
+  // D4699 — Load more: the next page below the last session id, appended once (a re-read or a new
+  // first page in the meantime drops it). Resolves to the merged list, or throws for the caller's Retry.
+  const loadMoreSessions = useCallback(async () => {
+    const list = sessionList;
+    const before = list?.cursor?.before_id;
+    if (!before) return list;
+    const current = seq.current.sessions;
+    const page = await api.hqSecuritySessions(before);
+    if (current !== seq.current.sessions) return list;
+    const seen = new Set((list.rows || []).map((x) => x.id));
+    const merged = { ...list, rows: [...(list.rows || []), ...(page.rows || []).filter((x) => !seen.has(x.id))], cursor: page.cursor || null, total: page.total ?? list.total, appended_to: list };
+    setSessionList(merged);
+    return merged;
+  }, [sessionList]);
+
+  // D4801 — the act; the SESSION LIST IS NOT RE-READ BEHIND IT. The workspace marks
   // what the server confirmed (a revoked row reads Revoked, in the dialog's
   // word) and offers Re-read. Re-reading on its own would also be wrong after
   // the two acts that sign the operator out: the next request answers 401 and
   // the page leaves for /login before the result could be read.
-  const onSessionAct = useCallback((kind, arg, reason) => runSessionAct(api, kind, arg, reason), []);
+  // D4699 — what the act made stale elsewhere IS re-read, softly (the page and the dialog stay drawn):
+  // the overview's counts and the ledger, after an act that leaves the operator signed in. Never after
+  // emergency re-authentication, nor after signing out the operator's own account.
+  const ownUserId = sessionList && sessionList !== UNAVAILABLE ? (sessionList.rows || []).find((x) => x.is_current)?.user_id ?? null : null;
+  const refreshAfter = useRef(() => {});
+  const onSessionAct = useCallback(async (kind, arg, reason) => {
+    const result = await runSessionAct(api, kind, arg, reason);
+    if (actLeavesOperatorSignedIn(kind, arg, ownUserId)) refreshAfter.current();
+    return result;
+  }, [ownUserId]);
 
   // H23's ledger, its own request. The filter is applied SERVER-side because
   // the feed is a merged page of sixty rows across five stores: filtering
@@ -664,13 +739,15 @@ export default function HqSecurityPage() {
   // request feeds Overview's source count, which says which filter it counted under.
   const [controls, setControls] = useState(EMPTY_CONTROLS);
   const query = JSON.stringify(feedQuery(controls));
-  const loadFeed = useCallback(() => {
-    setFeed(null);
+  const loadFeed = useCallback((soft) => {
+    const current = latest('feed');
+    if (soft !== true) setFeed(null);
     api.hqGovernance(filter, JSON.parse(query)).then(
-      (r) => { setFeed(r); stampRead('feed'); },
-      (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
+      (r) => { if (current()) { setFeed(r); stampRead('feed'); } },
+      (e) => { reportError('hq-governance', e); if (current() && soft !== true) setFeed(UNAVAILABLE); },
     );
   }, [filter, query]);
+  refreshAfter.current = () => { load(true); loadFeed(true); };
   const loadOlder = useCallback((before) => api.hqGovernance(filter, { ...JSON.parse(query), before }), [filter, query]);
   useEffect(() => {
     loadFeed();
@@ -691,15 +768,19 @@ export default function HqSecurityPage() {
       loadFeed={loadFeed}
       sessionList={sessionList}
       loadSessions={loadSessions}
+      loadMoreSessions={loadMoreSessions}
       onSessionAct={onSessionAct}
       readAt={readAt}
+      mfaPolicy={mfaPolicy}
+      mfaPolicyProps={{ isSuper, unavailable: UNAVAILABLE, onSet: onSetMfaPolicy, onRetry: loadMfaPolicy }}
     />
   );
 }
 
 export function SecurityConsole({
-  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {},
+  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {}, loadMoreSessions = null,
   controls = EMPTY_CONTROLS, setControls = () => {}, loadOlder = () => Promise.reject(new Error('no cursor reader')),
+  mfaPolicy = null, mfaPolicyProps = null,
 }) {
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
@@ -756,6 +837,9 @@ export function SecurityConsole({
     <WorkerRail
       workspace="Security"
       role="super_admin"
+      // D4803 (SE12): security prompts first; models, usage and top-up are one link away.
+      prompts={SECURITY_PROMPTS}
+      usageAt={SECURITY_USAGE_AT}
       stance="Read-only, except sessions and force re-auth"
       note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The acts here revoke sessions, sign accounts out and close data-subject requests, and each is recorded with its reason."
       coverage={ready ? [
@@ -830,8 +914,9 @@ export function SecurityConsole({
         scoped per subsidiary yet, the guardrail counters included.
       </p>
       <p>
-        Freshness is the time this browser received each read. No store records when it was last collected,
-        so no source here can be marked Stale yet.
+        &quot;Observed&quot; is the time this browser received each read. Each store also records its last good read
+        (D5247) and has its own age, set from how often it is written: a store past its age is marked Stale.
+        Sanctions screenings run on request only and have no age, so they are never Stale.
       </p>
     </>
   );
@@ -849,6 +934,8 @@ export function SecurityConsole({
         onRetry={{ overview: load, feed: loadFeed }}
         filterLabel={filterLabel}
         sourceNotes={sourceNotes}
+        mfaPolicy={mfaPolicy}
+        mfaPolicyProps={mfaPolicyProps}
       />
     ),
     events: (
@@ -877,11 +964,11 @@ export function SecurityConsole({
                 hours, and its reason when the ledger could not be read. */}
             <Stat unread label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
             Each account can also revoke its own devices under Settings.
           </p>
         </Zone>
-        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} />
+        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} onLoadMore={loadMoreSessions} />
 
 
         {/* H7's own zone. Not "what changed" — who read rows they do not
@@ -895,16 +982,16 @@ export function SecurityConsole({
               onRetry={loadFeed}
             />
           )}
-          {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {feed === null && <p className="text-[12px] text-axal-muted">Loading…</p>}
           {access && (
             <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
               <div>
-                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted">
                   Impersonations · {access.expiry_minutes}-minute limit
                 </div>
                 {access.impersonations.available ? (
                   access.impersonations.items.length === 0
-                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
+                    ? <p className="mt-1.5 text-[12px] text-axal-muted">No support session is on record.</p>
                     : (
                       <ul className="mt-1.5 space-y-1.5">
                         {access.impersonations.items.map((d) => (
@@ -918,11 +1005,11 @@ export function SecurityConsole({
                           >
                             <div className="flex items-baseline justify-between gap-3">
                               <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                              <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
+                              <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-muted'}`}>
                                 {d.dur || <Unrecorded>clock unknown</Unrecorded>}
                               </span>
                             </div>
-                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-muted">{d.meta}</div>
                           </li>
                         ))}
                       </ul>
@@ -932,19 +1019,19 @@ export function SecurityConsole({
                 )}
               </div>
               <div>
-                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted">Exports</div>
                 {access.exports.available ? (
                   access.exports.items.length === 0
-                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
+                    ? <p className="mt-1.5 text-[12px] text-axal-muted">No export is on record.</p>
                     : (
                       <ul className="mt-1.5 space-y-1.5">
                         {access.exports.items.map((d) => (
                           <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
                             <div className="flex items-baseline justify-between gap-3">
                               <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                              <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
+                              <span className="shrink-0 font-mono text-[10px] text-axal-muted">{d.dur}</span>
                             </div>
-                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-muted">{d.meta}</div>
                           </li>
                         ))}
                       </ul>
@@ -955,7 +1042,7 @@ export function SecurityConsole({
               </div>
             </div>
           )}
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-muted">
             A session that ran to its limit is recorded exactly like one ended early — the log does not
             distinguish diligence from the clock running out, and it should not. A row still open past the
             limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and
@@ -968,7 +1055,7 @@ export function SecurityConsole({
     // previous zone stays behind "How this is measured", read-only.
     privacy: (
       <PrivacyWorkspace dsr={ready ? data.dsr : null} unreadable={data === UNAVAILABLE} onReread={load}>
-        <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+        <Zone title="Data subject requests" sub={`${(ready && data.dsr?.clock?.label) || 'Statutory clock from receipt'} · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
           {/* D200 — H23 draws the DSR clocks "by territory · runs against the
               holding branch". Every request this database holds is HQ-held
               by construction, so the grouping has one group and the sentence
@@ -985,15 +1072,15 @@ export function SecurityConsole({
               <Unreadable what="The open deletion requests" claim="This is not a claim that none are open." />
             </div>
           )}
-          {ready && dsrReadable && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
+          {ready && dsrReadable && dsr.length === 0 && <p className="text-[12px] text-axal-muted">No deletion request is open.</p>}
           {ready && dsr.length > 0 && (
             <ul className="space-y-1.5" data-testid="hq-dsr">
               {dsr.map((d) => (
                 <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
                   <div className="flex items-center justify-between gap-3">
                     <DsrSubject row={d} />
-                    <span title={d.deadline_at ? `The clock runs out ${String(d.deadline_at).slice(0, 16).replace('T', ' ')} UTC: ${data.dsr?.clock_days} × 24 hours from receipt.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
+                    <span title={d.deadline_at ? `Due by the end of ${String(d.deadline_at).slice(0, 10)} UTC: ${(data.dsr?.clock?.label || 'the statutory clock').toLowerCase()}.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-muted' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : d.days_left === 0 ? 'due today' : `${num(d.days_left)}d left`}
                     </span>
                   </div>
                   {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
@@ -1002,11 +1089,11 @@ export function SecurityConsole({
                       made it. A third ask read as a first is the thing this
                       line exists to prevent. */}
                   {d.prior_requests === null ? (
-                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
+                    <p className="mt-0.5 text-[11px] text-axal-muted" data-testid="hq-dsr-history-unreadable">
                       <Unrecorded>earlier requests unknown</Unrecorded>
                     </p>
                   ) : d.prior_requests > 0 ? (
-                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
+                    <p className="mt-0.5 text-[11px] text-axal-muted" data-testid="hq-dsr-history">
                       {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
                       {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
                       {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
@@ -1016,17 +1103,17 @@ export function SecurityConsole({
               ))}
             </ul>
           )}
-          {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-muted">Loading…</p>}
           {/* D481 — the zone printed "erasure" as a literal on every row.
               The kinds the ledger does NOT hold are named here, from the
               payload, each Not recorded with its reason. */}
           {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
           {ready && dsrBranches && (
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-dsr-branches">
               {dsrBranchesSentence(dsrBranches)}
             </p>
           )}
-          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
             The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
             Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
             than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
@@ -1052,7 +1139,7 @@ export function SecurityConsole({
             <Stat label="KYC approved" value={kycReadable ? num(kyc.approved) ?? '0' : null} note="active accounts" />
             <Stat label="KYC rejected" value={kycReadable ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-muted">
             KYC status is one trust fact; sanctions screening is another and has its own card above, because the
             two are different stores that fail apart.
           </p>
@@ -1098,7 +1185,7 @@ export function SecurityConsole({
 
         <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">
               <ShieldCheck size={13} /> HQ · Security
             </div>
             <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">

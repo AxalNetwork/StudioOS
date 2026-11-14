@@ -21,7 +21,8 @@ One case per starter skill, named `<slug>.json` after the skill in `../`. Part D
 `numbers` is optional (#4531). `must_say_not_recorded` is judged per field: the
 field and "Not recorded" in the same line, sentence, list item or table row.
 `structure`, `evidence`, `refusal`, `claims` and `output_schema` are optional
-too (#4531 slice 2, judge version 3); each accepts only its documented forms,
+too (#4531 slice 2, judge version 3; a claim's `because` and `conditional`,
+D4531 part 4, judge version 4); each accepts only its documented forms,
 and a malformed one refuses the case. A skill whose case asserts citations,
 headings or JSON says that form in its own steps: the evaluation prompt does
 not. The full rules are in `documentation/architecture/SKILL_LIBRARY_CONTRACT.md`.

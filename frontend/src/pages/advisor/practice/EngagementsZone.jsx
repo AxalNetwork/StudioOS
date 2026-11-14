@@ -3,12 +3,15 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
-  BOARD_LANES, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
-  boardLaneOf, canDecideRenewal, clientNote, dueLine, laneMoves, shapeNote,
+  BOARD_LANES, END_REASON_LABEL, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
+  activityLine, boardLaneOf, canDecideRenewal, chipCounts, chipRows, clientNote, dueLine, endReasonLabel,
+  laneMoves, priceLine, scopeLine, shapeNote,
 } from './engagementBoard';
+import EngagementSheet from './EngagementSheet';
+import ClientSheet from './ClientSheet';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
@@ -68,7 +71,7 @@ export default function EngagementsZone() {
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState(null);
   const [deciding, setDeciding] = useState(null);
-  const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
+  const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [partial, setPartial] = useState(null);
@@ -82,6 +85,17 @@ export default function EngagementsZone() {
   const [correcting, setCorrecting] = useState(null);
   const [fix, setFix] = useState(correctionForm(null));
   const [history, setHistory] = useState({});
+  // #4831 (D4831): the engagement whose sheet is open, by id, so the sheet
+  // always draws the row as the last read returned it.
+  const [openId, setOpenId] = useState(null);
+  // #4831 part 2: the client whose sheet is open, `{ id, name }`. Only a linked
+  // account opens one: a client who is only a name has nothing to join by.
+  const [client, setClient] = useState(null);
+  const openClient = (e) => { if (e?.founder_user_id) { setOpenId(null); setClient({ id: e.founder_user_id, name: e.client_name }); } };
+  // The bookings and the deliverables, as read: null when a read failed, so
+  // the cards say "could not be read" rather than counting zero.
+  const [bookings, setBookings] = useState(null);
+  const [deliverables, setDeliverables] = useState(null);
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
@@ -96,6 +110,12 @@ export default function EngagementsZone() {
       // board, so this never takes the page down with it.
       const held = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null);
       setCandidatesRead(held != null);
+      setBookings(held ? held.items : null);
+      // #4831 (D4831): the work filed under each engagement, for the card's
+      // activity line, the sheet's Delivery tab and the #4684 warning. A
+      // tolerated read like the bookings: the board stands without it.
+      const work = await readEveryPage((page) => api.listMyAdvisorDeliverables(page)).catch(() => null);
+      setDeliverables(work ? work.items : null);
       const seen = new Map();
       for (const b of held?.items || []) {
         if (b.client_user_id && !seen.has(b.client_user_id)) {
@@ -110,7 +130,7 @@ export default function EngagementsZone() {
     } catch (error) {
       setState({
         loading: false,
-        error: error?.message || 'The engagement record could not be read.',
+        error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'),
         items: [], totals: null,
       });
     }
@@ -121,21 +141,24 @@ export default function EngagementsZone() {
   useScrollToHash(state.loading);
 
   const { items } = state;
-  // `by_client` REORDERS, it does not narrow. The chip is "By client", and a
-  // filter that dropped rows under that name would be lying about what it did.
-  const byClient = filter === 'by_client';
-  const ordered = useMemo(() => {
-    const rows = [...items];
-    return byClient
-      ? rows.sort((a, b) => String(a.client_name || '').localeCompare(String(b.client_name || '')))
-      : rows;
-  }, [items, byClient]);
+  const ordered = items;
+  // #4831 (D4831): the Practice v2 chip row, Active · Renewal due · Proposed ·
+  // Ended · All, each with its count over the whole record (`chipRows`).
+  const counts = useMemo(() => chipCounts(ordered), [ordered]);
+  // The chips this page serves, by name; `all` (and anything else) narrows nothing.
   const visible = useMemo(() => {
-    if (filter === 'signed') return ordered.filter((e) => SIGNED_LANES.has(e.lane));
-    if (filter === 'renewal_due') return ordered.filter((e) => e.lane === 'renewal_due');
-    if (filter === 'ended') return ordered.filter((e) => e.lane === 'ended');
-    return ordered;
+    switch (filter) {
+      case 'active': case 'renewal_due': case 'proposed': case 'ended': return chipRows(ordered, filter);
+      case 'all': default: return ordered;
+    }
   }, [ordered, filter]);
+  const opened = openId == null ? null : items.find((e) => e.id === openId) || null;
+
+  // PX-03c: the sheet's outcome choice records the same renewal decision as the
+  // form below, with the cycle count this row showed.
+  const decideFromSheet = (e, body) => act(e.id, () => api.recordMyAdvisorEngagementRenewal(e.id, {
+    ...body, expected_cycles: Number(e.cycles || 0),
+  }), 'That outcome could not be recorded.');
 
   const totals = state.totals || {};
   const renewalDue = useMemo(() => ordered.filter((e) => e.lane === 'renewal_due'), [ordered]);
@@ -183,16 +206,25 @@ export default function EngagementsZone() {
     () => api.updateMyAdvisorEngagement(e.id, { founder_user_id: value === '' ? null : Number(value) }),
     'That client account could not be linked.');
 
-  const recordRenewal = (e) => act(e.id, async () => {
+  const recordRenewal = (e) => {
+    // #5316 (D5316): the Worker refuses an ending with no reason, so the form asks first.
+    if (decision.decision === 'ended' && !END_REASON_LABEL[decision.end_reason]) {
+      setNote({ ok: false, text: 'Say why it ended: it did not renew, or it ended for another reason.' });
+      return undefined;
+    }
+    return recordDecision(e);
+  };
+  const recordDecision = (e) => act(e.id, async () => {
     await api.recordMyAdvisorEngagementRenewal(e.id, {
       decision: decision.decision,
+      ...(decision.decision === 'ended' ? { end_reason: decision.end_reason } : {}),
       // The term being decided: the cycle count this row showed. A retry of the same press is one cycle.
       expected_cycles: Number(e.cycles || 0),
       note: decision.note.trim() || null,
       term_ends_at: decision.term_ends_at || null,
     });
     setDeciding(null);
-    setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
+    setDecision({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
   }, 'That renewal decision could not be recorded.');
 
   const showHistory = async (e) => {
@@ -318,7 +350,7 @@ export default function EngagementsZone() {
       <ZoneToolbar
         className="mb-3"
         role="advisor"
-        filters={advisorZoneFilters('practice/engagements', { value: filter, onChange: setFilter })}
+        filters={advisorZoneFilters('practice/engagements', { value: filter, onChange: setFilter, counts })}
         actions={advisorZoneActions('practice/engagements', {
           view: {
             header: ['Client', 'State', 'Shape', 'Scope', 'Not in scope', 'Cycles', 'Outcome', 'Term ends', 'Per cycle', 'Note'],
@@ -384,7 +416,9 @@ export default function EngagementsZone() {
                        cards and no sentence reads as a rendering failure. */
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
-                      onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient} />)}
+                      onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient}
+                      activity={activityLine(e, bookings, deliverables)} onOpen={() => setOpenId(e.id)}
+                      onOpenClient={openClient} />)}
                 </div>
               </div>
             );
@@ -405,7 +439,7 @@ export default function EngagementsZone() {
             </p>
             : <div className="overflow-x-auto"><table className="w-full min-w-[460px] text-[12px]">
               <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                <th className="pb-2">Client</th><th className="pb-2">Cycles</th><th className="pb-2">Outcome</th><th className="pb-2">Note</th>
+                <th className="pb-2">Client</th><th className="pb-2">Cycles</th><th className="pb-2">Outcome</th><th className="pb-2">Why it ended</th><th className="pb-2">Note</th>
               </tr></thead>
               <tbody>{renewals.map((e) => (
                 <tr key={e.id} data-testid={`row-pr2-renewal-${e.id}`} className="border-t border-axal-hairline dark:border-gray-700">
@@ -414,6 +448,9 @@ export default function EngagementsZone() {
                   <td className="py-2 pr-3">{e.outcome
                     ? <Pill tone={OUTCOME_TONE[e.outcome]}>{OUTCOME_LABEL[e.outcome]}</Pill>
                     : <Unrecorded>No decision</Unrecorded>}</td>
+                  <td className="py-2 pr-3" data-testid={`end-reason-${e.id}`}>{e.outcome !== 'ended'
+                    ? ''
+                    : END_REASON_LABEL[e.end_reason] || <Unrecorded>{endReasonLabel(e)}</Unrecorded>}</td>
                   <td className="py-2 text-axal-muted">{e.renewal_note || <Unrecorded>No note recorded</Unrecorded>}</td>
                 </tr>
               ))}</tbody>
@@ -545,7 +582,7 @@ export default function EngagementsZone() {
                 <button type="button" className={ghostButtonClass} disabled={busy === e.id}
                   onClick={() => {
                     setDeciding(deciding === e.id ? null : e.id);
-                    setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
+                    setDecision({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
                   }}>
                   {deciding === e.id ? 'Cancel' : 'Decide'}
                 </button>
@@ -565,7 +602,17 @@ export default function EngagementsZone() {
                       disabled={decision.decision === 'ended'}
                       onChange={(ev) => setDecision({ ...decision, term_ends_at: ev.target.value })} />
                   </Field>
-                  <Field label="Note" hint="What the renewal history shows. Why it ended goes here too.">
+                  {decision.decision === 'ended' && (
+                    <Field label="Why it ended" hint="Required. Kept with the engagement.">
+                      <select className={inputClass} value={decision.end_reason} data-testid="end-reason-select"
+                        onChange={(ev) => setDecision({ ...decision, end_reason: ev.target.value })}>
+                        <option value="">Choose…</option>
+                        <option value="did_not_renew">{END_REASON_LABEL.did_not_renew}</option>
+                        <option value="other">{END_REASON_LABEL.other}</option>
+                      </select>
+                    </Field>
+                  )}
+                  <Field label="Note" hint="What the renewal history shows. Any detail on why it ended goes here.">
                     <input className={inputClass} value={decision.note}
                       placeholder="Two cycles, then they hired in-house."
                       onChange={(ev) => setDecision({ ...decision, note: ev.target.value })} />
@@ -604,6 +651,12 @@ export default function EngagementsZone() {
       </StatedLimit>
     </ZoneBody>
     <AdvisorAccessLog />
+    {opened && (
+      <EngagementSheet key={opened.id} e={opened} bookings={bookings} deliverables={deliverables}
+        busy={busy === opened.id} note={note} onClose={() => { setOpenId(null); setNote(null); }} onDecide={decideFromSheet}
+        onOpenClient={openClient} />
+    )}
+    {client && <ClientSheet key={client?.id} clientUserId={client?.id} clientName={client?.name} onClose={() => setClient(null)} />}
     </>
   );
 }
@@ -616,7 +669,7 @@ export default function EngagementsZone() {
  * rather than a disabled one: there is no move to make, and a greyed button
  * implies there is.
  */
-function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink }) {
+function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink, activity = null, onOpen, onOpenClient }) {
   const due = e.lane === 'renewal_due';
   const moves = laneMoves(e.lane);
   // The linked account may not be among the candidates any more — a booking can
@@ -630,13 +683,31 @@ function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLi
       className={`rounded-[9px] border p-2.5 ${due
         ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20'
         : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'}`}>
-      <div className="text-[12px] font-bold tracking-tight">{e.client_name}</div>
+      {/* #4831 (D4831): PX-03's card. Client and state, what it is, its price,
+          its date line, its scope and its activity, then Open engagement. */}
+      <div className="flex items-start justify-between gap-1.5">
+        {e.founder_user_id && onOpenClient
+          ? <button type="button" onClick={() => onOpenClient(e)} data-testid={`client-pr2-${e.id}`}
+            className="text-left text-[12px] font-bold tracking-tight hover:underline">{e.client_name}</button>
+          : <div className="text-[12px] font-bold tracking-tight">{e.client_name}</div>}
+        <Pill tone={due ? 'warn' : 'neutral'}>{LANE_LABEL[e.lane] || 'Lane not recorded'}</Pill>
+      </div>
       <div className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
         {e.scope_label || SHAPE_LABEL[e.shape] || 'No scope line recorded'}
       </div>
-      <div className={`mt-1.5 text-[10px] font-semibold tabular-nums ${due ? 'text-amber-700 dark:text-amber-300' : 'text-axal-faint'}`}>
+      <div className="mt-1 text-[11px] font-semibold tabular-nums" data-testid={`price-pr2-${e.id}`}>{priceLine(e, money)}</div>
+      <div className={`mt-1 text-[10px] font-semibold tabular-nums ${due ? 'text-amber-700 dark:text-amber-300' : 'text-axal-faint'}`}>
         {dueLine(e)}
       </div>
+      <div className="mt-1 text-[10.5px] leading-relaxed text-axal-muted">Scope: {scopeLine(e)}</div>
+      {activity && <div className="mt-0.5 text-[10px] text-axal-faint" data-testid={`activity-pr2-${e.id}`}>{activity}</div>}
+      {onOpen && (
+        <button type="button" onClick={onOpen} data-testid={`open-pr2-${e.id}`}
+          aria-label={`Open engagement with ${e.client_name || 'this client'}`}
+          className="mt-1.5 text-[10.5px] font-semibold text-emerald-700 hover:underline dark:text-emerald-300">
+          Open engagement →
+        </button>
+      )}
       {moves.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {moves.map((lane) => (

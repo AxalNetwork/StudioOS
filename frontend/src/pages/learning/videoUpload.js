@@ -457,15 +457,25 @@ export function streamCopyOf(row) {
   if (row.kind !== 'video' || row.video_source !== 'r2' || row.stream_uid) return null;
   const c = row[STREAM_COPY_FIELD];
   if (c === null || c?.state === 'none') return 'copy';
-  return ['copying', 'verified', 'failed'].includes(c?.state) ? c.state : null;
+  // D4649: `starting` is this page's own mark while the POST is in flight (no second click);
+  // `unreadable` is the route's word for a copy table it could not read (no button, no count).
+  if (c?.state === 'copying' && c.starting) return 'starting';
+  return ['copying', 'verified', 'failed', 'unreadable'].includes(c?.state) ? c.state : null;
 }
 
-/** lr16's banner count: uploaded files the read says are not yet verified on Stream. Null when no row carries the field. */
+/**
+ * lr16's banner count: uploaded files the read says are not yet verified on
+ * Stream. Null when no row carries the field; 'unreadable' (D4649) when the
+ * route could not read the copies, which is not a count of zero.
+ */
 export function stillOnStorage(rows) {
   const carried = (rows || []).filter((r) => streamCopyOf(r) !== undefined);
   if (!carried.length) return null;
-  return carried.filter((r) => ['copy', 'copying', 'failed'].includes(streamCopyOf(r))).length;
+  if (carried.some((r) => streamCopyOf(r) === 'unreadable')) return 'unreadable';
+  return carried.filter((r) => ['copy', 'starting', 'copying', 'failed'].includes(streamCopyOf(r))).length;
 }
 
 export const storageBanner = (n) => `${n} uploaded ${n === 1 ? 'video still plays' : 'videos still play'} from storage.`;
+/** D4649: the banner when the copies could not be read. Says so, and claims no count. */
+export const STORAGE_BANNER_UNREADABLE = 'Whether uploaded videos still play from storage could not be read.';
 export const STORAGE_BANNER_LINE = 'Copy each to Stream; the original is kept for 30 days after the copy is verified.';

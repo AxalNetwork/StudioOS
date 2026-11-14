@@ -176,9 +176,14 @@ test('migration 237 builds a ledger, not another frozen-status table', () => {
   // 'promised' exactly as investor_introductions' does.
   assert.match(ROUTE, /r\.patch\('\/:uid'/, 'the state transition is gone');
   const patch = handler("r.patch('/:uid'");
-  assert.match(patch, /state === 'delivered'\s*\n?\s*\? \(existing\.delivered_at \|\| isoDate\(body\.delivered_at\) \|\| day\)/,
+  // D4642: only the TRANSITION stamps the date. An amendment to an entry that
+  // is already delivered with no recorded date must not back-stamp today onto a
+  // delivery that happened at some other time, so `moving` gates the fallback.
+  assert.match(patch, /state === 'delivered'\s*\n?\s*\? \(existing\.delivered_at \|\| isoDate\(body\.delivered_at\) \|\| \(moving \? day : null\)\)/,
     'delivering no longer stamps a date');
-  assert.match(patch, /cannot change state/, 'a delivered entry can be re-opened');
+  assert.match(patch, /const moving = asked !== null && asked !== existing\.state;/,
+    'the transition flag that gates date stamping is gone');
+  assert.match(patch, /its state cannot change/, 'a delivered entry can be re-opened');
   assert.match(patch, /asked !== existing\.state && existing\.state !== 'promised'/,
     'the terminal-state check changed shape');
 });
@@ -201,7 +206,8 @@ test('the read and the write narrow on the same accessible set, and neither reac
     'the transition gate no longer checks the empty set first');
   // Every handler is behind canViewLpData, so a founder gets 403 rather than a
   // paywall — and the mount says why it is not in STUDIO_PREFIXES.
-  assert.equal((ROUTE.match(/if \(!canViewLpData\(user\)\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/g) || []).length, 3,
+  // Four handlers since D4642 added GET /:uid/history, which reads the same book.
+  assert.equal((ROUTE.match(/if \(!canViewLpData\(user\)\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/g) || []).length, 4,
     'a handler lost its role gate');
   assert.match(INDEX, /app\.route\('\/api\/portfolio-support', portfolioSupport\);/, 'the route is not mounted');
   assert.match(INDEX, /they have hit someone else's surface/, 'the mount no longer says why 403 rather than 402');
@@ -261,11 +267,22 @@ test('an unrecorded hour count is never a zero, on the page or in the total', ()
     'an untimed entry renders as a number');
   // The strip refuses to print a 0 total when the only reason it is zero is
   // that nothing was timed.
-  assert.match(P, /totals\.entries_without_hours > 0 && totals\.hours_recorded === 0\s*\n?\s*\? 'Not recorded'/,
+  assert.match(P, /totals\.entries > 0 && totals\.entries_without_hours === totals\.entries\s*\n?\s*\? 'Not recorded'/,
     'a ledger of untimed entries reports 0 hours');
   // The route counts the untimed entries rather than folding them in.
-  assert.match(ROUTE, /if \(s\.hours == null\) \{ x\.entries_without_hours \+= 1; withoutHours \+= 1; \}/,
+  //
+  // #4647 (D4647) moved this from a loop over the returned page to the
+  // ledger's own GROUP BY, because every figure here has to be over the whole
+  // authorized population and not over the 400 rows that happened to be
+  // shown. The rule is unchanged and so is what this case is for: an untimed
+  // entry is COUNTED, never summed as zero. Both halves are pinned, since the
+  // sum and the count are now separate columns — and behaviourally too, in
+  // cloudflare-worker/test/portfolio_periods_pages_4647.test.ts, which checks
+  // a ledger where every entry is untimed.
+  assert.match(ROUTE, /SUM\(CASE WHEN s\.hours IS NULL THEN 1 ELSE 0 END\) AS entries_without_hours/,
     'the route no longer counts untimed entries separately');
+  assert.match(ROUTE, /SUM\(CASE WHEN s\.hours IS NULL THEN 0 ELSE s\.hours END\)/,
+    'the hours total no longer excludes the untimed entries');
   assert.match(ROUTE, /if \(v === undefined \|\| v === null \|\| v === ''\) return null;/,
     'an empty hours field is coerced to a number');
   // And the form sends absence as absence.
@@ -356,4 +373,83 @@ test('the strip, the instrument and the header row match the artboard', () => {
   for (const m of ['portfolioSupportList', 'portfolioSupportLog', 'portfolioSupportUpdate']) {
     assert.ok(API.includes(`${m}:`), `the ${m} client method is gone`);
   }
+});
+
+/**
+ * D4642 (#4642) — the desk's save path.
+ *
+ * THREE DEFECTS THIS GUARDS AGAINST, each one found on this page rather than
+ * imagined: a refused write written into `state.error`, which blanked every
+ * stat to "Unavailable" and said the ledger could not be read about a ledger
+ * it had just read; a Deliver sent with no record id and no revision, so a
+ * stale tab silently overwrote a colleague's accepted change; and a draft
+ * holding a `project_uid` the reloaded book no longer carried, which the
+ * server answered with "Project not found" about a company the member had
+ * picked from this very list.
+ */
+test('a refused write names its own entry and leaves the ledger readable', () => {
+  // The two are separate state, and the stats read only `state.error`.
+  assert.match(P, /const \[notice, setNotice\] = useState\(null\);/, 'the per-entry write outcome is gone');
+  const move = /const move = async \(row, next\) => \{[\s\S]*?\n  \};/.exec(P);
+  assert.ok(move, 'the transition handler is gone');
+  assert.doesNotMatch(move[0], /setState\(\{ loading/, 'a refused write writes over the ledger read again');
+  assert.doesNotMatch(move[0], /error: error\?\.message/, 'a refused write is reported as an unreadable ledger again');
+  // The notice names the company and offers the next action.
+  assert.match(P, /data-testid=\{`status-ip3-support-\$\{notice\.kind\}`\}/, 'the notice is no longer addressable');
+  assert.match(P, /Reload the ledger/, 'the notice no longer offers a next action');
+  // And the row it is about is marked, so a conflict on a long ledger is
+  // findable rather than a sentence about an entry the member has to hunt for.
+  assert.match(fn('Ledger'), /noticeFor === row\.uid \? 'is-contested' : undefined/,
+    'the contested row is no longer marked');
+  assert.match(rendered(), /company \? `\$\{company\}: ` : ''/, 'the refusal no longer names the record it is about');
+});
+
+test('a transition names the record and the revision it read, and the loser keeps the newer work', () => {
+  const move = /const move = async \(row, next\) => \{[\s\S]*?\n  \};/.exec(P)[0];
+  // The request carries BOTH: the record it believes it is editing, and the
+  // revision the page read. Either alone is not enough — the uid alone cannot
+  // see a concurrent change, the revision alone cannot see a stale list.
+  assert.match(move, /project_uid: row\.project_uid \?\? undefined,/, 'the transition no longer names the record');
+  assert.match(move, /expected_revision: Number\(row\.revision\)/, 'the transition no longer sends the revision it read');
+  // On a conflict the server's row replaces the stale one: the page shows the
+  // accepted work rather than the copy it opened.
+  assert.match(move, /error\?\.code === 'changed_since_open'/, 'the conflict is no longer told apart from any other refusal');
+  assert.match(move, /entries: current\.data\.entries\.map\(\(x\) => \(x\.uid === row\.uid \? \{ \.\.\.x, \.\.\.fresh \} : x\)\),/,
+    'the newer accepted row is no longer adopted');
+  assert.match(move, /Apply yours again if it still applies\./, 'the conflict no longer says what the member can do');
+  // One pending save at a time, on both writers.
+  assert.match(move, /if \(busy\) return;/, 'a second transition can race the first');
+  assert.match(P, /if \(busy\) return; \/\/ D4642/, 'a double-clicked Log support can submit twice');
+  const ledger = fn('Ledger');
+  assert.match(ledger, /disabled=\{!!busy\}/, 'the move buttons are live during a pending save');
+  assert.match(ledger, /onMove\(row, 'delivered'\)/, 'Deliver no longer passes the whole row');
+});
+
+test('an amendment is attributed on the page, and an unamended entry claims nothing', () => {
+  const ledger = fn('Ledger');
+  assert.match(ledger, /Number\(row\.revision\) > 1/, 'the page no longer tells an amended entry from a fresh one');
+  assert.match(ledger, /Not amended since it was recorded/, 'an unamended entry no longer says so');
+  assert.match(ledger, /HISTORY_LABEL\[item\.action\]/, "an amendment's own verb is gone");
+  assert.match(P, /const HISTORY_LABEL = \{ amended: 'Amended'/, 'a state-less amendment is labelled as a transition again');
+  assert.match(ledger, /a member no longer on the account/, 'an amendment by a departed member reads as unattributed');
+  // An unreadable history is not an empty one, and it does not touch the row.
+  const open = /const openHistory = async \(row\) => \{[\s\S]*?\n  \};/.exec(P)[0];
+  assert.match(open, /if \(history\?\.uid === row\.uid\) \{ setHistory\(null\); return; \}/,
+    'a second click re-fetches rather than closing');
+  assert.match(open, /error: error\?\.message \|\| 'This entry\\u2019s history could not be read\.'/,
+    'a failed history read is reported as no amendments');
+  assert.match(ledger, /No amendment is recorded\./, 'an empty history is no longer told apart from a failed one');
+  assert.ok(API.includes('portfolioSupportHistory:'), 'the history client method is gone');
+  assert.match(ROUTE, /r\.get\('\/:uid\/history'/, 'the history read is gone from the route');
+});
+
+test('a draft cannot be saved against a company the book no longer holds', () => {
+  const submit = /const submit = async \(event\) => \{[\s\S]*?\n  \};/.exec(P)[0];
+  assert.match(submit, /if \(!companies\.some\(\(x\) => x\.project_uid === form\.project_uid\)\)/,
+    'the draft no longer re-checks its company against the reloaded book');
+  assert.match(submit, /Pick a company again\./, 'the refusal no longer says what to do about it');
+  // The message is the FORM's, not the ledger's: a draft that cannot be saved
+  // says nothing about whether the ledger could be read.
+  assert.match(submit, /setForm\(\(current\) => \(\{[\s\S]*?error: 'That company is no longer in this book/,
+    'the draft refusal is reported somewhere other than the form');
 });

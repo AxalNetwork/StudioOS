@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkerRail } from '../../ui';
 import ZoneHeader from '../../workspaces/ZoneHeader';
 import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
@@ -42,6 +42,9 @@ const KINDS = [
 ];
 const KIND_LABEL = Object.fromEntries(KINDS);
 const STATE_LABEL = { promised: 'Promised', delivered: 'Delivered', withdrawn: 'Withdrawn' };
+// D4642: an amendment's own verb. `amended` covers a change that moved no
+// state, which the other two labels would misreport as a transition.
+const HISTORY_LABEL = { amended: 'Amended', delivered: 'Delivered', withdrawn: 'Withdrawn' };
 const dateLabel = (value) => (value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null);
 /**
  * Hours, and the one place a zero must not be manufactured.
@@ -51,36 +54,60 @@ const dateLabel = (value) => (value ? new Date(value).toLocaleDateString('en-US'
  * why the route returns `entries_without_hours` beside the sum instead of
  * folding the unmeasured entries in at zero.
  */
-const hoursLabel = (value) => (value == null ? 'Not recorded' : `${Number(value) % 1 === 0 ? Number(value) : Number(value).toFixed(1)} h`);
+const hoursLabel = (value) => (value == null ? 'Not recorded' : `${Number(value).toLocaleString('en-US', { maximumFractionDigits: 12 })} h`);
 
 const EMPTY = {
   entries: [], companies: [], untouched: [],
   totals: {
-    delivered: 0, promised: 0, withdrawn: 0, hours_recorded: 0,
+    delivered: 0, promised: 0, withdrawn: 0, entries: 0, hours_recorded: 0,
     entries_without_hours: 0, companies_in_book: 0, companies_supported: 0,
   },
 };
 
 export default function InvestorPortfolioValueAdd() {
   const [filter, setFilter] = useState('all');
+  const [offset, setOffset] = useState(0);
+  const generation = useRef(0);
   const [state, setState] = useState({ loading: true, error: '', data: EMPTY });
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState('');
+  // D4642 (#4642): the outcome of a write against ONE entry, named. It is kept
+  // apart from `state.error`, which means the LEDGER READ failed: a refused
+  // Deliver used to be written into that field, so one entry's 409 blanked
+  // every stat to "Unavailable" and the page said the ledger could not be
+  // read — about a ledger it had just read.
+  const [notice, setNotice] = useState(null);
+  // D4642: the amendment history of ONE entry, fetched on demand. The ledger
+  // row carries the latest state; `recorded_by` says who created the entry.
+  // Neither says who amended it, which is the question a second member's edit
+  // raises, so the row offers the recorded history rather than the page
+  // guessing from what changed.
+  const [history, setHistory] = useState(null);
 
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const result = await api.portfolioSupportList();
+      const params = {};
+      if (offset) params.offset = offset;
+      if (filter === 'outstanding' || filter === 'delivered') params.state = filter === 'outstanding' ? 'promised' : 'delivered';
+      const result = await api.portfolioSupportList(params);
+      if (request !== generation.current) return;
+      if (offset && result?.entries?.length === 0) {
+        setOffset(Math.max(0, offset - (result.page?.limit || offset)));
+        return;
+      }
       setState({ loading: false, error: '', data: { ...EMPTY, ...result, totals: { ...EMPTY.totals, ...(result?.totals || {}) } } });
     } catch (error) {
+      if (request !== generation.current) return;
       // An unreadable ledger is not an empty one. The page says which it is
       // rather than drawing the empty state over a failed read.
       setState({ loading: false, error: error?.message || 'The support ledger could not be read.', data: EMPTY });
     }
-  }, []);
+  }, [filter, offset]);
   useEffect(() => { load(); }, [load]);
 
-  const { entries, companies, untouched, totals } = state.data;
+  const { entries, companies, untouched, totals, page } = state.data;
   // `company` is a VIEW, not a row predicate — the rollup rather than a
   // narrower set of entries. The other three read `state` directly.
   const byCompany = filter === 'company';
@@ -93,7 +120,8 @@ export default function InvestorPortfolioValueAdd() {
   const logSupport = useCallback(() => {
     setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', summary: '', outcome: '', error: '' }));
   }, []);
-  const byCompanyView = useCallback(() => { setFilter('company'); }, []);
+  const changeFilter = useCallback((next) => { setOffset(0); setFilter(next); }, []);
+  const byCompanyView = useCallback(() => { changeFilter('company'); }, [changeFilter]);
 
   // D1595 (#3868) / D1424 (#3700): Ask on Log support's "What happened". The
   // Add form's parent is the chosen company's project id; nothing is read
@@ -107,8 +135,20 @@ export default function InvestorPortfolioValueAdd() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (busy) return; // D4642: one pending save per card; a second submit waits
     if (!form?.project_uid || !form.summary.trim()) {
       setForm((current) => ({ ...current, error: 'A company and a description of what happened are both required.' }));
+      return;
+    }
+    // D4642: the draft's company must still be one this book holds. Without
+    // this the form kept a `project_uid` the reloaded book no longer has and
+    // sent it, and the member read "Project not found" about a company they
+    // had picked from this very list.
+    if (!companies.some((x) => x.project_uid === form.project_uid)) {
+      setForm((current) => ({
+        ...current,
+        error: 'That company is no longer in this book, so this entry cannot be recorded against it. Pick a company again.',
+      }));
       return;
     }
     setBusy('log');
@@ -131,20 +171,69 @@ export default function InvestorPortfolioValueAdd() {
     } finally { setBusy(''); }
   };
 
-  const move = async (uid, next) => {
-    setBusy(uid);
+  // D4642: one entry's transition. The request says which record and which
+  // revision it means, so the server can refuse a stale edit instead of
+  // overwriting a newer one; the outcome is reported against THAT entry.
+  const move = async (row, next) => {
+    if (busy) return; // a pending save owns the ledger until it settles
+    setBusy(row.uid);
+    setNotice(null);
     try {
-      await api.portfolioSupportUpdate(uid, { state: next });
+      await api.portfolioSupportUpdate(row.uid, {
+        state: next,
+        project_uid: row.project_uid ?? undefined,
+        ...(row.revision == null ? {} : { expected_revision: Number(row.revision) }),
+      });
       await load();
     } catch (error) {
-      setState((current) => ({ ...current, error: error?.message || 'That entry could not be updated.' }));
+      const company = row.project_name || error?.data?.project_name || null;
+      if (error?.code === 'changed_since_open') {
+        // Someone else's change is the accepted one. Take the row the server
+        // handed back so the page shows their work rather than this stale copy,
+        // and say so instead of silently discarding either edit.
+        const fresh = error?.data?.item || null;
+        if (fresh) {
+          setState((current) => ({
+            ...current,
+            data: {
+              ...current.data,
+              entries: current.data.entries.map((x) => (x.uid === row.uid ? { ...x, ...fresh } : x)),
+            },
+          }));
+        }
+        setNotice({
+          entryUid: row.uid, kind: 'conflict',
+          message: `${company ? `${company}: ` : ''}someone else changed this entry since this page read it. Their change is shown. Apply yours again if it still applies.`,
+        });
+        return;
+      }
+      setNotice({
+        entryUid: row.uid,
+        kind: error?.code === 'state_is_terminal' ? 'blocked' : 'error',
+        message: `${company ? `${company}: ` : ''}${error?.message || 'that entry could not be updated.'}`,
+      });
     } finally { setBusy(''); }
   };
 
+  // Toggling, so a second click closes rather than re-fetching. A failed fetch
+  // is reported in place: an unreadable history is not an empty one, and the
+  // row's own state is not in doubt because of it.
+  const openHistory = async (row) => {
+    if (history?.uid === row.uid) { setHistory(null); return; }
+    setHistory({ uid: row.uid, loading: true, error: '', items: [] });
+    try {
+      const result = await api.portfolioSupportHistory(row.uid);
+      setHistory({ uid: row.uid, loading: false, error: '', items: result?.items || [] });
+    } catch (error) {
+      setHistory({ uid: row.uid, loading: false, error: error?.message || 'This entry\u2019s history could not be read.', items: [] });
+    }
+  };
+
   const unreadable = Boolean(state.error);
-  const hours = totals.entries_without_hours > 0 && totals.hours_recorded === 0
+  const totalsUnreadable = unreadable || state.data.page_state === 'unreadable';
+  const hours = totals.entries > 0 && totals.entries_without_hours === totals.entries
     ? 'Not recorded'
-    : `${totals.hours_recorded} h`;
+    : hoursLabel(totals.hours_recorded);
 
   return <ZonePrimaryScope><div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add">
     <ZoneHeader bucketPath="/portfolio" title="Value-add desk" intro="Support ledger — introductions, hours and outcomes per company."
@@ -152,7 +241,7 @@ export default function InvestorPortfolioValueAdd() {
     <ZoneToolbar
       role="investor"
       className="mb-3"
-      filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: setFilter })}
+      filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: changeFilter })}
       actions={investorZoneActions('portfolio/value-add', {
         handlers: { logSupport, byCompany: byCompanyView },
         view: {
@@ -163,17 +252,32 @@ export default function InvestorPortfolioValueAdd() {
       })}
     />
     {state.error && <div className="i4-error" data-testid="status-investor-value-add-error"><span>The support ledger could not be read. That is not a claim that no support was given.</span><button type="button" onClick={load}>Retry</button></div>}
+    {/* D4642: ONE entry's write outcome, naming the entry's company and the
+        next action. The ledger beside it stays readable, because it was read. */}
+    {notice && <div className={notice.kind === 'conflict' ? 'i4-notice' : 'i4-error'} data-testid={`status-ip3-support-${notice.kind}`}>
+      <span>{notice.message}</span>
+      <button type="button" onClick={() => { setNotice(null); load(); }}>Reload the ledger</button>
+    </div>}
     {state.loading ? <Skeleton /> : <>
       <section className="i4-stats">
-        <Stat label="Delivered" value={unreadable ? 'Unavailable' : totals.delivered} note={unreadable ? 'Ledger unreadable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
-        <Stat label="Hours logged" value={unreadable ? 'Unavailable' : hours} note={unreadable ? 'Ledger unreadable' : totals.entries_without_hours === 0 ? (entries.length ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
-        <Stat label="Outstanding" value={unreadable ? 'Unavailable' : totals.promised} note={unreadable ? 'Ledger unreadable' : 'Promised and not yet delivered'} />
-        <Stat label="No support at all" value={unreadable ? 'Unavailable' : untouched.length} note={unreadable ? 'Ledger unreadable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
+        <Stat label="Delivered" value={totalsUnreadable ? 'Unavailable' : totals.delivered} note={totalsUnreadable ? 'Ledger totals unavailable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
+        <Stat label="Hours logged" value={totalsUnreadable ? 'Unavailable' : hours} note={totalsUnreadable ? 'Ledger totals unavailable' : totals.entries_without_hours === 0 ? (totals.entries ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
+        <Stat label="Outstanding" value={totalsUnreadable ? 'Unavailable' : totals.promised} note={totalsUnreadable ? 'Ledger totals unavailable' : 'Promised and not yet delivered'} />
+        <Stat label="No support at all" value={totalsUnreadable ? 'Unavailable' : untouched.length} note={totalsUnreadable ? 'Ledger totals unavailable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
       </section>
       {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} />}
       {byCompany
         ? <PerCompany companies={companies} unreadable={unreadable} />
-        : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
+        : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} history={history} onHistory={openHistory} noticeFor={notice?.entryUid || null} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
+      {!byCompany && !totalsUnreadable && page && (page.offset > 0 || page.next_offset != null) && (
+        <nav aria-label="Support ledger pages" className="flex flex-wrap items-center gap-3 py-2 text-sm">
+          <button type="button" className="underline disabled:opacity-40" disabled={!page.offset || Boolean(busy)}
+            onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>Previous</button>
+          <span aria-live="polite">{page.offset + 1}–{page.offset + entries.length} of {page.matching_total ?? page.total} matching entries</span>
+          <button type="button" className="underline disabled:opacity-40" disabled={page.next_offset == null || Boolean(busy)}
+            onClick={() => setOffset(page.next_offset)}>Next</button>
+        </nav>
+      )}
       {/* The artboard's band. Its foot read "Feeds the LP reporting pack." —
           false: accepting a draft stamps `accepted_at` and nothing else, and
           no LP report reads this store, so the foot now says what happens. */}
@@ -189,7 +293,7 @@ export default function InvestorPortfolioValueAdd() {
       />
       <footer className="i4-boundary">Investor workspace · the ledger is restricted to this investor’s accessible portfolio.</footer>
     </>}
-  </main><ValueAddRail totals={totals} entries={entries} unreadable={unreadable} /></div></ZonePrimaryScope>;
+  </main><ValueAddRail totals={totals} unreadable={totalsUnreadable} /></div></ZonePrimaryScope>;
 }
 
 /**
@@ -198,17 +302,33 @@ export default function InvestorPortfolioValueAdd() {
  * `promised`, which is the exact defect that makes `investor_introductions`
  * useless for this purpose — its status is written once and updated by nothing.
  */
-function Ledger({ rows, filter, unreadable, onMove, busy }) {
+function Ledger({ rows, filter, unreadable, onMove, busy, history = null, onHistory = null, noticeFor = null }) {
   if (unreadable) return <div className="i4-empty"><AlertCircle size={16} />The support ledger could not be read. No claim is being made about what was or was not done.</div>;
   if (!rows.length) {
     return <div className="i4-empty ip3-empty"><AlertCircle size={18} /><div><strong>{filter === 'outstanding' ? 'No promise is outstanding.' : filter === 'delivered' ? 'No entry is recorded as delivered.' : 'No support entry is recorded yet.'}</strong><p>{filter === 'all' ? 'The ledger is empty because nothing has been logged, not because nothing was done. Log support records the first entry.' : 'Every recorded entry sits under another state.'}</p></div></div>;
   }
-  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Kind</th><th>State</th><th>Hours</th><th>What happened</th></tr></thead><tbody>{rows.map((row) => <tr key={row.uid} data-testid={`row-ip3-support-${row.uid}`}>
+  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Kind</th><th>State</th><th>Hours</th><th>What happened</th></tr></thead><tbody>{rows.map((row) => <tr key={row.uid} data-testid={`row-ip3-support-${row.uid}`} className={noticeFor === row.uid ? 'is-contested' : undefined}>
     <td><strong>{row.project_name || `Startup ${row.project_id}`}</strong><small>{dateLabel(row.delivered_at || row.promised_at || row.created_at) || 'Date not recorded'}</small></td>
     <td>{KIND_LABEL[row.kind] || row.kind}</td>
-    <td><span className={`ip3-state is-${row.state}`}>{STATE_LABEL[row.state] || row.state}</span>{row.state === 'promised' && <span className="ip3-move"><button type="button" disabled={busy === row.uid} onClick={() => onMove(row.uid, 'delivered')}>Deliver</button><button type="button" disabled={busy === row.uid} onClick={() => onMove(row.uid, 'withdrawn')}>Withdraw</button></span>}</td>
+    <td><span className={`ip3-state is-${row.state}`}>{STATE_LABEL[row.state] || row.state}</span>{row.state === 'promised' && <span className="ip3-move">{/* D4642: the whole row, so the request can name the record and the revision it read. */}<button type="button" disabled={!!busy} onClick={() => onMove(row, 'delivered')}>Deliver</button><button type="button" disabled={!!busy} onClick={() => onMove(row, 'withdrawn')}>Withdraw</button></span>}</td>
     <td>{hoursLabel(row.hours)}</td>
-    <td><strong>{row.summary}</strong><small>{row.outcome || 'No outcome recorded yet'}</small></td>
+    <td><strong>{row.summary}</strong><small>{row.outcome || 'No outcome recorded yet'}</small>
+      {/* D4642: amended entries say so and offer the recorded history. An
+          entry still at revision 1 has none, and claims none. */}
+      {Number(row.revision) > 1
+        ? <span className="ip3-amended"><small>{`Amended ${Number(row.revision) - 1} ${Number(row.revision) === 2 ? 'time' : 'times'}`}</small><button type="button" onClick={() => onHistory && onHistory(row)} aria-expanded={history?.uid === row.uid}>{history?.uid === row.uid ? 'Hide history' : 'History'}</button></span>
+        : <span className="ip3-amended"><small>Not amended since it was recorded</small></span>}
+      {history?.uid === row.uid && <div className="ip3-history" data-testid={`history-ip3-support-${row.uid}`}>
+        {history.loading ? <small>Reading the history…</small>
+          : history.error ? <small>{history.error}</small>
+            : history.items.length === 0 ? <small>No amendment is recorded.</small>
+              : <ul>{history.items.map((item) => <li key={item.uid}>
+                <strong>{HISTORY_LABEL[item.action] || item.action}</strong>
+                <span>{` by ${item.actor?.name || 'a member no longer on the account'}`}</span>
+                <small>{`${dateLabel(item.created_at) || 'Date not recorded'} · revision ${item.revision}${item.changed?.length ? ` · ${item.changed.join(', ')}` : ''}`}</small>
+              </li>)}</ul>}
+      </div>}
+    </td>
   </tr>)}</tbody></table></div>;
 }
 
@@ -265,7 +385,7 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
 
 function Stat({ label, value, note }) { return <article className="i4-stat ip3-stat"><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
 function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }
-function ValueAddRail({ totals, entries, unreadable }) {
+function ValueAddRail({ totals, unreadable }) {
   return (
     <WorkerRail
       workspace="Portfolio"
@@ -274,7 +394,7 @@ function ValueAddRail({ totals, entries, unreadable }) {
       stance="Support ledger"
       note="Recorded support work, written by the people who did it. Introductions requested through the quota, dealroom membership and calendar activity are never relabelled as value-add."
       coverage={[
-        unreadable ? 'Support ledger unreadable' : `${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
+        unreadable ? 'Support ledger unreadable' : `${totals.entries} recorded ${totals.entries === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
         unreadable ? 'Hours unavailable' : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hour count`,
       ]}
       unavailable={[

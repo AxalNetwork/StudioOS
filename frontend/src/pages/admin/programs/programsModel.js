@@ -59,6 +59,10 @@ export const PERKS_PATH = '/admin/programs/perks';
 export const PERKS_HOW_PATH = '/admin/programs/perks/how-it-runs';
 export const PERKS_QUEUE_PATH = '/admin/programs/perks/queue';
 export const PERKS_ACTIVITY_PATH = '/admin/programs/perks/activity';
+// D5313 (#5313): Perks runs in the generic shell (PG03a), so it gains the shell's three other core sections.
+export const PERKS_AVAILABILITY_PATH = '/admin/programs/perks/availability';
+export const PERKS_PARTICIPATION_PATH = '/admin/programs/perks/participation';
+export const PERKS_SETTINGS_PATH = '/admin/programs/perks/settings';
 export const LEARNING_PATH = '/admin/programs/learning';
 export const LEARNING_HOW_PATH = '/admin/programs/learning/how-it-runs';
 export const LEARNING_PEOPLE_PATH = '/admin/programs/learning/people';
@@ -393,11 +397,17 @@ export const PAGES = Object.freeze({
     title: 'Perks', workspace: 'Programs',
     line: 'Partners list perks. Founders claim them with credits, through their plan, or by paying the partner.',
     facts: ['Who: Founders claim; other members browse. Partners have their own listings.', 'Join: Open'],
+    // D5313 (#5313): the generic shell's six core sections in PG03's order and words, with the Perk queue module
+    // (`perk_queue`, MODULE_PATHS) between Participation and History. The four addresses D953 and D962 gave Perks
+    // keep their paths: How it runs is Playbook, Queue is Perk queue, Activity is History.
     tabs: [
       { key: 'overview', label: 'Overview', path: PERKS_PATH },
-      { key: 'how', label: 'How it runs', path: PERKS_HOW_PATH },
-      { key: 'queue', label: 'Queue', path: PERKS_QUEUE_PATH },
-      { key: 'activity', label: 'Activity', path: PERKS_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: PERKS_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: PERKS_AVAILABILITY_PATH },
+      { key: 'participation', label: 'Participation', path: PERKS_PARTICIPATION_PATH },
+      { key: 'queue', label: 'Perk queue', path: PERKS_QUEUE_PATH, module: 'perk_queue' },
+      { key: 'activity', label: 'History', path: PERKS_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: PERKS_SETTINGS_PATH },
     ],
   },
   learning: {

@@ -6,8 +6,10 @@ import {api} from '../src/lib/api.js';
 
 // Exercise the actual host's band props and wording without loading unrelated cycle pages.
 const source=readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx',import.meta.url),'utf8');
-const from=source.indexOf("surface: 'raise/narrative-fix'");
-const definition=source.slice(from,source.indexOf('\n      }]]',from));
+// D5615: Raise's bands are in its entry, defs/raise.jsx; the host's tag stays in CycleRoute.jsx.
+const raiseDef=readFileSync(new URL('../src/pages/cycles/defs/raise.jsx',import.meta.url),'utf8');
+const from=raiseDef.indexOf("surface: 'raise/narrative-fix'");
+const definition=raiseDef.slice(from,raiseDef.indexOf('\n    }]]',from));
 const tagFrom=source.indexOf('<ZoneDraft key=');
 const tag=source.slice(tagFrom,source.indexOf('/>',tagFrom)+2);
 const moduleSource=`import React from 'react';

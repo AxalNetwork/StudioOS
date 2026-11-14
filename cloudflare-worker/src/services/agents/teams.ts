@@ -14,8 +14,8 @@
  * unrecorded, never 0.
  */
 import type { Env, User } from '../../types';
-import { canAccessProject, isProjectManager } from '../projectAccess';
-import { canEdit } from '../companyAccess';
+import { canAccessProject, canManageProject, isProjectManager } from '../projectAccess';
+import { companyWriteDenial } from '../companyAccess';
 import { isAdmin } from '../../routes/_t13t14t15_helpers';
 import { roleOf, type Rules } from './catalogue';
 
@@ -64,8 +64,9 @@ export async function canRead(env: Env, s: Scope, user: User): Promise<boolean> 
   return canAccessProject(env, user, s);
 }
 
-export async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
-  if (s.kind === 'company') return canEdit(env, { id: s.id }, user);
+export async function canManage(env: Env, s: Scope, user: User, opts: { agentRoster?: boolean } = {}): Promise<boolean> {
+  if (s.kind === 'company') return (await companyWriteDenial(env, { id: s.id }, user, !!user.support_session)) == null;
+  if (opts.agentRoster) return canManageProject(env, user, s, !!user.support_session);
   return isProjectManager(user, s);
 }
 

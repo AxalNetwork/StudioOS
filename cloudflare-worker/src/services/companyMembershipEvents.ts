@@ -36,9 +36,10 @@ export type MembershipEvent = {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   /**
-   * #4963: record the event only if the company row holds exactly this version AND this `updated_at` once the batch's
-   * earlier statements ran, i.e. only if THIS request's compare-and-swap update matched. The version alone is not
-   * enough: a concurrent writer that won the race leaves the same next version behind.
+   * #4963: filter on the company version and update stamp after the batch's earlier statements.
+   * #5654: neither this pair nor a millisecond stamp proves which request won. Callers must place
+   * decisionGuard immediately after the deciding UPDATE, before any dependent event, so a loser
+   * rolls back the entire batch. This predicate is an additional state filter, not ownership proof.
    */
   onlyIfProfile?: { version: number; updatedAt: string };
 };

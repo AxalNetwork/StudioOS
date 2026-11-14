@@ -23,12 +23,14 @@
  *   POST   /modules/:uid/lessons/order   reorder, by a full list of lesson uids
  *   PATCH  /lessons/:uid
  *   DELETE /lessons/:uid
+ *   GET    /coverage                  D4650 part 4: the catalogue's coverage of the four journeys
  *
  * A VIDEO IS A LINK ON THE ALLOW-LIST (`allowedVideoUrl`): https, and a host
  * from YouTube, Vimeo or Cloudflare Stream. An upload (`video_source = 'r2'`)
  * has no upload path yet and is refused rather than stored without a file.
  */
 import { COURSE_META_COLUMNS, courseMetaFields, courseMetaView, MetaInvalid } from '../services/learningCourseMeta';
+import { readCoverage } from '../services/learningCoverage';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
@@ -228,7 +230,9 @@ r.get('/items', async (c) => {
   const keys = new Map(((await c.env.DB.prepare(`SELECT uid, r2_key FROM learning_items WHERE video_source = 'r2' AND r2_key IS NOT NULL`)
     .all<{ uid: string; r2_key: string }>()).results ?? []).map((r) => [r.uid, r.r2_key]));
   const copies = await copyStates(c.env, items.map((i: any) => ({ uid: i.uid, video_source: i.video_source, r2_key: keys.get(i.uid) ?? null })));
-  return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: copies.get(i.uid) ?? { state: 'none' } } : i)) });
+  // D4649: `copies === null` is a copy table that could not be read: each uploaded file says so (`unreadable`),
+  // and the Studio offers no Copy to Stream and counts no banner from it.
+  return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: copies === null ? { state: 'unreadable' } : copies.get(i.uid) ?? { state: 'none' } } : i)) });
 });
 
 r.post('/items', async (c) => {
@@ -368,6 +372,22 @@ r.get('/courses', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const res = await c.env.DB.prepare(COURSE_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>();
   return c.json({ courses: (res.results || []).map(courseOut) });
+});
+
+// D4650 (#4650, part 4) — the curriculum coverage record. Reads the catalogue only (titles,
+// statuses, visibility, audience and stage), never a learner's row. A failed read is Unreadable,
+// never an empty catalogue.
+r.get('/coverage', async (c) => {
+  const admin = await gate(c); if (admin instanceof Response) return admin;
+  try {
+    return c.json({ coverage: await readCoverage(c.env) });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'coverage_unreadable',
+      message: 'The course catalogue could not be read, so coverage is unknown. This is not a claim that any journey has no material.',
+      raw: e,
+    });
+  }
 });
 
 async function slugTaken(env: Env, slug: string, exceptUid: string | null) {

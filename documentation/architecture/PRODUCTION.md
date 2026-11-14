@@ -56,14 +56,10 @@ wrangler secret put JWT_SECRET   # used for auth + Durable Object WS handshake
 npm run deploy                   # from the REPOSITORY ROOT
 ```
 
-`npm run deploy` is not a synonym for `wrangler deploy`. npm expands it into
-three scripts: `predeploy` applies pending D1 migrations
-(`scripts/migrate-d1.mjs --remote`), `deploy` builds the frontend and then runs
-`wrangler deploy --config ../wrangler.toml --env production`, and `postdeploy`
-probes the live site (`scripts/check-spa-live.mjs`). Running wrangler by hand
-skips the migration hook and ships the worker ahead of its schema.
-`npm run deploy` from inside `cloudflare-worker/` once did the same; that
-script now hands off to the root one (DEPLOY.md §1.1).
+`npm run deploy` dispatches **Cloudflare Worker deploy** on `main`. The
+workflow waits for the candidate's required checks, verifies queues and startup,
+applies D1 migrations and publishes the Worker. Check the run for live smoke.
+The Worker package delegates to the root command (DEPLOY.md §1.1).
 
 **The full procedure, with pre-flight, migration-failure triage and rollback, is
 [documentation/operations/DEPLOY.md](../operations/DEPLOY.md).**
@@ -132,17 +128,7 @@ It's not part of the production deploy path.
 
 **Live since 2026-10-14 09:00:26Z.** The deploy of `710f0ae19` (Actions run 38539060463, Worker version `279b51c2-077d-41d0-b549-f2884ebb8213`) switched MCP on in production, and every deploy of `main` since carries it. The owner's D669 MCP Inspector report on #1495 (connect, read context, submit a consented test interview, confirm a pending placement) is still outstanding, and it is now a check against production. The ordinary PR preview is an unbound SPA Worker and cannot run it.
 
-**Switching MCP off.** `checkMcpDeployment` pins the top-level and production flags to the `HQ_MCP_FLAG` constant in the same test file, and the "Cloudflare Worker deploy" workflow (`.github/workflows/cloudflare-worker-deploy.yml`) deploys `wrangler.toml` as committed, with whatever flag it commits, on every push to `main` and whenever it is dispatched (`workflow_dispatch`, `cloudflare-worker-deploy.yml:31`) or re-run. So a commit that flips only the flags fails CI, and a hand deploy lasts only until that workflow's next deploy. Leave the binding and the namespace in place throughout: switching off deletes no grant and no token, and the binding is what keeps every revocation path below working.
-
-1. **Immediately: deploy `main`'s head with the flag overridden.**
-   - **First, disable the deploy workflow.** In Actions, open "Cloudflare Worker deploy" and choose Disable workflow, and keep it disabled until the step-2 PR is ready. This is required: while the flag is committed on, every push to `main` deploys MCP back on. Then look for a run of it that is in progress or queued, and if there is one, let it finish before you deploy. That is a further condition, not a substitute for disabling: the workflow never cancels a running deploy (`cancel-in-progress: false`, `cloudflare-worker-deploy.yml:40-42`), so a run that started before your hand deploy can finish after it and switch MCP back on, and a queued one starts after it. Until step 2 merges, do not dispatch or re-run it.
-   - **Deploy.** From the repository root, on a clean checkout of `origin/main`, first install both packages as the deploy job does (`npm ci --prefix frontend` and `npm ci --prefix cloudflare-worker`, `cloudflare-worker-deploy.yml:63-67`), so the build has its dependencies and `npx wrangler` resolves the pinned wrangler rather than fetching another version for the `predeploy` migrations. Then run `npm run deploy -- --var MCP_SERVER_ENABLED:false --var WORKER_DEPLOY_VERSION:$(git rev-parse HEAD)`. The root `deploy` script runs its `predeploy` migration hook (`scripts/migrate-d1.mjs --remote`), builds, then runs `npx wrangler deploy --config ../wrangler.toml --env production` from `cloudflare-worker/`, and npm appends both `--var` flags to that command (npm 10.9.7 hands them to neither the `predeploy` nor the `postdeploy` hook). `npx --no-install wrangler deploy --help` (wrangler 4.147.0) lists `--var` as "A key-value pair to be injected into the script as a variable", repeatable; wrangler writes each over the `[vars]` value of the same name. The second flag is the one the deploy job passes on every deploy (`cloudflare-worker-deploy.yml:132`): without it the Worker would report an empty `WORKER_DEPLOY_VERSION` instead of the commit it runs. Run it from the root, not from `cloudflare-worker/`: that directory's `npm run deploy` is `cd .. && npm run deploy`, which appends the arguments without `--`, so the root npm takes each `--var` as its own option and passes the two values on to wrangler as bare arguments. The `predeploy` hook has then already applied any pending migrations and the build has run when wrangler refuses them (`Unknown argument: WORKER_DEPLOY_VERSION:<sha>`), so nothing deploys and MCP stays on. A dry run in a dummy package layout with npm 10.9.7 and wrangler 4.147.0 showed exactly that on 2026-10-14. The deploy log then lists `env.OAUTH_KV (a536c75e7461447a89b1967d367c13ad)`, `env.MCP_SERVER_ENABLED ("(hidden)")` and `env.WORKER_DEPLOY_VERSION ("(hidden)")`, because wrangler hides every `--var` value; `wrangler deploy --dry-run` with the same two flags listed exactly that on 2026-10-14. A clean checkout has no earlier build in `docs/`, so this deploy restarts asset retention ([DEPLOY.md §2.1](../operations/DEPLOY.md#21-docs-is-built-at-deploy-time-never-committed-d529)): a tab opened on an earlier build may need one reload.
-   - **Confirm.** `curl -s -o /dev/null -w '%{http_code}\n' https://axal.vc/.well-known/oauth-authorization-server` answers 404 with MCP off. Run it again after any later CI deploy: until step 2 merges, a CI deploy switches MCP back on. If it answers 200, repeat this step's hand deploy, and check that the workflow is still disabled.
-   - **Hand over to step 2.** Open that PR at the same time. When it is ready to merge, re-enable the workflow, so its merge deploys; merge it straight away, and confirm again once that deploy finishes.
-2. **Lasting: one PR to `main` that edits three lines.** It sets `MCP_SERVER_ENABLED = "false"` in the top-level `[vars]`, sets it to `"false"` in `[env.production.vars]`, and sets `const HQ_MCP_FLAG = 'false';` in `cloudflare-worker/test/mcp_server_d666.test.ts`. CI needs nothing else: on 2026-10-14 a scratch copy with exactly those three edits passed `mcp_server_d666.test.ts`, `mcp_authorization_d669.test.ts`, `scripts/lib/branchConfig.test.mjs`, `check-wrangler-binding-parity`, `check-branch-config` and both topology tests. The same PR updates the statements that would then be false, none of which CI reads: in this section, "`MCP_SERVER_ENABLED = "true"` at the top level and in production" and the "Live since 2026-10-14 09:00:26Z" paragraph; `ROUTE_MAP.md`'s "live in production since 2026-10-14 (D681)"; and the `OAUTH_KV` row's "live since 2026-10-14" in `CODEBASE_MAP.md` §2. Each says "MCP off since <date>". Its merge deploys the Worker with MCP off.
-3. **Last resort: `wrangler rollback`.** No version deployed from `main` before `710f0ae19` binds `OAUTH_KV`. The last one deployed with the flag off, `e3fb5042-82ca-4c4d-93b9-6f6ced4c8d8a` (the deploy of `7309b8a19`, run 38537160161, 08:44:28Z on 2026-10-14), lists the KV namespaces `TOKENS` and `RATE_LIMITS` only. While such a version is live, `revokeAllGrants` returns 0 without touching `OAUTH_KV` (`cloudflare-worker/src/mcp/grants.ts:105`), so no revocation path works: a member who signs out everywhere or requests deletion keeps every grant. Only `grantUser` (`grants.ts:43`) still protects them, on every tool call once MCP is back on: it refuses a grant older than the member's `jwt_min_iat` floor, and any grant of an account with `deletion_requested_at` set. Roll back only if steps 1 and 2 cannot run, as [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first) describes: `npx wrangler rollback <VERSION_ID> --config ../wrangler.toml --env production` from `cloudflare-worker/`. A rollback also takes back every other change deployed since that version, DEPLOY.md §3's D1 caveat applies, and the next CI deploy replaces it, as in step 1.
-
-   Bring the binding back with MCP off: step 1's hand deploy with `--var MCP_SERVER_ENABLED:false`, or step 2's merge. Once that version is live, end the grants of every member who raised their session floor or requested deletion while the rollback was live, and finish those revocations before any version with the flag on goes live. Find them by what happened in that window, not by `users.deletion_requested_at`: a member's cancel (`POST /api/settings/account/delete-request/cancel`, `routes/settings.ts:934`) and HQ's close of the request (`closeDsrRequest`, `services/dsrRequests.ts:133`) both set it back to NULL. Take every `users.id` whose `jwt_min_iat` (epoch seconds) falls inside the window, and every `user_id` with an `activity_logs` row whose `action` is `'account_deletion_requested'` (`routes/settings.ts:923`) and whose `created_at` (UTC) falls inside it. `dsr_requests.requested_at` inside the window is a cross-check; it records only the first request while one is open. `jwt_min_iat` is raised by every route in the first list below, by `POST /api/settings/totp/re-enrol/confirm` after recovery (`routes/settings.ts:694`), and for every active account by HQ's `POST /api/admin/security/force-reauth` (`routes/admin_security.ts:1290`), which ends no grant itself. HQ's `POST /api/admin/security/force-reauth/:userId` ends one member's grants, and it also ends that member's sessions.
+**Switching MCP off.** Keep the OAuth namespace binding so revocation remains available. Set `MCP_SERVER_ENABLED = "false"` in the top-level and production vars and update `HQ_MCP_FLAG` in `cloudflare-worker/test/mcp_server_d666.test.ts` in the same PR. Its verified main release publishes the disabled flag. Confirm that `/.well-known/oauth-authorization-server` answers 404 on `axal.vc`. The normal release path takes configuration from the committed candidate. For immediate owner recovery, follow the [rollback compatibility procedure](../operations/DEPLOY.md#3-capture-a-rollback-point-first) and select a compatible known-good Worker version that retains `OAUTH_KV`.
 
 **Revoking assistant grants.** Revoke a specific grant from Account > Connectors > AI assistants (`/account/connectors#ai-assistants`, which calls `DELETE /api/connectors/assistants/:id`) before the flag goes off: with the flag off, `signedIn` in `cloudflare-worker/src/routes/mcp_consent.ts` answers 404 to that route and to the grant list. After switch-off, these still end every assistant grant a member holds, because `revokeAllGrants` (`cloudflare-worker/src/mcp/grants.ts:104`) checks only that `OAUTH_KV` is bound:
 
@@ -237,12 +223,37 @@ A grant older than a raised session floor is also refused on every tool call (`g
     - Rotation: put the new `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then Register webhook at once (updates answer 401 in between, and Telegram retries). For the token, `/revoke` in @BotFather, put the new `TELEGRAM_CHANNEL_BOT_TOKEN`, then Register webhook.
     - Off without a deploy: delete `TELEGRAM_CHANNEL_WEBHOOK_SECRET`; the webhook then answers 503 and Telegram retries for a while. To stop the retries too, `/revoke` the token in @BotFather.
 
+### Independent Cloudflare notification Worker (D5671; disabled)
+
+These belong only to the separate receiver configured in
+`engineering-notifications/wrangler.cloudflare-5671.jsonc`, not the StudioOS
+production Worker. No receiver is deployed or enabled by this configuration.
+See [the delivery procedure](../operations/CLOUDFLARE_DELIVERY_5671.md) for
+private registries, destination checks, canary receipts and rollback.
+
+- [ ] `SLACK_BOT_TOKEN` — approved internal publisher with verified workspace,
+      private channel membership and recipient access.
+- [ ] `CF_WEBHOOK_SECRET` — random 32+ characters, configured identically in
+      Cloudflare's generic `cf-webhook-auth` destination field; never logged.
+- [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
+      `/status` reads. Only the independent observer receives this credential.
+
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
+      independent receiver's observer secret. It is neither the Slack token nor
+      the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`
+      and the approved `CF_STATUS_URL` are configured and fallback receipt is verified.
 
 ---
+
+D5676: the disabled independent archive observer needs separate writer (`ARCHIVE_OBSERVER_SECRET`), owned producer (`ARCHIVE_PRODUCER_SECRET`) and external read (`ARCHIVE_READER_SECRET`) keys. The tail and site receive only their matching private service bindings/role keys after owner preflight; the observer holds only its dedicated metadata DB and approved archive access. Flags remain off, and no values/resources are provisioned by the source change. Never send observer telemetry through studioos or attach a tail consumer to the observer. See D5676 for cadence, fallback, retention and rollback.
+
+D5673: the disabled Cloudflare metadata reconciler requires a separately scoped `CF_OBSERVER_READ_TOKEN` (Workers Scripts Read) and `CF_SOURCE_POLL=on` only after owner approval; never reuse the script-edit token. Neither is provisioned by its source PR.
+
+D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
 
 ## 5. Post-deploy checklist
 

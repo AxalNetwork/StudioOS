@@ -74,8 +74,15 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   // The test DOM keeps no attributes, so each node's React props are read instead.
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+  async function waitForText(value) {
+    const deadline = performance.now() + 5_000;
+    while (!text(container).includes(value) && performance.now() < deadline) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    }
+    assert.ok(text(container).includes(value), `The narrative did not show "${value}"`);
+  }
   return {
-    requests, flush, text: () => text(container),
+    requests, flush, waitForText, text: () => text(container),
     testIds: () => nodes().map((n) => props(n)['data-testid']).filter(Boolean),
     hrefs: () => nodes().filter((n) => String(n.tagName).toUpperCase() === 'A').map((n) => props(n).href),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
@@ -142,6 +149,7 @@ test('compare lines up two versions section by section and marks what changed', 
 test('Check reads the saved versions and the newest version\'s check (D912), never a record called "check"', async () => {
   const view = await mounted('/raise/investor-narrative/check?project_id=3');
   try {
+    await view.waitForText('Nothing compared yet.');
     assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/investor-narrative/form-options?project=3')), 'the saved versions');
     assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/4/check?project=3')), 'the newest version\'s check');
     assert.ok(!view.requests.some((u) => u.includes('/records/check')), 'a tab word is never read as a record');
@@ -291,7 +299,9 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1015 (#2432) adds the Cap table tool's tab words beside the narrative's; D1101 (#2456) the Data room's.
   assert.match(route, /enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def/);
   // 2026-10-24 (D906 review): Home's tabs keep the address's version, as every other tab page does.
-  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} \/> : undefined\}/);
+  // D5079 (#5079): each sensitive tool also reports a refused authoritative
+  // read to the page, which then draws none of that tool's module data.
+  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} onRefused=\{onToolRefused\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/> : undefined\}/);
   for (const f of ['Investor Narrative Page.dc.html', 'Investor Narrative · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
 import BrandIcon from '../../ui/BrandIcon.jsx';
-import { api as defaultApi } from '../../lib/api.js';
+import { api as defaultApi, readRefusal } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
 import { liveRefusal } from '../../lib/activeRecording.js';
@@ -22,7 +22,10 @@ import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   defaultProvider, estimate, hasMeetingLink, languageOptions, meetingAppHref, meetingLinkProblem, phoneOs, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
   startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE, TOKENS_ADDED_START,
+  teamsChipStatus,
 } from './recordSetup.js';
+import { clearRecordDraft, readRecordDraft, saveRecordDraft } from './recordDraft.js';
+import { useAuth } from '../../hooks/useAuthSync';
 
 /**
  * Validate › Record a session (D685 §5.5, #1587), as a lightbox over the page
@@ -172,6 +175,7 @@ const BOT_INSTEAD = new Set(['meeting_not_in_calendar', 'meeting_not_hosted', 'm
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
+  initialClientKey = null,
   cycle = cycleValidateApi,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
@@ -179,7 +183,14 @@ export default function RecordLightbox({
   asPage,
   // D1346 (#3554): `GET /founder/validate/meetings/bot`, when the caller has read it already.
   initialBot,
+  // D5811 (#5811): `GET /founder/validate/meetings/capabilities`, when the caller has read it already.
+  initialCaps,
+  // D5811: the signed-in member the kept setup belongs to; a test hands one in.
+  memberId,
 }) {
+  // D5811: Cancel and a Start that lands forget any kept setup; leaving for Account keeps it.
+  const close = () => { clearRecordDraft(); onClose?.(); };
+  const startedWith = (...args) => { clearRecordDraft(); return onStarted?.(...args); };
   // D1346 (#3663): a connector can change while this form stays open in
   // another tab. Refresh on return without resetting the interview fields.
   const [channels, setChannels] = useState(initialChannels === undefined ? null : initialChannels);
@@ -219,22 +230,62 @@ export default function RecordLightbox({
     channelsSource.botAvailability().then((r) => { if (alive) setBotRead(r ?? null); }).catch(() => { if (alive) setBotRead(null); });
     return () => { alive = false; };
   }, [channelsSource, initialBot, botTick]);
+  // D5811 (#5811): the member's own meeting capabilities (Teams' row decides its chip, its
+  // create button and its connect link). Read on open and again whenever the tab comes back,
+  // so a return from Account › Connectors shows the new state; a stale answer is dropped.
+  // undefined is still reading; null is unreadable (Try again reads it once more).
+  const [caps, setCaps] = useState(initialCaps);
+  const [capsTick, setCapsTick] = useState(0);
+  useEffect(() => {
+    if (initialCaps !== undefined && capsTick === 0) return undefined;
+    if (typeof channelsSource?.meetingCapabilities !== 'function') { setCaps(null); return undefined; }
+    let alive = true;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const r = await channelsSource.meetingCapabilities();
+        if (alive && current === request) setCaps(r ?? null);
+      } catch {
+        if (alive && current === request) setCaps(null);
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [channelsSource, initialCaps, capsTick]);
+  // D5811: the setup kept while the member was in Account › Connectors (`recordDraft.js`),
+  // this member's and this venture's only, read once and then forgotten. Nothing starts from it.
+  const authId = useAuth()?.user?.id ?? null;
+  const userId = memberId !== undefined ? memberId : authId;
+  const [draft] = useState(() => {
+    const d = readRecordDraft(userId, { projectId });
+    return d && (d.interviewId ?? null) === (interview?.id != null ? Number(interview.id) : null) ? d : null;
+  });
+  useEffect(() => { if (draft) clearRecordDraft(); }, [draft]);
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const startKey = useRef(null);
-  if (startKey.current === null) startKey.current = newStartKey();
-  const [name, setName] = useState(interview?.interviewee_name || '');
-  const [company, setCompany] = useState(interview?.interviewee_company || '');
-  const [mode, setMode] = useState(initialMode);
-  const [provider, setProvider] = useState(() => defaultProvider(initialMode, channels));
-  const [link, setLink] = useState('');
+  if (startKey.current === null) startKey.current = initialClientKey || newStartKey();
+  const setupKey = (bot) => initialClientKey || `${startKey.current}${bot ? '-bot' : ''}`;
+  const [name, setName] = useState(interview?.interviewee_name || draft?.name || '');
+  const [company, setCompany] = useState(interview?.interviewee_company || draft?.company || '');
+  const [mode, setMode] = useState(draft?.mode || initialMode);
+  const [provider, setProvider] = useState(() => (draft?.provider && (PROVIDERS[draft.mode] || []).some((c) => c.value === draft.provider) ? draft.provider : defaultProvider(draft?.mode || initialMode, channels)));
+  const [link, setLink] = useState(draft?.link || '');
   const [consent, setConsent] = useState(initialConsent);
   const [conversation, setConversation] = useState('');
   const [models, setModels] = useState(initialModels);
   const [live, setLive] = useState(initialModels?.defaults?.live ?? null);
   const [final, setFinal] = useState(initialModels?.defaults?.final ?? null);
   const [language, setLanguage] = useState('');
-  const [minutes, setMinutes] = useState(30);
+  const [minutes, setMinutes] = useState(draft?.minutes || 30);
   const supportsOutputs = typeof sessions.outputs === 'function';
   const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
   const [outputsLoaded, setOutputsLoaded] = useState(false);
@@ -341,7 +392,7 @@ export default function RecordLightbox({
   // D1358: a meeting is captured by Eadwyn AI or imported from the provider after
   // it ends, never by this browser's microphone or a shared tab.
   const capture = callCapture({ mode, provider, link, channels, bot, botLink: !!botPlatform(link) });
-  const offer = createMeetingOffer(mode, provider, channels);
+  const offer = createMeetingOffer(mode, provider, channels, caps);
   // D1362: a meeting has one Start. It creates the meeting when no link is
   // pasted, saves the call, sends Eadwyn AI where it can join, and opens the
   // meeting; the transcript is imported when the call ends.
@@ -354,7 +405,7 @@ export default function RecordLightbox({
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
   const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
-  const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
+  const label = refusal?.retrySetup ? 'Try again' : howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -384,6 +435,26 @@ export default function RecordLightbox({
   const pickMode = (next) => {
     const first = next === 'call' ? defaultProvider('video', channels) : defaultProvider(next, channels);
     setMode(next === 'call' ? callChannel(first) || 'video' : next); setProvider(first); setLink(''); setRefusal(null); setThread(null);
+  };
+  // D5811: kept for this member before leaving for Account › Connectors › Microsoft Teams.
+  const keepDraft = () => {
+    saveRecordDraft(userId, { projectId, interviewId: who?.id ?? null, name, company, mode, provider, link, minutes });
+  };
+  // D5811: "Create the meeting for me" for Teams fills the link and nothing else: no session, no bot.
+  // A refusal keeps every field; a personal account is told to paste the link from Teams.
+  const [creating, setCreating] = useState({ busy: false, error: '' });
+  const createTeams = async () => {
+    if (creating.busy || typeof channelsSource?.instantMeeting !== 'function') return;
+    setCreating({ busy: true, error: '' });
+    try {
+      const url = createdLink('teams', await channelsSource.instantMeeting('teams', minutes));
+      if (!url) throw new Error('The meeting could not be created. Create it in Microsoft Teams and paste its link.');
+      if (provider === 'teams') setLink((prev) => (String(prev).trim() ? prev : url));
+      setCreating({ busy: false, error: '' });
+    } catch (e) {
+      setCreating({ busy: false, error: (typeof e?.message === 'string' && e.message.trim()) || 'The meeting could not be created. Create it in Microsoft Teams and paste its link.' });
+      if (e?.code === 'teams_reconnect' || e?.code === 'teams_not_connected') setCapsTick((n) => n + 1);
+    }
   };
   const pickProvider = (next) => {
     setProvider(next);
@@ -449,7 +520,7 @@ export default function RecordLightbox({
       if (r?.session_id == null) throw new Error('The call could not be saved. Try again.');
       opened?.();
       // D1360: the Worker also sends Eadwyn AI when it can join (`r.bot`).
-      onStarted?.({ id: r.session_id, submitted_via: r.bot ? 'meeting_bot' : provider }, {
+      startedWith({ id: r.session_id, submitted_via: r.bot ? 'meeting_bot' : provider }, {
         id: target.id, interviewee_name: target.interviewee_name ?? named, interviewee_company: target.interviewee_company ?? null,
       });
     } catch (e) {
@@ -525,8 +596,13 @@ export default function RecordLightbox({
       const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
       const botFields = { ...fields, meeting_url: false };
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}-bot` }, botFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: setupKey(true) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(true) }, botFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       // D1363: refused for AI tokens, the member tops up here and the send is made again on
       // the same session once the tokens land; the meeting then opens (or the session page offers it).
       const send = async () => {
@@ -540,7 +616,7 @@ export default function RecordLightbox({
           return;
         }
         opened();
-        onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
+        startedWith({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
       };
       await send();
     } catch (e) { refuse(e); }
@@ -576,7 +652,7 @@ export default function RecordLightbox({
         const asks = chatC.required && chatC.status !== 'given' ? chatChoice : null;
         const r = await channelsSource.assign(thread, assignTarget({ name, company, consent, chatConsent: asks }, { projectId, interview: who }));
         const into = person({ id: r?.interview_id });
-        if (r?.session_id != null) { onStarted?.({ id: r.session_id }, into); return; }
+        if (r?.session_id != null) { startedWith({ id: r.session_id }, into); return; }
         setAssigned(assignedSentence(r, into.interviewee_name));
         setBusy(false); sending.current = false;
         return;
@@ -588,15 +664,20 @@ export default function RecordLightbox({
       // is the one setup call.
       const captureFields = useBot ? { ...fields, meeting_url: false } : fields;
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: `${startKey.current}${useBot ? '-bot' : ''}` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}${useBot ? '-bot' : ''}` }, captureFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: setupKey(useBot) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(useBot) }, captureFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       const into = person(r.interview);
       if (useBot) {
         const url = link.trim();
         const send = async () => {
           try {
             await sessions.sendBot(r.session.id, { meeting_url: url });
-            onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into);
+            startedWith({ ...r.session, submitted_via: 'meeting_bot' }, into);
           } catch (e) {
             setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
               ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
@@ -622,10 +703,10 @@ export default function RecordLightbox({
           // The Worker's link (a pasted one, or a scheduled call's): "Start the call" opens it (§5.8.1).
           meetingUrl: r.meeting_url ?? null,
         });
-        onStarted?.(r.session, into, 'live');
+        startedWith(r.session, into, 'live');
         return;
       }
-      onStarted?.(r.session, into);
+      startedWith(r.session, into);
     } catch (e) {
       if (handsOver) recorder?.release();
       setRefusal(startRefusal(e));
@@ -638,11 +719,11 @@ export default function RecordLightbox({
 
   return (
     <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" sub="It lands in Interviews when you stop."
-      onClose={onClose} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox" {...asPage}
+      onClose={close} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox" {...asPage}
       footer={(
         <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
+            <button type="button" onClick={close} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
             <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : captureReason ? 'record-capture-reason' : 'record-start-reason')}
               disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
@@ -701,7 +782,7 @@ export default function RecordLightbox({
           {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
-              options={chips.map((c) => { const st = howOf(mode) === 'call' && ['teams', 'signal', 'whatsapp', 'telegram'].includes(c.value) ? { word: 'Coming soon', disabled: true } : chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
+              options={chips.map((c) => { const st = howOf(mode) === 'call' && c.value === 'teams' ? teamsChipStatus(caps) : howOf(mode) === 'call' && ['signal', 'whatsapp', 'telegram'].includes(c.value) ? { word: 'Coming soon', disabled: true } : chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
                 // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
                 // Owner-requested Teams mark: official Teams favicon, saved locally (2026-10-28).
                 // Source: https://teams.public.onecdn.static.microsoft/evergreen-assets/icons/microsoft_teams_logo_refresh_v2025.ico
@@ -714,19 +795,31 @@ export default function RecordLightbox({
           )}
           {hasMeetingLink(mode, provider) && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Meeting link
-              <input className={FIELD} value={link} onChange={(e) => setLink(e.target.value)} disabled={!fields.meeting_url} placeholder={offer?.kind === 'create' ? 'Paste a link, or leave it empty: Start creates the meeting' : 'https://…'} inputMode="url" autoComplete="off" data-testid="record-link" aria-invalid={linkProblem ? true : undefined} />
+              <input className={FIELD} value={link} onChange={(e) => setLink(e.target.value)} disabled={!fields.meeting_url} placeholder={provider === 'teams' ? (offer?.button ? 'Paste the Teams link, or create the meeting below' : 'Paste the Teams meeting link') : offer?.kind === 'create' ? 'Paste a link, or leave it empty: Start creates the meeting' : 'https://…'} inputMode="url" autoComplete="off" data-testid="record-link" aria-invalid={linkProblem ? true : undefined} />
               {!fields.meeting_url ? <span className="font-normal text-axal-faint" data-testid="record-link-note">{NOT_STORED}</span>
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
           {meeting && offer && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-create-meeting">
-              {offer.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
-              {offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
+              {offer.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} onClick={provider === 'teams' ? keepDraft : undefined} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center" data-testid="record-create-connect">{offer.connectLabel}</Link>}
+              {offer.button && !String(link).trim() && (
+                <button type="button" onClick={createTeams} disabled={creating.busy || !fields.meeting_url} className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-bold text-axal-ink hover:border-gray-300 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 max-sm:min-h-[44px]" data-testid="record-create-teams">{creating.busy ? 'Creating…' : 'Create the meeting for me'}</button>
+              )}
+              {offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}
+                {offer.kind === 'unreadable' && <button type="button" onClick={() => setCapsTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-caps-retry">Try again</button>}</p>}
+              {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-teams-error">{creating.error}</p>}
               {offer.kind === 'create' && offer.note && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-teams-note">{offer.note}</p>}
             </div>
           )}
           {meeting && planNote && <p className="m-0 text-[12px] text-axal-ink dark:text-gray-100" data-testid="record-start-plan">{planNote}</p>}
+          {meeting && provider === 'teams' && !!String(link).trim() && !linkProblem && captureKind === 'none' && bot.state !== 'loading' && (
+            // D5811: no way to capture this Teams call here: after it, its recording or transcript.
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-teams-after">
+              <Link to="/validate/record/calls/upload" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center" data-testid="record-teams-upload">Upload the recording</Link>
+              <button type="button" onClick={() => pickMode('text')} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:min-h-[44px]" data-testid="record-teams-paste">Paste the transcript</button>
+            </div>
+          )}
           {meeting && bot.state === 'unreadable' && (
             <p id="record-bot-state" className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-bot-state" data-state={bot.state}>
               {bot.sentence}

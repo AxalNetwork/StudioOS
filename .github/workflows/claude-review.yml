@@ -70,6 +70,8 @@ jobs:
           node-version: '22'
       - name: Install the pinned SDK
         run: npm ci --prefix scripts/claude-review --ignore-scripts --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Test the reviewer
         run: node --test scripts/lib/claudeReview.test.mjs scripts/claude-review/review.test.mjs
 
@@ -274,12 +276,53 @@ jobs:
   # `[alert] the PR reviewer is not reviewing`, and posts once; a later
   # `reviewed` closes it and posts once. Its own job so the job that reads PR
   # content never holds `issues: write`. It runs only the base commit's script.
-  alert:
-    name: claude review (alert)
+  #
+  # #6363: the alert job serialises on one repository-wide group, and GitHub
+  # keeps only one pending job per group, so with many PRs pushing at once the
+  # alert jobs cancelled each other and seventeen PRs showed a red X for a job
+  # that had nothing to do. `alert-needed` runs outside the group and lets the
+  # alert job start only when there is something to open or close: a blocked
+  # outcome, or an ok outcome while the alert issue is open. A read it cannot
+  # make counts as needed, so an alert is never lost to this gate.
+  alert-needed:
+    name: claude review (alert needed?)
     needs: review
     if: ${{ always() && needs.review.result != 'skipped' && needs.review.outputs.outcome != '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      issues: read
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ needs.review.outputs.outcome }}
+        run: |
+          case "$OUTCOME" in
+            reviewed|duplicate)
+              # curl's failure and "no such issue" are different answers: only the first is unknown.
+              if body=$(curl -sS --fail --max-time 20 \
+                -H "authorization: Bearer $GITHUB_TOKEN" -H 'accept: application/vnd.github+json' \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100"); then
+                open=$(printf '%s' "$body" | grep -c '"title": *"\[alert\] the PR reviewer is not reviewing"' || true)
+              else open=unknown; fi
+              if [ "$open" = "0" ]; then needed=false; else needed=true; fi ;;
+            *) needed=true ;;
+          esac
+          echo "outcome=$OUTCOME open_alert=${open:-n/a} needed=$needed"
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+
+  alert:
+    name: claude review (alert)
+    needs: [review, alert-needed]
+    if: ${{ always() && needs.alert-needed.outputs.needed == 'true' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: github-health-review-blocked
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write

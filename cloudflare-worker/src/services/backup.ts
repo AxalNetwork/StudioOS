@@ -311,6 +311,48 @@ export async function readRestoreDrill(env: Env, now: number = Date.now()): Prom
   };
 }
 
+export const DRILL_HISTORY_PREFIX = 'drill-d1-history/';
+export const DRILL_HISTORY_LIMIT = 12;
+
+type DrillHistoryEntry = Pick<DrillMarkerV1,
+  'at' | 'outcome' | 'step' | 'exit_code' | 'reason' | 'duration_s' | 'recovery_point' | 'run_id'
+> & { id: string; fresh: boolean };
+
+/** D5317 — the newest bounded set of per-run objects, independent of the latest marker. */
+export async function readRestoreDrillHistory(env: Env, now: number = Date.now()): Promise<
+  { available: true; rows: DrillHistoryEntry[]; partial?: true } | { available: false; reason: string }
+> {
+  const bucket = env.BACKUPS;
+  const unavailable = { available: false as const, reason: 'The restore drill history could not be read.' };
+  if (!bucket) return unavailable;
+  try {
+    const objects: R2Object[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await bucket.list({ prefix: DRILL_HISTORY_PREFIX, limit: DRILL_HISTORY_LIMIT - objects.length, cursor });
+      objects.push(...page.objects);
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor && objects.length < DRILL_HISTORY_LIMIT);
+    const reads = await Promise.allSettled(objects.map(async ({ key, size }) => {
+      if (size > 16_384) throw new Error('Oversized drill record');
+      const obj = await bucket.get(key);
+      const checked = validateDrillMarker(await obj?.json(), now);
+      if (!checked.ok) throw new Error('Invalid drill record');
+      const { at, atMs, outcome, step, exit_code, reason, duration_s, recovery_point, run_id } = checked.value;
+      return { id: key.slice(DRILL_HISTORY_PREFIX.length), at, outcome, step, exit_code, reason, duration_s,
+        recovery_point, run_id, fresh: now - atMs <= DRILL_STALE_AFTER_DAYS * 86_400_000 };
+    }));
+    const rows = reads.flatMap((read) => read.status === 'fulfilled' ? [read.value] : []);
+    // A concurrent prune or bad object should not hide verified rows. Only a
+    // successful empty listing can say there are no recorded runs.
+    if (objects.length > 0 && rows.length === 0) return unavailable;
+    rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    return rows.length < objects.length ? { available: true, rows, partial: true } : { available: true, rows };
+  } catch {
+    return unavailable;
+  }
+}
+
 export type BackupHeartbeat =
   | {
       available: true;

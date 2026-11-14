@@ -18,7 +18,12 @@ unchanged when it was split.
   reads the header and the Overview share.
 - `TerritoryEditor.jsx` — step 2, the countries a licence holds.
 - `CommercialTerms.jsx` — step 3: `SeatEditor` (step 4 is `TermsWorkspace.jsx`).
-- `ContractStep.jsx` — step 5, the contract instantiated from a template.
+- `ContractStep.jsx` — step 5, the contract instantiated from a template (D5051: block 1 of the Agreement
+  section, with its record in Contracts and its version history).
+- `LicenceAgreements.jsx` — D5051 (#5051): the Agreement section's other blocks (L33): the Axal VC package
+  agreement, the licensed program agreements (each linking to its one record in Contracts), package readiness,
+  Needs HQ · legal and the legal history. Reads the D5048 and D5052 licence reads, each its own block; creates
+  nothing. Its `StatePill`, `ReadFailed` and `useBlockRead` are shared with `../grants/ProgramLegalAccess.jsx`.
 - `DeployStep.jsx` — step 6, the branch deployment.
 - `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach.
 - `NoticesEditor.jsx` — compliance notices and their review.
@@ -40,6 +45,12 @@ unchanged when it was split.
 - `TermsWorkspace.jsx` — D4819 part 2: the Terms section (L05 to L07): the
   schedule read-only by default, Amend terms as a reviewed session, and the
   conflict view when another admin wrote first. It replaced step 4's editor.
+- `RegistryLedger.jsx` — D5060 (#5060, part 3): the registry by licence family (addendum board L36): the
+  family chips, and the ten-column table across operator and user licences read from
+  `/api/admin/licence-registry`. Operator / territory stays `LedgerTable.jsx`.
+- `UserLicenceDetail.jsx` — D5060 part 3: one user licence at `/admin/licences/registry/user/:uid` (L37, L37B):
+  Overview, Programs, Agreement, Billing (only with commercial terms) and History. Its model is
+  `../licenceRegistryModel.js`.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
 (sections, tabs and selection), `licenceOverviewModel.js` (the header's and

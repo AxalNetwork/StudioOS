@@ -164,15 +164,14 @@ test('every citation names its passage, and one list serves both branches', () =
   assert.match(card, /passage \$\{ct\.chunk \+ 1\}/,
     'a citation does not name the passage it used');
 
-  // ONE LIST, NOT TWO, AND THAT IS THE FIX RATHER THAN THE RISK. This used to
-  // count the same assertion across two branches, because `answered` and
-  // `model_unavailable` each rendered their own citation list and deleting one
-  // still passed on the other (mutation A4). The thread renders `t.citations`
-  // once for every row, so the two cannot disagree — but only while the list
-  // stays outside an outcome test, which is what this holds.
-  const cites = card.slice(card.indexOf('(t.citations || []).map('));
-  assert.ok(cites.length > 0, 'the citation list is gone from the thread card');
-  const before = card.slice(0, card.indexOf('(t.citations || []).map('));
+  // The list is grouped now, so the old direct `.map` selector no longer
+  // exists. A missing selector's -1 offset searched the entire card and
+  // mistook Save to project's answered-only guard for the citation guard.
+  // Anchor on the actual source container; the mounted regression in
+  // research_v2_ask_3701 also checks both outcomes' recorded passages.
+  const start = card.indexOf('(t.citations || []).length ? (');
+  assert.ok(start >= 0, 'the citation list is gone from the thread card');
+  const before = card.slice(0, start);
   assert.doesNotMatch(before.slice(before.lastIndexOf('<div')), /t\.reason === 'answered' &&/,
     'the citation list has been put behind an answered-only guard, so a model failure would list nothing');
 });

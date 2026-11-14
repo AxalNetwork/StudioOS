@@ -103,12 +103,21 @@ test('mounted: a refused Accept says so in the dialog and keeps it open; Dismiss
     await r.click('company-vercel-accept-7');
     await r.click('company-vercel-add');
     assert.ok(r.has('company-vercel-dialog'));
-    assert.match(r.textOf('company-vercel-dialog-error'), /already accepted or dismissed/);
+    assert.equal(r.textOf('company-vercel-dialog-error'), 'That proposal could not be accepted. Nothing changed.');
     assert.equal(r.reloads(), 0);
     await r.click('company-vercel-cancel');
     await r.click('company-vercel-dismiss-7');
     assert.deepEqual(r.requests.at(-1), ['POST', '/api/cycles/build/company-creation/vercel-proposals/7/dismiss?project=101']);
     assert.equal(r.reloads(), 1);
+  } finally { await r.close(); }
+});
+
+test('mounted: provider and server error text never reaches the product surface', async () => {
+  const r = await mounted(PART(), () => response({ detail: 'SYNTHETIC_PRIVATE_PROVIDER_FAILURE' }, 500));
+  try {
+    await r.click('company-vercel-dismiss-7');
+    assert.equal(r.textOf('company-vercel-error'), 'That proposal could not be dismissed.');
+    assert.doesNotMatch(r.all(), /SYNTHETIC_PRIVATE_PROVIDER_FAILURE/);
   } finally { await r.close(); }
 });
 

@@ -127,6 +127,14 @@ export function isPublicPath(pathname) {
     || currentPath === '/login'
     || currentPath === '/register'
     || currentPath === '/verify-email'
+    // D4637: the public Help home and article-shaped addresses tolerate
+    // background API 401s. Ticket and admin routes stay protected.
+    || currentPath === '/help'
+    || (/^\/help\/[a-z0-9-]+\/[a-z0-9-]+$/i.test(currentPath)
+      && !currentPath.startsWith('/help/tickets/')
+      && !currentPath.startsWith('/help/admin/'))
+    || currentPath === '/status'
+    || currentPath === '/changelog'
     || currentPath.startsWith('/b/')
     // An author's public page, by id or by name slug (owner, 2026-10-12).
     || currentPath.startsWith('/authors/')
@@ -813,6 +821,16 @@ function expertisePage(page, extra = {}) {
   if (page?.limit) q.set('limit', String(page.limit));
   const s = q.toString();
   return s ? `?${s}` : '';
+}
+
+/**
+ * #5314 part 3 — a Delivery DELETE states the revision it was shown in the
+ * query. `undefined` sends nothing (the Worker then guards on its own read);
+ * `null` says the read found no record.
+ */
+function deliveryRevisionQuery(revision) {
+  if (revision === undefined) return '';
+  return `?expected_revision=${revision === null ? 'none' : encodeURIComponent(String(revision))}`;
 }
 
 export const api = {
@@ -2365,18 +2383,19 @@ export const api = {
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
-  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id, client_secret }),
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   // Task #3 — Rotate the secret in place (client_id stays the same).
-  adminRotateIntegrationKeys: (provider, client_secret) =>
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
       method: 'POST',
-      body: JSON.stringify({ client_secret }),
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
@@ -2927,7 +2946,12 @@ export const api = {
   networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
 
-  getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
+  // D4623 part 2: `licence` 'investor' asks for the investor figures of a held licence that is not the
+  // primary one (the multi-licence Studio's Investor block). Omitted, the payload is the primary licence's.
+  getDashboard: (fresh = false, licence = '') => {
+    const query = [fresh ? 'fresh=1' : '', licence ? `licence=${encodeURIComponent(licence)}` : ''].filter(Boolean).join('&');
+    return request('/dashboard' + (query ? `?${query}` : ''));
+  },
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
@@ -3472,17 +3496,17 @@ export const api = {
   // on the catalogue response is load-bearing: it lets the page say "no credit
   // allowance is set up" instead of "not enough credits", which are very
   // different things to tell someone with a zero balance.
-  perksCatalog: () => request('/perks'),
+  perksCatalog: (page = 1) => request(page === 1 ? '/perks' : `/perks?page=${encodeURIComponent(page)}`),
   perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
   perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
-  perksMine: () => request('/perks/mine'),
-  perkSubmissions: () => request('/perks/partner'),
+  perksMine: (page = 1, ledgerPage = 1) => request(page === 1 && ledgerPage === 1 ? '/perks/mine' : `/perks/mine?page=${encodeURIComponent(page)}&ledger_page=${encodeURIComponent(ledgerPage)}`),
+  perkSubmissions: (page = 1) => request(page === 1 ? '/perks/partner' : `/perks/partner?page=${encodeURIComponent(page)}`),
   perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
   perkUpdate: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
   perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
   // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
-  perkClaimsForListing: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/claims`),
+  perkClaimsForListing: (uid, page = 1) => request(`/perks/partner/${encodeURIComponent(uid)}/claims${page === 1 ? '' : `?page=${encodeURIComponent(page)}`}`),
   perkRedeem: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
@@ -3492,7 +3516,7 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
   },
-  perkReviewQueue: () => request('/perks/admin/queue'),
+  perkReviewQueue: (page = 1) => request(page === 1 ? '/perks/admin/queue' : `/perks/admin/queue?page=${encodeURIComponent(page)}`),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
   // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
@@ -3619,10 +3643,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.
-  hqSecuritySessions: () => request('/admin/security/sessions'),
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
   hqRevokeSession: (sessionId, reason) =>
     request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
@@ -4298,6 +4334,9 @@ export const api = {
   requestAdvisorProofConsent: (id, data) =>
     request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // #5316 (D5316): `billing_state: 'included'` (with an optional `engagement_id`) records a session as included
+  // in an engagement: no price, in no billed or outstanding total. Refused on a priced line (409 `priced_line`);
+  // an included line leaves that state only when `billing_state` is sent (409 `included_line` otherwise).
   updateMyAdvisorBookingBilling: (id, data) =>
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
@@ -4372,6 +4411,8 @@ export const api = {
   // here rather than through `advance`, so the loss lands in the denominator.
   // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
   // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
+  // #5316 (D5316): ending needs `data.end_reason`, 'did_not_renew' or 'other' (400 `end_reason_required`
+  // otherwise); the engagement then reads it back as `end_reason`, null on one ended before it was asked.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4391,6 +4432,13 @@ export const api = {
   // would sit in Unopened forever and bias the median.
   sendMyAdvisorDeliverableVersion: (id, version) =>
     request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+  // #5316 (D5316): mark a version ready to send, or take the mark off. NEITHER SENDS ANYTHING; the send
+  // clears the mark. A sent version is a 409 `already_sent`; one with no content a 422 `empty_version`.
+  // Each answers the version with `ready_at`, `ready_by_user_id` and `ready_by_name`.
+  markMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'POST' }),
+  clearMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'DELETE' }),
 
   // Migration 240 — the three things that decide what the calendar contains.
   // A price here is what the advisor ASKS FOR; nothing in this group charges
@@ -4546,7 +4594,7 @@ export const api = {
   // Every engagement with the surface it names, for the attribution form. An
   // engagement naming none is listed rather than hidden — it is what the
   // unattributed count is counting.
-  listPartnerAttribution: () => request('/partner/offers/attribution'),
+  listPartnerAttribution: (page = 1) => request(page === 1 ? '/partner/offers/attribution' : `/partner/offers/attribution?page=${encodeURIComponent(page)}`),
   setPartnerEngagementSource: (engagementId, data) =>
     request(`/partner/offers/engagements/${engagementId}/source`, {
       method: 'PUT', body: JSON.stringify(data),
@@ -4556,24 +4604,29 @@ export const api = {
 
   // `is_published` on each item is DERIVED from its consent rows, never stored.
   // There is no method to set it, and that absence is the feature.
-  listPartnerProof: () => request('/partner/offers/proof'),
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
   createPartnerProof: (data) =>
     request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
   updatePartnerProof: (id, data) =>
     request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePartnerProof: (id) =>
     request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the firm hands the link over by whatever channel it already
-  // has with the client, and no later read returns it.
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
   requestPartnerProofConsent: (id, data) =>
     request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
   // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
   // is the token holder's alone, which is what makes the record worth anything.
   withdrawPartnerProofConsent: (id, consentId) =>
     request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
-  // The client's own answer. Unauthenticated on purpose — the token is the
-  // credential, and the counterparty on an engagement is often not a user here.
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToPartnerProofConsent: (token, data) =>
     request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4590,6 +4643,10 @@ export const api = {
   // when nothing is recorded — never 'on_track'. There is no method to set it,
   // because green-because-empty is the failure the zone was written against.
   getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // #5314 part 3 (D4822): every Delivery edit states the version it was read
+  // at — `expected_revision` in a body, or the query below for a DELETE (and
+  // `null` / `none` where the read found no record). A stale one answers 409
+  // `delivery_changed` with `current_version` and changes nothing.
   // What the firm STATES about an engagement — owner, scope assessment, and
   // the client's score with where it was said. None of the three is derivable
   // from the five stores health is read across. An omitted key is untouched;
@@ -4613,8 +4670,8 @@ export const api = {
     }),
   updatePartnerMilestone: (id, data) =>
     request(`/partner/delivery/milestones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerMilestone: (id) =>
-    request(`/partner/delivery/milestones/${id}`, { method: 'DELETE' }),
+  deletePartnerMilestone: (id, revision) =>
+    request(`/partner/delivery/milestones/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // `side` is what lets a report name a client-side blocker plainly. A blockers
   // list with no side would make every delay the firm's.
@@ -4626,8 +4683,8 @@ export const api = {
     }),
   updatePartnerBlocker: (id, data) =>
     request(`/partner/delivery/blockers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerBlocker: (id) =>
-    request(`/partner/delivery/blockers/${id}`, { method: 'DELETE' }),
+  deletePartnerBlocker: (id, revision) =>
+    request(`/partner/delivery/blockers/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // NOTE WHAT IS ABSENT: nothing here sets `opened_at` or `signed_off_at`.
   // Those are the client's to set — only the founder side can truthfully say a
@@ -4640,8 +4697,8 @@ export const api = {
     }),
   updatePartnerDeliverable: (id, data) =>
     request(`/partner/delivery/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerDeliverable: (id) =>
-    request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
+  deletePartnerDeliverable: (id, revision) =>
+    request(`/partner/delivery/deliverables/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // Returns `people` (project, seat and internal hours split), `seats`, and
   // `cap_hours` — the number THIS FIRM stated, or null with the reason. Nothing
@@ -4665,8 +4722,10 @@ export const api = {
     request(`/partner/delivery/seats/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Revoking is a state, not a delete: a struck-through seat stays on the page
   // rather than the fact that access once existed silently disappearing.
-  revokePartnerSeat: (id) =>
-    request(`/partner/delivery/seats/${id}/revoke`, { method: 'POST' }),
+  revokePartnerSeat: (id, revision) =>
+    request(`/partner/delivery/seats/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
   savePartnerHours: (engagementId, personId, period, data) =>
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'PUT', body: JSON.stringify(data),
@@ -4674,8 +4733,8 @@ export const api = {
   // D637 — client hours by entry, this month and the two before it.
   listPartnerHourEntries: (period) =>
     request(`/partner/delivery/capacity/hours${period ? `?period=${encodeURIComponent(period)}` : ''}`),
-  deletePartnerHours: (engagementId, personId, period) =>
-    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+  deletePartnerHours: (engagementId, personId, period, revision) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}${deliveryRevisionQuery(revision)}`, {
       method: 'DELETE',
     }),
 
@@ -4691,10 +4750,12 @@ export const api = {
     }),
   // Records that a PERSON sent it. Nothing here delivers anything — no email,
   // no notification, no client-side surface exists.
-  sendPartnerStatusReport: (id) =>
-    request(`/partner/delivery/status-reports/${id}/send`, { method: 'POST' }),
-  deletePartnerStatusReport: (id) =>
-    request(`/partner/delivery/status-reports/${id}`, { method: 'DELETE' }),
+  sendPartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}/send`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
+  deletePartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
@@ -4957,7 +5018,10 @@ export const api = {
   portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Cap Table / Ownership (Support) ----------
-  positionsList: () => request('/positions'),
+  // D4644: the list honours `as_of` as the analytics read does (PF-02's
+  // "Read the book as of"); without one it reads the latest marks.
+  positionsList: (asOf) => request(`/positions${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  portfolioUpdatesLatest: () => request('/portfolio-updates/latest'),
   // Canvas IP1's `Mark history`. Every marking event across the accessible
   // book in one call — the per-project read already returned this history, but
   // looping it for a list page would be an N+1.
@@ -4977,7 +5041,7 @@ export const api = {
   // one anti-joined against `portfolio_positions` server-side, so "no support"
   // is two stored sets compared rather than the ledger's silence read as an
   // answer.
-  portfolioSupportList: () => request('/portfolio-support'),
+  portfolioSupportList: (params = {}) => request(`/portfolio-support${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
   // Logging is open to an investor for a company already in their book, not
   // admin-only like the valuation writes: a ledger the workers cannot write to
   // stays empty, which is the state IP3 existed in.
@@ -4987,6 +5051,12 @@ export const api = {
   // freeze at 'promised' exactly as `investor_introductions`'s does.
   portfolioSupportUpdate: (uid, data) =>
     request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D4642 (#4642): the entry's amendment history — one row per accepted
+  // amendment, with the revision it produced and who made it. The desk needs
+  // it because `recorded_by` only says who created the entry: an amendment by
+  // a second member was otherwise unattributable from the page.
+  portfolioSupportHistory: (uid) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}/history`),
   positionMarkCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
@@ -4999,11 +5069,19 @@ export const api = {
     request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
+  // #4611 finding 8: `project_id` is a SERVER filter now, applied inside the
+  // authorized scope and before the page, and the read is paginated. The
+  // response carries `total`, `counts`, `has_more` and `next_cursor`, whose
+  // scopes the Worker documents; a caller that passes none of these behaves as
+  // it did, on a page rather than on a 500-row cap.
   contactsList: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.audience) qs.set('audience', opts.audience);
     if (opts.status) qs.set('status', opts.status);
     if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    if (opts.project_id != null && opts.project_id !== '') qs.set('project_id', String(opts.project_id));
+    if (opts.limit != null) qs.set('limit', String(opts.limit));
+    if (opts.cursor) qs.set('cursor', String(opts.cursor));
     const s = qs.toString();
     return request(`/contacts${s ? `?${s}` : ''}`);
   },
@@ -5242,8 +5320,17 @@ export const api = {
     // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
     // back, in the page, because both are predicates over `reason` and
     // `citations` rather than a different read.
-    askSessions: (scope = 'session', sessionUid) => {
-      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+    // #4610: `cursor` and `limit`. The history is paginated, with `totals`
+    // covering the whole selected scope and `next_cursor`/`has_more` saying
+    // whether more of it exists — a caller passing neither gets the first page,
+    // which for every scope is the NEWEST rows.
+    askSessions: (scope = 'session', sessionUid, opts = {}) => {
+      const q = new URLSearchParams({
+        scope,
+        ...(sessionUid ? { session: sessionUid } : {}),
+        ...(opts.cursor ? { cursor: String(opts.cursor) } : {}),
+        ...(opts.limit != null ? { limit: String(opts.limit) } : {}),
+      }).toString();
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),

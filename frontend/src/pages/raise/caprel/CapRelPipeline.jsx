@@ -1,5 +1,7 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PIPELINE_FILTERS, clearFilters, useTabFilters } from './capRelUrlFilters';
 import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
@@ -10,9 +12,11 @@ import {
   importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
+import CapRelExportMenu from './CapRelExportMenu.jsx';
+import { pipelineCsv } from './capRelExports.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -33,10 +37,10 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
+const BTN = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[36px] justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
 const BTN_P = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-violet-700 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500`;
 const BTN_S = `${BTN} border-axal-hairline bg-white text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
 const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
@@ -53,12 +57,15 @@ export function useProspects(projectId) {
     setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
     Promise.resolve().then(() => api.raiseProspects(projectId))
       .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', items: null, projectId }); });
+      // D5079 (#5079): a refusal is not a failed read. Mapping a 403 to
+      // `unreadable` told the founder the pipeline "could not be read", which
+      // is a claim about the store rather than about access.
+      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, n]);
   // The frame before the effect runs still holds the previous venture's state: never draw it.
   const own = read.projectId === projectId ? read : { status: 'loading', items: null };
-  return { status: own.status, items: own.items, reload: () => setN((x) => x + 1) };
+  return { status: own.status, items: own.items, message: own.message ?? '', reload: () => setN((x) => x + 1) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -387,8 +394,7 @@ function Card({ p, onOpen, onMove }) {
   );
 }
 
-function Board({ cols, onOpen, onMove, phone }) {
-  const [showPassed, setShowPassed] = useState(false);
+function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed }) {
   const [one, setOne] = useState(STAGES[0]);
   const visible = phone ? cols.columns.filter((c) => c.stage === one) : cols.columns;
   return (
@@ -411,7 +417,7 @@ function Board({ cols, onOpen, onMove, phone }) {
         {!phone ? (
           <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-gray-300 p-2.5 dark:border-gray-700" data-testid="caprel-col-passed">
             <button type="button" className={`m-0 border-0 bg-transparent p-0 text-left text-[12px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}
-              aria-expanded={showPassed} onClick={() => setShowPassed((x) => !x)} data-testid="caprel-passed-toggle">Passed · {cols.passed.length}</button>
+              aria-expanded={showPassed} onClick={() => setShowPassed(!showPassed)} data-testid="caprel-passed-toggle">Passed · {cols.passed.length}</button>
             {showPassed ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{cols.passed.map((p) => <Card key={p.id} p={p} onOpen={onOpen} onMove={onMove} />)}</ul> : null}
           </section>
         ) : null}
@@ -437,25 +443,27 @@ function List({ items, onOpen, onBulk }) {
           <button type="button" className={BTN_S} onClick={() => setPicked(new Set())}>Clear</button>
         </div>
       ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-          <thead><tr className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
-            <th className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
-            {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th key={h} className="px-2 py-2">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
-                <td className="px-2 py-2"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></td>
-                <td className="px-2 py-2"><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
-                <td className="px-2 py-2">{stageLabel(p.stage)}</td>
-                <td className="px-2 py-2">{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
-                <td className="px-2 py-2">{p.next_step || <span className={MUTED}>No next step set</span>}</td>
-                <td className="px-2 py-2 font-mono">{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <ResponsiveRecords>
+          <table role="table" className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+            <thead role="rowgroup"><tr role="row" className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
+              <th role="columnheader" className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
+              {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th role="columnheader" key={h} className="px-2 py-2">{h}</th>)}
+            </tr></thead>
+            <tbody role="rowgroup">
+              {items.map((p) => (
+                <tr role="row" key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
+                  <td role="cell" className="px-2 py-2"><label className="inline-flex min-h-11 min-w-11 items-center justify-center lg:min-h-0 lg:min-w-0"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></label></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Investor</RecordLabel><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Stage</RecordLabel>{stageLabel(p.stage)}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Commitment</RecordLabel>{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Next step</RecordLabel>{p.next_step || <span className={MUTED}>No next step set</span>}</td>
+                  <td role="cell" className="px-2 py-2 font-mono"><RecordLabel>Due</RecordLabel>{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveRecords>
       </div>
     </div>
   );
@@ -485,6 +493,8 @@ export default function CapRelPipeline({ projectId, search = '' }) {
   const openId = /^[1-9][0-9]{0,9}$/.test(params.get('investor') || '') ? Number(params.get('investor')) : null;
   const setView = (v) => setParams((p) => { const n = new URLSearchParams(p); if (v === 'list') n.set('view', 'list'); else n.delete('view'); return n; }, { replace: true });
   const setOpen = (p) => setParams((cur) => { const n = new URLSearchParams(cur); if (p) n.set('investor', String(p.id)); else n.delete('investor'); return n; });
+  // D5377: whether the Passed column is open is the address's too (`?passed=1`); a venture switch closes it.
+  const [board, setBoard] = useTabFilters(PIPELINE_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
   const reload = useCallback(() => read.reload(), [read]);
   const items = read.items || [];
@@ -496,7 +506,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
     if (lastProject.current === projectId) return;
     lastProject.current = projectId;
     setDialog(null);
-    setParams((p) => { const n = new URLSearchParams(p); n.delete('investor'); return n; }, { replace: true });
+    setParams((p) => { const n = clearFilters(PIPELINE_FILTERS, p); n.delete('investor'); return n; }, { replace: true });
   }, [projectId, setParams]);
   const cols = useMemo(() => boardColumns(items), [items]);
   const onMove = (p, to) => setDialog({ kind: 'move', prospects: [p], to });
@@ -511,8 +521,9 @@ export default function CapRelPipeline({ projectId, search = '' }) {
         </div>
         <div className="flex gap-2">
           <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'proposals' })} data-testid="caprel-proposals-open">Eadwyn’s proposals</button>
-          <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })} data-testid="caprel-import">Import</button>
           <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })} data-testid="caprel-add">Add investor</button>
+          <CapRelExportMenu zone="pipeline" csv={read.status === 'ready' ? pipelineCsv(items) : null}
+            buttonClass={BTN_S} otherLabel="Import investors" otherTestId="caprel-import" onOther={() => setDialog({ kind: 'import' })} />
         </div>
       </div>
 
@@ -527,7 +538,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
           <div className="flex gap-2"><button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })}>Add investor</button><button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })}>Import</button></div>
         </section>
       ) : null}
-      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} /> : null}
+      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
       {items.length && view === 'list' ? <List items={items} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
       {cols.unknown.length ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-unknown-stage">{cols.unknown.length} {cols.unknown.length === 1 ? 'investor has' : 'investors have'} a stage the board does not draw; the list shows them.</p> : null}
 

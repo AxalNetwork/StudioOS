@@ -6,6 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { CODE_DAYS, HANDLE_DAYS, handleRef, keepFirstTouch, normaliseRef, readRefCookie } from '../src/lib/referralRef.js';
+import { saveConsent } from '../src/lib/cookieConsent.js';
+
+globalThis.localStorage = new Map();
+localStorage.getItem = (key) => localStorage.get(key);
+localStorage.setItem = (key, value) => localStorage.set(key, value);
 
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const fakeDoc = (cookie = '') => {
@@ -28,6 +33,7 @@ test('a handle reference stays a handle; a code is normalised as before', () => 
 
 test('first touch wins; a handle holds 90 days and a code 30', () => {
   // Mutation checked: give a handle the code's 30 days → the max-age reads 2592000.
+  saveConsent({ advertising: true });
   const d = fakeDoc();
   assert.equal(keepFirstTouch('@jane/yt', d, { protocol: 'https:' }), 'h:jane:yt');
   assert.match(d.writes[0], new RegExp(`^axal_ref=h%3Ajane%3Ayt; path=/; max-age=${HANDLE_DAYS * 86400}; SameSite=Lax; Secure$`));
@@ -40,16 +46,16 @@ test('first touch wins; a handle holds 90 days and a code 30', () => {
 
 test('the app, the register page and the stub use the one reader', () => {
   const app = read('App.jsx');
-  assert.match(app, /keepFirstTouch\(code\); \/\/ first-touch wins/);
+  assert.match(app, /if \(code\) keepFirstTouch\(code\);/);
   assert.doesNotMatch(app, /replace\(\/\[\^A-Z0-9\]\/g, ''\)/, 'no second copy of the code normaliser');
   const reg = read('pages/RegisterPage.jsx');
-  assert.match(reg, /const r = params\.get\('ref'\) \|\| readRefCookie\(\);\n\s+if \(r\) setRefCode\(normaliseRef\(r\) \|\| r\.toUpperCase\(\)\);/);
+  assert.match(reg, /ref_code: registrationRef\(window\.location\.search\) \|\| undefined/);
   const routes = read('routes/influencerHandle.jsx');
   assert.match(routes, /<Route path="\/:at" element=\{<HandlePage \/>\} \/>/);
   assert.match(routes, /<Route path="\/:at\/:channel" element=\{<HandlePage \/>\} \/>/);
   const page = read('pages/influencer/HandlePage.jsx');
   assert.match(page, /if \(!isHandle\) return <NotFoundPage \/>;/, 'a segment without @ is the 404');
-  assert.match(page, /if \(d\?\.state === 'live' && d\.ref\) keepFirstTouch\(d\.ref\);/, 'only a live handle sets the cookie');
+  assert.match(page, /if \(d\?\.state === 'live'\) \{[\s\S]*?if \(d\.ref\) keepFirstTouch\(d\.ref\);/, 'only a live handle sets the cookie');
   // D4297 (#4297): IN7 draws the Worker's sentence through `disclosureOf`, which falls back to the same sentence.
   assert.match(page, /data-testid="handle-disclosure">\{disclosureOf\(d\)\}/);
   assert.match(read('lib/api/publicHandles.js'), /'X-Axal-Visitor': visitor/);

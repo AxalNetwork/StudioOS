@@ -33,6 +33,9 @@
  * AN UNPARSEABLE COPY REFUSES (503): HQ sent something the branch cannot read,
  * so it cannot say the program is held.
  */
+import type { Context } from 'hono';
+import { refuse } from '../util/refusal';
+import { checkMemberProgramEntry } from './programEntitlements';
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { parseProgramCopy, type ProgramCopy } from './licencePrograms';
@@ -120,4 +123,19 @@ export async function programRefusal(env: Env, key: EnforcedProgram, today = new
   const standing = standingOf(copy, licence, key, today);
   if (standing === 'held') return null;
   return { status: 403, body: { detail: refusalSentence(key, standing), code: PROGRAM_NOT_GRANTED, program_key: key, standing } };
+}
+
+/** Account-level gate for a member entry point. Territory grants use programRefusal. */
+export async function memberProgramRefusal(c: Context<{ Bindings: Env }>, userId: number, key: string) {
+  const status = await checkMemberProgramEntry(c.env, userId, key);
+  if (status === 'allowed') return null;
+  const name = nameOf(key);
+  if (status === 'unavailable') return refuse(c, 503, {
+    code: 'program_entitlement_unavailable',
+    message: `Your ${name} access could not be checked. Try again.`,
+  });
+  return refuse(c, 403, {
+    code: 'program_entitlement_required',
+    message: `${name} access is not in force. Check Program access in your Account.`,
+  });
 }

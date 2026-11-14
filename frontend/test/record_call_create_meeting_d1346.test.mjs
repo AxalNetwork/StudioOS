@@ -23,6 +23,9 @@ const CONNECTED = { providers: [{ provider: 'zoom', available: true }, { provide
 const UNCONNECTED = { providers: [{ provider: 'zoom', available: true }, { provider: 'google_meet', available: true }], connections: {} };
 const models = { live: [{ model: 'live-a', label: 'Live A', price_usd_per_minute: 0.001, choosable: true }], final: [{ model: 'final-a', label: 'Final A', price_usd_per_minute: 0.002, choosable: true }], defaults: { live: null, final: 'final-a' } };
 
+/** D5811: `GET /meetings/capabilities` with a Teams row. */
+const capsWith = (teams) => ({ providers: { teams: { create_available: true, connected: false, can_create_meeting: false, can_join_as_bot: false, ...teams } } });
+
 const by = (m, id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
 async function press(m, id) { await act(async () => { await m.props(by(m, id)).onClick?.({ preventDefault() {} }); }); }
 async function change(m, id, value) { await act(async () => { await m.props(by(m, id)).onChange({ target: { value } }); }); }
@@ -58,8 +61,8 @@ test('the rules: what is offered per platform, which link fills, and the bot sta
   assert.deepEqual(createMeetingOffer('video', 'zoom', CONNECTED), { kind: 'create', connected: true, connectHref: null, connectLabel: 'Connect Zoom to create the meeting here' });
   assert.deepEqual(createMeetingOffer('video', 'google_meet', UNCONNECTED), { kind: 'create', connected: false, connectHref: '/account/connectors/google', connectLabel: 'Connect Google Calendar to create a Meet meeting here' });
   assert.equal(createMeetingOffer('video', 'zoom', null).connected, null, 'an unread connection is not "not connected"');
-  // D1359: Teams is created on the Microsoft calendar connection; the Worker decides whether it is connected.
-  assert.deepEqual(createMeetingOffer('video', 'teams', CONNECTED), { kind: 'create', connected: null, connectHref: null, connectLabel: 'Connect Microsoft to create the meeting here', note: TEAMS_CREATE_NOTE });
+  // D1359: Teams is created on the Microsoft calendar connection. D5811: its offer is the member's capability row.
+  assert.deepEqual(createMeetingOffer('video', 'teams', CONNECTED, capsWith({ connected: true, can_create_meeting: true })), { kind: 'create', connected: true, connectHref: null, connectLabel: 'Connect Microsoft Teams in Account to create the meeting here', note: TEAMS_CREATE_NOTE, button: true });
   assert.equal(createMeetingOffer('phone', 'whatsapp', CONNECTED), null);
   assert.equal(createMeetingOffer('video', 'zoom', { providers: [{ provider: 'zoom', available: false }], connections: {} }).kind, 'unavailable');
   assert.equal(createdLink('zoom', { join_url: ZOOM_LINK }), ZOOM_LINK);
@@ -88,9 +91,10 @@ test('D1362 the plan: import on a connected Zoom or Meet (with Eadwyn AI when it
   const plan = (p, link, botRead, ch = CONNECTED) => callStartPlan({ mode: 'video', provider: p, link, channels: ch, bot: botState(botRead, p), botLink: !!link, offer: offer(p, ch) });
   assert.deepEqual(plan('zoom', '', BOT_OFF), { kind: 'import', create: true, bot: false });
   assert.deepEqual(plan('zoom', ZOOM_LINK, BOT_ON), { kind: 'import', create: false, bot: true });
-  assert.deepEqual(plan('teams', '', BOT_ON), { kind: 'bot', create: true, bot: true });
+  // D5811: Start never creates a Teams meeting; its own button fills the link first.
+  assert.deepEqual(plan('teams', '', BOT_ON), { kind: 'none', create: false, reason: 'Paste the Teams meeting link.' });
   assert.deepEqual(plan('teams', TEAMS_LINK, BOT_ON), { kind: 'bot', create: false, bot: true });
-  assert.deepEqual(plan('teams', '', BOT_OFF), { kind: 'none', create: false, reason: TEAMS_NO_CAPTURE });
+  assert.deepEqual(plan('teams', TEAMS_LINK, BOT_OFF), { kind: 'none', create: false, reason: TEAMS_NO_CAPTURE });
   assert.deepEqual(plan('google_meet', '', BOT_OFF, UNCONNECTED), { kind: 'none', create: false, reason: 'Connect Google Calendar to create a Meet meeting here, or paste the meeting link.' });
   assert.equal(plan('zoom', 'https://evil.example/j/1', BOT_ON).kind, 'none', 'a bad link starts nothing');
   assert.equal(callStartPlan({ mode: 'phone', provider: 'whatsapp', link: '', channels: CONNECTED, bot: null, botLink: false, offer: null }), null);
@@ -268,7 +272,8 @@ test('upcoming call providers stay visible but cannot be selected', async () => 
   const s = setup({ bot: BOT_ON });
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
-    for (const [provider, label] of [['teams', 'Microsoft Teams'], ['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram']]) {
+    // D5811: Microsoft Teams is no longer among them (record_teams_d5811.test.mjs).
+    for (const [provider, label] of [['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram']]) {
       const option = by(m, `record-provider-${provider}`);
       assert.equal(m.props(option).disabled, true);
       assert.ok(m.text().includes(`${label} · Coming soon`));

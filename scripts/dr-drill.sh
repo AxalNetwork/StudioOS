@@ -56,6 +56,14 @@
 # decrypts it with DR_AGE_IDENTITY_FILE, and restores it through the same
 # verification, chunked import and row-count comparison. The identity file
 # is read by `age` only, and never copied or logged.
+#
+# D5337 — ONE RESTORE PATH. Fetching a backup and its manifest, the
+# independent copy's check and decryption, the manifest check, the chunked
+# import and the row-count comparison live in scripts/dr-restore-lib.sh, and
+# scripts/restore-d1.sh (the operator's restore) runs the same functions. What
+# stays here is the drill's own: the heartbeat, the throwaway database, the
+# smoke checks, the marker and the pager. A stale backup pages `rpo_breach`
+# from the EXIT trap.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -80,8 +88,45 @@ MIGRATION=""
 TABLES=0
 FAIL_REASON=
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# D5337: fetch, verify, chunked import and row-count comparison are shared
+# with scripts/restore-d1.sh, the operator's restore, so the drill proves it.
+# shellcheck source=scripts/dr-restore-lib.sh
+. "${REPO_ROOT}/scripts/dr-restore-lib.sh"
 
 log() { echo "[dr-drill] $*"; }
+utc_epoch() { jq -ner --arg stamp "$1" '$stamp | fromdateiso8601'; }
+
+# D5317: independent objects preserve overlapping runs. Invert the epoch so
+# the bucket's ascending key order starts with the newest run.
+write_history() {
+  local marker="$1" prefix="drill-d1-history/" key listed expired
+  key=$(printf '%s%012d-%s-%s.json' "$prefix" "$((999999999999 - STARTED_EPOCH))" "$$" "$(basename "$marker")")
+  if ! wrangler r2 object put "${BUCKET}/${key}" --file "$marker" --content-type application/json --remote; then
+    log "WARN: could not record drill history"
+    return
+  fi
+  if [[ ! "${CLOUDFLARE_ACCOUNT_ID:-}" =~ ^[a-fA-F0-9]{32}$ || ! "$BUCKET" =~ ^[a-z0-9-]{3,64}$ || -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+    log "WARN: drill history retention could not be checked"
+    return
+  fi
+  if ! listed=$(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_API_TOKEN" |
+      curl --fail --silent --max-time 15 --header @- --get \
+        --data-urlencode "prefix=$prefix" --data-urlencode 'per_page=1000' \
+        "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${BUCKET}/objects") ||
+      ! expired=$(jq -er '
+        if .success == true and (.result | type) == "array"
+        then [.result[].key | strings | select(test("^drill-d1-history/[0-9]{12}-[0-9]+-drill-marker\\.[A-Za-z0-9]+\\.json$"))] | sort | .[12:] | join("\n")
+        else error("invalid R2 object list") end' <<< "$listed" 2>/dev/null); then
+    log "WARN: drill history retention could not be checked"
+    return
+  fi
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    wrangler r2 object delete "${BUCKET}/${key}" --remote ||
+      log "WARN: could not prune an older drill history record"
+  done <<< "$expired"
+}
+
 page() {
   local msg="$1"
   log "PAGE: $msg"
@@ -98,7 +143,7 @@ page() {
 write_marker() {
   local rc="$1" outcome="failed" marker
   [[ "$rc" -eq 0 ]] && outcome="passed"
-  marker="$(mktemp)"
+  marker="$(mktemp "${TMPDIR:-/tmp}/drill-marker.XXXXXXXX")" || return
   if jq -n \
       --arg at "${STARTED_AT}" \
       --arg outcome "${outcome}" \
@@ -132,6 +177,7 @@ write_marker() {
         rto_met: ($duration_s <= $rto_target_s)}' > "${marker}"; then
     wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
       || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
+    write_history "$marker"
   else
     log "WARN: could not build the drill marker"
   fi
@@ -156,14 +202,15 @@ on_exit() {
   write_marker "$rc"
   # D4558: a passing run that missed a target still pages; the marker says which.
   if [[ $rc -eq 0 ]]; then
-    local now_s age_s
+    local now_s age_s recovery_s
     now_s=$(date -u +%s)
-    if [[ -n "${RECOVERY_POINT}" ]]; then
-      age_s=$(( STARTED_EPOCH - $(date -u -d "${RECOVERY_POINT}" +%s) ))
+    if [[ -n "${RECOVERY_POINT}" ]] && recovery_s=$(utc_epoch "${RECOVERY_POINT}"); then
+      age_s=$(( STARTED_EPOCH - recovery_s ))
       [[ "${age_s}" -le "${RPO_TARGET_S}" ]] || page "rpo_target_missed: the restored recovery point was ${age_s} s old (target ${RPO_TARGET_S} s)"
     fi
     [[ $(( now_s - STARTED_EPOCH )) -le "${RTO_TARGET_S}" ]] || page "rto_target_missed: the drill took $(( now_s - STARTED_EPOCH )) s (target ${RTO_TARGET_S} s)"
   fi
+  [[ "${FAIL_REASON}" == "stale" ]] && page "rpo_breach: the newest backup is older than ${MAX_AGE_HOURS} h"
   if [[ $rc -ne 0 ]]; then
     page "exit_code=$rc step=${STEP:-unknown}"
   fi
@@ -208,7 +255,12 @@ if [[ "${SOURCE}" == "primary" ]]; then
       log "FATAL: the independent copy is enabled and has no heartbeat: $(head -c 300 "${TMP}/indep.err" 2>/dev/null)"
       exit 1
     fi
-    INDEP_AGE_H=$(( ( $(date -u +%s) - $(date -u -d "${INDEP_AT}" +%s) ) / 3600 ))
+    if ! INDEP_EPOCH=$(utc_epoch "${INDEP_AT}" 2>/dev/null); then
+      FAIL_REASON="independent_copy_missing"
+      log "FATAL: the independent copy heartbeat has no valid UTC recovery point"
+      exit 1
+    fi
+    INDEP_AGE_H=$(( ( $(date -u +%s) - INDEP_EPOCH ) / 3600 ))
     if [[ "${INDEP_AGE_H}" -gt "${MAX_AGE_HOURS}" ]]; then
       FAIL_REASON="independent_copy_stale"
       log "FATAL: the independent copy's newest recovery point is ${INDEP_AGE_H} h old (limit ${MAX_AGE_HOURS} h)"
@@ -217,29 +269,8 @@ if [[ "${SOURCE}" == "primary" ]]; then
     log "independent copy: newest recovery point ${INDEP_AT} (${INDEP_AGE_H} h old)"
   fi
 else
-  # The owner-run drill of the independent copy.
-  POINT="${DR_INDEPENDENT_POINT:-}"
-  IDENTITY="${DR_AGE_IDENTITY_FILE:-}"
-  [[ "${POINT}" =~ ^[A-Za-z0-9_./-]+/(daily|monthly)/[0-9A-Za-z-]+$ ]] || { FAIL_REASON="point_invalid"; log "FATAL: DR_INDEPENDENT_POINT names no recovery point"; exit 1; }
-  [[ -n "${IDENTITY}" && -r "${IDENTITY}" ]] || { FAIL_REASON="key_missing"; log "FATAL: DR_AGE_IDENTITY_FILE is not a readable file"; exit 1; }
-  [[ -n "${DR_COPY_ENDPOINT:-}" && -n "${DR_COPY_BUCKET:-}" ]] || { FAIL_REASON="copy_unconfigured"; log "FATAL: DR_COPY_ENDPOINT and DR_COPY_BUCKET are required"; exit 1; }
-  s3get() { aws s3api get-object --bucket "${DR_COPY_BUCKET}" --key "$1" "$2" --endpoint-url "${DR_COPY_ENDPOINT}" --region "${DR_COPY_REGION:-auto}" >/dev/null; }
-  log "reading the independent recovery point ${POINT}/"
-  if ! s3get "${POINT}/manifest.json" "${TMP}/manifest.json"; then
-    FAIL_REASON="manifest_missing"; log "FATAL: the recovery point has no manifest"; exit 2
-  fi
-  s3get "${POINT}/backup.sql.age" "${TMP}/backup.sql.age" || { FAIL_REASON="ciphertext_missing"; log "FATAL: the recovery point has no ciphertext"; exit 2; }
-  WANT=$(jq -r '.independent_copy.ciphertext_sha256 // empty' "${TMP}/manifest.json" 2>/dev/null || true)
-  if [[ -z "${WANT}" || "$(sha256sum "${TMP}/backup.sql.age" | cut -d' ' -f1)" != "${WANT}" ]]; then
-    FAIL_REASON="ciphertext_mismatch"; log "FATAL: the ciphertext does not match its manifest"; exit 2
-  fi
-  if ! age -d -i "${IDENTITY}" -o "${TMP}/backup.sql" "${TMP}/backup.sql.age" 2>/dev/null; then
-    FAIL_REASON="decrypt_failed"; log "FATAL: the copy could not be decrypted with that key"; exit 2
-  fi
-  rm -f "${TMP}/backup.sql.age"
-  LATEST_KEY=$(jq -r '.key // empty' "${TMP}/manifest.json")
-  [[ -n "${LATEST_KEY}" ]] || { FAIL_REASON="manifest_invalid"; log "FATAL: the manifest names no backup"; exit 2; }
-  log "independent copy decrypted: the export of ${LATEST_KEY}"
+  # The owner-run drill of the independent copy (dr-restore-lib.sh).
+  dr_fetch_independent "${DR_INDEPENDENT_POINT:-}" "${DR_AGE_IDENTITY_FILE:-}" "${TMP}"
 fi
 
 # ---------- 1b. Verify it against its manifest (D4558) -------------
@@ -248,31 +279,9 @@ fi
 # real recovery point, not from the date in the key.
 STEP="verify"
 if [[ "${SOURCE}" == "primary" ]]; then
-  MANIFEST_KEY="${LATEST_KEY%.sql}.manifest.json"
-  if ! wrangler r2 object get "${BUCKET}/${MANIFEST_KEY}" --file "${TMP}/manifest.json" --remote; then
-    FAIL_REASON="manifest_missing"
-    log "FATAL: no manifest at r2://${BUCKET}/${MANIFEST_KEY}; a backup nothing vouches for is not restored"
-    exit 2
-  fi
+  dr_fetch_primary "${BUCKET}" "${LATEST_KEY}" "${TMP}"
 fi
-RECOVERY_POINT=$(jq -r '.exported_at // empty' "${TMP}/manifest.json" 2>/dev/null || true)
-MIGRATION=$(jq -r '.migrations.last // empty' "${TMP}/manifest.json" 2>/dev/null || true)
-TABLES=$(jq -r '(.tables | length) // 0' "${TMP}/manifest.json" 2>/dev/null || echo 0)
-[[ "${TABLES}" =~ ^[0-9]+$ ]] || TABLES=0
-if [[ "${SOURCE}" == "primary" ]]; then
-  wrangler r2 object get "${BUCKET}/${LATEST_KEY}" --file "${TMP}/backup.sql" --remote
-fi
-log "backup ready: $(wc -c < "${TMP}/backup.sql") bytes"
-if ! VERIFY=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" verify "${TMP}/backup.sql" "${TMP}/manifest.json" \
-    --key "${LATEST_KEY}" --migrations "${REPO_ROOT}/cloudflare-worker/sql/migrations" --max-age-hours "${MAX_AGE_HOURS}"); then
-  FAIL_REASON=$(printf '%s' "${VERIFY}" | sed -n 's/^reason=//p' | head -1)
-  FAIL_REASON="${FAIL_REASON:-verify_failed}"
-  [[ "${FAIL_REASON}" == "stale" ]] && page "rpo_breach: the newest backup is older than ${MAX_AGE_HOURS} h"
-  log "FATAL: the backup does not match its manifest: ${FAIL_REASON}"
-  exit 2
-fi
-BACKUP_SHA=$(jq -r '.sha256' "${TMP}/manifest.json")
-log "${VERIFY}"
+dr_verify "${TMP}/backup.sql" "${TMP}/manifest.json" "${LATEST_KEY}" "${MAX_AGE_HOURS}"
 
 # ---------- 2. Provision throwaway DB -------------------------------
 STEP="create_db"
@@ -299,38 +308,7 @@ log "restoring the verified backup into ${TARGET_DB}"
 # triggers) chunks of at most DR_DRILL_CHUNK_BYTES, and each chunk is its own
 # import, so a failure names the chunk that failed. Every line logged here is
 # a count or a size; backup content is never printed.
-CHUNK_BYTES="${DR_DRILL_CHUNK_BYTES:-1000000}"
-if ! SPLIT_SUMMARY=$(node "${REPO_ROOT}/scripts/dr-drill-split.mjs" "${TMP}/backup.sql" "${TMP}/chunks" "${CHUNK_BYTES}"); then
-  log "FATAL: could not split the backup into import chunks"
-  exit 2
-fi
-log "split (chunk budget ${CHUNK_BYTES} bytes): ${SPLIT_SUMMARY}"
-CHUNK_TOTAL=$(wc -l < "${TMP}/chunks/manifest.tsv")
-CHUNK_N=0
-# The manifest is read on fd 3 so nothing wrangler reads from stdin eats it.
-while IFS=$'\t' read -r CHUNK_FILE CHUNK_PHASE CHUNK_STMTS CHUNK_SIZE CHUNK_OVER <&3; do
-  CHUNK_N=$(( CHUNK_N + 1 ))
-  log "chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}): ${CHUNK_STMTS} statements, ${CHUNK_SIZE} bytes, ${CHUNK_OVER} over D1's 100 KB statement limit"
-  # wrangler's output is captured, not shown: a D1 error can quote the
-  # statement it failed on, which is backup content, and this log is public.
-  # Only its error codes and its "Executed N queries" counts are printed.
-  if ! wrangler d1 execute "${TARGET_DB}" --remote --file "${CHUNK_FILE}" > "${TMP}/chunk.log" 2>&1; then
-    CODES=$(grep -oE 'D1_[A-Z_]+|SQLITE_[A-Z_]+|exceeded its memory limit|D1 reset before execute completed|File could not be uploaded|did not upload successfully' "${TMP}/chunk.log" | sort -u | paste -sd ' ' - || true)
-    log "FATAL: restore failed at chunk ${CHUNK_N}/${CHUNK_TOTAL} (${CHUNK_PHASE}); wrangler's error codes: ${CODES:-none recognised (its full output is withheld because it can quote backup SQL)}"
-    # D4558: which tables that chunk writes, and their parents, so the next
-    # failure says where to look. Schema names only.
-    log "chunk ${CHUNK_N} $(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" chunk-tables "${CHUNK_FILE}" "${TMP}/manifest.json" 2>/dev/null || echo 'tables: unreadable')"
-    FAIL_REASON="chunk_${CHUNK_N}_of_${CHUNK_TOTAL}"
-    exit 2
-  fi
-  EXECUTED=$(grep -oE 'Executed [0-9]+ queries in [0-9.]+ms \([0-9]+ rows read, [0-9]+ rows written\)' "${TMP}/chunk.log" | head -1 || true)
-  log "chunk ${CHUNK_N}/${CHUNK_TOTAL} imported: ${EXECUTED:-no count reported}"
-done 3< "${TMP}/chunks/manifest.tsv"
-if [[ "${CHUNK_N}" -ne "${CHUNK_TOTAL}" || "${CHUNK_N}" -lt 1 ]]; then
-  log "FATAL: imported ${CHUNK_N} of ${CHUNK_TOTAL} chunks"
-  exit 2
-fi
-log "restore ok: ${CHUNK_N} chunks imported"
+dr_import_chunks "${TARGET_DB}" "${TMP}/backup.sql" "${TMP}/manifest.json" "${TMP}"
 
 # ---------- 4. Smoke test ------------------------------------------
 STEP="smoke"
@@ -367,29 +345,7 @@ log "schema smoke ok (${#REQUIRED_TABLES[@]} required tables present)"
 # 4b'. D4558 — every table's row count against the manifest. The counts are
 # read 40 tables to a query; a table missing from the restore counts as a
 # mismatch. Only table names and the number that differ are logged.
-node -e '
-  const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-  const q = (n) => `"${n.replace(/"/g, "\"\"")}"`;
-  const lit = (n) => `${String.fromCharCode(39)}${n.replace(/\x27/g, "\x27\x27")}${String.fromCharCode(39)}`;
-  for (let i = 0; i < m.tables.length; i += 40) {
-    console.log(m.tables.slice(i, i + 40).map((t) => `SELECT ${lit(t.name)} AS t, COUNT(*) AS n FROM ${q(t.name)}`).join(" UNION ALL ") + ";");
-  }' "${TMP}/manifest.json" > "${TMP}/counts.sql"
-: > "${TMP}/counts.jsonl"
-while IFS= read -r COUNT_SQL <&4; do
-  if ! wrangler d1 execute "${TARGET_DB}" --remote --command "${COUNT_SQL}" --json > "${TMP}/count.json" 2>"${TMP}/count.err"; then
-    FAIL_REASON="row_counts_unreadable"
-    log "FATAL: a row-count query failed (a table in the manifest is missing from the restore)"
-    exit 3
-  fi
-  jq -c '.[] .results[]' "${TMP}/count.json" >> "${TMP}/counts.jsonl"
-done 4< "${TMP}/counts.sql"
-jq -s '.' "${TMP}/counts.jsonl" > "${TMP}/counts.json"
-if ! COMPARE=$(node "${REPO_ROOT}/scripts/d1-backup-manifest.mjs" compare "${TMP}/manifest.json" "${TMP}/counts.json"); then
-  FAIL_REASON="row_counts_differ"
-  log "FATAL: ${COMPARE}"
-  exit 3
-fi
-log "${COMPARE}"
+dr_compare_counts "${TARGET_DB}" "${TMP}/manifest.json" "${TMP}"
 
 # 4c. (removed, D263) This ran `npm run test:drift` from the checkout. That
 # suite never touches the restored database, the workflow never ran `npm ci`

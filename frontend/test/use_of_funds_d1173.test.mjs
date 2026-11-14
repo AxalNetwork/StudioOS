@@ -15,6 +15,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { TABS, forecastHref, isUseOfFundsTab, tabHref, tabSearch } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -45,7 +46,8 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const requests = [];
-  globalThis.fetch = async (u, options = {}) => { requests.push(String(u)); return handle(String(u), options); };
+  let pending = 0;
+  globalThis.fetch = async (u, options = {}) => { requests.push(String(u)); pending += 1; try { return await handle(String(u), options); } finally { pending -= 1; } };
   globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
@@ -56,12 +58,20 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   ))));
-  const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => nodes().map((n) => props(n)['data-testid']).filter(Boolean);
+  // At least six ticks, then until no read is in flight for three ticks running (bounded): six fixed ticks were
+  // enough on an idle machine and not under a loaded runner, where the reads behind the page had not landed (D5398).
+  const flush = () => act(async () => {
+    let idle = 0;
+    for (let i = 0, end = Date.now() + 5000; (i < 6 || idle < 3) && Date.now() < end; i += 1) {
+      await new Promise((r) => setTimeout(r, pending ? 1 : 0));
+      idle = pending ? 0 : idle + 1;
+    }
+  });
+  await flush();
   return {
     requests, flush, text: () => text(container), testIds: ids,
     count: (id) => ids().filter((x) => x === id).length,
@@ -136,7 +146,7 @@ test('a failed plan read says so where the sections would be (D1177: Allocation 
  * ------------------------------------------------------------------ */
 
 test('the wiring: CycleRoute branches on the tab word, only D1178\'s two pages under a tab are routes, and the canvas sits in incoming', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.ok(route.includes('isUseOfFundsTab(slug, recordId)') && route.includes('!uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) })"));
   const routes = read('frontend/src/App.jsx').match(/path="\/raise\/use-of-funds[^"]*"/g) || [];

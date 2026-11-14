@@ -22,6 +22,7 @@ import { Refusal } from '../../components/deals/DealRoomKit';
 import MercuryMatch from '../../components/MercuryMatch';
 import { ProofStatement } from '../../components/ProofOfFunds';
 import { FOOT, SORTS, STATUS_FILTERS, gateLine, heading, rowAction, statusWord, tableRows, wireCents } from './dealAudienceModel';
+import { parseMinor, toMajorString } from '../../lib/money';
 
 const BOX = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const FIELD = 'rounded-lg border border-axal-hairline bg-white px-3 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -32,7 +33,7 @@ const DAY = (v) => { const d = v ? new Date(`${String(v).replace(' ', 'T')}${/[z
 /** DL17a — Record a wire, for an Admin, behind the IC gate. Nothing moves money: it records that money arrived. */
 export function RecordWireDialog({ dealId, row, currency = 'USD', onClose, onRecorded }) {
   const [gate, setGate] = useState({ status: 'loading' });
-  const [amount, setAmount] = useState(() => { const c = wireCents(row); return c == null ? '' : (c / 100).toFixed(2); });
+  const [amount, setAmount] = useState(() => { const c = wireCents(row, currency); return c == null ? '' : toMajorString(c, currency) ?? ''; });
   const [reference, setReference] = useState('');
   const [verified, setVerified] = useState(false);
   const [note, setNote] = useState('');
@@ -47,7 +48,9 @@ export function RecordWireDialog({ dealId, row, currency = 'USD', onClose, onRec
     return () => { live = false; };
   }, [dealId]);
   const g = gateLine(gate);
-  const cents = Math.round(Number(String(amount).replace(/,/g, '')) * 100);
+  // D5373: typed in the deal's currency, at that currency's own decimals.
+  const parsedAmount = parseMinor(String(amount).replace(/,/g, ''), currency);
+  const cents = parsedAmount.ok ? parsedAmount.minor : Number.NaN;
   const ready = g.held !== true && Number.isInteger(cents) && cents > 0 && !busy;
   const go = async () => {
     if (lock.current || !ready) return;

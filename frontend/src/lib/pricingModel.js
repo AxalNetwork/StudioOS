@@ -103,6 +103,24 @@ export function priceOf(plan, interval) {
   return prices.find((p) => p && p.interval === interval && (p.interval_count ?? 1) === 1 && Number.isSafeInteger(p.unit_amount)) ?? null;
 }
 
+/** D4652: disclose both billing intervals from the same catalogue record.
+ * Missing price/allowance data is unknown, not zero. Never synthesize a price.
+ */
+export function planIntervalAllowance(plan) {
+  const monthly = priceOf(plan, 'month');
+  const yearly = priceOf(plan, 'year');
+  if (!monthly || !yearly) return null;
+  const valid = (p) => Number.isSafeInteger(p?.allowance_microusd) && p.allowance_microusd >= 0;
+  if (!valid(monthly) || !valid(yearly)) return null;
+  const money = (amount) => usd(Math.round(amount / 10_000));
+  return {
+    monthly: money(monthly.allowance_microusd),
+    yearly: money(yearly.allowance_microusd),
+    annualCharge: usd(yearly.unit_amount),
+    differs: monthly.allowance_microusd !== yearly.allowance_microusd,
+  };
+}
+
 /**
  * "Save n%" for a tab, never typed: each plan's `yearly_saving_percent`
  * (D816, computed by the Worker from its two prices), or the same sum here
@@ -191,9 +209,11 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     const current = held !== null && held === spec.id;
     const card = {
       id: spec.id, name: spec.name, kick: spec.kick || '', tag: spec.tag, highlight: !!spec.highlight, current,
+      allowanceComparison: planIntervalAllowance(plan),
       lead: i > 0 ? `Everything in ${specs[i - 1].name}, plus:` : '',
       feats: spec.feats.slice(), offered, price: null, unit: '', note: '', yearlyMissing: false,
       button: { label: '', to: null, disabled: false },
+      selection: spec.free ? { plan: spec.storage, interval: null } : null,
     };
     if (spec.free) {
       card.price = spec.id === 'free' && spec.name === 'Free' ? 'Free' : '$0';
@@ -203,6 +223,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
       card.note = 'Pricing agreed with Axal VC';
     } else if (offered) {
       const shown = yearly && year ? year : month ?? year;
+      card.selection = { plan: planKeyOfSpec(spec), interval: shown.interval === 'year' ? 'yearly' : 'monthly' };
       if (shown.interval === 'year') {
         card.price = usd(Math.round(shown.unit_amount / 12));
         card.note = `${usd(shown.unit_amount)} billed yearly`;

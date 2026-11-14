@@ -12,6 +12,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import { BUILD_PARTS, PartBoundary, builtParts, buildPartsMap } from '../src/pages/cycles/buildParts.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
@@ -31,7 +32,7 @@ test('each module lists its connectors in the canvases\' order', () => {
   assert.deepEqual(order('founding-team'), ['github']);
 });
 
-test('a part not built yet is a null on its own line, named with the task that builds it', () => {
+test('completed connector parts are mounted from the module registry', () => {
   const src = read('frontend/src/pages/cycles/buildParts.jsx');
   for (const [issue, decision, component] of [
     ['#2962', 'D1097', 'RunsOnFromVercel'], ['#2962', 'D1097', 'HostingFromVercel'],
@@ -40,14 +41,17 @@ test('a part not built yet is a null on its own line, named with the task that b
   ]) {
     assert.ok(src.includes(`${issue} (${decision}), ${component}`), `${component} names ${issue}`);
   }
-  // The unbuilt ones are left out of what draws; GitHub's stay.
+  // D5064: each completed connector now draws from the existing module read.
   // D1088 (#2953) filled Notion's three lines: From Notion draws last on each module.
   // D1093 (#2958) filled Google's two lines: From Google draws before From Notion.
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion', 'posthog']);
-  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'notion', 'posthog']);
+  // Mutation checked: replacing any of the four render functions with null drops
+  // its key and fails these exact registry expectations.
+  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['vercel', 'github', 'google', 'notion', 'posthog']);
+  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'vercel', 'lovable', 'notion', 'posthog']);
+  assert.deepEqual(builtParts('company-creation').map(([k]) => k), ['github', 'vercel']);
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion'], 'D1097\'s Runs on, From Google, then From Notion');
   // CycleRoute takes Build's parts from here, and from nowhere else.
-  assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);
+  assert.match(cycleRouteText(), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });
 
 async function mount(element) {

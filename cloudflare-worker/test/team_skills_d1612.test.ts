@@ -56,6 +56,7 @@ function world(o: { events?: boolean } = {}) {
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
   db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   if (o.events !== false) db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
@@ -320,10 +321,16 @@ test('D1612: an agent gets a skill only of its role, with its approved tools, fr
   const tools = await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [needsMore] });
   assert.deepEqual([tools.status, tools.body.error, tools.body.tool], [422, 'tool_not_approved', { key: 'hubspot.read_deals', label: 'hubspot.read_deals' }]);
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [forIr] })).status, 200, 'its granted tool');
-  assert.equal((await call(w, OTHER_EDITOR, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.error, 'not_found');
-  assert.equal((await call(w, ADMIN, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.error, 'not_found', 'another company\'s skill, even for HQ');
+  const savedLinks = w.db.prepare('SELECT * FROM agent_skill_links').all();
+  const hq = await call(w, ADMIN, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] });
+  assert.deepEqual([hq.status, hq.body.error], [403, 'not_manager'], 'HQ has no editing seat');
+  assert.deepEqual(w.db.prepare('SELECT * FROM agent_skill_links').all(), savedLinks);
+  const crossCompany = await call(w, OTHER_EDITOR, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] });
+  assert.deepEqual([crossCompany.status, crossCompany.body.error], [404, 'not_found']);
+  assert.deepEqual(w.db.prepare('SELECT * FROM agent_skill_links').all(), savedLinks);
   // A project outside any company takes HQ skills only, even from its own founder.
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${SOLO_CFO}/skills`, { skills: [acme] })).body.error, 'not_found');
+  w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES (?, ?, 1, 'Admin')").run('l-super-acme', SUPER);
   assert.equal((await call(w, SUPER, 'PUT', `/agents/${CFO}/skills`, { skills: [draft] })).body.error, 'version_not_published');
   assert.deepEqual([(await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, (await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).body.error], [403, 'not_manager']);
   assert.equal((await call(w, STRANGER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, 404);

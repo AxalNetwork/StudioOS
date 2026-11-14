@@ -13,7 +13,7 @@ to the owner's canvases: `design/incoming/Companies Projects Page.dc.html` and
 | `CompanyPage.jsx` | D1413 (PF2, PF7c): the company's page at `/account/portfolio/<uid>`, which replaced D1139's lightbox (owner Q3) and hosts its dialogs. Legal information, Locations, Documents, Team and Projects, each a block that fails alone. |
 | `ProjectPage.jsx` | D1413 (PF3): a project's page at `/account/portfolio/projects/<id>`: its linked company, or "Not a company yet" with Make it a company and Move under a company; details and team. |
 | `CreateSheets.jsx` | D1413 (PF4): New company (only the name is required, owner Q2; the address and legal fields optional) and New project (standalone or in a company; the address checked as you type, D1591). |
-| `CompanySettingsTabs.jsx` | D1413 (PF6a, PF6c, PF8), D4152: Settings' one header and its four tabs (Team · General · Legal · Projects), Legal (the facts and `LegalSheet`), and Projects (each project's settings inside the company, Agents and Move out). |
+| `CompanySettingsTabs.jsx` | D1413 (PF6a, PF6c, PF8), D4152, D5366: Settings' one header and its four tabs (Team · General · Legal · Projects), Legal (the facts and `LegalSheet`), and Projects (each project's settings inside the company, Agents and Move out). Project Edit and Move follow the members read's server capabilities; HQ/support without a qualifying seat sees the matching read-only explanation. |
 | `CompanyGeneralForm.jsx`, `generalFormModel.js` | D4152 (#4152 §5): Settings › General as one form with one "Save changes": name, stage, default currency (#4736: the stored ISO 4217 code or "Not recorded"; `CURRENCY_CODES` is held equal to the Worker's list by a test), website, LinkedIn, regions, description and the growth details, saved through `PATCH /api/company/:uid` (only what changed). No logo field until the upload exists (#4201). |
 | `LegalSheet.jsx` | D1413 (PF8a): "Edit legal facts": the legal record, the tax ID (masked, Replace), the registered agent and the mailing address. No Ask on Account (owner Q8). |
 | `PortfolioAddress.jsx` | D1413: `/c/<company>[/p/<project>]` and `/p/<project>` (with an optional `/settings[/<tab>]`), resolved by `GET /api/account/resolve` and opened under Account in one hop; anything else is "This is not yours to open". Routed by `frontend/src/routes/portfolio.jsx`. |
@@ -65,3 +65,16 @@ to the owner's canvases: `design/incoming/Companies Projects Page.dc.html` and
 - **A failed or missing read is said, never drawn as none.** A cycle list the
   Worker could not read is "could not be read"; a failed memberships read is
   Unreadable, not "you belong to none".
+
+D4966 (#5312) rebuilds Company settings › General to the v2 canvas, frontend
+only. `CompanyGeneralFields.jsx` holds the parts the canvas adds, each pure and
+reading nothing: `CurrencyCombobox` (the ISO list searched by code or by name,
+"Not recorded" always offered, no guessed default), `UrlField` (Open, and what
+will be stored when it differs from what was typed), `DescriptionField`,
+`FieldFrame` (one field's label, hint, help, error and the changed-field edge),
+`ProblemSummary` (every bad field, each a link to it) and `PublicPreview` (the
+Worker's `PUBLIC_FIELDS` only, marked when it includes unsaved changes).
+`generalFormModel.js` gains the four intent groups, `previewOf`, `railStatus`'s
+twelve save states, `fieldProblems` (of which `problemOf` is the first) and the
+currency and URL helpers. The save machinery is unchanged: #4960 to #4964 own
+it.

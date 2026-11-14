@@ -3,8 +3,8 @@ import {
   CoverageMark, Figure, Section, When, Why, TABLE, TD, TH, NUM,
 } from './RevenueStates.jsx';
 import {
-  TREND_REASON, UNRECORDED_CURRENCY, finite, isReady, moneyFigure, pendingState, periodLabel, statementTotals,
-  summaryTemporal, tokenMarginView,
+  TREND_REASON, UNRECORDED_CURRENCY, finite, invoiceOnlyCurrencies, isReady, licenceStreamCells, moneyFigure, pendingState,
+  periodLabel, statementTotals, summaryTemporal, tokenMarginView,
 } from './revenueModel.js';
 
 /**
@@ -13,8 +13,10 @@ import {
  *
  * STREAMS. Contracted, invoiced and collected are kept apart. The licence row
  * is a contracted run-rate (a quarter of each active annual fee, D5039's
- * relabel) and never "collected"; its invoiced and collected cells are Not
- * recorded until a ledger backs them. Revenue-share statements are HQ's
+ * relabel) and never "collected". Its invoiced and collected cells read the
+ * licence-fee invoice ledger (`licence_invoices`, D5036) for the period in the
+ * row's own currency (D5036 part 2), and stay Not recorded only while the
+ * Worker does not send it. Revenue-share statements are HQ's
  * intercompany claims for the period: owed and paid as HQ recorded them, not
  * recognised revenue. A Coverage column replaces the old Read column, and its
  * one explanation is in the coverage drawer. No total row: the only figures
@@ -27,7 +29,14 @@ import {
 
 const na = <span className="text-axal-muted dark:text-gray-400">n/a</span>;
 
-export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
+/** The licence row's coverage: the run-rate alone until the invoice ledger is read, then the run-rate and invoices. */
+function LicenceCoverage({ cells, onWhy }) {
+  if (cells.coverage === 'invoiced') return <><CoverageMark state="partial" label="Run-rate and invoices" /> <Why source="ledger" onOpen={onWhy} /></>;
+  if (cells.coverage === 'ledger_unavailable') return <><CoverageMark state="partial" label="Run-rate only" /> <Why source="ledger" onOpen={onWhy} /></>;
+  return <><CoverageMark state="partial" label="Run-rate only" /> <Why source="licence_fees" onOpen={onWhy} /></>;
+}
+
+export function RevenueStreams({ stream = 'all', summary, periodStatements, period, onWhy }) {
   const ready = isReady(summary);
   const fees = ready ? summary.licence_fees : null;
   const token = ready ? summary.token_cost : null;
@@ -44,7 +53,8 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
       sub="Contracted, invoiced and collected kept apart · native currency"
       testId="hq-revenue-streams-section"
     >
-      <div className="overflow-x-auto">
+      <p id="revenue-stream-scope" className="mb-2 text-[13px] text-axal-muted dark:text-gray-400">Stream filters this table. Executive figures and other sections keep their labelled scope.</p>
+      <div className="relative overflow-x-auto">
         <table className={TABLE}>
           <caption className="sr-only">Revenue by stream, {periodLabel(period)}, native currency</caption>
           <thead>
@@ -60,10 +70,10 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
           </thead>
           <tbody data-testid="hq-revenue-streams">
             {!ready && (
-              <tr><td className={TD}><b>Licence fees</b></td><td className={`${TD} ${NUM}`}><Figure figure={pending} /></td><td className={TD} colSpan={4} /><td className={TD}><CoverageMark state={pending.state} /></td></tr>
+              <tr hidden={stream !== 'all' && stream !== 'licence_fees'}><td className={TD}><b>Licence fees</b></td><td className={`${TD} ${NUM}`}><Figure figure={pending} /></td><td className={TD} colSpan={4} /><td className={TD}><CoverageMark state={pending.state} /></td></tr>
             )}
             {ready && !fees?.available && (
-              <tr>
+              <tr hidden={stream !== 'all' && stream !== 'licence_fees'}>
                 <td className={TD}><b>Licence fees</b></td>
                 <td className={`${TD} ${NUM}`}><Figure figure={{ state: 'unavailable', text: null }} /></td>
                 <td className={`${TD} ${NUM}`}>{nr}</td><td className={`${TD} ${NUM}`}>{nr}</td>
@@ -71,26 +81,44 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
                 <td className={TD}><CoverageMark state="unavailable" /> <Why source="licence_fees" onOpen={onWhy} /></td>
               </tr>
             )}
-            {ready && fees?.available && fees.by_currency.map((row) => (
-              <tr key={row.currency}>
+            {ready && fees?.available && fees.by_currency.map((row) => {
+              const cells = licenceStreamCells(summary, row.currency);
+              return (
+              <tr hidden={stream !== 'all' && stream !== 'licence_fees'} key={row.currency}>
                 <td className={TD}>
                   <b>Licence fees · {row.currency}</b>
                   <small className="block text-[12.5px] text-axal-muted dark:text-gray-400">{row.licences} active licence{row.licences === 1 ? '' : 's'} · <When kind={summaryTemporal(summary, 'licence_fees')} period={period} /></small>
                 </td>
                 <td className={`${TD} ${NUM}`}><Figure figure={moneyFigure(row.quarter_cents, row.currency, { incomplete: finite(fees.active_without_fee) > 0 })} /></td>
-                <td className={`${TD} ${NUM}`}>{nr}</td>
-                <td className={`${TD} ${NUM}`}>{nr}</td>
+                <td className={`${TD} ${NUM}`}><Figure figure={cells.invoiced} /></td>
+                <td className={`${TD} ${NUM}`}><Figure figure={cells.collected} /></td>
                 <td className={`${TD} ${NUM}`}><span className="text-axal-muted dark:text-gray-400">No cost of goods</span></td>
                 <td className={`${TD} ${NUM}`}>{na}</td>
-                <td className={TD}><CoverageMark state="partial" label="Run-rate only" /> <Why source="licence_fees" onOpen={onWhy} /></td>
+                <td className={TD}><LicenceCoverage cells={cells} onWhy={onWhy} /></td>
               </tr>
-            ))}
-            {ready && fees?.available && !fees.by_currency.length && (
-              <tr><td className={TD}><b>Licence fees</b></td><td className={`${TD} ${NUM}`} colSpan={5}><Figure figure={{ state: 'zero', text: null }} absentLabel="No active licence fee" /></td><td className={TD}><CoverageMark state="complete" /></td></tr>
+              );
+            })}
+            {ready && fees?.available && invoiceOnlyCurrencies(summary, fees.by_currency.map((r) => r.currency)).map((cur) => {
+              // Invoices issued in a currency no active licence is priced in (an ended licence, say): drawn, never folded into another.
+              const cells = licenceStreamCells(summary, cur);
+              return (
+                <tr hidden={stream !== 'all' && stream !== 'licence_fees'} key={`invoiced-${cur}`}>
+                  <td className={TD}><b>Licence fees · {cur}</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">No active licence · <When kind="period" period={period} /></small></td>
+                  <td className={`${TD} ${NUM}`}><Figure figure={{ state: 'zero', text: null }} absentLabel="No active licence fee" /></td>
+                  <td className={`${TD} ${NUM}`}><Figure figure={cells.invoiced} /></td>
+                  <td className={`${TD} ${NUM}`}><Figure figure={cells.collected} /></td>
+                  <td className={`${TD} ${NUM}`}><span className="text-axal-muted dark:text-gray-400">No cost of goods</span></td>
+                  <td className={`${TD} ${NUM}`}>{na}</td>
+                  <td className={TD}><LicenceCoverage cells={cells} onWhy={onWhy} /></td>
+                </tr>
+              );
+            })}
+            {ready && fees?.available && !fees.by_currency.length && !invoiceOnlyCurrencies(summary, []).length && (
+              <tr hidden={stream !== 'all' && stream !== 'licence_fees'}><td className={TD}><b>Licence fees</b></td><td className={`${TD} ${NUM}`} colSpan={5}><Figure figure={{ state: 'zero', text: null }} absentLabel="No active licence fee" /></td><td className={TD}><CoverageMark state="complete" /></td></tr>
             )}
 
             {totals === null && (
-              <tr>
+              <tr hidden={stream !== 'all' && stream !== 'statements'}>
                 <td className={TD}><b>Revenue-share statements</b></td>
                 <td className={`${TD} ${NUM}`}>{na}</td>
                 <td className={`${TD} ${NUM}`} colSpan={2}><Figure figure={{ state: pendingState(periodStatements), text: null }} /></td>
@@ -99,7 +127,7 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
               </tr>
             )}
             {totals && totals.map((t) => (
-              <tr key={`st:${t.currency}`}>
+              <tr hidden={stream !== 'all' && stream !== 'statements'} key={`st:${t.currency}`}>
                 <td className={TD}>
                   <b>Revenue-share statements · {t.currency === UNRECORDED_CURRENCY ? 'currency not recorded' : t.currency}</b>
                   <small className="block text-[12.5px] text-axal-muted dark:text-gray-400">{t.count} drawn · intercompany claims, not recognised revenue</small>
@@ -121,16 +149,16 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
               </tr>
             ))}
             {totals && !totals.length && (
-              <tr>
+              <tr hidden={stream !== 'all' && stream !== 'statements'}>
                 <td className={TD}><b>Revenue-share statements</b></td>
                 <td className={`${TD} ${NUM}`}>{na}</td>
-                <td className={`${TD} ${NUM}`} colSpan={2}><Figure figure={{ state: 'not_recorded', text: null }} absentLabel={`None drawn for ${periodLabel(period)}`} /></td>
+                <td className={`${TD} ${NUM}`} colSpan={2}><Figure figure={{ state: 'not_recorded', text: null }} absentLabel={periodLabel(period) ? `No ${periodLabel(period)} statements yet` : 'No statements yet'} /></td>
                 <td className={`${TD} ${NUM}`}>{na}</td><td className={`${TD} ${NUM}`}>{na}</td>
                 <td className={TD}><CoverageMark state="not_recorded" label="Drawing held" /> <Why source="statements" onOpen={onWhy} /></td>
               </tr>
             )}
 
-            <tr>
+            <tr hidden={stream !== 'all' && stream !== 'subscriptions'}>
               <td className={TD}><b>Subscriptions</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">Stripe · per customer only</small></td>
               <td className={`${TD} ${NUM}`}>{na}</td>
               <td className={`${TD} ${NUM}`}>{ready ? nr : <Figure figure={pending} />}</td>
@@ -139,7 +167,7 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
               <td className={TD}><CoverageMark state={ready ? 'not_recorded' : pending.state} label={ready ? 'Missing ledger' : undefined} /> <Why source="subscriptions" onOpen={onWhy} /></td>
             </tr>
 
-            <tr>
+            <tr hidden={stream !== 'all' && stream !== 'tokens'}>
               <td className={TD}><b>AI / tokens</b><small className="block text-[12.5px] text-axal-muted dark:text-gray-400">USD</small></td>
               <td className={`${TD} ${NUM}`}>{na}</td>
               <td className={`${TD} ${NUM}`}>{ready ? nr : <Figure figure={pending} />}</td>

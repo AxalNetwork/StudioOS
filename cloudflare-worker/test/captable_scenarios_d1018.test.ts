@@ -316,6 +316,21 @@ async function worked(f: any, opts: { preferredTransfer?: boolean } = {}) {
   return { common, pref, pool, safe, note };
 }
 
+test('D5497 Today models JPY as major units and keeps USD model instruments out of JPY proposals', async () => {
+  const f = fresh();
+  saveModel(f);
+  assert.equal((await call(f, OWNER, '/record/10/currency', 'PUT', { currency: 'JPY' })).status, 200);
+  await worked(f);
+  const r = await call(f, OWNER, '/scenarios/by-project/10/today');
+  assert.equal(r.status, 200, r.text);
+  const safe = r.body.today.inputs.safes.find((s: any) => s.name === 'Early Angel');
+  assert.deepEqual([safe.amount, safe.cap], [2_500_000, 500_000_000]);
+  const fund = r.body.today.inputs.start.holders.find((h: any) => h.name === 'Fund One');
+  assert.equal(fund.preference, 250_000);
+  assert.ok(r.body.offer.rows.every((row: any) => row.kind === 'founding'));
+  assert.match(r.body.offer.currency_note, /US dollars/);
+});
+
 test('Today: nothing recorded says so; the model is "Cap table · model" and its rows are offered, never written', async () => {
   const f = fresh();
   saveModel(f);
@@ -483,3 +498,66 @@ test('D1283: today carries the record\'s price per share: the last priced issuan
   assert.equal(priceOnRecord(rec([], [{ uid: 'p', name: 'Plan', kind: 'option_pool', price_per_share_micros: 5, created_at: '2026' }])), null);
   assert.equal(priceOnRecord(rec([iss({ class_uid: 'c1' })], [{ uid: 'c1', name: 'Series A', kind: 'preferred' }])).instrument, 'Series A');
 });
+
+// ───────────────────────────────────────────────────────────── #4603 part 3: the lean reader
+
+/** The reads one call made, by what each statement reads. */
+function logged(f: any) {
+  const db = f.env.DB, sqls: string[] = [];
+  f.env.DB = { ...db, prepare(sql: string) { sqls.push(sql.replace(/\s+/g, ' ')); return db.prepare(sql); } };
+  return { sqls, restore: () => { f.env.DB = db; } };
+}
+const leanView = (r: any) => ({ source: r.source, start: r.start ?? null, today: r.today ?? null, record_reason: r.record_reason ?? null,
+  model: r.source === 'model' ? r.model : undefined });
+
+test('#4603 part 3: the lean reader gives the full reader\'s source, start, today and option pool, and reads only what they need', async () => {
+  // Mutation checked: the lean read leaving out the issuances → Today differs; reading no fallback model → the model shape reads none;
+  // the holder kinds or close uids still read → the lean statements include them; the model read when the record gives Today → it is listed.
+  const shapes: Array<[string, (f: any) => Promise<void>]> = [
+    ['nothing recorded', async () => {}],
+    ['the model only', async (f) => saveModel(f)],
+    ['the worked record', async (f) => { await worked(f); }],
+    ['the worked record and a preferred transfer', async (f) => { await worked(f, { preferredTransfer: true }); }],
+    ['the record over the model', async (f) => { saveModel(f); await worked(f); }],
+    ['the worked record with an instrument from a close', async (f) => {
+      await worked(f);
+      f.db.exec(`UPDATE cap_table_issuances SET origin = 'close', origin_ref = 'raise_prospect:synthetic-1' WHERE project_id = 10 AND kind = 'safe'`);
+    }],
+    ['an overgranted pool falls back to the model', async (f) => {
+      saveModel(f); const { pool } = await worked(f);
+      await record(f, { kind: 'grant', holder_name: 'Overgranted Hire', class_uid: pool.uid, shares: 900, issued_on: '2026-07-01' });
+    }],
+  ];
+  for (const [name, build] of shapes) {
+    const f = fresh();
+    await build(f);
+    const fullWatch = logged(f);
+    const full = await readCapTable(f.env, 10);
+    fullWatch.restore();
+    if (name.includes('from a close')) assert.ok(fullWatch.sqls.some((s) => /raise_prospects/.test(s)), 'the full read looks the close up');
+    const watch = logged(f);
+    const lean = await readCapTable(f.env, 10, { lean: true });
+    watch.restore();
+    assert.deepEqual(leanView(lean), leanView(full), name);
+    if (full.source === 'record') assert.equal((lean as any).model, null, `${name}: the record gives Today, so no model is read`);
+    assert.deepEqual(watch.sqls.filter((s) => /FROM cap_table_holders WHERE project_id = \? AND kind IS NOT NULL|raise_prospects/.test(s)), [], `${name}: no holder kinds, no closes`);
+    assert.equal(watch.sqls.some((s) => /FROM cap_table_scenarios/.test(s)), full.source !== 'record', `${name}: the model is read only as the fallback`);
+    // Build's option pool, through the lean read, is what the full read gives (100 less the founders' recorded share, none here, less the pool).
+    const want = unallocatedFrom(full);
+    const byHand: Record<string, number> = { 'the model only': 90, 'the worked record': 92.5 }; // as D1018's "one reader" test has them
+    if (Object.hasOwn(byHand, name)) assert.equal(want, byHand[name], `${name}: the reference agrees with the figures by hand`);
+    assert.equal(await unallocated(f.env, { id: 10 } as any, null), want, name);
+  }
+});
+
+/** What `unallocated` answers from a full read: 100 less the founders' recorded shares (none here) less the option pool. */
+function unallocatedFrom(cap: any): number {
+  if (cap.source === 'record') {
+    const pool = (cap.start.start.pool_shares ?? 0) + cap.start.start.holders.filter((h: any) => h.type === 'options').reduce((n: number, h: any) => n + h.shares, 0);
+    if (cap.start.start.pool_shares == null && pool === 0) return 100;
+    const total = cap.today.totals.shares_outstanding;
+    return Math.round((100 - (total > 0 ? Math.round(10000 * pool / total) / 100 : 0)) * 100) / 100;
+  }
+  const pct = cap.source === 'model' ? Number(cap.model.inputs?.option_pool_pct) : NaN;
+  return Number.isFinite(pct) ? Math.round((100 - pct) * 100) / 100 : 100;
+}

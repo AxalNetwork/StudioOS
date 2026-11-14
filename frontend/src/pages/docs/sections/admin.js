@@ -15,6 +15,8 @@ export default {
         'Open a row of the admin sidebar (admins only); its page lists the tools under it.',
         'Each page has its own header with a breadcrumb back to its row, and its own tabs where it has them.',
         'Use "View as" to step into a user’s view; exit from the violet bar at the top.',
+        'If you administer a studio licence, open My Licence → Contract to see program agreement status, what each program is waiting on, and any signed PDFs you can download.',
+        'At HQ, use the legal Needs HQ filters in Licences to find agreements that need attention. Open the licence’s Agreement section to prepare an agreement or review it before sending for signature.',
       ],
       tips: [
         'Bookmark the page you use most — every tool has its own address, so a bookmark opens it directly.',

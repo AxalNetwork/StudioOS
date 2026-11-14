@@ -1,0 +1,29 @@
+{
+  "GET /api/market-intel-public/publications": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/market-intel-public/publications/:slug": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/market-intel-public/publications/download/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The publication token (pub tag, HMAC, expiry, publications/ prefix lock) is the credential. A forged, expired or tampered token, a token for a key outside the prefix, another route's token and any session with no token get the same 403 with no object opened."
+  },
+  "GET /api/market-intel-public/unsubscribe": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "POST /api/market-intel-public/unsubscribe": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}

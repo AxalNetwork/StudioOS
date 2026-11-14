@@ -30,6 +30,7 @@ import DealCommitmentsStaff from '../src/pages/deal/DealCommitmentsStaff.jsx';
 import { viewerOf } from '../src/pages/deal/dealAudienceModel.js';
 import { FITS_RAISE_TARGET, FITS_RAISE_TARGET_NOTE, mercuryCreditReason } from '../src/lib/revenueLedger.js';
 import { USE_WORDS } from '../src/pages/account/mercuryModel.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const ssr = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -215,7 +216,7 @@ test('mounted: a refusal is printed under its own prospect', async () => {
 });
 
 test('Capital relationships draws the panel first on Overview, with the viewer\'s role and the module\'s re-read', () => {
-  const src = codeOnly(readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8'));
+  const src = codeOnly(cycleRouteText());
   // D1227 (#3226): the Calls history left Overview, so the panel comes first.
   assert.match(src, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<RaiseReceiptMatches role=\{ctx\.role\} onChanged=\{ctx\.reload\} \/>/);
   assert.match(src, /openDialog, role: user\?\.role \?\? null \}\)/);

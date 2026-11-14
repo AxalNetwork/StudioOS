@@ -1,6 +1,6 @@
 import React from 'react';
 import StatusBadge from './StatusBadge.jsx';
-import { SOURCE_LABELS } from './overviewModel.js';
+import { SOURCE_LABELS, freshnessOf } from './overviewModel.js';
 
 /**
  * D4800 (#4800, canvas SEB "SourceAvailability", SE10c "Partial") — "n of n
@@ -14,20 +14,35 @@ import { SOURCE_LABELS } from './overviewModel.js';
  *
  * Partial is never presented as clear: a failed source is named in the
  * summary line itself, with Retry, not only inside the disclosure.
+ *
+ * D5247 — each store's last good read and its own age sit on its row in the
+ * disclosure, and a store past its age is named in the summary line as Stale.
+ * The evidence stores `/overview` reads (backup heartbeats, restore drill,
+ * sanctions) are listed under them. A store with no recorded time says "Not
+ * recorded"; nothing here is ever drawn as 0.
  */
+function Freshness({ row, now }) {
+  const f = freshnessOf(row, now);
+  if (!f) return null;
+  return f.state
+    ? <span data-testid="security-source-stale"><StatusBadge state="stale" label={f.text} /></span>
+    : <span className="text-axal-muted">· {f.text}</span>;
+}
+
 export default function SourceAvailability({ sources, onRetry, filterLabel, compact = false, children, 'data-testid': testId = 'security-sources' }) {
-  const { state, read, total, rows } = sources;
+  const { state, read, total, rows, evidence = [], now = null } = sources;
   const failed = rows.filter((s) => !s.available);
+  const staleNames = [...rows, ...evidence].filter((s) => s.freshness === 'stale').map((s) => SOURCE_LABELS[s.table || s.source] || s.table || s.source);
   let summary;
   if (state === 'unreadable') summary = <StatusBadge state="unavailable" label="Sources could not be read" />;
-  else if (state !== 'ready') summary = <span className="text-[12px] text-axal-faint">Reading sources…</span>;
-  else summary = <StatusBadge state={failed.length || total === 0 ? 'unavailable' : 'healthy'} label={`${read} of ${total} sources read`} />;
+  else if (state !== 'ready') summary = <span className="text-[12px] text-axal-muted">Reading sources…</span>;
+  else summary = <StatusBadge state={failed.length || total === 0 ? 'unavailable' : staleNames.length ? 'stale' : 'healthy'} label={`${read} of ${total} sources read`} />;
 
   return (
     <div className={compact ? 'flex flex-col items-start gap-1 sm:items-end' : 'space-y-2'} data-testid={testId}>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {summary}
-        {state === 'ready' && filterLabel && <span className="text-[11px] text-axal-faint">under the {filterLabel} filter on Events</span>}
+        {state === 'ready' && filterLabel && <span className="text-[11px] text-axal-muted">under the {filterLabel} filter on Events</span>}
         {(state === 'unreadable' || failed.length > 0) && onRetry && (
           <button
             type="button"
@@ -38,6 +53,11 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
           </button>
         )}
       </div>
+      {staleNames.length > 0 && (
+        <p className="text-[11.5px] text-axal-muted" data-testid={`${testId}-stale`}>
+          <StatusBadge state="stale" /> {staleNames.join(', ')} {staleNames.length === 1 ? 'is' : 'are'} past {staleNames.length === 1 ? 'its' : 'their'} age; the last good read is older than the store is written.
+        </p>
+      )}
       {failed.length > 0 && (
         <p className="text-[11.5px] text-axal-muted" data-testid={`${testId}-partial`}>
           {failed.map((s) => SOURCE_LABELS[s.table] || s.table).join(', ')} could not be read; rows from {failed.length === 1 ? 'it' : 'them'} may be missing.
@@ -48,15 +68,28 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
         {rows.length > 0 && (
           <ul className="mt-1.5 space-y-0.5" data-testid={`${testId}-list`}>
             {rows.map((s) => (
-              <li key={s.table} className="flex flex-wrap items-center gap-1.5 text-axal-faint">
+              <li key={s.table} className="flex flex-wrap items-center gap-1.5 text-axal-muted">
                 <StatusBadge state={s.available ? 'healthy' : 'unavailable'} label={SOURCE_LABELS[s.table] || s.table} />
                 <span className="font-mono text-[10.5px]">{s.table}</span>
                 <span>· {s.available ? `${Number(s.rows).toLocaleString()} rows read` : s.reason || 'did not answer'}</span>
+                <Freshness row={s} now={now} />
               </li>
             ))}
           </ul>
         )}
-        {children && <div className="mt-2 space-y-1.5 leading-relaxed text-axal-faint">{children}</div>}
+        {evidence.length > 0 && (
+          <ul className="mt-1.5 space-y-0.5" data-testid={`${testId}-evidence`}>
+            {evidence.map((s) => (
+              <li key={s.source} className="flex flex-wrap items-center gap-1.5 text-axal-muted">
+                <StatusBadge state={s.answered ? 'healthy' : 'unavailable'} label={SOURCE_LABELS[s.source] || s.source} />
+                <span className="font-mono text-[10.5px]">{s.source}</span>
+                {!s.answered && <span>· did not answer</span>}
+                <Freshness row={s} now={now} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {children && <div className="mt-2 space-y-1.5 leading-relaxed text-axal-muted">{children}</div>}
       </details>
     </div>
   );

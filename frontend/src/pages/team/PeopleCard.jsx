@@ -83,7 +83,7 @@ function CompanyEditors({ block, company }) {
   return (
     <div className="mt-3 rounded-axal-md border border-dashed border-axal-hairline bg-axal-ground/60 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-950/40" data-testid="company-editors">
       <p className="m-0 font-mono text-[11px] font-medium uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">Company editors with access</p>
-      <p className={`m-0 mt-1 ${MUTED}`}>They manage this project through {company}. They are not project members, and their company roles are not project roles.</p>
+      <p className={`m-0 mt-1 ${MUTED}`}>They can manage this team through {company}, even without a project seat.</p>
       <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
         {block.value.map((e) => (
           <li key={e.uid || e.name} className="flex items-center gap-2.5">

@@ -31,7 +31,8 @@ export type ManagedProviderKey =
   | 'crunchbase'
   | 'affinity'
   | 'telegram'
-  | 'gcip';
+  | 'gcip'
+  | 'tiktok';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -48,6 +49,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'affinity',
   'telegram',
   'gcip',
+  'tiktok',
 ];
 
 export interface ProviderEnvVarPair {
@@ -62,6 +64,7 @@ export interface ProviderEnvVarPair {
  * `ensureCreds` calls can never disagree on what env vars to consult.
  */
 export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
+  tiktok:     { id: 'TIKTOK_CLIENT_KEY', secret: 'TIKTOK_CLIENT_SECRET' },
   slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
   hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
   salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },
@@ -109,7 +112,9 @@ async function ensureSchema(env: Env): Promise<void> {
          created_by_user_id INTEGER,
          created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
          updated_by_user_id INTEGER,
-         updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+         updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+         expires_at         TIMESTAMP,
+         last_used_at       TIMESTAMP
        )`,
     ).run();
     SCHEMA_ENSURED.set(bindingKey(env), true);
@@ -206,11 +211,12 @@ export async function rotateOauthSecret(
   providerKey: ManagedProviderKey,
   newClientSecret: string,
   adminUserId: number,
+  expiresAt: string | null = null,
 ): Promise<{ rotated_at: string }> {
   if (!newClientSecret.trim()) throw new Error('client_secret is required');
   await ensureSchema(env);
   const existing: any = await env.DB.prepare(
-    `SELECT 1 FROM provider_oauth_keys WHERE provider_key = ?`,
+    `SELECT 1 FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
   ).bind(providerKey).first();
   if (!existing) throw new Error('provider_not_configured');
   const enc = await encryptString(env, newClientSecret);
@@ -221,6 +227,7 @@ export async function rotateOauthSecret(
             updated_at         = CURRENT_TIMESTAMP
       WHERE provider_key = ?`,
   ).bind(enc, adminUserId, providerKey).run();
+  await resetKeyStamps(env, providerKey, expiresAt);
   cache.delete(providerKey);
   return { rotated_at: new Date().toISOString() };
 }
@@ -249,6 +256,7 @@ export async function setOauthCreds(
        updated_by_user_id = excluded.updated_by_user_id,
        updated_at         = CURRENT_TIMESTAMP`,
   ).bind(providerKey, clientId.trim(), enc, adminUserId, adminUserId).run();
+  await resetKeyStamps(env, providerKey, null);
   cache.delete(providerKey);
 }
 
@@ -270,10 +278,13 @@ export async function deleteOauthCredsAndDisconnect(
   providerKey: ManagedProviderKey,
 ): Promise<{ removed_keys: boolean; disconnected_users: number }> {
   await ensureSchema(env);
+  // D5304: a row that holds a key is "removed keys"; the stamps-only row of a
+  // Worker-secret key is deleted after it and is not.
   const del = await env.DB.prepare(
-    `DELETE FROM provider_oauth_keys WHERE provider_key = ?`,
+    `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
   ).bind(providerKey).run();
   const removed = ((del?.meta as any)?.changes ?? 0) > 0;
+  await dropStampsRow(env, providerKey);
 
   let disconnected = 0;
   try {
@@ -310,12 +321,13 @@ export async function deleteOauthCredsRowOnly(
   let removed = false;
   try {
     const del = await env.DB.prepare(
-      `DELETE FROM provider_oauth_keys WHERE provider_key = ?`,
+      `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc <> ''`,
     ).bind(providerKey).run();
     removed = ((del?.meta as any)?.changes ?? 0) > 0;
   } catch (e) {
     console.warn('[providerOauthKeys] row-only delete failed', e);
   }
+  await dropStampsRow(env, providerKey);
   cache.delete(providerKey);
   return { removed_keys: removed };
 }
@@ -339,6 +351,13 @@ export interface ProviderKeyStatus {
    * removal will disconnect — an unread count must not promise "none".
    */
   active_integrations: number | null;
+  /**
+   * D5304 — when the provider says this key expires, as the Super Admin
+   * entered it from the provider's console, or `null`: nothing recorded.
+   */
+  expires_at: string | null;
+  /** D5304 — the last call that authenticated with this key and succeeded (stamped at most hourly), or `null`. */
+  last_used_at: string | null;
 }
 
 /**
@@ -359,11 +378,12 @@ export function keyHeldAsWorkerSecret(env: Env, providerKey: ManagedProviderKey)
  */
 export async function listProviderKeyStatus(
   env: Env,
-): Promise<{ db_readable: boolean; items: Array<ProviderKeyStatus & { state: ProviderKeyState }> }> {
+): Promise<{ db_readable: boolean; stamps_readable: boolean; items: Array<ProviderKeyStatus & { state: ProviderKeyState }> }> {
   await ensureSchema(env);
   const status = await readProviderKeyStatus(env);
   return {
     db_readable: status.db_readable,
+    stamps_readable: status.stamps_readable,
     items: status.items.map((item) => ({ ...item, state: keyStateOf(item, status.db_readable) })),
   };
 }
@@ -383,12 +403,12 @@ export async function listProviderKeyStatus(
  */
 export async function readProviderKeyStatus(
   env: Env,
-): Promise<{ db_readable: boolean; items: ProviderKeyStatus[] }> {
+): Promise<{ db_readable: boolean; stamps_readable: boolean; items: ProviderKeyStatus[] }> {
   let dbRows: Array<{ provider_key: string; client_id: string; updated_at: string; updated_by_user_id: number | null }> = [];
   let dbReadable = true;
   try {
     const r: any = await env.DB.prepare(
-      `SELECT provider_key, client_id, updated_at, updated_by_user_id FROM provider_oauth_keys`,
+      `SELECT provider_key, client_id, updated_at, updated_by_user_id FROM provider_oauth_keys WHERE client_secret_enc <> ''`,
     ).all();
     dbRows = (r?.results || []) as typeof dbRows;
   } catch (e) {
@@ -409,6 +429,7 @@ export async function readProviderKeyStatus(
     }
   } catch { countsReadable = false; }
   const dbMap = new Map(dbRows.map(r => [r.provider_key, r] as const));
+  const stamps = await readProviderKeyStamps(env);
   const items = MANAGED_PROVIDERS.map((pk): ProviderKeyStatus => {
     const env_ = envCreds(env, pk);
     const db = dbMap.get(pk);
@@ -430,9 +451,11 @@ export async function readProviderKeyStatus(
       updated_by_user_id: db?.updated_by_user_id ?? null,
       // Absent from an answered GROUP BY means no active row: a measured zero.
       active_integrations: !countsReadable ? null : counts.has(pk) ? counts.get(pk)! : 0,
+      expires_at: stamps.byProvider.get(pk)?.expires_at ?? null,
+      last_used_at: stamps.byProvider.get(pk)?.last_used_at ?? null,
     };
   });
-  return { db_readable: dbReadable, items };
+  return { db_readable: dbReadable, stamps_readable: stamps.readable, items };
 }
 
 /**
@@ -512,7 +535,150 @@ export async function readProviderKeyLastSet(
   }
 }
 
+/* ── D5304: expiry and last use (D4860 question D = b) ─────────────────── */
+
+/** A successful use is stamped at most this often per key, so a hot path does not write on every call. */
+export const LAST_USED_STAMP_INTERVAL_MS = 60 * 60 * 1000;
+
+/** How soon an isolate that found a stamp from within the hour asks again. */
+const LAST_USED_RECHECK_MS = 10 * 60 * 1000;
+
+/** SQLite's own timestamp format (`CURRENT_TIMESTAMP`), so stored stamps compare like the rest. */
+export function sqlStamp(d: Date): string {
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/**
+ * An expiry as the Super Admin typed it from the provider's console: a date
+ * (`2027-03-01`) or a date and time. Returns the stamp to store, `null` for
+ * blank (nothing reported), or `undefined` when it is not a date at all.
+ */
+export function parseKeyExpiry(v: unknown): string | null | undefined {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string') return undefined;
+  const t = v.trim();
+  if (!t) return null;
+  if (!/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/.test(t)) return undefined;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t}T00:00:00Z` : t.replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? undefined : sqlStamp(d);
+}
+
+/** Per isolate: the last stamp this isolate wrote per key, so a second use within the hour issues no statement. */
+const LAST_STAMPED = new WeakMap<object, Map<string, number>>();
+
+/**
+ * Stamp a managed key's last successful use. Call it only after a call that
+ * authenticated with the key succeeded. At most once an hour per key: this
+ * isolate skips the statement inside the hour, and the statement itself
+ * changes nothing when another isolate stamped within the hour. A key held as
+ * a Worker secret has no row, so its stamp goes on a stamps-only row (no key
+ * material: `client_id` and `client_secret_enc` are ''). Best effort: it never
+ * throws, and logs no key, only the provider and the error.
+ *
+ * Returns whether it wrote.
+ */
+export async function markProviderKeyUsed(env: Env, providerKey: string, now: Date = new Date()): Promise<boolean> {
+  if (!(MANAGED_PROVIDERS as readonly string[]).includes(providerKey)) return false;
+  let seen: Map<string, number> | undefined;
+  try {
+    const k = bindingKey(env);
+    seen = LAST_STAMPED.get(k);
+    if (!seen) { seen = new Map(); LAST_STAMPED.set(k, seen); }
+    const prior = seen.get(providerKey);
+    if (prior !== undefined && now.getTime() - prior < LAST_USED_STAMP_INTERVAL_MS) return false;
+    const at = sqlStamp(now);
+    const cutoff = sqlStamp(new Date(now.getTime() - LAST_USED_STAMP_INTERVAL_MS));
+    const res: any = await env.DB.prepare(
+      `INSERT INTO provider_oauth_keys (provider_key, client_id, client_secret_enc, last_used_at)
+       VALUES (?, '', '', ?)
+       ON CONFLICT(provider_key) DO UPDATE SET last_used_at = excluded.last_used_at
+        WHERE provider_oauth_keys.last_used_at IS NULL
+           OR datetime(provider_oauth_keys.last_used_at) <= datetime(?)`,
+    ).bind(providerKey, at, cutoff).run();
+    const wrote = Number(res?.meta?.changes ?? 0) > 0;
+    // Wrote: nothing more for an hour. Found another isolate's stamp from within the hour, of unknown age: ask the
+    // database again in ten minutes rather than an hour, so the stored stamp never lags by up to two.
+    seen.set(providerKey, wrote ? now.getTime() : now.getTime() - LAST_USED_STAMP_INTERVAL_MS + LAST_USED_RECHECK_MS);
+    return wrote;
+  } catch (e) {
+    console.warn('[providerOauthKeys] last-use stamp failed', providerKey, (e as Error)?.message);
+    return false;
+  }
+}
+
+/**
+ * Record the expiry the provider reports for the key now in place. For a key
+ * held in the database it is set on its row; for a Worker-secret key it goes
+ * on a stamps-only row. `null` records nothing. Best effort, like the stamp.
+ */
+export async function recordProviderKeyExpiry(env: Env, providerKey: ManagedProviderKey, expiresAt: string | null): Promise<boolean> {
+  if (expiresAt === null) return false;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO provider_oauth_keys (provider_key, client_id, client_secret_enc, expires_at)
+       VALUES (?, '', '', ?)
+       ON CONFLICT(provider_key) DO UPDATE SET expires_at = excluded.expires_at`,
+    ).bind(providerKey, expiresAt).run();
+    return true;
+  } catch (e) {
+    console.warn('[providerOauthKeys] expiry write failed', providerKey, (e as Error)?.message);
+    return false;
+  }
+}
+
+/**
+ * A new secret on a database-held row: the old one's last use goes, and the
+ * expiry becomes the one reported for the new secret (or none). Its own
+ * statement, best effort, so the key write never depends on the D5304 columns.
+ */
+async function resetKeyStamps(env: Env, providerKey: ManagedProviderKey, expiresAt: string | null): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE provider_oauth_keys SET expires_at = ?, last_used_at = NULL WHERE provider_key = ?`,
+    ).bind(expiresAt, providerKey).run();
+  } catch (e) {
+    console.warn('[providerOauthKeys] stamps reset failed', providerKey, (e as Error)?.message);
+  }
+}
+
+/** Delete a key's stamps-only row (never a row holding a key). A new key starts with neither stamp. */
+async function dropStampsRow(env: Env, providerKey: ManagedProviderKey): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `DELETE FROM provider_oauth_keys WHERE provider_key = ? AND client_secret_enc = ''`,
+    ).bind(providerKey).run();
+  } catch (e) {
+    console.warn('[providerOauthKeys] stamps delete failed', providerKey, (e as Error)?.message);
+  }
+}
+
+/**
+ * Each key's two stamps. Its own read, so a database without the D5304
+ * columns leaves the stamps unreadable and every other field as it was.
+ */
+export async function readProviderKeyStamps(
+  env: Env,
+): Promise<{ readable: boolean; byProvider: Map<string, { expires_at: string | null; last_used_at: string | null }> }> {
+  const byProvider = new Map<string, { expires_at: string | null; last_used_at: string | null }>();
+  try {
+    const r: any = await env.DB.prepare(
+      `SELECT provider_key, expires_at, last_used_at FROM provider_oauth_keys`,
+    ).all();
+    for (const row of (r?.results || []) as Array<{ provider_key: string; expires_at: string | null; last_used_at: string | null }>) {
+      byProvider.set(String(row.provider_key), { expires_at: row.expires_at ?? null, last_used_at: row.last_used_at ?? null });
+    }
+    return { readable: true, byProvider };
+  } catch {
+    return { readable: false, byProvider };
+  }
+}
+
 /** Test hook — clears the in-isolate cache. Not exported via the route layer. */
 export function _clearOauthCredsCache(): void {
   cache.clear();
+}
+
+/** Test hook — forgets this isolate's last-use stamps, so a test can drive the database's own throttle. */
+export function _clearLastUsedMemo(env: Env): void {
+  LAST_STAMPED.delete(bindingKey(env));
 }

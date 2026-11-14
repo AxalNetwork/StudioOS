@@ -9,6 +9,7 @@
  */
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { NOT_ON_STUDIOOS } from './sourcesModel';
+import { newDeckFailure } from './pitchSafeErrors.js';
 
 export const NEW_PATH = '/raise/pitch/new';
 export const NO_ROUND = 'No active round yet.';
@@ -106,7 +107,7 @@ export function refusalOf(e) {
   if (!e) return null;
   const data = e.data && typeof e.data === 'object' ? e.data : {};
   const code = e.code || data.error || null;
-  const message = e.message || data.message || 'That did not work. Nothing was changed.';
+  const message = newDeckFailure(e);
   // D1604 (PD-9 plan gate): a press the plan does not include links to the plans, never to a top-up.
   const link = code === 'figure_in_prompt' && typeof data.href === 'string' && data.href.startsWith('/')
     ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }
@@ -137,7 +138,17 @@ export function startOptions(versions = [], methods = []) {
   return [
     { kind: 'blank', id: 'blank', label: 'Blank' },
     ...versions.filter((v) => v?.id != null).map((v) => ({ kind: 'version', id: v.id, label: `Past version v${v.version ?? '?'}` })),
-    ...methods.filter((m) => m?.id).map((m) => ({ kind: 'template', id: m.id, label: m.label || m.id, locked: Boolean(m.locked) })),
+    ...methods.filter((m) => m?.id).map((m) => ({
+      kind: 'template',
+      id: m.id,
+      label: m.label || m.id,
+      templateKey: m.key || m.id,
+      locked: Boolean(m.locked),
+      slide_count: m.slide_count ?? null,
+      best_for: m.best_for ?? null,
+      category: m.category ?? null,
+      slides: Array.isArray(m.slides) ? m.slides.map(({ id, title }) => ({ id, title })) : [],
+    })),
   ];
 }
 

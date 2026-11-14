@@ -6,6 +6,8 @@ import { NothingYet, StatedLimit, Unrecorded, ZoneBody, inputClass } from '../ex
 import { FromTheLab, NoBatch } from './kit';
 import { CohortLoading, StatusBadge, useCohortRead, useCohortWorkspace } from './CohortWorkspace';
 import { BOARD_COLUMNS, FOUNDER_STATES, dayTime, filterFounders, founderRows, needsAttention } from './cohortModel';
+import FounderDetail from './FounderDetail';
+import { DETAIL_PARAM, parseDetailParam } from './founderDetailModel';
 
 /**
  * Cohorts › Founders — founder triage for the selected cohort (D4813 boards C2,
@@ -30,6 +32,14 @@ import { BOARD_COLUMNS, FOUNDER_STATES, dayTime, filterFounders, founderRows, ne
  * this advisor's guidance. Submissions and sessions have no activity record
  * (D4813: new backend), so a founder with no guidance action reads "Not
  * recorded", never "never".
+ *
+ * OPEN FOUNDER (D4813 package 4, board C4) opens the founder detail sheet
+ * (`FounderDetail.jsx`) through `?detail=<userId>`, so the link can be shared
+ * and switching cohort closes it. Write guidance stays beside it.
+ *
+ * TABLET (834px, board C17): the table drops Cohort (the header names it) and
+ * Last activity below `lg`, so its six columns fit without a sideways scroll;
+ * the board keeps three state columns from `md`.
  *
  * COMPANY, STAGE, A LIVE SIGNAL AND YOUR NEXT ACTION ARE NOT DRAWN. The roster
  * returns name and email; the Lab records no venture for a founder here, no
@@ -89,7 +99,7 @@ function LastActivity({ at }) {
 }
 
 /** One founder, as a card (board columns, and the table on a phone). */
-export function FounderCard({ row, lastAt, guidanceHref }) {
+export function FounderCard({ row, lastAt, guidanceHref, onOpen }) {
   return (
     <article className={`rounded-[10px] border p-3 ${needsAttention(row) ? 'border-amber-200 dark:border-amber-900' : 'border-axal-hairline dark:border-gray-800'} bg-white dark:bg-gray-900`} data-testid="founder-card" data-state={row.state}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -105,14 +115,26 @@ export function FounderCard({ row, lastAt, guidanceHref }) {
         <dt className="text-axal-faint">Last</dt>
         <dd><LastActivity at={lastAt} /></dd>
       </dl>
-      <Link to={guidanceHref} className="mt-2 inline-flex min-h-[44px] items-center text-[12px] font-bold text-emerald-800 underline dark:text-emerald-300 lg:min-h-0">
-        Write guidance
-      </Link>
+      <div className="mt-2 flex flex-wrap gap-x-3">
+        {onOpen && (
+          <button type="button" onClick={() => onOpen(row.user_id)} data-testid="open-founder"
+            className="inline-flex min-h-[44px] items-center text-[12px] font-bold text-emerald-800 underline dark:text-emerald-300 lg:min-h-0">
+            Open founder
+          </button>
+        )}
+        <Link to={guidanceHref} className="inline-flex min-h-[44px] items-center text-[12px] font-bold text-emerald-800 underline dark:text-emerald-300 lg:min-h-0">
+          Write guidance
+        </Link>
+      </div>
     </article>
   );
 }
 
-export function FounderTable({ rows, label, lastBy, guidanceHref }) {
+/** Columns that give way below `lg` (tablet, C17): the header already names the cohort. */
+const WIDE_ONLY = new Set(['Cohort', 'Last activity']);
+const wide = (h) => (WIDE_ONLY.has(h) ? ' hidden lg:table-cell' : '');
+
+export function FounderTable({ rows, label, lastBy, guidanceHref, onOpen }) {
   return (
     <Card padding="none" className="overflow-x-auto">
       <table className="w-full text-[12.5px]" data-testid="founder-table">
@@ -120,7 +142,7 @@ export function FounderTable({ rows, label, lastBy, guidanceHref }) {
         <thead>
           <tr className="border-b border-axal-hairline dark:border-gray-700">
             {['Founder', 'Cohort', 'Week', 'Progress', 'Status', 'Next deadline', 'Last activity', 'Action'].map((h) => (
-              <th key={h} scope="col" className={TH}>{h}</th>
+              <th key={h} scope="col" className={`${TH}${wide(h)}`}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -131,7 +153,7 @@ export function FounderTable({ rows, label, lastBy, guidanceHref }) {
                 {r.name || <Unrecorded>Name not recorded</Unrecorded>}
                 {r.email && <div className="text-[11px] font-normal text-axal-faint">{r.email}</div>}
               </th>
-              <td className="px-3 py-2.5">{label}</td>
+              <td className={`px-3 py-2.5${wide('Cohort')}`}>{label}</td>
               <td className="px-3 py-2.5 whitespace-nowrap">{weekText(r) || <Unrecorded />}</td>
               <td className="px-3 py-2.5"><Progress row={r} /></td>
               <td className="px-3 py-2.5">
@@ -139,8 +161,16 @@ export function FounderTable({ rows, label, lastBy, guidanceHref }) {
                 {r.reason && <div className="mt-1 max-w-[240px] text-[11px] leading-snug text-axal-muted">{r.reason}</div>}
               </td>
               <td className="px-3 py-2.5 whitespace-nowrap">{r.deadline ? dayTime(r.deadline) : <Unrecorded />}</td>
-              <td className="px-3 py-2.5"><LastActivity at={lastBy.get(Number(r.user_id))} /></td>
-              <td className="px-3 py-2.5"><Link to={guidanceHref} className="font-bold text-emerald-800 underline dark:text-emerald-300">Write guidance</Link></td>
+              <td className={`px-3 py-2.5${wide('Last activity')}`}><LastActivity at={lastBy.get(Number(r.user_id))} /></td>
+              <td className="px-3 py-2.5">
+                <div className="flex flex-col items-start gap-1">
+                  {onOpen && (
+                    <button type="button" onClick={() => onOpen(r.user_id)} data-testid="open-founder"
+                      className="whitespace-nowrap font-bold text-emerald-800 underline dark:text-emerald-300">Open founder</button>
+                  )}
+                  <Link to={guidanceHref} className="whitespace-nowrap font-bold text-emerald-800 underline dark:text-emerald-300">Write guidance</Link>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -175,6 +205,11 @@ export default function FoundersZone() {
   const attention = rows.filter(needsAttention).length;
 
   const showAll = () => { const next = new URLSearchParams(params); next.delete('founder'); setParams(next); };
+  // D4813 package 4: the founder detail, addressed by `?detail=<userId>`.
+  const detailId = parseDetailParam(params.get(DETAIL_PARAM));
+  const openFounder = (id) => { const next = new URLSearchParams(params); next.set(DETAIL_PARAM, String(id)); setParams(next); };
+  const closeFounder = () => { const next = new URLSearchParams(params); next.delete(DETAIL_PARAM); setParams(next); };
+  const detailName = detailId == null ? null : (items.find((f) => Number(f.user_id) === detailId)?.name || null);
 
   return (
     <div className="space-y-4">
@@ -253,7 +288,7 @@ export default function FoundersZone() {
                       <span className="text-[11px] font-bold tabular-nums text-axal-faint">{cards.length}</span>
                     </div>
                     <div className="grid gap-2">
-                      {cards.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} />)}
+                      {cards.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} onOpen={openFounder} />)}
                       {cards.length === 0 && (
                         <div className="rounded-[10px] border border-dashed border-axal-hairline p-3 text-center text-[11px] text-axal-faint dark:border-gray-800">Nobody here</div>
                       )}
@@ -264,9 +299,9 @@ export default function FoundersZone() {
             </div>
           ) : (
             <>
-              <div className="hidden md:block"><FounderTable rows={shown} label={label} lastBy={lastBy} guidanceHref={guidanceHref} /></div>
+              <div className="hidden md:block"><FounderTable rows={shown} label={label} lastBy={lastBy} guidanceHref={guidanceHref} onOpen={openFounder} /></div>
               <div className="grid gap-2 md:hidden" data-testid="founder-cards-mobile">
-                {shown.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} />)}
+                {shown.map((r) => <FounderCard key={r.user_id} row={r} lastAt={lastBy.get(Number(r.user_id))} guidanceHref={guidanceHref} onOpen={openFounder} />)}
               </div>
             </>
           )}
@@ -274,6 +309,7 @@ export default function FoundersZone() {
           <p className="text-[11px] text-axal-faint">
             {`States: ${Object.values(FOUNDER_STATES).map((s) => s.label).join(', ')}. A failed or grace founder stays in Needs attention whatever their percentage. Founders who stopped sharing their progress with you do not appear.`}
           </p>
+          {detailId != null && !ws.preview && <FounderDetail userId={detailId} name={detailName} onClose={closeFounder} />}
           <FromTheLab />
           <StatedLimit title="What a founder row does not carry">
             The roster gives a founder&apos;s name and email, and the Lab&apos;s week record their status and

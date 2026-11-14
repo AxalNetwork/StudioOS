@@ -133,5 +133,18 @@ documentation/architecture/PAGE_INVENTORY.md
 # writes it; CI keeps it in the `routing-docs` artifact; `--check` in test:guards checks the ledger.
 documentation/architecture/AUTH_INVENTORY.json
 
+# D5612 (#5612): three generated modules are build output, never committed.
+# `node scripts/build-generated.mjs` writes them; every build, typecheck and
+# test runs it first. Each generator's `--check` fails if one is tracked again.
+cloudflare-worker/src/routes/_registry.ts
+frontend/src/lib/apiModules.generated.js
+cloudflare-worker/src/services/agents/skillLibrary.generated.ts
+# D4574 H3 (#4574): the skill library's entries, the static asset the same generator writes beside it.
+frontend/public/skill-library/
+
 # #4591: written by scripts/schema-rehearsal.mjs for its throwaway databases, deleted when it ends.
 wrangler.rehearsal.*.toml
+agent-compute/worker-configuration.d.ts
+agent-compute/__pycache__/
+# D4594 part 3: hosted Stage A's throwaway Worker config, written and deleted by scripts/agent-stage-a.mjs.
+wrangler.s4594.*.toml

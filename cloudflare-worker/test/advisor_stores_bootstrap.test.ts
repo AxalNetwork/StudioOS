@@ -86,6 +86,7 @@ const MIGRATIONS = [
   '565_advisor_cohort_assignment_events',
   // D4670: the claim a confirmation was asked about, its codes and its history.
   '202611062216_advisor_proof_attestation',
+  '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication', '202611121450_5315_advisor_profile_drafts',
 ];
 
 function fresh() {
@@ -115,11 +116,15 @@ test('the bootstrap produces the same schema the migrations do', async () => {
     migrated.exec(config.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}[\\s\\S]*?;`))![0]);
   }
   migrated.exec(migration('394_advisor_practice'));
+  // #5316 (D5316): a session recorded as included in an engagement.
+  migrated.exec(migration('202611110746_5316_advisor_booking_included'));
 
   const healed = fresh();
   await ensureAdvisorStoresSchema({ DB: makeD1(healed) } as any);
 
   assert.deepEqual(tables(healed), tables(migrated), 'same tables');
+  assert.ok(healed.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'advisor_proof_withdrawal_unpublishes'").get(),
+    'bootstrapping installs the same withdrawal protection as the migration');
   for (const t of ['advisors', 'advisor_bookings', 'advisor_services',
                    'advisor_proof_items', 'advisor_proof_consents', 'advisor_proof_consent_codes', 'advisor_proof_consent_events',
                    'advisor_cohort_assignments',

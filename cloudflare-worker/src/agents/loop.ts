@@ -52,6 +52,7 @@ import {
   type PauseReason, type RunRow, type RunStep,
 } from './engine';
 import { BREAKER_KEY, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from './runtime';
+import { cancelComputeRun, computeProposal, computeRunRequested, dispatchCompute } from '../services/agents/computeBridge';
 
 export type Decision = { status: 'accepted' | 'edited' | 'discarded' };
 export type StepOut = { go: true; [k: string]: unknown } | { go: false; status: string; refusal: string | null };
@@ -230,7 +231,7 @@ export async function context(d: LoopDeps, uid: string): Promise<StepOut> {
   }
   const summary = `Read ${b.reads.length ? b.reads.join(', ') : 'nothing'} and ${b.notes} notes${b.omitted.length ? `; left out ${b.omitted.join(', ')}` : ''}.`;
   await markRun(d.env, uid, 'context', { status: 'done', summary });
-  return { go: true, reads: b.reads, notes: b.notes };
+  return { go: true, reads: b.reads, notes: b.notes, ...(await computeRunRequested(d.env, uid) ? { compute: true } : {}) };
 }
 
 // ── run ─────────────────────────────────────────────────────────────────────
@@ -248,6 +249,18 @@ export async function runStep(d: LoopDeps, uid: string): Promise<StepOut> {
   if (!b.ok) {
     if (b.pause) await pauseAgent(d.env, l.agent.id, b.pause, d.now());
     return end(d, l, 'run', b.status, b.refusal, b.summary);
+  }
+  if (await computeRunRequested(d.env, uid)) {
+    try {
+      const proposal = await computeProposal(d.env, l.run, l.agent, l.task);
+      if (!proposal) return end(d, l, 'run', 'failed', 'compute_missing', 'The compute result is unavailable.');
+      await markRun(d.env, uid, 'run', { status: 'done', summary: 'A bounded compute artifact is ready for review.' }, { proposalUid: proposal });
+      return { go: true, proposal_uid: proposal };
+    } catch (error) {
+      if (!(error instanceof Response)) throw error;
+      const failed = await error.json() as { code?: string };
+      return end(d, l, 'run', 'failed', String(failed.code ?? 'compute_failed').slice(0, 64), 'The compute job could not produce a reviewable result.');
+    }
   }
   // D4534: a session's run names its saved skill and version, so it passes the same skill gates a manual run does.
   const sk = await sessionSkill(d.env, l.task);
@@ -392,6 +405,30 @@ export async function runTaskLoop(uid: string, step: StepLike, d: LoopDeps): Pro
   if (!l.go) return l;
   const c = await step.do('context', STEP_CONFIG, () => context(d, uid));
   if (!c.go) return c;
+  if (c.compute === true) {
+    const launch = await step.do('compute-dispatch', STEP_CONFIG, async () => {
+      try { return { ok: true as const, ...await dispatchCompute(d.env, uid) }; }
+      catch (error) {
+        if (!(error instanceof Response)) throw error;
+        const failure = await error.json() as { code?: string };
+        if (error.status >= 500) throw Error(`compute_transient:${String(failure.code ?? 'unavailable').slice(0, 64)}`);
+        const current = await loaded(d.env, uid);
+        const out = current ? !['admitted', 'running'].includes(current.run.status) ? stop(current.run.status, current.run.refusal)
+          : await end(d, current, 'run', 'refused', String(failure.code ?? 'compute_refused').slice(0, 64), 'The compute request was refused.') : stop('gone', 'run_gone');
+        return { ok: false as const, out };
+      }
+    });
+    if (!launch.ok) return launch.out;
+    if (launch.waiting) {
+      try { await step.waitForEvent('compute-result', { type: 'compute', timeout: '6 minutes' }); }
+      catch {
+        // A committed callback whose event was lost is still a completed job.
+        const completed = await d.env.DB.prepare("SELECT 1 AS done FROM agent_compute_jobs WHERE run_uid = ? AND status IN ('succeeded','failed','timed_out','cancelled')")
+          .bind(uid).first();
+        if (!completed) await step.do('compute-timeout', STEP_CONFIG, () => cancelComputeRun(d.env, uid, true));
+      }
+    }
+  }
   const r = await step.do('run', STEP_CONFIG, () => runStep(d, uid));
   if (!r.go) return r;
   const p = await step.do('propose', STEP_CONFIG, () => propose(d, uid));

@@ -9,10 +9,17 @@
  *   POST  /api/admin/governance/documents           { entity_key, category, title, effective_date?, confidential?, template_slug?, envelope_id? } → { document }
  *   GET   /api/admin/governance/documents/:uid      → { document, versions }
  *   GET   /api/admin/governance/documents/:uid/activity → { uid, events: [{ action, line, at, actor, version }] }   D4811 part 5
+ *   GET   /api/admin/governance/documents/:uid/related → { uid, dependants, governed_by, banner: { affected, version, dismissed } }   D4811 part 8
+ *   POST  /api/admin/governance/documents/:uid/related { kind: 'governance' | 'template' | 'agreement', ref } → { relation }
+ *   GET   /api/admin/governance/governing?kind=template|agreement&ref=… → { governing: [...] }   D4811 part 19
+ *   POST  /api/admin/governance/documents/:uid/related/:id/reviewed { note? } → { relation }
+ *   POST  /api/admin/governance/documents/:uid/related/dismiss → { banner }   hides the banner for this admin only
+ *   POST  /api/admin/governance/documents/:uid/related/:id/unlink { reason } → { unlinked: { id, kind }, banner }   D4811 part 21
  *   PATCH /api/admin/governance/documents/:uid      { title?, effective_date?, status?, confidential?, template_slug?, envelope_id? } → { document }
  *         D4811 part 6: status executed or archived also needs { reason, confirm: 'EXECUTED'|'ARCHIVE' } and a recent step-up;
  *         executed needs { evidence: { kind: 'version', version } | { kind: 'envelope' } } (`services/governanceHighRisk.ts`).
  *   POST  /api/admin/governance/documents/:uid/versions   multipart: file (PDF or .docx, ≤ 25 MB), signed?, note? → { document, version }
+ *         D4811 part 12: a signed copy (signed=true) also needs signed_on (YYYY-MM-DD, not after today), signatory and attest=true.
  *   GET   /api/admin/governance/documents/:uid/versions/:n/file[?download=1]   the file (inline for preview, attachment to download)
  *   GET   /api/admin/governance/ownership           → { entities: [{ key, name, ownership, updated_at }] }        Super Admin only
  *   PUT   /api/admin/governance/ownership/:entity   { ownership: [{ holder, interest?, percent?, note? }] }        Super Admin only
@@ -30,13 +37,17 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isSuperAdmin, requireHqAuthoring, requireStepUp } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
+import { entityJurisdiction } from '../services/crossBorder';
 import {
   DOCX, GOVERNANCE_CATEGORIES, GOVERNANCE_ENTITIES, GOVERNANCE_STATUSES, MAX_FILE_BYTES, PDF, canMove, dateOf, docView, entityName,
   envelopeExists, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
-  templateExists, versionKey, versionView, type DocRow, type GovernanceEntity,
+  templateExists, versionKey, versionView, type DocRow, type GovernanceEntity, signedCopyOf, approvedVersions, copyOfChoice,
 } from '../services/governance';
 import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
 import { GOVERNANCE_ACTIONS, eventOf } from '../services/governanceActivity';
+import {
+  bannerOf, baselineVersion, flagOf, isRelationKind, noteOf, triggerVersion, unlinkReasonOf, UNLINK_REASON_MAX, UNLINK_REASON_MIN, type RelationRow,
+} from '../services/governanceRelations';
 import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHighRisk';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
@@ -81,7 +92,7 @@ governance.get('/', async (c) => {
     const mine = (docs as DocRow[]).filter((d) => d.entity_key === key);
     const shown = mine.filter((d) => superAdmin || Number(d.confidential) !== 1);
     return {
-      key, name: entityName(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length,
+      key, name: entityName(key), jurisdiction: entityJurisdiction(key), documents: shown.map((d) => docView(d, latest.get(d.uid) ?? null, counts.get(d.uid) ?? 0)), withheld: mine.length - shown.length,
       attention: entityAttention(key, facts, superAdmin),
     };
   });
@@ -148,7 +159,8 @@ governance.get('/documents/:uid', async (c) => {
   if (doc instanceof Response) return doc;
   const versions = await readVersions(c.env, doc.uid);
   if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
-  return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map(versionView) });
+  const approved = await approvedVersions(c.env, doc.uid);
+  return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map((v) => versionView(v, approved)) });
 });
 
 /**
@@ -172,6 +184,182 @@ governance.get('/documents/:uid/activity', async (c) => {
   if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
   const events = rows.map(eventOf).filter(Boolean);
   return c.json({ uid: doc.uid, events, limit: 200 });
+});
+
+/**
+ * D4811 part 8 — related documents (board CT-11, `services/governanceRelations.ts`).
+ * The same visibility as the record. A dependant the viewer may not open (a
+ * confidential record, for anyone but the Super Admin) is listed as Restricted,
+ * with no title, reference or note. Links are references: nothing in a
+ * dependant is ever changed here.
+ */
+/**
+ * D4811 part 19: an agreement a governance record may govern, by the uid the
+ * Contracts desk uses: a legacy document's uid or an envelope's uuid. Its
+ * title and stored status, or null when there is none.
+ */
+async function agreementOf(env: Env, uid: string): Promise<{ title: string; status: string } | null> {
+  const d = await env.DB.prepare('SELECT title, status FROM documents WHERE uid = ?').bind(uid).first<any>().catch(() => null);
+  if (d) return { title: String(d.title), status: String(d.status) };
+  const e = await env.DB.prepare('SELECT document_title, status FROM esign_envelopes WHERE envelope_uuid = ?').bind(uid).first<any>().catch(() => null);
+  return e ? { title: String(e.document_title), status: String(e.status) } : null;
+}
+
+async function relationView(c: any, r: RelationRow & { reviewer_name?: string | null }, superAdmin: boolean, side: 'dependant' | 'governing') {
+  const kind = side === 'dependant' ? r.dependent_kind : 'governance';
+  const ref = side === 'dependant' ? r.dependent_ref : r.governing_uid;
+  let title: string | null = null; let status: string | null = null; let entity: string | null = null; let category: string | null = null;
+  let restricted = false; let missing = false;
+  if (kind === 'governance') {
+    const d = await readDoc(c.env, ref);
+    if (!d) missing = true;
+    else if (Number(d.confidential) === 1 && !superAdmin) restricted = true;
+    else { title = d.title; status = d.status; entity = d.entity_key; category = d.category; }
+  } else if (kind === 'agreement') {
+    const a = await agreementOf(c.env, ref);
+    if (!a) missing = true; else { title = a.title; status = a.status; }
+  } else {
+    const t = await c.env.DB.prepare('SELECT title, category FROM legal_templates WHERE slug = ? AND is_active = 1').bind(ref).first().catch(() => null);
+    if (!t) missing = true; else { title = t.title; category = t.category ?? null; }
+  }
+  return {
+    id: Number(r.id), kind, ref: restricted ? null : ref, title, status, entity_key: entity, category, restricted, missing,
+    state: flagOf(r), flag_version: r.flag_version, flagged_at: r.flagged_at,
+    reviewed_version: r.reviewed_version, reviewed_at: r.reviewed_at, reviewed_by: r.reviewer_name || null,
+    review_note: restricted ? null : r.review_note,
+  };
+}
+
+// D4811 part 19: the governance records that govern a template or an agreement (the reverse of
+// /documents/:uid/related), for their workspaces. A confidential governing record is counted, never named.
+governance.get('/governing', async (c) => {
+  const { superAdmin } = await hq(c);
+  const kind = c.req.query('kind');
+  const ref = String(c.req.query('ref') || '');
+  if ((kind !== 'template' && kind !== 'agreement') || !ref) return refuse(c, 422, { code: 'object_required', message: 'Name the template or agreement.' });
+  const rows = (await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by
+    WHERE r.dependent_kind = ? AND r.dependent_ref = ? ORDER BY r.id`).bind(kind, ref).all<any>()).results || [];
+  const governing = await Promise.all(rows.map((r: any) => relationView(c, r, superAdmin, 'governing')));
+  return c.json({ kind, ref, governing });
+});
+
+governance.get('/documents/:uid/related', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const own = (await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.governing_uid = ? ORDER BY r.id`).bind(doc.uid).all<any>()).results || [];
+  const above = (await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.dependent_kind = 'governance' AND r.dependent_ref = ? ORDER BY r.id`).bind(doc.uid).all<any>()).results || [];
+  const dismissal = await c.env.DB.prepare('SELECT flag_version FROM governance_relation_dismissals WHERE user_id = ? AND governing_uid = ?').bind(Number(user.id), doc.uid).first<{ flag_version: number }>();
+  const dependants = [];
+  for (const r of own) dependants.push(await relationView(c, r, superAdmin, 'dependant'));
+  const governedBy = [];
+  for (const r of above) governedBy.push(await relationView(c, r, superAdmin, 'governing'));
+  if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
+  return c.json({ uid: doc.uid, dependants, governed_by: governedBy, banner: bannerOf(own, dismissal?.flag_version ?? null) });
+});
+
+governance.post('/documents/:uid/related', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const b = await c.req.json().catch(() => ({} as any));
+  if (!isRelationKind(b.kind)) return c.json({ error: "kind must be 'governance', 'template' or 'agreement'" }, 400);
+  const ref = typeof b.ref === 'string' ? b.ref.trim() : '';
+  if (!ref) return c.json({ error: 'ref is required' }, 400);
+  if (b.kind === 'governance') {
+    if (ref === doc.uid) return refuse(c, 422, { code: 'relation_self', message: 'A record does not govern itself. Nothing was saved.' });
+    const target = UID.test(ref) ? await readDoc(c.env, ref) : null;
+    // A record this admin may not open is not one they can link: the same answer as a record that does not exist.
+    if (!target || (Number(target.confidential) === 1 && !superAdmin)) return refuse(c, 422, { code: 'relation_target_not_found', message: 'That governance record is not available. Nothing was saved.' });
+  } else if (b.kind === 'agreement') {
+    if (!(await agreementOf(c.env, ref))) return refuse(c, 422, { code: 'relation_target_not_found', message: 'That agreement is not on the Contracts desk. Nothing was saved.' });
+  } else if (!(await templateExists(c.env, ref))) {
+    return refuse(c, 422, { code: 'relation_target_not_found', message: 'That template is not in the library. Nothing was saved.' });
+  }
+  const versions = await readVersions(c.env, doc.uid);
+  const baseline = baselineVersion(doc.status, doc.executed_version, versions[0]?.version ?? null);
+  const res = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO governance_relations (governing_uid, dependent_kind, dependent_ref, reviewed_version, created_by) VALUES (?, ?, ?, ?, ?)`,
+  ).bind(doc.uid, b.kind, ref, baseline, Number(user.id)).run();
+  if (!Number(res.meta?.changes ?? 0)) return refuse(c, 409, { code: 'relation_exists', message: 'That document is already linked to this record. Nothing was saved.' });
+  const row = await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.governing_uid = ? AND r.dependent_kind = ? AND r.dependent_ref = ?`).bind(doc.uid, b.kind, ref).first<any>();
+  await audit(c, user, 'governance_relation_added', { uid: doc.uid, entity: doc.entity_key, category: doc.category, kind: b.kind, relation: Number(row.id) });
+  return c.json({ relation: await relationView(c, row, superAdmin, 'dependant') }, 201);
+});
+
+governance.post('/documents/:uid/related/dismiss', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const own = (await c.env.DB.prepare('SELECT flag_version, reviewed_version FROM governance_relations WHERE governing_uid = ?').bind(doc.uid).all<any>()).results || [];
+  const banner = bannerOf(own, null);
+  if (banner.version == null) return refuse(c, 409, { code: 'nothing_to_dismiss', message: 'No related document is waiting for review. Nothing was saved.' });
+  await c.env.DB.prepare(
+    `INSERT INTO governance_relation_dismissals (user_id, governing_uid, flag_version) VALUES (?, ?, ?)
+     ON CONFLICT (user_id, governing_uid) DO UPDATE SET flag_version = excluded.flag_version, dismissed_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')`,
+  ).bind(Number(user.id), doc.uid, banner.version).run();
+  return c.json({ banner: { ...banner, dismissed: true } });
+});
+
+governance.post('/documents/:uid/related/:id/reviewed', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const id = Number(c.req.param('id'));
+  const missing = () => refuse(c, 404, { code: 'relation_not_found', message: 'That related document is not linked to this record.' });
+  if (!Number.isSafeInteger(id) || id < 1) return missing();
+  const row = await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.id = ? AND r.governing_uid = ?`).bind(id, doc.uid).first<any>();
+  if (!row) return missing();
+  const view = await relationView(c, row, superAdmin, 'dependant');
+  // A dependant this admin may not open is not one they can say they checked.
+  if (view.restricted) return missing();
+  if (view.state !== 'review_suggested') return refuse(c, 409, { code: 'relation_not_flagged', message: 'This document is not waiting for review. Nothing was saved.' });
+  const b = await c.req.json().catch(() => ({} as any));
+  const note = noteOf(b.note);
+  if (note === false) return c.json({ error: 'note must be text of at most 500 characters' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE governance_relations SET reviewed_version = ?, reviewed_by = ?, reviewed_at = ?, review_note = ? WHERE id = ? AND governing_uid = ?`,
+  ).bind(row.flag_version, Number(user.id), now(), note, id, doc.uid).run();
+  await audit(c, user, 'governance_relation_reviewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category, kind: row.dependent_kind, relation: id, version: row.flag_version });
+  const saved = await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.id = ?`).bind(id).first<any>();
+  return c.json({ relation: await relationView(c, saved, superAdmin, 'dependant') });
+});
+
+/**
+ * D4811 part 21 — POST /documents/:uid/related/:id/unlink { reason }: removes
+ * one link (CT-11; part 8 had no unlink). The same access as linking: the
+ * governing record must be one this admin may open, and a dependant they may
+ * not open (a confidential record, for anyone but the Super Admin) answers
+ * exactly as a link that does not exist. A reason of 10 to 500 characters is
+ * kept in the audit row. Neither document is rewritten: only the reference
+ * row goes, with the review state it carried. The audit rows of its linking
+ * and reviews stay, so the Activity tab keeps that history; banner dismissals
+ * are per record and version, not per link, so they stay too.
+ */
+governance.post('/documents/:uid/related/:id/unlink', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const id = Number(c.req.param('id'));
+  const missing = () => refuse(c, 404, { code: 'relation_not_found', message: 'That related document is not linked to this record. Nothing was removed.' });
+  if (!Number.isSafeInteger(id) || id < 1) return missing();
+  const row = await c.env.DB.prepare('SELECT * FROM governance_relations WHERE id = ? AND governing_uid = ?').bind(id, doc.uid).first<any>();
+  if (!row) return missing();
+  // A dependant this admin may not open is not one they can unlink: the same answer as no link at all.
+  if ((await relationView(c, row, superAdmin, 'dependant')).restricted) return missing();
+  const b = await c.req.json().catch(() => ({} as any));
+  const reason = unlinkReasonOf(b?.reason);
+  if (!reason) return refuse(c, 422, { code: 'reason_required', message: `Say why, in ${UNLINK_REASON_MIN} to ${UNLINK_REASON_MAX} characters. It is kept in the audit log. Nothing was removed.` });
+  const versions = await readVersions(c.env, doc.uid);
+  const res = await c.env.DB.prepare('DELETE FROM governance_relations WHERE id = ? AND governing_uid = ?').bind(id, doc.uid).run();
+  if (!Number(res.meta?.changes ?? 0)) return missing();
+  await audit(c, user, 'governance_relation_unlinked', {
+    uid: doc.uid, entity: doc.entity_key, category: doc.category, kind: row.dependent_kind, ref: row.dependent_ref, relation: id,
+    version: versions[0]?.version ?? null, flag_version: row.flag_version ?? null, reviewed_version: row.reviewed_version ?? null, reason,
+  });
+  const own = (await c.env.DB.prepare('SELECT flag_version, reviewed_version FROM governance_relations WHERE governing_uid = ?').bind(doc.uid).all<any>()).results || [];
+  const dismissal = await c.env.DB.prepare('SELECT flag_version FROM governance_relation_dismissals WHERE user_id = ? AND governing_uid = ?').bind(Number(user.id), doc.uid).first<{ flag_version: number }>();
+  return c.json({ unlinked: { id, kind: row.dependent_kind }, banner: bannerOf(own, dismissal?.flag_version ?? null) });
 });
 
 governance.patch('/documents/:uid', async (c) => {
@@ -207,7 +395,7 @@ governance.patch('/documents/:uid', async (c) => {
   if (links.template_slug !== undefined) { next.template_slug = links.template_slug; changed = true; }
   if (links.envelope_id !== undefined) { next.envelope_id = links.envelope_id; changed = true; }
   let status = doc.status;
-  let highRisk: { reason: string; evidence: string | null } | null = null;
+  let highRisk: { reason: string; evidence: string | null; sha256?: string | null; copyOf?: number | null } | null = null;
   if (b.status !== undefined) {
     if (!isStatus(b.status)) return c.json({ error: `status must be one of ${GOVERNANCE_STATUSES.join(', ')}` }, 400);
     if (!canMove(doc.status, b.status)) return refuse(c, 409, { code: 'status_move_refused', message: `A ${doc.status} document cannot move to ${b.status}. Nothing was saved.` });
@@ -229,6 +417,13 @@ governance.patch('/documents/:uid', async (c) => {
       next.executed_version = chosen.evidence.version;
       if (chosen.evidence.envelope != null) next.envelope_id = chosen.evidence.envelope;
       highRisk!.evidence = chosen.evidence.version != null ? `v${chosen.evidence.version}` : `envelope #${chosen.evidence.envelope}`;
+      // D4811 part 12 (CT-92 "Execution evidence"): the evidence's hash is logged with it.
+      if (chosen.evidence.version != null) {
+        const ev = versions.find((v) => Number(v.version) === chosen.evidence.version);
+        highRisk!.sha256 = ev?.file_sha256 ?? null;
+        // D4811 part 20: and the approved version the signed copy names, when it names one.
+        highRisk!.copyOf = ev?.copy_of_version == null ? null : Number(ev.copy_of_version);
+      }
     }
     // The step-up comes after every form check, so a mistyped word never asks for a code; a missing step-up answers 403 step_up_required.
     if (highRisk) await requireStepUp(c);
@@ -244,10 +439,20 @@ governance.patch('/documents/:uid', async (c) => {
   await audit(c, user, b.status !== undefined && b.status !== doc.status ? 'governance_document_status' : 'governance_document_updated', {
     uid: doc.uid, entity: doc.entity_key, category: doc.category, from: doc.status, status,
     fields: Object.keys(b).filter((k) => b[k] !== undefined && !['reason', 'confirm', 'evidence'].includes(k)),
-    ...(highRisk ? { reason: highRisk.reason, evidence: highRisk.evidence } : {}),
+    ...(highRisk ? { reason: highRisk.reason, evidence: highRisk.evidence, ...(highRisk.sha256 ? { evidence_sha256: highRisk.sha256 } : {}),
+      ...(highRisk.copyOf != null ? { copy_of: highRisk.copyOf } : {}) } : {}),
   });
   const saved = (await readDoc(c.env, doc.uid))!;
   const versions = await readVersions(c.env, doc.uid);
+  if (b.status !== undefined && b.status !== doc.status) {
+    // D4811 part 8: a move to Approved or Executed at a newer version asks a person to review each dependant. Nothing in them changes.
+    const v = triggerVersion(saved.status, saved.executed_version, versions[0]?.version ?? null);
+    if (v != null) {
+      await c.env.DB.prepare(
+        `UPDATE governance_relations SET flag_version = ?, flagged_at = ? WHERE governing_uid = ? AND (flag_version IS NULL OR flag_version < ?) AND (reviewed_version IS NULL OR reviewed_version < ?)`,
+      ).bind(v, now(), doc.uid, v, v).run();
+    }
+  }
   return c.json({ document: docView(saved, versions[0] ?? null, versions.length) });
 });
 
@@ -268,6 +473,16 @@ governance.post('/documents/:uid/versions', async (c) => {
   const type = sniffDocument(bytes);
   if (!type) return refuse(c, 415, { code: 'unsupported_file', message: 'Upload a PDF or a Word (.docx) document. Nothing was uploaded.' });
   const signed = String(form?.get('signed') ?? '') === 'true';
+  // D4811 part 12 (CT-12 B): a signed copy says when it was signed, by whom, and is attested by the uploader.
+  const copy = signed ? signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, now().slice(0, 10)) : null;
+  if (copy && !copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message });
+  // D4811 part 20: a signed copy may name the counsel-approved version it is a copy of; a draft never can.
+  let copyOf: number | null = null;
+  if (signed) {
+    const choice = copyOfChoice(form?.get('copy_of'), await readVersions(c.env, doc.uid), await approvedVersions(c.env, doc.uid));
+    if (!choice.ok) return refuse(c, choice.status, { code: choice.code, message: choice.message });
+    copyOf = choice.version;
+  }
   const noteRaw = form?.get('note');
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim().slice(0, 500) : null;
   const sha = await sha256Hex(bytes);
@@ -277,18 +492,20 @@ governance.post('/documents/:uid/versions', async (c) => {
   await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { governance_uid: doc.uid, version: String(version) } });
   try {
     await c.env.DB.prepare(
-      `INSERT INTO governance_document_versions (document_uid, version, signed, r2_key, file_sha256, file_bytes, content_type, note, uploaded_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(doc.uid, version, signed ? 1 : 0, key, sha, bytes.length, type, note, Number(user.id)).run();
+      `INSERT INTO governance_document_versions (document_uid, version, signed, r2_key, file_sha256, file_bytes, content_type, note, uploaded_by, signed_on, signatory, attested_by, copy_of_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(doc.uid, version, signed ? 1 : 0, key, sha, bytes.length, type, note, Number(user.id),
+      copy?.ok ? copy.signed_on : null, copy?.ok ? copy.signatory : null, copy?.ok ? Number(user.id) : null, copyOf).run();
   } catch {
     // Another upload took this number first: its row stands, and this file is not recorded.
     await c.env.FILES.delete(key).catch(() => {});
     return refuse(c, 409, { code: 'version_conflict', message: 'Another version was uploaded at the same moment. Reload and upload again.' });
   }
   await c.env.DB.prepare('UPDATE governance_documents SET updated_by = ?, updated_at = ? WHERE uid = ?').bind(Number(user.id), now(), doc.uid).run();
-  await audit(c, user, 'governance_version_uploaded', { uid: doc.uid, entity: doc.entity_key, category: doc.category, version, signed, bytes: bytes.length });
+  await audit(c, user, 'governance_version_uploaded', { uid: doc.uid, entity: doc.entity_key, category: doc.category, version, signed, bytes: bytes.length, sha256: sha,
+    ...(copy?.ok ? { signed_on: copy.signed_on } : {}), ...(copyOf != null ? { copy_of: copyOf } : {}) });
   const versions = await readVersions(c.env, doc.uid);
-  return c.json({ document: docView((await readDoc(c.env, doc.uid))!, versions[0] ?? null, versions.length), version: versionView(versions[0]) }, 201);
+  return c.json({ document: docView((await readDoc(c.env, doc.uid))!, versions[0] ?? null, versions.length), version: versionView(versions[0], await approvedVersions(c.env, doc.uid)) }, 201);
 });
 
 governance.get('/documents/:uid/versions/:n/file', async (c) => {

@@ -15,6 +15,7 @@ import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
 import { logActorAct } from '../services/actorLog';
+import { companyBinds } from '../services/partnerPipelineRules';
 import {
   analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
   analyseLossReasons, inDecisionPeriod, quarterOf,
@@ -321,15 +322,11 @@ quotesRouter.get('/me', async (c) => {
     const rows = await (
       isAdmin(user)
         ? c.env.DB.prepare('SELECT * FROM quotes ORDER BY created_at DESC LIMIT 200')
-        : companyId !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT * FROM quotes
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
                 ORDER BY created_at DESC LIMIT 200`,
-            ).bind(user.partner_id ?? -1, companyId)
-          : c.env.DB.prepare(
-              'SELECT * FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 200',
-            ).bind(user.partner_id ?? -1)
+            ).bind(user.partner_id ?? -1, ...companyBinds(companyId))
     ).all<Quote>();
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
@@ -466,33 +463,23 @@ quotesRouter.get('/analytics', async (c) => {
               WHERE q.id > ?
               ORDER BY q.id LIMIT ?`,
           ).bind(afterId, ANALYTICS_CHUNK)
-        : analyticsCompany !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL) AND q.id > ?
+                WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?) AND q.id > ?
                 ORDER BY q.id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
-          : c.env.DB.prepare(
-              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
-                 FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND q.id > ? ORDER BY q.id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
     ).all<QuoteAnalyticsRow & { id: number }>();
     const readEngagements = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
             'SELECT id, status, price AS amount FROM engagements WHERE id > ? ORDER BY id LIMIT ?',
           ).bind(afterId, ANALYTICS_CHUNK)
-        : analyticsCompany !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT id, status, price AS amount FROM engagements
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL) AND id > ?
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?) AND id > ?
                 ORDER BY id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
-          : c.env.DB.prepare(
-              'SELECT id, status, price AS amount FROM engagements WHERE partner_id = ? AND id > ? ORDER BY id LIMIT ?',
-            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
     ).all<EngagementAnalyticsRow & { id: number }>();
     const quoteRows = await readAllByIdChunks(readQuotes);
 
@@ -595,24 +582,38 @@ async function quoteTransition(c: Context<{ Bindings: Env }>, target: 'accept' |
   // Two concurrent accepts of different quotes therefore cannot both win: the
   // second claim matches nothing, and so does everything chained to it.
   const decidedAt = nowIso();
-  const results = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
-        WHERE id = ? AND status = 'submitted'
-          AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
-          AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
-    ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
-    c.env.DB.prepare(
-      `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
-        WHERE need_id = ? AND id != ? AND status = 'submitted'
-          AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
-    ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
-    c.env.DB.prepare(
-      `UPDATE founder_needs SET status='filled', updated_at=?
-        WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
-    ).bind(decidedAt, q.need_id, id, decidedAt),
-    c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
-  ]);
+  let results: unknown[];
+  try {
+    results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
+          WHERE id = ? AND status = 'submitted'
+            AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
+            AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
+      ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
+          WHERE need_id = ? AND id != ? AND status = 'submitted'
+            AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
+      c.env.DB.prepare(
+        `UPDATE founder_needs SET status='filled', updated_at=?
+          WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, q.need_id, id, decidedAt),
+      c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
+    ]);
+  } catch (e) {
+    // D5359: the partial unique index is the last arbiter when two Workers
+    // race. Its loser is the same business outcome as a zero-row claim, not a
+    // server failure. Other batch failures still propagate and roll back.
+    if (/UNIQUE constraint failed:\s*quotes\.need_id/i.test(String((e as Error)?.message ?? e))) {
+      return c.json({
+        error: 'need_already_decided',
+        detail: 'This need already has an accepted quote, or is no longer open. Nothing was changed.',
+      }, 409);
+    }
+    throw e;
+  }
   if (!Number((results[0] as any)?.meta?.changes)) {
     // Someone else's acceptance (or a closed need) got there first.
     const now = await c.env.DB.prepare('SELECT status FROM quotes WHERE id = ?').bind(id).first<{ status: string }>();
@@ -694,10 +695,8 @@ engagementsRouter.get('/', async (c) => {
     // theirs to be tested against. Admin stays wide.
     const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
     if (isPartner(user)) {
-      where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1);
-      if (companyId !== null) {
-        where += ' AND (e.company_id = ? OR e.company_id IS NULL)'; params.push(companyId);
-      }
+      where = 'e.partner_id = ? AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)';
+      params.push(user.partner_id ?? -1, ...companyBinds(companyId));
     }
     else if (isFounder(user)) {
       where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1);

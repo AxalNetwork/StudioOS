@@ -23,8 +23,14 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ADMIN_PAGE = codeOnly(read('frontend/src/pages/PortfolioPositionsPage.jsx'));
 const POSITIONS = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioPositions.jsx'));
 const UPDATES = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'));
+const MODEL = codeOnly(read('frontend/src/pages/portfolio/portfolioModel.js'));
 const API = read('frontend/src/lib/api.js');
 const POSITIONS_ROUTE = read('cloudflare-worker/src/routes/positions.ts');
+// D4644 (#4644) moved the as-of mark rule out of the route and into one
+// service every consumer reads, so the pin that the marks are cut at the date
+// follows it there. The guarantee is the same one; the file that holds it is
+// not the route any more.
+const VALUATION = read('cloudflare-worker/src/services/portfolioValuation.ts');
 
 test('the admin mark and distribution forms write through the governed path', () => {
   assert.match(ADMIN_PAGE, /api\.positionMarkCreate\(detail\.project\.uid, \{/, 'the mark form is unwired');
@@ -37,33 +43,44 @@ test('the admin mark and distribution forms write through the governed path', ()
   assert.match(ADMIN_PAGE, /detail\.distributions\.map/, 'the distributions history is not rendered');
 });
 
-test('the four alert rules are evaluated and named, and a failed source is never a zero', () => {
-  assert.match(POSITIONS, /data-testid="ip1-alerts"/, 'the alerts section is gone');
-  for (const name of ['Runway below 6 months', 'Update overdue 30 days', 'Health flipped to red', 'Valuation marked down']) {
-    assert.ok(POSITIONS.includes(name), `the "${name}" rule is gone`);
+test('the attention rules are evaluated and named, and a failed source is never a zero', () => {
+  // D4817 part 2 (#5311, PF-02): the four alert rules became the addendum's
+  // attention rules (PFA06), evaluated in the shared model so Positions and
+  // the Overview read one rule set (audit F-05).
+  assert.match(POSITIONS, /data-testid="positions-attention-rules"/, 'the rules section is gone');
+  assert.match(POSITIONS, /attentionRulesOf\(reads, rows, flips\)/, 'the page no longer evaluates the shared rules');
+  for (const name of ['Runway under 6 months', 'Update older than 30 days', 'Health turned red within 90 days', 'Latest mark below cost']) {
+    assert.ok(MODEL.includes(name), `the "${name}" rule is gone`);
   }
   // The runway rule reads the self-reported figure off the latest update's own
   // KPIs — never the health snapshot, which does not carry one.
-  assert.match(POSITIONS, /row\.lastUpdateObj\?\.kpis\?\.runway_months/, 'the runway rule reads the wrong store');
-  // The health flip reads the dated history, lazily and only for the red ones.
+  assert.match(MODEL, /const RUNWAY_KEYS = \['runway_months', 'runway'\];/, 'the runway rule reads the wrong store');
+  assert.match(MODEL, /runwayFor\(p, updates\)/, 'the runway rule does not read the founder update');
+  // The health flip reads the dated history, lazily and only for the Attention ones.
   assert.match(POSITIONS, /api\.portfolioHealthGet\(uid, 90\)/, 'the flip rule reads no history');
   // A rule whose source failed says so rather than reporting zero.
-  assert.match(POSITIONS, /not a claim that nothing fired/, 'a failed source must not read as a clear rule');
+  assert.match(POSITIONS, /Not a claim that nothing fired/, 'a failed source must not read as a clear rule');
 });
 
-test('the quarter-end export reads the book as of the date, and the route cuts both stores at it', () => {
-  assert.match(POSITIONS, /api\.positionsAnalytics\(asOf \|\| undefined\)/, 'the export never passes the date');
+test('the book reads as of a date, and the route cuts both stores at it', () => {
+  // D4817 part 2 (#5311, PF-02): the quarter-end export became the register's
+  // "Read the book as of" (addendum PFA06): the positions list honours the date.
+  assert.match(POSITIONS, /api\.positionsList\(asOf \|\| undefined\)/, 'the register never passes the date');
+  assert.match(API, /positionsList: \(asOf\) =>/, 'api.js lost the list\'s as_of read');
   assert.match(API, /positionsAnalytics: \(asOf\)/, 'api.js lost the as_of read');
+  assert.match(POSITIONS_ROUTE, /const listAsOf = isoDate\(c\.req\.query\('as_of'\)\);/, 'the list stopped honouring the date');
   // The route's half: the marks are read at-or-before the date, and the flows
   // after it are excluded.
-  assert.match(POSITIONS_ROUTE, /as_of_date <= \?/, 'the marks are not cut at the date');
+  assert.match(VALUATION, /as_of_date <= \?/, 'the marks are not cut at the date');
+  assert.match(POSITIONS_ROUTE, /latestProjectMarks\(/, 'the route no longer reads the one as-of mark rule');
   assert.match(POSITIONS_ROUTE, /if \(asOf && date && date > asOf\) continue;/, 'the flows are not cut at the date');
   assert.match(POSITIONS_ROUTE, /as_of: asOf,/, 'the route stopped echoing the date the figures speak for');
 });
 
 test('the chase is wired to the log, per row and in bulk', () => {
   assert.match(UPDATES, /api\.portfolioChase\(overdueRows\.map/, 'Chase all overdue must hand the page’s own overdue set');
-  assert.match(UPDATES, /api\.portfolioChase\(\[row\.project_id\]\)/, 'the per-row chase is gone');
+  // D4817 part 4 (#5311, PF-04): the inbox row names its company by `projectId`.
+  assert.match(UPDATES, /api\.portfolioChase\(\[row\.projectId\]\)/, 'the per-row chase is gone');
   assert.match(UPDATES, /api\.portfolioChases\(\)/, 'the chase log is never read back');
   assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
   // The rail no longer denies the outbound the page now has.

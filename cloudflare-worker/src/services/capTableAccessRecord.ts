@@ -1,4 +1,5 @@
 /** D1130: venture grants and links read recorded issuances, never scenarios or proposals. */
+import { toMajorString } from '../../../frontend/src/lib/money.js';
 import type { AccessLevel } from './captableShare';
 import type { readRecord } from './capTableRecord';
 type RecordRead = Awaited<ReturnType<typeof readRecord>>;
@@ -37,12 +38,20 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
   const copyPosition = (h: typeof positions[number]) => ({ holder: h.holder, type: h.type, shares: h.shares, pct: h.pct,
     ...(selected && h.identity === key(selected) ? { mine: true } : {}) });
   const mine = (h: Holder | null | undefined) => h != null && selected != null && key(h) === key(selected);
-  const instrument = (i: RecordRead['instruments']['rows'][number]) => ({
-    instrument: i.kind, amount: i.amount_cents == null ? null : i.amount_cents / 100,
-    currency: i.currency, cap: i.terms.cap_cents == null ? null : i.terms.cap_cents / 100,
-    discount: i.terms.discount_bps == null ? null : i.terms.discount_bps / 10000,
-    basis: i.terms.basis, issue_date: i.issued_on,
-  });
+  const major = (value: number | null, currency: string | null) => {
+    const text = toMajorString(value, currency);
+    return text === null ? null : Number(text);
+  };
+  const instrument = (i: RecordRead['instruments']['rows'][number]) => {
+    // Old native rows without a code used USD cents. Linked SAFEs carry their own terms.
+    const code = i.currency ?? (i.safe_issuance_uid ? null : 'USD');
+    return {
+      instrument: i.kind, amount: major(i.amount_cents, code),
+      currency: i.currency, cap: major(i.terms.cap_cents, code),
+      discount: i.terms.discount_bps == null ? null : i.terms.discount_bps / 10000,
+      basis: i.terms.basis, issue_date: i.issued_on,
+    };
+  };
   if (level === 'own_position') return {
     level, holder: selected?.name || 'Not recorded',
     position: selected ? positions.filter(h => h.identity === key(selected)).map(copyPosition) : [],

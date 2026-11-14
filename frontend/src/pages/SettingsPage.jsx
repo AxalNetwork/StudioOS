@@ -27,6 +27,7 @@ import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switc
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
+import AccountProgramAccess from './account/AccountProgramAccess';
 import AccountNewsletters from './account/AccountNewsletters';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
@@ -68,6 +69,7 @@ import { isSuperAdminUser } from '../lib/shellRole';
 import { sessionRowState } from '../lib/sessionRows';
 import { effectiveDisplayName } from '../lib/displayName';
 import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
+import { formatStripeAmount } from '../lib/money';
 
 // D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
 // above every pane: the write side of Trust Center, on the page whose data the
@@ -498,6 +500,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           {/* D1140 (#3020, CMP19b): Your companies moved to Companies and projects; this line says so once. */}
           <ProfileMovedNotice />
           <RolesAccessCard data={data} onJump={() => onSelect('billing')} />
+          <AccountProgramAccess />
           <DocumentsAgreementsSection />
           <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
         </>
@@ -4920,7 +4923,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
   if (prices.length === 0) return null;
 
   const fmt = (amt, cur) =>
-    amt == null ? '—' : new Intl.NumberFormat(undefined, { style: 'currency', currency: (cur || 'usd').toUpperCase() }).format(amt / 100);
+    amt == null ? '—' : formatStripeAmount(amt, cur || 'usd');
 
   return (
     <Card title="Pay by card" description="Complete your upgrade inline — no redirect to Stripe.">

@@ -22,6 +22,10 @@ import { isChunkLoadError } from '../src/lib/chunkLoadError.js';
 const h = React.createElement;
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const ROUTE = read('frontend/src/pages/cycles/CycleRoute.jsx');
+// D5615 (#5615): each cycle's own steps are declared in its entry, `defs/<cycle>.jsx`.
+const DEF_FILES = ['validate', 'raise', 'grow', 'build'].map((c) => `frontend/src/pages/cycles/defs/${c}.jsx`);
+const SOURCES = [['frontend/src/pages/cycles/CycleRoute.jsx', ROUTE], ...DEF_FILES.map((f) => [f, read(f)])];
+const ALL = SOURCES.map(([, src]) => src).join('\n');
 
 class Catch extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -97,20 +101,21 @@ test('a chunk that fails to load reaches the error boundary as a chunk error; a 
   } finally { await n.unmount(); }
 });
 
-// Every step CycleRoute loads lazily: [local name, module, export].
-const STEPS = [...ROUTE.matchAll(/^const (\w+) = lazyStep\(\(\) => import\('([^']+)'\)(?:, '(\w+)')?/gm)].map((m) => [m[1], m[2], m[3] || 'default']);
+// Every step CycleRoute loads lazily, in the route or a cycle's entry: [local name, module, export, file, its source].
+const STEPS = SOURCES.flatMap(([file, src]) => [...src.matchAll(/^const (\w+) = lazyStep\(\(\) => import\('([^']+)'\)(?:, '(\w+)')?/gm)]
+  .map((m) => [m[1], m[2], m[3] || 'default', file, src]));
 
 test('every step is a dynamic import of a module that still exports it, and none is imported statically', async () => {
   const expected = ['OverviewTab', 'ChannelsTab', 'ProspectsPage', 'CampaignsTab', 'ResultsTab', 'NewCampaignPage', 'AdsTab',
-    'InterviewRecord', 'CalendarTab', 'CalendarWeek', 'UpdatesHistory', 'ReportingDesk', 'BuildPlan', 'BuildPlanDoor', 'VerdictRecordWithPlan',
+    'InterviewRecord', 'CalendarTab', 'CalendarWeek', 'UpdatesHistory', 'GrowOverview', 'ReportingDesk', 'BuildPlan', 'BuildPlanDoor', 'VerdictRecordWithPlan',
     'NarrativeHome', 'NarrativeTabBar', 'NarrativeTabPage', 'CapTableHomeNav', 'CapTableTabPage', 'DataRoomHomeNav', 'DataRoomTabPage', 'DataRoomUpload',
     'UseOfFundsHomeNav', 'UseOfFundsTabPage', 'CapRelHomeNav', 'CapRelTabPage'];
   assert.deepEqual(STEPS.map(([name]) => name).sort(), [...expected].sort());
-  const imports = ROUTE.split('\n').filter((l) => /^import\b/.test(l));
-  for (const [name, spec, exported] of STEPS) {
+  for (const [name, spec, exported, file, src] of STEPS) {
+    const imports = src.split('\n').filter((l) => /^import\b/.test(l));
     const bare = spec.replace(/\.jsx$/, '');
-    assert.equal(imports.some((l) => l.includes(`'${bare}'`) || l.includes(`'${bare}.jsx'`)), false, `${spec} is imported statically again`);
-    const mod = await import(new URL(`../src/pages/cycles/${spec.endsWith('.jsx') ? spec : `${spec}.jsx`}`, import.meta.url));
+    assert.equal(imports.some((l) => l.includes(`'${bare}'`) || l.includes(`'${bare}.jsx'`)), false, `${spec} is imported statically again in ${file}`);
+    const mod = await import(new URL(spec.endsWith('.jsx') ? spec : `${spec}.jsx`, new URL(`../../${file}`, import.meta.url)));
     assert.equal(typeof mod[exported], 'function', `${spec} exports ${exported} (${name})`);
   }
   // Hooks, models and redirects a render reads synchronously stay static.
@@ -140,6 +145,6 @@ test('the routes, deep links and render sites that reach the steps are unchanged
     /<UseOfFundsTabPage tab=\{uofTab\} sub=\{uofSub\} projectId=\{projectId\}/,
     /'customer-research': \(read, ctx\) => <InterviewRecord read=\{read\} \{\.\.\.ctx\} \/>/,
     /distributionTab === 'campaigns' \? <CampaignsTab/,
-  ]) assert.match(ROUTE, site);
+  ]) assert.match(ALL, site);
   assert.match(read('documentation/architecture/decisions/D4574.md'), /^### H5 — /m);
 });

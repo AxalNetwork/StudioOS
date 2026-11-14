@@ -40,6 +40,7 @@ import {
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
+import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -85,7 +86,9 @@ const SYMBOL: Record<string, string> = { usd: '$', eur: '€', gbp: '£' };
 function money(cents: unknown, currency: unknown = 'usd'): string | null {
   if (cents == null || cents === '' || !Number.isFinite(Number(cents))) return null;
   const c = String(currency || 'usd').toLowerCase();
-  return `${SYMBOL[c] ?? `${c.toUpperCase()} `}${(Number(cents) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  // D5373: at the currency's own decimals; an unlisted code names the stored count.
+  const plain = plainAmount(Number(cents), c.toUpperCase(), { trimWhole: true });
+  return plain === null ? String(suffixAmount(Number(cents), c.toUpperCase())) : `${SYMBOL[c] ?? `${c.toUpperCase()} `}${plain}`;
 }
 
 /** A writer's refusal, as the status and sentence the route answers with (as Validate's records do). */
@@ -753,6 +756,12 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
 // ── Market expansion — id: the market's uid ─────────────────────────────────
 
 const MARKET_EDIT = ['state', 'decision', ...MARKET_PARTS.flatMap(([k]) => [`${k}_score`, `${k}_source`]), 'geography_ref', 'size_cents', 'size_currency', 'size_source'] as const;
+const marketDecisions = [{ value: '', label: 'Not decided' }, ...opts(DECISIONS, LABEL)];
+
+async function marketGeographies(rc: RecordContext) {
+  const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => null);
+  return (res?.results ?? []).map(({ code, name }) => ({ value: code, label: name }));
+}
 
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -792,8 +801,9 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     const size = money(m.size_cents, m.size_currency);
     return { rows: [size ? { a: 'Size', b: size, c: m.size_source ?? '' } : notRecorded('Size', 'No size recorded')] };
   }, { side: true }),
-], async (_rc, id, record): Promise<RecordAction[]> => {
+], async (rc, id, record): Promise<RecordAction[]> => {
   const { m } = loadedOf(record);
+  const countries = await marketGeographies(rc);
   const part = (k: string, l: string): RecordField[] => [
     { key: `${k}_score`, label: `${l} (0–10)`, kind: 'T', value: m[`${k}_score`] ?? '' },
     { key: `${k}_source`, label: `${l} source`, kind: 'T', value: m[`${k}_source`] ?? '' },
@@ -801,7 +811,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
   return [{
     key: 'change-decision', label: 'Change decision', kind: 'form',
     form: { title: 'Change decision', cta: 'Save', fields: [
-      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: [{ value: '', label: 'Not decided' }, ...opts(DECISIONS, LABEL)] },
+      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: marketDecisions },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, { decision: field(body, 'decision') ?? null }) })),
   }, {
@@ -819,8 +829,10 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
     form: { title: 'Edit market', cta: 'Save', foot: 'A score names where it came from.', fields: [
       { key: 'state', label: 'State', kind: 'CH', value: m.state, options: opts(MARKET_STATES, LABEL) },
+      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: marketDecisions },
       ...MARKET_PARTS.flatMap(([k, l]) => part(k, l)),
-      { key: 'geography_ref', label: 'Attach a country', kind: 'T', value: m.geography_ref ?? '', placeholder: 'Two-letter code' },
+      { key: 'geography_ref', label: 'Attach a country', kind: 'CH', value: m.geography_ref ?? '',
+        options: [{ value: '', label: 'Nothing yet' }, ...countries] },
       { key: 'size_cents', label: 'Size', kind: 'T', input: 'money', value: m.size_cents ?? '' },
       { key: 'size_currency', label: 'Currency', kind: 'T', value: m.size_currency ?? '' },
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
@@ -828,9 +840,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
   }];
 }, async (rc) => {
-  const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => ({ results: [] as Array<{ code: string; name: string }> }));
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
-    geographies: (res.results || []).map((c) => ({ value: c.code, label: c.name })) };
+    geographies: await marketGeographies(rc) };
 });
 
 // ── Durable company-building — id: the obligation's id ──────────────────────

@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { helpCenterApi } from '../../lib/api/helpCenter';
 import { reportError } from '../../lib/log';
+import { guideReviewFor, contentReviewItems } from './guideGovernance';
 import {
   MISSING_MAX, POPULAR_ASKED, POPULAR_DAYS, adminFeedbackView, answeredLine, feedbackFrom, guideHref,
   popularGuides, viewsLine,
@@ -90,10 +91,14 @@ export function PopularGuidesView({ read, onRetry }) {
 }
 
 /** The "Popular this week" read: `[read, retry]`. A phone's Help home (D700) draws it as rows. */
-export function usePopularGuides(sections) {
-  const [read, setRead] = useState({ status: 'loading', cards: [] });
+export function usePopularGuides(sections, enabled = true) {
+  const [read, setRead] = useState({ status: enabled ? 'loading' : 'ok', cards: [] });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!enabled) {
+      setRead({ status: 'ok', cards: [] });
+      return undefined;
+    }
     let alive = true;
     setRead({ status: 'loading', cards: [] });
     helpCenterApi.popular({ days: POPULAR_DAYS, limit: POPULAR_ASKED })
@@ -107,7 +112,7 @@ export function usePopularGuides(sections) {
         if (alive) setRead({ status: 'error', cards: [] });
       });
     return () => { alive = false; };
-  }, [attempt, sections]);
+  }, [attempt, sections, enabled]);
   return [read, () => setAttempt((n) => n + 1)];
 }
 
@@ -263,6 +268,7 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll }) {
   const guides = v ? (all ? v.guides : v.guides.slice(0, ADMIN_ROWS)) : [];
   const texts = v ? (all ? v.missing : v.missing.slice(0, ADMIN_ROWS)) : [];
   const more = v ? Math.max(0, v.guides.length - guides.length) + Math.max(0, v.missing.length - texts.length) : 0;
+  const reviewQueue = v ? contentReviewItems(v) : null;
   return (
     <section aria-labelledby="help-answers" className={`${CARD} px-5 py-[18px]`} data-testid="help-answers-admin">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -283,6 +289,10 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll }) {
         </p>
       )}
       {read.status === 'ok' && guides.length > 0 && (
+        <>
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+          {reviewQueue?.length || 0} guides need a content follow-up from negative feedback. This list is derived from feedback, not a resolved ticket queue.
+        </p>
         <ul className="mt-2.5 list-none p-0">
           {guides.map((g) => (
             <li key={g.anchor} className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 py-2 last:border-b-0 dark:border-gray-800" data-testid="help-answers-row">
@@ -294,10 +304,14 @@ export function GuideAnswersAdminView({ read, onRetry, all, onAll }) {
               ) : (
                 <span className="min-w-0 font-mono text-[12px] text-gray-500 dark:text-gray-400" title="This guide is no longer in the Help Center.">{g.title}</span>
               )}
-              <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{g.yes} yes · {g.no} no</span>
+              <span className="flex flex-col text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                <span>{g.yes} yes · {g.no} no</span>
+                <span>{guideReviewFor(g.anchor).owner} · {guideReviewFor(g.anchor).status}</span>
+              </span>
             </li>
           ))}
         </ul>
+        </>
       )}
       {read.status === 'ok' && texts.length > 0 && (
         <>

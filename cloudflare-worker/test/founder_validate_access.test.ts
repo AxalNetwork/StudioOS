@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ownsVenture, canReadBoard, canReadDecision, canWrite,
-  verdictFor, laneFor, barNoteFor, VALIDATION_BAR,
+  verdictFor, verdictForV1, laneFor, barNoteFor, VALIDATION_BAR,
   type ProjectRef,
 } from '../src/routes/_founder_validate_helpers.ts';
 import type { User } from '../src/types.ts';
@@ -111,8 +111,12 @@ test('a verdict that is met stands, whatever else is unrecorded', () => {
   // The bar is already cleared; more supporters cannot un-clear it, so an
   // unknown fit elsewhere does not make this one unknowable.
   assert.equal(verdictFor({ supporting: 5, contradicting: 0, fitUnrecorded: 0 }), 'validated');
-  assert.equal(verdictFor({ supporting: 5, contradicting: 9, fitUnrecorded: 4 }), 'validated');
+  assert.equal(verdictFor({ supporting: 5, contradicting: 0, fitUnrecorded: 4 }), 'validated');
   assert.equal(verdictFor({ supporting: VALIDATION_BAR, contradicting: 0, fitUnrecorded: 0 }), 'validated');
+  // D4586 v2 (deliberate change 1): contradiction is read BEFORE the bar. 5 / 9 with 4 unknown was "validated" under
+  // v1; now 9 contradictions outweigh 5 supporters, and 4 more ICP supporters would make it contested, so it is unknown.
+  assert.equal(verdictFor({ supporting: 5, contradicting: 9, fitUnrecorded: 4 }), null);
+  assert.equal(verdictForV1({ supporting: 5, contradicting: 9, fitUnrecorded: 4 }), 'validated', 'v1, kept for the history only');
 });
 
 test('AN UNRECORDED ICP FIT IS NOT A NO — the assertion this file exists for', () => {
@@ -122,13 +126,18 @@ test('AN UNRECORDED ICP FIT IS NOT A NO — the assertion this file exists for',
   // function would answer "unproven" for every claim in the product — with
   // total confidence, on no evidence — and the page would render that in the
   // same font as a verdict somebody earned.
-  assert.equal(verdictFor({ supporting: 0, contradicting: 0, fitUnrecorded: 3 }), null,
-    'three interviews of unknown fit is not "unproven", it is "we do not know"');
-  assert.equal(verdictFor({ supporting: 1, contradicting: 4, fitUnrecorded: 2 }), null,
+  // D4586 v2 (deliberate change 3): unknown exactly when counting the missing fits as ICP could change the status.
+  assert.equal(verdictFor({ supporting: 4, contradicting: 0, fitUnrecorded: 1 }), null,
+    'one interview of unknown fit could meet the bar: it is "we do not know", not "unproven"');
+  assert.equal(verdictFor({ supporting: 2, contradicting: 3, fitUnrecorded: 2 }), null,
     'an unrecorded fit could outweigh the contradictions; refuse the verdict');
-  assert.equal(barNoteFor({ supporting: 0, contradicting: 0, fitUnrecorded: 3 }), null,
+  assert.equal(barNoteFor({ supporting: 4, contradicting: 0, fitUnrecorded: 1 }), null,
     'the distance to the bar depends on a count we do not have');
-  assert.equal(laneFor(null, { supporting: 0, contradicting: 0, fitUnrecorded: 3 }), 'unknown');
+  assert.equal(laneFor(null, { supporting: 4, contradicting: 0, fitUnrecorded: 1 }), 'unknown');
+  // Where the missing fits cannot change it, the status stands and the note still names them.
+  assert.equal(verdictFor({ supporting: 0, contradicting: 0, fitUnrecorded: 3 }), 'unproven');
+  assert.equal(barNoteFor({ supporting: 0, contradicting: 0, fitUnrecorded: 3 }), '5 more ICP interviews needed · 3 with no fit recorded');
+  assert.equal(verdictFor({ supporting: 1, contradicting: 4, fitUnrecorded: 2 }), 'invalidated', 'even all three as ICP, four still outweigh three');
 });
 
 test('with every fit recorded, the canvas formula applies exactly', () => {
@@ -147,6 +156,8 @@ test('lanes are derived, never set — and an empty claim is not "testing"', () 
   assert.equal(laneFor('unproven', { supporting: 2, contradicting: 0, fitUnrecorded: 0 }), 'testing');
   assert.equal(laneFor('validated', { supporting: 5, contradicting: 0, fitUnrecorded: 0 }), 'validated');
   assert.equal(laneFor('invalidated', { supporting: 0, contradicting: 2, fitUnrecorded: 0 }), 'invalidated');
+  // D4586 § 3: Contested sits in the Testing lane, labelled Contested.
+  assert.equal(laneFor('contested', { supporting: 5, contradicting: 3, fitUnrecorded: 0 }), 'testing');
 });
 
 test('the bar note never invents a number', () => {
@@ -154,6 +165,9 @@ test('the bar note never invents a number', () => {
   assert.equal(barNoteFor({ supporting: 1, contradicting: 0, fitUnrecorded: 0 }), '4 more ICP interviews needed');
   assert.equal(
     barNoteFor({ supporting: 0, contradicting: 2, fitUnrecorded: 0 }),
-    '2 contradict, 0 support · bar cannot be met',
+    '2 contradict, 0 support · contradiction outweighs support',
   );
+  // D4586: support and contradiction named together once the bar is met.
+  assert.equal(barNoteFor({ supporting: 5, contradicting: 3, fitUnrecorded: 0 }), '5 of 5 · bar met · 3 contradict · contested');
+  assert.equal(barNoteFor({ supporting: 6, contradicting: 2, fitUnrecorded: 0 }), '6 of 5 · bar met · 2 contradict');
 });

@@ -7,6 +7,7 @@ import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { clampDays } from '../util/pagination';
 import { maskFounderForInvestor } from '../services/trust';
 import { keepFindable } from '../services/investorFindable';
+import { holdsLicence } from '../services/accountLicences';
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
@@ -31,10 +32,17 @@ const l1 = createL1<any>(L1_TTL_MS);
  * `all` rather than an empty segment for "no company selected", so the key is
  * never ambiguous with a company whose id is somehow blank.
  */
-const cacheKey = (userId: number, companyId: number | null) =>
-  `${userId}:${companyId ?? 'all'}`;
-const kvKey = (userId: number, companyId: number | null) =>
-  `cache:dash:${cacheKey(userId, companyId)}`;
+//
+// D4623 part 2: a held, non-primary Investor licence's payload (`?licence=investor`)
+// is computed with the investor lens, so it is a different payload and carries
+// its own `:investor` segment. Every other key is unchanged.
+const cacheKey = (userId: number, companyId: number | null, lens: 'investor' | null = null) =>
+  `${userId}:${companyId ?? 'all'}${lens ? `:${lens}` : ''}`;
+const kvKey = (userId: number, companyId: number | null, lens: 'investor' | null = null) =>
+  `cache:dash:${cacheKey(userId, companyId, lens)}`;
+
+/** The one licence a caller may name with `?licence=`. */
+export const DASHBOARD_LICENCE_LENSES = Object.freeze(['investor'] as const);
 
 // Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
 // Returns the fallback value and logs the underlying error for observability.
@@ -70,10 +78,30 @@ dashboard.get('/', async (c) => {
   const days = clampDays(c.req.query('days'), 30, 365);
   const now = Date.now();
 
+  // D4623 part 2 (#4623): the Investor block of a multi-licence Studio (D4474)
+  // asks `?licence=investor`. For a member who holds Investor as a granted,
+  // non-primary licence, the investor figures (the deal-flow total, its masked
+  // preview, the match average, the recommended syndicates) are then computed
+  // with the investor lens, exactly as for a primary investor; before, they
+  // were computed with the primary licence's lens (a founder's own projects).
+  // The lens is the caller's own licence only: a licence the member does not
+  // hold is refused, never served another licence's figures, and an admin
+  // keeps the admin payload (an admin is never on a block page). With no
+  // `licence` the payload is the primary licence's, unchanged.
+  const askedLicence = c.req.query('licence');
+  if (askedLicence !== undefined && !(DASHBOARD_LICENCE_LENSES as readonly string[]).includes(askedLicence)) {
+    return c.json({ error: 'invalid_licence', message: 'This summary can be read for the Investor licence only.' }, 400);
+  }
+  if (askedLicence === 'investor' && (user.role === 'admin' || !holdsLicence(user, 'investor'))) {
+    return c.json({ error: 'licence_not_held', message: 'This account does not hold the Investor licence.' }, 403);
+  }
+  const lens: 'investor' | null = askedLicence === 'investor' && user.role !== 'investor' ? 'investor' : null;
+  const viewRole = lens ?? user.role;
+
   // Resolved BEFORE the cache lookup because it is part of the key. Only a
   // founder's payload is company-scoped, so nobody else pays for the lookup.
-  const dashCompanyId = user.role === 'founder' ? await activeCompanyFor(c, user) : null;
-  const ck = cacheKey(user.id, dashCompanyId);
+  const dashCompanyId = viewRole === 'founder' ? await activeCompanyFor(c, user) : null;
+  const ck = cacheKey(user.id, dashCompanyId, lens);
 
   // L1 — per-isolate
   if (!fresh) {
@@ -83,7 +111,7 @@ dashboard.get('/', async (c) => {
     }
     // L2 — KV (only attempt if binding exists; falls through to origin otherwise)
     if (c.env.TOKENS) {
-      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id, dashCompanyId));
+      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id, dashCompanyId, lens));
       if (kvHit) {
         l1.map.set(ck, { v: kvHit, exp: now + L1_TTL_MS });
         return c.json({ ...kvHit, cached: 'kv' });
@@ -92,11 +120,12 @@ dashboard.get('/', async (c) => {
   }
 
   const sql = getSQL(c.env);
-  const isAdmin = user.role === 'admin';
+  // `viewRole` is `user.role` unless a held, non-primary Investor licence was asked for (above).
+  const isAdmin = viewRole === 'admin';
   // Phase 0.1: investors share dashboard view with partners (capital-allocator lens).
-  const isInvestor = user.role === 'investor';
-  const isPartner = user.role === 'partner' || isInvestor;
-  const isFounder = user.role === 'founder';
+  const isInvestor = viewRole === 'investor';
+  const isPartner = viewRole === 'partner' || isInvestor;
+  const isFounder = viewRole === 'founder';
 
 
   // Run all queries in parallel for speed (Cloudflare Workers loves this).
@@ -208,7 +237,13 @@ dashboard.get('/', async (c) => {
   // Build chain counts map
   const chains: Record<string, number> = { L1: 0, L2: 0, L3: 0 };
   for (const r of chainCounts as any[]) chains[`L${r.level}`] = r.n;
-  const networkReach = chains.L1 + chains.L2 + chains.L3;
+  const sourceReady = (label: string) => status.get(label) === 'ready';
+  const countFigure = (label: string, raw: unknown): number | null => {
+    if (!sourceReady(label)) return null;
+    const parsed = Number.parseInt(String(raw ?? 0), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const networkReach = sourceReady('chainCounts') ? chains.L1 + chains.L2 + chains.L3 : null;
 
   // AI score average across my matches
   const scoresArr = (scoresMine as any[]).map(s => s.score).filter((n): n is number => typeof n === 'number');
@@ -294,15 +329,15 @@ dashboard.get('/', async (c) => {
       return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
     })() },
     quick_stats: {
-      month_earnings_cents: parseInt((monthEarnings as any)[0]?.c) || 0,
-      lifetime_earnings_cents: parseInt((lifetimeEarnings as any)[0]?.c) || 0,
-      compound_earnings_cents: parseInt((compoundEarnings as any)[0]?.c) || 0,
-      pending_payouts_cents: parseInt((pendingPayouts as any)[0]?.c) || 0,
-      active_syndicates: (syndicatesAll as any[]).length,
-      my_syndicates: (mySyndicateMemberships as any[]).length,
+      month_earnings_cents: countFigure('monthEarnings', (monthEarnings as any)[0]?.c),
+      lifetime_earnings_cents: countFigure('lifetimeEarnings', (lifetimeEarnings as any)[0]?.c),
+      compound_earnings_cents: countFigure('compoundEarnings', (compoundEarnings as any)[0]?.c),
+      pending_payouts_cents: countFigure('pendingPayouts', (pendingPayouts as any)[0]?.c),
+      active_syndicates: sourceReady('syndicatesAll') ? (syndicatesAll as any[]).length : null,
+      my_syndicates: sourceReady('mySyndicateMemberships') ? (mySyndicateMemberships as any[]).length : null,
       ai_score_avg: aiScoreAvg,
       network_reach: networkReach,
-      marketplace_available: parseInt((marketplaceCount as any)[0]?.n) || 0,
+      marketplace_available: countFigure('marketplaceCount', (marketplaceCount as any)[0]?.n),
     },
     proprietary_deal_flow: dealsMasked,
     proprietary_deal_flow_summary: proprietaryDealFlow,
@@ -343,7 +378,7 @@ dashboard.get('/', async (c) => {
   l1.map.set(ck, { v: payload, exp: Date.now() + L1_TTL_MS });
   if (c.env.TOKENS) {
     const ctx = (c.executionCtx as any);
-    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id, dashCompanyId), payload, KV_TTL_SEC);
+    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id, dashCompanyId, lens), payload, KV_TTL_SEC);
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
   }
   return c.json(payload);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { EMPTY_DRAFT, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
-import { useMutations, useZoneRead } from './useZoneMutations';
+import { EMPTY_DRAFT, blockedLine, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
+import { useMutations, useZoneRead, failureNote, stated } from './useZoneMutations';
+import { DeliveryNote } from './deliveryEdits';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -8,7 +9,7 @@ import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the three tiles it drew. The strip is the artboard's
   // own four now, and one of them has to draw an absence rather than a number.
-  Section, Field, SaveNote,
+  Section, Field,
   NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
@@ -35,10 +36,12 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
  * had been reading blockers live since it was written — the listing simply
  * never joined them. It does now, and the chips select what they name.
  *
- * BLOCKED IS NOT A FIELD, and that is deliberate. Blockers are read live and
- * attached to each report at read time; nothing copies them into the report
- * row. A prose copy would go stale the moment a blocker cleared, and the side
- * is exactly what a stale copy would lose.
+ * BLOCKED IS TWO THINGS, KEPT APART (#5314 part 2). The section is words the
+ * firm writes, like Shipped and Next, and is stored with the report — it is
+ * part of what the client receives. The engagement's open blockers are the
+ * evidence beneath it, read live and never copied in, so the side cannot go
+ * stale. A report saved before the section existed reads "Not recorded",
+ * never "nothing blocked".
  *
  * A CLIENT-SIDE BLOCKER IS NAMED PLAINLY, WITHOUT BEING LEANED ON. That is a
  * copy decision as much as a data one, and the old card said so. The zone shows
@@ -72,6 +75,24 @@ function ReportTile({ label, value, note, nr = false }) {
         )}
       </div>
       <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+/**
+ * #5314 part 2: the report's own Blocked section, as saved. Not recorded on a
+ * report saved before the section existed; "Nothing blocked" only where the
+ * firm said so.
+ */
+function ReportBlocked({ report }) {
+  const line = blockedLine(report);
+  return (
+    <div>
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Blocked</div>
+      <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-muted" data-blocked-state={line.kind}>
+        {line.kind === 'written' ? line.text : <Unrecorded>{line.text}</Unrecorded>}
+      </p>
+      {line.note && <p className="mt-0.5 text-[11px] text-axal-faint">{line.note}</p>}
     </div>
   );
 }
@@ -112,7 +133,7 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
         </div>
       </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
         <div>
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Shipped</div>
           <p className="mt-1 whitespace-pre-wrap text-[12.5px] leading-relaxed text-axal-muted">
@@ -125,6 +146,7 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
             {report.next_up || <Unrecorded>Nothing written</Unrecorded>}
           </p>
         </div>
+        <ReportBlocked report={report} />
       </div>
 
       {sent ? (
@@ -142,7 +164,7 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
           </button>
         </div>
       )}
-      <SaveNote note={note?.scope === `rep:${report.id}` ? note : null} />
+      <DeliveryNote note={note?.scope === `rep:${report.id}` ? note : null} />
     </div>
   );
 }
@@ -201,6 +223,8 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
   const [composed, setComposed] = useState(false);
   const [shipped, setShipped] = useState('');
   const [nextUp, setNextUp] = useState('');
+  // #5314 part 2: the report's written Blocked section.
+  const [blockedText, setBlockedText] = useState('');
   const [loadError, setLoadError] = useState('');
   // #4673: which composition is current. A response for an older selection is
   // dropped, so it can neither show nor be saved under another engagement.
@@ -238,6 +262,7 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
       setComposed(true);
       setShipped(r?.existing?.shipped || '');
       setNextUp(r?.existing?.next_up || '');
+      setBlockedText(r?.existing?.blocked || '');
       if (thenFocus) setTimeout(() => shippedRef.current?.focus?.(), 0);
     } catch (e) {
       if (!gate.current.isCurrent(ticket)) return;
@@ -374,6 +399,10 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
               <textarea className={inputClass} rows={3} value={nextUp} maxLength={4000}
                 onChange={(e) => setNextUp(e.target.value)} />
             </Field>
+            <Field label="Blocked" hint="Yours to write, and saved with the report. The open blockers above are the evidence; leave it empty to say nothing is blocked.">
+              <textarea className={inputClass} rows={2} value={blockedText} maxLength={4000}
+                onChange={(e) => setBlockedText(e.target.value)} />
+            </Field>
           </div>
 
           <button
@@ -386,18 +415,28 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
               // which the Worker checks against the URL it is sent to. Taken
               // now, so a second press while this one is out starts nothing and
               // the words sent are the words that were on screen.
-              const sending = saveRequest(draft, { shipped, next_up: nextUp });
-              const r = await runSave('save', async () => {
-                const saved = await api.savePartnerStatusReport(...sending);
-                await fill.afterSave(saved?.id);
-              });
-              if (r.skipped) return;
-              if (r.ok) await onSaved(); else onError(r.error);
+              const sending = saveRequest(draft, { shipped, next_up: nextUp, blocked: blockedText });
+              // #5314 part 3: the draft's revision as composed (null: no report
+              // yet); Keep my edits sends the same words at the version now there.
+              const save = async (rev) => {
+                const r = await runSave('save', async () => {
+                  const saved = await api.savePartnerStatusReport(sending[0], sending[1], {
+                    ...sending[2],
+                    expected_revision: stated(rev, draft.existing ? Number(draft.existing.revision ?? 0) : null),
+                  });
+                  if (saved && saved.id != null) setDraft((dr) => ({ ...dr, existing: saved }));
+                  await fill.afterSave(saved?.id);
+                });
+                if (r.skipped) return;
+                if (r.ok) await onSaved();
+                else onError(r.error, { retry: save, reload: () => composeFor(draft.engagement_id, draft.period) });
+              };
+              await save(undefined);
             }}
           >
             {isSaving('save') ? 'Saving…' : 'Save draft'}
           </button>
-          <SaveNote note={note?.scope === 'compose' ? note : null} />
+          <DeliveryNote note={note?.scope === 'compose' ? note : null} />
         </div>
       )}
     </div>
@@ -435,11 +474,19 @@ export default function PartnerStatusReportsZone() {
     const r = await runMutation(key, fn);
     if (r.skipped) return false;
     if (!r.ok) {
-      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => run(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
       return false;
     }
     setNote({ ok: true, text: ok, scope });
     load();
+    if (fn.retried) fn.after?.();
     return true;
   }, [runMutation, load]);
 
@@ -658,9 +705,11 @@ export default function PartnerStatusReportsZone() {
               setNote({ ok: true, text: 'Draft saved.', scope: 'compose' });
               await load();
             }}
-            onError={(e) => setNote({
-              ok: false, text: e?.message || 'That did not save.', scope: 'compose',
-            })}
+            onError={(e, again) => setNote(failureNote(e, {
+              scope: 'compose', fallback: 'That did not save.',
+              reload: () => { setNote(null); load(); again?.reload?.(); },
+              retry: (now) => again?.retry?.(now),
+            }))}
           />
         )}
 
@@ -683,12 +732,12 @@ export default function PartnerStatusReportsZone() {
                 }}
                 onSend={(rep) => run(
                   `send:${rep.id}`,
-                  () => api.sendPartnerStatusReport(rep.id),
+                  (rev) => api.sendPartnerStatusReport(rep.id, stated(rev, rep.revision)),
                   'Marked sent.', `rep:${rep.id}`,
                 )}
                 onDelete={(rep) => run(
                   `discard:${rep.id}`,
-                  () => api.deletePartnerStatusReport(rep.id),
+                  (rev) => api.deletePartnerStatusReport(rep.id, stated(rev, rep.revision)),
                   'Draft discarded.', `rep:${rep.id}`,
                 )}
               />
@@ -716,12 +765,13 @@ export default function PartnerStatusReportsZone() {
             next period instead.
           </p>
           <p className="mt-2">
-            <strong>Blocked is read live, never stored in the report.</strong> The
-            draft shows the engagement’s open blockers with their side at the
-            moment you compose. A prose copy would go stale the instant one
-            cleared — and the side, which is what lets you name a client-side
-            blocker plainly rather than swallowing it, is exactly what a stale
-            copy loses.
+            <strong>Blocked is what you write; the blockers are its evidence.</strong> The
+            Blocked section is saved with the report, like Shipped and Next,
+            because it is part of what the client receives. The engagement’s
+            open blockers, with their side, are read live beneath it and never
+            copied in — a copy would go stale the instant one cleared. A report
+            saved before the section existed reads Not recorded, not “nothing
+            blocked”.
           </p>
         </StatedLimit>
       </div>

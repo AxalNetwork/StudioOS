@@ -49,6 +49,8 @@ export const connectorsApi = {
   logs: (uid, params = {}) => request(`/connectors/${enc(uid)}/logs${qs(params)}`),
   setCompanies: (uid, companyIds) => request(`/connectors/${enc(uid)}/companies`, { method: 'PUT', body: JSON.stringify({ company_ids: companyIds }) }),
   fed: (uid) => request(`/connectors/${enc(uid)}/fed`),
-  action: (uid, name, body) => request(`/connectors/${enc(uid)}/action/${enc(name)}`, body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'GET' }),
+  action: (uid, name, body, opts) => request(`/connectors/${enc(uid)}/action/${enc(name)}`, {
+    ...(body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'GET' }), ...co(opts),
+  }),
   patchConfig: (uid, patch) => request(`/connectors/${enc(uid)}/config`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };

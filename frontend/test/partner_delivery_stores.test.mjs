@@ -175,7 +175,7 @@ test('consent is a state that can be withdrawn, not a flag that can vanish', () 
 //
 // A named ledger rather than a count, and it refuses a STALE entry too: a line
 // that no longer points at two real files is a line nobody can check, which is
-// the rule `scripts/sql-prepare-baseline.json` states for its own.
+// the rule `scripts/baselines/sql-prepare/` states for its own.
 const KNOWN_DUPLICATE_NUMBERS = {
   '011': ['011_sms_2fa.sql', '011_subscription_tiers.sql'],
   '068': ['068_news_articles.sql', '068_x_twitter.sql'],
@@ -195,6 +195,12 @@ const KNOWN_DUPLICATE_NUMBERS = {
   // again (D269). The same pair is LEGACY_DUPLICATE_STAMPS in
   // scripts/lib/migrationPlan.mjs.
   '202611072219': ['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql'],
+  // #5261 (D5157) and #5273 (D4613) each stamped a migration 2026-11-09 20:35
+  // UTC and merged four minutes apart: research_projects and research_funds'
+  // catalogue_uid, different tables. Both are on main; renaming either would
+  // edit a migration on main (D269). The same pair is in LEGACY_DUPLICATE_STAMPS
+  // in scripts/lib/migrationPlan.mjs.
+  '202611092035': ['202611092035_research_fund_catalogue_uid.sql', '202611092035_research_projects.sql'],
 };
 
 test('the migration numbers are free and in order', () => {

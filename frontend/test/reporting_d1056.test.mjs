@@ -98,7 +98,11 @@ test('mounted desk: History from the Durable company-building read beside part 2
     assert.ok(t.byId('reporting-empty'), 'no duty yet: the empty state, never "nothing due"');
     assert.ok(!/\b0 (due|late|duties)\b/.test(t.text(t.container)), 'no zero is claimed');
     const tabs = t.walk(t.byId('cycle-tabs')).filter((n) => n.tagName === 'A');
-    assert.equal(t.props(tabs.find((n) => t.text(n) === 'Reporting'))['aria-current'], 'page');
+    assert.equal(tabs.some((n) => t.text(n) === 'Reporting'), false, 'Reporting is outside the operating areas');
+    const utility = t.walk(t.container).find((n) => t.props(n)['aria-label'] === 'Reporting utility');
+    assert.equal(t.props(utility)['aria-current'], 'page');
+    assert.equal(t.props(utility).href, '/grow/reporting?project_id=7');
+    assert.match(t.text(t.byId('cycle-header')), /Grow · Reporting/);
     assert.equal(t.props(t.byId('reporting-tab-duties')).href, '/grow/reporting/duties?project_id=7');
     await act(async () => t.root.render(h(MemoryRouter, { key: 'duties', initialEntries: ['/grow/reporting/duties'] },
       h(ReportingDesk, { tab: 'duties', projectId: 7, search: '?project_id=7', cards: [] }))));
@@ -130,7 +134,9 @@ test('mounted company page: the header from the position, Reports from the compa
       h(Routes, null,
         h(Route, { path: '/portfolio/companies/:uid', element: h(PortfolioCompanyPage) }),
         h(Route, { path: '/portfolio/companies/:uid/reports', element: h(PortfolioCompanyPage) }),
-        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) })))));
+        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) }),
+        // D4817 part 6: the old Terms address is replaced by Financials, at Ownership & rights.
+        h(Route, { path: '/portfolio/companies/:uid/financials', element: h(PortfolioCompanyPage) })))));
     await t.settle();
   };
   try {
@@ -171,7 +177,8 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
   assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/grow\/updates' \}/);
   assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /\{ to: '\/portfolio\/updates', label: 'Reports',/);
   assert.match(read('frontend/src/workspaces/shellConfig.js'), /\{ slug: 'updates', label: 'Reports', archetype: A\.FEED \}/);
-  assert.match(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'), /<Link to=\{companyHref\(row\.project\.uid\)\}/);
+  // D4817 part 4 (#5311, PF-04): the obligations inbox row carries the company's uid itself.
+  assert.match(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'), /<Link className="pf-co" to=\{companyHref\(row\.uid\)\}/);
   for (const f of ['frontend/src/pages/cycles/ReportingDesk.jsx', 'frontend/src/pages/investor/PortfolioCompanyPage.jsx', 'frontend/src/pages/cycles/reportingModel.js']) {
     assert.doesNotMatch(read(f), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
   }

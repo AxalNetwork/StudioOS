@@ -156,15 +156,23 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.match(home, /\{!previewing && <InvestorThesisBand \/>\}/, 'an admin preview withholds investor records');
 });
 
-test('the seven bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots carry its tools', () => {
-  for (const f of ['InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
+test('the six bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots and Positions carry its tools', () => {
+  // D4817 part 2 (#5311, PF-02): Positions draws in the Portfolio frame, whose
+  // heading and local navigation replace ZoneHeader's; it keeps the header tools.
+  // D4817 part 4 (#5311, PF-04): Reports (InvestorPortfolioUpdates) does the same.
+  for (const f of ['InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
     const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
     assert.match(src, /return <ZonePrimaryScope>/, `${f} is not a primary scope`);
     assert.match(src, /<\/ZonePrimaryScope>;/, `${f} does not close its scope`);
     assert.match(src, /<ZoneHeader /, `${f} lost its ZoneHeader`);
     assert.doesNotMatch(src, /<ZoneNav /, `${f} draws a second pill row`);
   }
-  for (const f of ['InvestorPortfolioCanvas', 'InvestorFundLanding']) {
+  for (const [f, tab] of [['InvestorPortfolioPositions', 'positions'], ['InvestorPortfolioUpdates', 'updates']]) {
+    const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
+    assert.match(src, new RegExp(`<PortfolioFrame\\s+tab="${tab}"`), `${f} left the Portfolio frame`);
+    assert.doesNotMatch(src, /<ZoneNav |<ZoneHeader /, `${f} draws a second heading or pill row`);
+  }
+  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorFundLanding']) {
     assert.match(codeOnly(read(`frontend/src/pages/investor/${f}.jsx`)), /<ZoneHeaderTools role="investor"/, `${f} lost its header tools`);
   }
 });
@@ -227,5 +235,5 @@ test('no new client method: every read and write here is one main already serves
     assert.doesNotMatch(codeOnly(read(f)), /request\(|fetch\(|from '\.\.\/lib\/api'/, `${f} reaches the network`);
   }
   assert.match(codeOnly(read('frontend/src/pages/investor/InvestorThesisBand.jsx')), /api\.getInvestorProfile\(\)/);
-  assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+  assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(days\)/);
 });

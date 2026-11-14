@@ -8,6 +8,8 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+// D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
+import { redactPath } from '../util/pathRedaction';
 
 // A KV round trip that has not answered in this long is treated exactly like a
 // KV error. Two seconds is far above a healthy bump (single-digit ms) and far
@@ -54,6 +56,9 @@ export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$
 // D691 — the deck share link's signup (routes/deck_share_actions.ts), mounted
 // under /api/decks. Exported so the test executes the pattern itself.
 export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
+// D5791 (#5791): an investor's attached walkthrough on their share link, its
+// takes and each take's file (routes/deck_share_walkthrough.ts).
+export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)
@@ -310,6 +315,18 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'GET' && MCP_CLIENT_METADATA.test(p),
     scope: 'ip',
   },
+  // D5791 (#5791) — the public walkthrough read on a share link and its
+  // takes' files: per IP and fail-open, as the other public reads (a link
+  // must not stop playing with KV). A video asks for its file in ranges as
+  // it plays and seeks, so 120 a minute; tighter than the general 200/min/IP
+  // bucket because every request reads the link, its gates and R2.
+  {
+    name: 'deck_share_walkthrough',
+    limit: 120,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && DECK_SHARE_WALKTHROUGH.test(p),
+    scope: 'ip',
+  },
   // 60 requests/min per user — default
   {
     name: 'user',
@@ -545,6 +562,13 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'POST' && p === '/api/track',
     scope: 'ip',
   },
+  {
+    name: 'meta_data_deletion',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/meta/data-deletion',
+    scope: 'ip',
+  },
   // 1000 req/min global burst protection
   {
     name: 'global',
@@ -716,7 +740,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         if (closesDoor) {
           const named = (stalled ? matching.slice(i).find((r) => r.failClosed) : b)!;
           await logBlock(env, ctx, {
-            user_id: userId, endpoint: path, bucket: named.name, count: -1, blocked: true,
+            user_id: userId, endpoint: redactPath(path), bucket: named.name, count: -1, blocked: true,
           });
           c.header('Retry-After', '30');
           c.header('X-RateLimit-Bucket', named.name);
@@ -733,7 +757,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
 
       if (count > b.limit) {
         await logBlock(env, ctx, {
-          user_id: userId, endpoint: path, bucket: b.name, count, blocked: true,
+          user_id: userId, endpoint: redactPath(path), bucket: b.name, count, blocked: true,
         });
         const retryAfter = b.windowSec >= 3600 ? 3600 : 60;
         c.header('Retry-After', String(retryAfter));

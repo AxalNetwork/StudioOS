@@ -284,7 +284,10 @@ test('GET /meetings/bot: deployed is true with the per-minute prices; off for th
   mockFetch(t, {});
   const r = await call(world(DEPLOYED).env, 'GET', '/meetings/bot');
   assert.equal(r.body.available, true);
-  assert.deepEqual(r.body.platforms, { zoom: true, google_meet: true, teams: true });
+  // D1451: Teams has its own switch, off by default.
+  assert.deepEqual(r.body.platforms, { zoom: true, google_meet: true, teams: false });
+  const teamsOn = await call(world({ ...DEPLOYED, MEETING_BOT_TEAMS: 'on' }).env, 'GET', '/meetings/bot');
+  assert.deepEqual(teamsOn.body.platforms, { zoom: true, google_meet: true, teams: true });
   assert.equal(r.body.price.bot_microusd_per_minute, 2790, 'D886 §5: 2,232 × 1.25, rounded up');
   assert.ok(Number.isSafeInteger(r.body.price.transcription_microusd_per_minute) && r.body.price.transcription_microusd_per_minute > 0);
   const canary = await call(world({ ...DEPLOYED, MEETING_BOT: 'canary' }).env, 'GET', '/meetings/bot');

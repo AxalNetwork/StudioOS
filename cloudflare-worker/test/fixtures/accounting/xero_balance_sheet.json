@@ -1,0 +1,35 @@
+{
+  "Status": "OK",
+  "Reports": [{
+    "ReportID": "BalanceSheet",
+    "ReportName": "Balance Sheet",
+    "ReportType": "BalanceSheet",
+    "ReportTitles": ["Balance Sheet", "Synthetic Fixture Ltd", "As at 31 March 2026"],
+    "ReportDate": "31 March 2026",
+    "UpdatedDateUTC": "/Date(1775031200000)/",
+    "Rows": [
+      { "RowType": "Header", "Cells": [{ "Value": "" }, { "Value": "31 Mar 2026" }, { "Value": "31 Mar 2025" }] },
+      { "RowType": "Section", "Title": "Assets", "Rows": [] },
+      { "RowType": "Section", "Title": "Bank", "Rows": [
+        { "RowType": "Row", "Cells": [
+          { "Value": "Business Current Account", "Attributes": [{ "Value": "6f8b0c5e-1d2a-4b3c-9e8f-0a1b2c3d4e5f", "Id": "account" }] },
+          { "Value": "88120.45", "Attributes": [{ "Value": "6f8b0c5e-1d2a-4b3c-9e8f-0a1b2c3d4e5f", "Id": "account" }] },
+          { "Value": "120004.10" } ] },
+        { "RowType": "Row", "Cells": [
+          { "Value": "Business Savings Account", "Attributes": [{ "Value": "7a9c1d6f-2e3b-4c4d-8f90-1b2c3d4e5f60", "Id": "account" }] },
+          { "Value": "" },
+          { "Value": "5000.00" } ] },
+        { "RowType": "SummaryRow", "Cells": [{ "Value": "Total Bank" }, { "Value": "88120.45" }, { "Value": "125004.10" }] }
+      ] },
+      { "RowType": "Section", "Title": "Current Liabilities", "Rows": [
+        { "RowType": "Row", "Cells": [
+          { "Value": "VAT", "Attributes": [{ "Value": "8b0d2e70-3f4c-4d5e-9a01-2c3d4e5f6071", "Id": "account" }] },
+          { "Value": "(4210.00)" }, { "Value": "(3100.00)" } ] },
+        { "RowType": "SummaryRow", "Cells": [{ "Value": "Total Current Liabilities" }, { "Value": "(4210.00)" }, { "Value": "(3100.00)" }] }
+      ] },
+      { "RowType": "Section", "Title": "", "Rows": [
+        { "RowType": "Row", "Cells": [{ "Value": "Net Assets" }, { "Value": "83910.45" }, { "Value": "121904.10" }] }
+      ] }
+    ]
+  }]
+}

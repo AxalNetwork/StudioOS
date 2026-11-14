@@ -37,6 +37,7 @@
  * `services/labGraduation.ts`; the public outcome reads are
  * `services/labReporting.ts`, bounded in SQL. Tests import those modules.
  */
+import { memberProgramRefusal } from '../services/programEnforcement';
 import { holdsLicence } from '../services/accountLicences';
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
@@ -631,6 +632,8 @@ spinoutLab.post('/apply/interview/reschedule', async (c) => {
 
 spinoutLab.post('/start', async (c) => {
   const user = await requireAuth(c);
+  const denied = await memberProgramRefusal(c, user.id, 'spinout-lab');
+  if (denied) return denied;
   const out = await beginLab(c.env, user.id);
   return c.json(out.body, out.status);
 });
@@ -639,6 +642,8 @@ type MilestoneBody = { milestone_key?: unknown };
 
 spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
+  const denied = await memberProgramRefusal(c, user.id, 'spinout-lab');
+  if (denied) return denied;
   const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
   const { completeLabMilestone } = await import('../services/labProgress');
   const out = await completeLabMilestone(c.env, user.id, body.milestone_key);
@@ -650,6 +655,8 @@ spinoutLab.post('/milestone', async (c) => {
 // was deleted. A recorded, live venture is never switched here.
 spinoutLab.post('/venture', async (c) => {
   const user = await requireAuth(c);
+  const denied = await memberProgramRefusal(c, user.id, 'spinout-lab');
+  if (denied) return denied;
   const body = (await c.req.json().catch(() => ({}))) as { project_id?: unknown };
   const { chooseVenture } = await import('../services/labVenture');
   try {

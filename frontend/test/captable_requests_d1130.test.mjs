@@ -51,7 +51,9 @@ test('Access lists the asks above Who sees what; the owner approves at a level o
 
 test('CT22b: the other company\'s page asks for access; someone who cannot ask is told why', () => {
   const page = read('pages/raise/captable/CapTableOverview.jsx');
-  assert.match(page, /<Link className=\{GHOST\} to=\{HOME_PATH\}>Switch company<\/Link>\s*<AskForAccess projectId=\{projectId\} testId="captable-other-company" \/>/);
+  // A company refusal offers the switch. An explicit support refusal omits it.
+  assert.match(page, /\{!supportRequired \? <Link className=\{GHOST\} to=\{HOME_PATH\}>Switch company<\/Link> : null\}/);
+  assert.match(page, /\{admin \? <Link className=\{GHOST\} to=\{`\/cap-tables\/\$\{encodeURIComponent\(String\(projectId\)\)\}`\} data-testid="captable-other-company-support">Open for support, with a reason<\/Link>\s*: <AskForAccess projectId=\{projectId\} testId="captable-other-company" \/>\}/);
   const panel = read('pages/raise/captable/InvestorCapTablePanel.jsx');
   assert.match(panel, /export function AskForAccess\(/);
   assert.match(panel, /<AskForAccess projectId=\{projectId\} venture=\{venture\} testId=\{testId\} \/>/, 'CT15n uses the same ask');

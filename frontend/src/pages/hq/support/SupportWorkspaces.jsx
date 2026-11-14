@@ -13,7 +13,7 @@
  *                     subsidiaries folded to one line.
  *   BranchesWorkspace support by subsidiary, the queues-by-subsidiary matrix
  *                     when it compares anything, and each branch's tickets.
- *   DeliveryWorkspace this session's decisions and their delivery, and the
+ *   DeliveryWorkspace HQ’s recent decisions and their latest delivery attempts, and the
  *                     GitHub mirror, one line while healthy.
  *   PolicyWorkspace   whether the ticket SLA is on every subsidiary, then the
  *                     policy panel (ticket SLA, escalation deadlines, taxonomy).
@@ -25,7 +25,7 @@ import { Unrecorded, Unreadable } from '../../../ui';
 import { StateShape } from '../security/StatusBadge.jsx';
 import {
   SUPPORT_WORKSPACES, workspaceHref, figureText, hoursText, queueKindChoices,
-  matrixCompares, mirrorLine, deliveryRows, nextUidAfter,
+  matrixCompares, mirrorLine, deliveryRows, deliveryState, notDelivered, nextUidAfter,
 } from './supportWorkspaceModel.js';
 
 // ───────────────────────────────────────────────────────────── badge ──
@@ -106,7 +106,7 @@ export function SupportHeader({ readAt, refreshing = false, onRefresh, sources, 
 }
 
 /** The four workspaces as routes, never ARIA tabs (canvas HQS13). */
-export function WorkspaceNav({ current, marks = {} }) {
+export function WorkspaceNav({ current, marks = {}, queueRef }) {
   return (
     <nav aria-label="Support workspaces" className="mt-4 border-b border-axal-hairline dark:border-gray-800" data-testid="hq-support-workspaces">
       <ul className="flex">
@@ -116,6 +116,7 @@ export function WorkspaceNav({ current, marks = {} }) {
           return (
             <li key={w.key} className="min-w-0 flex-1 sm:flex-none">
               <Link
+                ref={w.key === 'queue' ? queueRef : undefined}
                 to={workspaceHref(w.key)}
                 aria-current={on ? 'page' : undefined}
                 className={`-mb-px flex min-h-[44px] items-center justify-center gap-1.5 border-b-2 px-2 text-[13.5px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:justify-start sm:px-3 ${
@@ -193,7 +194,7 @@ export function AllClear({ overview, readAt }) {
           <h2 id="hq-support-clear-title" className={H2}>{whole ? 'All clear' : 'Nothing waiting at HQ'}</h2>
           <p className="mt-0.5 text-[14px] text-axal-ink dark:text-gray-100">
             {whole
-              ? 'No support items currently require HQ attention.'
+              ? 'No escalations or support tickets are open.'
               : 'HQ’s escalations and HQ-hosted tickets are empty. The subsidiaries are not all measured — see below.'}
           </p>
           <p className={`mt-1 ${META}`}>
@@ -221,7 +222,6 @@ export function AllClear({ overview, readAt }) {
           </dd>
         </div>
       </dl>
-      <p className={`mt-3 ${META}`}>Branches, Delivery and Policy are one click away above. Nothing else is shown while nothing is waiting.</p>
     </section>
   );
 }
@@ -532,14 +532,17 @@ export function BranchesWorkspace({ data, cards, branchState, busy, onRetry, mat
 
 // ────────────────────────────────────────────────────────── delivery ──
 
-/**
- * Decision delivery and the GitHub mirror (canvas SU05a/SU05b). Durable
- * delivery history is #5035 and not built, so the list is this session's
- * decisions and says so; failures lead.
- */
-export function DeliveryWorkspace({ recorded, renderRecorded, sync, mirror }) {
+/** Each history read is independent of the GitHub mirror and branch hosts. */
+export function DecisionHistoryStatus({ history, onRetry }) {
+  if (!history) return <LoadingNote>Loading recent decisions…</LoadingNote>;
+  if (!history.available) return <Unreadable what="Recent decisions" claim={history.reason} onRetry={onRetry} />;
+  return null;
+}
+
+export function DeliveryWorkspace({ recorded, history, onRetry, renderRecorded, sync, mirror }) {
   const rows = deliveryRows(recorded);
-  const failedN = rows.filter((r) => !(r.pushed && r.pushed.ok === true)).length;
+  const failedN = notDelivered(rows);
+  const allDelivered = history?.available && rows.length > 0 && rows.every((r) => deliveryState(r) === 'delivered');
   const line = mirrorLine(sync);
   return (
     <div className="grid gap-4" data-testid="hq-support-delivery">
@@ -548,14 +551,15 @@ export function DeliveryWorkspace({ recorded, renderRecorded, sync, mirror }) {
           <h2 id="hq-support-dl-title" className={H2}>
             {failedN > 0 ? `${failedN} ${failedN === 1 ? 'decision' : 'decisions'} not delivered` : 'Decision delivery'}
           </h2>
-          {rows.length > 0 && failedN === 0 && <SupportBadge tone="delivered">All decisions recorded here were delivered</SupportBadge>}
+          {allDelivered && <SupportBadge tone="delivered">All recent decisions were delivered</SupportBadge>}
         </div>
         <p className={`mt-1 ${META}`} data-testid="hq-support-delivery-scope">
-          This lists the decisions recorded on this page since you opened it. HQ does not yet keep a history of past
-          deliveries to read back (#5035), so a decision recorded earlier is not shown here.
+          HQ keeps the latest decision for each escalation and the result of its last branch delivery attempt.
+          Up to 25 recent decisions are shown here.
         </p>
-        {rows.length ? renderRecorded(rows) : (
-          <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-300" data-testid="hq-support-delivery-empty">No decision has been recorded in this session.</p>
+        <DecisionHistoryStatus history={history} onRetry={onRetry} />
+        {rows.length ? renderRecorded(rows) : history?.available && (
+          <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-300" data-testid="hq-support-delivery-empty">No decisions have been recorded at HQ.</p>
         )}
       </section>
       <section aria-labelledby="hq-support-gh-title" data-testid="hq-support-mirror" data-state={line ? 'quiet' : 'detail'}>
@@ -601,7 +605,8 @@ export function DistributionBanner({ distribution }) {
       <p className="mt-1 text-[13px]">
         {d.state === 'incomplete'
           ? 'HQ’s ticket SLA applies to HQ-hosted tickets. A subsidiary not on the current version bands its own tickets with the policy it last received. Each one is named below.'
-          : (d.branchState === 'loading' ? 'The subsidiaries are still being asked.' : 'The subsidiaries could not be read.')}
+          : (d.branchState === 'ready' ? 'No branch coverage was reported for this policy version.'
+            : (d.branchState === 'loading' ? 'The subsidiaries are still being asked.' : 'The subsidiaries could not be read.'))}
       </p>
     </div>
   );

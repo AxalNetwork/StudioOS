@@ -23,8 +23,9 @@ say is "Not recorded", and must never say. Part D (#3954) runs them.
 
 `scenarios/` holds the qualification scenarios for the first ten skills (#4588,
 D4588): 5 to 10 cases per skill, each with a known-correct output and targeted
-incorrect outputs. They are not in the generated module and the seed does not
-import them yet; `cases/` stays the one golden case per skill.
+incorrect outputs. Since D5336 the generator embeds them beside the golden
+case and the seed imports each as its own case, by `case_id` + `revision`;
+`cases/` stays the one golden case per skill.
 
 ## Rules for adding a skill
 
@@ -35,15 +36,20 @@ import them yet; `cases/` stays the one golden case per skill.
   recorded", never estimated, never carried over.
 - **People by name, never by email.** No address in a skill or a case.
 - **Text, not HTML,** under 32 KB. A1 parses it as data and never executes it.
-- **One case per skill**, fed only from reads the skill is given.
+- **One golden case per skill**, plus an optional scenario pack, fed only from
+  reads the skill is given; at most 20 cases in all.
 - `cloudflare-worker/test/agent_skill_library_d1612.test.ts` checks all of this.
 
 ## How the library reaches the store (D4225)
 
 The Worker reads no file at run time. `node scripts/build-skill-library.mjs`
-embeds every file here in `../skillLibrary.generated.ts`, which is never edited
-by hand. Run it after adding or changing a skill; the library test fails while
-the module is stale.
+builds every file here into two outputs, never edited by hand and never
+committed (D5612): they are gitignored, and `scripts/build-generated.mjs` writes
+them before every build, typecheck and test. Since D4574 H3 (#4574) the
+entries are not in the Worker script: `../skillLibrary.generated.ts` is the
+index (slugs, digest, asset path), and the entries are the static asset
+`frontend/public/skill-library/library-<digest16>.json`, which the library
+routes read through the assets binding (`../skillLibraryAsset.ts`).
 
 `POST /api/admin/ai-agents/skills/library/seed { reason }` (Super Admin) creates
 each skill not yet in the store as an Axal **draft** with its golden case. It

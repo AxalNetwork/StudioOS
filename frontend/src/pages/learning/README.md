@@ -46,6 +46,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `LessonFooter.jsx`, `lessonFooterModel.js`, `lessonFooter.css` | D4478: the accessible lesson position/completion footer and its phone bar. |
 | `lessonPositionWriter.js`, `useOnline.js` | D4478: the browser connection and latest-position offline queue around the existing progress throttle. |
 | `LearningHomeActions.jsx` | D4481 (#4481): the home’s shared registration action and current seat refresh, structured refusals, phone course primary and webinar rows. |
+| `CurriculumCoverage.jsx`, `coverageModel.js` | D4650 (#4650, part 4): the studio's curriculum coverage record, below the content table. Each of the founder, investor, advisor and partner journeys as Published, Not reachable, Unknown or Missing, with the courses behind it, from `GET /api/admin/learning/coverage`. A course with no audience makes a journey Unknown, never Missing; a failed read is Unreadable. It reads the catalogue only. |
 
 ## The rules for adding here
 
@@ -108,8 +109,8 @@ The Learning home now owns its gutters like Help: its decorative hero uses
 `/site/home-hero.webp` with light/dark overlays, and its content has 16px/32px
 insets. Desktop and phone render the same `LearningHero`; the phone frame's
 optional header wraps its default bar, retaining Back, its subtitle and the
-conditional Eadwyn control, with one heading. The temporary
-coming-soon gate, links, searches and reads are unchanged.
+conditional Eadwyn control, with one heading. Links, searches and reads are
+unchanged, and the coming-soon gate stays dormant (lifted 2026-11-04).
 
 
 ## Video on Stream (#4177, L2 of #3726, on L1's routes, D4176)
@@ -149,6 +150,11 @@ coming-soon gate, links, searches and reads are unchanged.
   /admin/learning/stream/migrations`; a refusal updates the row's own
   `stream_copy` to `{ state: 'failed', error_message }`, read only from the
   route's `error.data.message`, never `e.message`.
+- **One copy per click, and an unreadable copy table (#4649, D4649).** While
+  the POST is in flight the row reads "Starting copy…" with no button, and a
+  second click or "Try again" starts nothing. A copy table the Worker could not
+  read is `stream_copy: { state: 'unreadable' }`: no button on the row, and the
+  banner says the count could not be read (with Try again), never a number.
 - **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
   wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
   `FILL_FIELDS` has no Learning form;

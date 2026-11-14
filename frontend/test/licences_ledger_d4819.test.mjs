@@ -302,11 +302,11 @@ test('a Needs HQ category the reads cannot compute is never a 0: Not instrumente
     const needs = v.textOf('licence-needs');
     assert.equal(v.textOf('licence-need-requests'), 'Requests waiting · Unavailable');
     assert.equal(v.props(v.byId('licence-need-requests')).role, undefined, 'an unknown count is not a filter');
-    assert.match(v.textOf('licence-needs-not-instrumented'), /Not instrumented on the ledger yet: Agreements incomplete · Branch out of sync · Overdue invoices\./);
+    assert.match(v.textOf('licence-needs-not-instrumented'), /Not instrumented on the ledger yet: Branch out of sync · Overdue invoices\./);
     assert.doesNotMatch(needs, /\b0\b/, 'no category reads 0');
     for (const name of ['agreement', 'branch', 'sync', 'invoice']) assert.doesNotMatch(needs, new RegExp(`\\b0 [a-z ]*${name}`, 'i'));
   } finally { await v.close(); }
-  assert.deepEqual(NOT_INSTRUMENTED, ['Agreements incomplete', 'Branch out of sync', 'Overdue invoices']);
+  assert.deepEqual(NOT_INSTRUMENTED, ['Branch out of sync', 'Overdue invoices']);
   // Until every loaded row's read answers, the requests item is Reading, never a partial count.
   const partial = needsSummary(POPULATED, { a: { ok: true, total: 2 } });
   assert.deepEqual(partial[0], { key: 'requests', state: 'reading', label: 'Requests waiting · Reading…' });
@@ -481,7 +481,21 @@ test('the Needs HQ filter reads only fields the ledger and requests reads return
   const model = codeOnly(read('frontend/src/pages/admin/licenceLedgerModel.js'));
   // The fields NEEDS reads: a row's status and renewal date, and its requests total.
   const fields = new Set([...model.matchAll(/\bl\.(\w+)/g)].map((m) => m[1]));
-  for (const f of fields) assert.ok(['renews_on', 'status', 'territories', 'uid'].includes(f), `the model reads l.${f}`);
+  for (const f of fields) assert.ok(['renews_on', 'status', 'territories', 'uid', 'legal_signals'].includes(f), `the model reads l.${f}`);
   assert.deepEqual(needsFromParam('renewal,bogus,requests'), ['requests', 'renewal']);
   assert.deepEqual(filterByNeeds(POPULATED, {}, ['requests']), [], 'an unread count matches nothing');
+});
+
+test('legal Needs HQ chips count and filter the loaded ledger page', async () => {
+  const items = POPULATED.map((row, index) => ({
+    ...row, legal_signals: index === 0 ? ['awaiting_signature'] : [],
+  }));
+  const v = await mount('/admin/licences', worker({ items, summary: POP_SUMMARY }));
+  try {
+    assert.equal(v.textOf('licence-need-legal_awaiting_signature'), 'Awaiting signature · 1');
+    await v.click('licence-need-legal_awaiting_signature');
+    assert.deepEqual(v.rowsShown(), ['a']);
+    assert.match(v.at.path, /needs=legal_awaiting_signature/);
+  } finally { await v.close(); }
+  assert.equal(needsSummary(POPULATED, {}).find((item) => item.key === 'legal_stale').state, 'unavailable');
 });

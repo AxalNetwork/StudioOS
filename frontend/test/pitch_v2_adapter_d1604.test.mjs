@@ -185,7 +185,8 @@ test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.li
     deckFiguresApi.list = async () => { throw Object.assign(new Error('The figures could not be read.'), { status: 500 }); };
     const bad = await adapter.figures(7);
     assert.equal(bad.unreadable, true, 'anything else is unreadable');
-    assert.equal(bad.reason, 'The figures could not be read.');
+    // D5070 (#5376): a 5xx's own text is never shown; the adapter's fallback is.
+    assert.equal(bad.reason, 'could not be read');
     assert.doesNotMatch(adapter.shown(bad, (v) => String(v.counts?.linked ?? 0)), /^0$/, 'never "0 figures"');
   } finally { deckFiguresApi.list = real; }
   assert.equal(adapter.availability('figures'), null);
@@ -293,8 +294,8 @@ test('the seam reaches no network, and no client method exists for a route that 
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
   const money = (v) => `$${Number(v).toFixed(2)}`;
-  // D1524 (#3776) swapped deckUsage, and D1573 (#3820) slideAnalytics; `walkthrough` is still on the seam.
-  const off = await adapter.walkthrough('deck');
+  // D1524 (#3776) swapped deckUsage, D1573 (#3820) slideAnalytics and D4599 part 2 walkthrough; `outlineReorder` is still on the seam.
+  const off = await adapter.outlineReorder('deck');
   assert.equal(adapter.shown(off, money), LATER);
   assert.equal(adapter.shown(off, () => '0'), LATER, 'the formatter never runs on an unavailable answer');
   assert.equal(adapter.shown(undefined, money), LATER);
@@ -310,7 +311,8 @@ test('through() is the swap: a value, a route that is still off, or unreadable, 
   const bad = await adapter.through(async () => { throw e500; }, 3749);
   assert.equal(bad.unreadable, true);
   assert.equal(bad.available, false);
-  assert.equal(bad.reason, 'The deck could not be read.');
+  // D5070 (#5376): a 5xx's own text is never shown; the adapter's fallback is.
+  assert.equal(bad.reason, 'could not be read');
 });
 
 test('the element picker: 8 groups, each item on main or on the seam, and the three owner marks', () => {
@@ -462,8 +464,9 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
     assert.deepEqual(await adapter.cancelBatch('run-1'), { available: true, value: { uid: 'run-1', state: 'cancelled' } });
     assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
     assert.equal(adapter.availability('batch'), null);
-    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
-    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null });
+    // The Worker's refusal carries its code (deck_batches.ts `not_your_run`), so its sentence is kept (D5070 rule 2).
+    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403, code: 'not_your_run' }); };
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null, code: 'not_your_run' });
   } finally { Object.assign(deckBatchesApi, real); }
   const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);

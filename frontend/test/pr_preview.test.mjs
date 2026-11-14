@@ -112,8 +112,11 @@ test('the login-e2e job runs the D722 spec against the preview it just deployed,
   assert.match(job, /needs: deploy/);
   assert.match(wf, /outputs:\n\s+url: \$\{\{ steps\.deploy\.outputs\.url \}\}/, 'the deploy job must expose its URL as an output');
   assert.match(job, /PLAYWRIGHT_BASE_URL: \$\{\{ needs\.deploy\.outputs\.url \}\}/, 'the spec must run against this PR\'s preview');
-  assert.match(job, /playwright test tests\/e2e\/google_popup_signin\.spec\.js/);
-  assert.match(job, /test:e2e:install/, 'Playwright needs its browser installed');
+  assert.match(job, /playwright test tests\/e2e\/google_popup_signin\.spec\.js --retries=0/);
+  assert.match(job, /playwright test tests\/e2e\/integrations\.spec\.js --retries=0/);
+  assert.match(job, /image: mcr\.microsoft\.com\/playwright@sha256:[0-9a-f]{64}/, 'use the pinned image with Chromium and its system libraries');
+  assert.match(job, /PW_CHROMIUM_PATH: \/ms-playwright\//, 'point Playwright at the image’s Chromium');
+  assert.match(at('frontend/playwright.config.js'), /executablePath: process\.env\.PW_CHROMIUM_PATH/);
   assert.match(job, /permissions:\n\s+contents: read\n/, 'the job reads the repository and nothing more');
   assert.doesNotMatch(job, /secrets\./, 'the e2e job must hold no secret: the spec stubs every Google route');
   assert.doesNotMatch(job, /wrangler/, 'the e2e job deploys nothing');

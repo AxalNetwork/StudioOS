@@ -7,7 +7,7 @@
  * routes/advisors.ts; it and the route modules split out of it (advisors_*.ts)
  * import them from here, so there is still one implementation of each.
  */
-import { actingAdvisor } from '../services/advisorAccess';
+import { actingAdvisor, mayActAsAdvisor, ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { refuse } from '../util/refusal';
@@ -49,6 +49,8 @@ export type BookingRow = {
   // #4702: the advisor's answer, kept apart from what happened to the session.
   advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
   cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
+  // #5316 (D5316): recorded as included in an engagement (read as billing_state 'included').
+  included_at?: string | null; included_by_user_id?: number | null; included_engagement_id?: number | null;
 };
 /**
  * D4715 (#4715) — the offer a booking is made on, copied from its session type
@@ -122,6 +124,7 @@ export function bookingDto(b: BookingRow, extras: any = {}): any {
 export function advisorMoney(b: Partial<BookingRow>): {
   amount_cents: number | null; billing_state: string;
   platform_cut_cents: number | null; take_rate_bps: number | null; net_cents: number | null;
+  included_at: string | null; included_by_user_id: number | null; included_engagement_id: number | null;
 } {
   const gross = b.amount_cents ?? null;
   // 241 — THE STORED CUT, NOT A RECOMPUTED ONE. `platform_cut_cents` is what
@@ -132,10 +135,15 @@ export function advisorMoney(b: Partial<BookingRow>): {
   const cut = (b as any).platform_cut_cents ?? null;
   return {
     amount_cents: gross,
-    billing_state: b.billing_state ?? 'unpriced',
+    // #5316 (D5316): an included session is its own state. It is stored beside
+    // `billing_state` (whose CHECK cannot take a fifth value) and read as one.
+    billing_state: b.included_at ? 'included' : (b.billing_state ?? 'unpriced'),
     platform_cut_cents: cut,
     take_rate_bps: (b as any).take_rate_bps ?? null,
     net_cents: gross != null && cut != null ? gross - cut : null,
+    included_at: b.included_at ?? null,
+    included_by_user_id: b.included_at ? (b.included_by_user_id ?? null) : null,
+    included_engagement_id: b.included_at ? (b.included_engagement_id ?? null) : null,
   };
 }
 /** #4715: the policy's eligibility and ownership checks (services/advisorAccess.ts). */
@@ -170,18 +178,34 @@ export const sentRevision = (body: any): string | null =>
 // creates an obligation on Axal — see the header of migration 205.
 // ===========================================================================
 
+/** #5363: an eligible account that owns no advisor row. Our sentence, a fixed code. */
+export const ADVISOR_PROFILE_MISSING = {
+  code: 'advisor_profile_missing',
+  message: 'No advisor profile attached to your account',
+} as const;
+
 /**
- * The caller's own advisor row, or an error naming what is missing.
+ * The caller's own advisor row, or a thrown coded refusal.
  *
  * Also the single door every store endpoint below goes through, which is where
  * the lazy schema bootstrap belongs — one call site rather than nine, and it
  * short-circuits on a database that already has the schema. See
  * `services/advisorStoresSchema.ts` for why a bootstrap is required at all.
+ *
+ * #5363: TWO REFUSALS, TOLD APART. An account that is not eligible
+ * (`mayActAsAdvisor` false: no Advisor licence today, or one revoked, and not
+ * an admin) gets the same 403 `advisor_licence_required` that `GET`/`POST
+ * /me` answer, so the page can say "needs the Advisor licence" instead of a
+ * generic failure. An eligible account with no row of its own keeps today's
+ * 400 under the fixed code `advisor_profile_missing`. Both are thrown as a
+ * Response, which `mapError` passes through untouched; neither carries
+ * exception text. Who passes is D4715's policy, unchanged.
  */
 export async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Promise<AdvisorRow> {
+  if (!mayActAsAdvisor(user)) throw refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
   await ensureAdvisorStoresSchema(c.env);
   const m = await myAdvisor(c.env, user);
-  if (!m) throw new Error('No advisor profile attached to your account');
+  if (!m) throw refuse(c, 400, ADVISOR_PROFILE_MISSING);
   return m;
 }
 
@@ -206,6 +230,8 @@ export type EngagementRow = {
   proposed_at: string | null; started_at: string | null;
   term_ends_at: string | null; ended_at: string | null;
   cycles: number; outcome: string | null; renewal_note: string | null;
+  // #5316 (D5316): why a signed engagement ended; NULL before it was recorded.
+  end_reason?: string | null;
   created_at: string; updated_at: string;
 };
 

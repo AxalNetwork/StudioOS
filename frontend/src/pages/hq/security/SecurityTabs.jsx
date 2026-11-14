@@ -22,8 +22,12 @@ import { securityState } from './securityStates.js';
  */
 export default function SecurityTabs({ current, onSelect, marks = {} }) {
   const refs = useRef({});
-  const onKey = (e) => {
-    const next = tabAfterKey(current, e.key);
+  // D4803 (#4803 browser pass): move from the link that has focus, not from
+  // `current`. The router renders a `?tab=` change as a transition, so a quick
+  // second key (or a held arrow repeating) arrived before `current` caught up
+  // and moved from the workspace before: End then Right went to Access.
+  const onKey = (from) => (e) => {
+    const next = tabAfterKey(from, e.key);
     if (!next) return;
     e.preventDefault();
     onSelect(next);
@@ -32,7 +36,7 @@ export default function SecurityTabs({ current, onSelect, marks = {} }) {
   return (
     <>
       <label className="mt-4 block sm:hidden">
-        <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Section</span>
+        <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-muted">Section</span>
         <select
           value={current}
           onChange={(e) => onSelect(e.target.value)}
@@ -60,7 +64,7 @@ export default function SecurityTabs({ current, onSelect, marks = {} }) {
               ref={(el) => { refs.current[t.key] = el; }}
               to={tabHref(t.key)}
               aria-current={on ? 'page' : undefined}
-              onKeyDown={onKey}
+              onKeyDown={onKey(t.key)}
               className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12.5px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                 on
                   ? 'border-violet-600 text-axal-ink dark:border-violet-400 dark:text-white'

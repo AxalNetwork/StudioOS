@@ -373,53 +373,99 @@ export interface ReadTracking {
   available: boolean;
   /** Why not, in the repo's honesty vocabulary. Null when available. */
   reason: string | null;
+  /**
+   * #5314 part 1: when the client-open route began recording (migration
+   * `202611110731_5314`). Absent where availability is only inferred from a
+   * recorded open. A deliverable sent before it was never openable here.
+   */
+  since?: string;
 }
 
 export const READ_TRACKING_UNAVAILABLE_REASON =
   'Not recorded: nothing in this product records that a client opened a deliverable or read a report, so a deliverable sent and not opened says nothing about the client.';
 
 /**
- * Whether this build instruments deliverable opens. `engagement_deliverables.
- * opened_at` is the client's to set (migration 208:160) and no client-side
- * surface writes it. Flip this only together with that surface; until then
- * availability is inferred from the data, below.
+ * Whether this build instruments deliverable opens unconditionally. Since
+ * #5314 part 1 opens ARE recorded — `POST /api/client/deliverables/:uid/open`
+ * (routes/client_deliverables.ts) — but only from the moment migration
+ * `202611110731_5314` wrote into `delivery_read_instrumentation`;
+ * `deliverableReadsSince` reads that moment and `readTrackingFor` takes it as
+ * `since`. This flag stays false so a database without the migration keeps
+ * the inferred answer below.
  */
 export const DELIVERABLE_READ_INSTRUMENTED = false;
 
 /**
+ * #5314 part 1: when client opens began to be recorded, or null when the
+ * instrument is absent or unreadable — which keeps every sent deliverable
+ * "Not recorded" rather than "Never opened".
+ */
+export async function deliverableReadsSince(env: Env): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare('SELECT started_at FROM delivery_read_instrumentation WHERE id = 1')
+      .first<{ started_at: string | null }>();
+    return row?.started_at ? String(row.started_at) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * ONE answer to "can we see opens?", used by Deliverables, Health, the Board
- * and the report draft. Available when the build is instrumented, or when any
- * deliverable in the book carries an `opened_at` — a recorded open is proof the
- * instrument exists. Otherwise every sent deliverable would read "unopened", a
- * claim about the CLIENT that is really a claim about OUR missing instrument.
+ * and the report draft. Available when opens are recorded from a moment
+ * (`since`), when the build is instrumented, or when any deliverable in the
+ * book carries an `opened_at` — a recorded open is proof the instrument exists.
+ * Otherwise every sent deliverable would read "unopened", a claim about the
+ * CLIENT that is really a claim about OUR missing instrument.
  */
 export function readTrackingFor(
   deliverables: Array<{ opened_at?: string | null }>,
   instrumented: boolean = DELIVERABLE_READ_INSTRUMENTED,
+  since: string | null = null,
 ): ReadTracking {
+  if (since) return { available: true, reason: null, since };
   const proven = deliverables.some((d) => Boolean(d.opened_at));
   return instrumented || proven
     ? { available: true, reason: null }
     : { available: false, reason: READ_TRACKING_UNAVAILABLE_REASON };
 }
 
+/**
+ * Could the client have opened THIS deliverable through the platform? Where
+ * opens are recorded from a moment (`since`), the open is recorded when the
+ * client follows the shared link, so only a deliverable sent from that moment
+ * on, with a link to follow, can be called unopened. One with no link, or sent
+ * before the route existed, is "Not recorded", never "Never opened".
+ */
+export function openObservable(
+  d: { sent_at?: string | null; link_url?: string | null },
+  tracking: ReadTracking,
+): boolean {
+  if (!tracking.available || !d.sent_at) return false;
+  if (!tracking.since) return true;
+  if (!d.link_url) return false;
+  const sent = Date.parse(String(d.sent_at).replace(' ', 'T'));
+  const since = Date.parse(String(tracking.since).replace(' ', 'T'));
+  return Number.isFinite(sent) && Number.isFinite(since) && sent >= since;
+}
+
 /** Sent and not opened — or NULL when opens cannot be observed. Never 0 by default. */
 export function unopenedCountFor(
-  deliverables: Array<{ sent_at?: string | null; opened_at?: string | null }>,
+  deliverables: Array<{ sent_at?: string | null; opened_at?: string | null; link_url?: string | null }>,
   tracking: ReadTracking,
 ): number | null {
   if (!tracking.available) return null;
-  return deliverables.filter((d) => d.sent_at && !d.opened_at).length;
+  return deliverables.filter((d) => !d.opened_at && openObservable(d, tracking)).length;
 }
 
-/** One deliverable's read state; `not_recorded` when opens cannot be observed. */
+/** One deliverable's read state; `not_recorded` when its open cannot be observed. */
 export function readStateFor(
-  d: { sent_at?: string | null; opened_at?: string | null },
+  d: { sent_at?: string | null; opened_at?: string | null; link_url?: string | null },
   tracking: ReadTracking,
 ): 'not_sent' | 'opened' | 'unopened' | 'not_recorded' {
   if (!d.sent_at) return 'not_sent';
   if (d.opened_at) return 'opened';
-  return tracking.available ? 'unopened' : 'not_recorded';
+  return openObservable(d, tracking) ? 'unopened' : 'not_recorded';
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +494,7 @@ export const CADENCE_MONTHS: Readonly<Record<string, number>> = Object.freeze({
 /** Months in a cadence, or null for a cadence this rule does not know. */
 export function cadenceMonths(cadence: string | null | undefined): number | null {
   const m = CADENCE_MONTHS[String(cadence ?? '').trim().toLowerCase()];
-  return m === undefined ? null : m;
+  return typeof m === 'number' ? m : null;
 }
 
 /**
@@ -471,13 +517,15 @@ export function retainerPeriodFor(cadence: string | null | undefined, now: Date 
  * not keep money on the books.
  */
 export function isRetainerActive(
-  retainer: { ended_at?: string | null } | null | undefined,
+  retainer: Pick<RetainerRow, 'ended_at' | 'engagement_status' | 'cancelled_at'> | null | undefined,
   now: Date = new Date(),
 ): boolean {
   if (!retainer) return false;
+  if (retainer.cancelled_at || retainer.engagement_status === 'cancelled') return false;
   const raw = retainer.ended_at;
   if (raw === null || raw === undefined || String(raw).trim() === '') return true;
-  const t = Date.parse(String(raw).trim().replace(' ', 'T'));
+  const stamp = String(raw).trim().replace(' ', 'T');
+  const t = Date.parse(stamp.includes('T') && !/(?:Z|[+-]\d\d:?\d\d)$/i.test(stamp) ? `${stamp}Z` : stamp);
   if (!Number.isFinite(t)) return false;
   return t > now.getTime();
 }
@@ -492,8 +540,9 @@ export function monthlyAmountCents(
 ): number | null {
   if (!retainer || retainer.amount_cents === null || retainer.amount_cents === undefined) return null;
   const months = cadenceMonths(retainer.cadence);
-  if (months === null) return null;
-  return Math.round(Number(retainer.amount_cents) / months);
+  const amount = Number(retainer.amount_cents);
+  if (months === null || !Number.isFinite(amount)) return null;
+  return Math.round(amount / months);
 }
 
 /**
@@ -502,7 +551,7 @@ export function monthlyAmountCents(
  * nothing to what is recurring now). Sum these; skip the nulls.
  */
 export function currentMonthlyCents(
-  retainer: { cadence?: string | null; amount_cents?: number | null; ended_at?: string | null } | null | undefined,
+  retainer: RetainerRow | null | undefined,
   now: Date = new Date(),
 ): number | null {
   if (!isRetainerActive(retainer, now)) return null;
@@ -510,6 +559,8 @@ export function currentMonthlyCents(
 }
 
 export interface RetainerRow {
+  engagement_status?: string | null;
+  cancelled_at?: string | null;
   retainer_id?: number | null;
   retainer_uid?: string | null;
   shape?: string | null;
@@ -567,6 +618,7 @@ export function retainerProjection(
   const retainedHours = row.retained_hours === null || row.retained_hours === undefined
     ? null : Number(row.retained_hours);
   const active = isRetainerActive(row, now);
+  const monthly = monthlyAmountCents(row);
   const thisPeriod = usage.find((u) => u.period === period) || null;
   const measured = utilisationFor({ retained_hours: retainedHours }, thisPeriod);
   const util: Utilisation = active ? measured : {
@@ -586,8 +638,9 @@ export function retainerProjection(
       ended_at: row.ended_at ?? null,
       days_to_renewal: row.renews_at ? -(daysBetween(row.renews_at) ?? 0) : null,
       active,
-      monthly_amount_cents: monthlyAmountCents(row),
-      current_monthly_cents: currentMonthlyCents(row, now),
+      monthly_amount_cents: monthly,
+      monthly_cents: monthly,
+      current_monthly_cents: active ? monthly : null,
     },
     current_period: period,
     usage,
@@ -596,26 +649,29 @@ export function retainerProjection(
 }
 
 // ---------------------------------------------------------------------------
-// Capacity time basis (#4690)
+// Capacity time basis (#4690; one weekly basis since #5314 part 4)
 // ---------------------------------------------------------------------------
 
 /**
- * THE TIME BASIS. Hours are LOGGED per calendar month (`YYYY-MM`); a cap is
- * STATED per week (`weekly_hours`). They are different units over different
- * periods and are never compared as written. The cap is scaled to the period
- * the hours cover: weekly_hours × days in the month ÷ 7. Rounded to 2 places
- * HERE, so the figure the page shows is the figure the comparison used.
+ * THE TIME BASIS (#5314 part 4, owner's call 2026-11-11). Hours are LOGGED per
+ * calendar month (`YYYY-MM`); a cap is STATED per week (`weekly_hours`).
+ * Capacity is read on ONE basis, hours a week: a month's hours are converted
+ * with 52 weeks over 12 months (hours × 12 ÷ 52), the same factor every month,
+ * so the same hours never read over in February and under in December. Rounded
+ * to 2 places HERE, so the figure the page shows is the figure the comparison
+ * used. Unrecorded stays null: no hours is not zero hours a week.
  */
+export const WEEKS_PER_MONTH = 52 / 12;
+
+export function weeklyFromMonthly(monthlyHours: number | null | undefined): number | null {
+  if (monthlyHours === null || monthlyHours === undefined || !Number.isFinite(Number(monthlyHours))) return null;
+  return Math.round(Number(monthlyHours) * 12 / 52 * 100) / 100;
+}
+
 export function daysInPeriod(period: string): number | null {
   const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(period));
   if (!m) return null;
   return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
-}
-
-export function periodCapHours(weeklyHours: number | null, period: string): number | null {
-  const days = daysInPeriod(period);
-  if (weeklyHours === null || weeklyHours === undefined || days === null) return null;
-  return Math.round(Number(weeklyHours) * days / 7 * 100) / 100;
 }
 
 // ---------------------------------------------------------------------------

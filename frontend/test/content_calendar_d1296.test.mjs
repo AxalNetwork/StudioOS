@@ -148,7 +148,10 @@ test('ART7 mounted: October reads its range, chips sit on their days, the ready 
   } finally { await w.done(); }
 });
 
-test('ART8 mounted: Move… opens the dialog first, then sends the schedule call', async () => {
+test('ART8 mounted: Move… previews and submits the UTC instant for browser-local input', async (t) => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'Europe/Zurich';
+  t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   const s = stub();
   const w = await mount(s.api);
   try {
@@ -158,13 +161,14 @@ test('ART8 mounted: Move… opens the dialog first, then sends the schedule call
     assert.ok(byId(w.container, 'calendar-schedule'));
     assert.match(text(byId(w.container, 'calendar-schedule-now')), /08:00 UTC · Mon 26 Oct 2026/);
     const input = byId(w.container, 'calendar-schedule-input');
-    await act(async () => props(input).onChange({ target: { value: '2026-10-26T08:00' } }));
+    // Zurich is UTC+1 on both dates. The input itself carries no timezone.
+    await act(async () => props(input).onChange({ target: { value: '2026-10-26T09:00' } }));
     assert.match(text(byId(w.container, 'calendar-schedule-others')), /“\[Same minute\]” at 08:00/);
     await act(async () => props(input).onChange({ target: { value: '2026-10-20T09:00' } }));
     // Mutation checked: let a past time through → Schedule is pressable for yesterday.
     assert.match(text(byId(w.container, 'calendar-schedule-problem')), /in the future/);
     assert.equal(props(byId(w.container, 'calendar-schedule-confirm')).disabled, true);
-    await act(async () => props(input).onChange({ target: { value: '2026-10-30T11:00' } }));
+    await act(async () => props(input).onChange({ target: { value: '2026-10-30T12:00' } }));
     assert.equal(props(byId(w.container, 'calendar-schedule-confirm')).disabled, false);
     assert.match(text(byId(w.container, 'calendar-schedule-utc')), /11:00 UTC · Fri 30 Oct 2026/);
     await click(byId(w.container, 'calendar-schedule-confirm'));

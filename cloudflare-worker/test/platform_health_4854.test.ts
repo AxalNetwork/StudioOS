@@ -24,7 +24,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 import {
   buildHealth, CRON_FAILURE_STREAK, detectIncidents, DLQ_HIGH, healthStateOf, readCronStreaks, readTelemetryHealth,
-  readWebhookHealth, REMEDIATION, TELEMETRY_LAST_OK_KEY, WEBHOOK_FAILURE_CRITICAL, WEBHOOK_FAILURE_STREAK, type HealthInput,
+  readWebhookHealth, REMEDIATION, TELEMETRY_LAST_OK_KEY, WEBHOOK_FAILURE_CRITICAL, WEBHOOK_FAILURE_STREAK, WEBHOOK_SILENCE_HOURS, type HealthInput,
 } from '../src/services/platformHealth.ts';
 import { readPlatformSummary } from '../src/services/platformSummary.ts';
 import { STRIPE_WEBHOOK_PATH } from '../src/services/stripeWebhookDeliveries.ts';
@@ -61,6 +61,8 @@ const healthy = (over: Partial<HealthInput> = {}): HealthInput => ({
   webhook: { available: true, consecutive_failures: 0, streak_at_least: false, streak_started_at: null, last_delivery_at: '2026-11-07 11:00:00', last_success_at: '2026-11-07 11:00:00', last_failure_at: null },
   telemetry: { status: 'healthy', binding_present: true, read_configured: true, answered: true, last_event_at: '2026-11-07 11:59:00', events_in_window: 900, window_hours: 24, last_successful_read_at: NOW.toISOString(), checked_at: NOW.toISOString(), coverage: 'c', reason: null },
   published: { available: true, count: 0, window_days: 30 },
+  meeting_bot: { available: true, applies: true, outcomes_read: 1, window_hours: 168, latest: { outcome: 'started', code: null, stage: 'runtime_command_accepted', failure_code: null, at: '2026-11-07T10:00:00.000Z' }, consecutive_failures: 0, streak_at_least: false, streak_started_at: null },
+  branches: { available: true, applies: true, branches: [] },
   stripe_configured: true,
   now: NOW,
   ...over,
@@ -158,6 +160,11 @@ test('webhook silence is a low note only while Stripe is configured, and does no
   assert.deepEqual(buildHealth(healthy({ webhook: quiet, stripe_configured: false })).detected, []);
   const never = buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: null } }));
   assert.match(never.detected[0].title, /ever been logged/);
+  // #4860 Q4 = B: the threshold is 24 h, as the overview's. Thirty hours silent is noted; twenty is not.
+  assert.equal(WEBHOOK_SILENCE_HOURS, 24);
+  const at = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+  assert.deepEqual(buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: at(30) } })).detected.map((i) => i.key), ['webhook:silence']);
+  assert.deepEqual(buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: at(20) } })).detected, []);
 });
 
 // ── cron ──────────────────────────────────────────────────────────────────
@@ -227,7 +234,7 @@ test('published incidents are kept apart, labelled manual, and never move the st
   assert.deepEqual([h.published.available, (h.published as any).count, h.published.manual], [true, 4, true]);
   const gone = buildHealth(healthy({ published: { available: false, reason: 'table gone' } }));
   assert.deepEqual([gone.published.available, (gone.published as any).reason, gone.state], [false, 'table gone', 'healthy']);
-  assert.ok(h.not_detected.some((n) => /Branch/.test(n.signal)), 'what is not detected here is said');
+  assert.ok(h.not_detected.some((n) => /diagnostics/.test(n.signal)), 'what is not detected here is said');
 });
 
 test('every incident links to a runbook section that exists, and every console link is a mounted route', () => {

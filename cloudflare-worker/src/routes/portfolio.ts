@@ -3,7 +3,10 @@
  * Mounted at /api/portfolio.
  *
  * Visibility:
- *   admin/partner            -> every project
+ *   admin                    -> every project
+ *   partner                  -> ventures where they hold an accepted seat
+ *                               (D4636 part 3; the seat rule of D889/D4636's
+ *                               update reads, `getMemberProjectIds`)
  *   investor                 -> explicitly related projects only
  *   founder                  -> only projects they own
  *   advisor                   -> 403
@@ -23,6 +26,9 @@ import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../services/skillsTaxono
 import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { projectInActiveCompany } from '../services/tenancyScope';
+import { requireFundGp } from '../services/fundGpAccess';
+import { getMemberProjectIds } from '../services/projectAccess';
+import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -48,12 +54,23 @@ function canViewDashboard(u: User): boolean {
  * beneath it. Filtered with `projectInActiveCompany`, the same predicate the
  * five loaders use, so it cannot drift from them.
  *
- * Admin and partner still return null ("portfolio-wide"), untouched.
+ * An admin returns null ("portfolio-wide"). D4636 part 3: a partner licence
+ * reads the ventures where the caller holds an accepted seat — the rule the
+ * update reads use for a partner (`getMemberProjectIds`) — together with what
+ * any other licence they hold already shows them. A partner with no seat reads
+ * an empty portfolio, as their update list is empty.
  */
 async function visibleProjectIds(c: any, user: User): Promise<number[] | null> {
+  if (isAdmin(user)) return null;
+  const other = await licenceProjectIds(c, user);
+  if (!isPartner(user)) return other;
+  return [...new Set([...(await getMemberProjectIds(c.env, user.id)), ...other])];
+}
+
+/** The investor and founder arms, unchanged by D4636 part 3. */
+async function licenceProjectIds(c: any, user: User): Promise<number[]> {
   const env: Env = c.env;
-  if (isAdmin(user) || isPartner(user)) return null;
-  if (isInvestor(user)) return investorProjectIds(env, user, await investorActiveCompany(c, user));
+  if (isInvestor(user)) return (await investorProjectIds(env, user, await investorActiveCompany(c, user))) || [];
   if (isFounder(user)) {
     if (!user.founder_id) return [];
     const companyId = await investorActiveCompany(c, user);
@@ -64,49 +81,20 @@ async function visibleProjectIds(c: any, user: User): Promise<number[] | null> {
   return [];
 }
 
-async function computeScore(env: Env, projectId: number): Promise<{ score: number; drivers: any }> {
-  const drivers: any = {};
-  // Latest score snapshot
-  // `total_score` is the column; `score` is not one. The catch turned that
-  // into a null driver on every portfolio row rather than an error.
-  const sc = await env.DB.prepare(
-    'SELECT total_score FROM score_snapshots WHERE project_id = ? ORDER BY id DESC LIMIT 1'
-  ).bind(projectId).first<{ total_score: number }>().catch(() => null);
-  drivers.scoring = sc ? Number(sc.total_score) : null;
-  // Open vs total tickets
-  const t = await env.DB.prepare(
-    `SELECT
-       SUM(CASE WHEN status IN ('open','in_progress') THEN 1 ELSE 0 END) AS open,
-       COUNT(*) AS total
-     FROM tickets WHERE project_id = ?`
-  ).bind(projectId).first<{ open: number; total: number }>().catch(() => null);
-  drivers.tickets_open = Number(t?.open || 0);
-  drivers.tickets_total = Number(t?.total || 0);
-  // Recent activity (last 30 days)
-  const thirty = new Date(Date.now() - 30 * 86400000).toISOString();
-  const a = await env.DB.prepare(
-    `SELECT COUNT(*) AS c FROM activity_logs
-     WHERE datetime(created_at) >= datetime(?) AND (
-       details LIKE ('%project=' || ? || '%') OR details LIKE ('%project_id=' || ? || '%')
-     )`
-  ).bind(thirty, projectId, projectId).first<{ c: number }>().catch(() => null);
-  drivers.activity_30d = Number(a?.c || 0);
-
-  // Compose: scoring 60%, recent activity 30% (capped at 30 events = 100), ticket pressure -10
-  const scoringPart = drivers.scoring != null ? Math.max(0, Math.min(100, drivers.scoring)) : 50;
-  const activityPart = Math.min(100, drivers.activity_30d * 100 / 30);
-  const ticketPressure = drivers.tickets_total > 0
-    ? (drivers.tickets_open / drivers.tickets_total) * 100
-    : 0;
-  let score = Math.round(scoringPart * 0.6 + activityPart * 0.3 - ticketPressure * 0.1);
-  if (score < 0) score = 0; if (score > 100) score = 100;
-  return { score, drivers };
-}
-
-function badgeFor(score: number): { badge: string; intervention: boolean } {
-  if (score >= 70) return { badge: 'green', intervention: false };
-  if (score >= 40) return { badge: 'yellow', intervention: false };
-  return { badge: 'red', intervention: true };
+/**
+ * #4645: a snapshot's age, and whether it is stale.
+ *
+ * Health is a measurement with a date on it. The list answered with
+ * yesterday's row and today's in the same shape, so a company last scored
+ * weeks ago read as current. `stale` is one documented threshold, reported
+ * with the response so a reader is not left to guess it.
+ */
+const STALE_AFTER_DAYS = 7;
+function staleness(snapshotDate: string, now = Date.now()): { age_days: number | null; stale: boolean | null } {
+  const at = Date.parse(`${snapshotDate}T00:00:00Z`);
+  if (!Number.isFinite(at)) return { age_days: null, stale: null };
+  const age = Math.floor((now - at) / 86_400_000);
+  return { age_days: age, stale: age > STALE_AFTER_DAYS };
 }
 
 function snapDto(s: SnapRow, project?: any): any {
@@ -125,9 +113,22 @@ function snapDto(s: SnapRow, project?: any): any {
   };
 }
 
-async function upsertSnapshot(env: Env, project: any) {
-  const { score, drivers } = await computeScore(env, project.id);
-  const { badge, intervention } = badgeFor(score);
+/**
+ * #4645 (D4645): a snapshot is written only for a score that was measured.
+ *
+ * `score` and `badge` are NOT NULL on this table, so an unmeasurable health
+ * score has no row to be written to — and inventing one is exactly what the
+ * old `: 50` did. A project whose inputs could not be read keeps whatever
+ * snapshot it already had (yesterday's measurement stays true of yesterday)
+ * and the caller is told why today's is missing, rather than being handed a
+ * fabricated one that reads like a measurement.
+ *
+ * Returns the snapshot row when one was written, and otherwise the scoring's
+ * own account of why not.
+ */
+async function upsertSnapshot(env: Env, project: any): Promise<{ row: SnapRow | null; scored: Scored }> {
+  const scored = await healthOf(env, project.id);
+  if (!scorable(scored)) return { row: null, scored };
   const today = todayIso();
   const uid = newUid();
   // UPSERT on (project_id, snapshot_date)
@@ -138,12 +139,12 @@ async function upsertSnapshot(env: Env, project: any) {
      ON CONFLICT(project_id, snapshot_date) DO UPDATE SET
        score = excluded.score, badge = excluded.badge,
        intervention = excluded.intervention, drivers_json = excluded.drivers_json`
-  ).bind(uid, project.id, today, score, badge, intervention ? 1 : 0,
-         JSON.stringify(drivers), nowIso()).run();
+  ).bind(uid, project.id, today, scored.score, scored.badge, scored.intervention ? 1 : 0,
+         JSON.stringify(scored.drivers), nowIso()).run();
   const row = await env.DB.prepare(
     'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? AND snapshot_date = ?'
   ).bind(project.id, today).first<SnapRow>();
-  return row!;
+  return { row: row!, scored };
 }
 
 r.get('/health', async (c) => {
@@ -157,32 +158,66 @@ r.get('/health', async (c) => {
     if (visible == null) {
       projects = ((await c.env.DB.prepare('SELECT * FROM projects WHERE deleted_at IS NULL').all<any>()).results || []) as any[];
     } else if (visible.length === 0) {
-      return c.json({ items: [], as_of: null, totals: { green: 0, yellow: 0, red: 0, intervention: 0 } });
+      // #4645: the same shape as the answer below. A caller whose book is
+      // empty must not get a response missing half its fields — a reader of
+      // `population.projects_visible` or `not_measured` would find undefined
+      // here and defined one request later, which is how a contract becomes
+      // "whatever the last response happened to carry".
+      return c.json({
+        items: [], as_of: null, stale_after_days: STALE_AFTER_DAYS,
+        totals: { green: 0, yellow: 0, red: 0, intervention: 0, stale: 0, not_measured: 0 },
+        not_measured: [], population: { projects_visible: 0, filtered: false },
+      });
     } else {
       const ph = visible.map(() => '?').join(',');
       projects = ((await c.env.DB.prepare(`SELECT * FROM projects WHERE id IN (${ph}) AND deleted_at IS NULL`).bind(...visible).all<any>()).results || []) as any[];
     }
     const items: any[] = [];
     let asOf: string | null = null;
+    // #4645: a project with no snapshot used to be dropped silently, so the
+    // overview's population was "the projects that happen to have been
+    // scored" while reading as the portfolio. They are reported apart, by
+    // name, with the state the snapshot store is actually in for them.
+    const notMeasured: Array<{ uid: string; name: string; state: string; reason: string }> = [];
+    const filtered = Boolean(badge) || interventionOnly;
     for (const p of projects) {
       const row = await c.env.DB.prepare(
         'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT 1'
       ).bind(p.id).first<SnapRow>();
-      if (!row) continue;
+      if (!row) {
+        // Only when the caller asked for the whole portfolio: a badge filter
+        // is a request for a subset, and an unscored project is in no subset.
+        if (!filtered) {
+          notMeasured.push({
+            uid: p.uid, name: p.name, state: 'not_recorded',
+            reason: 'Not recorded — this company has no health snapshot yet',
+          });
+        }
+        continue;
+      }
       if (badge && row.badge !== badge) continue;
       if (interventionOnly && !row.intervention) continue;
-      items.push(snapDto(row, p));
+      items.push({ ...snapDto(row, p), ...staleness(row.snapshot_date) });
       if (!asOf || row.snapshot_date > asOf) asOf = row.snapshot_date;
     }
     items.sort((a, b) => (Number(b.intervention) - Number(a.intervention)) || (a.score - b.score));
     return c.json({
       items, as_of: asOf,
+      // Each item carries its own `snapshot_date` and age, because `as_of` is
+      // the NEWEST snapshot in the list and says nothing about the oldest: a
+      // forty-day-old row read as current under it.
+      stale_after_days: STALE_AFTER_DAYS,
       totals: {
         green: items.filter((i) => i.badge === 'green').length,
         yellow: items.filter((i) => i.badge === 'yellow').length,
         red: items.filter((i) => i.badge === 'red').length,
         intervention: items.filter((i) => i.intervention).length,
+        stale: items.filter((i) => i.stale).length,
+        not_measured: filtered ? null : notMeasured.length,
       },
+      not_measured: filtered ? null : notMeasured,
+      /** The population these totals are over: every project the caller may see. */
+      population: { projects_visible: projects.length, filtered },
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -200,11 +235,20 @@ r.get('/health/:uid', async (c) => {
     const rows = await c.env.DB.prepare(
       'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT ?'
     ).bind(project.id, days).all<SnapRow>();
-    const history = (rows.results || []).map((r) => snapDto(r));
+    const history = (rows.results || []).map((r) => ({ ...snapDto(r), ...staleness(r.snapshot_date) }));
     return c.json({
       project: { uid: project.uid, name: project.name, sector: project.sector, stage: project.stage, status: project.status },
       latest: history[0] || null,
       history,
+      // #4645: `latest: null` meant two different things — this company has
+      // never been scored, or its history window holds nothing. The window is
+      // stated, so the reader can tell which.
+      window: { history_days: days, rows: history.length },
+      stale_after_days: STALE_AFTER_DAYS,
+      latest_state: history.length
+        ? 'recorded'
+        : 'not_recorded',
+      latest_reason: history.length ? null : 'Not recorded — this company has no health snapshot in this window',
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -214,9 +258,26 @@ r.post('/health/recompute', async (c) => {
     const user = await requireAuth(c);
     if (!isAdmin(user)) return c.json({ detail: 'Admin only' }, 403);
     const projects = ((await c.env.DB.prepare('SELECT * FROM projects').all<any>()).results || []) as any[];
-    let n = 0;
-    for (const p of projects) { await upsertSnapshot(c.env, p); n++; }
-    return c.json({ ok: true, summary: { projects_scored: n, snapshot_date: todayIso() } });
+    // #4645: `projects_scored` used to be the number of projects WALKED, not
+    // the number scored, so a run in which every read failed reported full
+    // success. The two are now counted apart, and each project that could not
+    // be scored says which source was at fault.
+    let scored = 0;
+    const not_scored: Array<{ project_id: number; reason: string }> = [];
+    for (const p of projects) {
+      const { row, scored: s } = await upsertSnapshot(c.env, p);
+      if (row) scored += 1;
+      else not_scored.push({ project_id: Number(p.id), reason: s.reason || 'Unreadable' });
+    }
+    return c.json({
+      ok: true,
+      summary: {
+        projects_seen: projects.length, projects_scored: scored,
+        projects_not_scored: not_scored.length, snapshot_date: todayIso(),
+      },
+      not_scored: not_scored.slice(0, 200),
+      not_scored_complete: not_scored.length <= 200,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -230,8 +291,19 @@ r.post('/health/recompute/:uid', async (c) => {
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const visible = await visibleProjectIds(c, user);
     if (visible != null && !visible.includes(Number(project.id))) return c.json({ detail: 'Forbidden' }, 403);
-    const row = await upsertSnapshot(c.env, project);
-    return c.json(snapDto(row, project));
+    const { row, scored } = await upsertSnapshot(c.env, project);
+    // #4645: a recompute that could not measure says so, with the source that
+    // failed and the state of each input, rather than answering with a score
+    // nothing measured. 409: the request was understood and nothing is wrong
+    // with it — there is simply nothing to state yet.
+    if (!row) {
+      return c.json({
+        detail: scored.reason, code: 'health_not_measurable',
+        project: { uid: project.uid, name: project.name },
+        sources: (scored.drivers as any).sources,
+      }, 409);
+    }
+    return c.json({ ...snapDto(row, project), sources: (scored.drivers as any).sources });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -239,7 +311,9 @@ r.post('/health/recompute/:uid', async (c) => {
 // Task #18 — Partner Coverage Analytics.
 //
 // GET /coverage[?fund_id=N]
-//   Admin/partner-only portfolio-wide skill-gap dashboard. Composes a per-
+//   Admin/partner-only skill-gap dashboard: an admin reads every venture, a
+//   partner the ventures where they hold an accepted seat (D4636 part 3); `fund_id` narrows
+//   to one fund only through the fund operating gate (D4636 part 2). Composes a per-
 //   company 8-axis radar (from the radar service, built on each company's
 //   founding team) plus a portfolio-level aggregate.
 //
@@ -449,10 +523,13 @@ r.get('/coverage', async (c) => {
     let projects: { id: number; uid: string; name: string; sector: string | null; stage: string | null; founder_id: number | null }[];
 
     if (fundId) {
-      const f = await c.env.DB.prepare('SELECT id, name FROM vc_funds WHERE id = ?')
-        .bind(fundId).first<{ id: number; name: string }>();
-      if (!f) return c.json({ detail: 'Fund not found' }, 404);
-      fund = { id: f.id, name: f.name };
+      // D4636 part 2: narrowing to one fund reads that fund's reserve plan,
+      // which is the fund's own data. It goes through the fund operating gate
+      // (`requireFundGp`): an admin, or the fund's GP of record at the
+      // institutional tier under the active company; otherwise 402 below the
+      // tier, else 404, the same answers as `GET /api/funds/:id`.
+      const { fund: f } = await requireFundGp(c, fundId);
+      fund = { id: Number(f.id), name: String(f.name) };
       const rows = await c.env.DB.prepare(
         `SELECT DISTINCT p.id, p.uid, p.name, p.sector, p.stage, p.founder_id
          FROM projects p
@@ -467,6 +544,13 @@ r.get('/coverage', async (c) => {
          FROM projects WHERE deleted_at IS NULL ORDER BY name`
       ).all<any>();
       projects = (rows.results || []) as any[];
+    }
+    // D4636 part 3: a partner reads the ventures where they hold an accepted
+    // seat (`getMemberProjectIds`, the update reads' partner rule), with or
+    // without a fund filter. No seat, no companies.
+    if (!isAdmin(user)) {
+      const seats = new Set(await getMemberProjectIds(c.env, user.id));
+      projects = projects.filter((p) => seats.has(Number(p.id)));
     }
 
     const axisMeta = RADAR_AXES.map((a) => ({ slug: a.slug, label: a.label }));

@@ -34,16 +34,15 @@ test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
   // D4631 part 2: the route asks the shared deal policy (services/dealAccess.ts)
   // whether an NDA is in force, so the rule is read where it now lives.
   const route = read(ROUTE);
-  assert.match(route, /import \{[^}]*hasActivePairNda[^}]*hasActiveVentureNda[^}]*\} from '\.\.\/services\/dealAccess'/,
+  assert.match(route, /import \{ hasActiveVentureNda \} from '\.\.\/services\/dealAccess'/,
     'the data room must ask the shared NDA rule, not keep its own');
   assert.match(route, /return hasActiveVentureNda\(env, projectId, investorUserId\)/);
-  assert.match(route, /return hasActivePairNda\(env, founderUserId, investorUserId\)/);
+  assert.match(route, /await projectNdaActive\(c\.env, project\.id, investorId\)/);
   const w = read('cloudflare-worker/src/services/dealAccess.ts');
   assert.match(w, /FROM pairwise_ndas/, 'the gate must use the existing e-sign NDA table');
   // Migration 025 fixes party_a as the founder. Accepting either ordering
   // would take rows the rest of the system treats as malformed.
-  // Party A then party B in the same statement (the shared rule checks party A's account is active between them).
-  assert.match(w, /n\.party_a_user_id = \? AND [^`]*?n\.party_b_user_id = \?/);
+  assert.match(w, /owner\.id = n\.party_a_user_id[^`]*?n\.party_b_user_id = \?/);
   assert.ok(!/party_b_user_id = \? AND party_a_user_id = \?/.test(w + route),
     'the reversed ordering must not be accepted');
   // THE COLUMN IS NORMALISED, NOT JUST THE CLOCK (D124). This read

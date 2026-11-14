@@ -48,6 +48,8 @@ const PRECONSENT_CAP = 20;    // in-memory buffer while the banner is undecided
 // and the event table in documentation/architecture/ANALYTICS_FUNNEL.md.
 export const FUNNEL_EVENTS = new Set([
   'landing_view',
+  'pricing_view',
+  'pricing_plan_selected',
   'register_view',
   'register_form_start',
   'register_field_error',

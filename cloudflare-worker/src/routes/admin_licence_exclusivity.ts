@@ -77,7 +77,13 @@ r.get('/:uid/exclusivity', async (c) => {
       reviewsFor(c.env, licence.uid), allRegions(c.env), territoryOf(c.env, licence.id),
     ]);
     let scheduleExclusive: number | null | 'unreadable' = null;
-    try { scheduleExclusive = ((await readLicenceTerms(c.env, licence.uid))?.terms.exclusive ?? null) as number | null; } catch { scheduleExclusive = 'unreadable'; }
+    // D5019 part 2: the operating licence's minimum is the terms schedule's Minimum Guarantee (§4.4), read with it.
+    let minimumGuarantee: number | null | 'unreadable' = null;
+    try {
+      const schedule = (await readLicenceTerms(c.env, licence.uid))?.terms;
+      scheduleExclusive = (schedule?.exclusive ?? null) as number | null;
+      minimumGuarantee = typeof schedule?.minimum_guarantee_cents === 'number' ? schedule.minimum_guarantee_cents : null;
+    } catch { scheduleExclusive = 'unreadable'; minimumGuarantee = 'unreadable'; }
     // The structure both ways: the children this master lists, and the master that lists this licence.
     const parentRow = await c.env.DB.prepare(
       `SELECT t.licence_uid, l.licence_ref FROM licence_exclusivity_terms t JOIN territory_licences l ON l.uid = t.licence_uid
@@ -94,6 +100,8 @@ r.get('/:uid/exclusivity', async (c) => {
       operating: {
         territory, annual_fee_cents: licence.annual_fee_cents ?? null, revenue_share_bps: licence.revenue_share_bps ?? null,
         currency: licence.currency ?? null,
+        // null: the schedule records no minimum (never 0); 'unreadable': the schedule could not be read just now.
+        minimum_guarantee_cents: minimumGuarantee,
       },
       exclusivity: cur,
       exclusivity_reason: cur ? null : 'No exclusivity is recorded: the licence is non-exclusive. Paying the licence fee grants none.',

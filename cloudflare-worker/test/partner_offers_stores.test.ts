@@ -15,7 +15,7 @@
  *     both halves, so a withdrawal cannot be undone by forgetting one column;
  *   * a withdrawal is a STATE — the row stays and says so, because a request
  *     that vanished on refusal would let a firm re-ask until it got a yes;
- *   * `request_token` is returned exactly once and by no later read;
+ *   * the link the firm holds answers nothing without the client's emailed code (D4672);
  *   * an engagement can be attributed to one surface, not two, and only to a
  *     surface belonging to the same firm;
  *   * a budget floor rejects a fractional and a negative amount, and a
@@ -37,6 +37,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import partnerOffers from '../src/routes/partner_offers.ts';
+import { proofConsentMailer } from '../src/services/partnerProofConsent.ts';
+
+// D4672: answering needs a code mailed to the client. The mailer is swapped so
+// a test reads the code it would have sent; nothing leaves the process.
+const mailed: { to: string; code: string }[] = [];
+proofConsentMailer.send = async (_env: any, to: string, _firm: string, code: string) => { mailed.push({ to, code }); return true; };
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
@@ -68,9 +75,16 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
     async batch(x: any[]) {
-      const out = [];
-      for (const st of x || []) out.push(await st.run().catch(() => ({})));
-      return out;
+      db.exec('SAVEPOINT d1_batch');
+      try {
+        const out = [];
+        for (const st of x) out.push(await st.run());
+        db.exec('RELEASE d1_batch');
+        return out;
+      } catch (error) {
+        db.exec('ROLLBACK TO d1_batch; RELEASE d1_batch');
+        throw error;
+      }
     },
   };
 }
@@ -126,6 +140,8 @@ function freshDb() {
   // against the schema as it ships rather than against a hand-written copy that
   // has to be remembered. 229 adds `partner_fit_rules.signal`.
   db.exec(migration('229_fit_rule_signal'));
+  // D4672: revisions on proof items, pinned claims on consents, codes and the answer history.
+  db.exec(migration('202611092206_partner_proof_consent_integrity'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -178,6 +194,17 @@ async function call(
 }
 
 const ours = { user: OURS_USER, role: 'partner' };
+
+/**
+ * The client's answer as the public page makes it (D4672): read the claim the
+ * link shows, ask for a code, and answer with that code and the claim's hash.
+ */
+async function answer(e: any, link: string, body: any) {
+  const claim = (await call(e, 'GET', `/proof-consents/${link}/claim`, null)).body;
+  const sent = await call(e, 'POST', `/proof-consents/${link}/code`, null, {});
+  const code = sent.status === 200 ? mailed[mailed.length - 1].code : '000000';
+  return call(e, 'POST', `/proof-consents/${link}/respond`, null, { claim_sha256: claim?.claim_sha256, code, ...body });
+}
 const theirs = { user: THEIRS_USER, role: 'partner' };
 const fran = { user: FOUNDER_USER, role: 'founder' };
 
@@ -265,6 +292,33 @@ test('deleting a surface takes its attributions and leaves the engagement', asyn
   assert.equal(r.unattributed_count, 1);
 });
 
+test('#4835: a failed surface delete rolls back its attribution deletes', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const s = await call(e, 'POST', '/surfaces', ours, { name: 'Directory' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/source`, ours, { surface_id: s.body.id });
+  db.exec("CREATE TRIGGER reject_surface_delete BEFORE DELETE ON partner_surfaces BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
+  const result = await call(e, 'DELETE', `/surfaces/${s.body.id}`, ours);
+  assert.ok(result.status >= 400);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM engagement_sources').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_surfaces').get<any>().c, 1);
+});
+
+test('#4835: attribution exposes a second page with timestamp ties', async () => {
+  const db = freshDb();
+  const insert = db.prepare(`INSERT INTO engagements (uid, need_id, quote_id, partner_id, founder_id, project_id, price, created_at)
+    VALUES (?, 401, ?, 1, ?, 9, 1, '2026-01-01')`);
+  for (let i = 0; i < 200; i++) insert.run(`extra-${i}`, 900 + i, FOUNDER_USER);
+  const e = env(db);
+  const first = (await call(e, 'GET', '/attribution?page=1', ours)).body;
+  const second = (await call(e, 'GET', '/attribution?page=2', ours)).body;
+  assert.equal(first.items.length, 200);
+  assert.equal(first.has_more, true);
+  assert.equal(second.items.length, 1);
+  assert.equal(second.has_more, false);
+  assert.equal(new Set([...first.items, ...second.items].map((item) => item.engagement_id)).size, 201);
+});
+
 test('retiring a surface keeps it and everything it produced', async () => {
   const e = env(freshDb());
   const s = await call(e, 'POST', '/surfaces', ours, { name: 'Old listing' });
@@ -299,12 +353,29 @@ test('a proof item is self-stated until a live consent exists', async () => {
   assert.equal(list.self_stated_count, 1);
 });
 
+test('#4835: a failed proof delete preserves its consent and code', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
+  const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
+    consenter_name: 'Dana', consenter_email: 'dana@client.example', consenter_role: 'CTO',
+  });
+  assert.equal(ask.status, 200);
+  assert.equal((await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/code`, null, {})).status, 200);
+  db.exec("CREATE TRIGGER reject_proof_delete BEFORE DELETE ON partner_proof_items BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
+  const result = await call(e, 'DELETE', `/proof/${item.body.id}`, ours);
+  assert.ok(result.status >= 400);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_items').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_consents').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_consent_codes').get<any>().c, 1);
+});
+
 test('the firm has no route that can grant consent', async () => {
   const db = freshDb();
   const e = env(db);
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana', consenter_role: 'CTO',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example', consenter_role: 'CTO',
   });
   assert.equal(ask.status, 200);
 
@@ -313,7 +384,7 @@ test('the firm has no route that can grant consent', async () => {
     title: 'A result', consent_given: true, is_published: true, status: 'published',
   });
   await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana', consent_given: true, consent_text: 'sure',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example', consent_given: true, consent_text: 'sure',
   });
 
   const rows = db.prepare('SELECT consent_given FROM partner_proof_consents').all() as any[];
@@ -325,38 +396,104 @@ test('the firm has no route that can grant consent', async () => {
   assert.equal(after.items[0].is_published, false);
 });
 
-test('the token is returned once and by no later read', async () => {
+// D4672 changed what the link is. It is the invitation the firm hands over and
+// may read back, and it only SHOWS the claim: answering needs a code mailed to
+// the client's address, so holding it is not being able to answer.
+test('the firm can read its link back, and the link alone answers nothing', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
-  assert.ok(ask.body.request_token, 'the ask must return the token once');
+  assert.ok(ask.body.invite_token, 'the ask returns the link to hand over');
+  assert.equal(ask.body.request_token, undefined, 'the raw column leaked');
   assert.equal(ask.body.delivered, false, 'nothing is sent — the firm hands the link over');
-
-  // A firm that could read it back could answer on the client's behalf, which
-  // would make every consent in the table self-issued and worth nothing.
   const list = (await call(e, 'GET', '/proof', ours)).body;
-  assert.equal(list.items[0].consents.length, 1);
-  assert.equal(list.items[0].consents[0].request_token, undefined);
-  // A plain substring test, not a regex built from the token — same reasoning
-  // as the guards in `frontend/test/_zoneGuards.mjs`, and here the token could
-  // in principle contain a metacharacter that changed what the pattern meant.
-  assert.ok(!JSON.stringify(list).includes(ask.body.request_token),
-    'the token appeared somewhere in a later read');
+  assert.equal(list.items[0].consents[0].invite_token, ask.body.invite_token);
+
+  // Everything the firm holds, without the client's code: refused, nothing written.
+  const tried = await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/respond`, null, { consent_text: 'Yes.' });
+  assert.equal(tried.status, 400);
+  const guessed = await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/respond`, null, { consent_text: 'Yes.', code: '123456' });
+  assert.equal(guessed.status, 401);
+  // And a signed-in member of the firm is refused even with the client's real code.
+  await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/code`, null, {});
+  const own = await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/respond`, ours, {
+    consent_text: 'Yes.', code: mailed[mailed.length - 1].code,
+  });
+  assert.equal(own.status, 403);
+  assert.equal((await call(e, 'GET', '/proof', ours)).body.items[0].is_published, false);
+});
+
+test('#4835: proof reads only page history and reports whole-firm publication counts', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const old = (await call(e, 'POST', '/proof', ours, { title: 'Old confirmed result' })).body;
+  const foreign = (await call(e, 'POST', '/proof', theirs, { title: 'Another firm' })).body;
+  for (const [owner, item, email] of [[ours, old, 'client@example.test'], [theirs, foreign, 'other@example.test']] as const) {
+    const ask = await call(e, 'POST', `/proof/${item.id}/consent-request`, owner, {
+      consenter_name: 'Client', consenter_email: email,
+    });
+    assert.equal(ask.status, 200);
+    assert.equal((await answer(e, ask.body.invite_token, { consent_text: 'Agreed' })).status, 200);
+  }
+  db.prepare("UPDATE partner_proof_items SET created_at = '2026-01-01' WHERE id = ?").run(old.id);
+  const insert = db.prepare(`INSERT INTO partner_proof_items (uid, partner_id, kind, title, created_at)
+    VALUES (?, 1, 'case_study', 'New result', '2026-02-01')`);
+  for (let i = 0; i < 200; i++) insert.run(`new-proof-${i}`);
+
+  const fetched: number[][] = [];
+  const prepare = e.DB.prepare.bind(e.DB);
+  e.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (/SELECT k\.\*/.test(sql)) {
+      const bind = statement.bind;
+      statement.bind = (partner: number, ids: string) => {
+        fetched.push(JSON.parse(ids));
+        return bind(partner, ids);
+      };
+    }
+    return statement;
+  };
+  const first = (await call(e, 'GET', '/proof', ours)).body;
+  assert.equal(first.total, 201);
+  assert.equal(first.published_count, 1);
+  assert.equal(first.self_stated_count, 200);
+  assert.equal(first.has_more, true);
+  assert.deepEqual(fetched[0], first.items.map((item: any) => item.id));
+  assert.equal(first.items.length, 200);
+  assert.ok(first.items.every((item: any, index: number) => index === 0 || first.items[index - 1].id > item.id));
+
+  const next = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.deepEqual(fetched[1], [old.id]);
+  assert.equal(next.has_more, false);
+  assert.equal(next.published_count, 1);
+  assert.deepEqual(next.items.map((item: any) => [item.id, item.consents[0].state]), [[old.id, 'confirmed']]);
+
+  const empty = (await call(e, 'GET', '/proof?page=3', ours)).body;
+  assert.deepEqual(empty.items, []);
+  assert.equal(empty.total, 201);
+  assert.equal(fetched.length, 2);
+
+  assert.equal((await call(e, 'GET', '/proof?page=0', ours)).status, 400);
+  assert.equal((await call(e, 'PATCH', `/proof/${old.id}`, ours, { title: 'Edited result' })).status, 200);
+  const changed = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.equal(changed.published_count, 0);
+  assert.equal(changed.self_stated_count, 201);
+  assert.equal(changed.items[0].consents[0].state, 'superseded');
 });
 
 test('the client answers unauthenticated, and that is what publishes it', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
 
   // No Authorization header at all. The counterparty on an engagement is often
   // not a user of this product; requiring an account would mean the only
   // publishable outcomes are the ones an existing Axal user will vouch for.
-  const answered = await call(e, 'POST', `/proof-consents/${ask.body.request_token}/respond`, null, {
+  const answered = await answer(e, ask.body.invite_token, {
     consent_text: 'I confirm this is accurate and they may show it.',
   });
   assert.equal(answered.status, 200);
@@ -373,11 +510,11 @@ test('agreeing without saying to what is refused', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
   // Consent to "a case study" and consent to "a case study naming our revenue"
   // are different consents, so a record with no wording is a record of nothing.
-  const bare = await call(e, 'POST', `/proof-consents/${ask.body.request_token}/respond`, null, {});
+  const bare = await answer(e, ask.body.invite_token, {});
   assert.equal(bare.status, 400);
   assert.match(bare.body.detail, /consent_text/);
 });
@@ -387,9 +524,9 @@ test('declining leaves a row saying no', async () => {
   const e = env(db);
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
-  await call(e, 'POST', `/proof-consents/${ask.body.request_token}/respond`, null, {
+  await answer(e, ask.body.invite_token, {
     consent_given: false,
   });
   // A request that vanished on refusal would let a firm re-ask until it got a
@@ -405,9 +542,9 @@ test('a withdrawal un-publishes and stays on the record', async () => {
   const e = env(db);
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
-  await call(e, 'POST', `/proof-consents/${ask.body.request_token}/respond`, null, {
+  await answer(e, ask.body.invite_token, {
     consent_text: 'Yes.',
   });
   const before = (await call(e, 'GET', '/proof', ours)).body;
@@ -432,9 +569,9 @@ test('a withdrawal survives a forgotten column', async () => {
   const e = env(db);
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana',
+    consenter_name: 'Dana', consenter_email: 'dana@client.example',
   });
-  await call(e, 'POST', `/proof-consents/${ask.body.request_token}/respond`, null, {
+  await answer(e, ask.body.invite_token, {
     consent_text: 'Yes.',
   });
   // Simulate the half-write this design exists to survive: `withdrawn_at` set,

@@ -17,7 +17,8 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 // Advisory workspace, which is exactly why this page stayed broken against the
 // same DTOs — see their header in that file.
 import {
-  bookingView, formatDateTime, isBookableSlot, offerFromType, offerLine, slotMinutes, slotView,
+  bookingView, formatDateTime, isBookableSlot, offerFromType, offerLine, slotMinutes,
+  slotUnavailableReason, slotView,
 } from './advisor/advisory/kit';
 
 /**
@@ -209,7 +210,18 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
   // What the worker calls bookable. `s.status === 'open' && s.remaining > 0`
   // stood here and matched nothing — `slotDto` emits neither key — so every
   // advisor looked fully booked and native booking was unreachable.
-  const bookable = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
+  const offered = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
+  // #4692: the booking refuses an hour inside the advisor's minimum notice, a
+  // blackout or the buffer around a session they hold, and a paid one in a week
+  // at their paid cap. `GET /:uid/slots` answers all four per slot (D4692); the
+  // page offered them a Book button regardless and let the founder find out at
+  // the click. The hour stays listed, under the reason, so the schedule still
+  // shows the time exists.
+  const offer = sessionType ? offerFromType(sessionType) : null;
+  const bookable = offered.filter((s) => !slotUnavailableReason(s, offer));
+  const ruledOut = offered
+    .map((s) => ({ slot: s, reason: slotUnavailableReason(s, offer) }))
+    .filter((r) => r.reason);
   return (
     <Sheet label={advisor.display_name || 'Advisor'} title={advisor.display_name} sub={advisor.headline || undefined}
       onClose={onClose} width={640} testId="advisor-detail">
@@ -240,10 +252,15 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
           </div>
         ) : slots === null ? (
           <div className="text-sm text-gray-500">Loading…</div>
-        ) : bookable.length === 0 ? (
+        ) : bookable.length === 0 && ruledOut.length === 0 ? (
           <div className="text-sm text-gray-500">No open slots — check back later.</div>
         ) : (
           <div className="space-y-2">
+            {bookable.length === 0 && (
+              <div className="text-sm text-gray-500" data-testid="slots-all-ruled-out">
+                This advisor has open hours, but none of them can be booked right now. Each one says why below.
+              </div>
+            )}
             {bookable.map((s) => (
               <div key={s.id} className="flex items-center justify-between border border-gray-200 rounded p-3 dark:border-gray-800">
                 <div className="text-sm">
@@ -266,6 +283,21 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
                   className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 min-h-[44px] rounded font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
                   Book
                 </button>
+              </div>
+            ))}
+            {ruledOut.map(({ slot: s, reason }) => (
+              <div key={s.id} data-testid={`slot-unavailable-${s.id}`}
+                className="flex items-center justify-between border border-dashed border-gray-200 rounded p-3 dark:border-gray-800">
+                <div className="text-sm">
+                  <div className="font-medium text-gray-500 flex items-center gap-2 dark:text-gray-400">
+                    <Calendar size={14} /> {formatDateTime(s.startsAt)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {slotMinutes(s) != null && <span className="mr-2">{slotMinutes(s)} min</span>}
+                    {reason}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400 px-3 py-1.5">Not bookable</span>
               </div>
             ))}
           </div>

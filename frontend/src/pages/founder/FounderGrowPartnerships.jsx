@@ -1,6 +1,7 @@
+import { growTabs, reportingHref } from '../cycles/growOverviewModel';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, Handshake, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronRight, Handshake, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
@@ -10,6 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { LensLink } from '../../workspaces/lens';
+import GrowOverviewLink from './GrowOverviewLink';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -91,10 +93,10 @@ export default function FounderGrowPartnerships() {
   const query = project?.id ? `?project_id=${project.id}` : '';
   const { rows, counts } = useMemo(() => partnershipViews(pitches), [pitches]);
   const visible = rows[view] || rows.all;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = growTabs(query, 'partnerships').map((tab) => [tab.name, tab.href]);
 
   return <main className="a5-grow fg-partnerships" data-testid="founder-grow-partnerships"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><GrowOverviewLink /><span>‹</span><b>Partnerships</b></div><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</LensLink>)}</nav><nav aria-label="Grow utilities"><LensLink to={reportingHref(query)}>Reporting</LensLink></nav>
     <ZoneToolbar
               filters={partnershipFilters(view, setView, counts)}
               actions={founderZoneActions('grow/partnerships', { query, view: { scope: project?.name, header: ['Partner', 'Type', 'Status', 'State', 'Created'], rows: visible, cells: (r) => [r.title, r.type, r.status, r.state, r.created_at] } })}

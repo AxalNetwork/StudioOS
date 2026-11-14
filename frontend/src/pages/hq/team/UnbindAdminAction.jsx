@@ -9,11 +9,13 @@ import React, { useState } from 'react';
 import { api } from '../../../lib/api';
 import { useGovernedAction } from './governedAction';
 import ActionNotice from './ActionNotice';
+import { escapeCloses, useFocusOnMount } from './actionFocus';
 
 export const UNBIND_REASON_MIN = 10;
 
-export default function UnbindAdminAction({ hit, from, onUnbound }) {
+export default function UnbindAdminAction({ hit, from, onUnbound, onCancel }) {
   const [unbindReason, setUnbindReason] = useState('');
+  const firstField = useFocusOnMount();
   const unbind = useGovernedAction(
     (reason) => api.hqUnbindAdmin(from, hit.id, reason),
     { fallback: 'The unbind was refused.', tag: 'hq-team-unbind', initial: 'open' },
@@ -24,6 +26,7 @@ export default function UnbindAdminAction({ hit, from, onUnbound }) {
       className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
       data-testid="hq-team-unbind"
       data-state={unbind.state}
+      onKeyDown={escapeCloses(unbind.busy, onCancel)}
       onSubmit={async (e) => {
         e.preventDefault();
         const out = await unbind.submit(unbindReason.trim());
@@ -36,7 +39,7 @@ export default function UnbindAdminAction({ hit, from, onUnbound }) {
       </p>
       <label className="text-[11px] text-axal-muted">
         Reason (at least 10 characters). It is recorded here and on the branch.
-        <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} value={unbindReason} disabled={unbind.busy} onChange={(e) => setUnbindReason(e.target.value)} />
+        <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} ref={firstField} value={unbindReason} disabled={unbind.busy} onChange={(e) => setUnbindReason(e.target.value)} />
       </label>
       <ActionNotice action={unbind} prefix="hq-team-unbind" />
       <button type="submit" disabled={unbind.busy || unbind.state === 'unknown' || unbindReason.trim().length < UNBIND_REASON_MIN} className="justify-self-start rounded-md bg-rose-700 px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-50">

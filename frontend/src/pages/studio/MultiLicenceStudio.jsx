@@ -22,7 +22,10 @@
  * THE READS. Each home reads its own sources (#4622). The Investor home is
  * also handed the dashboard summary and the deal lifecycle, which `Dashboard`
  * reads for it on a single-licence Studio; here they are read once, only when
- * Investor is held, through the same client methods. A figure the summary
+ * Investor is held, through the same client methods. The summary is asked for
+ * with the investor lens (`?licence=investor`, D4623 part 2), so a held
+ * Investor licence that is not the primary one gets the investor figures the
+ * Worker computes for a primary investor. A figure the summary
  * does not carry is drawn by the home as "Not recorded", never 0. A summary
  * read that fails is said in fixed words, never the error's message.
  */
@@ -59,7 +62,8 @@ function useInvestorContext(enabled) {
   const [lifecycle, setLifecycle] = useState(undefined);
   const readDashboard = useCallback(() => {
     setDashboard(undefined);
-    api.getDashboard()
+    // D4623 part 2: the investor lens, so a held Investor licence that is not the primary one gets its own figures.
+    api.getDashboard(false, 'investor')
       .then((d) => setDashboard(d || null))
       .catch((e) => { reportError('MultiLicenceStudio:dashboard', e); setDashboard(null); });
   }, []);
@@ -110,17 +114,23 @@ function BlockStudio({ held, user, homes }) {
       );
     }
     if (block.key === 'investor') {
+      // D4815 (#4815): the investor's My tasks moved here from /deals. It is the
+      // same list as the Founder block's (every task given to me, across my
+      // Teams), so it is drawn once: here only when Founder is not held.
       return (
-        <Home
-          user={user}
-          embedded
-          previewing={false}
-          dashboard={investor.dashboard}
-          lifecycle={investor.lifecycle}
-          dashboardUnavailable={investor.dashboard === null ? SUMMARY_UNREADABLE : ''}
-          onRetryDashboard={investor.readDashboard}
-          onRetryLifecycle={investor.readLifecycle}
-        />
+        <div className="space-y-6">
+          <Home
+            user={user}
+            embedded
+            previewing={false}
+            dashboard={investor.dashboard}
+            lifecycle={investor.lifecycle}
+            dashboardUnavailable={investor.dashboard === null ? SUMMARY_UNREADABLE : ''}
+            onRetryDashboard={investor.readDashboard}
+            onRetryLifecycle={investor.readLifecycle}
+          />
+          {!held.includes('founder') && <MyTasks licence="investor" testId="studio-investor-my-tasks" />}
+        </div>
       );
     }
     return <Home user={user} embedded previewing={false} />;

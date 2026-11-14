@@ -20,21 +20,31 @@
  *   explain(id, quoteUid)     POST /api/events/:id/recommendation/explain
  *                             (D4450: the quote's `quote_uid` is the Idempotency-Key)
  *
- * STILL UNAVAILABLE, one-line bodies until their routes land (D3724 §gaps):
- * Part E — `uploadCover` (R2 with the three crops, alt text, its source) and
- * `drawVariants` (four variants per draw). The single drawn cover is NOT behind
- * this seam: `POST /api/events/:id/cover/quote` and `…/cover/draw` landed with
- * #3935 and the editor calls them directly.
+ * Part E is served too (#5309, D5309, §gaps 8 to 11):
+ *
+ *   uploadCover(id, { file, alt, focal, crops })
+ *                             POST /api/events/:id/cover/upload   (multipart)
+ *   variantsQuote(id, prompt) POST /api/events/:id/cover/variants/quote
+ *   drawVariants(id, prompt, quoteUid)
+ *                             POST /api/events/:id/cover/variants
+ *                             (the quote's `quote_uid` is the Idempotency-Key,
+ *                             so the same press retried charges nothing again)
+ *
+ * The single drawn cover is NOT behind this seam: `POST
+ * /api/events/:id/cover/quote` and `…/cover/draw` landed with #3935 and the
+ * editor calls them directly.
  *
  * NO CLIENT METHOD IS ADDED HERE OR IN `lib/api` FOR A ROUTE THAT DOES NOT
  * EXIST: the drift test (`scripts/check-api-drift.mjs`) resolves every one.
  */
 import { readRefusal } from '../../lib/api.js';
 import { eventRecommendationsApi as api } from '../../lib/api/eventRecommendations.js';
+import { eventCoversApi } from '../../lib/api/eventCovers.js';
 import { formToPrefs } from './recommendationsModel.js';
 
-export const COVER_UPLOAD_OFF = 'Uploading a cover isn’t switched on yet. Paste an image link, or draw one with Eadwyn.';
-export const VARIANTS_OFF = 'Four variants at once aren’t switched on yet. Each draw makes one image.';
+export const NO_FILE = 'Choose a JPG or PNG image first.';
+export const NO_PROMPT = 'Describe the cover you want first.';
+export const QUOTE_FIRST = 'Get the price first.';
 export const PLAIN_REFUSAL = 'That did not go through. Try again.';
 export const DEFAULT_LIMIT = 8;
 
@@ -88,5 +98,22 @@ export const explainQuote = (id) => through(() => api.quote(id));
 export const explain = (id, quoteUid) => (quoteUid
   ? through(() => api.explain(id, quoteUid))
   : Promise.resolve({ ...refusal({ data: { error: 'quote_stale' }, status: 409 }), reason: 'Get the price first.' }));
-export const uploadCover = async () => unavailable(COVER_UPLOAD_OFF);
-export const drawVariants = async () => unavailable(VARIANTS_OFF);
+/**
+ * #5309: the uploaded cover. The file is required here because an upload with
+ * no file is not a refusal the Worker should be asked for. Everything else —
+ * the type, the size, the alt text, the focal point and the crops — is the
+ * Worker's own check, and its sentence is what the step shows.
+ */
+export const uploadCover = (id, { file, alt, focal, crops } = {}) => (file
+  ? through(() => eventCoversApi.upload(id, { file, alt, focal, crops }))
+  : Promise.resolve(unavailable(NO_FILE)));
+
+/** #5309: what four variants cost, in one figure, with the brand colours the prompt will carry. */
+export const variantsQuote = (id, prompt) => (String(prompt || '').trim()
+  ? through(() => eventCoversApi.variantsQuote(id, prompt))
+  : Promise.resolve(unavailable(NO_PROMPT)));
+
+/** #5309: four variants on one quote. Without the quote's uid nothing is sent: the price comes first. */
+export const drawVariants = (id, prompt, quoteUid) => (quoteUid
+  ? through(() => eventCoversApi.variants(id, prompt, quoteUid))
+  : Promise.resolve({ ...refusal({ data: { error: 'quote_stale' }, status: 409 }), reason: QUOTE_FIRST }));

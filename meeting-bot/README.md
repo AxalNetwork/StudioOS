@@ -10,7 +10,11 @@ This folder is the bot **runtime**, the part that sits in the call. The
 Worker's control plane (the routes, the `MeetingBotRun` Durable Object, the
 callback, consent and metering) is B1's (#2579), under `cloudflare-worker/`.
 
-**Not deployed yet.** D886 selects Cloudflare Containers. The owner kept the
+**Deployed, canary only.** The bot host (`worker/`) and its image run as their
+own Worker and Cloudflare Container (Meeting bot deploy run 40668914717,
+#3588), with `MEETING_BOT=canary`, so only Super Admins can send it. The live
+Meet and Zoom check is open on #3588 (D5370 corrected this paragraph, which
+said "not deployed yet"). D886 selects Cloudflare Containers. The owner kept the
 TypeScript/Node core on 2026-10-22: Meet/Teams use Playwright for Node, and
 Zoom uses a Python SDK sidecar behind the adapter. `Dockerfile` packages the
 core, Chromium and Python; B8 builds/publishes it through its existing image
@@ -295,3 +299,5 @@ control boundary. `wrangler.meeting-bot.toml` and `meeting-bot-deploy.yml` own
 the image release independently of the site. `container-entry.sh` supplies
 Xvfb/PulseAudio for the SDK sidecar. The packaged factory now connects Teams
 and Zoom; no real-platform measurement or publication is implied.
+
+D5675: `src/previewCanary.ts` sends only the signed synthetic callback from the runtime image; `worker/previewCanary.ts` validates its isolated recipient and cleanup receipt.

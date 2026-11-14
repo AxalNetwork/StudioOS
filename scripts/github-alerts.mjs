@@ -6,17 +6,19 @@
  *   node scripts/github-alerts.mjs main-red        (reads the latest finished CI run on a push to main)
  *   node scripts/github-alerts.mjs review-blocked  OUTCOME, PR, RUN_URL
  *   node scripts/github-alerts.mjs queue           QUEUE_ALERT_QUEUED, QUEUE_ALERT_OLDEST_MIN (optional)
- *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_LOG (a TAP file), RUN_URL
+ *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
- * webhook, the issue is still opened or closed and the job warns; an alerting
- * job never fails the thing it watches.
+ * webhook, the issue is still opened or closed and the job warns; the trusted reporter fails visibly on unreadable evidence without changing the watched result.
  */
-import { readFileSync, existsSync } from 'node:fs';
-import {
-  ALERT_KINDS, QUEUE_DEFAULTS, failingTests, futureClockMessage, mainState, message, queueState, reviewState, transition,
-} from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, queueStallState, queueState, reviewState } from './lib/githubAlerts.mjs';
+import { safeGithubUrl } from './lib/ciClassify.mjs';
+import { readFileSync } from 'node:fs';
+import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
+import { createHealthMonitor } from './health-alert-episodes.mjs';
+import { webhookDelivery } from './health-alert-transport.mjs';
+import { futureClockReport } from './future-clock-report.mjs';
 
 const env = process.env;
 const api = env.GITHUB_API_URL || 'https://api.github.com';
@@ -25,6 +27,8 @@ const repo = env.GITHUB_REPOSITORY;
 async function gh(path, init = {}) {
   const res = await fetch(`${api}${path}`, {
     ...init,
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       authorization: `Bearer ${env.GITHUB_TOKEN}`,
       accept: 'application/vnd.github+json',
@@ -32,53 +36,71 @@ async function gh(path, init = {}) {
       ...(init.body ? { 'content-type': 'application/json' } : {}),
     },
   });
-  if (!res.ok) throw new Error(`GitHub ${init.method || 'GET'} ${path.split('?')[0]}: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`github_http_${res.status}`);
   return res.status === 204 ? null : res.json();
 }
 
-async function slack(text) {
-  if (!text) return;
-  if (!env.SLACK_GITHUB_WEBHOOK_URL) {
-    console.log(`::warning::SLACK_GITHUB_WEBHOOK_URL is not set; not posted: ${text.split('\n')[0]}`);
-    return;
-  }
-  const res = await fetch(env.SLACK_GITHUB_WEBHOOK_URL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
-  if (!res.ok) console.log(`::warning::Slack answered HTTP ${res.status}; the alert was not posted.`);
-  else console.log(`Posted to Slack: ${text.split('\n')[0]}`);
-}
-
-/** The open alert issue for a kind, by its exact title, or null. */
-async function openIssue(kind) {
-  const title = ALERT_KINDS[kind].title;
-  const list = await gh(`/repos/${repo}/issues?state=open&per_page=100&sort=created&direction=desc`);
-  return (list || []).find((i) => !i.pull_request && i.title === title) || null;
-}
-
-async function apply(kind, active, facts) {
-  const issue = await openIssue(kind);
-  const action = transition(active, Boolean(issue));
-  console.log(`${kind}: active=${active} issue=${issue ? `#${issue.number}` : 'none'} -> ${action}`);
-  if (action === 'open') {
-    const body = `${message(kind, 'open', facts)}\n\nOpened by \`.github/workflows/github-alerts.yml\` (scripts/github-alerts.mjs). It closes itself when the condition clears.`;
-    const created = await gh(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS[kind].title, body }) });
-    await slack(message(kind, 'open', { ...facts, issueUrl: created.html_url }));
-  } else if (action === 'close') {
-    await gh(`/repos/${repo}/issues/${issue.number}/comments`, { method: 'POST', body: JSON.stringify({ body: `Recovered${facts.runUrl ? `: ${facts.runUrl}` : ''}. Closing.` }) });
-    await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
-    await slack(message(kind, 'close', { ...facts, issueUrl: issue.html_url }));
-  }
-}
+let monitor;
+const openIssue = kind => monitor.openIssue(kind);
+const apply = async (kind, active, facts, source) => {
+  const result = await monitor.apply(kind, active, facts, source);
+  if (result.delivery.some(i => i.state !== 'acknowledged')) process.exitCode = 1;
+  return result;
+};
+const runSource = (runId, attempt = 1) => {
+  const value = Number(runId) * 1000 + Number(attempt);
+  if (!Number.isSafeInteger(value) || Number(attempt) < 1 || Number(attempt) > 999) throw new Error('source_identity_invalid');
+  return value;
+};
 
 async function main() {
   const mode = process.argv[2];
+  if (!env.GITHUB_TOKEN) throw new Error('github_token_missing');
+  if (mode === 'scan') {
+    const facts = scanFacts(JSON.parse(readFileSync(env.SCAN_FACTS_FILE, 'utf8')));
+    if (!facts.baseline) return console.log('scan: no known baseline; no alert transition');
+    // Separate scanners share one issue. Their short report jobs are serialized;
+    // resolving one scanner cannot close the other's outstanding findings.
+    let issue = null;
+    for (let page = 1; page <= 100; page++) {
+      const rows = await gh(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+      if (!Array.isArray(rows)) throw new Error('Unreadable scan alert inventory');
+      issue = rows.find(row => !row.pull_request && row.title === ALERT_KINDS.scan.title);
+      if (issue || rows.length < 100) break;
+      if (page === 100) throw new Error('Scan alert inventory cap reached');
+    }
+    const states = issue ? readScanAlert(issue.body) : {};
+    states[facts.scanner] = facts;
+    const active = Object.values(states).some(state => Object.keys(state.counts).length > 0);
+    if (!active && !issue) return;
+    const body = scanAlertBody(states);
+    if (!issue) return gh(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS.scan.title, body }) });
+    if (body !== issue.body) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    if (!active) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
+    return;
+  }
+  monitor = createHealthMonitor({ api: gh, repo, deliver: webhookDelivery({ url: env.SLACK_GITHUB_WEBHOOK_URL }), log: value => console.log(JSON.stringify(value)) });
+  if (mode === 'queue-stalled') {
+    const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&status=completed&per_page=30`);
+    const runs = (list.workflow_runs || []).filter(run => run.head_branch?.startsWith('gh-readonly-queue/main/')).slice(0, 2);
+    if (!runs[0]) return;
+    const withJobs = await Promise.all(runs.map(async run => ({
+      ...run,
+      jobs: run.conclusion === 'failure' && Number.isSafeInteger(run.id)
+        ? (await gh(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100&filter=latest`)).jobs
+        : [],
+    })));
+    const state = queueStallState(withJobs);
+    return apply('queue-stalled', state.active, { ...state, runUrl: safeGithubUrl(runs[0].html_url) });
+  }
   if (mode === 'main-red') {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?branch=main&event=push&status=completed&per_page=1`);
     const run = list?.workflow_runs?.[0];
     if (!run) return console.log('main-red: no finished CI run on main yet');
-    return apply('main-red', mainState(run.conclusion), { sha: run.head_sha, title: run.display_title, runUrl: run.html_url });
+    return apply('main-red', mainState(run.conclusion), { sha: run.head_sha, runUrl: run.html_url }, runSource(run.id, run.run_attempt));
   }
   if (mode === 'review-blocked') {
-    return apply('review-blocked', reviewState(env.OUTCOME), { outcome: env.OUTCOME, pr: env.PR, runUrl: env.RUN_URL });
+    return apply('review-blocked', reviewState(env.OUTCOME), { outcome: env.OUTCOME, pr: env.PR, runUrl: env.RUN_URL }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
   if (mode === 'queue') {
     const thresholds = {
@@ -87,28 +109,31 @@ async function main() {
     };
     // Oldest first: the API lists newest first, so read the last page's last run.
     const first = await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100`);
-    const total = Number(first?.total_count) || 0;
+    if (!Number.isSafeInteger(first?.total_count) || first.total_count < 0 || !Array.isArray(first.workflow_runs)) throw new Error('queue_evidence_unreadable');
+    const total = first.total_count;
     let oldest = null;
     if (total) {
       const lastPage = Math.min(10, Math.ceil(total / 100));
       const page = lastPage === 1 ? first : await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100&page=${lastPage}`);
       const runs = page?.workflow_runs || [];
       oldest = runs.length ? runs[runs.length - 1].created_at : null;
+      if (!Number.isFinite(Date.parse(oldest || ''))) throw new Error('queue_age_unreadable');
     }
-    const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds });
+    const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds, issueOpen: Boolean(await openIssue('queue')) });
     return apply('queue', q.active, q);
   }
   if (mode === 'future-clock') {
-    const file = env.FUTURE_CLOCK_LOG;
-    const tap = file && existsSync(file) ? readFileSync(file, 'utf8') : '';
-    const failures = failingTests(tap);
-    console.log(`future-clock: ${failures.names.length + failures.more} failing test(s)`);
-    return slack(futureClockMessage({ days: Number(env.FUTURE_CLOCK_DAYS) || 0, failures, runUrl: env.RUN_URL }));
+    const evidence = await futureClockReport({ env, api: gh });
+    console.log(JSON.stringify({ kind: 'future-clock', ...evidence }));
+    const active = evidence.active;
+    if (!evidence.complete) process.exitCode = 1;
+    return apply('future-clock', active, { days: 7, failedCount: evidence.failed, runUrl: env.RUN_URL }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
-  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue or future-clock`);
+  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock or scan`);
 }
 
-main().catch((e) => {
-  // Never fail the run being watched over an alert: say so and exit 0.
-  console.log(`::warning::github-alerts: ${e.message}`);
+main().catch(() => {
+  // This trusted monitoring job fails visibly; it cannot change the watched CI/review result.
+  console.error('::error::github-alerts observation or persistence unavailable; no recovery inferred');
+  process.exitCode = 1;
 });

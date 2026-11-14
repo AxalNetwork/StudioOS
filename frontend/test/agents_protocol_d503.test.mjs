@@ -10,7 +10,7 @@
  *     label it never names is one no agent knows to set, a STATUS field it
  *     drops is one Session 1 stops receiving, and its house rules are the
  *     only copy an agent that never loads CLAUDE.md will ever see.
- *   .github/pull_request_template.md — the eight sections every agent's PR
+ *   .github/pull_request_template.md — the required sections every agent's PR
  *     fills in.
  *   .github/workflows/labels-sync.yml — writes labels with the job's token. It
  *     needs `issues: write` to work at all, so it must run no third-party code
@@ -41,7 +41,7 @@ const CI = '.github/workflows/ci.yml';
 const FORMS = '.github/ISSUE_TEMPLATE';
 
 const STATE_LABELS = ['state:ready', 'state:in-progress', 'state:blocked', 'state:review'];
-const SLOT_LABELS = Array.from({ length: 26 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
+const SLOT_LABELS = Array.from({ length: 37 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
 
 /** The block every agent posts. AGENTS.md carries it to be reproduced exactly. */
 const STATUS_BLOCK = [
@@ -64,6 +64,7 @@ const PR_SECTIONS = [
   'Risks',
   'Dependencies',
   'Agent',
+  'Help impact',
   'Review requested',
 ];
 
@@ -198,7 +199,7 @@ function formLabels(src) {
 
 // ---------- .github/labels.yml ----------
 
-test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S26', () => {
+test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S37', () => {
   const names = declaredLabels().map((l) => l.name);
   const missing = [...STATE_LABELS, 'needs-decision', ...SLOT_LABELS].filter((n) => !names.includes(n));
   assert.deepEqual(missing, [],
@@ -287,7 +288,7 @@ test('CLAUDE.md sends every Claude session to AGENTS.md before it takes an issue
 
 // ---------- .github/pull_request_template.md ----------
 
-test('the PR template has the eight sections, in order', () => {
+test('the PR template has the required sections, in order', () => {
   const headings = at(PR_TEMPLATE).split('\n')
     .filter((l) => l.startsWith('## '))
     .map((l) => l.slice(3).trim());
@@ -341,4 +342,17 @@ test('blank issues stay open, and security reports go to a private advisory', ()
     'blank issues stay enabled; the forms are a help, not a gate');
   assert.match(config, /^\s+url: https:\/\/github\.com\/AxalNetwork\/StudioOS\/security\/advisories\/new\s*$/m,
     'the repository is public: the issue chooser must send a security report to a private advisory');
+});
+
+test('retired labels map to declared labels, including case-only renames', () => {
+  const names = declaredLabels().map(l => l.name);
+  const rows = at('.github/labels-retired.yml').split('\n').filter(l => l.startsWith('"'));
+  assert.equal(rows.length, 9);
+  for (const row of rows) {
+    const match = /^"([^"]+)": "([^"]+)"$/.exec(row);
+    assert.ok(match);
+    assert.ok(names.includes(match[2]), match[2]);
+  }
+  assert.match(at(AGENTS), /claim\/|claim\.mjs/);
+  assert.match(at(SYNC), /Normalize case-only/);
 });

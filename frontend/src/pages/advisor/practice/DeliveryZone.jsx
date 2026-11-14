@@ -6,64 +6,62 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass,
+  buttonClass, ghostButtonClass, inputClass, zoneError,
 } from '../expertise/kit';
 import {
-  STATE_LABEL, STATE_TONE, medianLabel, nudgeTargets, seamLine, sentLine,
-  reviewCoverage, shortMoment, versionCountLabel, versionTag,
+  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, cardReceiptLine, cardStatus, medianLabel, nudgeTargets,
+  reviewCoverage, seamLine, sentLine, statusCounts, versionTag,
 } from './deliveryTrail';
-import { sendPreview } from './practiceTools';
 import { formatDateTime } from '../advisory/kit';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
-import DeliverablesByClient, { AttachForm, DeliverableEditor } from './DeliverablesByClient';
+import DeliverablesByClient, { DeliverableEditor } from './DeliverablesByClient';
+import { AddVersionDialog, DeliverableSheet, SendConfirmDialog } from './DeliverableSheet';
 import { partialLine, readEveryPage } from './everyPage';
 
 /**
- * The chip keys a `?view=` may open the page on. D571: the Ops canvas's
- * `/practice/deliverables` is this zone grouped by client, and that address
- * redirects here with `?view=by_client` rather than drawing a second list.
+ * The addresses a `?view=` may open the page on: a chip of the Practice v2
+ * row (#4833, D4833), or `by_client`, which D571's `/practice/deliverables`
+ * redirects to and which groups the cards by client. PR3's `unopened` is
+ * still read, as the Sent chip it became.
  */
-const VIEWS = new Set(['all', 'by_client', 'unopened', 'opened', 'draft']);
+const VIEWS = new Set(['all', 'draft', 'sent', 'opened', 'accepted', 'by_client', 'unopened']);
 
 /**
- * Practice · Delivery — canvas PR3, `/practice/delivery`.
+ * Practice · Delivery, `/practice/delivery`: the Practice v2 canvas's Delivery
+ * zone (`design/incoming/Practice v2 Page.dc.html`, PX-06; #4833, D4833), built
+ * over PR3's collection (D571, D4684, D4712).
  *
- * WHAT REPLACED WHAT, AND WHAT SURVIVED IT. This route mounted the legacy
- * five-tab Advisory workspace, whose Delivery tab was a post-session REVIEW
- * loop — sessions held, whether a review was filed, and the advisor's own
- * review form — with a disclaimer saying document deliverables were not tracked.
- * The disclaimer was true and the artboard is about the thing it named: every
- * work product, every version, and whether anyone opened it.
+ * ARTIFACT FIRST. The unit is a work-product CARD whose state is its latest
+ * version's (Draft · Sent · Opened · Accepted, from that version's own stamps).
+ * `Open` brings up the detail sheet: the latest version, then the immutable
+ * history with each version's own recipient and receipts. Add version is a
+ * dialog that needs a change note and a document link; Send is a confirmation
+ * that names the recipient and the document before anything goes. There is no
+ * Ready chip: no Ready state is stored (D4874).
  *
- * THE REVIEW LOOP IS STILL HERE, at the bottom, and that is a deliberate
- * departure from the artboard rather than an oversight. `ROUTE_MAP` records that
- * it moved to Delivery when `/office-hours` was retired, as "its one capability
- * that lived nowhere else". Deleting a working feature because a new artboard
- * does not draw it is the failure this whole series exists to avoid; PR4 may
- * relocate it once the Sessions artboard has been read.
+ * THE POST-SESSION REVIEW LOOP STANDS ALONE, below and outside `ZoneBody`, with
+ * its own loading, error and empty state, so it is reachable with no work
+ * product at all (D4712). It arrived here when `/office-hours` retired, as the
+ * one capability that lived nowhere else.
  *
- * THE OPEN RECEIPT IS NOT THIS PAGE'S TO WRITE. Three of the four tiles report
- * whether a client read something, and migration 208's header — inherited by
- * 239 — states the rule: only the founder side can truthfully say a thing was
- * read. So no control here marks anything opened, and the founder's own surface
- * stamps it. D72.
+ * THE OPEN RECEIPT IS NOT THIS PAGE'S TO WRITE. Opened and accepted are the
+ * client's (migration 208's rule, inherited by 239; D72, D4684), so no control
+ * here marks anything opened or accepted.
  *
- * NO AI BAND, and this is the one artboard instrument deliberately not built.
- * The canvas draws a consent-gated batch summariser whose own foot note says the
- * gate working *is* the feature — and its premise is false at the first clause:
- * nothing in this product records that an advisory session was recorded,
- * captures consent to record one, or holds a transcript of one. The zone states
- * the five missing pieces instead of drawing a control over none of them.
+ * NO AI BAND. Nothing in this product records that an advisory session was
+ * recorded, captures consent to record one, or holds a transcript of one, so
+ * the zone states the gap instead of drawing a summariser over none of them.
  */
 
 export default function DeliveryZone() {
-  // 'all', as on the other two Practice zones: every instrument reads the whole
-  // record, and a narrowed default would open the page mid-filter. A `?view=`
-  // naming a chip opens on that chip instead (D571, `/practice/deliverables`).
+  // 'all' by default: a narrowed default would open the page mid-filter. A
+  // `?view=` naming a chip opens on that chip; `by_client` groups (D571).
   const [searchParams] = useSearchParams();
-  const [filter, setFilter] = useState(() => (VIEWS.has(searchParams.get('view')) ? searchParams.get('view') : 'all'));
+  const initialView = VIEWS.has(searchParams.get('view')) ? searchParams.get('view') : 'all';
+  const [filter, setFilter] = useState(() => (initialView === 'by_client' ? 'all' : initialView === 'unopened' ? 'sent' : initialView));
+  const [grouped, setGrouped] = useState(initialView === 'by_client');
   const [state, setState] = useState({ loading: true, error: '', items: [], totals: null });
   // #4712 (D4712): the post-session review section has its OWN loading, error
   // and empty state. It used to ride the deliverables read and live inside the
@@ -79,14 +77,16 @@ export default function DeliveryZone() {
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ title: '', client_name: '', engagement_id: '', summary: '', link_url: '' });
-  const [trailFor, setTrailFor] = useState(null);
   const [nudging, setNudging] = useState(false);
   const [engagements, setEngagements] = useState([]);
-  // D571 — one row open for an edit, one for an attach, in either view.
+  // #4833: one work product open in the detail sheet; one Add version dialog;
+  // one send confirmation. Editing a work product's details happens in its sheet,
+  // or in the by-client group.
+  const [openId, setOpenId] = useState(null);
+  const [revising, setRevising] = useState(null);
+  const [confirming, setConfirming] = useState(null);
   const [editing, setEditing] = useState(null);
   const [attaching, setAttaching] = useState(null);
-  // #4712: the one row open for a new version (the real revision form).
-  const [revising, setRevising] = useState(null);
 
   const loadHeld = useCallback(async () => {
     setHeld((c) => ({ ...c, loading: true }));
@@ -143,7 +143,7 @@ export default function DeliveryZone() {
     } catch (error) {
       setState({
         loading: false,
-        error: error?.message || 'The delivery record could not be read.',
+        error: zoneError(error, error?.message || 'The delivery record could not be read.', 'practice'),
         items: [], totals: null,
       });
       return;
@@ -155,51 +155,35 @@ export default function DeliveryZone() {
 
   const { items } = state;
   const totals = state.totals || {};
-  // One `Date.now()` per render, so every row on one paint measures its wait
+  // One `Date.now()` per render, so every card on one paint measures its wait
   // against the same instant.
   const now = Date.now();
+  const counts = useMemo(() => statusCounts(items), [items]);
 
   /**
-   * The chip row, narrowing in the page — the same shape `EngagementsZone` uses,
-   * and it belongs here rather than in `deliveryTrail.js` for a reason worth
-   * stating. The module holds derivations a guard can import without React;
-   * WHICH ROWS A CHIP SHOWS is a contract between this page and
-   * `advisorZoneFilters.js`, and `profile_zone_filters.test.mjs` asserts that
-   * the page declaring a chip live is the page that names its key. A predicate
-   * hidden one import away satisfies the reader and not the guard, and the guard
-   * is right: it is what stops a chip being declared live over a page that
-   * cannot serve it.
-   *
-   * `draft` IS THE CANVAS'S OWN INCONSISTENCY, RESOLVED RATHER THAN REPRODUCED.
-   * The artboard offers a `Draft` chip and defines a `Draft` pill, but no row in
-   * its fixture carries that state — its draft row is `state:'Not started'` with
-   * `version:'v2 draft'`. The chip as drawn would return nothing. Migration 239
-   * makes the state real: a work product whose latest version has never been
-   * sent IS the draft, which is `not_started`. The chip works, and the canvas's
-   * two names for one thing collapse into the one the store can answer.
-   *
-   * `by_client` REORDERS RATHER THAN NARROWS, as it does on Engagements — a chip
-   * with that name that dropped rows would be lying about what it did, and an
-   * empty result from a filter reads as an answer.
+   * The chip row narrows in the page, on the LATEST version's own status
+   * (`cardStatus`), because `profile_zone_filters.test.mjs` requires the page
+   * that mounts a live chip to name its key. `all` shows every card. There is
+   * no `ready`: nothing stores it (D4874).
    */
   const visible = useMemo(() => {
     const rows = [...items];
-    if (filter === 'by_client') {
-      return rows.sort((a, b) => String(a.client_name || '').localeCompare(String(b.client_name || ''))
-        || String(a.title || '').localeCompare(String(b.title || '')));
-    }
-    if (filter === 'unopened') return rows.filter((i) => i.state === 'sent');
-    if (filter === 'opened') return rows.filter((i) => i.state === 'opened');
-    if (filter === 'draft') return rows.filter((i) => i.state === 'not_started');
+    if (filter === 'draft') return rows.filter((i) => cardStatus(i) === 'draft');
+    if (filter === 'sent') return rows.filter((i) => cardStatus(i) === 'sent');
+    if (filter === 'opened') return rows.filter((i) => cardStatus(i) === 'opened');
+    if (filter === 'accepted') return rows.filter((i) => cardStatus(i) === 'accepted');
     return rows;
   }, [items, filter]);
+  // Grouping by client reorders rather than narrows (D571).
+  const byClient = useMemo(() => [...visible].sort((a, b) => String(a.client_name || '').localeCompare(String(b.client_name || ''))
+    || String(a.title || '').localeCompare(String(b.title || ''))), [visible]);
   const targets = useMemo(() => nudgeTargets(items), [items]);
-  // The trail card shows one work product. It defaults to the one with the most
-  // versions, because a trail of one row is not a trail.
-  const trail = useMemo(() => {
-    if (trailFor) return items.find((i) => i.id === trailFor) || null;
-    return [...items].sort((a, b) => b.version_count - a.version_count)[0] || null;
-  }, [items, trailFor]);
+  const openItem = openId == null ? null : items.find((i) => i.id === openId) || null;
+  const engagementName = (item) => {
+    if (!item?.engagement_id) return null;
+    const e = engagements.find((x) => x.id === item.engagement_id);
+    return e ? (e.title || e.client_name || null) : null;
+  };
 
   // `success`, where given, is said once the write lands (D571: a write shows
   // what it did, not only what it refused).
@@ -215,15 +199,15 @@ export default function DeliveryZone() {
   };
 
   /**
-   * D571 — an edit or an attach answers in two places. A refusal is handed
-   * back to the form that caused it, which stays open; a success closes the
-   * form, reloads, and is said above the list.
+   * D571 — an edit, an attach, a new version or a send answers in two places.
+   * A refusal is handed back to the form or dialog that caused it, which stays
+   * open; a success closes it, reloads, and is said above the cards.
    */
   const write = async (key, fn, success, failure) => {
     setBusy(key); setNote(null);
     try {
       await fn();
-      setEditing(null); setAttaching(null); setRevising(null);
+      setEditing(null); setAttaching(null); setRevising(null); setConfirming(null);
       setNote({ ok: true, text: success });
       await load();
       return null;
@@ -238,8 +222,8 @@ export default function DeliveryZone() {
 
   const attachLink = (item, body) => write(`a-${item.id}`,
     () => api.addMyAdvisorDeliverableVersion(item.id, body),
-    `Attached to v${Number(item.version_count || 0) + 1} of “${item.title}”, not sent.`,
-    'That link could not be attached. Nothing was recorded.');
+    `Saved v${Number(item.latest_version?.version || item.version_count || 0) + 1} of “${item.title}” as a draft, not sent.`,
+    'That version could not be saved. Nothing was recorded.');
 
   const create = () => act('new', async () => {
     await api.createMyAdvisorDeliverable({
@@ -253,10 +237,14 @@ export default function DeliveryZone() {
     setDraft({ title: '', client_name: '', engagement_id: '', summary: '', link_url: '' });
   }, 'That work product could not be created.');
 
-  const send = (item) => act(`s-${item.id}`,
+  // #4833: Send always goes through the confirmation; this is what it calls.
+  const send = (item) => write(`s-${item.id}`,
     () => api.sendMyAdvisorDeliverableVersion(item.id, item.latest_version.version),
-    'That version could not be sent.',
-    `Sent ${versionTag(item.latest_version)} of “${item.title}”.`);
+    `Sent ${versionTag(item.latest_version)} of “${item.title}”.`,
+    'That version could not be sent. Nothing was sent.');
+  const askToSend = (item) => { setConfirming(item.id); setNote(null); };
+  const confirmItem = confirming == null ? null : items.find((i) => i.id === confirming) || null;
+  const reviseItem = revising == null ? null : items.find((i) => i.id === revising) || null;
 
   // D1345: choose a client, then review and send their draft in Email.
   const bulkHandlers = {
@@ -308,7 +296,7 @@ export default function DeliveryZone() {
                     onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
                 </Field>
               )}
-              <Field label="What changed" hint="The line the version trail shows against v1.">
+              <Field label="What changed" hint="The line the version history shows against v1.">
                 <input className={inputClass} value={draft.summary} placeholder="First pass from the Aug 5 teardown"
                   onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
               </Field>
@@ -319,7 +307,8 @@ export default function DeliveryZone() {
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
               It opens at <strong>v1, not sent</strong>. Sending is its own step, because that is the
-              moment the client can start reading it.
+              moment the client can start reading it. A v1 with no link is a draft that cannot be sent
+              until a version carries the document.
             </p>
             <button type="button" className={`${buttonClass} mt-2`}
               disabled={busy === 'new' || !draft.title.trim() || (!draft.engagement_id && !draft.client_name.trim())}
@@ -339,7 +328,7 @@ export default function DeliveryZone() {
       empty={<>
       <NothingYet
         title="No work product is on file"
-        body="This collection fills as you record what you send a client — each version, when it went out, and whether they opened it. It is empty because nothing has been recorded, not because anything was lost."
+        body="Delivery fills as you record what you send a client: each version, who it went to, and whether they opened and accepted it. It is empty because nothing has been recorded, not because anything was lost."
         action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record a work product</button>}
       />
       {/* D4687 (#4687): the form used to live only in the non-empty body, so a
@@ -349,23 +338,43 @@ export default function DeliveryZone() {
       </>}
     >
       {partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="delivery-partial">{partial}</p>}
+
+      <ZoneHeading
+        title="Work products"
+        blurb="Work products sent to clients, with every version kept."
+        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}
+          data-testid="new-work-product">
+          {adding ? 'Close' : 'New work product'}
+        </button>}
+      />
+      {adding && createForm}
+
       <ZoneToolbar
-        className="mb-3"
+        className="mb-1"
         role="advisor"
-        filters={advisorZoneFilters('practice/delivery', { value: filter, onChange: setFilter })}
+        filters={advisorZoneFilters('practice/delivery', { value: filter, onChange: setFilter, counts })}
         actions={advisorZoneActions('practice/delivery', {
           handlers: bulkHandlers,
           view: {
-            header: ['Work product', 'Client', 'Version', 'Versions', 'State', 'Sent', 'Opened'],
+            header: ['Work product', 'Client', 'Version', 'Versions', 'State', 'Sent', 'Opened', 'Accepted'],
             rows: visible,
             cells: (i) => [
               i.title, i.client_name, versionTag(i.latest_version), i.version_count,
-              STATE_LABEL[i.state] || i.state,
-              i.latest_version?.sent_at, i.latest_version?.opened_at,
+              VERSION_STATUS_LABEL[cardStatus(i)],
+              i.latest_version?.sent_at, i.latest_version?.opened_at, i.latest_version?.signed_off_at,
             ],
           },
         })}
       />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-axal-faint dark:text-gray-400" data-testid="ready-not-recorded">
+          There is no Ready filter: Axal records drafts, sends, opens and acceptances, not a ready state.
+        </p>
+        <button type="button" className={ghostButtonClass} aria-pressed={grouped}
+          onClick={() => setGrouped((g) => !g)} data-testid="group-by-client">
+          {grouped ? 'Show as cards' : 'Group by client'}
+        </button>
+      </div>
 
       <SaveNote note={note} />
 
@@ -403,18 +412,30 @@ export default function DeliveryZone() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* PX-06 A: the cards. Grouping by client reorders the same set (D571). */}
+      {visible.length === 0
+        ? <p className="rounded-[10px] border border-dashed border-axal-hairline p-4 text-[12.5px] leading-relaxed text-axal-muted dark:border-gray-700 dark:text-gray-400"
+          data-testid="delivery-filter-empty">
+          No work product is {filter === 'all' ? 'on file' : VERSION_STATUS_LABEL[filter]?.toLowerCase() || 'in this view'} right now.
+        </p>
+        : grouped
+          ? <Card padding="md"><DeliverablesByClient items={byClient} engagements={engagements} busy={busy}
+            editing={editing} attaching={attaching} onEdit={setEditing} onAttachOpen={setAttaching}
+            onSave={saveEdit} onAttach={attachLink} onSend={askToSend} /></Card>
+          : <div className="grid gap-2.5" data-testid="delivery-cards">{visible.map((i) => (
+            <DeliverableCard key={i.id} item={i} now={now} onOpen={() => { setOpenId(i.id); setNote(null); }} />
+          ))}</div>}
+
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Work products" value={totals.work_products ?? 0}
           note={totals.clients
             ? `across ${totals.clients} ${totals.clients === 1 ? 'client' : 'clients'}`
             : 'no client has a work product yet'} />
         <Stat label="Unopened" value={totals.unopened ?? 0}
           note={totals.unopened ? 'sent, not read' : 'nothing is waiting to be read'} />
-        {/* A REAL MEASUREMENT, unlike Opportunities' median: both `sent_at` and
-            `opened_at` are stamps, so this is computed rather than declined.
-            Null before the first open, and null renders as nothing — never
-            "0 h", which would say a deliverable was read the instant it was
-            sent (D56/D68). */}
+        {/* A REAL MEASUREMENT: both `sent_at` and `opened_at` are stamps. Null
+            before the first open, and null renders as "Not recorded", never
+            "0 h" (D56/D68). */}
         <Stat
           label="Median to open"
           value={medianLabel(totals.median_to_open_hours) ?? <Unrecorded>Not recorded</Unrecorded>}
@@ -425,120 +446,64 @@ export default function DeliveryZone() {
             : 'everything sent has been read'} />
       </div>
 
-      <Card padding="md" className="mt-3">
+      <Card padding="md" variant="sunken" className="mt-3">
         <ZoneHeading
-          title="All work products"
-          blurb="Version history and open state — only here. What went out, which version, and whether the client opened it."
-          action={<button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
-            {adding ? 'Close' : 'New work product'}
-          </button>}
+          title="Follow-ups from sessions"
+          blurb="Not available for advisory sessions yet."
         />
-        {adding && createForm}
-        {/* D571 — "By client" GROUPS rather than only sorting: the Ops canvas's
-            per-client deliverables (A1), with the flow legend, the due column
-            it cannot fill, and the edit and attach forms. Still every row:
-            grouping reorders, it never narrows. */}
-        {visible.length === 0
-          ? <p className="text-[12.5px] leading-relaxed text-axal-muted">No work product sits under this view.</p>
-          : filter === 'by_client'
-            ? <DeliverablesByClient items={visible} engagements={engagements} busy={busy}
-              editing={editing} attaching={attaching} onEdit={setEditing} onAttachOpen={setAttaching}
-              onSave={saveEdit} onAttach={attachLink} onSend={send} />
-            : <div className="grid gap-2.5">{visible.map((i) => (
-              <React.Fragment key={i.id}>
-                <Row item={i} now={now} busy={busy} selected={trail?.id === i.id} editing={editing === i.id}
-                  onTrail={() => setTrailFor(i.id)} onVersion={() => { setRevising(revising === i.id ? null : i.id); setNote(null); }} onSend={() => send(i)}
-                  onEdit={() => setEditing(editing === i.id ? null : i.id)} />
-                {editing === i.id && (
-                  <DeliverableEditor item={i} engagements={engagements} busy={busy === `e-${i.id}`}
-                    onCancel={() => setEditing(null)} onSave={saveEdit} />
-                )}
-                {revising === i.id && (
-                  <AttachForm item={i} busy={busy === `a-${i.id}`} onCancel={() => setRevising(null)} onAttach={attachLink} />
-                )}
-              </React.Fragment>
-            ))}</div>}
-        <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-          Open state is the only honest measure of a deliverable, and it is the client&rsquo;s to give:
-          nothing on this page marks a work product opened. A version that has sat unread is worth one
-          message before the next one ships on top of it.
+        <p className="text-[12px] leading-relaxed text-axal-muted">
+          A summary of a session needs a transcript, a transcript needs a recording, and a recording
+          needs consent agreed before it is made. <strong>Axal does not record advisory sessions, so
+          none of those three exists yet.</strong> Until then there is nothing to summarise, so no
+          button offers to.
         </p>
       </Card>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1.15fr]">
-        <Card padding="md">
-          <ZoneHeading
-            title="Version trail"
-            blurb={trail ? `${trail.client_name} · ${trail.title}` : 'Nothing to trail yet.'}
-          />
-          {!trail || !trail.versions?.length
-            ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
-              A trail appears once a work product has a version. Select a row above to trail it.
-            </p>
-            : <div className="grid gap-2">{trail.versions.map((v) => (
-              <div key={v.uid} data-testid={`row-pr3-trail-${v.uid}`}
-                className="flex items-start gap-3 rounded-[9px] border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
-                <span className="w-7 shrink-0 text-[10.5px] font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
-                  {versionTag(v)}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[11.5px] font-semibold">
-                    {v.summary || <Unrecorded>No change note recorded</Unrecorded>}
-                  </div>
-                  <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">
-                    {v.sent_at ? `${shortMoment(v.sent_at)} · sent${v.recipient_name ? ` to ${v.recipient_name}` : ''}` : 'Not sent'}
-                    {v.opened_at ? ` · opened ${shortMoment(v.opened_at)}` : ''}
-                  </div>
-                </div>
-              </div>
-            ))}</div>}
-        </Card>
-
-        {/* THE ARTBOARD'S THIRD ZONE IS AN AI BAND, AND THIS IS WHAT SITS THERE
-            INSTEAD. Its subtitle is "Consent-gated at the source" and its own
-            foot note says the gate working is the feature — over a gate that
-            has nothing to gate. */}
-        <Card padding="md" variant="sunken">
-          <ZoneHeading
-            title="Follow-ups from sessions"
-            blurb="Not available for advisory sessions yet."
-          />
-          <p className="text-[12px] leading-relaxed text-axal-muted">
-            A summary of a session needs a transcript, a transcript needs a recording, and a recording
-            needs consent agreed before it is made. <strong>Axal does not record advisory sessions, so
-            none of those three exists yet.</strong>
-          </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-muted">
-            Follow-ups will appear here once a session can be recorded with both sides&rsquo; consent and
-            transcribed. Until then there is nothing to summarise, so no button offers to.
-          </p>
-        </Card>
-      </div>
-
-
-      <StatedLimit title="What this collection cannot say">
+      <StatedLimit title="What Delivery cannot say">
         <p>
           <strong>A work product can only be sent to a client with an Axal account.</strong> An
           engagement may name a company that has not joined, and a version sent to one could never be
-          recorded as opened — so it would sit unopened for ever and drag the median with it. Axal
-          refuses the send rather than keeping a figure that quietly means nothing.
+          recorded as opened. Axal refuses the send rather than keeping a figure that quietly means nothing.
         </p>
         <p className="mt-2">
-          <strong>Nothing here marks a work product opened.</strong> That is the client&rsquo;s to say,
-          and their own surface says it. An open state an advisor could set is not a measurement — it
-          is a claim about somebody else&rsquo;s reading.
+          <strong>Opened and Accepted are the client&rsquo;s to give:</strong>
+          nothing on this page marks a work product opened or accepted. A receipt records when a
+          version was first opened, not how long it was read.
         </p>
         <p className="mt-2">
-          <strong>A work product has no due date and no sign-off.</strong> Neither is stored: the state is
-          read from what was sent and opened, so nothing here can mark one planned, in progress or
-          accepted by hand. The client&rsquo;s sign-off has a place in the record and no screen that writes it.
-        </p>
-        <p className="mt-2">
-          <strong>There is no consent-gated session summary,</strong> and the gap is five pieces deep
-          rather than one control short — see the card above. Nor is reading time recorded: a receipt
-          says when a version was first opened, not how long it was read.
+          <strong>There is no Ready state and no file upload.</strong> A version is a draft until it is
+          sent, and its document is a web link. There is no consent-gated session summary either; see
+          the card above.
         </p>
       </StatedLimit>
+
+      {openItem && (
+        <DeliverableSheet item={openItem} engagementName={engagementName(openItem)} busy={busy}
+          editing={editing === openItem.id}
+          onClose={() => { setOpenId(null); setEditing(null); }}
+          onAddVersion={() => { setRevising(openItem.id); setNote(null); }}
+          onSend={() => askToSend(openItem)}
+          onEdit={() => setEditing(editing === openItem.id ? null : openItem.id)}>
+          {editing === openItem.id && (
+            <DeliverableEditor item={openItem} engagements={engagements} busy={busy === `e-${openItem.id}`}
+              onCancel={() => setEditing(null)} onSave={saveEdit} />
+          )}
+          {/* The dialogs sit inside the sheet so they are not made inert by it. */}
+          {reviseItem && reviseItem.id === openItem.id && (
+            <AddVersionDialog item={reviseItem} busy={busy === `a-${reviseItem.id}`}
+              onCancel={() => setRevising(null)} onSave={attachLink} />
+          )}
+          {confirmItem && confirmItem.id === openItem.id && (
+            <SendConfirmDialog item={confirmItem} busy={busy === `s-${confirmItem.id}`}
+              onCancel={() => setConfirming(null)} onConfirm={send} />
+          )}
+        </DeliverableSheet>
+      )}
+      {/* From the by-client group, with no sheet open. */}
+      {!openItem && confirmItem && (
+        <SendConfirmDialog item={confirmItem} busy={busy === `s-${confirmItem.id}`}
+          onCancel={() => setConfirming(null)} onConfirm={send} />
+      )}
     </ZoneBody>
     {/* #4712 (D4712): OUTSIDE `ZoneBody`, with its own loading, error and empty
         state. The collection above may be empty (no work product yet) while
@@ -546,8 +511,8 @@ export default function DeliveryZone() {
         is not a property of any work product. */}
     <Card padding="md" className="mt-3" data-testid="review-loop">
       <ZoneHeading
-        title="Sessions you have held"
-        blurb="Whether each held session has a review, and your own review of them."
+        title="Post-session reviews"
+        blurb="Independent of work products: the sessions you have held, whether each has a review, and your own review of them."
       />
       {held.loading
         ? <p className="text-[12.5px] leading-relaxed text-axal-muted" aria-busy="true">Reading your held sessions…</p>
@@ -632,70 +597,41 @@ export default function DeliveryZone() {
 }
 
 /**
- * One work product.
+ * #4833 (D4833) — one work product as a card (PX-06 A): title, client, the
+ * latest version and when it went, its receipts, its status, and Open.
  *
- * The draft row is tinted, which is the artboard's own treatment and the right
- * one: a work product that has never gone out is the row most likely to be
- * forgotten, and it is the only state on this page the advisor can fix alone.
+ * The status is the LATEST version's (`cardStatus`). A card whose engagement
+ * has no client account says it cannot be sent, because Send would be refused.
  */
-function Row({ item, now, busy, selected, editing, onTrail, onVersion, onSend, onEdit }) {
+function DeliverableCard({ item, now, onOpen }) {
   const latest = item.latest_version;
-  const seam = seamLine(item, now);
-  const draftRow = item.state === 'not_started';
-  const sendable = latest && !latest.sent_at;
-  // #4712: say exactly which version a send would send, and refuse one with nothing in it.
-  const preview = sendable ? sendPreview(item) : null;
+  const status = cardStatus(item);
   return (
-    <div data-testid={`row-pr3-${item.id}`}
-      className={`rounded-[10px] border p-3 ${draftRow
-        ? 'border-red-200 bg-red-50/40 dark:border-red-900/60 dark:bg-red-950/20'
-        : 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-900/40'} ${selected ? 'ring-1 ring-emerald-500' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <strong className="text-[13px] font-extrabold tracking-tight">{item.title}</strong>
-            {versionTag(latest) && <Pill tone="neutral">{versionTag(latest)}</Pill>}
-          </div>
-          <p className="mt-1 text-[11.5px] text-axal-faint">{item.client_name}</p>
-          {seam && <p className="mt-1 text-[10.5px] tabular-nums leading-relaxed text-cyan-700 dark:text-cyan-300">{seam}</p>}
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-[11px] tabular-nums text-axal-faint">{versionCountLabel(item.version_count)}</div>
-          <div className="mt-0.5 text-[10.5px] tabular-nums text-axal-faint">{sentLine(latest)}</div>
-        </div>
-        <Pill tone={STATE_TONE[item.state]}>{STATE_LABEL[item.state] || item.state}</Pill>
-      </div>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
-        <button type="button" className={ghostButtonClass} onClick={onTrail}
-          data-testid={`trail-pr3-${item.id}`}>Trail</button>
-        <button type="button" className={ghostButtonClass} disabled={busy === `v-${item.id}`}
-          onClick={onVersion} data-testid={`version-pr3-${item.id}`}>Add a version</button>
-        <button type="button" className={ghostButtonClass} onClick={onEdit}
-          data-testid={`edit-pr3-${item.id}`}>{editing ? 'Close' : 'Edit'}</button>
-        {/* No Send once it has gone out: a sent date is a fact, and the worker
-            answers 409 rather than overwriting it. */}
-        {sendable && (
-          <button type="button" className={buttonClass} disabled={busy === `s-${item.id}` || !preview.sendable}
-            onClick={onSend} data-testid={`send-pr3-${item.id}`}>
-            Send {versionTag(latest)}
-          </button>
-        )}
-        {preview && (
-          <span className={`w-full text-[10.5px] leading-relaxed ${preview.sendable ? 'text-axal-faint' : 'text-amber-700 dark:text-amber-300'}`}
-            data-testid={`send-preview-pr3-${item.id}`}>
-            {preview.line}
-          </span>
-        )}
-        {item.client_user_email == null && (
-          <span className="self-center text-[10.5px] text-amber-700 dark:text-amber-300">
-            No client account — this cannot be sent
-          </span>
+    <article data-testid={`row-pr3-${item.id}`} data-status={status}
+      className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-axal-hairline bg-white p-3.5 dark:border-gray-700 dark:bg-gray-900/40">
+      <div className="min-w-0 flex-1">
+        <h3 className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.title}</h3>
+        <p className="mt-0.5 text-[12.5px] text-axal-muted dark:text-gray-400">
+          {item.client_name}
+          {latest ? <> · Latest {versionTag(latest)} · {sentLine(latest)}</> : <> · <Unrecorded>No version recorded yet</Unrecorded></>}
+        </p>
+        <p className="mt-1 text-[11px] tabular-nums text-cyan-700 dark:text-cyan-300" data-testid={`receipt-pr3-${item.id}`}>
+          {cardReceiptLine(item, now)}
+        </p>
+        {item.client_user_email == null && item.client_user_id == null && status === 'draft' && (
+          <p className="mt-1 text-[10.5px] text-amber-700 dark:text-amber-300">No client account — this cannot be sent</p>
         )}
       </div>
-    </div>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <Pill tone={VERSION_STATUS_TONE[status]}>{VERSION_STATUS_LABEL[status]}</Pill>
+        <button type="button" className={ghostButtonClass} onClick={onOpen} data-testid={`open-pr3-${item.id}`}
+          aria-label={`Open ${item.title}`}>
+          Open
+        </button>
+      </div>
+    </article>
   );
 }
-
 function Stat({ label, value, note }) {
   return (
     <Card padding="md">

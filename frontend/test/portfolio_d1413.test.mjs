@@ -99,6 +99,7 @@ function worker(over = {}) {
     if (path === '/api/account/companies') return response(SUMMARY);
     if (path === '/api/account/projects') return response(PROJECTS);
     if (path === '/api/account/switcher') return response(SWITCHER);
+    if (path === '/api/account/settings-scope') return response({ scope: 'company', tabs: [{ key: 'projects', available: true, children: [{ key: 'projects:1', label: '[Atlas Pilot]', path: '/c/northwind-labs/p/atlas-pilot/settings/general' }] }] });
     if (path === '/api/account/invitations') return response({ company: ok([]), project: ok([]) });
     if (key === 'GET /api/company/nl') return response(COMPANY);
     if (key === 'GET /api/company/nl/legal') return response(LEGAL);
@@ -107,7 +108,7 @@ function worker(over = {}) {
     if (key === 'GET /api/projects/2') return response({ id: 2, name: '[Lantern]', company_id: null, stage: 'validation', sector: 'Climate', created_at: '2026-09-12 10:00:00', hq: null });
     if (key === 'GET /api/projects/2/members') return response({ members: [{ user_id: ME, name: '[Avery Stone]', role: 'owner', email: 'avery@example.test' }], can_manage: true, my_role: 'owner' });
     if (key === 'GET /api/projects/1') return response({ id: 1, name: '[Atlas Pilot]', company_id: 7, stage: 'mvp', sector: null, created_at: '2026-04-03 10:00:00', hq: 'Lisbon, Portugal' });
-    if (key === 'GET /api/projects/1/members') return response({ members: [{ user_id: ME, name: '[Avery Stone]', role: 'owner' }], can_manage: true, my_role: 'owner' });
+    if (key === 'GET /api/projects/1/members') return response({ members: [{ user_id: ME, name: '[Avery Stone]', role: 'owner' }], can_manage: true, can_edit: true, write_reason: null, my_role: 'owner' });
     if (path.startsWith('/api/account/slug-check')) return response({ available: true, reason: null, suggestion: null });
     if (method !== 'GET') return response({ ok: true, id: 9, uid: 'c9', company_name: 'Newco', name: 'Tidewater' });
     return response({});
@@ -160,6 +161,8 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
     path: () => props(byId('where'))?.['data-path'],
     submit: (id) => fire(id, 'onSubmit', { preventDefault() {} }),
     click: (id) => fire(id, 'onClick'), change: (id, v) => fire(id, 'onChange', { target: { value: v, checked: v } }),
+    focus: (id) => fire(id, 'onFocus', {}),
+    mouseDown: (id) => fire(id, 'onMouseDown', { preventDefault() {} }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -491,6 +494,39 @@ test('PF8: Company settings › Legal draws the facts and Edit; a member who is 
   } finally { await v.close(); }
 });
 
+test('D5366: Projects follows the server capability, not a cached platform role', async () => {
+  const at = { url: '/account/portfolio/nl/settings/projects/1', path: '/account/portfolio/:uid/settings/projects/:id', element: h(CompanySettingsTabs, { tab: 'projects' }) };
+  let v = await mount('admin', {
+    ...at,
+    handle: worker({ 'GET /api/projects/1/members': () => response({ members: [], can_manage: false, can_edit: false, write_reason: 'hq_access' }) }),
+  });
+  try {
+    assert.equal(v.has('company-project-edit'), false);
+    assert.equal(v.has('company-project-move-out'), false);
+    assert.match(v.of('company-project-read-only'), /HQ reads this project\. Its company members make the changes here\./);
+  } finally { await v.close(); }
+
+  v = await mount('founder', {
+    ...at,
+    handle: worker({ 'GET /api/projects/1/members': () => response({ members: [], can_manage: true, can_edit: true, write_reason: null }) }),
+  });
+  try {
+    assert.ok(v.has('company-project-edit'), 'the server may allow an editor regardless of cached client role');
+    assert.ok(v.has('company-project-move-out'));
+  } finally { await v.close(); }
+});
+
+test('D5366: a support session gets the read-only Projects explanation', async () => {
+  const v = await mount('founder', {
+    url: '/account/portfolio/nl/settings/projects/1', path: '/account/portfolio/:uid/settings/projects/:id', element: h(CompanySettingsTabs, { tab: 'projects' }),
+    handle: worker({ 'GET /api/projects/1/members': () => response({ members: [], can_manage: false, can_edit: false, write_reason: 'support_session' }) }),
+  });
+  try {
+    assert.equal(v.has('company-project-edit'), false);
+    assert.match(v.of('company-project-read-only'), /support session can read this project but cannot change it/i);
+  } finally { await v.close(); }
+});
+
 test('PF6: the scope block — Legal has its address for a company; a standalone project has no Legal; a picked project decides', () => {
   const co = scopeFor({ company: { uid: 'nl', name: 'x' } });
   assert.equal(co.entries[1].children.find((c) => c.key === 'legal').path, '/account/portfolio/nl/settings/legal');
@@ -622,18 +658,25 @@ test('#4736: General for a company the member cannot open is the refusal with Ba
 });
 
 test('#4736: General draws Default currency, Not recorded when the company has none, the stored code when it has one, and saves only a change', async () => {
+  // D4966 (#5312, CS-06): the control is a searchable combobox now, not a
+  // `<select>`. The rule is the same: an unrecorded currency reads "Not
+  // recorded", nothing is preselected, and only a change is sent.
   let v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }) });
   try {
-    assert.equal(v.prop('general-default-currency', 'value'), '');
-    assert.equal(v.prop('general-default-currency-none', 'value'), '', 'the empty choice is the unrecorded one, not a code');
+    assert.equal(v.prop('general-default-currency', 'value'), 'Not recorded');
+    assert.equal(v.prop('general-default-currency', 'role'), 'combobox');
+    await v.focus('general-default-currency');
+    assert.equal(v.prop('general-default-currency-none', 'aria-selected'), true, 'the empty choice is the unrecorded one, not a code');
     assert.match(v.of('general-section-identity'), /Default currency.*Not recorded/s);
     assert.equal(v.count('company-general-savebar'), 0);
   } finally { await v.close(); }
   v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: worker({ 'GET /api/company/nl': () => response({ ...COMPANY, default_currency: 'EUR' }) }) });
   try {
-    assert.equal(v.prop('general-default-currency', 'value'), 'EUR');
+    assert.equal(v.prop('general-default-currency', 'value'), 'EUR · Euro');
     assert.equal(v.count('company-general-savebar'), 0, 'an unchanged currency is not a change');
+    await v.focus('general-default-currency');
     await v.change('general-default-currency', 'GBP');
+    await v.mouseDown('general-default-currency-GBP');
     await v.submit('company-general-form');
     assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['POST /api/company/nl/settings', { default_currency: 'GBP' }]]);
   } finally { await v.close(); }

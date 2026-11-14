@@ -1611,6 +1611,10 @@ billing.post('/stripe/webhook', async (c) => {
     } catch (e: any) {
       console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
     }
+    // D5299 (#5299): the revenue ledger's row for this event, once. A failed write throws, so the receipt stays
+    // unfinished and the 503 below makes Stripe retry; a replay writes nothing new.
+    const { recordStripeFinancialEvent } = await import('../services/financialEvents');
+    await recordStripeFinancialEvent(c.env, event as Parameters<typeof recordStripeFinancialEvent>[1]);
     const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
       SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
       WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)
@@ -2208,10 +2212,22 @@ async function handleStripeEvent(
     // returns non-2xx → Stripe retries the event (idempotent: one email per
     // invoice/charge id). Stripe's own customer emails are disabled (ops step)
     // so buyers only ever see Axal branding.
+    case 'invoice.created': {
+      const { checkPromoRenewal } = await import('../services/promoRenewal');
+      await checkPromoRenewal(env, obj);
+      return;
+    }
+    case 'invoice.voided': {
+      const { settlePromoRenewal } = await import('../services/promoRenewal');
+      await settlePromoRenewal(env, obj, false);
+      return;
+    }
     case 'invoice.paid':
     case 'invoice.finalized': {
       // D1052: a paid invoice closes its open payment alerts.
       if (event.type === 'invoice.paid') {
+        const { settlePromoRenewal } = await import('../services/promoRenewal');
+        await settlePromoRenewal(env, obj, true);
         const { closeInvoiceAlerts } = await import('../services/billingAlerts');
         await closeInvoiceAlerts(env, obj);
         // D892 §6: a founder or investor row left at `incomplete` for the

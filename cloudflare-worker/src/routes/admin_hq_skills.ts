@@ -6,13 +6,22 @@
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
  *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
+ *                                    D5325: each row's `readiness` (SK-13, `services/agents/skillReadiness.ts`) and
+ *                                    `run_cost: null` (Not recorded until #4536 records cost by executed version)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
+ *   GET  /library/reconcile          D5335: READ ONLY. The generated library against the store's HQ skills (D4532 §3) →
+ *                                    { report_version, scope: 'hq', read_at, totals: { <class>: n }, skills: [{ slug, class,
+ *                                    disposition, source_hash, persisted_hash, published_version }], manifest: [persisted, hashes only] };
+ *                                    audited (`agent_skill_library_reconciled`, the totals only)
+ *                                    D4574 H3: all three read the entries from a static asset; where it cannot be read
+ *                                    each answers 503 `library_unreadable` (seed after its 400 `reason_required`), writing
+ *                                    and auditing nothing
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
  *                                    publish refuses on), each review's `changes`, each version's `evidence` (null: no manifest)
- *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
+ *   GET  /:uid/diff?from=source|vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
  *                                    D4533: `evidence`, the cases added and removed, the required models and the evaluator
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft, on its evidence
  *   POST /:uid/review/approve        { comment? }       the named reviewer approves; never the draft's author
@@ -80,8 +89,11 @@ import { compareResults, type ResultRow } from '../services/agents/skillEvalComp
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
-import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
+import { SKILL_LIBRARY_SLUGS } from '../services/agents/skillLibrary.generated';
+import { LIBRARY_UNREADABLE, loadSkillLibrary } from '../services/agents/skillLibraryAsset';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
+import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
 
 const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
@@ -91,7 +103,6 @@ const adminHqSkills = new Hono<{ Bindings: Env }>();
 export const REASON_MIN = 10;
 export const REASON_MAX = 500;
 const BULK_MAX = 50;
-const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
 const say = (c: C, status: number, code: string, message: string, extra?: Record<string, unknown>) => refuse(c, status, { code, message, extra });
@@ -120,10 +131,10 @@ async function audit(env: Env, admin: User, action: string, s: Pick<SkillRow, 'u
   await logAdminAction(env, admin.id, admin.email, action, { skill_uid: s.uid, skill_name: s.name, reason, before, after, ...extra });
 }
 
-function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
-  const axis = p.tags.map((t) => RADAR_AXES.find((a) => a.slug === category.get(t.slug))).find(Boolean);
-  const level = p.tags.reduce<string | null>((best, t) => (best == null || LEVELS.indexOf(t.level) > LEVELS.indexOf(best) ? t.level : best), null);
-  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level };
+export function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
+  const primary = areaOf(p.tags, (slug) => category.get(slug) ?? null);
+  const axis = RADAR_AXES.find((candidate) => candidate.slug === primary.area);
+  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level: primary.level };
 }
 
 // D4533: `current` is the whole evidence; `changes` says which part moved since (null: not recorded on a review from before D4533).
@@ -203,25 +214,13 @@ adminHqSkills.get('/', async (c) => {
 
   // Only the latest result per case and REQUIRED model under the current
   // evidence counts; a required run with no result is not evaluated, as on the detail page.
-  const [evalResult, tokens] = await Promise.all([
-    env.DB.prepare(`WITH want AS (
-        SELECT CAST(j.key AS INTEGER) AS skill_id, json_extract(j.value, '$.e') AS evidence, json_extract(j.value, '$.m') AS models FROM json_each(?) j
-      ), latest AS (
-        SELECT MAX(r.id) AS id
-        FROM want w JOIN agent_skill_eval_results r ON r.skill_id = w.skill_id AND r.evidence_hash = w.evidence
-        WHERE r.model_id IN (SELECT value FROM json_each(w.models))
-        GROUP BY r.skill_id, r.case_id, r.model_id
-      )
-      SELECT r.skill_id, COUNT(*) AS recorded,
-        SUM(CASE WHEN r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
-        MAX(r.run_at) AS last_run
-      FROM latest JOIN agent_skill_eval_results r ON r.id = latest.id
-      JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
-      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, models, evidence }) => [row.id, { e: evidence, m: models }]))))
-      .all<{ skill_id: number; recorded: number; pass: number; last_run: string }>(),
+  // D5325: the same evidence answers each row's readiness, with one more read for the reviews and older runs.
+  const wants = drafts.map(({ row, models, evidence }) => ({ skill_id: row.id, evidence, models }));
+  const [evals, history, tokens] = await Promise.all([
+    currentResults(env, wants),
+    reviewHistory(env, wants),
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
-  const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
   let draftsUnevaluated = 0;
   const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
@@ -237,6 +236,11 @@ adminHqSkills.get('/', async (c) => {
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
       golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
+      // D5325: SK-13's state, decided here (`skillReadiness.ts`); `unknown` when a fact it needs could not be read.
+      readiness: readinessOf({ scope: row.scope, status: row.status, live_cases: row.live_cases, models: models.length,
+        results: summary ?? { recorded: 0, pass: 0, last_run: null }, history: history ? history.get(row.id) ?? null : null }),
+      // D5325: a recorded cost per run does not exist yet (#4536 records it by executed version); null reads "Not recorded", never 0.
+      run_cost: null,
     };
   });
   // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
@@ -265,7 +269,7 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
       JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'`).first<AdoptionRow>(),
   ]);
   return catalogueCoverage(rows.results ?? [], {
-    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY.map((e) => e.slug),
+    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY_SLUGS,
     adoption: adoption ?? { links: 0, agents: 0, behind_current: 0, published_without_links: 0 },
     draftsWithoutCurrentEvaluation,
   });
@@ -274,9 +278,12 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
 adminHqSkills.get('/library', async (c) => {
   await requireSuperAdmin(c);
+  // D4574 H3: the entries are a static asset; unreadable is said, never answered as an empty library.
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
   const tax = await taxonomyMaps(c.env);
   const present = new Map(((await c.env.DB.prepare("SELECT slug, status FROM agent_skills WHERE scope = 'hq' AND company_id IS NULL").all<{ slug: string; status: string }>()).results ?? []).map((r) => [r.slug, r.status]));
-  const skills = checkLibrary(new Set(tax.category.keys())).map((x) => {
+  const skills = checkLibrary(new Set(tax.category.keys()), entries).map((x) => {
     const raw = readLibrarySkill(x.entry.skill_md);
     const tags = (raw?.tags as Array<{ slug: string; level: string }> | undefined) ?? [];
     const { area, level } = areaOf(tags, (s) => tax.category.get(s) ?? null);
@@ -294,8 +301,24 @@ adminHqSkills.post('/library/seed', async (c) => {
   const b = await body(c);
   const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
   if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
-  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
+  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500), entries);
   return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
+});
+
+// D5335 (#5335): the read-only preflight D4532 §3 names. It hashes the HQ drafts and live cases and returns hashes,
+// identities and classes, never their text; company skills are outside `persistedManifest`. It repairs nothing.
+adminHqSkills.get('/library/reconcile', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
+  const tax = await taxonomyMaps(c.env);
+  const persisted = await persistedManifest(c.env);
+  const source = await libraryManifest(new Set(tax.category.keys()), entries);
+  const report = reconcileReport(reconcile(source, persisted), persisted);
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_library_reconciled', { scope: 'hq', skills: report.skills.length, totals: report.totals });
+  return c.json({ report_version: report.report_version, scope: report.scope, read_at: new Date().toISOString(), totals: report.totals, skills: report.skills, manifest: report.manifest });
 });
 
 adminHqSkills.get('/:uid', async (c) => {
@@ -307,8 +330,8 @@ adminHqSkills.get('/:uid', async (c) => {
   const e = freshness.evidence;
   const open = await openReview(c.env, s.id);
   const history = (await c.env.DB.prepare('SELECT * FROM agent_skill_reviews WHERE skill_id = ? ORDER BY id DESC LIMIT 20').bind(s.id).all<ReviewRow>()).results ?? [];
-  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by, evidence_json FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
-    .bind(s.id).all<{ version: number; published_at: string; published_by: number; evidence_json: string | null }>()).results ?? [];
+  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by, evidence_json, release_note FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
+    .bind(s.id).all<{ version: number; published_at: string; published_by: number; evidence_json: string | null; release_note: string | null }>()).results ?? [];
   const cases = (await c.env.DB.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
     .bind(s.id).all<{ uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
   const retired = await c.env.DB.prepare(`SELECT r.reason, r.pinned_agents, r.retired_at, r.retired_by, s.uid AS replacement_uid, s.name AS replacement_name
@@ -338,6 +361,8 @@ adminHqSkills.get('/:uid', async (c) => {
     versions: await Promise.all(versions.map(async (v) => ({
       version: v.version, published_at: v.published_at, by: await personOf(c.env, v.published_by), evidence: await versionEvidence(c.env, v.evidence_json),
       publish_audited: audited ? audited.has(v.version) : null,
+      // D4533 (B1): the publisher's note, or null ("Not recorded") for a version published without one or before 202611092030.
+      release_note: v.release_note ?? null,
     }))),
     retired: retired ? {
       reason: retired.reason, pinned_agents: retired.pinned_agents, at: retired.retired_at, by: await personOf(c.env, retired.retired_by),
@@ -359,10 +384,25 @@ adminHqSkills.get('/:uid/diff', async (c) => {
     return row ? { parts: versionParts(row), evidence: parseEvidence(row.evidence_json) } : null;
   };
   const fromDefault = s.current_version > 0 ? `v${s.current_version}` : 'draft';
-  const from = await side(c.req.query('from'), fromDefault);
-  const to = await side(c.req.query('to'), 'draft');
-  if (!from || !to) return say(c, 400, 'version_unknown', 'Compare a published version (v1, v2, …) or the draft.');
-  return c.json({ from: c.req.query('from') ?? fromDefault, to: c.req.query('to') ?? 'draft', ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
+  const fromLabel = c.req.query('from') ?? fromDefault;
+  const toLabel = c.req.query('to') ?? 'draft';
+  let from;
+  if (fromLabel === 'source') {
+    const entries = await loadSkillLibrary(c.env);
+    if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
+    const matches = entries.filter((entry) => entry.slug === s.slug);
+    if (!matches.length) return say(c, 404, 'source_missing', 'This HQ skill has no matching library source.');
+    if (matches.length > 1) return say(c, 409, 'source_ambiguous', 'More than one library source matches this skill.');
+    const tax = await taxonomyMaps(c.env);
+    const [checked] = checkLibrary(new Set(tax.category.keys()), matches);
+    if (!checked.ok) return say(c, 409, 'source_invalid', 'The matching library source could not be validated.');
+    from = { parts: checked.draft, evidence: null };
+  } else {
+    from = await side(fromLabel, fromDefault);
+  }
+  const to = await side(toLabel, 'draft');
+  if (!from || !to) return say(c, 400, 'version_unknown', 'Compare the library source, a published version (v1, v2, …) or the draft.');
+  return c.json({ from: fromLabel, to: toLabel, ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
 });
 
 // D4531 slice 3 (section E): the candidate's results against the baseline's, per case and per model.

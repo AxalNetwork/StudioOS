@@ -28,6 +28,7 @@ export default function PublicNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [netOpen, setNetOpen] = useState(false);
   const netRef = useRef(null);
+  const netTriggerRef = useRef(null);
 
   // A route change closes both menus.
   useEffect(() => { setMenuOpen(false); setNetOpen(false); }, [pathname]);
@@ -35,7 +36,12 @@ export default function PublicNav() {
   // The Network menu closes on Escape or a click outside it.
   useEffect(() => {
     if (!netOpen) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setNetOpen(false); };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      const focusInside = netRef.current?.contains(document.activeElement);
+      setNetOpen(false);
+      if (focusInside) netTriggerRef.current?.focus();
+    };
     const onDown = (e) => { if (netRef.current && !netRef.current.contains(e.target)) setNetOpen(false); };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onDown);
@@ -61,6 +67,7 @@ export default function PublicNav() {
           ))}
           <div className="ax-netmenu-wrap" ref={netRef}>
             <button
+              ref={netTriggerRef}
               type="button"
               className="ax-navlink"
               aria-expanded={netOpen}

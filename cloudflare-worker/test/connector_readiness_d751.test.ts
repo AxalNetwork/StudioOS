@@ -46,8 +46,8 @@ const FILES = registeringFiles();
 for (const f of FILES) await import(pathToFileURL(f).href);
 
 // D1096 adds Vercel's read-only Integration.
-const TEN = ['calendly', 'carta', 'docusign', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'vercel', 'zoom'];
-const MANAGED = TEN.filter((k) => k !== 'zoom');
+const TEN = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'tiktok', 'vercel', 'zoom'];
+const MANAGED = TEN.filter((k) => !['zoom', 'tiktok', 'facebook'].includes(k));
 const NAMES: Record<string, string> = { github: 'GitHub', slack: 'Slack', zoom: 'Zoom' };
 const FOUNDER = 1, ADMIN = 2, STUDIO = 3;
 
@@ -276,7 +276,7 @@ test('D751 8: no response carries a secret or a client field', () => {
   }
 });
 
-test('D751 13: every OAuth provider with an impl implements ready, and they are exactly the ten', () => {
+test('D751 13: every OAuth provider with an impl implements ready', () => {
   const withImpl = REGISTRY.filter((p) => p.auth_type === 'oauth2' && getProviderImpl(p.key)).map((p) => p.key).sort();
   assert.deepEqual(withImpl, TEN);
   for (const k of withImpl) assert.equal(typeof getProviderImpl(k)!.ready, 'function', `${k} implements ready`);

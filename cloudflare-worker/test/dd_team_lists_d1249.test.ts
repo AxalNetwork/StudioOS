@@ -48,7 +48,10 @@ function world() {
   // Three cases: Alpha in review with a High open flag, Beta open with a past target date, Gamma decided.
   const c = db.prepare(`INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id, lead_user_id, status, created_at, updated_at,
     target_ic_date, decision, decided_at, template_depth) VALUES (?, 'project', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  c.run('case-alpha', 10, 'Company Alpha', LEAD, LEAD, 'in_review', '2026-10-20 09:00:00', '2026-10-25 09:00:00', '2026-11-14', null, null, 'standard');
+  // Alpha's target is a month ahead, whatever today is: a fixed 2026-11-14 turned past its target from 2026-11-15 and
+  // joined Beta under past_target (D5398, found by the +7-day run).
+  const alphaTarget = (db.prepare("SELECT date('now', '+30 days') AS d").get() as any).d;
+  c.run('case-alpha', 10, 'Company Alpha', LEAD, LEAD, 'in_review', '2026-10-20 09:00:00', '2026-10-25 09:00:00', alphaTarget, null, null, 'standard');
   c.run('case-beta', 11, 'Company Beta', LEAD, LEAD, 'open', '2026-09-01 09:00:00', '2026-09-02 09:00:00', '2026-10-01', null, null, 'lite');
   // Gamma was decided five days ago, whatever today is, so the 90-day window and the month never drift.
   const decidedAt = (db.prepare("SELECT datetime('now', '-5 days') AS t").get() as any).t;

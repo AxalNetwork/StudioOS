@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { bsdShellTools } from './_dr_fakes.mjs';
 
 const SCRIPT = resolve(process.cwd(), 'scripts/dr-drill.sh');
 const SRC = readFileSync(SCRIPT, 'utf8');
@@ -121,6 +122,7 @@ if (a[0] === 'r2' && a[2] === 'put') {
   fs.copyFileSync(fileArg(), ${JSON.stringify(join(dir, 'marker.json'))});
   process.exit(0);
 }
+if (a[0] === 'r2' && a[2] === 'delete') process.exit(0);
 if (a[0] === 'd1' && a[1] === 'create') process.exit(0);
 if (a[0] === 'd1' && a[1] === 'delete') process.exit(0);
 if (a[0] === 'd1' && a[1] === 'execute' && has('--file')) {
@@ -174,9 +176,16 @@ function drill(env = {}) {
   env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
   fakeWrangler(dir);
+  bsdShellTools(dir);
+  // Real curl reads the `--header @-` the drill pipes in. A fake that exits
+  // without reading it races the writer into SIGPIPE, and under pipefail the
+  // retention list then reads as unreadable (the D5317 test failed under load).
+  writeFileSync(join(dir, 'curl'), '#!/bin/sh\ncat >/dev/null\nprintf "%s" "$HISTORY_LIST"\n', { mode: 0o755 });
   writeFileSync(join(dir, 'calls.log'), '');
   const r = spawnSync('bash', [SCRIPT], {
-    env: { PATH: `${dir}:${process.env.PATH}`, HOME: dir, BACKUP_BUCKET: 'studioos-backups', DR_DRILL_PREVIEW: '0', ...env },
+    env: { PATH: `${dir}:${process.env.PATH}`, HOME: dir, BACKUP_BUCKET: 'studioos-backups', DR_DRILL_PREVIEW: '0',
+      CLOUDFLARE_ACCOUNT_ID: '0'.repeat(32), CLOUDFLARE_API_TOKEN: 'test-only',
+      HISTORY_LIST: JSON.stringify({ success: true, result: [] }), ...env },
     encoding: 'utf8',
   });
   const calls = readFileSync(join(dir, 'calls.log'), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -206,9 +215,21 @@ test('D263 drill: every R2 call names --remote, and the marker goes to drill-d1.
   assert.ok(r2.length >= 3, 'the heartbeat read, the backup download and the marker put');
   for (const c of r2) assert.ok(c.includes('--remote'), `an R2 call without --remote reads local storage: ${c.join(' ')}`);
   const put = r2.filter((c) => c[2] === 'put');
-  assert.deepEqual(put.map((c) => c[3]), ['studioos-backups/drill-d1.json']);
+  assert.equal(put.length, 2);
+  assert.equal(put[0][3], 'studioos-backups/drill-d1.json');
+  assert.match(put[1][3], /^studioos-backups\/drill-d1-history\/\d{12}-\d+-drill-marker\.[A-Za-z0-9]+\.json$/);
   // The key came from the heartbeat, not from a subcommand wrangler lacks.
   assert.equal(r2[0][3], 'studioos-backups/heartbeat-d1.json');
+});
+
+test('D5317: retention prunes only older drill history objects after recording the run', () => {
+  const keys = Array.from({ length: 13 }, (_, i) => `drill-d1-history/${String(i).padStart(12, '0')}-1-drill-marker.abc.json`);
+  const r = drill({ HISTORY_LIST: JSON.stringify({
+    success: true,
+    result: ['drill-d1.json', 'drill-d1-history/unrelated.json', ...keys].reverse().map((key) => ({ key })),
+  }) });
+  assert.equal(r.status, 0, r.out);
+  assert.deepEqual(r.calls.filter((c) => c[0] === 'r2' && c[2] === 'delete').map((c) => c[3]), [`studioos-backups/${keys[12]}`], r.out);
 });
 
 test('D263 drill: a failed restore exits 2, writes a failed marker naming the step, and still deletes the throwaway database', () => {
@@ -238,7 +259,9 @@ test('D263 drill: a marker that cannot be written never changes the exit code', 
 });
 
 test('D263 drill: the script and its workflow no longer carry the four defects', () => {
-  const code = SRC.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  // D5337: the drill's fetch, verify, import and compare live in dr-restore-lib.sh, so it is read too.
+  const LIB = readFileSync(resolve(process.cwd(), 'scripts/dr-restore-lib.sh'), 'utf8');
+  const code = `${SRC}\n${LIB}`.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   assert.doesNotMatch(code, /wrangler r2 object list/, 'a subcommand wrangler does not have');
   assert.doesNotMatch(code, /wrangler r2[^\n]*2>\/dev\/null/, 'wrangler\'s own error thrown away');
   assert.doesNotMatch(code, /npm run test:drift/, 'step 4c ran the whole repo suite against nothing restored');

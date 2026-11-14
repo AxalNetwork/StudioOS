@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../../../ui';
 import { adminHqSkillsApi } from '../../../lib/api/adminHqSkills';
+import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { REASON_MAX, REASON_MIN, bulkLine, skillRefusal } from './refusals.js';
 import {
-  CASES_MAX, OUTPUT_KINDS, actionsFor, blankCase, caseToForm, casesPayload, diffChoices, diffRows, evalLine, isAskedReviewer, reasonFits,
+  CASES_MAX, OUTPUT_KINDS, RELEASE_NOTE_MAX, actionsFor, blankCase, caseToForm, casesPayload, diffChoices, diffRows, evalLine, isAskedReviewer,
+  publishState, reasonFits, releaseNotePayload, releaseNoteText, reusedLine,
 } from './skillLifecycleModel.js';
 
 /**
@@ -13,6 +15,9 @@ import {
  *                       (`adminHqSkillsApi.bulk`), each skill done or refused on its own.
  *   SA4  `SkillLifecycle` on `/hq/ai-agents/skills/:uid/edit`: the review (ask, approve, request
  *                       changes), the golden cases, the evaluation, the diff and Retire…
+ *   D4533 (B1)  `PublishPanel` publishes the draft with an optional release note
+ *                       (`teamAgentsApi.publishSkill`, the single publish), and `ReleaseNotes`
+ *                       lists each version's note, "Not recorded" when none was written.
  *
  * Every write takes a reason of 10 to 500 characters. A refusal shows the sentence
  * `refusals.js` keeps for its code, never the error's own text. The rules (which action a
@@ -219,6 +224,53 @@ function EvalsPanel({ data, reload }) {
   );
 }
 
+function PublishPanel({ data, reload }) {
+  const [note, setNote] = useState('');
+  const [problem, setProblem] = useState('');
+  const write = useWrite();
+  const state = publishState(data.freshness);
+  const reused = reusedLine(data.freshness);
+  const next = (Number(data.skill.version) || 0) + 1;
+  const go = async () => {
+    const p = releaseNotePayload(note);
+    if (!p.ok) { setProblem(p.problem); return; }
+    const r = await write.run(() => teamAgentsApi.publishSkill(data.skill.uid, { releaseNote: p.note }));
+    if (r.ok) reload(); // the page reads the skill again and draws the panel afresh, with no note
+  };
+  return (
+    <Card className="space-y-2 px-4 py-4" data-testid="skill-publish">
+      <h3 className={H3}>Publish</h3>
+      <p className={MUTED} data-testid="skill-publish-state">{state.ready ? `The draft can be published as v${next}.` : state.why ?? 'The server decides whether this draft can be published.'}</p>
+      {reused ? <p className={MUTED} data-testid="skill-publish-reused">{reused}</p> : null}
+      <label className={LABEL}>Release note · optional
+        <textarea value={note} onChange={(e) => { setNote(e.target.value); setProblem(''); }} rows={3} maxLength={RELEASE_NOTE_MAX} className={FIELD} data-testid="skill-release-note" />
+        <span className={MUTED}>What changed in v{next} and why, up to {RELEASE_NOTE_MAX} characters. It is kept with the version and cannot be edited after publishing.</span>
+      </label>
+      {problem ? <p role="alert" className={ALERT} data-testid="skill-release-note-problem">{problem}</p> : null}
+      <button type="button" className={PRIMARY} disabled={write.busy || (state.known && !state.ready)} onClick={go} data-testid="skill-publish-go">{write.busy ? 'Publishing…' : `Publish v${next}`}</button>
+      {write.error ? <p role="alert" className={ALERT} data-testid="skill-error">{write.error}</p> : null}
+    </Card>
+  );
+}
+
+function ReleaseNotes({ versions }) {
+  return (
+    <Card className="space-y-2 px-4 py-4" data-testid="skill-release-notes">
+      <h3 className={H3}>Release notes</h3>
+      {!versions?.length ? <p className={MUTED}>No version has been published yet.</p> : (
+        <ul className="space-y-2">
+          {versions.map((v) => (
+            <li key={v.version} data-testid="skill-release-note-row">
+              <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">v{v.version} · {v.published_at ?? 'Not recorded'} · {v.by?.name ?? 'Not recorded'}</p>
+              <p className={`${MUTED} whitespace-pre-wrap break-words`}>{releaseNoteText(v)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function DiffPanel({ data }) {
   const choices = diffChoices(data.versions);
   const [from, setFrom] = useState(data.versions[0] ? `v${data.versions[0].version}` : 'draft');
@@ -293,6 +345,8 @@ export default function SkillLifecycle({ data, viewerUid, reload }) {
       <ReviewPanel data={data} viewerUid={viewerUid} reload={reload} />
       {can.cases ? <CasesEditor data={data} reload={reload} /> : null}
       {can.evals ? <EvalsPanel data={data} reload={reload} /> : null}
+      {can.publish ? <PublishPanel data={data} reload={reload} /> : null}
+      <ReleaseNotes versions={data.versions} />
       <DiffPanel data={data} />
       {can.retire ? <RetirePanel data={data} reload={reload} /> : null}
     </div>

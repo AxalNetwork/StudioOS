@@ -253,6 +253,40 @@ export function ledgerPosition(summary) {
   };
 }
 
+/**
+ * D5036 part 2 (#5036) — the Revenue streams licence row's Invoiced and Collected for one currency, read from the
+ * same `licence_invoices` the executive summary draws (D5082): the invoices issued in the period, in that currency
+ * only, never summed across currencies. Before the Worker sends the field both stay Not recorded and the row is
+ * "Run-rate only"; an unreadable ledger is Unavailable, never 0; a currency the readable ledger holds no invoice in
+ * is a measured zero in that currency.
+ */
+export function licenceStreamCells(summary, currency) {
+  const nr = { state: 'not_recorded', text: null };
+  const inv = isReady(summary) ? summary.licence_invoices : null;
+  if (!inv || typeof inv !== 'object') return { invoiced: nr, collected: nr, coverage: 'run_rate_only' };
+  if (!inv.available) {
+    const u = { state: 'unavailable', text: null };
+    return { invoiced: u, collected: u, coverage: 'ledger_unavailable' };
+  }
+  const cur = currencyCode(currency) || UNRECORDED_CURRENCY;
+  const p = (Array.isArray(inv.by_currency) ? inv.by_currency : []).find((r) => (currencyCode(r.currency) || UNRECORDED_CURRENCY) === cur);
+  const zero = { state: 'zero', text: money(0, cur) };
+  return {
+    invoiced: p ? moneyFigure(p.invoiced_cents, cur) : zero,
+    collected: p ? moneyFigure(p.collected_cents, cur) : zero,
+    invoices: p ? finite(p.invoices) : 0,
+    coverage: 'invoiced',
+  };
+}
+
+/** The currencies the period's licence invoices hold that no run-rate row does, so none of them goes undrawn. */
+export function invoiceOnlyCurrencies(summary, runRateCurrencies) {
+  const inv = isReady(summary) ? summary.licence_invoices : null;
+  if (!inv?.available || !Array.isArray(inv.by_currency)) return [];
+  const have = new Set((runRateCurrencies || []).map((c) => currencyCode(c) || UNRECORDED_CURRENCY));
+  return [...new Set(inv.by_currency.map((r) => currencyCode(r.currency) || UNRECORDED_CURRENCY))].filter((c) => !have.has(c)).sort();
+}
+
 /** The ledger's one explanation once it is read: licence fees only, and what is still outside it. */
 export function ledgerReason(position) {
   const gaps = [];
@@ -354,6 +388,7 @@ export function statementAllowsPaidInFull(statement) {
 export function receivableStatus(s) {
   if (!s) return 'draft';
   if (s.status === 'void') return 'void';
+  if (s.overdue === true) return 'overdue';
   if (finite(s.disputed_cents) > 0 && s.status !== 'paid') return 'disputed';
   if (s.status === 'paid') return 'paid';
   if (s.status === 'issued') return 'issued';
@@ -361,6 +396,7 @@ export function receivableStatus(s) {
 }
 
 export const RECEIVABLE_STATUSES = Object.freeze([
+  { key: 'overdue', word: 'Overdue', shape: 'clock', tone: 'negative' },
   { key: 'disputed', word: 'Disputed', shape: 'triangle', tone: 'negative' },
   { key: 'issued', word: 'Issued', shape: 'clock', tone: 'progress' },
   { key: 'draft', word: 'Draft', shape: 'ring', tone: 'neutral' },
@@ -370,10 +406,9 @@ export const RECEIVABLE_STATUSES = Object.freeze([
 const STATUS_ORDER = Object.fromEntries(RECEIVABLE_STATUSES.map((s, i) => [s.key, i]));
 
 /**
- * The receivables table: one row per drawn statement, disputed first, then
- * issued, draft, paid and void, newest period first inside each. No statement
- * records a due date, so Due is Not recorded and there is no Overdue status:
- * an overdue claim cannot be told from one not yet due.
+ * The receivables table: one row per drawn statement, overdue then disputed, then
+ * issued, draft, paid and void, newest period first inside each. Overdue uses
+ * the Worker observation from an explicit due date; an unknown date stays unknown.
  */
 export function receivableRows(statements, { licenceUid = null } = {}) {
   const items = isReady(statements) && statements.available ? (statements.items || []) : [];
@@ -416,7 +451,7 @@ export function receivableCounts(rows) {
 export function outstandingByCurrency(rows) {
   const by = new Map();
   for (const r of rows) {
-    if (r.status !== 'issued' && r.status !== 'disputed') continue;
+    if (!['issued', 'disputed', 'overdue'].includes(r.status)) continue;
     const cents = finite(r.statement.outstanding_cents);
     if (cents === null) continue;
     const b = by.get(r.currency) || { currency: r.currency, cents: 0, floors: 0, count: 0 };
@@ -507,9 +542,7 @@ export function subsidiaryRows({ coverage, periodStatements, period, currentPeri
  * The five facts about one ceiling row, kept apart (D5028). Never derived from each other:
  *   saved     the row exists at HQ (it is listed, so it is);
  *   pushed    the branch confirmed the LATEST saved figure (`pushed_at` not older than the last save);
- *   enforced  what the branch does with it at checkout: only a ceiling for the CURRENT quarter that the branch has
- *             received is enforced; an older one says nothing about this quarter; an earlier figure is what a branch
- *             enforces when the latest save did not reach it;
+ *   enforced  unknown until an explicit read of the branch checkout calculation; never inferred from a push;
  *   issued    what the branch reported to HQ, or Not reported. HQ's copy is only what a branch reports;
  *   remaining known only when an issued figure was reported: no issued figure, no remaining, never the whole ceiling.
  */
@@ -520,15 +553,11 @@ export function ceilingFacts(row, currentPeriod) {
   const latestPushed = everPushed && (!r.updated_at || String(r.pushed_at) >= String(r.updated_at));
   const issuedKnown = r.issued_available === true && r.issued_cents !== null && r.issued_cents !== undefined && Number.isFinite(Number(r.issued_cents));
   const remainingKnown = issuedKnown && r.remaining_cents !== null && r.remaining_cents !== undefined && Number.isFinite(Number(r.remaining_cents));
-  let enforced;
-  if (!current) enforced = { state: 'other_period', label: 'Not this quarter: it governs no checkout now' };
-  else if (latestPushed) enforced = { state: 'enforced', label: 'Enforced by the branch at checkout' };
-  else if (everPushed) enforced = { state: 'earlier_figure', label: 'The branch enforces the figure it last received, not this one' };
-  else enforced = { state: 'not_received', label: 'Not enforced yet: the branch has not received it, so it allows discounts' };
+  const enforced = { state: current ? 'not_checked' : 'other_period', label: current ? 'Enforcement needs a branch checkout read-back; push acceptance is a separate fact.' : 'Not this quarter: read-back covers current checkout only' };
   return {
     saved: { yes: true, label: 'Saved at HQ' },
     pushed: latestPushed
-      ? { yes: true, label: `Pushed to the branch${dayOf(r.pushed_at) ? ` ${dayOf(r.pushed_at)}` : ''}` }
+      ? { yes: true, label: `Push accepted${dayOf(r.pushed_at) ? ` ${dayOf(r.pushed_at)}` : ''}` }
       : { yes: false, label: everPushed ? 'The latest figure was not pushed' : 'Not pushed to the branch' },
     enforced,
     issued: issuedKnown
@@ -695,7 +724,7 @@ export function coverageSources({ summary, statements, disputes, refunds, ceilin
       key: 'statements',
       name: 'Revenue-share statements',
       state: floors ? 'partial' : 'complete',
-      reason: `${(statements.items || []).length} drawn, newest first. Intercompany claims HQ recorded, not reconciled against a bank and not recognised revenue; no statement records a due date, so none can be called overdue.`
+      reason: `${(statements.items || []).length} drawn, newest first. Intercompany claims HQ recorded, not reconciled against a bank and not recognised revenue. Overdue requires an explicitly recorded due date and a positive open balance.`
         + (floors ? ` ${floors} ${floors === 1 ? 'is a floor' : 'are floors'}: drawn over unreported or estimated streams.` : '')
         + ' Drawing new statements is held (D514).',
     });
@@ -766,7 +795,7 @@ export function coverageSources({ summary, statements, disputes, refunds, ceilin
       name: 'Promotion issued amounts',
       state: !rows.length || known === rows.length ? 'complete' : (known ? 'partial' : 'not_reported'),
       reason: (rows.length ? `${known} of ${rows.length} ${rows.length === 1 ? 'branch' : 'branches'} reported what ${rows.length === 1 ? 'it' : 'they'} issued against ${label}'s ceiling.` : `No ceiling is set for ${label}.`)
-        + ' The branch counts what it gives and enforces the ceiling itself; HQ\'s copy is only what a branch reports, so Remaining is shown only beside a reported Issued figure. "Enforced" is read from an accepted push: branches do not report enforcement back.'
+        + ' The branch counts what it gives and enforces the ceiling itself; HQ\'s copy is only what a branch reports, so Remaining is shown only beside a reported Issued figure. Push acceptance does not prove enforcement. Check branch reads the live checkout ceiling, with its own observation time.'
         + (isReady(summary) && summary.promos?.available ? ` ${summary.promos.budget_reason}` : ''),
     });
   }

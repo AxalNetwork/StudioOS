@@ -605,6 +605,32 @@ const retainerRow = (id, client, amountCents) => ({
 const retBody = (items) => ({ items, retainer_count: items.length, shape_counts: {} });
 const amountBoxes = (m) => m.nodes().filter((n) => n.tagName === 'INPUT' && m.props(n).placeholder === 'e.g. 8000');
 
+test('Retainers: the mounted Monthly cells use the Worker projection and leave ended amounts absent', async () => {
+  const rows = [
+    ['Quarterly Co', 'quarterly', 990000, 123400, true],
+    ['Monthly Co', 'monthly', 880000, 234500, true],
+    ['Ended Co', 'monthly', 770000, 345600, false],
+  ].map(([name, cadence, rawAmount, monthly, active], i) => {
+    const row = retainerRow(i + 1, name, rawAmount);
+    return { ...row, founder_name: name, retainer: { ...row.retainer, cadence, active, monthly_amount_cents: monthly, current_monthly_cents: active ? monthly : null, ended_at: active ? null : '2020-01-01' } };
+  });
+  const restore = stub({ listPartnerRetainers: async () => retBody(rows) });
+  const m = await mountContracts(h(PartnerRetainersZone));
+  try {
+    await m.flush();
+    const u = ui(m);
+    const rowText = (name) => {
+      const row = m.nodes().find((n) => n.childNodes?.length === 6 && u.textOf(n.childNodes[0]) === name);
+      assert.ok(row, `ledger row for ${name}`);
+      return u.textOf(row.childNodes[1]);
+    };
+    assert.match(rowText('Quarterly Co'), /\$1,234\/mo/);
+    assert.match(rowText('Monthly Co'), /\$2,345\/mo/);
+    assert.match(rowText('Ended Co'), /Not recorded/);
+    assert.doesNotMatch(rowText('Ended Co'), /\/mo/);
+  } finally { await m.unmount(); restore(); }
+});
+
 test('Retainers: saving one row keeps another row’s unsaved amount through the refresh', async () => {
   const reload = deferred();
   let reads = 0;

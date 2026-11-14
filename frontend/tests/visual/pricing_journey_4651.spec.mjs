@@ -15,6 +15,7 @@
  *   · a failed catalogue read on registration says so, and Try again reads it.
  */
 import { test, expect } from '@playwright/test';
+import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
 const PAID = {
   'founder:growth': { month: 5000, year: 48000 },
@@ -40,11 +41,11 @@ function priced(body) {
  * `state.signedIn` flips when the email link is confirmed or Google returns.
  */
 async function wire(page, manifest, state) {
-  await page.addInitScript(() => {
+  await page.addInitScript((consentVersion) => {
     try {
-      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: 1, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
+      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the journey fails loudly on its first check */ }
-  });
+  }, CONSENT_VERSION);
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
   await page.route('**/api/public/plans-and-packs', async (route) => {
     if (state.catalogueDown > 0) { state.catalogueDown -= 1; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Unavailable"}' }); }
@@ -78,6 +79,25 @@ const kept = (page) => page.evaluate(() => { try { return JSON.parse(localStorag
 for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
   test.describe(`${label} (${width}px)`, () => {
     test.use({ viewport: { width, height } });
+
+    test('pricing exposes the active comparison and keeps audience choices visible', async ({ page, request }, testInfo) => {
+      await wire(page, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await page.goto('/pricing?for=founder');
+      const comparison = page.getByRole('table', { name: width === 390 ? /plan features/ : 'Compare plans' });
+      await expect(comparison.getByRole('rowheader', { name: 'Customer interviews' })).toBeVisible();
+      if (width !== 390) {
+        await expect(comparison.getByRole('columnheader', { name: 'Validate + Build' })).toBeVisible();
+      }
+      await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toHaveAttribute('aria-selected', 'true');
+      const models = page.getByRole('tab', { name: 'Models', exact: true });
+      await expect(models).toBeInViewport({ ratio: 1 });
+      await page.getByRole('tab', { name: 'Founder', exact: true }).focus();
+      for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
+      await expect(models).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath('pricing-audience-focus.png') });
+      await page.keyboard.press('Enter');
+      await expect(models).toHaveAttribute('aria-selected', 'true');
+    });
 
     test('Back and choosing another plan before signing up carry the new plan only; the email link opens its checkout', async ({ page, request }) => {
       const manifest = await manifestOf(request);

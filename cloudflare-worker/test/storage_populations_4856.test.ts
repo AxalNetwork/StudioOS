@@ -23,14 +23,19 @@ function fixture() {
       (11,'Member','member@example.test','founder',101,1,'free','active','free','free'),
       (12,'Idle','idle@example.test','investor',NULL,1,'free','active','free','free'),
       (15,'Staff','staff@example.test','admin',NULL,1,'free','active','free','free');
+    INSERT INTO dd_cases(id,uid,subject_type,subject_id,subject_label,owner_user_id)
+      VALUES (1,'null-owner-fixture','project',1,'Fixture',11);
   `);
   const put = (owner: number, n: number, bytes: number | null) => db.prepare(
     'INSERT INTO research_documents(uid,owner_user_id,title,r2_key,size_bytes) VALUES (?,?,?,?,?)',
   ).run(`f-${owner}-${n}`, owner, 'Filler', `research/${owner}/${n}`, bytes);
+  const putUnowned = (n: number, bytes: number | null) => db.prepare(
+    'INSERT INTO dd_attachments(case_id,file_key,filename,size_bytes,uploaded_by_user_id) VALUES (1,?,?,?,NULL)',
+  ).run(`dd/null/${n}`, 'Filler', bytes);
   const native = d1Over(db);
   let fail: RegExp | null = null;
   const env: any = { DB: { prepare(sql: string) { if (fail?.test(sql)) throw new Error('synthetic-private-failure'); return native.prepare(sql); }, batch: (s: any[]) => native.batch(s) } };
-  return { db, env, put, fail: (r: RegExp | null) => { fail = r; } };
+  return { db, env, put, putUnowned, fail: (r: RegExp | null) => { fail = r; } };
 }
 
 test('100 MB of member storage and 900 MB of staff storage: members 100 MB, staff 900 MB, total 1 GB', async () => {
@@ -53,6 +58,7 @@ test('the total is the sum of the populations, in files, bytes and unknown-size 
   f.put(11, 1, 10); f.put(11, 2, null);
   f.put(15, 1, 20); f.put(15, 2, null); f.put(15, 3, null);
   f.put(999, 1, 40); f.put(999, 2, null);
+  f.putUnowned(1, 30); f.putUnowned(2, null);
   const body = await readPlatformStorage(f.env);
   const p = body.populations!;
   for (const key of ['files', 'measured_bytes', 'unknown_size_files'] as const) {
@@ -61,7 +67,11 @@ test('the total is the sum of the populations, in files, bytes and unknown-size 
   }
   assert.deepEqual([p.members.files, p.members.measured_bytes, p.members.unknown_size_files], [2, 10, 1]);
   assert.deepEqual([p.staff.files, p.staff.measured_bytes, p.staff.unknown_size_files], [3, 20, 2]);
-  assert.deepEqual([p.unattributed.accounts, p.unattributed.files, p.unattributed.measured_bytes, p.unattributed.unknown_size_files], [1, 2, 40, 1]);
+  assert.deepEqual([p.unattributed.accounts, p.unattributed.accounts_with_files, p.unattributed.files, p.unattributed.measured_bytes, p.unattributed.unknown_size_files], [1, 1, 4, 70, 2]);
+  const direct = f.db.prepare(`SELECT COUNT(*) AS files, SUM(size_bytes) AS bytes, SUM(size_bytes IS NULL) AS unknown FROM (
+    SELECT size_bytes FROM research_documents UNION ALL SELECT size_bytes FROM dd_attachments
+  )`).get() as any;
+  assert.deepEqual([body.totals.files, body.totals.measured_bytes, body.totals.unknown_size_files], [direct.files, direct.bytes, direct.unknown], 'the population total matches the direct stored-file aggregate');
   assert.equal(body.measured_is_floor, true, 'unknown-size files make the bytes a floor, never counted as 0 in a total claimed exact');
 });
 

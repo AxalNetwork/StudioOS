@@ -196,6 +196,7 @@ export function meetingLinkProblem(provider, raw) {
   let url;
   try { url = new URL(text); } catch { return 'That is not a link.'; }
   if (url.protocol !== 'https:') return 'The link must start with https://.';
+  if (url.username || url.password) return 'Use a meeting link without a username or password.';
   const host = url.hostname.toLowerCase();
   const scheduled = MEETING_PROVIDERS.find((p) => p.key === provider);
   if (scheduled && !safeJoinUrl(text, provider)) return provider === 'zoom' ? 'A Zoom link is on zoom.us.' : `A ${scheduled.label} link is on meet.google.com.`;
@@ -235,12 +236,42 @@ export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', '
 export const TEAMS_PASTE = 'Create the meeting in Microsoft Teams and paste its link here. Axal cannot create a Teams meeting yet.';
 /** D1359: Teams is created on the member's Microsoft calendar connection, which needs a work or school account. */
 export const TEAMS_CREATE_NOTE = 'Uses your Microsoft calendar connection, and needs a work or school Microsoft 365 account. A personal account: create it in Teams and paste the link.';
-export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google Calendar to create a Meet meeting here', teams: 'Connect Microsoft to create the meeting here' });
-export function createMeetingOffer(mode, provider, channels) {
+export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google Calendar to create a Meet meeting here', teams: 'Connect Microsoft Teams in Account to create the meeting here' });
+/** D5810, D5811: Microsoft Teams' own Account page, on the shared Microsoft connection. */
+export const TEAMS_CONNECT_HREF = '/account/connectors/teams';
+export const TEAMS_CHECKING = 'Checking whether Axal can create a Teams meeting for you…';
+export const TEAMS_UNREADABLE = 'Unreadable: Axal could not read whether it can create a Teams meeting for you. Try again, or create it in Teams and paste the link.';
+export const TEAMS_UNAVAILABLE = 'Microsoft Teams meetings cannot be created on Axal yet. Create it in Microsoft Teams and paste the link.';
+/** D5811: the meetings capability read's Teams row; null when the read is still out, failed, or has none. */
+export const teamsRow = (caps) => (caps && typeof caps === 'object' && caps.providers && typeof caps.providers.teams === 'object' && caps.providers.teams) || null;
+/**
+ * D5811 (#5811): the Teams chip's word, from `GET /meetings/capabilities`.
+ * Never disabled: a pasted link needs no Microsoft sign-in. `caps` is
+ * undefined while reading and null when unreadable.
+ */
+export function teamsChipStatus(caps) {
+  if (caps === undefined) return { word: 'Checking', disabled: false };
+  const row = teamsRow(caps);
+  if (!row || row.connected === null) return { word: 'Unreadable', disabled: false };
+  if (row.connected === true) return { word: 'Connected', disabled: false };
+  return { word: 'Ready', disabled: false };
+}
+/**
+ * "Create the meeting for me" (D1346), per provider. D5811: Teams reads the
+ * member's own capability row; `caps` is undefined while it is read and null
+ * when it failed, so neither is ever "not connected".
+ */
+export function createMeetingOffer(mode, provider, channels, caps) {
   if (mode !== 'video') return null;
-  // D1359: Teams' connection is not in the channels read, so the Worker decides
-  // (`connected: null`) and refuses "Connect Microsoft … first" in its own words.
-  if (provider === 'teams') return { kind: 'create', connected: null, connectHref: null, connectLabel: CREATE_CONNECT.teams, note: TEAMS_CREATE_NOTE };
+  if (provider === 'teams') {
+    if (caps === undefined) return { kind: 'checking', sentence: TEAMS_CHECKING };
+    const row = teamsRow(caps);
+    if (!row) return { kind: 'unreadable', sentence: TEAMS_UNREADABLE };
+    if (row.create_available === false) return { kind: 'unavailable', sentence: TEAMS_UNAVAILABLE };
+    if (row.connected === null) return { kind: 'unreadable', sentence: TEAMS_UNREADABLE };
+    if (row.connected === true && row.can_create_meeting === true) return { kind: 'create', connected: true, connectHref: null, connectLabel: CREATE_CONNECT.teams, note: TEAMS_CREATE_NOTE, button: true };
+    return { kind: 'create', connected: false, connectHref: TEAMS_CONNECT_HREF, connectLabel: CREATE_CONNECT.teams, note: TEAMS_CREATE_NOTE };
+  }
   if (provider !== 'zoom' && provider !== 'google_meet') return null;
   const label = provider === 'zoom' ? 'Zoom' : 'Google Meet';
   if (availableOf(channels, provider) === false) return { kind: 'unavailable', sentence: `${label} meetings cannot be created on Axal yet. Create it in ${label} and paste the link.` };
@@ -257,6 +288,7 @@ export function meetingHref(provider, raw) {
   if (provider !== 'teams') return null;
   try {
     const u = new URL(String(raw || '').trim());
+    if (u.username || u.password) return null;
     const host = u.hostname.toLowerCase();
     return u.protocol === 'https:' && (host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft') ? u.toString() : null;
   } catch { return null; }
@@ -330,7 +362,7 @@ export function botState(read, platform) {
  * Any other mode is `device` (in person, or a call on this phone's speaker).
  * `botLink` is whether the link is one Eadwyn AI can join (`botPlatform`).
  */
-export const TEAMS_NO_CAPTURE = 'Axal can’t capture a Microsoft Teams call yet: Eadwyn AI is not available for Teams here, and Axal has no Teams connection. After the call, upload its recording or paste its transcript.';
+export const TEAMS_NO_CAPTURE = 'Axal can’t capture this Microsoft Teams call: Eadwyn AI is not available for Teams here, and Axal does not import Teams transcripts. After the call, upload its recording or paste its transcript.';
 export const IMPORT_NOTE = Object.freeze({
   zoom: 'Axal does not record this call. When it ends, Axal imports the transcript Zoom makes in your connected account’s cloud recording. Turn on cloud recording with audio transcripts in Zoom, and host the call from that account.',
   google_meet: 'Axal does not record this call. When it ends, Axal imports the transcript Google Meet makes, for a call organised from your connected Google account with transcription turned on in the call.',
@@ -380,6 +412,8 @@ export function callStartPlan({ mode, provider, link, channels, bot, botLink, of
     const capture = callCapture({ mode, provider, link: text, channels, bot, botLink });
     return { kind: 'none', create: false, reason: capture.kind === 'none' ? capture.reason : null };
   }
+  // D5811: a Teams meeting is created by its own button, which only fills the link; Start never makes one.
+  if (provider === 'teams') return { kind: 'none', create: false, reason: offer?.button ? 'Create the meeting, or paste its link.' : 'Paste the Teams meeting link.' };
   if (offer?.kind !== 'create') {
     return { kind: 'none', create: false, reason: offer?.kind === 'unavailable' ? offer.sentence : 'Paste the meeting link.' };
   }
@@ -533,6 +567,9 @@ export function startRefusal(e) {
   const storage = storageRefusal(e);
   if (storage) return { text: storage.text, liveHref: null, storage };
   const text = (typeof e?.message === 'string' && e.message.trim()) || 'The session could not be created.';
+  if (e?.code === 'setup_incomplete' || Number(e?.status) >= 500) {
+    return { text: e?.code === 'setup_incomplete' ? text : 'Session setup did not finish. Try again.', liveHref: null, retrySetup: true };
+  }
   // D1363: refused for AI tokens: the dialog offers Top up in place.
   if (tokenRefusal(e)) return { text, liveHref: null, topUp: true };
   const sid = e?.data?.session_id;

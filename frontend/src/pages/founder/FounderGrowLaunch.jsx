@@ -1,6 +1,7 @@
+import { growTabs, reportingHref } from '../cycles/growOverviewModel';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
+import { AlertCircle, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { text, titleCase } from '../../lib/absence';
 import { WorkerRail } from '../../ui';
@@ -10,6 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 import { LensLink } from '../../workspaces/lens';
+import GrowOverviewLink from './GrowOverviewLink';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -22,6 +24,10 @@ const dateLabel = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
+const DAY_MS = 86_400_000;
+const LAUNCH_WINDOW_DAYS = 90;
+/** D5203 (#5203): the project-linked kinds a launch calendar shows: events and Grow's dated plans and sends. */
+const LAUNCH_KINDS = Object.freeze(['event_hosted', 'event_ticket', 'publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step']);
 const kindLabel = (value) => titleCase(value) || 'Event';
 const statusLabel = (value) => titleCase(value) || 'State not recorded';
 
@@ -49,11 +55,13 @@ export default function FounderGrowLaunch() {
       if (String(selected.id) !== requestedId) {
         setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(selected.id)); return next; }, { replace: true });
       }
-      const now = new Date();
-      const from = new Date(now); from.setFullYear(from.getFullYear() - 1);
-      const to = new Date(now); to.setFullYear(to.getFullYear() + 1);
+      // D5203 (#5203): 90 days either side (the Worker's personal window is at most
+      // 180 days) and only the launch kinds, not two years of every source.
+      const now = Date.now();
+      const from = new Date(now - LAUNCH_WINDOW_DAYS * DAY_MS);
+      const to = new Date(now + LAUNCH_WINDOW_DAYS * DAY_MS);
       const results = await Promise.allSettled([
-        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString() }),
+        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString(), kinds: LAUNCH_KINDS.join(',') }),
         // Founder side; `/me/attributions` is the partner's and refuses a founder.
         api.founderCoMarketing(selected.id),
       ]);
@@ -78,10 +86,10 @@ export default function FounderGrowLaunch() {
   }), [events]);
   const visible = view === 'events' ? events : upcoming;
   const leadsAttributed = attributions.filter((row) => String(row.event_kind || '').toLowerCase() === 'lead').length;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = growTabs(query, 'distribution').map((tab) => [tab.name, tab.href]);
 
   return <main className="a5-grow fg-launch" data-testid="founder-grow-launch"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
+    <header className="a5-grow-hero"><div className="fg-launch-crumb"><GrowOverviewLink /><span>‹</span><b>Launch</b></div><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Distribution' ? 'is-active' : ''}>{label}</LensLink>)}</nav><nav aria-label="Grow utilities"><LensLink to={reportingHref(query)}>Reporting</LensLink></nav>
     <ZoneToolbar
               filters={founderZoneFilters('grow/launch', { value: view, onChange: setView })}
               actions={founderZoneActions('grow/launch', { query, view: { scope: project?.name, header: ['Item', 'Starts', 'Ends', 'State'], rows: events, cells: (r) => [r.title, r.start_at, r.end_at, r.status || r.state] } })}

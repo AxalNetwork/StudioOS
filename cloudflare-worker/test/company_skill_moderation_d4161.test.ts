@@ -51,6 +51,7 @@ function world() {
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
   db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql'));
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
@@ -148,6 +149,7 @@ test('D4161: the queue lists every company\'s skills, the author by name and nev
     uid: acme, name: 'Acme board brief', company: { uid: 'co-uid-1', name: 'Acme' }, project: null,
     author: { uid: 'u-editor', name: 'Eve Editor' }, area: { slug: 'finance_ops', label: 'Finance / Ops' },
     tools: [], status: 'published', version: 1,
+    based_on: null, // D4538 part 3: a standalone company skill has no lineage
   });
   // Mutation checked: `version: s.current_version || null` → `s.current_version` makes the draft read 0 and this fails.
   assert.equal(all.body.skills.find((s: any) => s.uid === draft).version, null, 'an unpublished skill has no version, never 0');

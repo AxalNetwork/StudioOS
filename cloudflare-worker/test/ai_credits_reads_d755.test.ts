@@ -239,8 +239,8 @@ test('the public read lists every family with its allowance, names no person, ne
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('advisor',0,0,1)").run();
     const r = await call(f, 'GET', '/api/public/plans-and-packs', null);
     assert.equal(r.status, 200, r.text);
-    // D816 (#2262): five minutes at the edge, as the issue sets for the public plans read.
-    assert.equal(r.headers.get('cache-control'), 'public, max-age=300, s-maxage=300');
+    // D816 (#2262) set five minutes at the edge; D5318 (#5318, H10) shortened it to 60 s + 60 s stale-while-revalidate.
+    assert.equal(r.headers.get('cache-control'), 'public, max-age=60, s-maxage=60, stale-while-revalidate=60');
     const byKey = Object.fromEntries(r.body.plans.map((p: any) => [`${p.family}:${p.licence_key}:${p.product_id}`, p]));
     assert.deepEqual(Object.keys(byKey).sort(), [
       'advisor:advisor:free:null', 'advisor:advisor:prod_advisor', 'founder:founder:free:null', 'founder:founder:growth:prod_growth', 'founder:founder:studio:prod_studio',

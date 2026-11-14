@@ -5,7 +5,10 @@ import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import {
+  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationNeedsSetup, keepThroughSetup,
+  loginRedirectFor, markPendingNextRedirected, pendingNextRedirected,
+} from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -88,6 +91,7 @@ import { clearActiveProject } from './lib/activeProject.js';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { keepFirstTouch } from './lib/referralRef';
+import { subscribe as subscribeConsent } from './lib/cookieConsent';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -486,6 +490,10 @@ const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
 // D1295 (#3391, ART17b): a member who opens a Content queue address is told it is for studio admins, with the way to their own articles.
 const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPermission'));
+// #4579: who reads Grow's boundary instead of a silent bounce home. Kept in step with
+// GROW_BOUNDARY_ROLES in pages/founder/GrowBoundary.jsx (a test compares them).
+const GrowBoundary = lazy(() => import('./pages/founder/GrowBoundary'));
+const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -543,7 +551,7 @@ import RecordingPill from './pages/founder/RecordingPill';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
-import { connectorsRedirect } from './pages/account/connectorsModel';
+import { connectorsRedirect, takeSignInFrom } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
@@ -781,7 +789,9 @@ function SupportRedirect() {
 // Connectors" notice.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={connectorsRedirect(loc)} state={{ connectorsMoved: true }} replace />;
+  // D5810: a Microsoft sign-in begun on the Teams page returns there; the marker is read once.
+  const [from] = useState(() => takeSignInFrom());
+  return <Navigate to={connectorsRedirect(loc, { from })} state={{ connectorsMoved: true }} replace />;
 }
 
 
@@ -863,6 +873,7 @@ function UserDropdown({ user, onLogout }) {
         className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-50 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         aria-expanded={open}
         aria-haspopup="menu"
+        data-tour="account-menu"
       >
         <span className="max-w-[160px] truncate">{user?.name || user?.email || 'Account'}</span>
         <ChevronDown size={13} className={`flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
@@ -1239,21 +1250,22 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <>
       {hqStrip === 'Platform' && (
         <HqSubNavStrip label="Platform">
+          {/* D4860 part 5: grouped by domain; HqSubNavStrip draws each group's name from HQ_STRIPS. */}
           <StripLink to="/admin/platform">Overview</StripLink>
-          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/platform/topology">Topology</StripLink>
-          <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
-          <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
           <StripLink to="/admin/platform/storage">Storage</StripLink>
+          <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
-          <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
-          <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>
-          <StripLink to="/admin/platform/decks">Decks</StripLink>
-          <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
-          <StripLink to="/monitoring">Monitoring</StripLink>
+          <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
+          <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
+          <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
+          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
+          <StripLink to="/admin/platform/decks">Decks</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Licences' && (
@@ -1321,6 +1333,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     [viewAsBranch],
   );
 
+  const errorContextAttributes = {
+    'data-error-shell': shellRole,
+    'data-error-licences': heldLicences.filter(isLicence).join(' '),
+    'data-error-sidebar': shellRole && location.state?.sectionSidebarShell === shellRole ? '1' : undefined,
+  };
+
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
@@ -1338,7 +1356,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           The height is the dynamic viewport where the browser has one: iOS Safari's
           100vh is taller than the visible screen, so the whole shell scrolled and
           took the band with it. */}
-      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}>
+      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}
+        {...errorContextAttributes}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
@@ -1671,6 +1690,22 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     if (pendingRedirect) markPendingNextRedirected();
   }, [pendingRedirect]);
 
+  // #4579 (D4579): a destination that needs a finished account (Grow) does not
+  // exempt the visitor from setup the way an invitation does. The setup gates
+  // below keep it (`keepThroughSetup`) as they redirect, and once setup is
+  // complete the visitor is returned to it here, once. Read in render, cleared
+  // after commit, so StrictMode's two renders agree.
+  const deferPendingToSetup = !!(pendingNext && destinationNeedsSetup(pendingNext));
+  const exemptFromSetup = atPendingNext && !deferPendingToSetup;
+  const afterSetup = user && onboardingLoaded && onboardingComplete ? destinationAfterSetup() : null;
+  const afterSetupDue = !!(afterSetup && location.pathname !== afterSetup.split(/[?#]/)[0]);
+  useEffect(() => {
+    if (afterSetup) clearDestinationAfterSetup();
+  }, [afterSetup]);
+  // Called by each setup gate just before it redirects. Idempotent: the same
+  // safe path written twice by StrictMode's two renders.
+  const keepForAfterSetup = () => keepThroughSetup(`${location.pathname}${location.search}${location.hash}`);
+
   useEffect(() => {
     if (!user) return;
     // A different account must not inherit the previous one's choice. The
@@ -1832,12 +1867,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding/chat" replace />;
   }
 
@@ -1849,12 +1885,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'licence' &&
     !onboardingComplete &&
     !onLicencePath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -1885,7 +1922,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   if (
     termsPending &&
     !licenceGateOwnsConsent &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
@@ -1925,7 +1962,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !onWizardPath &&
     chatGateRole !== 'admin'
   ) {
+    keepForAfterSetup();
     return <Navigate to={myWizard} replace />;
+  }
+
+  // #4579: setup is done; return to the destination it was started for, once.
+  if (afterSetupDue) {
+    return <Navigate to={afterSetup} replace />;
   }
 
   // Onboarding gate: only investors must complete KYC before accessing other
@@ -1999,6 +2042,8 @@ const ROUTE_BOUNDARIES = [
   // An admin previewing another role is sent home as before (`notPreview`).
   { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
   { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
+  // #4579: an account without the Founder licence reads why Grow is closed to it, and how to open it.
+  { under: /^\/grow(\/|$)/, roles: GROW_BOUNDARY_ROLES, Panel: GrowBoundary },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -2392,19 +2437,17 @@ function AppInner() {
     window.location.replace('/login');
   }, [clearSession]);
 
-  // Task #8 — Universal referral attribution. Capture a `?ref=CODE` from ANY
-  // entry point (not just /register) into the `axal_ref` cookie so a later
-  // purchase of ANY SKU can pay the referrer a commission. First-touch wins:
-  // we never overwrite an existing cookie. 30-day window, SameSite=Lax so it
-  // survives the cross-domain marketing → app hop.
+  // D5509 — capture a referral on entry or when the visitor opts in on that page.
   useEffect(() => {
-    try {
-      const code = new URLSearchParams(window.location.search).get('ref');
-      if (!code) return;
-      // D4289 P2 (#4291): a handle reference stays a handle (h:jane, 90 days); a code is normalised as before (30 days).
-      keepFirstTouch(code); // first-touch wins: an existing cookie is never replaced
-    } catch { /* attribution must never break navigation */ }
-  }, []);
+    const capture = () => {
+      try {
+        const code = new URLSearchParams(window.location.search).get('ref');
+        if (code) keepFirstTouch(code);
+      } catch { /* attribution must never break navigation */ }
+    };
+    capture();
+    return subscribeConsent(capture);
+  }, [location.search]);
 
   // T20 — cross-tab `user` sync now lives inside AuthProvider; the
   // realUser mirror still lives here because it's only relevant to the
@@ -3502,7 +3545,7 @@ function AppInner() {
         Every legacy address still resolves, to the ticket or to the article:
         `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
       */}
-      <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      <Route path="/help" element={<HelpCenterPage />} />
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
@@ -3522,7 +3565,7 @@ function AppInner() {
           children (`/help/tickets/:id`, `/help/admin/*`) outrank this by React
           Router's own ranking; the page reads the role-filtered manifest, so a
           guide the viewer may not read answers "not found". */}
-      <Route path="/help/:area/:guide" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      <Route path="/help/:area/:guide" element={<HelpCenterPage />} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/help/:id" element={<HelpTicketIdRedirect />} />
       <Route path="/tickets/:id" element={<TicketsRedirect />} />
@@ -3604,7 +3647,9 @@ function AppInner() {
           read, and /grow/<module> its module pages. The seven Grow pages
           below are static and win over /grow/:slug; no module slug is one of
           them. */}
-      <Route path="/grow" element={founderGrowLanding
+      {/* #4579: signed out, /grow goes through the guard itself, so sign-in
+          returns here (`next=/grow`) rather than to the page it would forward to. */}
+      <Route path="/grow" element={founderGrowLanding || !user
         ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
       {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}
@@ -3732,6 +3777,9 @@ function AppInner() {
       <Route path="/portfolio/companies/:uid" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/reports" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/terms" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/financials" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/support" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/activity" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links

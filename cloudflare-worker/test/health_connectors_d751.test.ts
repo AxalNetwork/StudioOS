@@ -21,7 +21,8 @@ import { memKV } from './_mem_kv.mjs';
 const FIXTURE_ID = 'Iv1.d751-health-fixture-id';
 const FIXTURE_SECRET = 'd751-health-fixture-secret';
 const GH = { GITHUB_APP_CLIENT_ID: FIXTURE_ID, GITHUB_APP_CLIENT_SECRET: FIXTURE_SECRET };
-const OFFERED = ['calendly', 'carta', 'docusign', 'github', 'hubspot', 'slack', 'stripe', 'vercel', 'zoom'];
+// #5291 adds TikTok, a read-only OAuth connector, to the catalogue's offer.
+const OFFERED = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'hubspot', 'slack', 'stripe', 'tiktok', 'vercel', 'zoom'];
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
 
 function fixture(opts: { env?: Record<string, string>; unreadable?: boolean } = {}) {

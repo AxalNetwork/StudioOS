@@ -36,7 +36,8 @@ const PROVIDER_NAMES: Record<string, string> = {
 const MEETING_HOSTS: Record<string, (host: string) => boolean> = {
   zoom: (h) => h === 'zoom.us' || h.endsWith('.zoom.us'),
   google_meet: (h) => h === 'meet.google.com',
-  teams: (h) => h === 'teams.microsoft.com' || h === 'teams.live.com',
+  // D1451 (#5297): the same three Teams hosts as botPlatform, teamsMeet and the bot's teamsJoinUrl.
+  teams: (h) => h === 'teams.microsoft.com' || h === 'teams.live.com' || h === 'teams.cloud.microsoft',
 };
 
 /**
@@ -63,6 +64,7 @@ export function callRefusal(channel: string, provider: string | null, meetingUrl
   let url: URL;
   try { url = new URL(meetingUrl); } catch { return 'That meeting link is not a web address.'; }
   if (url.protocol !== 'https:') return 'A meeting link must start with https://.';
+  if (url.username || url.password) return 'Use a meeting link without a username or password.';
   if (!hostOk(url.hostname.toLowerCase())) return `That link is not a ${PROVIDER_NAMES[provider]} link.`;
   return null;
 }

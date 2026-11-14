@@ -193,7 +193,7 @@ test('every read is owner-scoped, and the API takes nobody else’s id', () => {
   }
 });
 
-test('the scope chips are three separate statements, not one with a fragment spliced in', () => {
+test('the scope chips are four separate statements, not one with a fragment spliced in', () => {
   // `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
   // value is a literal chosen by a ternary — and it was right to: the first
   // draft of this read spliced `' AND saved = 1'` in, and the next person to
@@ -205,10 +205,23 @@ test('the scope chips are three separate statements, not one with a fragment spl
   // session to read before it reads anything, which is a fourth prepare and
   // nothing to do with the scopes — slicing at the `rows` declaration is what
   // keeps this counting the thing it names.
-  const branches = listing.slice(listing.indexOf('let rows:'), listing.indexOf('const items ='));
+  const branches = listing.slice(listing.indexOf('let rows:'), listing.indexOf('const read = trimPage('));
   assert.ok(branches.length > 0, 'the scope branches are gone');
-  assert.equal((branches.match(/DB\.prepare\(/g) || []).length, 3,
-    'the three scopes are no longer three whole statements');
+  // #4610 — EIGHT PREPARES FOR FOUR SCOPES, and the doubling is the point.
+  // `discarded` joined the three (it was a client-side filter over `all`'s
+  // window, so an archived answer past it was unreachable from the one tab
+  // that exists to find it), and each scope now has a first-page statement and
+  // a keyset-continuation one. Written out rather than spliced, for exactly
+  // the reason this test was written: a cursor predicate is the most tempting
+  // thing in this handler to interpolate.
+  assert.equal((branches.match(/DB\.prepare\(/g) || []).length, 8,
+    'the four scopes are no longer four pairs of whole statements');
+  for (const scope of ['saved = 1', 'discarded = 1']) {
+    assert.ok(branches.includes(scope), `the ${scope} scope lost its own written-out predicate`);
+  }
+  // Every scope reads newest-first, so the first page a reader is handed holds
+  // the answer they just got. An ASC first page would have been their oldest.
+  assert.doesNotMatch(branches, /ORDER BY id ASC/, 'a scope still pages from the oldest row forward');
 });
 
 test('the four chips reach the two things they can be', () => {
@@ -216,8 +229,14 @@ test('the four chips reach the two things they can be', () => {
   // back. `This session` and `All history` change the request; `Cited` and
   // `Unanswered` are predicates over whatever it returned — which is what keeps
   // `Cited` one chip rather than one per scope.
-  assert.match(ASK, /const SCOPES = new Set\(\['session', 'all', 'saved'\]\)/,
-    'the scope set is gone');
+  // #4610: `discarded` moved from NARROW into SCOPES. As a narrowing it ran
+  // over `scope=all`'s window, so an archived answer past that window was
+  // unreachable from the Archived tab — the one tab whose whole job is to find
+  // them. It is a server read now, with its own statement and its own totals.
+  assert.match(ASK, /const SCOPES = new Set\(\['session', 'all', 'saved', 'discarded'\]\)/,
+    'the scope set is gone, or Archived went back to being a client-side filter');
+  assert.doesNotMatch(ASK, /discarded: \(t\) => t\.discarded === true,/,
+    'Archived is a narrowing again, so it can only ever search the page in hand');
   assert.match(ASK, /cited: \(t\) => \(t\.citations \|\| \[\]\)\.length > 0,/,
     'the Cited chip no longer tests for citations');
   assert.match(ASK, /unanswered: \(t\) => t\.reason !== 'answered',/,

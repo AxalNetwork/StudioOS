@@ -1,3 +1,4 @@
+import { codeAmount } from './money.js';
 // D801 (#2234) — every escalation kind's label, and the requests a licence's
 // Administrator sends HQ (D799). The Worker's vocabulary is `ESCALATION_KINDS`
 // in `rpc/hqOps.ts`; a kind this map does not name still reads, from its key.
@@ -108,7 +109,7 @@ export function termAsItStands(term, licence) {
     case 'fee':
       return licence.annual_fee_cents === null || licence.annual_fee_cents === undefined
         ? 'Annual fee not recorded'
-        : `Annual fee ${licence.currency || ''} ${(Number(licence.annual_fee_cents) / 100).toLocaleString('en-GB')}`.replace(/\s+/g, ' ');
+        : `Annual fee ${codeAmount(Number(licence.annual_fee_cents), licence.currency, { locale: 'en-GB' })}`;
     case 'term':
       return `${licence.term_years ? `${licence.term_years} years` : 'Term not recorded'}${licence.renews_on ? `, renews ${licence.renews_on}` : ''}`;
     case 'seats': {

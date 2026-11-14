@@ -26,6 +26,7 @@ import { pageAction, pageEntry } from '../src/pages/account/connectorPageModel.j
 import { discoverFacets } from '../src/pages/account/discoverModel.js';
 import { ConnectorPanel, SheetFrame, openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
+import { cycleDef, cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -253,7 +254,9 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on its c
   }
   // Both old addresses route through it, and ask for the once-only notice.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Navigate to=\{connectorsRedirect\(loc\)\} state=\{\{ connectorsMoved: true \}\} replace \/>/);
+  // D5810: plus the page a Microsoft sign-in began on (Teams), read once from this tab.
+  assert.match(app, /<Navigate to=\{connectorsRedirect\(loc, \{ from \}\)\} state=\{\{ connectorsMoved: true \}\} replace \/>/);
+  assert.match(app, /const \[from\] = useState\(\(\) => takeSignInFrom\(\)\);/);
   assert.match(app, /<Route path="\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
   assert.doesNotMatch(app, /<Route path="\/account\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
   // The section reads the return from the address it lands on, and strips it.
@@ -476,12 +479,12 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   // Build's header is the Build cycle overview's primary action since the A3
   // desk retired (D661, #1474): "Connect a tool" opens the same sheet, now at
   // /build/connect over the page (D686 §5.1), mounted by the one lightbox mount.
-  const build = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  const def = build.slice(build.indexOf('\n  build: {'), build.indexOf('\n};', build.indexOf('\n  build: {')));
+  const build = cycleRouteText();
+  const def = cycleDef(build, 'build');
   assert.match(def, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\),/);
   // D686 §5.4 (#1597): the sheet connects for the project's company and tells the page a tool changed.
   assert.match(build, /function BuildMount\(\{ projectId, onClose, onChanged, asPage \}\) \{\s*return <ConnectToolSheet projectId=\{projectId\} onClose=\{onClose\} onChanged=\{onChanged\} asPage=\{asPage\} \/>;/);
-  assert.match(build, /import ConnectToolSheet from '\.\.\/account\/ConnectToolSheet';/);
+  assert.match(build, /import ConnectToolSheet from '\.\.\/\.\.\/account\/ConnectToolSheet';/);
   assert.match(build, /\{lightbox && Mount && projectId && \(\s*<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\}/);
 });
 

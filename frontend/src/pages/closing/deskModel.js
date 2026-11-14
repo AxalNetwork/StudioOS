@@ -16,6 +16,8 @@
  * cents with the closing's currency. Eadwyn never fills money.
  */
 import { DESK_PATH, STEPS, daysLeft, SOON_DAYS } from './closingModel.js';
+import { formatMinorOrCount } from '../../lib/money.js';
+import { closingPaperLifecycle } from '../../lib/contractLifecycle.js';
 
 export { DESK_PATH, STEPS, SOON_DAYS };
 
@@ -25,12 +27,8 @@ const cents = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? nul
 export function moneyCents(value, currency = 'USD') {
   const c = cents(value);
   if (c == null) return null;
-  const code = /^[A-Z]{3}$/.test(String(currency || '')) ? currency : 'USD';
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 2 }).format(c / 100);
-  } catch {
-    return `${(c / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a closing's currency defaults to USD, an unlisted code names the count.
+  return formatMinorOrCount(c, String(currency || 'USD'), { locale: 'en-US' });
 }
 
 // ───────────────────────────────────────────────────────────── CP13, CP21: the desk
@@ -205,17 +203,30 @@ export function awaitingRelease(envelopes) {
     && e.stages.some((s) => s.state === 'awaiting_release'));
 }
 
-/** A line's paper in one phrase, from its staged envelopes, newest first. */
+/**
+ * A line's paper in one phrase, from its staged envelopes, newest first, in
+ * the agreement lifecycle's words (D4811 part 22: "Executed", "Sent · awaiting
+ * signature · 1 of 2 signed"). `closingPaperLifecycle` holds the rule.
+ * Undefined is a read still under way ("Reading…"); null, a failed read ("Unreadable").
+ */
 export function paperWord(envelopes) {
-  const list = (Array.isArray(envelopes) ? envelopes : []).filter((e) => !e?.voided);
-  if (!list.length) return 'No paper sent';
-  const e = list[0];
-  if (e.complete) return 'Signed';
-  if (e.stages?.some((s) => s.state === 'declined')) return 'Declined';
-  if (e.stages?.some((s) => s.state === 'awaiting_release')) return 'Waiting for Axal’s countersign';
-  const done = (e.stages || []).filter((s) => s.state === 'signed').length;
-  return `Signing · ${done} of ${(e.stages || []).length} signed`;
+  if (envelopes === undefined) return 'Reading…';
+  return closingPaperLifecycle(envelopes).text;
 }
+
+/**
+ * D4811 part 24: the envelopes a dialog reads for one line, from the desk's
+ * per-line read (`{ status, envelopes }`): undefined while it is read, null
+ * when it failed, so a failed read never reads "No paper sent".
+ */
+export function paperEnvelopes(entry) {
+  if (!entry || entry.status === 'loading') return undefined;
+  if (entry.status === 'error') return null;
+  return entry.envelopes;
+}
+
+/** A line read's envelopes, or null when the answer carries no list (read as Unreadable, never as no paper). */
+export const envelopesOf = (answer) => (Array.isArray(answer?.envelopes) ? answer.envelopes : null);
 
 // ───────────────────────────────────────────────────────────── CP5: choose the route
 

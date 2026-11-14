@@ -19,6 +19,9 @@ export function scopeSentence(scope) {
 const OUTCOME_LABEL = {
   done: 'done',
   failed: 'failed — nothing changed',
+  // D4669 part 2: asked and did not answer. Never "done", and never "failed"
+  // either, which would claim nothing changed there.
+  unreachable: 'unreachable — not known whether it acted',
   not_reached: 'not reached',
   unknown: 'unknown',
 };
@@ -32,7 +35,9 @@ export function outcomeLines(outcomes) {
     const where = o?.deployment === 'hq' ? 'HQ' : String(o?.deployment ?? 'unnamed deployment');
     const what = OUTCOME_LABEL[o?.outcome] || `unrecognised outcome (${String(o?.outcome)})`;
     const n = count(o?.affected) !== null ? ` · ${count(o.affected)} account${o.affected === 1 ? '' : 's'}` : '';
-    return `${where} · ${what}${n}${o?.reason ? ` — ${o.reason}` : ''}`;
+    // D4669 part 2: a branch that already held this act answers from its record.
+    const again = o?.replayed ? ' · already on record from an earlier attempt' : '';
+    return `${where} · ${what}${n}${again}${o?.reason ? ` — ${o.reason}` : ''}`;
   });
 }
 

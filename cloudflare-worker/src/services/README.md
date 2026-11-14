@@ -40,6 +40,10 @@ runs these directly against an in-process SQLite, with no request at all.
 transactional legacy copy/Base writer. See its README for the part-3 contract;
 forecasts stay Modelled and never supply runway today.
 
+`financialStatements/` (D5833, #5833) holds the provider-neutral accounting
+statement contract: exact amounts, revisions, the QuickBooks and Xero report
+adapters and the venture-guarded store. See its README.
+
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
 gate, validates bound filters, pins append-only source ids for insertion-stable
@@ -718,3 +722,5 @@ D1420 (#3864): `studioLayoutRun.ts` is `studio:layout` on `POST /api/ai/rail/run
 D1456 (#4014): interview processing persists its actual failed step and clears it on a successful recovery claim; session and active reads share the same DTO. See the D1456 decision for the complete contract.
 
 D4811 (#4811): `templateSafety.ts` is the one predicate for a legal template's Restricted overlay (its slug in `COUNSEL_REVIEW_SLUGS`) and Incomplete overlay (a stub or a blank body). Every route that generates from, uses or publishes a template refuses through `templateUseRefusal` with 409 (`template_restricted`, or the existing `template_has_no_body`); reading, editing, previewing and withdrawing are never refused.
+
+`meta/` reads the shared Meta app credentials for WhatsApp and Facebook.

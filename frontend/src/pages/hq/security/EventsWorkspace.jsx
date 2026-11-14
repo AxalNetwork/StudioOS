@@ -52,7 +52,7 @@ function Actor({ identity, fallback }) {
   return (
     <span data-identity-kind={identity.kind}>
       {identity.label}{behalf}
-      {identity.kind !== 'user' && <small className="ml-1 text-[10.5px] text-axal-faint dark:text-gray-400">({identity.kind === 'network' ? 'network' : identity.kind})</small>}
+      {identity.kind !== 'user' && <small className="ml-1 text-[10.5px] text-axal-muted dark:text-gray-400">({identity.kind === 'network' ? 'network' : identity.kind})</small>}
     </span>
   );
 }
@@ -60,7 +60,7 @@ function Actor({ identity, fallback }) {
 function Scope({ row }) {
   return row.tenant
     ? <span>{row.tenant}</span>
-    : <span className="text-axal-faint dark:text-gray-400" title="This store does not record a branch">Not recorded</span>;
+    : <span className="text-axal-muted dark:text-gray-400" title="This store does not record a branch">Not recorded</span>;
 }
 
 function Outcome({ row }) {
@@ -136,7 +136,7 @@ export function EventFilters({ controls, setControls, actors, onApply, phone = f
         <select disabled aria-describedby="events-branch-why" className={FIELD} data-testid="events-branch">
           <option>Not offered</option>
         </select>
-        <span id="events-branch-why" className="max-w-[180px] text-[10.5px] font-normal text-axal-faint dark:text-gray-400">
+        <span id="events-branch-why" className="max-w-[180px] text-[10.5px] font-normal text-axal-muted dark:text-gray-400">
           Only licence and security events record a branch.
         </span>
       </label>
@@ -176,13 +176,13 @@ export function EventDrawer({ row, onClose, onActor }) {
           <span className="text-axal-muted dark:text-gray-300">{row.at ? `${String(row.at).slice(0, 19).replace('T', ' ')} UTC` : 'No timestamp recorded'}</span>
         </div>
         <section aria-labelledby="ev-what">
-          <h3 id="ev-what" className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint dark:text-gray-400">What happened</h3>
+          <h3 id="ev-what" className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">What happened</h3>
           <p className="mt-1 leading-relaxed text-axal-ink dark:text-gray-100" data-testid="event-what">
             {row.actor_identity?.label || row.actor || 'An unnamed actor'}: {label.toLowerCase()}. {row.target ? `${row.target}. ` : ''}{said}
           </p>
         </section>
         <section aria-labelledby="ev-who">
-          <h3 id="ev-who" className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint dark:text-gray-400">Who and where</h3>
+          <h3 id="ev-who" className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">Who and where</h3>
           <dl className="mt-1 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-axal-muted dark:text-gray-400">Actor</dt><dd><Actor identity={row.actor_identity} fallback={row.actor} /></dd>
             <dt className="text-axal-muted dark:text-gray-400">Scope</dt><dd><Scope row={row} /></dd>
@@ -206,11 +206,11 @@ export function EventDrawer({ row, onClose, onActor }) {
         <div className="flex flex-wrap items-center gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800">
           <button type="button" className={BTN} onClick={() => copy('id', row.key)}>Copy event ID</button>
           <button type="button" className={BTN} onClick={() => copy('json', json)}>Copy raw JSON</button>
-          <span role="status" className="text-[11.5px] text-axal-faint dark:text-gray-400">
+          <span role="status" className="text-[11.5px] text-axal-muted dark:text-gray-400">
             {copied === 'id' ? 'Event ID copied.' : copied === 'json' ? 'Raw JSON copied.' : copied === 'none' ? 'Copying is not available in this browser.' : ''}
           </span>
         </div>
-        <p className="text-[11.5px] text-axal-faint dark:text-gray-400">Read-only. The ledger cannot be edited from here.</p>
+        <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Read-only. The ledger cannot be edited from here.</p>
       </div>
     </Sheet>
   );
@@ -234,8 +234,12 @@ export default function EventsWorkspace({
   const [howOpen, setHowOpen] = useState(false);
   const opener = useRef(null);
 
+  // D4699 — the first page Load older belongs to. A page that answers after the list changed
+  // (a new filter, a retry) is dropped: it belongs to the old list, not this one.
+  const listOf = useRef(feed);
   // A new first page is a new list: what Load older appended belongs to the old one.
   useEffect(() => {
+    listOf.current = feed;
     setOlder([]);
     setOlderState({ cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && feed.page_split_second) });
   }, [feed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,12 +261,15 @@ export default function EventsWorkspace({
 
   const more = async () => {
     if (!olderState.cursor || olderState.busy) return;
+    const list = feed;
     setOlderState((s) => ({ ...s, busy: true, failed: false }));
     try {
       const page = await loadOlder(olderState.cursor.before);
+      if (listOf.current !== list) return;
       setOlder((cur) => [...cur, page.rows || []]);
       setOlderState({ cursor: page.cursor || null, busy: false, failed: false, split: Boolean(page.page_split_second) });
     } catch {
+      if (listOf.current !== list) return;
       setOlderState((s) => ({ ...s, busy: false, failed: true }));
     }
   };
@@ -331,7 +338,7 @@ export default function EventsWorkspace({
       {feed === unavailable && (
         <Unreadable what="The security ledger" claim="This is not a claim that nobody did anything." onRetry={onRetry} />
       )}
-      {feed === null && <p className="text-[12.5px] text-axal-faint dark:text-gray-400" aria-busy="true">Reading the sources…</p>}
+      {feed === null && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" aria-busy="true">Reading the sources…</p>}
 
       {ready && rows.length === 0 && failedSources.length === 0 && (
         <div className={`${CARD} flex items-start gap-3 p-4`} data-testid="hq-gov-empty">
@@ -346,7 +353,7 @@ export default function EventsWorkspace({
         <>
           <div className={`${CARD} hidden overflow-hidden md:block`}>
             <table className="w-full text-left text-[12.5px]" data-testid="hq-gov-feed">
-              <caption className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[.06em] text-axal-faint dark:text-gray-400">{caption}</caption>
+              <caption className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">{caption}</caption>
               <thead>
                 <tr className="border-b border-axal-hairline text-[11px] text-axal-muted dark:border-gray-800 dark:text-gray-400">
                   <th scope="col" className="px-3 py-2 font-semibold">Time</th>
@@ -373,7 +380,7 @@ export default function EventsWorkspace({
                           <button type="button" onClick={(e) => show(r, e)} className="text-left font-semibold text-axal-ink underline-offset-2 hover:underline dark:text-white" data-testid="event-open">
                             {label}
                           </button>
-                          <small className="block break-all font-mono text-[10.5px] text-axal-faint dark:text-gray-400">{raw}</small>
+                          <small className="block break-all font-mono text-[10.5px] text-axal-muted dark:text-gray-400">{raw}</small>
                         </td>
                         <td className="px-3 py-2"><Outcome row={r} /></td>
                         <td className="whitespace-nowrap px-3 py-2 text-[11.5px] text-axal-muted dark:text-gray-300">{SOURCE_SHORT[r.source] || r.source}</td>
@@ -413,12 +420,12 @@ export default function EventsWorkspace({
               <button type="button" className={BTN} onClick={more} disabled={olderState.busy} data-testid="events-load-older">
                 {olderState.busy ? 'Loading older events…' : 'Load older events'}
               </button>
-              <small className="text-[11.5px] text-axal-faint dark:text-gray-400">
+              <small className="text-[11.5px] text-axal-muted dark:text-gray-400">
                 Older than {olderThanLine(lastAt) || 'the last row'} · keeps your filters
               </small>
             </>
           ) : rows.length > 0 && (
-            <small className="text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="events-end">
+            <small className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="events-end">
               That is every event the sources hold{narrowed || filter !== 'all' ? ' for these filters' : ''}.
             </small>
           )}
@@ -426,7 +433,7 @@ export default function EventsWorkspace({
             <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">Older events could not be read. The rows above are unchanged; try again.</p>
           )}
           {olderState.split && (
-            <p className="text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="events-split-second">
+            <p className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="events-split-second">
               Every row on the last page shares one second, so the next page starts after it; rows in that second beyond these may not be shown.
             </p>
           )}

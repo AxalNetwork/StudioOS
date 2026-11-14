@@ -26,15 +26,17 @@
 import { branchSegmentOverview } from '../services/personaSegmentScopes';
 import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { promoCeilingReadback } from '../services/promoCeilingReadback';
 import type { Env } from '../types';
 import type { GameSet } from '../services/gameLibrary';
 import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
+  moveAccountOut, inviteAccount, unbindAdmin, emergencySignOut, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
   applyGames, branchGameHoldings, branchInsights, branchPrograms,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
+  type EmergencySignOutRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage,
@@ -97,6 +99,8 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
     return applyPromoCeiling(this.env, c);
   }
 
+  promoCeilingReadback() { return promoCeilingReadback(this.env); }
+
   applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
 
   // D1003 — HQ's decision on a segment suggestion this subsidiary's Admin
@@ -157,6 +161,13 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // demotes and deactivates accounts, so it authenticates its caller.
   unbindAdmin(secret: string, req: UnbindRequest) {
     return unbindAdmin(this.env, secret, req);
+  }
+
+  // D4669 part 2 — HQ signs accounts out on THIS branch, on request (the
+  // owner's option B). Secret first, for the reason above: it ends sessions,
+  // so it authenticates its caller rather than assuming it.
+  emergencySignOut(secret: string, req: EmergencySignOutRequest) {
+    return emergencySignOut(this.env, secret, req);
   }
 }
 

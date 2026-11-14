@@ -130,6 +130,11 @@ on main read `deckV2Adapter.js`.
 | `PitchPage.css` | #3717: scopes the app-main flex height to PitchPage so its rail reaches the footer on short pages. |
 | `diagramEditModel.js` | D1542 (#3780): a diagram's nodes edited on the canvas, pure: the selected area's diagram block, each node the layout draws with what it edits (an item's label or a matrix axis), one label changed (an empty one refused), and the line from the Worker's check (`deckV2Adapter.diagrams`), never "fits" when unread. |
 | `DiagramNodes.jsx` | D1542 (#3780): the selected diagram's nodes as fields over the block on the Grid, one edit each through `onCard`, and `DiagramCheck`, the check's status line under the card. |
+| `RecordPanel.jsx`, `walkthroughModel.js` | D4599 part 2 (#4599; D1590 F11, #3837): Present › Record (pd36, "Record a pitch"), a take per card sent to `deckRecordingsApi.record` as each card ends, with playback and captions, Retake, Delete behind its confirm, Send again for an interrupted upload, and "Attach to [Fund]'s link"; the model holds the words, the Worker's card numbering (`slideNumbers`) and pd35's Walkthrough cell (`walkthroughCell`), which `InvestorLinksTable.jsx` draws. Reads `deckV2Adapter.walkthrough`; HQ's `deck:walkthrough` off reads "Not switched on yet." |
+| `ShareWalkthrough.jsx`, `shareWalkthroughModel.js` | D5791 (#5791): the investor's share viewer (`../../PitchDeckPrintPage.jsx`, share mode) plays the walkthrough attached to their link: "Watch the walkthrough", then each card's take with its captions under it, in the link's own card order, moving on as a take ends. Drawn only when the link has a take attached; nothing attached and HQ's `deck:walkthrough` off draw nothing; a failed read says "The walkthrough could not be read." with Try again. Reads `deckShareWalkthroughApi` (the Worker's `cloudflare-worker/src/routes/deck_share_walkthrough.ts`), not the adapter. |
+
+| `DeckPreview.jsx` | #5218: visible-only method, stored-template and saved-version previews through the existing deck renderers; chooser-local read cache. |
+| `TemplateChooser.jsx` | #5218: visual Start from choices, previewable plan locks and the template's structure in place of the unused outline. |
 
 The old template builder retired with D898 group E: its four actions are
 `StudioActions.jsx` and New deck's Recommended mark, and `/raise/pitch/builder`

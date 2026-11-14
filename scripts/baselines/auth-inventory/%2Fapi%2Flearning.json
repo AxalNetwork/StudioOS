@@ -1,0 +1,41 @@
+{
+  "GET /api/learning/courses/:uid/cover/:filename": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/exams/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/items/:uid/captions/:lang": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/items/:uid/video": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/stream/source/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The purpose-keyed source token is the credential. A forged, tampered, expired or other route's token, and a token for an upload the item no longer plays or an item that plays no upload, get the same 404 an unknown path gets with no object opened; a session opens nothing."
+  },
+  "GET /api/learning/webinars/:uid/calendar.ics": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The entry follows canSeeLearning: an open published webinar to any member, a program webinar to a member actively enrolled in a published program holding it (a removed enrolment is refused), a draft to the Super Admin only. Every refusal is the same 404 a missing webinar gets; no credentials or a disabled account get 401."
+  },
+  "POST /api/learning/exams/:uid/attempts/:attempt/submit": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

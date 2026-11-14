@@ -19,6 +19,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
 import { usePageMeta } from '../lib/seo';
+import { track } from '../lib/funnel';
 import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -89,7 +90,7 @@ function Tabs({ tab, onPick }) {
   );
 }
 
-function PlanCard({ card, onCheckout }) {
+function PlanCard({ card, onCheckout, onSelect }) {
   const D = useContext(Face);
   const cls = `axp-card${card.highlight ? ' is-hi' : ''}${card.current ? ' is-current' : ''}`;
   return (
@@ -107,14 +108,21 @@ function PlanCard({ card, onCheckout }) {
             {card.unit && <span className="axp-price-u">{card.unit}</span>}
           </div>
           <div className="axp-price-note">{card.note}</div>
+          {card.allowanceComparison && (
+            <p className="axp-small" data-testid={`pricing-ai-interval-${card.id}`}>
+              Included AI allowance per month: {card.allowanceComparison.monthly} with monthly billing;
+              {' '}{card.allowanceComparison.yearly} with yearly billing.
+              {card.allowanceComparison.differs && ' The annual subscription discount also reduces the monthly included AI allowance.'}
+            </p>
+          )}
         </>
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
       {card.button.checkout && !card.button.disabled ? (
-        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => onCheckout(card)} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
+        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
       ) : card.button.to && !card.button.disabled ? (
-        <Link to={card.button.to} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
+        <Link to={card.button.to} onClick={card.button.to.split('?')[0] === '/register' ? () => onSelect(card) : undefined} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
       ) : (
         <button type="button" className="axp-btn" disabled>{card.button.label}</button>
       )}
@@ -148,7 +156,7 @@ function Compare({ tab, cards, storage = null }) {
   const cell = (v, key, cn = 'axp-cell') => {
     const c = compareCell(v);
     return (
-      <span key={key} className={cn}>
+      <span key={key} role="cell" className={cn}>
         {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
         {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
         {c.text}
@@ -159,14 +167,14 @@ function Compare({ tab, cards, storage = null }) {
   return (
     <section className="axp-sec axp-compare" aria-labelledby="axp-compare-h">
       <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>
-      <div className="axp-desk axp-table">
-        <div className="axp-thead" style={cols}><span />{cards.map((c) => <span key={c.id} className={`axp-th${D}`}>{c.name}</span>)}</div>
+      <div className="axp-desk axp-table" role="table" aria-labelledby="axp-compare-h">
+        <div className="axp-thead" role="row" style={cols}><span role="columnheader">Feature</span>{cards.map((c) => <span key={c.id} role="columnheader" className={`axp-th${D}`}>{c.name}</span>)}</div>
         {groups.map(([t, rows, meta]) => (
           <React.Fragment key={t}>
-            <GroupHead t={t} meta={meta} />
+            <div role="row"><div role="cell" aria-colspan={cards.length + 1}><GroupHead t={t} meta={meta} /></div></div>
             {rows.map((r) => (
-              <div key={r[0]} className="axp-row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
-                <span className="axp-row-l">{r[0]}</span>
+              <div key={r[0]} className="axp-row" role="row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
+                <span className="axp-row-l" role="rowheader">{r[0]}</span>
                 {r.slice(1).map((v, i) => cell(v, i, cellClass(meta, r[0])))}
               </div>
             ))}
@@ -179,12 +187,12 @@ function Compare({ tab, cards, storage = null }) {
             <button key={c.id} type="button" role="tab" aria-selected={i === at} className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
           ))}
         </div>
-        <div className="axp-table">
+        <div className="axp-table" role="table" aria-label={`${cards[at]?.name ?? ''} plan features`}>
           {groups.map(([t, rows, meta]) => (
             <React.Fragment key={t}>
-              <GroupHead t={t} meta={meta} />
+              <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
               {rows.map((r) => (
-                <div key={r[0]} className="axp-row axp-row-phone"><span className="axp-row-l">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
+                <div key={r[0]} className="axp-row axp-row-phone" role="row"><span className="axp-row-l" role="rowheader">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
               ))}
             </React.Fragment>
           ))}
@@ -457,6 +465,12 @@ export function PricingBody({ user = null }) {
   const role = useViewMode()?.shellRole ?? null;
   const tab = initialTab(location.search, user ? role : null);
   const [billing, setBilling] = useState('monthly');
+  useEffect(() => {
+    if (tab !== 'models') track('pricing_view', { audience: tab, plan: null, interval: billing });
+  }, [tab, billing]);
+  const selectPlan = (card) => {
+    if (card.selection?.plan) track('pricing_plan_selected', { audience: tab, ...card.selection });
+  };
   // D1048 (#2451): the card whose checkout sheet is open, over this page; no route change.
   const [checkout, setCheckout] = useState(null);
   // D1287: Add tokens and a pack's Buy open the sheet's pack mode in place, on that pack.
@@ -550,6 +564,9 @@ export function PricingBody({ user = null }) {
               ))}
             </div>
             {built.saving && <span className="axp-save">{built.saving}</span>}
+            <span className="axp-small" data-testid="pricing-billing-allowance-note">
+              Compare each plan's monthly AI allowance below; yearly billing can change the included amount. Full annual charges are shown on the cards.
+            </span>
           </div>
         )}
       </section>
@@ -562,7 +579,7 @@ export function PricingBody({ user = null }) {
           {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
           {ready && (
             <div className={`axp-grid axp-grid-${built.cards.length}`}>
-              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} />)}
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} onSelect={selectPlan} />)}
             </div>
           )}
           {ready && tab === 'investor' && (

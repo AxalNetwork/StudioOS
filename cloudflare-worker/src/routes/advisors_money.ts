@@ -18,7 +18,7 @@ export { ledgerAggregate, type LedgerLine };
 import { PayoutAccountNotReady, SettlementDisabled, chargeSession, FeeSnapshotMissing, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount } from '../services/advisorConnect';
 import { ensurePaymentsCustomer } from './payments';
 import {
-  type BookingRow, advisorMoney, bookingDto, parsePriceCents, requireMyAdvisor,
+  type BookingRow, advisorMoney, bookingDto, parsePriceCents, requireMyAdvisor, requireOwnEngagement,
 } from '../services/advisorPractice';
 
 const advisors = new Hono<{ Bindings: Env }>();
@@ -28,6 +28,13 @@ const advisors = new Hono<{ Bindings: Env }>();
 // 205 — What a session was worth. Recording only; no money moves.
 // ---------------------------------------------------------------------------
 const BILLING_STATES = ['unpriced', 'billed', 'collected', 'written_off'];
+/**
+ * #5316 (D5316): the states this route accepts. `included` is not a value of the
+ * `billing_state` column (205's CHECK cannot take a fifth one): it is recorded
+ * in `included_at` / `included_by_user_id` / `included_engagement_id`, and every
+ * advisor read reports it as `billing_state: 'included'`.
+ */
+const WRITABLE_BILLING_STATES = [...BILLING_STATES, 'included'];
 
 /**
  * Price a session, or record what happened to that money.
@@ -55,6 +62,57 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       }>();
     if (!row || row.advisor_id !== m.id) return c.json({ detail: 'Booking not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
+    const includedAt = row.included_at ?? null;
+
+    // #5316 (D5316): INCLUDED IN AN ENGAGEMENT, a recorded state of its own.
+    if (body.billing_state != null && !WRITABLE_BILLING_STATES.includes(String(body.billing_state).trim())) {
+      return c.json({ detail: 'billing_state must be one of: unpriced, billed, collected, written_off, included' }, 400);
+    }
+    if (body.billing_state != null && String(body.billing_state).trim() === 'included') {
+      // No price: the engagement's fee covers the session, so there is no figure
+      // for a billed, collected or outstanding total to count.
+      if ('amount_cents' in body && parsePriceCents(body.amount_cents) != null) {
+        return c.json({ detail: 'A session included in an engagement has no price of its own.', code: 'included_has_no_price' }, 400);
+      }
+      // A priced line keeps its stamped amount, rate and cut (#4713): including
+      // it would restate them. Clear the price first (a settled one cannot be).
+      if (row.amount_cents != null || row.billing_state !== 'unpriced') {
+        return c.json({
+          detail: 'This session has a price. Clear it first; a session included in an engagement is not billed.',
+          code: 'priced_line',
+        }, 409);
+      }
+      let engagementId: number | null = includedAt ? (row.included_engagement_id ?? null) : null;
+      if ('engagement_id' in body) {
+        engagementId = body.engagement_id == null || body.engagement_id === ''
+          ? null
+          : (await requireOwnEngagement(c, m.id, Number(body.engagement_id))).id;
+      }
+      // The first record stands (when, and who); naming an engagement updates the link only.
+      const now = nowIso();
+      const res: any = await c.env.DB.prepare(
+        `UPDATE advisor_bookings
+            SET included_at = ?, included_by_user_id = ?, included_engagement_id = ?, updated_at = ?
+          WHERE id = ? AND billing_state = 'unpriced' AND amount_cents IS NULL AND included_at IS ?`
+      ).bind(
+        includedAt ?? now, includedAt ? (row.included_by_user_id ?? null) : Number(user.id), engagementId, now,
+        row.id, includedAt,
+      ).run();
+      if (Number(res?.meta?.changes ?? 0) !== 1) {
+        return c.json({ detail: 'This session changed while you were editing it. Reload and try again.', code: 'booking_changed' }, 409);
+      }
+      const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
+        .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
+      return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
+    }
+    // Leaving the included state is said out loud: a bare amount on an included
+    // session is refused rather than read as "it is billed now".
+    if (includedAt && body.billing_state == null) {
+      return c.json({
+        detail: 'This session is recorded as included in an engagement. Send billing_state to change that.',
+        code: 'included_line',
+      }, 409);
+    }
 
     const stored = row.amount_cents == null ? null : Number(row.amount_cents);
     const amount_cents = 'amount_cents' in body ? parsePriceCents(body.amount_cents) : stored;
@@ -133,14 +191,17 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     // the same batch, after the guarded update, and inserts only if that update
     // changed the row, so a refused or raced write leaves no event.
     const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    // #5316 (D5316): any other state clears an included record, in the same
+    // UPDATE, and the compare includes it.
     const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
-              platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
-        WHERE id = ? AND billing_state = ? AND amount_cents IS ?`
+              platform_cut_cents = ?, take_rate_bps = ?,
+              included_at = NULL, included_by_user_id = NULL, included_engagement_id = NULL, updated_at = ?
+        WHERE id = ? AND billing_state = ? AND amount_cents IS ? AND included_at IS ?`
     ).bind(
       amount_cents, billing_state, cut, bps, nowIso(),
-      row.id, row.billing_state, stored,
+      row.id, row.billing_state, stored, includedAt,
     );
     const writes = [update];
     if (audited) {
@@ -573,6 +634,8 @@ advisors.get('/me/ledger', async (c) => {
     // by an operator). Nothing here moves money. One refund row per booking, as
     // before; the window is the booking's, as for every other figure here.
     const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    // #5305: an unreadable refund store is null below, never "0 owed".
+    let refundsRead = false;
     try {
       const rr = await c.env.DB.prepare(
         `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
@@ -589,36 +652,149 @@ advisors.get('/me/ledger', async (c) => {
           });
         }
       }
+      refundsRead = true;
     } catch { /* table absent or unreadable: no refund figure, never a guess */ }
     const refundsFor = (resolved: boolean) => [...refundByBooking.values()].filter((r) => r.resolved === resolved);
     // PAID OUT is the provider paying the advisor, which is a separate event
     // from collecting. Read from the payout ledger in the same window; null
     // (never 0) when it could not be read.
     let paidOutCents: number | null = null;
+    // #4834 (D4834): how many paid rows the sum covers, so the page draws a
+    // "Paid out" figure only over payouts that were actually recorded, and
+    // never a $0 card over an empty payout table. Null with the sum when unread.
+    let paidOutCount: number | null = null;
     try {
       const po = await c.env.DB.prepare(
-        `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+        `SELECT COALESCE(SUM(amount_cents), 0) AS cents, COUNT(*) AS n
            FROM advisor_payouts
           WHERE advisor_id = ? AND state = 'paid'
             AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) >= datetime(?))
             AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) < datetime(?))`
-      ).bind(m.id, from, from, until, until).first<{ cents: number }>();
+      ).bind(m.id, from, from, until, until).first<{ cents: number; n: number }>();
       paidOutCents = Number(po?.cents ?? 0);
-    } catch { paidOutCents = null; }
+      paidOutCount = Number(po?.n ?? 0);
+    } catch { paidOutCents = null; paidOutCount = null; }
+
+    // #4834 (D4834): THE RECORDS BEHIND THE TOTALS, one per booking, so the
+    // Practice v2 ledger (PX-07) can show each line's own price, billing state,
+    // rate and fee. Same population as `ledgerAggregate` (a cancelled or missed
+    // session counts only if collected), newest first, capped and saying so.
+    //
+    // THE RATE AND THE FEE ARE THE LINE'S OWN, AS STORED. A line priced before
+    // migration 241 stamped them carries NULL, and it is sent as NULL: the
+    // aggregate fills that gap with today's rate for its totals, which is a
+    // different fact from a rate fixed when the line was priced, so `unfrozen`
+    // counts those lines and the page says so. Tolerated: an unread list leaves
+    // the totals standing (`lines.read: false`).
+    const LINES_CAP = 200;
+    let lines: {
+      read: boolean; listed: number; total: number | null; complete: boolean | null;
+      unfrozen: number | null; items: any[];
+      other: { records: number; gross_cents: number; fee_cents: number; net_cents: number } | null;
+    } = { read: false, listed: 0, total: null, complete: null, unfrozen: null, items: [], other: null };
+    try {
+      const lr = await c.env.DB.prepare(
+        `SELECT b.id AS id, b.founder_user_id AS client_user_id, u.name AS client_name,
+                b.topic AS topic, b.status AS status, b.created_at AS created_at,
+                s.starts_at AS session_at,
+                b.amount_cents AS amount_cents, b.billing_state AS billing_state,
+                b.take_rate_bps AS take_rate_bps, b.platform_cut_cents AS platform_cut_cents,
+                b.included_at AS included_at, b.included_engagement_id AS included_engagement_id
+           FROM advisor_bookings b
+           LEFT JOIN users u ON u.id = b.founder_user_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.advisor_id = ?
+            AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+            AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+            AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+          ORDER BY b.created_at DESC, b.id DESC
+          LIMIT ?`
+      ).bind(m.id, from, from, until, until, LINES_CAP + 1).all<any>();
+      const un = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n
+           FROM advisor_bookings b
+          WHERE b.advisor_id = ?
+            AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+            AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+            AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+            AND b.amount_cents IS NOT NULL AND b.platform_cut_cents IS NULL`
+      ).bind(m.id, from, from, until, until).first<{ n: number }>();
+      const rows = lr.results || [];
+      // #4702's rule for a capped list: the records past the cap are not lost,
+      // they are one summed row, with the aggregate's own fee expression, so
+      // the listed records plus this row add to the totals.
+      let other: { records: number; gross_cents: number; fee_cents: number; net_cents: number } | null = null;
+      if (rows.length > LINES_CAP) {
+        const o = await c.env.DB.prepare(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS gross,
+                  COALESCE(SUM(CASE WHEN amount_cents IS NULL THEN 0
+                                    WHEN platform_cut_cents IS NOT NULL THEN platform_cut_cents
+                                    ELSE CAST((amount_cents * COALESCE(take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
+             FROM (SELECT b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
+                          b.take_rate_bps AS take_rate_bps
+                     FROM advisor_bookings b
+                    WHERE b.advisor_id = ?
+                      AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+                      AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+                      AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+                    ORDER BY b.created_at DESC, b.id DESC
+                    LIMIT -1 OFFSET ?)`
+        ).bind(rate.bps, m.id, from, from, until, until, LINES_CAP).first<{ n: number; gross: number; cut: number }>();
+        const g = Number(o?.gross ?? 0); const cu = Number(o?.cut ?? 0);
+        other = { records: Number(o?.n ?? 0), gross_cents: g, fee_cents: cu, net_cents: g - cu };
+      }
+      const items = rows.slice(0, LINES_CAP).map((r: any) => {
+        const amount = r.amount_cents == null ? null : Number(r.amount_cents);
+        const fee = r.platform_cut_cents == null ? null : Number(r.platform_cut_cents);
+        // #5316 (D5316): included first, as the aggregate classifies it.
+        const state = r.included_at ? 'included' : amount == null ? 'unpriced' : String(r.billing_state || 'billed');
+        return {
+          id: Number(r.id),
+          client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
+          client_name: r.client_name ?? null,
+          topic: r.topic ?? null,
+          status: r.status ?? null,
+          session_at: r.session_at ?? null,
+          created_at: r.created_at ?? null,
+          amount_cents: amount,
+          billing_state: state,
+          // Collected is recorded as the line's whole price: there is no
+          // separate collected amount in the store. Null when not collected.
+          collected_cents: state === 'collected' ? amount : null,
+          take_rate_bps: r.take_rate_bps == null ? null : Number(r.take_rate_bps),
+          platform_fee_cents: fee,
+          net_cents: amount != null && fee != null ? amount - fee : null,
+          included_engagement_id: r.included_at && r.included_engagement_id != null ? Number(r.included_engagement_id) : null,
+        };
+      });
+      lines = {
+        read: true,
+        listed: items.length,
+        total: agg.totals.sessions,
+        complete: rows.length <= LINES_CAP,
+        unfrozen: Number(un?.n ?? 0),
+        items,
+        other,
+      };
+    } catch { /* tolerated: `lines.read` stays false and the totals stand */ }
     const states = {
       billed: agg.states.billed,
       collected: agg.states.collected,
       written_off: agg.states.written_off,
       unpriced: { sessions: agg.states.unpriced },
-      refunds_owed: {
+      // #5316 (D5316): sessions the engagement covers. No figure: they are in no
+      // money total, and counted here so the page can say so.
+      included: { sessions: agg.states.included },
+      refunds_owed: refundsRead ? {
         sessions: refundsFor(false).length,
         amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
-      },
-      refunded: {
+      } : null,
+      refunded: refundsRead ? {
         sessions: refundsFor(true).length,
         amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
-      },
+      } : null,
       paid_out_cents: paidOutCents,
+      paid_out_count: paidOutCount,
       void_sessions: agg.voidSessions,
     };
     const clients = [...byClient.values()]
@@ -645,6 +821,8 @@ advisors.get('/me/ledger', async (c) => {
         // the sessions nobody priced would be a smaller number presented as a
         // complete one.
         unpriced_sessions: totals.unpriced,
+        // #5316 (D5316): included in an engagement — neither priced nor unpriced.
+        included_sessions: totals.included,
         // The money actually received: collected lines only, net of the cut.
         received_cents: states.collected.net_cents,
       },
@@ -658,6 +836,7 @@ advisors.get('/me/ledger', async (c) => {
         engagements: { read: engagementsRead, complete: engagementsComplete },
       },
       states,
+      lines,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
       // spread", which is the opposite of what an empty quarter means.
@@ -687,14 +866,17 @@ advisors.get('/me/ledger', async (c) => {
  * the chip row offers "Year to date" and "All time", and a note written under
  * one of those is as real as one written under a quarter.
  */
-const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}|all)$/;
+// #4834 (D4834): the Practice v2 period selector (PX-07) adds a calendar
+// MONTH, `2026-11`, beside the quarter and the year. A custom range has no key
+// and therefore no note: a note is the advisor's word on a named period.
+const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}-(0[1-9]|1[0-2])|\d{4}|all)$/;
 
 advisors.get('/me/period-notes/:key', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     const row = await c.env.DB.prepare(
       'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
     ).bind(m.id, key).first<any>();
@@ -717,7 +899,7 @@ advisors.put('/me/period-notes/:key', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     const body = await c.req.json().catch(() => ({} as any));
     // #4679 — A NOTE IS FILED AGAINST THE PERIOD IT WAS WRITTEN FOR. The page
     // names that period in the body; if it is not the period in the URL (a
@@ -765,7 +947,7 @@ advisors.delete('/me/period-notes/:key', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     await c.env.DB.prepare(
       'DELETE FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
     ).bind(m.id, key).run();
@@ -932,6 +1114,7 @@ advisors.get('/me/tax-summary', async (c) => {
       sessions: totals.sessions,
       priced_sessions: totals.priced,
       unpriced_sessions: totals.unpriced,
+      included_sessions: totals.included,
       clients: agg.pricedClients,
       completeness: { basis: 'Every booking created in the year, summed in the database. No row cap applies.', sessions: totals.sessions },
       basis: 'Calendar year in UTC, by the date each session was booked.',
@@ -939,7 +1122,8 @@ advisors.get('/me/tax-summary', async (c) => {
         is_tax_form: false,
         note: 'A summary of what this platform recorded. It is not an IRS Form 1099, '
           + 'no tax document is issued by Axal, and this is not tax advice. '
-          + 'Sessions with no price recorded are counted separately and are not in these totals.',
+          + 'Sessions with no price recorded, and sessions included in an engagement, are counted '
+          + 'separately and are not in these totals.',
       },
       settlement: settlementMode(c.env),
     });

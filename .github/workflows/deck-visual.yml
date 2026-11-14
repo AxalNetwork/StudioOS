@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
-      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      image: mcr.microsoft.com/playwright@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f # v1.64.1-noble
     permissions:
       contents: read
     steps:
@@ -52,6 +52,10 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend --no-audit --no-fund
+
+      # D5612: the API index is built, not committed; vite's webServer imports it.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
 
       - name: Run the visual and axe suites
         id: run

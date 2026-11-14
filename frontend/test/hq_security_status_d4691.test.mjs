@@ -108,7 +108,7 @@ const OV_BASE = () => ({
   mfa: { admins_total: 2, admins_with_mfa: 2 },
   impersonations: { available: true, active: 0, recent: [] },
   sessions: { available: true, active: 1, token_hours: 24 },
-  dsr: { clock_days: 30, rows: [] },
+  dsr: { clock: { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' }, rows: [] },
   sanctions: { available: true, runs_total: 1, unreviewed_hits: 0 },
   backup_dr: {
     backup: { available: true, state: 'fresh', fresh: true, kind: 'd1', at: '2026-11-07T02:00:00Z' },

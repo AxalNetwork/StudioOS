@@ -27,6 +27,10 @@ import { perkListingCounts, perkListingRows } from '../../lib/perkListings.js';
  */
 export default function partnerOffersBoard(role, api) {
   return {
+    // D4841 (#4841): the root draws the Offer Readiness view (`OfferReadiness.jsx`,
+    // derived in `offerReadiness.js`) over these same sources and sections,
+    // in place of the generic six-section board. Opt-in: no other board sets it.
+    overview: 'readiness',
     sources: {
       catalog: () => api.listServiceOfferings({ mine: 1 }),
       // The firm's OWN submissions (`GET /perks/partner`), the dataset the Perk
@@ -51,8 +55,8 @@ export default function partnerOffersBoard(role, api) {
         // Requests are counted, not priced: the worker serves counts by status
         // and no booked value (#4696), and the zone prints the same figure.
         summary: (d) => summary(
-          count(Array.isArray(d?.items) ? d.items.length : null, 'offering'),
-          count(d?.measures?.requested, 'request'),
+          count(d?.total ?? (Array.isArray(d?.items) ? d.items.length : null), 'offering'),
+          d?.has_more ? null : count(d?.measures?.requested, 'request'),
         ),
         // THE FIELD NAMES ARE THE PAYLOAD'S. `o.name` and `o.price` are neither:
         // `GET /services/offerings` serializes `title`, `category`, `price_usd`
@@ -63,8 +67,7 @@ export default function partnerOffersBoard(role, api) {
         // artboard's instMeta is "Prices stored as integers, formatted once",
         // and feeding a cents integer to the dollars formatter reads $480,000
         // where the page reads $4,800.
-        // services.ts reads offerings with LIMIT 200 (D403).
-        total: (d) => total(d?.items, 200),
+        total: (d) => d?.total ?? total(d?.items, 200),
         rows: (d) => top(d?.items).map((o) => [o.title, title(o.category), usdCents(o.price_cents)]),
         footnote: () =>
           'The catalog is what a founder browsing the network sees. Each entry carries its own '
@@ -84,10 +87,9 @@ export default function partnerOffersBoard(role, api) {
         summary: (d) => {
           const c = perkListingCounts(d?.items);
           return Array.isArray(d?.items)
-            ? summary(count(c.total, 'listing'), count(c.live, 'live', 'live'))
+            ? d?.has_more ? `${c.total} listings on the first page` : summary(count(c.total, 'listing'), count(c.live, 'live', 'live'))
             : null;
         },
-        // The worker reads submissions with LIMIT 200.
         total: (d) => total(d?.items, 200),
         rows: (d) => top(perkListingRows(d?.items)).map((r) => [r.name, r.reviewLabel, r.stateLabel]),
         footnote: () =>

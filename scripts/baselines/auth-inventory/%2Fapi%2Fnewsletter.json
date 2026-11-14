@@ -1,0 +1,17 @@
+{
+  "GET /api/newsletter/confirm": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/newsletter/confirm": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/newsletter/subscribe": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

@@ -17,6 +17,8 @@ canonical entity map.
 | ------------------- | --------------------------------------------------------------------- |
 | `frontend/`         | React 19 + Vite 6 + Tailwind 4 SPA — built into `docs/`, served by the Worker on both hosts |
 | `cloudflare-worker/`| **Production API** — Hono on Cloudflare Workers, D1, KV, R2, Queues, Vectorize, Durable Objects |
+| `engineering-notifications/` | D5664: inactive independent GitHub metadata capture and reconciliation proposal. |
+| `engineering-slack/` | D5665: inactive independent Slack batching and durable delivery proposal. |
 | `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
 | `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
 | `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
@@ -59,3 +61,6 @@ Full walkthrough + auth-error troubleshooting:
 
 Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
 to Axal VC Management LLC for operation.
+| `agent-compute/` | D4557: separate default-off general compute host and bounded Container runtime. |
+
+D5676: `cloudflare-archive-observer/` is the independent disabled metadata observer for `cloudflare-worker-tail/`; no raw archive body enters notification receipts.

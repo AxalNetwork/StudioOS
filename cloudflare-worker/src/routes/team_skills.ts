@@ -8,13 +8,21 @@
  *        Axal", and the company's own skills when `company` is the caller's
  *   GET  /skills/:uid                    one skill: its SKILL.md, versions and the agents using it
  *   POST /skills                         a new draft { scope, company?, ...fields } or { scope, company?, skill_md }
- *   PATCH /skills/:uid                   edit the draft, or retire it
+ *   PATCH /skills/:uid                   edit the draft, or retire it. D5325: `expected_draft_hash` (the card's
+ *                                        `draft_hash`) is checked: stale → 409 `draft_conflict` { draft_hash, draft,
+ *                                        updated_at, updated_by }, nothing written; malformed → 400 `draft_hash_invalid`;
+ *                                        absent → unchecked, as before. The write is guarded inside its batch either way.
+ *   D5325: every card (list, detail and write replies) carries `readiness` (SK-13, `services/agents/skillReadiness.ts`),
+ *        `draft_hash` (a writer's; null for a reader) and `run_cost: null` (Not recorded until #4536)
  *   POST /skills/:uid/publish            a new immutable version (`services/agents/skillPublish.ts`); an HQ
  *                                        skill needs a second Super Admin's approval and its golden cases
  *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`) on every
  *                                        required model (D4533: 409 `evaluation_incomplete`); a refusal carries
  *                                        the release decision as `freshness`, and so does the reply
- *                                        `{ skill, freshness }` (null for a company skill)
+ *                                        `{ skill, freshness }` (null for a company skill). D4533 (B1): the body may
+ *                                        carry `release_note` (text, up to 2000 characters; 400
+ *                                        `release_note_invalid` | `release_note_too_long`), kept on the version row;
+ *                                        GET /skills/:uid answers it as `versions[].release_note` (null: none written)
  *
  * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
@@ -30,6 +38,20 @@
  *   GET  /skills/:uid/assignable         the skill's role's agents the caller can manage: assigned, blocked, skill_count
  *   POST /skills/:uid/assign             { agent_uids }: pins the current version; partial, { added, refused }
  *   GET  /:scope/:id/coverage            per axis, the team's people's highest level and its agents'
+ *
+ * D4538 part 2 (#4538): company extensions, forks with provenance (decisions/D4538.md, D4538-p2.md).
+ *   POST /skills/:uid/extend             :uid an HQ skill; { company, reason, version?, name? }: a new company DRAFT
+ *                                        copied from that exact published HQ version, recording `based_on` and the
+ *                                        reason. The HQ skill is only read. 201 { skill, base }. Refusals: 404
+ *                                        `not_found` (skill or company), 422 `base_not_hq`, 403 `not_editor`, 400
+ *                                        `fork_reason_invalid` | `version_invalid`, 422 `version_not_published`, 409
+ *                                        `base_retired` | `base_suspended` | `slug_taken`, and `checkDraft`'s codes.
+ *   GET  /skills/:uid/base               a company skill's lineage: null for a standalone skill; else the exact base
+ *                                        version's parts, the HQ skill's current version, `base_update_available`
+ *                                        (a newer published HQ version, never applied), and a per-field three-way
+ *                                        comparison (old base, new base, the company's latest) naming conflicts.
+ *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
+ *   Every card carries `based_on: { skill_uid, version } | null`.
  *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
@@ -69,8 +91,9 @@ import {
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
-import { publishDraft } from '../services/agents/skillPublish';
+import { publishDraft, releaseNoteOf } from '../services/agents/skillPublish';
 import { draftHash } from '../services/agents/skillLifecycle';
+import { readinessOfSkills, type Readiness } from '../services/agents/skillReadiness';
 import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import { moduleOf } from '../services/agents/catalogue';
@@ -88,6 +111,9 @@ type SkillRow = {
   id: number; uid: string; scope: 'hq' | 'company'; company_id: number | null; slug: string; name: string; purpose: string;
   steps_json: string; allowed_tools_json: string; output_kind: OutputKind; status: 'draft' | 'published' | 'retired';
   current_version: number; created_by: number; updated_by: number | null; created_at: string; updated_at: string;
+  required_models_json?: string | null;
+  /** D4538 part 2: an extension's lineage; null (or absent before migration 202611130253) on a standalone skill. */
+  based_on_skill_uid?: string | null; based_on_version?: number | null; fork_reason?: string | null;
 };
 type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;
@@ -176,7 +202,15 @@ function partsDto(p: Parts, tax: Taxonomy) {
   };
 }
 
-function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts, draft: Parts | null, usedByCount: number, contextTokens: number | null) {
+/**
+ * D5325: `readiness` is SK-13's state, decided on the server (`skillReadiness.ts`). `draft_hash` is the version of the
+ * draft a writer loaded (`draftHash`, the same value as HQ's `skill.draft_hash`), sent back as `expected_draft_hash`
+ * on `PATCH /skills/:uid`; null for a reader. `run_cost` is null: a recorded cost per run is #4536's, and until it
+ * exists the screen reads "Not recorded", never 0. `context_tokens` stays the estimate it was (D4121).
+ */
+type CardExtra = { readiness: Readiness; draft_hash: string | null };
+
+function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts, draft: Parts | null, usedByCount: number, contextTokens: number | null, extra: CardExtra) {
   return {
     uid: s.uid, scope: s.scope, slug: s.slug, status: s.status, version: s.current_version || null,
     author: s.scope === 'hq' ? 'Axal' : authorName,
@@ -185,27 +219,46 @@ function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts,
     context_tokens: contextTokens,
     updated_at: s.updated_at,
     can_write: draft !== null,
+    readiness: extra.readiness,
+    draft_hash: draft ? extra.draft_hash : null,
+    run_cost: null,
+    // D4538 part 2: the HQ skill and exact version an extension was forked from; null for a standalone skill.
+    based_on: s.based_on_skill_uid ? { skill_uid: s.based_on_skill_uid, version: s.based_on_version ?? null } : null,
     ...(draft ? { draft: partsDto(draft, tax) } : {}),
   };
+}
+
+/** D5325: one skill's readiness, from the same reads as the list's; `unknown` when its golden cases cannot be read. */
+async function readinessOfOne(env: Env, s: SkillRow, parts: Parts): Promise<Readiness> {
+  const needsCases = s.scope === 'hq' && s.status !== 'retired';
+  const caseUids = needsCases
+    ? await all<{ uid: string }>(env, 'SELECT uid FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id', s.id).then((r) => r.map((k) => k.uid)).catch(() => null)
+    : [];
+  if (!caseUids) return 'unknown';
+  return (await readinessOfSkills(env, [{ ...s, parts, case_uids: caseUids }])).get(s.id) ?? 'unknown';
 }
 
 /** A library card: readers see the published version; a writer also sees the draft. */
 async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorName: string) {
   const writer = await mayWrite(env, s, user);
   const current = s.current_version > 0 ? await versionOf(env, s.id, s.current_version) : null;
-  const draft = writer || !current ? await draftParts(env, s) : null;
+  const parts = await draftParts(env, s);
+  const draft = writer || !current ? parts : null;
   const tokens = current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null;
-  return skillCard(s, tax, authorName, current ? versionParts(current) : draft!, writer ? draft : null, await usedBy(env, s.id), tokens);
+  const extra = { readiness: await readinessOfOne(env, s, parts), draft_hash: writer ? await draftHash(parts) : null };
+  return skillCard(s, tax, authorName, current ? versionParts(current) : draft!, writer ? draft : null, await usedBy(env, s.id), tokens, extra);
 }
 
 /** Read the scoped catalogue with a fixed number of D1 requests, even for HQ’s full draft library. */
 async function libraryCards(env: Env, tax: Taxonomy, company: { id: number; company_name: string } | null, canWriteHq: boolean, canWriteCompany: boolean) {
-  const rows = await all<SkillRow & { draft_tags: string; draft_roles: string; used_by: number }>(env,
+  const rows = await all<SkillRow & { draft_tags: string; draft_roles: string; case_uids: string; used_by: number }>(env,
     `SELECT s.*,
        (SELECT json_group_array(json_object('slug', t.taxonomy_skill_slug, 'level', t.level))
           FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS draft_tags,
        (SELECT json_group_array(r.role_key)
           FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r) AS draft_roles,
+       (SELECT json_group_array(k.uid)
+          FROM (SELECT uid FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL ORDER BY id) k) AS case_uids,
        (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
           WHERE l.skill_id = s.id AND a.status <> 'removed') AS used_by
        FROM agent_skills s
@@ -220,13 +273,18 @@ async function libraryCards(env: Env, tax: Taxonomy, company: { id: number; comp
   const tokens = await pinTokens(env, versions.map((v) => ({ skill_id: v.skill_id, version: v.version })));
   const tokensById = new Map(versions.map((v, i) => [v.skill_id, tokens?.[i] ?? null]));
 
+  // D5325: every card's readiness in two more reads whatever the count, from each skill's current draft and live cases.
+  const parts = new Map(rows.map((s) => [s.id, draftContent(s, parse(s.draft_tags, []), parse(s.draft_roles, []))]));
+  const readiness = await readinessOfSkills(env, rows.map((s) => ({ ...s, parts: parts.get(s.id)!, case_uids: parse<string[]>(s.case_uids, []) })));
+
   const cards: Array<ReturnType<typeof skillCard>> = [];
   for (const s of rows) {
     const writer = s.scope === 'hq' ? canWriteHq : canWriteCompany;
     const current = byId.get(s.id);
     if (!writer && !current) continue;
-    const draft = writer ? draftContent(s, parse(s.draft_tags, []), parse(s.draft_roles, [])) : null;
-    cards.push(skillCard(s, tax, company?.company_name ?? '', current ? versionParts(current) : draft!, draft, s.used_by, tokensById.get(s.id) ?? null));
+    const draft = writer ? parts.get(s.id)! : null;
+    const extra = { readiness: readiness.get(s.id) ?? 'unknown' as Readiness, draft_hash: draft ? await draftHash(draft) : null };
+    cards.push(skillCard(s, tax, company?.company_name ?? '', current ? versionParts(current) : draft!, draft, s.used_by, tokensById.get(s.id) ?? null, extra));
   }
   return cards;
 }
@@ -282,8 +340,8 @@ router.get('/skills/:uid', async (c) => {
   const company = s.company_id != null ? await c.env.DB.prepare('SELECT uid, company_name FROM company_profiles WHERE id = ?').bind(s.company_id).first<{ uid: string; company_name: string }>() : null;
   const card = await cardOf(c.env, s, user, tax, company?.company_name ?? '');
   const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
-  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null }>(c.env,
-    `SELECT v.version, v.published_at, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
+  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null; release_note: string | null }>(c.env,
+    `SELECT v.version, v.published_at, v.release_note, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
       WHERE v.skill_id = ? ORDER BY v.version DESC`, s.id);
   // The agents using it that the caller can see, grouped by company, with projects under each.
   const links = await all<AgentRow & { pinned: number }>(c.env,
@@ -309,7 +367,7 @@ router.get('/skills/:uid', async (c) => {
   }
   return c.json({
     skill: { ...card, skill_md: current?.skill_md ?? null },
-    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null })),
+    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null, release_note: v.release_note ?? null })),
     agents: [...groups.values()],
   });
 });
@@ -335,10 +393,53 @@ function writeDraftStatements(env: Env, skillId: number, d: SkillDraft) {
  * `company_skill_draft_*`. The draft is mutable and is not a history; the record is who saved which definition hash,
  * before and after. A save that changes nothing writes no row.
  */
-async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string) {
+async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string, extra: Record<string, unknown> = {}) {
   await logAdminAction(env, user.id, user.email, `${s.scope === 'hq' ? 'agent_skill' : 'company_skill'}_draft_${act}`, {
     skill_uid: s.uid, skill_name: s.name, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
-    before: before ? { definition_hash: before } : null, after: { definition_hash: after },
+    before: before ? { definition_hash: before } : null, after: { definition_hash: after }, ...extra,
+  });
+}
+
+/**
+ * D5325: the draft as ONE read (its columns, tags and roles in their order), so the version the PATCH checks and the
+ * guard its write carries are the same snapshot. The guard is the batch's first statement: when the draft is no
+ * longer this snapshot it fails (`json()` of a non-JSON text raises), and D1 rolls the whole batch back. The two
+ * statements spell the same `json_array(…)` expression; were they to drift, every checked save would be refused, which
+ * `skill_library_v2_backend_5325.test.ts` catches.
+ */
+type DraftSnapshot = { snapshot: string; parts: Parts; updated_at: string; updated_by: number | null };
+
+async function draftSnapshot(env: Env, skillId: number): Promise<DraftSnapshot | null> {
+  const row = await env.DB.prepare(`SELECT json_array(s.name, s.purpose, s.steps_json, s.allowed_tools_json, s.output_kind,
+      json((SELECT json_group_array(json_array(t.taxonomy_skill_slug, t.level)) FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t)),
+      json((SELECT json_group_array(r.role_key) FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r))) AS snapshot,
+      s.updated_at, s.updated_by FROM agent_skills s WHERE s.id = ?`)
+    .bind(skillId).first<{ snapshot: string; updated_at: string; updated_by: number | null }>();
+  if (!row) return null;
+  const json = <T>(v: unknown, fallback: T): T => (typeof v === 'string' ? parse<T>(v, fallback) : (v as T) ?? fallback);
+  const [name, purpose, steps, tools, outputKind, tags, roles] = JSON.parse(row.snapshot) as unknown[];
+  return {
+    snapshot: row.snapshot, updated_at: row.updated_at, updated_by: row.updated_by,
+    parts: {
+      name: String(name), purpose: String(purpose), steps: json<string[]>(steps, []), tools: json<string[]>(tools, []), output_kind: outputKind as OutputKind,
+      tags: json<Array<[string, Tag['level']]>>(tags, []).map(([slug, level]) => ({ slug, level })), roles: json<string[]>(roles, []),
+    },
+  };
+}
+
+const draftGuard = (env: Env, skillId: number, snapshot: string) =>
+  env.DB.prepare(`SELECT CASE WHEN json_array(s.name, s.purpose, s.steps_json, s.allowed_tools_json, s.output_kind,
+      json((SELECT json_group_array(json_array(t.taxonomy_skill_slug, t.level)) FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t)),
+      json((SELECT json_group_array(r.role_key) FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r))) = ?
+    THEN 1 ELSE json('draft_conflict ' || s.uid) END AS unchanged FROM agent_skills s WHERE s.id = ?`)
+    .bind(snapshot, skillId);
+
+/** D5325 (board SK-04 D): the draft as it is now, who saved it and when, for the conflict the editor shows. Nothing was written. */
+async function draftConflict(c: C, now: DraftSnapshot) {
+  const by = now.updated_by == null ? null
+    : await c.env.DB.prepare('SELECT uid, name FROM users WHERE id = ?').bind(now.updated_by).first<{ uid: string; name: string | null }>();
+  return say(c, 409, 'draft_conflict', 'This draft changed while you were editing. Nothing of yours was saved: reload it and reapply your changes.', {
+    draft_hash: await draftHash(now.parts), draft: partsDto(now.parts, await taxonomy(c.env)), updated_at: now.updated_at, updated_by: by ? { uid: by.uid, name: by.name } : null,
   });
 }
 
@@ -402,7 +503,17 @@ router.patch('/skills/:uid', async (c) => {
       skill_uid: s.uid, skill_name: s.name, company_id: s.company_id, before: { status: s.status, version: s.current_version || null }, after: { status: 'retired' },
     });
   } else {
-    const cur = await draftParts(c.env, s);
+    // D5325: the draft version check. `expected_draft_hash` is the `draft_hash` the editor loaded; a stale one is 409
+    // `draft_conflict` and nothing is written. Without it the save is unchecked, as before, for the callers that do not
+    // send it yet; the write below is still guarded against a change landing between this read and the batch.
+    const expected = b.expected_draft_hash;
+    if (expected !== undefined && (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected))) {
+      return say(c, 400, 'draft_hash_invalid', 'Send the draft_hash you loaded as expected_draft_hash.');
+    }
+    const snap = await draftSnapshot(c.env, s.id);
+    if (!snap) return noSkill(c);
+    if (expected !== undefined && expected !== await draftHash(snap.parts)) return draftConflict(c, snap);
+    const cur = snap.parts;
     const has = (k: string) => k in b;
     const merged = {
       slug: s.slug, name: has('name') ? b.name : cur.name, purpose: has('purpose') ? b.purpose : cur.purpose,
@@ -412,11 +523,26 @@ router.patch('/skills/:uid', async (c) => {
     const checked = checkDraft(merged, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
     if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
     const d = checked.draft;
-    await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, s.id),
-      ...writeDraftStatements(c.env, s.id, d),
-    ]);
+    // D4538 part 2: an extension's tools stay within its base version's; a fork can narrow them, never widen them.
+    if (s.scope === 'company' && s.based_on_skill_uid) {
+      const base = await baseOf(c.env, s);
+      if (!base?.version) return say(c, 409, 'base_unreadable', 'The Axal skill this extension is based on could not be read, so its tools cannot be checked. Nothing was saved.');
+      const outside = d.tools.find((t) => !versionParts(base.version!).tools.includes(t));
+      if (outside) return say(c, 422, 'tool_not_in_base', `${toolLabel(outside)} is not a tool of the Axal skill this extends, so it cannot be added here. An extension can use its base's tools or fewer.`, { tool: { key: outside, label: toolLabel(outside) } });
+    }
+    try {
+      await c.env.DB.batch([
+        // D5325: the batch is one transaction; its first statement fails it unless the draft is still what was read.
+        draftGuard(c.env, s.id, snap.snapshot),
+        c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, s.id),
+        ...writeDraftStatements(c.env, s.id, d),
+      ]);
+    } catch (e) {
+      const now = await draftSnapshot(c.env, s.id);
+      if (now && now.snapshot !== snap.snapshot) return draftConflict(c, now);
+      throw e;
+    }
     const [before, after] = await Promise.all([draftHash(cur), draftHash(d)]);
     if (before !== after) await auditDraft(c.env, user, s, 'saved', before, after);
   }
@@ -432,11 +558,134 @@ router.post('/skills/:uid/publish', async (c) => {
   // D4160: one publish for this route and HQ's bulk publish. An HQ skill needs a
   // second admin's approval and its golden cases at the bar. A company skill's
   // new version clears HQ's open flag or suspension in the same batch (D4161).
-  const done = await publishDraft(c.env, s, user);
+  // D4533 (B1): an optional release note, kept on the version row. A bad one refuses before anything is written.
+  const note = releaseNoteOf((await c.req.json().catch(() => null))?.release_note);
+  if (!note.ok) return say(c, note.status, note.code, note.message);
+  const done = await publishDraft(c.env, s, user, null, note.note);
   if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
   // D4533: an HQ publish answers the decision it was let through on (`freshness`), and null for a company skill.
   return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md }, freshness: done.freshness });
+});
+
+// ── Company extensions: forks with provenance (D4538 part 2) ───────────────
+
+/** Longest fork reason, once trimmed (the column's CHECK says the same). */
+const FORK_REASON_MAX = 300;
+const PART_FIELDS = ['name', 'purpose', 'steps', 'tools', 'output_kind', 'tags', 'roles'] as const;
+type PartField = typeof PART_FIELDS[number];
+
+type HqBase = { row: Pick<SkillRow, 'id' | 'uid' | 'name' | 'status' | 'current_version'>; version: VersionRow | null };
+
+/**
+ * An extension's HQ base and the exact version it was forked from. The uid is looked up within `scope = 'hq'` only,
+ * so a lineage column can never lead to another company's skill. Null when the HQ row cannot be found.
+ */
+async function baseOf(env: Env, s: SkillRow): Promise<HqBase | null> {
+  if (!s.based_on_skill_uid || s.based_on_version == null) return null;
+  const row = await env.DB.prepare(`SELECT id, uid, name, status, current_version FROM agent_skills WHERE uid = ? AND scope = 'hq'`)
+    .bind(s.based_on_skill_uid).first<HqBase['row']>();
+  if (!row) return null;
+  return { row, version: await versionOf(env, row.id, s.based_on_version) };
+}
+
+/** A part as one comparable value: a field "changed" when this differs. */
+const partKey = (p: Parts, f: PartField) => JSON.stringify(f === 'tags' ? p.tags.map((t) => [t.slug, t.level]) : p[f]);
+
+/**
+ * D4538's three-way comparison, field by field: the base the company forked from, the HQ skill's newest published
+ * version, and the company's latest. A field is a `conflict` when both sides changed it and differently. Read only:
+ * nothing is merged here (rebase and fork-again are not built, D4538-p2.md).
+ */
+function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
+  return PART_FIELDS.map((field) => {
+    const o = partKey(oldBase, field), n = newBase ? partKey(newBase, field) : o, mine = partKey(company, field);
+    const companyChanged = mine !== o, baseChanged = n !== o;
+    return { field, company_changed: companyChanged, base_changed: baseChanged, conflict: companyChanged && baseChanged && mine !== n };
+  });
+}
+
+router.post('/skills/:uid/extend', async (c) => {
+  const user = await requireAuth(c);
+  const base = await skillByUid(c.env, c.req.param('uid'));
+  if (!base || !(await mayRead(c.env, base, user))) return noSkill(c);
+  if (base.scope !== 'hq') return say(c, 422, 'base_not_hq', 'Only an Axal skill can be extended. A company skill is edited in place.');
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the extension as a JSON object.');
+  const company = await companyByUid(c.env, typeof b.company === 'string' ? b.company : undefined);
+  if (!company || company.archived_at || !(await isMember(c.env, company.id, user))) return say(c, 404, 'not_found', 'There is no such company.');
+  // The company's editors write its skills (`canEditAsMember`); HQ's admins moderate and never write one (D4161).
+  if (!(await canEditAsMember(c.env, company, user))) return say(c, 403, 'not_editor', 'Only the company\'s editors write its skills.');
+  const reason = typeof b.reason === 'string' ? b.reason.replace(/\r\n?/g, '\n').trim() : '';
+  if (!reason || reason.length > FORK_REASON_MAX) return say(c, 400, 'fork_reason_invalid', `Say why your company is extending this skill, in up to ${FORK_REASON_MAX} characters.`);
+  if (b.version !== undefined && (!Number.isSafeInteger(b.version) || b.version < 1)) return say(c, 400, 'version_invalid', 'Name the published version to extend as a whole number.');
+  const version: number = b.version ?? base.current_version;
+  const v = version >= 1 && version <= base.current_version ? await versionOf(c.env, base.id, version) : null;
+  if (!v) return say(c, 422, 'version_not_published', 'Only a published version of an Axal skill can be extended.');
+  if (base.status === 'retired') return say(c, 409, 'base_retired', 'This Axal skill is retired, so it cannot be extended.');
+  if (await skillRunRefusal(c.env, base.id, version)) return say(c, 409, 'base_suspended', 'This version of the Axal skill is suspended, so it cannot be extended.');
+  // The copy is the exact version's parts; only the name may differ, so the company can extend one skill twice.
+  const parts = versionParts(v);
+  const fields = { ...parts, name: b.name !== undefined ? b.name : parts.name };
+  const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
+  const d = checked.draft;
+  const clash = await c.env.DB.prepare(`SELECT 1 AS ok FROM agent_skills WHERE scope = 'company' AND IFNULL(company_id, 0) = ? AND slug = ?`)
+    .bind(company.id, d.slug).first();
+  if (clash) return say(c, 409, 'slug_taken', 'Your company already has a skill with this short name. Give the extension another name.');
+  const uid = newUid();
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, steps_json, allowed_tools_json, output_kind, created_by, updated_by,
+       based_on_skill_uid, based_on_version, fork_reason)
+     VALUES (?, 'company', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  ).bind(uid, company.id, d.slug, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, user.id,
+    base.uid, version, reason).first<{ id: number }>();
+  await c.env.DB.batch(writeDraftStatements(c.env, Number(inserted!.id), d));
+  const s = (await skillByUid(c.env, uid))!;
+  // The existing company-skill write audit (D4533 F1), with where the draft came from and why.
+  await auditDraft(c.env, user, s, 'created', null, await draftHash(d), { based_on: { skill_uid: base.uid, version }, fork_reason: reason });
+  const tax = await taxonomy(c.env);
+  return c.json({
+    skill: await cardOf(c.env, s, user, tax, company.company_name),
+    base: { uid: base.uid, name: base.name, version, current_version: base.current_version },
+  }, 201);
+});
+
+router.get('/skills/:uid/base', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  // A standalone skill (every HQ skill, and every company skill not made by /extend) has no base.
+  if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return c.json({ lineage: null });
+  const tax = await taxonomy(c.env);
+  const base = await baseOf(c.env, s);
+  const history = await all<{ version: number; based_on_version: number | null }>(c.env,
+    'SELECT version, based_on_version FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC', s.id);
+  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions: history };
+  // The HQ row or its version could not be read: say so, never guess an answer (the screen's "Unreadable").
+  if (!base?.version) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
+  const retired = base.row.status === 'retired';
+  const updateAvailable = !retired && base.row.current_version > s.based_on_version;
+  const newest = updateAvailable ? await versionOf(c.env, base.row.id, base.row.current_version) : null;
+  if (updateAvailable && !newest) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
+  // The company's side: its latest published version, else its draft (only its writers can read an unpublished skill).
+  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
+  const companyParts = current ? versionParts(current) : await draftParts(c.env, s);
+  const oldBase = versionParts(base.version);
+  return c.json({
+    lineage: {
+      ...lineage,
+      base: {
+        uid: base.row.uid, name: base.row.name, status: base.row.status, current_version: base.row.current_version,
+        retired, suspended: !!(await skillRunRefusal(c.env, base.row.id, base.row.current_version)),
+        version: { version: s.based_on_version, ...partsDto(oldBase, tax) },
+        newest: newest ? { version: newest.version, ...partsDto(versionParts(newest), tax) } : null,
+      },
+      base_update_available: updateAvailable,
+      company: { side: current ? 'version' : 'draft', version: current ? current.version : null },
+      fields: threeWay(oldBase, newest ? versionParts(newest) : null, companyParts),
+    },
+  });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────

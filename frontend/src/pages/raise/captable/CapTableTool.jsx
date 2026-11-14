@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
-import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
-import { useAuth } from '../../../hooks/useAuthSync';
 import { Unreadable, useMovedNotice } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import AccessTab from './AccessTab';
@@ -20,9 +18,9 @@ import OptionPoolTab from './OptionPoolTab';
 import { ScenarioRoute, ScenariosList } from './ScenariosPages';
 import {
   HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, PHONE_ROOT, SLUG, TABS, TITLE,
-  tabHref, tabSearch,
+  recordStanding, tabHref, tabSearch,
 } from './capTableModel';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import './capTable.css';
 
 /**
@@ -83,17 +81,24 @@ export function CapTableMovedNotice() {
  * (D1022) the record's blocks: the tool bar, Needs you, Who owns and the side
  * column. The module page's own Holders list and Planned round card follow, Modelled.
  */
-export function CapTableHomeNav({ search = '', projectId = null }) {
+export function CapTableHomeNav({ search = '', projectId = null, onRefused = null }) {
   // D1028 (CT23a): below 1024px every control here is a 44px target (`capTable.css`).
   const phone = usePhoneWidth();
+  // D5079 (#5079): the note names the Holders list and the Planned round card
+  // "below". Under a refusal neither is drawn, so the note would promise
+  // blocks that are not there; it goes with them.
+  const [refused, setRefused] = useState(false);
+  const report = useCallback((refusal) => { setRefused(!!refusal?.refused); onRefused?.(refusal); }, [onRefused]);
   return (
     <div className={`flex flex-col gap-3${phone ? ` ${PHONE_ROOT}` : ''}`} data-testid="captable-home">
       <CapTableMovedNotice />
       <CapTableTabBar active="overview" search={search} />
-      <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
-        <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
-      </p>
-      <CapTableOverview projectId={projectId} search={search} />
+      {refused ? null : (
+        <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
+          <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
+        </p>
+      )}
+      <CapTableOverview projectId={projectId} search={search} onRefused={report} />
     </div>
   );
 }
@@ -111,33 +116,30 @@ export function useRead(load, projectId, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(projectId))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
+      .catch((error) => { if (alive) setState({ status: raiseReadState(error, 'error'), data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, projectId, reload]);
   return state;
 }
 
 const readRecordOf = (id) => capTableRecordApi.read(id);
-const readGrantsOf = (id) => capTableHolderApi.grants(id);
-
 /**
- * D1025 (#2862, CT10): History, with the record (for the classes and the
- * currency its lines name) and the grants (who may void) read beside it. The
- * owner voids a recorded row (CT12b); an admin corrects one (CT12c).
+ * D1025 (#2862, CT10): History, with the record (for the classes and the currency its lines name) read beside it.
+ * The owner voids a recorded row (CT12b); an admin corrects one (CT12c). D5074: who may do which is the record
+ * read's capability map (`recordStanding`), the one the void and the correction are refused from.
  */
 function HistoryPage({ projectId, reload, retry }) {
-  const { user } = useAuth() || {};
   const record = useRead(readRecordOf, projectId, reload);
-  const grants = useRead(readGrantsOf, projectId, reload);
   const [voiding, setVoiding] = useState(null);
   const [correcting, setCorrecting] = useState(null);
-  const owner = grants.status === 'ready' && !!grants.data?.can_change;
-  const admin = String(user?.role || '').toLowerCase() === 'admin';
+  const standing = recordStanding(record);
+  const voids = standing.can('record') && standing.plan;
+  const corrects = standing.can('correct') && standing.plan;
   const done = () => { setVoiding(null); setCorrecting(null); retry(); };
   return (
     <>
-      <HistoryTab projectId={projectId} record={record} owner={owner || admin} admin={admin} reload={reload} onVoid={setVoiding} onCorrect={setCorrecting} />
-      {voiding && record.status === 'ready' ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && !owner} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      <HistoryTab projectId={projectId} record={record} owner={voids} admin={corrects} reload={reload} onVoid={setVoiding} onCorrect={setCorrecting} />
+      {voiding && record.status === 'ready' ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={standing.admin} onClose={() => setVoiding(null)} onDone={done} /> : null}
       {correcting && record.status === 'ready' ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
     </>
   );

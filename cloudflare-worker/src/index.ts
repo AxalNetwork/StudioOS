@@ -507,7 +507,7 @@ import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './ut
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
 import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
@@ -728,56 +728,9 @@ app.get('/api/health', async (c) =>
   }),
 );
 
-// Task #10 — Client error sink. Captures sanitized browser-side errors (render
-// throws, failed loads, 401-redirects) into the Worker logs so a production-only
-// failure like the passkey → /studio blank leaves a trace that's retrievable
-// via `wrangler tail` / deployment logs (grep for `[client-error]`). The
-// frontend's reportError() beacons here WITHOUT credentials, so the request
-// carries no auth cookie (hence no CSRF requirement), no token, and no PII.
-// Best-effort: it never blocks, always returns 204, and the body is size-capped
-// before parsing. Abuse is bounded by the per-IP rate-limit buckets.
-app.post('/api/client-error', async (c) => {
-  try {
-    const raw = await c.req.text();
-    // Hard size cap — drop anything implausibly large before parsing.
-    if (raw && raw.length <= 8192) {
-      let body: Record<string, unknown> | null = null;
-      try {
-        const parsed = JSON.parse(raw);
-        body = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
-      } catch {
-        body = null;
-      }
-      if (body) {
-        const clip = (v: unknown, n: number) => (v == null ? undefined : String(v).slice(0, n));
-        const entry = {
-          scope: clip(body.scope, 200) || 'unknown',
-          level: body.level === 'warn' ? 'warn' : 'error',
-          name: clip(body.name, 100),
-          message: clip(body.message, 500),
-          path: clip(body.path, 200),
-          ts: typeof body.ts === 'number' ? body.ts : Date.now(),
-          stack: clip(body.stack, 2000),
-          // Deliberately NO IP. The client already redacts secrets/PII from the
-          // free-form fields above; we keep only the user-agent as operational
-          // telemetry (it's what lets us tell "this blank only happens on Safari
-          // 17" from "this is universal"). Cloudflare's edge logs still retain
-          // the source IP if it's ever needed for an abuse investigation.
-          ua: clip(c.req.header('user-agent'), 200),
-        };
-        // One structured line so it's greppable in deployment logs.
-        console.error('[client-error]', JSON.stringify(entry));
-      }
-    }
-  } catch {
-    /* the telemetry sink must never throw */
-  }
-  return c.body(null, 204);
-});
-
 // Task #2 — First-party signup-funnel event sink (batched, consent-gated on
 // the client, per-IP `track` rate-limit bucket). Same telemetry philosophy
-// as /api/client-error above: unauthenticated, best-effort, always 204.
+// as /api/client-error: unauthenticated, best-effort, always 204.
 app.route('/api/track', track);
 
 // Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
@@ -1894,6 +1847,8 @@ app.onError((err: any, c) => {
   // reason the step-up carries its TTL: the status alone leaves the holder with
   // nothing to act on.
   if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  // D5249 — enrol-first: the body names where to enrol.
+  if (msg === ADMIN_MFA_REQUIRED) return c.json(adminMfaRequiredBody(), 403);
   // D142 — the branch twin. Without this line the gate's 423 fell through to
   // the table below and shipped as `{detail}` alone, which no client can key
   // on; `api.js` keys strictly on `code`.
@@ -2453,6 +2408,13 @@ export default {
         }
         if (now.getUTCMinutes() % 5 === 2) {
           try {
+            const { retryCalendarCopies } = await import('./services/calendar/sync');
+            const tried = await retryCalendarCopies(env);
+            if (tried) cronSummary.push(`calendar copy retries tried=${tried}`);
+          } catch {
+            taskFailed('calendar copy retry', 'calendar_copy_retry_failed');
+          }
+          try {
             const { runChannelSweeps } = await import('./services/channels/jobs');
             await runChannelSweeps(env, now);
             // Assigned chats that gained messages and went quiet are
@@ -2604,6 +2566,22 @@ export default {
           await runLabReconcileTick(env, { nowMs: now.getTime() });
         } catch (e) {
           taskFailed('lab reconcile tick', e);
+        }
+        // D4663 (#4663, owner decision A): graduation closes the Lab, so the
+        // reconciler above never sees a graduate whose final request died
+        // before the credential was issued. A few such graduates per tick get
+        // the credential and its bonus here. Idempotent; bounded by
+        // CERT_BACKFILL_TICK_LIMIT; recorded in spinout_certificate_backfill_*.
+        try {
+          const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
+          const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
+          // D5360: the same tick pays lost graduation bonuses; a tick that only paid bonuses is logged too.
+          if (b.scanned || b.bonus.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid} bonus_skipped=${b.bonus.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid}`);
+          }
+        } catch (e) {
+          taskFailed('certificate backfill tick', e);
         }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
@@ -2846,6 +2824,15 @@ export default {
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
           } catch (e) { taskFailed('licence push retry', e); }
+          // D5361 — incomplete termination consequences use the same five-minute
+          // lease as a manual resume, so a crashed request no longer waits for
+          // an operator and a racing clock cannot repeat an event or notice.
+          try {
+            const { resumeIncompleteLicenceTerminations } = await import('./routes/admin_licences_lifecycle');
+            const r = await resumeIncompleteLicenceTerminations(env, now);
+            if (!r.available) console.warn('[cron] licence termination resume', r.reason);
+            else if (r.tried || r.skipped) console.info(`[cron] licence termination resume tried=${r.tried} complete=${r.complete} incomplete=${r.incomplete} skipped=${r.skipped}`);
+          } catch (e) { taskFailed('licence termination resume', e); }
           // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
           try {
             const { retryOutbox } = await import('./services/programOutbox');
@@ -3231,6 +3218,15 @@ export default {
                 taskFailed('axal-search re-embed', type, e);
               }
             }
+            try {
+              const { sweepResearchIndex } = await import('./services/researchIndexSweep');
+              const r = await sweepResearchIndex(env, now);
+              if (r.pending_scanned || r.legacy_scanned || r.pending_failed) {
+                console.info(`[cron] research index recovery pending=${r.pending_scanned} enqueued=${r.pending_enqueued} requeued=${r.pending_requeued} failed=${r.pending_failed} legacy=${r.legacy_scanned}/${r.legacy_enqueued}`);
+              }
+            } catch (e) {
+              taskFailed('research index recovery', e);
+            }
           } catch (e) {
             taskFailed('axal-search re-embed', e);
           }
@@ -3481,6 +3477,8 @@ export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
 export { DeckRemote } from './durable-objects/deck-remote';
+// D5581 part 2 (#5581): WorkGraph leases, bound as WORK_GRAPH_LEASE; kept apart from #5618's Merge Control.
+export { WorkGraphLease } from './durable-objects/work-graph-lease';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].

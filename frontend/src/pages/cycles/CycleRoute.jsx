@@ -6,7 +6,7 @@ import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
 import { EadwynButton } from '../../ui/EadwynPanel.jsx';
 import RailFrame from '../../ui/RailFrame';
-import { RailCrumbsProvider, useRailOption, useSetRailCrumbs } from '../../ui/railCrumbs';
+import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -16,12 +16,7 @@ import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
 import useScrollToHash from '../../hooks/useScrollToHash';
-import ShareUpdateLightbox from '../founder/ShareUpdateLightbox';
-import ConnectToolSheet from '../account/ConnectToolSheet';
 import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
-import RoundCallSheet from '../founder/RoundCallSheet';
-import RecordLightbox from '../founder/RecordLightbox';
-import { interviewListOf } from '../../lib/discoveryEvidence';
 import { recordingHref } from '../founder/recordSetup';
 import { openingStep } from '../founder/assistantSession.js';
 import { reviewPath } from '../../lib/activeRecording';
@@ -37,7 +32,6 @@ import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab
 import { SequenceNeedsYou } from './distribution/SequenceBuilder.jsx';
 import NewsletterTab from './distribution/NewsletterTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
-import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
@@ -50,34 +44,18 @@ import ValidateNextAction from './ValidateNextAction';
 import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
-import DurabilityChecklist from './DurabilityChecklist';
-import GrowFromMercury from './GrowFromMercury';
-import MercuryRaiseFeed from './MercuryRaiseFeed';
-import FromLovable from './FromLovable';
-import ValidateFromGoogle from './ValidateFromGoogle';
-import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
-import FromNotion from './FromNotion';
-import { ValidateDemandPosthog, ValidateExperimentsPosthog } from './ValidatePosthog';
-import RaisePosthog from './RaisePosthog';
-import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
-import NotionInterviewImport from './NotionInterviewImport';
-import NotionSnapshotImport from './NotionSnapshotImport';
-import { buildPartsMap } from './buildParts';
-import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
-import UpdateAskReplies from './UpdateAskReplies';
-import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
-import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
+import { FromYourInterviews } from './ValidateSections';
 import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
+import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
-import { editFor, formFor, formsFor } from './forms';
-import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
+import { editFor, formsFor } from './forms';
+import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
-import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -86,8 +64,7 @@ import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/Narr
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
-import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
-import EvidencePart from './evidence/EvidencePart';
+import { isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
 import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
@@ -95,6 +72,10 @@ import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 import { lazyStep } from './lazyStep.jsx';
+import validateDef from './defs/validate.jsx';
+import raiseDef from './defs/raise.jsx';
+import growDef from './defs/grow.jsx';
+import buildDef from './defs/build.jsx';
 
 // D4574 (#4574, H5): each step's module behind its own lazy boundary, so a step page
 // fetches its own step, not all of them. Each keeps its local name, so every render
@@ -106,15 +87,10 @@ const CampaignsTab = lazyStep(() => import('./distribution/CampaignsTab.jsx'));
 const ResultsTab = lazyStep(() => import('./distribution/ResultsTab.jsx'));
 const NewCampaignPage = lazyStep(() => import('./distribution/NewCampaignPage.jsx'));
 const AdsTab = lazyStep(() => import('./distribution/AdsTab.jsx'));
-const InterviewRecord = lazyStep(() => import('../founder/InterviewReviewPage'));
 const CalendarTab = lazyStep(() => import('./distribution/CalendarTab.jsx'));
-const CalendarWeek = lazyStep(() => import('./distribution/CalendarTab.jsx'), 'CalendarWeek');
-const UpdatesHistory = lazyStep(() => import('./UpdatesHistory'));
 const ReportingDesk = lazyStep(() => import('./ReportingDesk'));
 const BuildPlan = lazyStep(() => import('./BuildPlan'));
 const BuildPlanDoor = lazyStep(() => import('./BuildPlan'), 'BuildPlanDoor', { fallback: null });
-const VerdictRecordWithPlan = lazyStep(() => import('./BuildPlan'), 'VerdictRecordWithPlan');
-const NarrativeHome = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeHome');
 const NarrativeTabBar = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabBar', { fallback: null });
 const NarrativeTabPage = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabPage');
 const CapTableHomeNav = lazyStep(() => import('../raise/captable/CapTableTool'), 'CapTableHomeNav', { fallback: null });
@@ -127,12 +103,6 @@ const UseOfFundsTabPage = lazyStep(() => import('../raise/useoffunds/UseOfFundsT
 const CapRelHomeNav = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelHomeNav', { fallback: null });
 const CapRelTabPage = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelTabPage');
 
-
-/** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
-const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
-/** D840 part 2 (#2347): a Raise module's From Mercury, from `parts.mercury`, which only the founder's own read carries. */
-const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={data?.parts?.mercury} projectId={ctx.projectId} reload={ctx.reload} />;
-
 /**
  * D661 (#1474) — a cycle's overview and module pages, wired to its read.
  *
@@ -143,7 +113,7 @@ const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={dat
  *
  * THE AI BANDS ARE A TABLE (`drafts`), rendered by one `<ZoneDraft {...draft}>`
  * below. `research_ask_session.test.mjs` censuses every band against the
- * Worker's `DRAFT_SURFACES` and reads this file's `surface: '…'` entries for
+ * Worker's `DRAFT_SURFACES` and reads the `surface: '…'` entries in `defs/` for
  * it, and `validate_fills_the_blanks.test.mjs` holds each cycle's rail
  * sentence to the bands in its own entry.
  *
@@ -157,351 +127,9 @@ const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={dat
  * nothing behind it is not drawn.
  */
 
-const CYCLE_DEFS = {
-  validate: {
-    modules: MODULES.validate,
-    // D685 §5.4: "Record a session" is the lightbox at /validate/record. A plain
-    // click opens it over this page (`onOpen`); a new tab or a deep link follows
-    // the href to the same place. The interview comes with it, or is made at Start.
-    // D686: every cycle's action is `{ path, Mount }` on this one mechanism.
-    path: 'record',
-    Mount: ValidateMount,
-    action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
-    tools: toFnMap({
-      'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
-    }),
-    add: toFnMap({
-      'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
-    }),
-    // The AI fill bands the Validate desk carried, on the module they fill.
-    fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
-    // D697 (#1659): the three bottom sections, what the Interviews, Pain map
-    // and Hypotheses pages drew. They read nothing: counts are the module
-    // read's `parts`, writes are these callbacks, and the venture is always
-    // the page's, never a row's. Each dialog goes through `ctx.openDialog`.
-    parts: toFnMap({
-      // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
-      'customer-research': (data, ctx) => (
-        <>
-          <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-            onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
-            onExport={() => api.exportValidateInterviews(ctx.projectId)} />
-          <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
-          {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
-          <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
-        </>
-      ),
-      // D1087 (#2952): research pages from Notion, as sources (title and link).
-      'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
-      'demand-signals': (data, ctx) => (
-        <>
-          <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
-          {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}
-          <ValidateDemandPosthog projectId={ctx.projectId} />
-        </>
-      ),
-      'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-        onExport={() => api.exportValidatePainMap(ctx.projectId)}
-        // #1692's `attach` on the theme record, so the theme's activity logs it.
-        onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
-        newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
-      experiments: (data, ctx) => (
-        <>
-          <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-            // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
-            onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
-              hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
-            }))}
-            // #1692's `link` on the theme record, so both sides log it.
-            onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
-            // Only until #1656 registers New hypothesis as the table's Add (decision 20).
-            onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
-          <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
-          {/* D1605 (#3731): PostHog experiments and surveys; the hypothesis and direction are the founder's. */}
-          <ValidateExperimentsPosthog projectId={ctx.projectId}
-            loadHypotheses={() => api.getValidationBoard(ctx.projectId).then((board) => (board?.hypotheses || []).filter((h) => !h.retired_at))} />
-        </>
-      ),
-      // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
-      verdict: (_data, ctx) => <ExportSummary projectId={ctx.projectId} />,
-    }),
-    // D697 (#1659): an interview is Customer research's record. The page draws
-    // what the read sends, with the session's working parts inside it.
-    recordPage: toFnMap({
-      'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
-      // D1069 (#2939, VB2a): after a given Proceed or Pivot, "Plan the build" above the record.
-      verdict: (read, ctx) => <VerdictRecordWithPlan read={read} render={(record) => (
-        <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
-          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
-      )} />,
-      // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
-      experiments: (read, ctx) => <div className="space-y-3">
-        <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
-          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
-        {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
-      </div>,
-    }),
-  },
-  /**
-   * Raise's read (#1501, D663) is already in D661's shape: its cards carry
-   * chart specs and its records carry their own `add`, so it needs no
-   * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
-   * list by `cycle_adapters_d661.test.ts`.
-   *
-   * Data room's module page is `/raise/data-room`: that static route draws
-   * this page with `slug="data-room"` (D696 decision 12), so all seven Raise
-   * modules have module pages. It is the Data room tool's Home (D1101); the
-   * old files tool and access view are retired and their addresses forward to
-   * the tool's tabs (D1109).
-   */
-  raise: {
-    modules: MODULES.raise,
-    // Keep the round-call lightbox route; the primary action opens Pitch Studio.
-    path: 'call',
-    Mount: RaiseMount,
-    action: (q) => ({ label: 'Build your deck', href: `/raise/pitch${q}` }),
-    // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
-    // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
-    // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
-    // D1267 (#3290, VR6): then each module's Evidence part, opening the Evidence view's drawers.
-    parts: toFnMap({
-      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
-        <>
-          {mercuryPart(m.slug, data, ctx)}
-          {/* D1607 (#3731): Pitch deck's PostHog metrics; Readiness and Narrative draw theirs below. */}
-          <RaisePosthog slug={m.slug} projectId={ctx.projectId} />
-          <EvidencePart slug={m.slug} projectId={ctx.projectId} />
-        </>
-      )])),
-      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
-      // D913: its Objections heard, with no Answer it for an admin.
-      'investor-narrative': (data, ctx) => (
-        <>
-          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} projectId={ctx.projectId} />
-          {mercuryPart('investor-narrative', data, ctx)}
-          <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
-          <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
-        </>
-      ),
-      // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
-      'fundraising-readiness': (data, ctx) => (
-        <>
-          <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
-          {mercuryPart('fundraising-readiness', data, ctx)}
-          <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
-          <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
-        </>
-      ),
-      // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
-      'capital-relationships': (data, ctx) => (
-        <>
-          <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
-          {mercuryPart('capital-relationships', data, ctx)}
-          {/* D1089 (#2954): an investor CRM in Notion, as investors to add or link; once linked, their stage follows. */}
-          <FromNotion section="raise" projectId={ctx.projectId} module="capital_relationships" />
-          <EvidencePart slug="capital-relationships" projectId={ctx.projectId} />
-        </>
-      ),
-      // D1089 (#2954): Notion pages as dated snapshots, NDA by default; a change adds a version on Accept only.
-      'data-room': (data, ctx) => (
-        <>
-          {mercuryPart('data-room', data, ctx)}
-          <FromNotion section="raise" projectId={ctx.projectId} module="data_room" acceptDialog={NotionSnapshotImport} />
-          <EvidencePart slug="data-room" projectId={ctx.projectId} />
-        </>
-      ),
-    }),
-    tools: toFnMap({
-      'investor-narrative': (q) => ({ label: 'Open positioning', href: `/raise/investor-narrative/positioning${q || ''}` }),
-      'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
-      // D1029: the Cap table module page is the tool, so it has no door to itself.
-      // D1173 (#2455): the venture travels with the link (broken item 8).
-      'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
-      // D1194 (#3128): the old pipeline retired into the tool; its door opens the Pipeline tab with the venture.
-      'capital-relationships': (q) => ({ label: 'Open the investor pipeline', href: `/raise/capital-relationships/pipeline${q || ''}` }),
-      // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
-    }),
-    add: toFnMap({}),
-    fills: {},
-    // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
-    // read: the round and its order of payment on Cap table, which holds the
-    // scenario both read; the room and the clauses on Fundraising readiness,
-    // which scores the data room and the documents, so the room's band sits
-    // there rather than on Data room's module page. The narrative band sits on
-    // Investor narrative, whose check it phrases.
-    drafts: new Map([
-      ['cap-table', [{
-        surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
-        empty: 'Nothing proposed yet. Eadwyn will read your round and cap-table scenario back in plain language, and show every step of the arithmetic.',
-        nothingToDraft: 'No round and no cap-table scenario are recorded for this startup yet.',
-        foot: 'Shown step by step, because you will be asked to defend this number.',
-      }, {
-        surface: 'raise/liquidity', label: 'Proposal · plain-language read', run: 'Explain the order of payment', accept: 'Attach to term sheet',
-        empty: 'Nothing proposed yet. Eadwyn will explain who is paid what and in what order from your cap table and round — and name every term the answer needs that nothing here records.',
-        nothingToDraft: 'No cap-table scenario is recorded, so there is no ownership to pay out.',
-        foot: 'No preference term is stored, so none is assumed.',
-      }]],
-      ['fundraising-readiness', [{
-        surface: 'raise/data-room', label: 'Gap analysis', run: 'Read the room', accept: 'Keep this reading',
-        empty: 'Nothing proposed yet. Eadwyn will read what this room holds, what sits behind NDA, and what the investors with access have actually opened.',
-        nothingToDraft: 'This room holds no folders and no files yet.',
-        foot: 'Read from the room itself, never from a generic diligence checklist.',
-      }, {
-        surface: 'raise/legal', tone: 'warn', label: 'Clause explained', run: 'Explain the clauses', accept: 'Keep this reading',
-        empty: 'Nothing proposed yet. Eadwyn will read the documents you have stored and name the clauses worth looking at again, quoting each one.',
-        nothingToDraft: 'No stored legal document has any text to read.',
-        // A reading of your own documents, and the footnote says what it is
-        // rather than what it is not (D424's voice rule).
-        foot: 'A reading of your documents, not counsel’s review. Counsel is on the Team page.',
-      }]],
-      // #1524 item 3 (D663): the consistency check lists each figure the
-      // narrative states differently from the stored metrics; on request,
-      // Eadwyn phrases the fix for the first one, citing both sides.
-      ['investor-narrative', [{
-        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Save reading to copy',
-        empty: 'Nothing proposed yet. Eadwyn will phrase the fix for the first mismatch the consistency check found in your newest narrative version, naming both figures and where each was read.',
-        nothingToDraft: 'The consistency check found no mismatch in your newest narrative version.',
-        foot: 'Neither figure is taken as the right one. Keeping the wording changes neither the narrative nor the metrics.',
-      }]],
-    ]),
-  },
-  /**
-   * Grow's read (#1488, D664) carries its own shapes, so it has an adapter
-   * (`adapters/grow.js`), as Validate does. The primary action is D654's
-   * Share an update, the sheet the Grow desk opened.
-   *
-   * Every Grow store has its Add and Edit form in `forms.js`, on the module
-   * page (D695, #1657): Open a role writes through `POST /cycles/grow/roles`,
-   * and the jobs board keeps its own editor. The metric log, Talent and the
-   * compliance calendar stay one tool link away.
-   */
-  grow: {
-    modules: MODULES.grow,
-    path: 'update',
-    Mount: GrowMount,
-    action: (q, open) => ({ label: 'Share an update', href: `/grow/update${q}`, onOpen: open }),
-    actions: toFnMap({ distribution: distributionPrimary }),
-    tools: toFnMap({
-      'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
-      'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
-      'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
-    }),
-    add: toFnMap({}),
-    fills: { 'product-improvement': 'feedback_theme' },
-    // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
-    // applicant ranking on Team expansion. D4493 retired Distribution's
-    // outreach-sequence band: 'Ask Eadwyn for a sequence' in the sequence
-    // builder (Prospects) runs it through D4488's drafting task.
-    drafts: new Map([
-      ['team-expansion', [{
-        surface: 'grow/talent', label: 'Match · why this one', run: 'Rank the applicants', accept: 'Keep this ranking',
-        empty: 'Nothing proposed yet. Eadwyn will rank your applicants and give reasons for the top one — each a receipt you can open and check in their own application.',
-        nothingToDraft: 'No live role has an applicant yet.',
-        foot: 'A reading only. Nothing here moves an application to a screen.',
-      }]],
-    ]),
-    // A module's further parts, drawn under its table from the module read.
-    parts: toFnMap({
-      // D686 §5.8: the Updates history (#updates) above the checklist.
-      'durable-company-building': (data, ctx) => (<>
-        <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction} />
-        <DurabilityChecklist items={data?.parts?.checklist}
-          onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
-        {fromMercury('durable-company-building', data, ctx)}
-        {/* D1095 (#2960): Calendar events tagged #board or #filing, each an obligation proposal. */}
-        <DurableFromGoogle projectId={ctx.projectId} />
-      </>),
-      // The replies customer and partner asks brought in, beside the rows.
-      distribution: (data, ctx) => (<>
-        {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
-        <CalendarWeek projectId={ctx.projectId} />
-        {fromMercury('distribution', data, ctx)}
-        <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
-      </>),
-      // D1090 (#2955): a feedback database in Notion, as product feedback.
-      'product-improvement': (_data, ctx) => (<>
-        <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />
-        {/* D1608 (#3731): survey scores and feedback from the founder's PostHog. */}
-        <ImprovementPosthog projectId={ctx.projectId} />
-      </>),
-      'partner-network': (data, ctx) => (<>
-        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
-        {fromMercury('partner-network', data, ctx)}
-      </>),
-      // D840 part 3 (#2348): the founder's own Mercury, anchored at #from-mercury.
-      // D1095 (#2960): then a metrics Sheet's figures, From Google.
-      'revenue-and-traction': (data, ctx) => (<>
-        {fromMercury('revenue-and-traction', data, ctx)}
-        <RevenueFromGoogle projectId={ctx.projectId} />
-        {/* D1608 (#3731): PostHog's metrics and product retention, apart from revenue retention. */}
-        <RevenuePosthog projectId={ctx.projectId} />
-      </>),
-      'team-expansion': (data, ctx) => fromMercury('team-expansion', data, ctx),
-    }),
-  },
-  /**
-   * Build's read (#1475, D662) is already in D661's shape (chart specs,
-   * `{ key, label }` columns, `{ id, cells }` rows), so it passes through with
-   * no adapter, as Raise's does. The primary action is D650's Connect a tool,
-   * the sheet the Build desk opened.
-   *
-   * Build's new stores (risks, formation steps, the must-have mark) have no
-   * page of their own: their Add and Edit forms are `forms.js`'s, on the
-   * module page. The roadmap, the cap table and the operating cadence link
-   * the pages that edit them today.
-   */
-  build: {
-    modules: MODULES.build,
-    // THE ONE PLACE A STARTUP IS CREATED. `/projects` is retired and the Build
-    // desk inherited the only `api.createProject` caller; sixteen links,
-    // the Command Palette's among them, address it as `/build?new=1`. The
-    // Build overview keeps it: `?new=1` opens the form, also when this page is
-    // already mounted.
-    creates: true,
-    path: 'connect',
-    Mount: BuildMount,
-    action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
-    // D1311 (#2398, #2408): each module's connector parts, in the canvases'
-    // order, one line per connector (buildParts.jsx). GitHub's are D782's;
-    // Vercel's and Lovable's lines wait there for their tasks.
-    parts: toFnMap(buildPartsMap()),
-    tools: toFnMap({
-      'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
-      'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
-      'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
-    }),
-    add: toFnMap({}),
-    fills: {},
-    // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
-    // they read: the roadmap tradeoff on Product roadmap; the Monday plan, the
-    // Friday retro and the KPI annotation on Operating systems, the weekly
-    // cadence they serve.
-    drafts: new Map([
-      ['product-roadmap', [{
-        surface: 'build/roadmap', label: 'Proposal · tradeoff, reasoned', run: 'Argue the ordering', accept: 'Accept the argument',
-        empty: 'Nothing proposed yet. Eadwyn will read the horizons and quarters you have set and argue the one ordering most worth changing — from the record, not from anything it knows about your market.',
-        nothingToDraft: 'There are no objectives to argue an order between yet.',
-        foot: 'This writes an argument, never an order. Reordering stays in Roadmap.',
-      }]],
-      ['operating-systems', [{
-        surface: 'build/this-week', label: 'Proposal · Monday plan', run: 'Draft a Monday plan', accept: 'Accept the plan',
-        empty: 'Nothing proposed yet. Eadwyn will read what actually moved — your current key results and the cards still open — and propose next week\'s commitments.',
-        nothingToDraft: 'There are no current objectives and no open cards to plan from yet.',
-        foot: 'Owners and risk are never proposed: neither is recorded.',
-      }, {
-        surface: 'build/retro', label: 'Proposal · retro summary', run: 'Draft a retro summary', accept: 'Accept the summary',
-        empty: 'Nothing proposed yet. Eadwyn will read this week on your board — the cards touched in the last seven days and the open ones past their due date — and summarise it for your Friday retro.',
-        nothingToDraft: 'There are no cards on this board to summarise yet.',
-        foot: 'The board keeps no history of its moves, so the summary never says how often a card moved.',
-      }, {
-        surface: 'build/kpi', label: 'Out of range · explain this?', run: 'Draft an annotation', accept: 'Keep this annotation',
-        empty: 'Nothing proposed yet. Eadwyn will name the figure that moved most between your last two snapshots and draft one line about the movement — never about its cause, which nothing here records.',
-        nothingToDraft: 'No metric snapshot is recorded for this startup yet.',
-        foot: 'Kept as wording only. The snapshot has no annotation field to attach it to.',
-      }]],
-    ]),
-  },
-};
+// D5615 (#5615): each cycle's entry is its own file under `defs/`, so a
+// change to one cycle's modules, parts, bands or lightbox edits that file.
+const CYCLE_DEFS = { validate: validateDef, raise: raiseDef, grow: growDef, build: buildDef };
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
@@ -575,102 +203,10 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
  */
 const formWrites = { ...cyclesWrite, verdict: verdictApi };
 
-/**
- * D693 decision 13: Export summary, the verdict zone's CSV (`founder_validate.ts`,
- * gated by `canReadDecision` as the module is). A quiet button; a failure shows
- * the Worker's sentence.
- */
-function ExportSummary({ projectId }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const run = () => {
-    if (!projectId || busy) return;
-    setBusy(true); setError('');
-    Promise.resolve(api.exportValidateSummary(projectId))
-      .catch((e) => setError(e?.message || 'The summary could not be exported.'))
-      .finally(() => setBusy(false));
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-3" data-testid="verdict-export-summary">
-      <button type="button" onClick={run} disabled={busy}
-        className="rounded-lg border border-axal-hairline px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">
-        {busy ? 'Exporting…' : 'Export summary'}
-      </button>
-      {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-400">{error}</span>}
-    </div>
-  );
-}
-
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
 export function underModule(modules, path, cycle = 'validate', action = 'record') {
   const slug = underSlug(path, cycle, action);
   return (modules || []).some((m) => m.slug === slug) ? slug : null;
-}
-
-/**
- * The lightbox, with the interview it was opened on (`?interview=<id>`, from a
- * row's "Record a session") read first so Who is pre-filled.
- *
- * D4625 (#4625): `listInterviews` answers `{ project_id, interviews: [...] }`,
- * which `interviewListOf` decodes. The requested interview is one of four
- * things, and never silently another:
- *   - none requested: the intentional new-person flow (no read at all);
- *   - found: the lightbox opens on it, Who pre-filled, and Start attaches the
- *     session to that interview;
- *   - not in this venture's list (missing, or out of the caller's scope): said
- *     so, with a deliberate "Record someone new" and a Close;
- *   - unreadable (the read failed, or its answer was not a list): said so,
- *     with Try again. It never falls into the new-person flow.
- * A result is kept with the venture and interview it was read for, so
- * switching either while a read is in flight can never show or apply the
- * earlier one.
- */
-export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage, read = (id) => api.listInterviews(id), lightboxProps }) {
-  const { recorder } = useActiveRecording();
-  // D768: while Record a session is open, the rail is that option's (transcription).
-  useRailOption('transcribe:interview', 'Record a session');
-  const key = interviewId ? `${projectId}|${interviewId}` : null;
-  const [result, setResult] = useState(null); // { key, status: 'ready' | 'missing' | 'error', interview }
-  const [attempt, setAttempt] = useState(0);
-  const [newFor, setNewFor] = useState(null); // the key the founder chose "Record someone new" for
-  useEffect(() => {
-    if (!key) return undefined;
-    let alive = true;
-    const settle = (next) => { if (alive) setResult({ key, ...next }); };
-    Promise.resolve().then(() => read(projectId))
-      .then((res) => {
-        const rows = interviewListOf(res);
-        if (!rows) { settle({ status: 'error', interview: null }); return; }
-        const found = rows.find((r) => String(r.id) === String(interviewId));
-        settle(found ? { status: 'ready', interview: found } : { status: 'missing', interview: null });
-      })
-      .catch(() => settle({ status: 'error', interview: null }));
-    return () => { alive = false; };
-  }, [key, projectId, interviewId, attempt]); // eslint-disable-line react-hooks/exhaustive-deps -- `read` is a test seam, not a trigger
-  const lightbox = (interview) => <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} {...lightboxProps} />;
-  if (!key) return lightbox(null);
-  if (newFor === key) return lightbox(null);
-  const current = result?.key === key ? result : null;
-  if (!current) return null;
-  if (current.status === 'ready') return lightbox(current.interview);
-  const missing = current.status === 'missing';
-  return (
-    <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" onClose={onClose} testId="record-unavailable" {...asPage}
-      footer={(
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-unavailable-close">Close</button>
-          {missing
-            ? <button type="button" onClick={() => setNewFor(key)} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-new">Record someone new</button>
-            : <button type="button" onClick={() => { setResult(null); setAttempt((n) => n + 1); }} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-retry">Try again</button>}
-        </div>
-      )}>
-      <p className="m-0 text-[13px] leading-relaxed text-axal-ink dark:text-gray-100" role={missing ? 'status' : 'alert'} data-testid="record-unavailable-message">
-        {missing
-          ? 'That interview is not in this venture, or you cannot open it. Nothing was recorded.'
-          : 'The interview could not be read just now, so the session was not set up. Nothing was recorded. Try again.'}
-      </p>
-    </Lightbox>
-  );
 }
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
@@ -692,29 +228,6 @@ export function finishPath(session, where, projectId) {
   if (session?.submitted_via === 'meeting_bot') return `/validate/session/${encodeURIComponent(session?.id)}`;
   if (openingStep(session) === 'channel') return `/validate/session/${encodeURIComponent(session?.id)}`;
   return reviewPath({ ...session, project_id: session?.project_id ?? projectId });
-}
-
-/*
- * Each cycle's open lightbox (D686 §5.1). Build, Raise and Grow each mount a
- * sheet that draws its own `<Lightbox size="tall">` with an `ActionSheet`
- * body: Build's `ConnectToolSheet` (S02-B, #1597), Raise's `RoundCallSheet`
- * in its `CallLightbox` (S03-A) and Grow's `ShareUpdateLightbox` (S03-B).
- * Validate's `RecordMount` draws `RecordLightbox`. This route draws no frame
- * around any of them: two dialogs must never nest.
- */
-function ValidateMount({ projectId, searchParams, onClose, onDone, asPage }) {
-  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
-}
-// D686 §5.4 (#1597): the sheet connects for this project's company, and a
-// change re-reads the Build page once the lightbox closes.
-function BuildMount({ projectId, onClose, onChanged, asPage }) {
-  return <ConnectToolSheet projectId={projectId} onClose={onClose} onChanged={onChanged} asPage={asPage} />;
-}
-function RaiseMount({ projectId, onClose, asPage }) {
-  return <RoundCallSheet projectId={projectId} onClose={onClose} asPage={asPage} />;
-}
-function GrowMount({ projectId, onClose, onDone, asPage }) {
-  return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} asPage={asPage} />;
 }
 
 /** D696: a scoped record read and its declared actions; the route owns every mount. */
@@ -897,7 +410,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (creates && searchParams.get('new') === '1') setCreating(true);
   }, [creates, searchParams]);
   const name = cycleOf(cycle)?.name || 'Validate';
-  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
+  const moduleName = slug ? def?.moduleName?.(slug) || (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
@@ -930,6 +443,22 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
   // D1464 (#4021): the access pill and banner say HQ for the Super Admin, Studio admin for an Admin.
   const supportViewer = isSuperAdminUser(user) ? 'super_admin' : 'admin';
+  /**
+   * D5079 (#5079): a sensitive Raise tool's own authoritative read can be
+   * refused while this page's module read succeeds — the two are gated
+   * differently, and an admin passes one and not the other. The tool reports
+   * its refusal here, and this page then draws none of the module's
+   * authoritative data for it. The page's own refused branch is what withholds
+   * it — the card, the records table with its Add and row actions, and the
+   * children: Eadwyn's bands, the module's parts and the Evidence block — so
+   * this flag only has to reach it. Only the tool's own refusal and its tab
+   * row stay, because `subnav` sits outside that branch. "Not allowed to
+   * read" must never be drawn as "read, and empty".
+   */
+  const [toolRefusal, setToolRefusal] = useState(null);
+  const onToolRefused = useCallback((refusal) => setToolRefusal(refusal ?? null), []);
+  useEffect(() => { setToolRefusal(null); }, [cycle, slug, projectId]);
+  const refusedTool = !record && toolRefusal?.refused ? toolRefusal : null;
   const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -1025,7 +554,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }, [adding, editingId]);
 
   // The table's query resets when the module changes.
-  useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
+  // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
+  // read below (its dependency is `query`), so every module page read its module twice when it opened.
+  useEffect(() => {
+    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+  }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
   // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.
@@ -1310,7 +843,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // D703 decision 1: below 1024px the root is the phone page, in place of
     // the overview and `AlsoIn`, never beside them. Both read the same overview.
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
-    body = phone ? (
+    body = def?.Overview ? <>
+      <def.Overview raw={rawOverview} data={overview} status={overviewState} search={q} action={action} message={overviewMessage} readOnly={Boolean(narrativeAdmin || supportOpen)} onRetry={() => setReload((n) => n + 1)}
+        more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null} />
+      {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
+    </> : phone ? (
       <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId} message={overviewMessage}
         openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
     ) : (
@@ -1330,12 +867,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             : cycle === 'validate' && rawOverview ? <ValidateNextAction raw={rawOverview} search={q} openAction={openAction} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
-          // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
-          more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null}
           // D1466 (RO00): Raise's header Ask, beside Build your deck.
           ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
         />
-        {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
         <AlsoIn role="founder" row={name} />
@@ -1356,12 +890,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         header={distribution ? null : undefined}
         cards={tabs}
         data={module}
-        status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
-        message={moduleStatus === 'refused' ? moduleMessage : undefined}
+        status={projectStatus === 'unreadable' ? 'unreadable' : refusedTool ? 'refused' : moduleStatus}
+        message={refusedTool ? refusedTool.message : moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
-        recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
+        recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
@@ -1379,15 +913,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
-        more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
+        more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
           : moduleFill ? <FillModule key={`${slug}-${projectId}`} refresh={reload} target={moduleFill} projectId={projectId} moduleName={moduleName} aiOff={!fillsOn}
             onChanged={() => setReload((n) => n + 1)}
@@ -1395,6 +929,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
               const i = forms.findIndex((f) => f.key === moduleFill.form);
               navigate(addHref(forms[i], i), { state: { under: `${location.pathname}${location.search}`, fillRow: { uid: p.uid, row: p.row, form: moduleFill.form } } });
             }} /> : null}
+          {projectId && slug && !narrativeAdmin && <ModuleWorkingHere key={`${projectId}:${slug}`} projectId={projectId} module={slug} moduleLabel={moduleName} readOnly={Boolean(supportOpen)} />}
+        </>}
       >
         {cycle === 'grow' && <PublishedFromHere part={module?.parts?.publish} />}
         {fillKind && projectId && (
@@ -1425,7 +961,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
-    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} key={projectId} aiOff={!fillsOn} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;

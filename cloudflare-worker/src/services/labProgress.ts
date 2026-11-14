@@ -177,18 +177,36 @@ export async function completeLabMilestone(env: Env, userId: number, rawKey: unk
 }
 
 /**
- * Issue the credential, and pay its bonus, when the founder meets the
- * graduation rule (view spinout_lab_graduates, by_rule) and holds none yet.
+ * Issue the credential and pay its bonus when the founder meets the
+ * graduation rule (view spinout_lab_graduates, by_rule). A concurrent request
+ * can finish paying the bonus for an automatically issued credential.
  * Idempotent and best-effort: the certificate backfill and the reconciler
  * catch up anything missed. Returns the bonus outcome, or null.
+ *
+ * D5360: a suspended branch, or one whose licence does not hold the Spin-Out
+ * Lab (or whose grants cannot be read), issues neither. The milestone that
+ * completed graduation is already recorded; the scheduled backfill issues the
+ * credential and its bonus on the first tick after the hold lifts. The same
+ * `labIssuanceHold` the admin routes and the backfill ask.
  */
 export async function issueIfGraduated(env: Env, userId: number): Promise<unknown> {
   try {
     if (!(await graduationOf(env, userId)).by_rule) return null;
-    const { issueOnGraduation } = await import('./certificateIssuance');
-    if ((await issueOnGraduation(env, userId)) !== 'issued') return null;
+    const { issueOnGraduation, labIssuanceHold } = await import('./certificateIssuance');
+    if (await labIssuanceHold(env)) return null;
+    const outcome = await issueOnGraduation(env, userId);
+    if (outcome !== 'issued' && outcome !== 'already_issued') return null;
+    if (outcome === 'already_issued') {
+      // The other final milestone may have issued before the incorporation
+      // credit landed. D541 keeps early admin-issued credentials out of this path.
+      const automatic = await env.DB.prepare(
+        `SELECT id FROM spinout_certificates WHERE user_id = ? AND status = 'issued' AND issued_by_user_id IS NULL`,
+      ).bind(userId).first<{ id: number }>();
+      if (!automatic) return null;
+    }
     const { creditLabGraduation } = await import('./labMilestoneCredits');
-    return await creditLabGraduation(env, userId);
+    const bonus = await creditLabGraduation(env, userId);
+    return outcome === 'issued' || bonus.status === 'granted' ? bonus : null;
   } catch { console.warn('[lab-progress] graduation issue skipped'); return null; }
 }
 

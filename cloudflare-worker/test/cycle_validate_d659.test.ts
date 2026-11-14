@@ -11,6 +11,7 @@
  *   · a Lab venture's read gives the Lab page's own figures.
  */
 import { MODULES as VALIDATE_MODULES } from '../src/services/cycleValidate.ts';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -49,6 +50,7 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(MIG440);
+  applyAcceptRetryKeys(db); // D5352
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.
@@ -506,7 +508,7 @@ test('D659: Inconclusive is the founder\'s mark under a computed verdict; streng
   assert.equal(fig(o.body, 'hypotheses_supported').unit, 'of 3');
   assert.equal(fig(o.body, 'hypotheses_supported').delta_30d, null, 'no verdict history → the change is not recorded');
   assert.equal(fig(o.body, 'hypotheses_supported').reason, 'The change over 30 days is not recorded: verdict history starts later');
-  assert.deepEqual(card(o.body, 'experiments').series.statuses, { untested: 1, testing: 0, supported: 1, refuted: 0, inconclusive: 1, not_recorded: 0 });
+  assert.deepEqual(card(o.body, 'experiments').series.statuses, { untested: 1, testing: 0, supported: 1, contested: 0, refuted: 0, inconclusive: 1, not_recorded: 0 });
 });
 
 test('D659: the market page\'s three checks are stored and read back', async () => {

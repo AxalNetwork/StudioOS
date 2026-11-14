@@ -1,4 +1,9 @@
 export interface Env {
+  TIKTOK_APP_APPROVED?: string;
+  FACEBOOK_APP_APPROVED?: string;
+  FACEBOOK_LOGIN_CONFIG_ID?: string;
+  TIKTOK_CLIENT_KEY?: string;
+  TIKTOK_CLIENT_SECRET?: string;
   // D666 (#1496): the StudioOS MCP server and its OAuth provider. Off unless
   // "true"; with it off every MCP and OAuth path answers 404 and the provider
   // is never built. OAUTH_KV holds clients, grants, tokens and parked consent
@@ -96,6 +101,8 @@ export interface Env {
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
+  PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
   // Required by `index.ts` proxy handler. The worker returns 503 if missing.
   FASTAPI_ORIGIN?: string;
@@ -361,12 +368,16 @@ export interface Env {
   TEAM_AGENTS_ENABLED?: string;
   /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
   AGENT_ENGINE?: string;
+  /** D5624 (#5624): `true` (with the agent engine on) turns on a team's Landing settings; anything else answers 404 `team_landing_off`. */
+  TEAM_LANDING?: string;
   /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
   AGENT_RUNTIME?: string;
   /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
   AGENT_SKILL_RUNTIME?: string;
+  /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
+  AGENT_INFERENCE_STUB?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
@@ -497,6 +508,8 @@ export interface Env {
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
   MEETING_BOT?: string;
+  // D1451 (#5297): a var, not a secret. Only 'on' lets the bot take a Teams link; missing or anything else is off.
+  MEETING_BOT_TEAMS?: string;
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;
@@ -525,6 +538,10 @@ export interface Env {
   AI_GOVERNOR?: DurableObjectNamespace;
   // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
   DECK_REMOTE?: DurableObjectNamespace;
+  // D5581 part 2 (#5581): WorkGraph leases (`services/workGraphLeases.ts`). Optional: without it every lease call is refused `no_binding`.
+  WORK_GRAPH_LEASE?: DurableObjectNamespace;
+  /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
+  WORK_GRAPH_LEASES?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
@@ -656,6 +673,11 @@ export interface Env {
   // no-op (returns ok:false) and never breaks the underlying business
   // action that called it.
   SLACK_BOT_TOKEN?: string;
+  // Operator-owned section delivery configuration, stored per environment.
+  AXAL_SECTION_SLACK_TEAM_ID?: string;
+  AXAL_SECTION_SLACK_CHANNELS?: string;
+  // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
+  AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
   // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
   // mirror the constants in services/slackBus.ts.
   SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub
@@ -729,6 +751,8 @@ export interface User {
   // Spin-Out Lab membership (getCurrentUser does SELECT *, so the row carries
   // it). Lab members may edit their OWN project regardless of account role.
   spinout_lab_active?: number | null;
+  /** Request-local, non-enumerable marker copied from an impersonation JWT. */
+  support_session?: boolean;
   // Migration 199 — the franchisor's elevation on `role: 'admin'`. NOT a
   // column: `users` is at D1's 100-column ceiling, so the elevation is a row
   // in `super_admins` and `auth.ts hydrateSuperAdmin` copies it here. Optional

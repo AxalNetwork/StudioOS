@@ -15,6 +15,10 @@ of `.github/workflows/deck-visual.yml`.
 | `harnessData.js` | The harness's data for one run, read from `fixture.json`. |
 | `deck_editor.visual.spec.js` | The screenshots (17 structures × themes × 2 aspects, and the one-click deck) and the axe checks (light, dark, the keyboard path, the Ask dialog, phone and tablet). |
 | `__screenshots__/` | The baselines. CI writes them in the pinned container and commits them; never add one made on a laptop. |
+| `grow_overview_4862.spec.mjs` | #4862: sparse/active overview, Share lightbox, failed-read retry and read-only states at desktop and phone widths. |
+
+| `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
+| `revenue_completion_5039.spec.mjs` | #5039: Stream filtering, native invoice figures, governed dispute/due-date receipts, lazy history and checkout read-back at desktop, 834, 390 and dark; unknown replay and stale-period responses. |
 
 ### Rules
 
@@ -41,6 +45,14 @@ and StudioHome at `/raise/pitch`).
 | `fonts/` | Inter, Roboto Mono and Space Grotesk (variable, latin; OFL, licences beside them) |
 | `__screenshots__/` | The baselines, committed. One PNG per screenshot name |
 | `pricing_journey_4651.spec.mjs` | #4651: a plan chosen on Pricing through Back, another plan, the email link and the Google return to its checkout sheet, at desktop and phone width; no screenshots |
+| `calendar_degraded_5202.spec.mjs` | #5202: one external calendar's read failing with a good credential — the agenda stands, the rail says Connected and "Events temporarily unavailable", and Retry re-reads that provider alone; desktop and phone, no screenshots |
+| `approvals.a11y.spec.mjs` | D4814 (#4814, part 7): Approvals (Inbox, an item, Lanes, Decided, the three boards) at 1440 and 390 — zero serious or critical axe violations, no page wider than a phone, the keyboard path through ⋯, Assign and the sheets, 44px phone targets, the lane chart inside its box; part 8: the boards' selection bar and ⋯, and a last row's ⋯ clickable; no screenshots |
+| `_approvals.mjs` | The reads Approvals makes, answered for that spec: the glance, inbox, item, weekly, Decided and the boards, as the Worker answers them; made-up names |
+| `pitch_draft_recovery_5349.spec.mjs` | D5349: draft autosave, reload, offline recovery, stale revisions and storage refusal in Chromium at 1440 and 390 px, using a synthetic Worker-backed deck |
+| `security.a11y.spec.mjs` | D4803 (#4803, #4800 §7): HQ › Security's seven workspaces at 1440, 768 and 390, light and dark — zero serious or critical axe violations, no page wider than its viewport; the workspace keys, the phone select and findings at 44 px, the revoke sheet's focus on a phone, and Eadwyn's security prompts; no screenshots |
+| `_security_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as a Super Admin: a failed restore drill, administrators without MFA, sessions, a deletion request near its date, ledger rows, a Trust Center draft, the backup heartbeats; made-up names |
+| `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
+| `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 
 ### Run it
 

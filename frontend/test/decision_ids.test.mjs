@@ -16,7 +16,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { decisionIds, decisionIdProblems } from '../../scripts/check-decision-ids.mjs';
+import {
+  allDecisionProblems, decisionFileProblems, decisionIds, decisionIdProblems, filePart, readDecisionFiles,
+} from '../../scripts/check-decision-ids.mjs';
 
 const DECISIONS = resolve(process.cwd(), 'documentation/architecture/DECISIONS.md');
 
@@ -105,4 +107,57 @@ test('D followed by more digits is one number, not a prefix match', () => {
   // would collide with its own prefix.
   assert.deepEqual(decisionIds('## D6 — a\n\n## D62 — b\n'), [6, 62]);
   assert.deepEqual(decisionIdProblems('## D6 — a\n\n## D62 — b\n'), []);
+});
+
+// ── D5615 (#5615): a later part of a multi-part issue is its own file ────────
+
+const parent = { name: 'D4589.md', md: '## D4589 — Build the thing (#4589)\n\nBody.\n' };
+const part = (name, first) => ({ name, md: `${first}\n\nWhat part 2 decided.\n` });
+
+test('D5615: a part file is read as its decision and part, and nothing else is', () => {
+  assert.deepEqual(filePart('D4589-p2.md'), { id: 4589, part: 2 });
+  for (const bad of ['D4589.md', 'D4589-p0.md', 'D4589-p02.md', 'D4589-part2.md', 'D4589-P2.md', 'd4589-p2.md', 'D4589-p2.MD']) {
+    assert.equal(filePart(bad), null, `${bad} was read as a part file`);
+  }
+});
+
+test('D5615: D<n>-p2.md is accepted beside its parent D<n>.md', () => {
+  assert.deepEqual(decisionFileProblems([parent, part('D4589-p2.md', '## D4589 part 2 — The second part (#4589)')]), []);
+  // And through the whole check, beside DECISIONS.md.
+  assert.deepEqual(allDecisionProblems('## D1 — a\n', [parent, part('D4589-p2.md', '## D4589 part 2 — The second part (#4589)')]), []);
+});
+
+test('D5615: a part file with no parent fails, naming the parent it lacks', () => {
+  const problems = decisionFileProblems([part('D4589-p2.md', '## D4589 part 2 — The second part (#4589)')]);
+  assert.equal(problems.length, 1, problems.join('\n'));
+  assert.match(problems[0], /^D4589-p2\.md has no parent: D4589\.md is not in the folder/);
+});
+
+test('D5615: a part heading citing another issue, or none, fails', () => {
+  const wrong = decisionFileProblems([parent, part('D4589-p2.md', '## D4589 part 2 — The second part (#4590)')]);
+  assert.equal(wrong.length, 1, wrong.join('\n'));
+  assert.match(wrong[0], /a part's heading cites its own issue, #4589.*It cites #4590/);
+  assert.match(decisionFileProblems([parent, part('D4589-p2.md', '## D4589 part 2 — The second part')])[0], /It cites no issue/);
+});
+
+test('D5615: the heading names the same decision and part as the file, in the part shape', () => {
+  assert.match(decisionFileProblems([parent, part('D4589-p2.md', '## D4589 part 3 — Off by one (#4589)')]).join('\n'),
+    /D4589-p2\.md is headed D4589 part 3/);
+  assert.match(decisionFileProblems([parent, part('D4589-p2.md', '## D4589 — Not a part heading (#4589)')]).join('\n'),
+    /does not start with `## D4589 part 2 — <title> \(#4589\)`/);
+  assert.match(decisionFileProblems([parent, part('D4589-p2.md', '## D4589 part 2 — Two (#4589)\n\n## D4590 — b')]).join('\n'),
+    /holds 2 decision headings/);
+  // Parts are for decisions numbered by their issue.
+  const old = { name: 'D1650.md', md: '## D1650 — An older number\n' };
+  assert.match(decisionFileProblems([old, part('D1650-p2.md', '## D1650 part 2 — Later (#1650)')]).join('\n'),
+    /parts are for decisions numbered by their issue, D4000 up/);
+});
+
+test('D5615: a misnamed file is still refused, and the refusal names both shapes', () => {
+  const problems = decisionFileProblems([{ name: 'D4589-part2.md', md: '## D4589 part 2 — x (#4589)\n' }]);
+  assert.match(problems[0], /is not named D<n>\.md.*D<n>-p<k>\.md/);
+});
+
+test('D5615: the real folder is clean, parts included', () => {
+  assert.deepEqual(allDecisionProblems(readFileSync(DECISIONS, 'utf8'), readDecisionFiles()), []);
 });

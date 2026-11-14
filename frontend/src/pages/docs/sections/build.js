@@ -106,6 +106,7 @@ export default {
         "The Pitch Deck builder assembles a 10–12 slide investor deck from your startup brief, financials, and discovery interviews. Each slide is editable; you can rearrange, hide, and re-style.",
       howto: [
         'Open Pitch Deck on your startup.',
+        'In New deck, select a template under Start from to see its structure, or open Preview all slides. Plan-locked templates can be previewed; using one requires the matching plan.',
         'Click "Generate" to seed a draft from your brief and financials.',
         'Edit slide-by-slide; rearrange via drag-and-drop.',
         'Use "Print preview" to check page breaks before exporting to PDF.',

@@ -73,7 +73,7 @@ export function answerabilityOf(d) {
  * and for a client's document, which is not the reader's to change.
  */
 export function rowProblem(d) {
-  if (!d || d.source === 'client') return null;
+  if (!d || d.source === 'client' || d.read_only === true || d.in_ask === true) return null;
   if (d.index_state === 'failed') {
     return { reason: d.index_note || 'The last read failed.', action: 'retry', label: 'Retry' };
   }
@@ -122,15 +122,63 @@ export function askStateOf(t, { libraryUids = null } = {}) {
  * library read lists its document, `gone` when it does not, and null when the
  * library was not read or the citation names no document: unknown is not gone.
  */
-export function citationAvailability(ct, libraryUids) {
+export function citationAvailability(ct, libraryUids, revisions = null) {
   if (!libraryUids || !ct?.document_uid) return null;
-  return libraryUids.has(ct.document_uid) ? 'available' : 'gone';
+  if (!libraryUids.has(ct.document_uid)) return 'gone';
+  // D4613: the document is still here but was indexed again after this
+  // answer, so the passage shown is the version the answer read, not
+  // necessarily what the document says now. Unknown on either side is not
+  // "changed".
+  const now = revisions?.get?.(ct.document_uid);
+  if (ct.revision && now && now !== ct.revision) return 'changed';
+  return 'available';
 }
 
 export const CITATION_AVAILABILITY = {
   available: { label: 'Available', tone: 'ok', glyph: '✓' },
+  changed: { label: 'Re-indexed since this answer', tone: 'warn', glyph: '↻' },
   gone: { label: 'No longer available', tone: 'neutral', glyph: '⊠' },
 };
+
+/**
+ * D4613 — an answer's citations split into the sources it cites and the
+ * passages it was given and never cites. Each keeps its index in the stored
+ * list, which is what the source sheet opens by. A citation stored without a
+ * `cited` mark (a payload from before D4613) counts as retrieved, never as
+ * cited: unknown is not support.
+ */
+export function splitCitations(t) {
+  const all = (Array.isArray(t?.citations) ? t.citations : []).map((ct, i) => ({ ct, i }));
+  return {
+    cited: all.filter(({ ct }) => ct?.cited === true),
+    retrieved: all.filter(({ ct }) => ct?.cited !== true),
+  };
+}
+
+/**
+ * D4613 — what the page says about an answer's bracketed references, from the
+ * Worker's `reference_check`. Null when there is nothing to say. A reference
+ * that resolves is never called verified: it names a source the answer was
+ * given, which is not proof that source supports the sentence.
+ */
+export function referenceNote(t) {
+  const check = t?.reference_check;
+  if (!check || t?.reason !== 'answered') return null;
+  if (check.status === 'invalid_refs') {
+    const refs = (check.invalid || []).map((n) => `[${n}]`).join(', ');
+    return {
+      tone: 'warn',
+      text: `This answer cites ${refs}, which ${check.invalid.length === 1 ? 'is' : 'are'} not among the sources it was given. ${check.invalid.length === 1 ? 'That reference is' : 'Those references are'} unverified.`,
+    };
+  }
+  if (check.status === 'none_cited') {
+    return { tone: 'warn', text: 'This answer cites none of its sources by number, so no sentence in it is tied to a passage.' };
+  }
+  return null;
+}
+
+/** D4613: the sentence that keeps a resolved reference from reading as proof. */
+export const REFERENCE_LIMIT = 'A numbered reference names the passage the answer drew on. It is not a check that the passage supports the sentence.';
 
 /**
  * What "Copy with citations" puts on the clipboard: the answer, then each

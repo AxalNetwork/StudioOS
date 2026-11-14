@@ -51,13 +51,14 @@ Every client module in this folder, one row each. The list below is generated, n
    the two import each other, and a top-level call would run before `request`
    is defined.
 
-2. Run `node scripts/build-api-index.mjs`. It rewrites
+2. Nothing else. `node scripts/build-api-index.mjs` writes
    `../apiModules.generated.js`, one `export * from './api/<name>.js';` line
    per file in this folder, alphabetical, between `// api-modules:begin` and
    `// api-modules:end`. `api.js` re-exports that file with one line that
-   never changes, so **you do not edit `api.js`** (#4105). Commit the
-   generated file with your module; if another branch added a module next to
-   yours, rerun the script rather than resolving its conflict by hand.
+   never changes, so **you do not edit `api.js`** (#4105). The index is
+   gitignored and never committed (D5612): `scripts/build-generated.mjs`
+   writes it before every build, typecheck and test, so a module added next
+   to yours on another branch never conflicts with it.
 
    It is a generated file and not a Vite `import.meta.glob` because the
    modules are re-exported by name (`import { verdictApi } from

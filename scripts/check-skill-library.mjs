@@ -6,26 +6,36 @@
  *   node --experimental-strip-types --no-warnings \
  *     --import ./cloudflare-worker/test/_ts-loader.mjs scripts/check-skill-library.mjs
  *       [--json <path>]        also write the machine-readable summary there
- *       [--persisted <path>]   reconcile with a persisted manifest (a JSON array that
+ *       [--persisted <path>]   reconcile with a persisted manifest: a JSON array that
  *                              `persistedManifest()` produced from a local or test D1,
- *                              or from a separately authorized read-only preflight)
+ *                              or the JSON of the read-only preflight
+ *                              GET /api/admin/ai-agents/skills/library/reconcile
+ *                              (D5335; its `manifest` is that array)
  *
- * It reads the repository only. It never writes the generated module (it runs
- * the generator's own `render()` and compares), never seeds, never publishes,
+ * It reads the repository only. It never writes the generated module (D5612:
+ * it checks that the generator is deterministic, that git does not track the
+ * module, and that the module it imports is the generator's own `render()`
+ * of the files — and, since D4574 H3, that the entries' static asset is its
+ * `renderAsset()` of them, and it reads the entries from that asset; `scripts/build-generated.mjs` builds it first), never seeds, never publishes,
  * and needs no credential. The rules are the runtime's own
  * (`services/agents/skillCatalogue.ts`); see SKILL_LIBRARY_AUDIT.md §10 and
  * SKILL_LIBRARY_CONTRACT.md.
+ *
+ * D5336 (#5336): it also reads `skills/scenarios/`, runs #4588's scenario
+ * rules on every pack, fails a skill with more than `CASES_MAX` cases or two
+ * cases of one identity, and prints scenario coverage per skill, apart from
+ * model runs, which CI never makes (`model_evaluation: not_run`).
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { libraryEntries, render } from './build-skill-library.mjs';
-import { checkSourceCatalogue, reconcile, summary } from '../cloudflare-worker/src/services/agents/skillCatalogue.ts';
-import { SKILL_LIBRARY } from '../cloudflare-worker/src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY_ASSET_DIR_REL, SKILL_LIBRARY_REL, libraryAssetPath, libraryEntries, render, renderAsset, skillLibraryProblems } from './build-skill-library.mjs';
+import { checkSourceCatalogue, persistedFromJson, reconcile, summary } from '../cloudflare-worker/src/services/agents/skillCatalogue.ts';
+import { SKILL_LIBRARY_ASSET } from '../cloudflare-worker/src/services/agents/skillLibrary.generated.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DIR = join(ROOT, 'cloudflare-worker/src/services/agents/skills');
-const GENERATED = join(ROOT, 'cloudflare-worker/src/services/agents/skillLibrary.generated.ts');
+const SKILLS_REL = 'cloudflare-worker/src/services/agents/skills';
+const DIR = join(ROOT, SKILLS_REL);
 const TAXONOMY_SQL = join(ROOT, 'cloudflare-worker/sql/migrations/090_seed_skills_values_taxonomy.sql');
 
 /** Active taxonomy skill → its category, from the checked-in seed (category rows name themselves). */
@@ -34,24 +44,57 @@ export function taxonomyFromSeed(sql) {
 }
 
 export function readSources(dir = DIR) {
-  const definitions = {}; const cases = {};
+  const definitions = {}; const cases = {}; const scenarios = {};
   for (const f of readdirSync(dir)) if (f.endsWith('.md') && f !== 'README.md') definitions[f] = readFileSync(join(dir, f), 'utf8');
   for (const f of readdirSync(join(dir, 'cases'))) if (f.endsWith('.json')) cases[f] = readFileSync(join(dir, 'cases', f), 'utf8');
-  return { definitions, cases };
+  for (const f of readdirSync(join(dir, 'scenarios'))) if (f.endsWith('.json')) scenarios[f] = readFileSync(join(dir, 'scenarios', f), 'utf8');
+  return { definitions, cases, scenarios };
+}
+
+/**
+ * D5612: the generated module under `root` is sound — its generator is
+ * deterministic, git does not track it, and `moduleText` (the module this run
+ * imports) is the generator's build of the files.
+ */
+export function generatedSound(root = ROOT, moduleText = null) {
+  let text = moduleText;
+  if (text === null) { try { text = readFileSync(join(root, SKILL_LIBRARY_REL), 'utf8'); } catch { return false; } }
+  const entries = libraryEntries(join(root, SKILLS_REL));
+  // D4574 H3: the entries' asset is the generator's build of the same files, at the path the index names.
+  let asset;
+  try { asset = readFileSync(join(root, SKILL_LIBRARY_ASSET_DIR_REL, libraryAssetPath(entries).split('/').pop()), 'utf8'); } catch { return false; }
+  return skillLibraryProblems(root).length === 0 && text === render(entries) && asset === renderAsset(entries);
+}
+
+/**
+ * D4574 H3: the library's entries as the Worker reads them — the static asset
+ * the generated index names, read from disk (the assets binding serves the
+ * same file from `docs/`). Null when it is not there.
+ */
+export function generatedEntries(root = ROOT) {
+  try {
+    return JSON.parse(readFileSync(join(root, 'frontend/public', SKILL_LIBRARY_ASSET), 'utf8')).entries;
+  } catch {
+    return null;
+  }
 }
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const { definitions, cases } = readSources();
-  let generatedFresh = false;
-  try { generatedFresh = readFileSync(GENERATED, 'utf8') === render(libraryEntries()); } catch { generatedFresh = false; }
-  const { findings, manifest } = await checkSourceCatalogue({
-    definitions, cases, generated: SKILL_LIBRARY, generatedFresh, taxonomy: taxonomyFromSeed(readFileSync(TAXONOMY_SQL, 'utf8')),
+  const { definitions, cases, scenarios } = readSources();
+  const { findings, manifest, coverage } = await checkSourceCatalogue({
+    definitions, cases, scenarios, generated: generatedEntries() ?? [], generatedSound: generatedSound(), taxonomy: taxonomyFromSeed(readFileSync(TAXONOMY_SQL, 'utf8')),
   });
   const persistedPath = arg('--persisted');
-  const lines = persistedPath ? reconcile(manifest, JSON.parse(readFileSync(persistedPath, 'utf8'))) : null;
-  const out = summary(findings, manifest, lines);
+  let persisted = null;
+  if (persistedPath) {
+    try { persisted = persistedFromJson(JSON.parse(readFileSync(persistedPath, 'utf8'))); } catch (e) {
+      console.error(`✖ check-skill-library: --persisted ${persistedPath}: ${e.message}`); process.exit(1);
+    }
+  }
+  const lines = persisted ? reconcile(manifest, persisted) : null;
+  const out = summary(findings, manifest, lines, coverage);
   const jsonPath = arg('--json');
   if (jsonPath) writeFileSync(jsonPath, `${JSON.stringify(out, null, 2)}\n`);
   for (const f of findings) {
@@ -59,7 +102,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console[f.level === 'error' ? 'error' : 'log'](`${f.level === 'error' ? '✖' : '!'} ${where}: ${f.rule} — ${f.message} ${f.remediation}`);
   }
   for (const l of (lines ?? []).filter((x) => x.disposition !== 'none')) console.log(`${l.disposition === 'fail' ? '✖' : '!'} ${l.slug}: ${l.class} (${l.disposition})`);
-  const tail = `${out.skills} skills, ${out.cases} cases, ${out.errors} errors, ${out.warnings} warnings; model evaluation not run in CI`;
+  for (const c of out.scenario_coverage.skills) console.log(`  ${c.slug}: ${c.cases} cases (${c.scenarios} scenarios), ${c.assertions} assertions, ${c.incorrect_outputs} incorrect outputs, ${c.staged} staged`);
+  const tail = `${out.skills} skills, ${out.cases} cases (${out.scenario_coverage.scenarios} scenarios), ${out.errors} errors, ${out.warnings} warnings; model evaluation not run in CI`;
   if (!out.ok) { console.error(`✖ check-skill-library: ${tail}.`); process.exit(1); }
   console.log(`✓ check-skill-library: ${tail}${lines ? `; reconciliation ${JSON.stringify(out.reconciliation.classes)}` : ''}.`);
 }

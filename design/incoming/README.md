@@ -2615,3 +2615,45 @@ Three more board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`Portfolio v2 Page.dc.html`**, **`Portfolio v2 · Boards.dc.html`**: boards PF-01 to PF-12, drawn 2026-11-07 (D4817). The shell follows #3704: Portfolio opens from the Account menu.
 
 None is built yet. Companies, people, skills and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Pitch Studio v2, Platform States, and the Licences and Contracts v2 addendum (#4839, #5129, #5303)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10, each as a page plus its boards under the names Claude Design gave them:
+- **`Pitch Studio v2 Page.dc.html`**, **`Pitch Studio v2 · Boards.dc.html`**: sections PS-00 to PS-13, 42 frames (D4839). A design and interaction pass over Pitch Deck Studio v2 (D1604), which stays the baseline.
+- **`Platform States Page.dc.html`**, **`Platform States · Boards.dc.html`**: boards ST-00 to ST-14 (D5129). The shared data-state vocabulary every surface cites; drawn to Question 2's pick A.
+- **`Licences and Contracts v2 Addendum Page.dc.html`**, **`Licences and Contracts v2 Addendum · Boards.dc.html`**: boards L23 to L40 and CT-17 to CT-20 (#5303; addendum sections in D4819 and D4811). Extends the Licences v2 and Contracts v2 canvases rather than forking them.
+
+None is built yet. Ventures, people, investors and amounts are sample content, except the addendum's package names, programs, base fees and guidance ranges, which are the seeded ones; each decision lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Admin › Deals (#5459)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10 and revised the same day for the owner's two amendments, as a page plus its boards under the names Claude Design gave them:
+- **`Administrator Deal Preparation Page.dc.html`**, **`Administrator Deal Preparation · Boards.dc.html`**: sections ADPW-00 to ADPW-26, 56 frames (D5459). The Admin profile's **Deals** workspace at `/admin/deals`; the investor Deals redesign stays `Deals v2` (D4815).
+
+Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.
+
+## Landed 2026-11-14 — Validate v2, Build v2, Grow v2, Raise v2, Offers v2, Account v2 and the Network workspace (#4837, #4846, #4861, #4863, #4872, #4955, #4799)
+
+Seven board sets the owner approved on 2026-11-10 and that were never committed, so about twenty build issues waited on them. Six come from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them, byte for byte:
+- **`Validate v2 Page.dc.html`**, **`Validate v2 · Boards.dc.html`**: boards V0 to V16 (D4837).
+- **`Build v2 Page.dc.html`**, **`Build v2 · Boards.dc.html`**: boards BD-0 to BD24, revised 2026-11-09 (D4846).
+- **`Grow v2 Page.dc.html`**, **`Grow v2 · Boards.dc.html`**: boards GR-01 to GR-20 (D4861).
+- **`Raise v2 Page.dc.html`**, **`Raise v2 · Boards.dc.html`**: boards RA-01 to RA-26 and RA-A to RA-D, revised 2026-11-09 (D4863).
+- **`Offers v2 Page.dc.html`**, **`Offers v2 · Boards.dc.html`**: boards OF-01 to OF-10 (D4872).
+- **`Account v2 Page.dc.html`**, **`Account v2 · Boards.dc.html`**: boards AC-0 to AC-11 (D4955).
+
+The seventh is a design of its own, kept in a folder because its files import each other by name:
+- **`network-workspace/`**: `Main.dc.html` (NW1) with `NW1-2-Empty`, `NW2-Relationships`, `NW3-Intro-detail`, `NW5-States`, `NW8-Phone`, `NW10-Dark` and `canvas.json`, which holds the board titles (D4799).
+
+Each decision file records the SHA-256 of what was committed. For Build, Grow, Raise, Offers and Account they equal the digests recorded on the issues on 2026-11-13. None is built as a whole yet. Ventures, people and amounts are sample content.
+
+## Portfolio audited-gap addendum — owner review required (#4817)
+
+- `Portfolio v2 · Addendum.dc.html` — D4817 review-only collection of additional company rights/reporting/KPI, responsive/dark, source-state and route/access handoff specimens, imported from the existing Portfolio Page. The landed PF boards are retained; production implementation waits for owner review and #5311. See D4817 for the audit-gap map and current backend fit.
+
+## Landed 2026-11-14 — Expertise v2 (#4823)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the #4823 brief and approved by the owner on 2026-11-10, as a page plus its boards under the names Claude Design gave them:
+- **`Expertise v2 Page.dc.html`**, **`Expertise v2 · Boards.dc.html`**: boards EX-01 to EX-16 (D4823). Each file is byte-for-byte the approved export: SHA-256 `b0c44c7c…5e01a40` (page) and `a3fed64f…e4bd446d` (boards), the digests recorded on #4823.
+
+Not built yet. People, companies, services and articles are sample content; D4823 lists what is frontend-only and what needs backend work (#5315).

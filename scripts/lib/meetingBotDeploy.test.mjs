@@ -33,7 +33,10 @@ test('site bindings target the separate production and preview host, never a loc
   assert.equal(site,configured);
   remote(configured);assert.throws(()=>remote(configured.replace('script_name = "studioos-meeting-bot"','script_name = "studioos"')));remote(configured);
   const sections=parseSections(bot),root=bindings(sections,''),preview=bindings(sections,'env.preview.');
-  assert.deepEqual(preview,root);
+  const onlyPreview=new Set(['CF_BOT_AUDIENCE','PREVIEW_CANARY_ENABLED','PREVIEW_CANARY_ORIGIN']);
+  assert.deepEqual(new Set([...preview.get('vars')].filter(k=>!onlyPreview.has(k))),root.get('vars'));
+  for(const key of onlyPreview){assert.ok(preview.get('vars').has(key));assert.equal(root.get('vars').has(key),false);}
+  preview.set('vars',root.get('vars'));assert.deepEqual(preview,root);
   assert.match(bot,/workers_dev = false/);assert.match(bot,/preview_urls = false/);
   assert.match(read('meeting-bot/worker/index.ts'),/status: 404/);
 });

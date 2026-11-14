@@ -162,7 +162,7 @@ export default function TrustPublishDialog({ read, api = trustCenterAdminApi, on
               className="w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               data-testid="trust-note"
             />
-            <span id="trust-note-hint" className="text-[11px] text-axal-faint dark:text-gray-400">{ns.hint}</span>
+            <span id="trust-note-hint" className="text-[11px] text-axal-muted dark:text-gray-400">{ns.hint}</span>
             {noteError && <span role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">✕ {noteError}</span>}
           </div>
           {busy && <p role="status" className="text-[12.5px] text-axal-muted dark:text-gray-300">Waiting for the server. Nothing is shown as published until it answers.</p>}

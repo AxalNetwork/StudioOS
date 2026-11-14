@@ -21,6 +21,15 @@
  *   coverage       capability coverage, read from the switch registry's
  *                  counts and the broadcast and deployment reads
  *   activity       a significant-events feed, from timestamps the reads carry
+ *   detectedIncidents  the incidents the Worker detects for itself (D4854,
+ *                  `health` on the summary), as Needs attention items
+ *
+ * ONE SEVERITY RULE (D4860 part 4). The Worker's `services/platformHealth.ts`
+ * decides how severe a signal is. Where it detected an incident, that
+ * incident replaces the page's own items for the signal, at the Worker's
+ * severity. Where it detected none, the page's own observation stays, on the
+ * same scale: the thresholds below are the Worker's, and
+ * `platform_detected_d4860.test.mjs` holds them equal.
  *
  * NOTHING HERE IS FETCHED AND NOTHING IS INVENTED. A figure the reads do not
  * carry is `null` with its reason, and the page draws it as Not recorded.
@@ -51,17 +60,27 @@ export const STATUS = {
   Reading: { sym: '…', tone: 'neutral' },
   'Not recorded': { sym: '○', tone: 'neutral' },
   Planned: { sym: '◇', tone: 'neutral' },
+  // D5304: a managed key past, or within 30 days of, the expiry its provider reported.
+  Expired: { sym: '✕', tone: 'bad' },
+  Expiring: { sym: '◷', tone: 'warn' },
 };
 
 /** The severities of the Needs attention queue, most severe first. */
 export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low', 'Info'];
 export const SEVERITY_SYM = { Critical: '■', High: '▲', Medium: '◆', Low: '●', Info: 'i' };
 
-/** A dead-letter backlog at or above this is Critical; any backlog is High. */
-export const DLQ_CRITICAL = 100;
-/** This many failed webhook deliveries in a row, with none since, is Critical. */
-export const WEBHOOK_CRITICAL_RUN = 3;
-/** The webhook's silence threshold: no delivery for this long reads as Stale. */
+/** A dead-letter backlog at or above this is High; any backlog is Medium. Never Critical (the Worker's DLQ_HIGH). */
+export const DLQ_HIGH = 100;
+/** This many refused webhook deliveries in a row, with none since, is High (the Worker's WEBHOOK_FAILURE_STREAK). */
+export const WEBHOOK_REFUSED_RUN = 3;
+/** This many is Critical (the Worker's WEBHOOK_FAILURE_CRITICAL). */
+export const WEBHOOK_CRITICAL_RUN = 10;
+/**
+ * The webhook's silence threshold: no delivery for this long reads as Stale
+ * (owner answer C, 2026-11-09), and the Worker notes silence at the same
+ * threshold (Q4 = B, 2026-11-12). Silence is a Low note and never lowers
+ * health on its own.
+ */
 export const WEBHOOK_SILENCE_HOURS = 24;
 /** A Telegram channel tested within this many hours, with no error since, is Verified recently. */
 export const VERIFIED_RECENTLY_HOURS = 24;
@@ -150,6 +169,77 @@ export function keyLevels(keys) {
   return out;
 }
 
+/* ── managed keys: expiry and last use (D5304) ─────────────────────────── */
+
+/** A key this close to its provider-reported expiry joins Needs attention. */
+export const KEY_EXPIRY_WARN_DAYS = 30;
+const DAY = 24 * HOUR;
+
+/**
+ * A key's expiry as the platform records it. `Not recorded` when no expiry is
+ * stored (no provider reports one to the platform, and none was entered), and
+ * `days` is then null: never a date, never 0 days. `Expired` once the stamp has
+ * passed, `Expiring` inside KEY_EXPIRY_WARN_DAYS, `Valid` beyond it. `days` is
+ * whole days to the expiry (negative once expired), rounded toward zero.
+ */
+export function keyExpiry(k, now) {
+  const at = stampDate(k?.expires_at);
+  if (!at || !now) return { state: 'Not recorded', at: null, days: null };
+  const ms = at.getTime() - now.getTime();
+  const days = Math.trunc(ms / DAY);
+  if (ms <= 0) return { state: 'Expired', at, days };
+  return { state: ms <= KEY_EXPIRY_WARN_DAYS * DAY ? 'Expiring' : 'Valid', at, days };
+}
+
+/** "3 Dec 2026" from a stamp, in UTC (the canvas's key dates). */
+export function keyDay(at) {
+  const d = at instanceof Date ? at : stampDate(at);
+  return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null;
+}
+
+/** The expiry line on a key row: "3 Dec 2026 · in 26 d", "3 Jun 2026 · expired 4 d ago", or "Not recorded". */
+export function keyExpiryText(k, now) {
+  const e = keyExpiry(k, now);
+  if (e.state === 'Not recorded') return 'Not recorded';
+  if (e.state === 'Expired') return `${keyDay(e.at)} · expired${e.days < 0 ? ` ${-e.days} d ago` : ' today'}`;
+  return `${keyDay(e.at)} · in ${e.days > 0 ? `${e.days} d` : 'under a day'}`;
+}
+
+/**
+ * The Integrations block's one line on expiry, over the keys in place: how
+ * many are expired, how many expire within the window, how many carry no
+ * recorded expiry. "Unreadable" when the stamps could not be read.
+ */
+export function expirySummary(keys, now) {
+  if (!keys?.available) return null;
+  if (keys.stamps_available === false) return 'Unreadable';
+  const held = (keys.items || []).filter((k) => k.state === 'env' || k.state === 'db');
+  const by = { Expired: 0, Expiring: 0, Valid: 0, 'Not recorded': 0 };
+  for (const k of held) by[keyExpiry(k, now).state] += 1;
+  return `${by.Expired} expired · ${by.Expiring} within ${KEY_EXPIRY_WARN_DAYS} d · ${by['Not recorded']} of ${held.length} not recorded`;
+}
+
+/** The last-use line on a key row: a UTC minute, or "Not recorded" for a key no successful use has stamped. */
+export const keyLastUsedText = (k) => utcStamp(k?.last_used_at) || 'Not recorded';
+
+/**
+ * The Needs attention items for keys whose recorded expiry has passed (High)
+ * or falls within KEY_EXPIRY_WARN_DAYS (Medium). A key with no recorded expiry
+ * raises nothing: unknown is not soon.
+ */
+export function keyExpiryItems(keys, now, seen) {
+  if (!keys?.available) return [];
+  const out = [];
+  for (const k of keys.items || []) {
+    if (k.state !== 'env' && k.state !== 'db') continue;
+    const e = keyExpiry(k, now);
+    const name = cap(k.provider_key);
+    if (e.state === 'Expired') out.push({ severity: 'High', title: `${name} key expired`, detail: `The provider reported it expires ${keyDay(e.at)}. Rotate it in Integration keys.`, state: 'Expired', since: utcStamp(e.at), observed: seen, link: { ...LINK.keys, label: 'Rotate key' } });
+    else if (e.state === 'Expiring') out.push({ severity: 'Medium', title: `${name} key expires in ${e.days > 0 ? plural(e.days, 'day', 'days') : 'under a day'}`, detail: `The provider reported it expires ${keyDay(e.at)}. Rotate it before then.`, state: 'Expiring', observed: seen, link: { ...LINK.keys, label: 'Rotate key' } });
+  }
+  return out;
+}
+
 /* ── the Stripe webhook ──────────────────────────────────────────────── */
 
 const is2xx = (code) => code != null && code >= 200 && code < 300;
@@ -181,8 +271,12 @@ export function webhookHealth(payments, now) {
     silence_threshold: `${WEBHOOK_SILENCE_HOURS} h`,
     latency: last?.latency_ms != null ? `${last.latency_ms} ms handling, newest delivery` : null,
   };
+  const runText = `${run}${w.consecutive_failures_capped ? '+' : ''}`;
   if (run != null && run >= WEBHOOK_CRITICAL_RUN) {
-    return { state: 'Critical', why: `${run}${w.consecutive_failures_capped ? '+' : ''} deliveries in a row were refused, with no success since.`, fields };
+    return { state: 'Critical', why: `${runText} deliveries in a row were refused, with no success since.`, fields };
+  }
+  if (run != null && run >= WEBHOOK_REFUSED_RUN) {
+    return { state: 'Degraded', why: `${runText} deliveries in a row were refused, with no success since.`, fields, run };
   }
   if (last && last.status_code != null && !is2xx(last.status_code)) {
     return { state: 'Degraded', why: `The newest delivery was answered HTTP ${last.status_code}.`, fields };
@@ -305,7 +399,7 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
     const why = traffic === UNAVAILABLE ? 'The metrics read did not answer.' : (traffic.reason || 'Analytics Engine returned no answer.');
     add({
       key: 'telemetry', name: 'Telemetry', status: 'Unknown', line: 'unavailable', why, core: true,
-      items: [{ severity: 'Medium', title: 'Telemetry unavailable', detail: `${why} Traffic by branch and worker error rates cannot be confirmed, so health confidence is reduced.`, state: 'Unknown', observed: observed.traffic, link: { ...LINK.monitoring, label: 'Check telemetry' } }],
+      items: [{ severity: 'High', title: 'Telemetry unavailable', detail: `${why} Traffic by branch and worker error rates cannot be confirmed, so health confidence is reduced.`, state: 'Unknown', observed: observed.traffic, link: { ...LINK.monitoring, label: 'Check telemetry' } }],
     });
   } else add({ key: 'telemetry', name: 'Telemetry', status: 'Healthy', line: 'reporting', core: true });
 
@@ -319,8 +413,8 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
     const failed = jobs.triggers.filter((j) => j.state === 'failed');
     const stale = jobs.triggers.filter((j) => j.state === 'stale');
     const items = [];
-    for (const j of failed) items.push({ severity: 'High', title: `Scheduled job failing: ${j.name}`, detail: j.error || 'Its last run failed.', state: 'Error', since: utcStamp(j.last_started_at), observed: seen, link: LINK.monitoring });
-    for (const j of stale) items.push({ severity: 'Medium', title: `Scheduled job silent: ${j.name}`, detail: `No run recorded since it was last due${j.expected_at ? ` at ${utcStamp(j.expected_at)}` : ''}.`, state: 'Stale', since: utcStamp(j.last_started_at), observed: seen, link: LINK.monitoring });
+    for (const j of failed) items.push({ severity: 'Medium', title: `Scheduled job failing: ${j.name}`, detail: j.error || 'Its last run failed.', state: 'Error', since: utcStamp(j.last_started_at), observed: seen, link: LINK.monitoring });
+    for (const j of stale) items.push({ severity: 'High', title: `Scheduled job silent: ${j.name}`, detail: `No run recorded since it was last due${j.expected_at ? ` at ${utcStamp(j.expected_at)}` : ''}.`, state: 'Stale', since: utcStamp(j.last_started_at), observed: seen, link: LINK.monitoring });
     add({
       key: 'jobs', name: 'Scheduled jobs', core: true, base: true,
       status: failed.length ? 'Degraded' : stale.length ? 'Stale' : ok === n ? 'Healthy' : 'Unknown',
@@ -335,11 +429,10 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
   if (summaryLoading) add({ key: 'dlq', name: 'DLQ', status: 'Reading', line: 'reading' });
   else if (!dlq?.available) add({ key: 'dlq', name: 'DLQ', status: 'Unknown', line: 'could not be read', why: dlq?.reason || 'The platform summary could not be read.', core: true, base: true });
   else {
-    const crit = dlq.total >= DLQ_CRITICAL;
     add({
       key: 'dlq', name: 'DLQ', core: true, base: true, line: String(dlq.total),
-      status: crit ? 'Critical' : dlq.total > 0 ? 'Degraded' : 'Healthy',
-      items: dlq.total > 0 ? [{ severity: crit ? 'Critical' : 'High', title: `${plural(dlq.total, 'dead letter', 'dead letters')} waiting`, detail: `${dlq.legacy} from the D1 queue, ${dlq.mirror} from Cloudflare Queues.`, state: crit ? 'Critical' : 'Degraded', observed: seen, link: { ...LINK.monitoring, label: 'Inspect DLQ' } }] : [],
+      status: dlq.total > 0 ? 'Degraded' : 'Healthy',
+      items: dlq.total > 0 ? [{ severity: dlq.total >= DLQ_HIGH ? 'High' : 'Medium', title: `${plural(dlq.total, 'dead letter', 'dead letters')} waiting`, detail: `${dlq.legacy} from the D1 queue, ${dlq.mirror} from Cloudflare Queues.`, state: 'Degraded', observed: seen, link: { ...LINK.monitoring, label: 'Inspect DLQ' } }] : [],
     });
   }
 
@@ -361,9 +454,11 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
   const wh = summaryLoading ? null : webhookHealth(d?.payments_catalog, now);
   if (summaryLoading) add({ key: 'webhook', name: 'Stripe webhook', status: 'Reading', line: 'reading' });
   else {
-    const sev = { Critical: 'Critical', Degraded: 'High', Stale: 'Medium', Unknown: 'Medium' }[wh.state];
+    // The Worker's scale: a refused run is High, ten is Critical, a refusal
+    // short of a run Medium, silence a Low note that does not lower health.
+    const sev = { Critical: 'Critical', Degraded: wh.run != null ? 'High' : 'Medium', Stale: 'Low', Unknown: 'Medium' }[wh.state];
     add({
-      key: 'webhook', name: 'Stripe webhook', core: true, status: wh.state, why: wh.why,
+      key: 'webhook', name: 'Stripe webhook', core: true, status: wh.state, why: wh.why, note: wh.state === 'Stale',
       line: { Healthy: 'delivering', Stale: 'silent', Degraded: 'failing', Critical: 'failing', Unknown: 'unknown', 'Not configured': 'not configured' }[wh.state],
       // An unread summary raises no item of its own: the page says it once,
       // and the queue's empty state names every Unknown signal.
@@ -378,9 +473,9 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
     const asked = (deps.deployments || []).filter((x) => x.live_state !== 'not_deployed');
     const failing = asked.filter((x) => !(x.live_state === 'ok' && x.live?.db_ok === true));
     add({
-      key: 'branches', name: 'Branches', status: failing.length ? 'Critical' : asked.length ? 'Healthy' : 'Not configured',
+      key: 'branches', name: 'Branches', status: failing.length ? 'Degraded' : asked.length ? 'Healthy' : 'Not configured',
       line: asked.length ? `${asked.length - failing.length}/${asked.length} healthy` : 'none deployed',
-      items: failing.map((x) => ({ severity: 'Critical', title: `Branch ${x.code} ${x.live_state === 'ok' ? 'database failing' : 'not answering'}`, detail: x.live?.detail || x.live_reason || 'The branch did not report a working database.', state: 'Critical', observed: observed.deps, link: LINK.topology })),
+      items: failing.map((x) => ({ severity: 'Medium', title: `Branch ${x.code} ${x.live_state === 'ok' ? 'database failing' : 'not answering'}`, detail: x.live?.detail || x.live_reason || 'The branch did not report a working database.', state: 'Degraded', observed: observed.deps, link: LINK.topology })),
     });
   }
 
@@ -424,6 +519,7 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
     const kItems = [];
     if (lv) {
       if (lv.Required.unset.length) kItems.push({ severity: 'High', title: `${plural(lv.Required.unset.length, 'required key', 'required keys')} not set`, detail: lv.Required.unset.join(', '), state: 'Not configured', observed: seen, link: LINK.keys });
+      kItems.push(...keyExpiryItems(d.integration_keys, now, seen));
       if (lv.Recommended.unset.length) kItems.push({ severity: 'Low', title: `${plural(lv.Recommended.unset.length, 'recommended key', 'recommended keys')} not set`, detail: `${lv.Recommended.unset.join(', ')}. The features that use them are off.`, state: 'Not configured', observed: seen, link: LINK.keys });
     }
     add({ key: 'keys', name: 'Integration keys', status: lv ? 'Healthy' : 'Unknown', line: '', items: kItems, config: true, levels: lv });
@@ -441,19 +537,107 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
   if (summaryDown) {
     for (const s of out) if (s.status === 'Reading') s.status = 'Unknown';
   }
+  foldDetected(out, detectedIncidents(d));
   return out;
+}
+
+/* ── detected incidents (D4854, read here since D4860 part 4) ─────────── */
+
+/** The Worker's severity words, as the queue draws them. */
+export const SEVERITY_OF = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+/** The overview signal each detected kind belongs to; a kind with no signal of its own gets one. */
+export const KIND_SIGNAL = { cron: 'jobs', webhook: 'webhook', dlq: 'dlq', telemetry: 'telemetry', branch: 'branches', meeting_bot: 'meeting_bot' };
+const KIND_FALLBACK_LINK = { cron: LINK.monitoring, dlq: { ...LINK.monitoring, label: 'Inspect DLQ' } };
+const HEALTH_STATES = new Set(['critical', 'degraded', 'unknown', 'healthy']);
+
+/**
+ * `health` from the summary, as the overview reads it. `null` while the
+ * summary is not read; `{ available: false }` when the summary carries no
+ * `health` (a Worker older than D4854), which the page draws as Not recorded,
+ * never as "0 detected". Each incident becomes a Needs attention item with the
+ * Worker's severity, its console and its runbook.
+ */
+export function detectedIncidents(d) {
+  if (!d) return null;
+  const h = d.health;
+  if (!h || !HEALTH_STATES.has(h.state) || !Array.isArray(h.detected)) {
+    return { available: false, reason: 'This Worker does not report detected incidents.' };
+  }
+  const items = h.detected.map((i) => {
+    const severity = SEVERITY_OF[i.severity] || 'Medium';
+    const surface = i.remediation?.surface;
+    const link = surface?.href ? { to: surface.href, label: `Open ${surface.label}` } : (KIND_FALLBACK_LINK[i.kind] || LINK.monitoring);
+    const rb = i.remediation?.runbook;
+    return {
+      key: i.key, kind: i.kind, detected: true, severity,
+      title: i.title, detail: i.detail || '',
+      state: severity === 'Critical' ? 'Critical' : severity === 'Low' ? 'Stale' : 'Degraded',
+      since: utcStamp(i.since), observed: i.observed_at || null,
+      link, runbook: rb?.doc ? { label: rb.label || 'Runbook', doc: rb.doc } : null,
+    };
+  });
+  return {
+    available: true,
+    state: h.state,
+    items,
+    unknown: Array.isArray(h.unknown) ? h.unknown : [],
+    notDetected: Array.isArray(h.not_detected) ? h.not_detected : [],
+    published: h.published || null,
+  };
+}
+
+const rank = (sev) => SEVERITIES.indexOf(sev);
+
+/**
+ * Folds the Worker's incidents into the signals, in place. For each signal
+ * the Worker raised something on, its incidents replace the page's own items,
+ * and the signal's status follows the Worker: Critical only when an incident
+ * is critical, otherwise at most Degraded; a High or Medium incident lowers a
+ * signal the page read as Healthy. A signal the Worker raised nothing on keeps
+ * the page's own observation, already on the Worker's scale.
+ */
+export function foldDetected(sigs, det) {
+  if (!det?.available) return sigs;
+  const byKey = new Map();
+  for (const it of det.items) {
+    const key = KIND_SIGNAL[it.kind] || it.kind;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(it);
+  }
+  const covered = new Set(Object.values(KIND_SIGNAL));
+  for (const s of sigs) {
+    const mine = byKey.get(s.key);
+    // The Worker judges these signals: the page never reads one Critical on its own.
+    if (covered.has(s.key) && s.status === 'Critical') s.status = 'Degraded';
+    if (!mine) continue;
+    byKey.delete(s.key);
+    s.items = mine;
+    const worst = mine.map((i) => i.severity).sort((a, b) => rank(a) - rank(b))[0];
+    if (worst === 'Critical') s.status = 'Critical';
+    else if ((worst === 'High' || worst === 'Medium') && ['Healthy', 'Not configured', 'Stale'].includes(s.status)) s.status = 'Degraded';
+    if (worst !== 'Low') s.note = false;
+  }
+  // A detected kind the overview has no signal for (the meeting bot's starts).
+  for (const [key, items] of byKey) {
+    const worst = items.map((i) => i.severity).sort((a, b) => rank(a) - rank(b))[0];
+    sigs.push({ key, name: key === 'meeting_bot' ? 'Meeting bot' : cap(key), status: worst === 'Critical' ? 'Critical' : worst === 'Low' ? 'Stale' : 'Degraded', line: '', items, note: worst === 'Low' });
+  }
+  return sigs;
 }
 
 /* ── overall health ──────────────────────────────────────────────────── */
 
 /**
  * D4860's rule. Critical when a known user-facing capability is failing (any
- * Critical signal). Unknown when the core base signals — the summary, or both
+ * Critical signal: the AI budget tripped, or an incident the Worker detects as
+ * critical, such as ten refused webhook deliveries in a row). Unknown when the core base signals — the summary, or both
  * scheduled jobs and the dead-letter queue — cannot be read. Degraded when
  * anything else is wrong OR any core signal is unknown: unread is reduced
  * confidence, never a zero. Healthy only when every core signal was read and
  * is healthy. Configuration items (an unset optional key, an unbound
- * channel) are warnings in the queue and never lower health on their own.
+ * channel) are warnings in the queue and never lower health on their own,
+ * and neither is a Low note (webhook silence, a branch nobody checked), as the
+ * Worker's `healthStateOf` says.
  */
 export function platformHealth(sigs, { summaryDown = false, loading = false } = {}) {
   if (loading) return { state: 'Reading', confidence: 'Reading the platform…' };
@@ -466,7 +650,7 @@ export function platformHealth(sigs, { summaryDown = false, loading = false } = 
   if (baseBlind) {
     return { state: 'Unknown', confidence: `Health can't be determined: ${summaryDown ? 'the platform summary could not be read' : 'scheduled jobs and the dead-letter queue could not be read'}. Don't treat this as healthy.` };
   }
-  const wrong = sigs.filter((s) => !s.config && ['Degraded', 'Stale', 'Partial'].includes(s.status));
+  const wrong = sigs.filter((s) => !s.config && !s.note && ['Degraded', 'Stale', 'Partial'].includes(s.status));
   if (unknown.length || wrong.length) {
     const parts = [];
     if (unknown.length) parts.push(`Confidence reduced: ${unknown.map((s) => `${s.name.toLowerCase()} ${s.why ? `(${s.why.replace(/\.$/, '')})` : 'unknown'}`).join('; ')}.`);
@@ -568,3 +752,38 @@ export const CONSOLE_GROUPS = [
 export const PREVIEW_CONSOLES = [
   ['Event syndication', '/admin/platform/event-syndication', 'Not built yet: nothing posts. Listed here so nobody relies on it.'],
 ];
+
+/* ── one console's state, for the overview and the HQ strip (D4860 part 5) ── */
+
+/**
+ * The state a link to a console carries (PL-07: "each link carrying its live
+ * state where one applies"), read off the signal the console remediates. A
+ * Healthy or still-reading signal draws no state, as on the canvas. A signal
+ * the reads could not produce because the summary did not answer is Unknown,
+ * never blank: blank next to a link would read as healthy.
+ */
+export function consoleState(sigs, key, { summaryDown = false } = {}) {
+  if (!key) return null;
+  const s = sigs.find((x) => x.key === key);
+  if (!s) return summaryDown ? 'Unknown' : null;
+  return ['Healthy', 'Reading'].includes(s.status) ? null : s.status;
+}
+
+/**
+ * What the HQ Platform strip draws (D4860 part 5, finding 13), from the same
+ * reads the overview makes and through the same rule: `signals`, folded with
+ * the Worker's detected incidents, then `platformHealth`. Overview carries the
+ * overall state, always, so the strip never leaves health unsaid; every other
+ * item carries its console's state from `CONSOLE_GROUPS`, the overview's own
+ * map, so a link never reads one way in the strip and another on the page.
+ */
+export function stripStates({ data, deps, traffic, now, observed, UNAVAILABLE }) {
+  const sigs = signals({ data, deps, traffic, now, observed, UNAVAILABLE });
+  const summaryDown = data === UNAVAILABLE;
+  const health = platformHealth(sigs, { summaryDown, loading: data === null });
+  const byRoute = { '/admin/platform': health.state };
+  for (const [, links] of CONSOLE_GROUPS) {
+    for (const [, to, key] of links) if (key) byRoute[to] = consoleState(sigs, key, { summaryDown });
+  }
+  return { health, byRoute };
+}

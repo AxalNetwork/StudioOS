@@ -67,5 +67,64 @@ and citations by number keep working.
 | `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D4618.md` | Account regressions: an interaction or concurrency test for each #4615–#4617 repair, each mutation-checked (part of #4618). |
+| `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
+| `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
+| `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
+| `D5315.md` | Expertise V2 Worker contracts, beginning with owner-only proof request cancellation. |
+| `D5358.md` | Practice Sessions confirms price changes and clears, preserves status-only updates, and handles billing refusals. |
+| `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
-| `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |
+| `D5352.md` | #5352: proposal-keyed retries for the remaining Validate/Grow target writers. |
+| `D5366.md` | #5366: company project writes pass the company-seat gate while #5329 retains project-scope authority. |
+| `D5525.md` | #5525: a company Member may still create a project in its company; creation refuses only support sessions and HQ access without a seat. |
+| `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
+| `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
+| `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |
+| `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
+| `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
+| `D5535.md` | Verify production queues before release mutations. |
+| `D4662.md` | Sent conversation identity and quotes survive draft deletion; selected threads refresh, expose older pages and preserve unreadable and uncertain outcomes. |
+| `D4705.md` | Studio Pipeline keyboard entry and creation recovery; synthetic call baseline and remaining partner/live checks. |
+| `D5532.md` | Measure production-shaped Worker startup and bind diagnostics to the release artifact. |
+| `D5501.md` | Gate production D1 and Worker publication on the exact verified main candidate. |
+| `D4710.md` | Mounted Delivery stale-edit/stale-send verification of merged revision handling; remaining 6/6 handoff scope. |
+| `D4580.md` | Grow auth browser evidence, accessible malformed-input fixes and remaining live-account verification. |
+| `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
+| `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
+| `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
+| `D5565.md` | Strict portable WorkspaceSpec/ExecutorAdapter and injected-clock atomic lease/fencing protocol; unmounted and no new task/usage ledger. |
+| `D5567.md` | Unmounted workspace security gate: live scoped grants, provider/image eligibility, one-use callbacks and encrypted tenant-bound object access. |
+| `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
+| `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
+
+- [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
+
+- [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
+- [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
+
+- [D5675](D5675.md) — Isolated synthetic preview callback, normal promotion gate and urgent rollback handling (#5675).
+| `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
+| `D5666.md` | Observational session attribution and persistent PR/incident routing. |
+| `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
+| `D5664.md` | Independent signed metadata capture, immutable ledger and explicit source gaps. |
+| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
+| `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
+| `D5670.md` | Cloudflare source coverage, ownership and staged acceptance. |
+| `D5671.md` | Authenticated Cloudflare delivery and explicit route isolation. |
+| `D5672.md` | Existing platform signals and conservative incident attribution. |
+| `D5680.md` | Restricted operational security triage without public disclosure. |
+| `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
+| `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
+| `D4557-p2.md` | Bounded general compute host with canonical grants; hosted activation remains owner-gated. |
+| `D5720.md` | Static notification test Worker, data bindings and scanner-clean policy locals. |
+| `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |
+| `D4862-p2.md` | Focus-first Grow overview, recorded attention and one taxonomy over existing routes (#4862). |
+
+| `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
+| `D5039-p3.md` | Governed statement disputes and due dates, actual action history, Stream control and dated branch checkout read-back (#5039). |
+| `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
+| `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
+| `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
+| `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
+| `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |

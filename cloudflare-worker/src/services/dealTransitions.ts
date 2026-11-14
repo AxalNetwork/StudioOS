@@ -62,6 +62,9 @@ export function initialStatus(requested: unknown, staff: boolean): { status: str
 
 /** The version a move is conditional on: the stage and when it was entered. */
 export type Version = { status: string; stage_changed_at: string | null };
+export const SYSTEM_MOVE_SOURCES = ['hubspot', 'salesforce', 'affinity'] as const;
+export type SystemMoveSource = typeof SYSTEM_MOVE_SOURCES[number];
+export type SystemMoveResult = 'moved' | 'unchanged' | 'missing' | 'lost';
 
 const VERSION_SQL = ' WHERE id = ? AND status = ? AND stage_changed_at IS ?';
 
@@ -90,21 +93,53 @@ function setList(fields: Partial<Record<MoveColumn, unknown>>) {
   return { cols, binds };
 }
 
+/** Updates CRM-owned fields without inventing a duplicate stage event. */
+async function writeSystemFieldsAtVersion(
+  env: Env,
+  dealId: number,
+  from: Version,
+  fields: Partial<Record<MoveColumn, unknown>>,
+): Promise<SystemMoveResult> {
+  const { cols, binds } = setList(fields);
+  if (!cols.length) return 'unchanged';
+  const comparisons: string[] = [];
+  const comparisonBinds: unknown[] = [];
+  for (const col of MOVE_COLUMNS) {
+    if (!Object.hasOwn(fields, col)) continue;
+    const value = fields[col];
+    if (value === NOW) { comparisons.push('1'); continue; }
+    comparisons.push(col + ' IS NOT ?');
+    comparisonBinds.push(value ?? null);
+  }
+  const result = await env.DB.prepare(
+    'UPDATE deals SET updated_at = CURRENT_TIMESTAMP, ' + cols.join(', ')
+    + VERSION_SQL + ' AND (' + comparisons.join(' OR ') + ')',
+  ).bind(...binds, dealId, from.status, from.stage_changed_at, ...comparisonBinds).run();
+  if (Number(result.meta?.changes) === 1) return 'unchanged';
+  const version = await env.DB.prepare('SELECT status, stage_changed_at FROM deals WHERE id = ?')
+    .bind(dealId).first<Version>();
+  if (!version) return 'missing';
+  return version.status === from.status && version.stage_changed_at === from.stage_changed_at ? 'unchanged' : 'lost';
+}
+
 /**
  * The two statements of a move from `from` to `to`. `kind` is the history's
  * (`advance`, `pass`, `set`). `fields` are written in the same UPDATE.
  */
 export function moveStatements(env: Env, input: {
   dealId: number; from: Version; to: string; kind: 'advance' | 'pass' | 'set'; actorUserId: number | null;
+  source?: SystemMoveSource | null;
   fields?: Partial<Record<MoveColumn, unknown>>;
 }): D1PreparedStatement[] {
-  const { dealId, from, to, kind, actorUserId } = input;
+  const { dealId, from, to, kind, actorUserId, source = null } = input;
   const days = daysBetween(from.stage_changed_at);
   const { cols, binds } = setList(input.fields ?? {});
+  const sourceColumn = source ? ', source' : '';
+  const sourceValue = source ? ', ?' : '';
   const event = env.DB.prepare(
-    'INSERT INTO deal_stage_events (deal_id, from_stage, to_stage, kind, days_in_from, actor_user_id)'
-    + ' SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM deals' + VERSION_SQL + ')',
-  ).bind(dealId, from.status, to, kind, days, actorUserId, dealId, from.status, from.stage_changed_at);
+    'INSERT INTO deal_stage_events (deal_id, from_stage, to_stage, kind, days_in_from, actor_user_id' + sourceColumn + ')'
+    + ' SELECT ?, ?, ?, ?, ?, ?' + sourceValue + ' WHERE EXISTS (SELECT 1 FROM deals' + VERSION_SQL + ')',
+  ).bind(dealId, from.status, to, kind, days, actorUserId, ...(source ? [source] : []), dealId, from.status, from.stage_changed_at);
   const update = env.DB.prepare(
     "UPDATE deals SET status = ?, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP"
     + cols.map((c) => ', ' + c).join('') + VERSION_SQL,
@@ -116,6 +151,56 @@ export function moveStatements(env: Env, input: {
 export async function runMove(env: Env, input: Parameters<typeof moveStatements>[1]): Promise<boolean> {
   const results = await env.DB.batch(moveStatements(env, input));
   return Number(results[1]?.meta?.changes) === 1;
+}
+
+const SYSTEM_PASS_NOTE: Record<SystemMoveSource, string> = {
+  hubspot: 'Rejected by the HubSpot CRM stage mapping.',
+  salesforce: 'Rejected by the Salesforce CRM stage mapping.',
+  affinity: 'Rejected by the Affinity CRM stage mapping.',
+};
+
+/**
+ * D5354 (#5354) — the system-actor door used by CRM pulls. It reads the
+ * current version itself, writes one null-actor history row plus the move in
+ * the same guarded batch, and reports a lost race without writing either.
+ * Repeating the same mapped stage is a no-op. A CRM pass uses the existing
+ * `thesis` category and a fixed provider-naming note; provider text is never
+ * accepted as a pass reason.
+ */
+export async function runSystemMove(env: Env, input: {
+  dealId: number; to: string; source: SystemMoveSource;
+  fields?: Partial<Record<MoveColumn, unknown>>;
+}): Promise<SystemMoveResult> {
+  if (!DEAL_STATUSES.includes(input.to)) throw new Error('unknown_deal_status');
+  const from = await env.DB.prepare('SELECT status, stage_changed_at FROM deals WHERE id = ?')
+    .bind(input.dealId).first<Version>();
+  if (!from) return 'missing';
+  if (from.status === input.to) {
+    return writeSystemFieldsAtVersion(env, input.dealId, from, input.fields ?? {});
+  }
+
+  const fields: Partial<Record<MoveColumn, unknown>> = { ...(input.fields ?? {}) };
+  if (input.to === PASSED_STATUS) {
+    fields.pass_reason = 'thesis';
+    fields.pass_note = SYSTEM_PASS_NOTE[input.source];
+    fields.passed_at = DB_NOW;
+    fields.passed_by_user_id = null;
+  } else if (from.status === PASSED_STATUS) {
+    fields.pass_reason = null;
+    fields.pass_note = null;
+    fields.passed_at = null;
+    fields.passed_by_user_id = null;
+  }
+  const moved = await runMove(env, {
+    dealId: input.dealId,
+    from,
+    to: input.to,
+    kind: input.to === PASSED_STATUS ? 'pass' : 'set',
+    actorUserId: null,
+    source: input.source,
+    fields,
+  });
+  return moved ? 'moved' : 'lost';
 }
 
 /** Writes fields with no move: one UPDATE, so all of them land or none does. */

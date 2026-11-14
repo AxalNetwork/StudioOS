@@ -59,7 +59,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { isAdmin } from './_t13t14t15_helpers';
 import {
-  companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+  companyBinds, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
 } from '../services/partnerPipelineRules';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
@@ -393,6 +393,9 @@ partnerPipeline.get('/leads', async (c) => {
       excluded_count: excludedCount,
       passed_count: Number(passTotal?.n ?? 0),
       totals_complete: walk.complete,
+      population_note: walk.complete
+        ? 'Open counts all open marketplace needs across the firm, including fit exclusions, except needs already bid on or passed by this firm. Strong fit counts scored open leads at 80 or above.'
+        : 'These counts cover the open marketplace needs read so far. They exclude needs already bid on or passed by this firm. Strong fit counts scored open leads at 80 or above.',
       // What the score is made of, said in the response so the page cannot
       // imply a model where there is a substring match.
       scoring: ruleRows.length || offeringRows.length ? 'fit_rules' : 'none',
@@ -409,7 +412,10 @@ partnerPipeline.get('/leads', async (c) => {
  * written none of these down.
  */
 export function audienceFitQuery(rules: any[], offerings: any[], extra: string): string {
-  const fit = rules.filter((r) => r.kind === 'best_fit' && String(r.value ?? '').trim()).map((r) => String(r.value).trim());
+  const fit = rules
+    .filter((r) => r.kind === 'best_fit' && r.signal !== 'weak_intent')
+    .map((r) => String(r.value ?? '').trim())
+    .filter(Boolean);
   const sells = offerings.map((o) => String(o.title ?? '').trim()).filter(Boolean);
   return [
     extra,
@@ -1229,24 +1235,6 @@ async function readRetainers(env: Env, partnerId: number, companyId: number | nu
       r.retainer_id ? (usageByRetainer.get(Number(r.retainer_id)) || []) : [],
       now,
     );
-    // D4693: the monthly figure the zone prints, and what counts as current revenue.
-    // A quarterly amount is divided by three; an unknown cadence is null, never
-    // assumed monthly. An ended retainer, or one on a cancelled engagement, is
-    // history and contributes nothing to the total.
-    if (proj.retainer) {
-      const active = isActiveRetainer(
-        { ended_at: r.ended_at },
-        { status: r.engagement_status, cancelled_at: r.cancelled_at },
-        now.toISOString().slice(0, 10),
-      );
-      const monthly = monthlyCents(
-        r.amount_cents === null || r.amount_cents === undefined ? null : Number(r.amount_cents),
-        r.cadence,
-      );
-      proj.retainer.active = active;
-      proj.retainer.monthly_cents = monthly;
-      proj.retainer.current_monthly_cents = active ? monthly : null;
-    }
     return { ...base, ...proj };
   });
   const last = list[list.length - 1];

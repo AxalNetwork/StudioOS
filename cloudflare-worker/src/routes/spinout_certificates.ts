@@ -22,7 +22,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireBranchNotSuspended } from '../auth';
-import { programRefusal } from '../services/programEnforcement';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -99,8 +98,10 @@ app.post('/certificates', async (c) => {
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
   // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
-  const notGranted = await programRefusal(c.env, 'spinout-lab');
-  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  // D5360 — asked through the one gate every issuing path calls.
+  const { labIssuanceHold } = await import('../services/certificateIssuance');
+  const held = await labIssuanceHold(c.env);
+  if (held) return c.json(held.body, held.http);
   await ensureTables(c.env);
 
   const body = await c.req.json().catch(() => ({} as any));
@@ -228,7 +229,18 @@ app.get('/certificates', async (c) => {
     console.error('[certificates] awaiting read failed', (e as Error)?.message);
     unavailable.awaiting = 'The graduate list could not be read, so who is still waiting for a certificate is unknown.';
   }
-  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, unavailable });
+  // D4663 — what the scheduled backfill last did. `last_tick: null` is "not
+  // recorded" (no tick has run here), never "0 issued"; a failed read is
+  // `null` with its sentence in `unavailable`.
+  let scheduledBackfill: unknown = null;
+  try {
+    const { readCertificateBackfillState } = await import('../services/certificateIssuance');
+    scheduledBackfill = await readCertificateBackfillState(c.env);
+  } catch (e) {
+    console.error('[certificates] scheduled backfill read failed', (e as Error)?.message);
+    unavailable.scheduled_backfill = 'When the scheduled backfill last ran could not be read.';
+  }
+  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, scheduled_backfill: scheduledBackfill, unavailable });
 });
 
 app.post('/certificates/:id/revoke', async (c) => {
@@ -284,8 +296,10 @@ app.post('/certificates/backfill', async (c) => {
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
   // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
-  const notGranted = await programRefusal(c.env, 'spinout-lab');
-  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  // D5360 — asked through the one gate every issuing path calls.
+  const { labIssuanceHold } = await import('../services/certificateIssuance');
+  const held = await labIssuanceHold(c.env);
+  if (held) return c.json(held.body, held.http);
   await ensureTables(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
   const { backfillCertificates } = await import('../services/certificateIssuance');

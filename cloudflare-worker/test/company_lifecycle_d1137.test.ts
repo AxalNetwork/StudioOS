@@ -43,6 +43,8 @@ const VENTURE = 10;
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
+  // #5654: install the production decision CHECK used by profile/logo batches.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/202611071200_program_grant_revisions.sql', import.meta.url), 'utf8'), 'decision_guard'));
   for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks
@@ -190,11 +192,14 @@ test('a venture moves only to a company its owner belongs to, never to an archiv
 
   await call(db, env, ADA, 'POST', '/api/company/co-north/archive');
   assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: NORTH })).body.code, 'archived');
-  const out = await call(db, env, EVE, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
-  assert.deepEqual([out.status, out.body.company_id], [200, null], 'an admin may take it out of its company');
+  const hq = await call(db, env, EVE, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
+  assert.equal(hq.status, 403, 'a platform admin without a seat cannot move it');
+  assert.equal((db.prepare('SELECT company_id FROM projects WHERE id = ?').get(VENTURE) as any).company_id, SOUTH);
+  const out = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
+  assert.deepEqual([out.status, out.body.company_id], [200, null], 'the owner with an editing seat can move it out');
   assert.deepEqual(events(db).filter((e) => e.kind === 'project_move').map((e) => [e.project_id, e.company_id, e.actor_user_id, JSON.parse(e.before_json), JSON.parse(e.after_json)]), [
     [VENTURE, SOUTH, ADA, { company_id: NORTH }, { company_id: SOUTH }],
-    [VENTURE, SOUTH, EVE, { company_id: SOUTH }, { company_id: null }],
+    [VENTURE, SOUTH, ADA, { company_id: SOUTH }, { company_id: null }],
   ]);
 });
 
@@ -225,7 +230,10 @@ test('the owner seat goes to a co-founder with a founder account who belongs to 
   assert.deepEqual(roles, { [ADA]: 'cofounder', [BEN]: 'owner', [CY]: 'cofounder', [DEE]: 'advisor', [FAY]: 'cofounder' }, 'Ada keeps a seat as a co-founder');
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.company_id, e.target_user_id, JSON.parse(e.after_json)]),
     [['project_transfer', VENTURE, NORTH, BEN, { owner_user_id: BEN }]]);
-  assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: SOUTH })).status, 403, 'Ada no longer owns it');
+  assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/transfer`, { user_id: ADA })).status, 403, 'Ada no longer owns it');
+  const move = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
+  assert.equal(move.status, 200, 'Ada still manages the move through her editing seat');
+  assert.equal((db.prepare('SELECT company_id FROM projects WHERE id = ?').get(VENTURE) as any).company_id, null);
 });
 
 // ── #3850 (E6 of #3742, D1528 §4.4): what a move and an owner transfer do to the agent engine ──

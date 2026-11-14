@@ -233,8 +233,16 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Awaiting consent', key: 'awaiting' },
     { canvas: 'Self-stated', key: 'self' },
   ],
-  // `articles.status` is draft or published. Nothing classifies a piece as an
-  // essay rather than a note or a post — there is no kind column on articles.
+  // D4826 (#4826): `articles.status` is SEVEN values, not two — draft,
+  // submitted, in_review, changes_requested, rejected, approved, published —
+  // and an approved piece with a `publish_at` is Scheduled (D484). The note
+  // here used to say "draft or published", which was wrong when D4681 gave the
+  // shelf a pill per state. These two chips are the canvas's own axis (AX4's
+  // `filters: fil(['All','Published','Drafts','Essays'], 0)`), so Drafts stays
+  // the coarse "not public yet" narrowing the canvas asks for; the row's pill,
+  // its audience line and the export all name the real state
+  // (`expertiseModel.articleStage`). Nothing classifies a piece as an essay
+  // rather than a note or a post — there is no kind column on articles.
   'expertise/thinking': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Published', key: 'published' },
@@ -264,48 +272,42 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All time', key: 'all' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
-  // stores `lane` with five values, so Signed, Renewal due and Ended each read
-  // a column directly — `Signed` covers both signed lanes, because
-  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
-  // that excluded it would hide the contracts most in need of attention.
-  //
-  // `By client` IS A SORT, and saying so matters. Every other chip in these four
-  // tables narrows a set; this one orders the board, the renewal history and the
-  // scope cards by client name and drops nothing. A chip called "By client" that
-  // filtered rows out would be lying about what it did — and this file's own
-  // docblock is about exactly that failure mode, a chip whose empty result reads
-  // as an answer.
+  // #4831 (D4831): THE PRACTICE V2 CANVAS'S ROW (PX-03), which replaced PR2's
+  // `All · Signed · Renewal due · Ended · By client`. Each chip narrows the
+  // board and carries its count over the whole record (`chipRows` and
+  // `chipCounts` in `engagementBoard.js`); `Active` is signed or renewal due,
+  // the same set the Active tile counts. `By client` left with the PR2 row: it
+  // was a sort, and the v2 board draws none.
   'practice/engagements': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Signed', key: 'signed' },
-    { canvas: 'Renewal due', key: 'renewal_due' },
-    { canvas: 'Ended', key: 'ended' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Active', key: 'active', label: 'Active {n}' },
+    { canvas: 'Renewal due', key: 'renewal_due', label: 'Renewal due {n}' },
+    { canvas: 'Proposed', key: 'proposed', label: 'Proposed {n}' },
+    { canvas: 'Ended', key: 'ended', label: 'Ended {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM ONLY RUNS BECAUSE THE STORE RESOLVED THE
-  // CANVAS'S OWN INCONSISTENCY. `Draft` is drawn as a chip and defined as a
-  // pill, but no row in the artboard's fixture carries that state — its draft
-  // row is `state:'Not started'` with `version:'v2 draft'`, two names for one
-  // thing. Clicking the chip as drawn would have returned nothing, which is the
-  // exact failure this file's docblock is about: an empty set reading as an
-  // answer. Migration 239 makes it a real state — a work product whose latest
-  // version has never been sent — so `Draft` is `not_started` and the chip
-  // narrows honestly.
+  // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,
+  // PX-06), which replaced PR3's `All · Unopened · Opened · Draft · By client`.
+  // Each chip narrows on the LATEST version's own stamps (`cardStatus` in
+  // `deliveryTrail.js`): Draft is a latest version with no `sent_at`, Sent has
+  // no receipt yet, Opened has `opened_at`, Accepted has `signed_off_at`. The
+  // receipts are written by the client's routes, never an advisor's (D72,
+  // D4684).
   //
-  // `Unopened` and `Opened` read the derived state, which comes from whether
-  // `opened_at` exists — and that column is written by the FOUNDER side, never
-  // by an advisor route (D72). These two chips are the only place in four
-  // profiles where a filter reads a fact the signed-in user cannot author.
+  // THE CANVAS ALSO DRAWS `Ready`, AND IT IS LEFT OUT, not drawn disabled: the
+  // canvas itself marks it "isn't recorded today" and D4874 lists it as backend
+  // required. `profile_zone_filters.test.mjs` drops it from the canvas row by
+  // name, citing D4874, the way founder's `Cited in deck` is dropped (D549).
   //
-  // `By client` reorders rather than narrows, as on Engagements.
+  // `By client` left the chip row with the PR3 artboard. Grouping by client is
+  // still `?view=by_client` (D571's `/practice/deliverables`), a toggle beside
+  // the cards rather than a chip, because it reorders rather than narrows.
   'practice/delivery': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Unopened', key: 'unopened' },
-    { canvas: 'Opened', key: 'opened' },
-    { canvas: 'Draft', key: 'draft' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Draft', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Sent', key: 'sent', label: 'Sent {n}' },
+    { canvas: 'Opened', key: 'opened', label: 'Opened {n}' },
+    { canvas: 'Accepted', key: 'accepted', label: 'Accepted {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
   // TWO OF THESE CHANGE THE WINDOW AND TWO NARROW IT, which is unusual enough
@@ -325,24 +327,19 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Unpaid held', key: 'unpaid_held' },
   ],
 
-  // D4 (`design/canvases/backlog/Detail Layer Canvas II.dc.html`), which is
-  // what PR5 in the Practice canvas points at: "drawn in full as D4".
-  //
-  // THE FIRST TWO ARE A DYNAMIC GROUP, and that is the whole reason this entry
-  // is not four static chips. D4's fixture draws "Q3 2026" and "Q2 2026",
-  // which are the right two CHIPS and the wrong two LABELS: written down, the
-  // page names one quarter for ever and is wrong from January. The page
-  // supplies today's two quarters, exactly as `grow/customers` supplies its
-  // own sources.
+  // #4834 (D4834): THE PRACTICE V2 CANVAS'S PERIOD SELECTOR (`Practice v2
+  // Page.dc.html`, PX-07), which replaced D4's `Q3 2026 · Q2 2026 · Year to
+  // date · All time`. Five static chips: each asks the Worker for a different
+  // window, so a label is the period's kind and the page shows the period's own
+  // name beside the row ("November 2026", "Q4 2026"). `Quarter` is the current
+  // calendar quarter and `Year` the current calendar year. `Custom` opens two
+  // day fields; a custom range has no note key, so it carries no note.
   'practice/earnings': [
-    {
-      canvas: ['Q3 2026', 'Q2 2026'],
-      dynamic: 'quarters',
-      label: 'One chip per quarter',
-      unbuilt: 'the two quarter chips are named from the reader’s own calendar, so a page that supplies none draws none',
-    },
-    { canvas: 'Year to date', key: 'ytd' },
-    { canvas: 'All time', key: 'all' },
+    { canvas: 'This month', key: 'this_month' },
+    { canvas: 'Last month', key: 'last_month' },
+    { canvas: 'Quarter', key: 'quarter' },
+    { canvas: 'Year', key: 'year' },
+    { canvas: 'Custom', key: 'custom' },
   ],
 
   'research/library': [

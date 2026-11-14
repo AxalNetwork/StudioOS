@@ -22,7 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { CYCLES, cycleBands, cycleDef, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
+import { CYCLES, cycleBands, cycleDraftsBlock, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
 import { MODULES } from '../src/pages/cycles/modules.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -58,7 +58,8 @@ test('a founder\'s bare /build/team is the Team workspace, and the Grow landing 
   const team = app.match(/<Route path="\/build\/team"[^\n]*/)?.[0] || '';
   assert.match(team, /guard\(\['admin', 'founder'\], founderWorkspace\('grow', founderEditor\(<FounderTeamPage \/>\)\)\)/);
   assert.doesNotMatch(team, /founderGrowLanding/, 'the bare route branches on a landing it no longer has');
-  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/);
+  // #4579: signed out, /grow goes through the guard itself, so sign-in keeps next=/grow.
+  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding \|\| !user\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/);
 });
 
 /** Each band, on the module whose read it explains. */
@@ -114,11 +115,7 @@ test('a band is drawn only with the switch on and a venture chosen, and spends n
       assert.ok(worker.includes(`\n  '${surface}': {`), `${surface} has no DRAFT_SURFACES entry`);
     }
   }
-  const drafts = CYCLES.map((cycle) => {
-    const def = cycleDef(route, cycle);
-    const at = def.indexOf('drafts: new Map([');
-    return at < 0 ? '' : def.slice(at, def.indexOf('\n    ]),', at));
-  }).join('\n');
+  const drafts = CYCLES.map((cycle) => cycleDraftsBlock(route, cycle)).join('\n');
   for (const field of ['label', 'run', 'accept', 'empty', 'nothingToDraft', 'foot']) {
     const n = (drafts.match(new RegExp(`\\b${field}: '`, 'g')) || []).length;
     // D4493: ten, since Distribution's outreach-sequence band was retired.

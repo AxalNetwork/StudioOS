@@ -94,11 +94,12 @@ test('statement actions offer the governed issue and void, and the dispute form'
 });
 
 test('the page calls the statement api methods and reloads the ledger', () => {
-  assert.match(PAGE, /api\.statementUpdate\(/);
+  assert.doesNotMatch(PAGE, /api\.statementUpdate\(/);
+  assert.match(PAGE, /adminStatementActionsApi\.recordDispute\(/);
   assert.match(PAGE, /<StatementDrawHeld \/>/);
   assert.doesNotMatch(PAGE, /api\.statementDraw\(/, 'D514 holds the draw: the page must not call it');
   assert.match(PAGE, /StatementActions/);
-  assert.match(PAGE, /refreshStatements\(\)/, 'an update re-reads the ledger');
+  assert.match(PAGE, /onChanged=\{refreshStatements\}/, 'an applied action re-reads the ledger');
   assert.match(API, /statementDraw:/);
   assert.match(API, /statementUpdate:/);
   assert.doesNotMatch(PAGE, /api\.statementDraw has no caller/,

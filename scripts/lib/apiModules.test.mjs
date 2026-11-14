@@ -9,6 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -21,7 +22,9 @@ import {
   API_MODULES_DIR_REL,
   REEXPORT_BEGIN,
   REEXPORT_END,
+  apiIndexProblems,
   apiJsProblems,
+  buildApiIndex,
   classifyCalls,
   clientSources,
   extractClientCalls,
@@ -136,9 +139,10 @@ test('the re-export block must name only real modules, once each, in order', () 
     /malformed line/);
   assert.match(reexportProblems("export const x = 1;\n", []).join('\n'), /no re-export block/);
   assert.match(reexportProblems(indexJs([]), ['Bad_name']).join('\n'), /not camelCase/);
-  // #4105: a missing index, and one whose lines are right but whose text is
-  // not what the generator writes (a hand edit), are both reported.
-  assert.match(reexportProblems(null, ['a']).join('\n'), /is missing — run: node scripts\/build-api-index\.mjs/);
+  // #4105: an index that is not built, and one whose lines are right but whose
+  // text is not what the generator writes (a hand edit), are both reported.
+  // D5612: it is built before every build and test, never committed.
+  assert.match(reexportProblems(null, ['a']).join('\n'), /is not built — run: node scripts\/build-generated\.mjs/);
   assert.match(reexportProblems(`// hand-written\n${renderApiIndex(['a'])}`, ['a']).join('\n'), /not exactly what build-api-index writes/);
   assert.deepEqual(reexportProblems(renderApiIndex(['b', 'a']), ['a', 'b']), [], 'the generator sorts');
 });
@@ -154,8 +158,26 @@ test('api.js re-exports the generated index with its one line, and lists no modu
 test('the real api.js re-exports the generated index, and the index names exactly the modules on disk', () => {
   const src = readFileSync(join(REPO, API_FILE_REL), 'utf8');
   assert.deepEqual(apiJsProblems(src), []);
-  assert.deepEqual(reexportProblems(readApiIndex(REPO), listModules(join(REPO, API_MODULES_DIR_REL))), []);
+  // D5612: the index is built, not committed, so this reads the generator's output rather than a file.
+  assert.deepEqual(reexportProblems(buildApiIndex(REPO), listModules(join(REPO, API_MODULES_DIR_REL))), []);
+  assert.equal(buildApiIndex(REPO, { reversed: true }), buildApiIndex(REPO), 'two renders of the same modules differ');
   const files = clientSources(REPO).map((s) => s.file);
   assert.equal(files[0], API_FILE_REL);
   assert.ok(extractClientCalls(src).length > 1000, 'api.js parsed to almost nothing — the harvest stopped matching');
+});
+
+test('D5612: the index is sound when built and untracked; a new module needs no other edit; a tracked index fails', (t) => {
+  const root = fixture({ widgets: widgetModule('/widgets/${id}') });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.deepEqual(apiIndexProblems(root), []);
+  // A new domain module is one new file: the generator's output names it, and nothing else changes.
+  writeFileSync(join(root, API_MODULES_DIR_REL, 'gadgets.js'), widgetModule('/widgets/${id}').replace('widgetsApi', 'gadgetsApi'));
+  writeFileSync(join(root, API_INDEX_REL), buildApiIndex(root));
+  assert.deepEqual(apiIndexProblems(root), []);
+  assert.match(readApiIndex(root), /export \* from '\.\/api\/gadgets\.js';\nexport \* from '\.\/api\/widgets\.js';/);
+  // `git add -f` the index: the check says it is tracked.
+  execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
+  assert.deepEqual(apiIndexProblems(root), []);
+  execFileSync('git', ['add', '-f', API_INDEX_REL], { cwd: root, stdio: 'ignore' });
+  assert.deepEqual(apiIndexProblems(root), [`${API_INDEX_REL} is tracked by git; it is generated and never committed (D5612) — run: git rm --cached ${API_INDEX_REL}`]);
 });

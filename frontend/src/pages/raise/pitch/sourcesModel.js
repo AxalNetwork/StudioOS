@@ -11,6 +11,7 @@
  * words them.
  */
 
+import { formatMinor } from '../../../lib/money.js';
 import { dayLabel } from './pitchStudioModel.js';
 
 export const NOT_ON_STUDIOOS = 'Not recorded on StudioOS';
@@ -60,7 +61,7 @@ export function valueText(item) {
   const n = Number(v);
   switch (item.unit) {
     case 'usd': return Number.isFinite(n) ? money(n) : null;
-    case 'cents': return Number.isFinite(n) ? money(n / 100) : null;
+    case 'cents': return formatMinor(n, 'USD', { trimWhole: true });
     case 'percent': return Number.isFinite(n) ? `${Number(n.toFixed(1))}%` : null;
     case 'months': return Number.isFinite(n) ? `${Number(n.toFixed(1))} months` : null;
     case 'date': return dayLabel(v);

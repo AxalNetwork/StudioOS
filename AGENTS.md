@@ -12,8 +12,8 @@ in one format, so no person has to relay it.
 
 ## Slots
 
-Work belongs to a slot, not to a session. There are twenty-six slots, `S01`
-to `S26`. Each has a label, `slot:SNN`, and its queue is the open issues that
+Work belongs to a slot, not to a session. There are thirty-seven standard slots, `S01`
+to `S37`. Each has a label, `slot:SNN`, and its queue is the open issues that
 carry it. Session 1 is slot `S01` and orchestrates: it writes the tasks and
 answers STATUS comments on the same thread.
 
@@ -35,8 +35,15 @@ because only Session 1 makes a task ready.
 1. **Pull.** Take the oldest open issue labelled with your slot and
    `state:ready`, one task at a time. Over the REST API that is
    `GET /repos/AxalNetwork/StudioOS/issues?labels=slot:SNN,state:ready&state=open&sort=created&direction=asc`.
-2. **Claim.** Swap `state:ready` for `state:in-progress` and post a STATUS
-   comment.
+2. **Claim.** Run `node scripts/claim.mjs claim <issue> --slot <SLOT> --agent
+   <AGENT> --session <SESSION>` to create the atomic `claim/<issue>` ref.
+   Exit 0 won; exit 3 means another holder: leave it alone. Renew before the
+   24-hour TTL with `renew` and the same identity. On exit 4 (HTTP 403), fall
+   back to the label claim and say so in STATUS. Then swap `state:ready` for
+   `state:in-progress` and post a STATUS comment. Release with `release` and
+   the same identity on DONE or hand-back; never delete another holder's ref.
+   An expired ref remains held until its holder releases it or the owner
+   explicitly hands it back. The reaper only comments.
 3. **Work.** Branch `agent/<agent>/<issue>-<slug>` from the latest `main`. If
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains
@@ -48,9 +55,18 @@ because only Session 1 makes a task ready.
    pick, so that one letter answers it. When only part of the task waits,
    build the rest: that PR says `Part of #<issue>` instead of
    `Closes #<issue>`, so the issue stays open for the part that waits.
-5. **Finish.** Fix CI and review comments until everything is green. Never
-   merge, never mark a PR ready for review, and never push to `main` or to
-   another slot's branch. The owner merges.
+5. **Finish.** Fix CI and review comments until everything is green. The
+   owner lands T2 and any PR without an eligible report. After #5605 rows 3
+   and 6 and #5500 are in effect, an agent may queue T0/T1 only when all
+   required checks are green and the `landing policy` summary reports T0 or
+   T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
+   the target still requires the merge queue and that the PR did not edit
+   `.github/workflows/landing-policy.yml`. Then run
+   `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
+   Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
+   the queue if queued before pushing changes. Wait for a new eligible report.
+   Never use `--admin`, push to `main` or another slot's branch, or approve
+   your own PR (#5569).
 
 ### STATUS
 
@@ -78,7 +94,7 @@ Each STATUS state goes with one label, and you change both at the same time:
 | `READY_FOR_REVIEW` | `state:review` |
 | `DONE` | none: the issue closes when its PR merges |
 
-The slot posts `DONE` once, after the owner merges the PR. If the slot has
+The slot posts `DONE` once, after the PR merges. If the slot has
 moved on by then, Session 1 posts it when it confirms the deploy.
 
 ### Owner answers
@@ -158,13 +174,57 @@ without being merged.
 - Decision numbers come from the issue: a new decision is `D<issue number>`
   (D4106), and older issues that name a lower D number keep it. A new
   migration needs no number at all: it is named by the UTC minute it was
-  written, `YYYYMMDDHHMM_<slug>.sql` (D4106). Never take "the next free
-  number" for either.
+  written and its issue, `YYYYMMDDHHMM_<issue>_<slug>.sql` (D4106, D5398;
+  required from 2026-11-11 00:00 UTC). Never take "the next free number" for
+  either.
 
 ### File ownership
 
 An issue names the files it owns. Never edit files that another open issue or
 PR owns; ask on your own issue instead.
+
+### Red main and a backed-up queue (D5398)
+
+One broken merge turns every open PR red at once. Then every slot ports the
+same fix, or merges `main` into its branch, or re-runs its suite. That queued
+over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
+2026-11-10. So, while `[alert] main is red` is open:
+
+1. **There is exactly one repair PR.** Session 1 names it on the alert issue.
+   If none is named and you have the fix, open it, link it on the alert, and
+   say so in your STATUS. Never open a second one; review or extend the named
+   one.
+2. **Never port the repair into your branch.** It reaches your PR when it
+   merges.
+3. **Never merge `main` into, or rebase, an open PR only to chase the
+   inherited failure.** Merge `main` only for your own conflict, or once main
+   is green again and your PR needs a fresh run.
+4. **Never re-run a failed workflow for an inherited failure.** The gate
+   job's summary and the CI failure digest comment say which it is
+   (`scripts/ci-classify.mjs`, `<!-- studioos-ci-digest:v1 -->`):
+   - `inherited_main_failure`: every failed part is red on main too. Do
+     nothing to the PR.
+   - `pr_failure`: at least one part is yours. Fix it.
+   - `main_health_unknown`: main's state could not be read. Treat it as
+     yours until you know otherwise.
+5. **Report it once.** Your STATUS says `blockers: inherited main failure,
+   <alert issue>`, and no comment goes on each PR.
+
+When main is green again, let PRs revalidate as they merge through the queue.
+Do not press "Update branch" on every PR at once.
+
+While `[alert] the Actions queue is backed up` is open, the same backpressure
+applies to everything that is not a fix for a PR's own failure:
+
+- no branch updates;
+- no bulk "re-run all jobs", and at most one failed job re-run, and only for
+  a PR-specific failure;
+- no manually dispatched load or CI jobs.
+
+The alert clears only once the queue is well below its thresholds, so wait for
+it to close.
+
+- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
 
 ### CHANGELOG.md is Session 1's
 
@@ -260,20 +320,25 @@ documents it indexes.
   there first. `backend/` (FastAPI) is never deployed. Never add a method to
   `frontend/src/lib/api.js`, or to a module under `frontend/src/lib/api/`,
   without a mounted Worker route. A new API domain goes in its own module
-  there (D527), and `node scripts/build-api-index.mjs` lists it in the
-  generated `frontend/src/lib/apiModules.generated.js`; `api.js` is not edited.
+  there (D527); the generated `frontend/src/lib/apiModules.generated.js` lists
+  it with no edit from you, and `api.js` is not edited.
 - **New modules register themselves (#4105).** A new Worker router is one file,
   `cloudflare-worker/src/routes/<name>.ts`, exporting `mount` (`{ path, router,
-  before? }`), plus `node scripts/build-route-registry.mjs`, which rewrites the
-  generated `routes/_registry.ts`; never add an `app.route(...)` to
-  `index.ts`. A new route area is one file, `frontend/src/routes/<area>.jsx`,
-  which `App.jsx` collects by itself. Commit the generated files; `npm run
-  test:drift` fails while either is stale. If two branches both add a line to
-  a generated file, rerun its script instead of resolving the conflict by hand.
+  before? }`); the generated `routes/_registry.ts` picks it up. Never add an
+  `app.route(...)` to `index.ts`. A new route area is one file,
+  `frontend/src/routes/<area>.jsx`, which `App.jsx` collects by itself.
+  **Never commit the generated files** (D5612): `routes/_registry.ts`,
+  `frontend/src/lib/apiModules.generated.js` and
+  `services/agents/skillLibrary.generated.ts` are gitignored, and `node
+  scripts/build-generated.mjs` writes them before every build, typecheck and
+  test (the `npm run build`, `dev`, `test:*` and `lint` hooks run it; run it
+  yourself before a bare `tsc` or `node --test`). Each generator's `--check`
+  fails if one is tracked again.
 - **Migrations.** A migration is a new file under
-  `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<slug>.sql` by the
-  UTC minute you write it (D4106); an issue written before D4106 may still give
-  a number up to 799. Never edit an applied migration, and never create a
+  `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<issue>_<slug>.sql`
+  by the UTC minute you write it and your issue's number (D4106, D5398: two PRs
+  in one minute no longer collide); an issue written before D4106 may still
+  give a number up to 799. Never edit an applied migration, and never create a
   trigger by hand.
 - **Honesty.** Where no store exists, the screen says "Not recorded" and gives
   the reason. Where a read fails, it says "Unreadable", never zero. Never
@@ -299,6 +364,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy
