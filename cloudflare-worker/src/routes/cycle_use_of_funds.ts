@@ -9,6 +9,8 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { base,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
 import { planRead,runwayToday } from '../services/useOfFunds/read';
 import useOfFundsEadwyn from './use_of_funds_eadwyn';
+import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean}}>();
 r.use('*',async(c,next)=>{
@@ -91,5 +93,63 @@ r.get('/history',async c=>{
   return c.json({page,page_size:20,total:Number(count?.n??0),items:(rows.results??[]).map(x=>({
     id:x.id,action:x.action,summary:x.details??null,at:x.created_at,who:x.who??null,admin:x.who_role==='admin',
   }))});
+});
+/**
+ * D6084 (#6084): the base scenario as a file (UF1's Export). Each export writes
+ * its audit row into the plan's history before the file is answered: no audit,
+ * no file. A plan that cannot be read is refused (`plan_unreadable`), never
+ * half-exported. Mercury and measured cash are never in the file.
+ */
+const exportDay=()=>new Date().toISOString().slice(0,10);
+const ventureOf=(c:any,pid:number)=>c.env.DB.prepare('SELECT uid,name FROM projects WHERE id=?').bind(pid).first() as Promise<{uid:string|null;name:string|null}|null>;
+r.get('/export.csv',async c=>{
+  const s=c.get('uof'); const plan=await readBasePlan(c.env,s); const asOf=exportDay();
+  const csv=planCsv(plan,asOf,(await ventureOf(c,s.projectId))?.name||'This venture');
+  await exportAudit(c.env,s,'uof_plan_exported','Exported the plan as CSV.',String(plan.uid)).run();
+  return new Response(csv,{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="use-of-funds-${s.projectId}-${asOf}.csv"`,'Cache-Control':'no-store'}});
+});
+r.get('/export.pdf',async c=>{
+  const s=c.get('uof'); const plan=await readBasePlan(c.env,s); const asOf=exportDay();
+  const bytes=await planPdf(plan,asOf,(await ventureOf(c,s.projectId))?.name||'This venture');
+  await exportAudit(c.env,s,'uof_plan_exported','Exported the plan as PDF.',String(plan.uid)).run();
+  return new Response(bytes,{headers:{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="use-of-funds-${s.projectId}-${asOf}.pdf"`,'Cache-Control':'no-store'}});
+});
+/**
+ * D6084: a dated PDF snapshot filed in the venture's data room, as the cap
+ * table's is (D1020 §5): under NDA, seen by nobody until the founder shares it.
+ * The file row and its audit row are one batch; if either fails the stored
+ * object is removed. A support session cannot file (the middleware refuses
+ * every non-GET).
+ */
+r.post('/snapshot',async c=>{
+  const s=c.get('uof');
+  if (!c.env.FILES) return c.json({code:'storage_not_configured',detail:'The data room’s storage is not configured here.'},503);
+  const venture=await ventureOf(c,s.projectId);
+  if (!venture?.uid) return c.json({code:'not_found',detail:'This venture has no data room.'},404);
+  const plan=await readBasePlan(c.env,s); const asOf=exportDay();
+  const bytes=await planPdf(plan,asOf,venture.name||'This venture');
+  const uid=crypto.randomUUID().replace(/-/g,'');
+  const key=`data-room/${venture.uid}/${uid}`;
+  const name=`Use of funds as of ${asOf}.pdf`;
+  // D1170: a filed snapshot is a data room file and counts to the venture's owner.
+  let storage:Awaited<ReturnType<typeof assertStorageRoom>>;
+  // A full allowance is answered as its own 413 (D1169), not as this router's 503.
+  try { storage=await assertStorageRoom(c.env,{projectId:s.projectId},bytes.byteLength,s.user as any); } catch(e) { if (e instanceof Response) return e; throw e; }
+  await c.env.FILES.put(key,bytes,{httpMetadata:{contentType:'application/pdf'},customMetadata:{project_uid:venture.uid,uploaded_by:String(s.user.id)}});
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
+           created_at, updated_at, access_tier, source_kind, source_ref)
+         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody', 'document', 'use_of_funds')`)
+        .bind(uid,s.projectId,name,key,bytes.byteLength,s.user.id),
+      exportAudit(c.env,s,'uof_plan_snapshot_filed',`Added the plan to the data room as “${name}”.`,String(plan.uid)),
+    ]);
+  } catch (e) {
+    console.error('[use-of-funds] snapshot not filed:',(e as Error).name);
+    await c.env.FILES.delete(key).catch(()=>{});
+    return c.json({code:'snapshot_not_filed',detail:'The plan could not be added to the data room. Nothing was filed; try again in a moment.'},500);
+  }
+  await noteStorageLanded(c.env,storage);
+  return c.json({ok:true,file:{uid,name,as_of:asOf,visibility:'nda',access_tier:'nobody',where:'Data room, under NDA, shared with nobody until you share it.'}},201);
 });
 export default r;
