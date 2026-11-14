@@ -77,3 +77,5 @@ Mercury. Keep Mercury stubbed in all tests.
 exclude stale responses. All nested console Lightboxes inherit the phone sheet
 form; the global step-up opts in separately at the route boundary. See D1165
 for what still needs the owner's live check and other parts' final content.
+
+D6397 adds the `new=1` navigation handoff on Calls: after the preview act is verified, the existing New capital call dialog opens for the chosen fund with blank inputs and consumes the flag.
