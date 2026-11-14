@@ -20,6 +20,8 @@ The tabs of the Due diligence desk under `/admin/due-diligence` and `/due-dilige
 | `DdCaseDeal.jsx` | D1251: the deal team's tabs — Requests (DDL6), Documents (DDL7), Cross-checks (DDL8), Team (DDL9) and Sign-off with the memo, IC and the reports (DDL10) |
 | `DdCaseDialogs.jsx` | D1251: the case's dialogs — verdict, raise and update a flag, the decision, notify founder, report, widen (DDL14 A–H), compose, due date, withdraw, assign (DDL9b) and the checklist's bulk changes |
 | `useDiligenceInvolvement.js` | D1252: whether a partner, investor or advisor leads or reviews any case, for the sidebar's "Diligence" row (`withDiligenceRow` in `../../sidebarConfig.js`) |
+| `ddDealContextModel.js` | D6293: exact native-unit money, changed-field-only deal context patches and recorded prior-review count words |
+| `DdDealContextDialog.jsx` | D6293: permitted in-page round, cheque and subject-linked deal edits through the existing case PATCH |
 
 `../AdminDueDiligencePage.jsx` mounts the list tabs (and sends a founder to their requests), and `../AdminDueDiligenceCasePage.jsx` reads the case, mounts the reviewer's panel and the case tabs, draws the tab its address names, and holds the open dialog. `../DueDiligenceRequestsPage.jsx` is the subject's own page (DDL15): the requests addressed to them, never the case.
 
