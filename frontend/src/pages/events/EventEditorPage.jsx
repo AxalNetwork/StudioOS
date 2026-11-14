@@ -20,6 +20,7 @@ import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
 import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
 import EventCoverStep from './EventCoverStep';
+import EventEditorPreview from './EventEditorPreview';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
@@ -242,13 +243,14 @@ export default function EventEditorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       {isEdit
         ? <HostHeader event={{ ...(saved || {}), id, status }} screen="details" pending={pending} publishLabel={action?.label} onPublish={openPublish} busy={saving} />
         : <NewEventHeader primaryLabel={action?.label} onSaveDraft={save} onPrimary={openPublish} busy={saving} />}
       <PageExplainer pageKey="event_editor" />
 
-      <div className="mt-4 space-y-6">
+      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-6">
         {/* Basics */}
         <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 space-y-4">
           <FillFormBar fill={fill} />
@@ -413,6 +415,9 @@ export default function EventEditorPage() {
             <Save size={16} /> {saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Create event')}
           </button>
         </div>
+      </div>
+
+        <EventEditorPreview form={form} saved={saved} />
       </div>
 
       {publishing && (

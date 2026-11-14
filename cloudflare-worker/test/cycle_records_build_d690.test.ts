@@ -139,7 +139,7 @@ const SLUGS = ['solution-design', 'prototype-mvp', 'product-roadmap', 'founding-
 /** CO:617-622: each list's title, columns, filters and default sort. */
 const CANVAS: Record<string, { title: string; name: string; cols: string[]; filters: string[]; sort: string }> = {
   'solution-design': { title: 'Features', name: 'Solution design', cols: ['Feature', 'Pain theme', 'Hypothesis', 'Impact', 'Effort'], filters: ['Linked', 'Impact', 'Effort'], sort: 'Impact' },
-  'prototype-mvp': { title: 'Must-haves', name: 'Prototype / MVP', cols: ['Must-have', 'Tests', 'State', 'Owner', 'Due'], filters: ['State', 'Hypothesis'], sort: 'State' },
+  'prototype-mvp': { title: 'Must-haves', name: 'Prototype / MVP', cols: ['Must-have', 'Test', 'State', 'Owner', 'Due', 'Built', 'Tested'], filters: ['State', 'Hypothesis'], sort: 'State' },
   'product-roadmap': { title: 'Roadmap items', name: 'Product roadmap', cols: ['Item', 'Column', 'Moves', 'Owner', 'Date'], filters: ['Column', 'Theme', 'KPI'], sort: 'Column' },
   'founding-team': { title: 'Founders', name: 'Founding team', cols: ['Founder', 'Role', 'Equity', 'Vesting', 'Agreement'], filters: ['Role'], sort: 'Equity' },
   'company-creation': { title: 'Filings', name: 'Company creation', cols: ['Filing', 'Jurisdiction', 'Due', 'State', 'Proof'], filters: ['State', 'Due'], sort: 'Due' },
