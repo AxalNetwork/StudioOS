@@ -6,7 +6,7 @@ Internal codename: Axal StudioOS. Operated by **Axal VC Management LLC**
 (Delaware). Brand and platform IP owned by **Axal VC Holdings LLC**
 (Delaware). **Axal VC Spin-Out Lab Fund I LP** (Delaware) is managed by **Axal VC
 GP LLC** (Delaware) — the GP signs no platform contracts and is not the
-operating entity. See [`documentation/architecture/LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
+operating entity. See [`documentation/architecture/LEGAL_ENTITIES.md`](documentation/architecture/LEGAL_ENTITIES.md) for the
 canonical entity map.
 
 > **Architecture in one sentence:** The `studioos` Cloudflare Worker (`cloudflare-worker/`) serves both `axal.vc` and `app.axal.vc` as whole-host custom domains — the React SPA (`frontend/`, built into `docs/`) from its `[assets]` binding and the API at `/api/*` — with one build behind both hosts; D1 is the canonical user store; there is no Cloudflare Pages deployment any more (the mirror was retired on 2026-09-03); and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. The `app.axal.vc` cutover runbook at [`documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md`](./documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md) is a dated record of the 2026-05 migration, not the current topology.
@@ -15,7 +15,7 @@ canonical entity map.
 
 | Path                | What it is                                                            |
 | ------------------- | --------------------------------------------------------------------- |
-| `frontend/`         | React 19 + Vite 6 + Tailwind 4 SPA — built into `docs/`, served by the Worker on both hosts |
+| `frontend/`         | React 19 + Vite 8 + Tailwind 4 SPA — built into `docs/`, served by the Worker on both hosts |
 | `cloudflare-worker/`| **Production API** — Hono on Cloudflare Workers, D1, KV, R2, Queues, Vectorize, Durable Objects |
 | `engineering-notifications/` | D5664: inactive independent GitHub metadata capture and reconciliation proposal. |
 | `engineering-slack/` | D5665: inactive independent Slack batching and durable delivery proposal. |

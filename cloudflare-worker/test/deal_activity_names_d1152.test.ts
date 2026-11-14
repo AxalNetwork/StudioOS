@@ -36,7 +36,8 @@ const NAMES: Record<number, string> = { 1: 'Sam Staff', 2: 'Ada Angel', 3: 'Ben 
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments']) db.exec(ddl(t));
+  // #6193: the activity also reads documents and diligence, each behind its own rule.
+  for (const t of ['users', 'projects', 'deals', 'deal_invitations', 'commitments', 'documents', 'pairwise_ndas', 'dd_cases', 'dd_reviewers', 'dd_requests']) db.exec(ddl(t));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   for (const [id, role] of Object.entries(ROLE)) u.run(Number(id), role, NAMES[Number(id)], `u${id}@example.test`);
   db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${FOUNDER}`);

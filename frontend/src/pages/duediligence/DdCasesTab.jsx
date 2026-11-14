@@ -16,6 +16,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { usePhoneWidth } from '../../ui';
 import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { reportError } from '../../lib/log';
 import { useToast } from '../../components/useToast';
@@ -67,11 +68,11 @@ function Tile({ t }) {
 function RowMenu({ row, me, base, onPick }) {
   const [open, setOpen] = useState(false);
   const mine = canChangeCase(me, row);
-  const item = 'block w-full rounded-md px-3 py-2 text-left text-[13px] text-gray-800 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
+  const item = 'flex min-h-11 items-center w-full rounded-md px-3 py-2 text-left text-[13px] text-gray-800 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
   return (
     <div className="relative">
       <button type="button" aria-label={`Actions for ${row.subject_label}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}
-        className="rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`dd-row-menu-${row.uid}`}>
+        className="inline-grid min-h-11 min-w-11 place-items-center rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`dd-row-menu-${row.uid}`}>
         <MoreHorizontal size={16} />
       </button>
       {open ? (
@@ -127,6 +128,35 @@ function CaseRow({ row, me, base, onPick, now }) {
   );
 }
 
+function CaseCard({ row, me, base, onPick, now }) {
+  const c = rowCells(row, now);
+  const facts = [
+    ['Stage', c.stageWord],
+    ['Lead', c.lead],
+    ['Checklist', c.checklist],
+    ['Open flags', [c.flags, c.severity].filter((value) => value != null && value !== '').join(' · ')],
+    ['Risk band', c.band],
+    ['Target IC date', [c.target.day, c.target.sub].filter(Boolean).join(' · ')],
+  ];
+  return (
+    <article className="min-w-0 border-t border-axal-hairline p-3 first:border-0 dark:border-gray-800" data-testid={`dd-card-${row.uid}`}>
+      <div className="flex items-start justify-between gap-2">
+        <Link to={`${base}/${row.uid}`} className="inline-flex min-h-11 min-w-0 items-center break-words text-sm font-bold text-axal-violet dark:text-violet-300">{c.name}</Link>
+        <RowMenu row={row} me={me} base={base} onPick={onPick} />
+      </div>
+      <p className={`m-0 text-xs ${muted}`}>{c.short} · {c.type}</p>
+      <dl className="mb-0 mt-3 grid grid-cols-2 gap-3">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0 break-words">
+            <dt className={eyebrowCls}>{label}</dt>
+            <dd className="m-0 mt-1 text-[13px] font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  );
+}
+
 function FiltersPanel({ filters, me, onChange }) {
   const sel = (key, label, options) => (
     <label className="block min-w-[150px]">
@@ -168,6 +198,7 @@ function Empty({ title, sub, children, testId }) {
 const clock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 export default function DdCasesTab({ me, now = Date.now() }) {
+  const phone = usePhoneWidth('(max-width: 767px)');
   const navigate = useNavigate();
   // A case link stays on the caller's base, so a member never reaches an /admin/ address.
   const { pathname } = useLocation();
@@ -258,7 +289,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
             </div>
           ) : null}
 
-          <div className="mt-3.5 grid gap-3.5 lg:grid-cols-2">
+          <div className="mt-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-2">
             <ChartCard title="Open cases by age" chart={age} state={chartState(age, ov?.ages)} onRetry={loadOverview} testId="dd-chart-age" />
             <ChartCard title="Decisions, last 12 months" chart={dec} state={chartState(dec, ov?.decisions)} onRetry={loadOverview} testId="dd-chart-decisions" />
           </div>
@@ -288,7 +319,7 @@ export default function DdCasesTab({ me, now = Date.now() }) {
             </button>
             <label className="inline-flex items-center gap-1.5">
               <span className="sr-only">Sort</span>
-              <select className={`${inputCls} h-9 w-auto py-0`} value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} aria-label="Sort" data-testid="dd-sort">
+              <select className={`${inputCls} h-11 max-w-full w-auto py-0 md:h-9`} value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} aria-label="Sort" data-testid="dd-sort">
                 {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
             </label>
@@ -296,9 +327,9 @@ export default function DdCasesTab({ me, now = Date.now() }) {
               {readAt ? <span className={muted}>Read at <span className="font-mono">{clock(readAt)}</span> · <button type="button" onClick={refresh} className="font-semibold text-axal-violet hover:underline dark:text-violet-300"><RefreshCw size={11} className="mr-0.5 inline" />Refresh</button></span> : null}
               {list ? <span className="font-mono text-gray-900 dark:text-gray-100" data-testid="dd-range">{rangeText(page, pageSize, shown, list.total)}</span> : null}
               <span className="inline-flex gap-1">
-                <button type="button" className={`${btnCls} h-8 px-2`} aria-label="Previous page" onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</button>
+                <button type="button" className={`${btnCls} min-h-11 min-w-11 justify-center px-2 md:min-h-8 md:min-w-8`} aria-label="Previous page" onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</button>
                 <span className="inline-grid h-8 min-w-[32px] place-items-center rounded-lg border border-violet-200 bg-violet-50 font-mono text-[12px] font-bold text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200" data-testid="dd-page">{page}</span>
-                <button type="button" className={`${btnCls} h-8 px-2`} aria-label="Next page" onClick={() => setPage((p) => Math.min(pages, p + 1))} data-testid="dd-next">›</button>
+                <button type="button" className={`${btnCls} min-h-11 min-w-11 justify-center px-2 md:min-h-8 md:min-w-8`} aria-label="Next page" onClick={() => setPage((p) => Math.min(pages, p + 1))} data-testid="dd-next">›</button>
               </span>
             </div>
           </div>
@@ -328,6 +359,12 @@ export default function DdCasesTab({ me, now = Date.now() }) {
               <Empty title="No cases match these filters." sub={noMatchText({ filters, stage, q }, me)} testId="dd-no-match">
                 <button type="button" className={btnCls} onClick={clearAll}>Clear filters</button>
               </Empty>
+            ) : phone ? (
+              <div data-testid="dd-case-cards">
+                {listState === 'loading'
+                  ? <p className={`p-4 text-sm ${muted}`} role="status">Loading cases…</p>
+                  : list.items.map((r) => <CaseCard key={r.uid} row={r} me={me} base={base} now={now} onPick={(kind, row) => setDialog({ kind, row })} />)}
+              </div>
             ) : (
               <table className="w-full min-w-[1080px] border-collapse text-left">
                 <thead>

@@ -101,7 +101,7 @@ function metricFigure(rows: Snap[], col: 'mrr' | 'paying_accounts', key: string,
   if (!have.length) return notRecordedFigure(key, label, unit, `Not recorded: no metric snapshot records ${label}`);
   const last = have[have.length - 1];
   const cutoff = iso(Date.parse(last.snapshot_date) - 30 * DAY);
-  const before = [...have].reverse().find((r) => r.snapshot_date <= cutoff);
+  const before = [...have].reverse().find((r) => r.snapshot_date <= cutoff && snapSource(r.source) === snapSource(last.source));
   const months = new Map<string, number>();
   for (const r of have) months.set(r.snapshot_date.slice(0, 7), r[col] as number);
   const spark = monthsBack(now, 8).filter((m) => months.has(m)).map((m) => months.get(m)!);

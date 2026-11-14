@@ -315,8 +315,8 @@ test('Outreach: Eadwyn’s drafts to send from your own email, each dismissed on
     assert.match(w.url, /\/ai\/rail\/proposals\/00000000-0000-4000-8000-0000000000d1\/decide$/);
     assert.deepEqual(w.body, { decision: 'discard' });
     assert.deepEqual(v.all('caprel-material').map(v.textOf), [
-      'Bluefern Capital Viewed 3× · last 2026-10-10 Opened 4× · last 2026-10-11 Opened Seed extension',
-      'Harbor Seed Fund Not sent Not on Axal Not on Axal',
+      'Investor Bluefern Capital Deck link Viewed 3× · last 2026-10-10 Data room Opened 4× · last 2026-10-11 Call for Capital Opened Seed extension',
+      'Investor Harbor Seed Fund Deck link Not sent Data room Not on Axal Call for Capital Not on Axal',
     ]);
     assert.match(v.text('caprel-outreach-updates'), /September update · shared 2026-10-02 with 9 investors[\s\S]*Recorded on the timeline, never emailed/);
     assert.equal(v.props(v.by('caprel-outreach-share')).href, '/grow/update?project_id=3');
@@ -335,7 +335,7 @@ test('Commitments: the bar against the target, what is not counted, every commit
     assert.match(v.text('caprel-commit-legend'), /Indicated through a call \$200,000 · not counted[\s\S]*Soft \$75,000 · not counted/);
     assert.match(v.text('caprel-commit-no-status'), /Status not recorded: 1 investor is not counted/);
     assert.equal(v.all('caprel-commit-row').length, 4);
-    assert.match(v.textOf(v.all('caprel-commit-row')[3]), /Northwind Angels Not recorded Status not recorded/);
+    assert.match(v.textOf(v.all('caprel-commit-row')[3]), /Northwind Angels Amount Not recorded Status Status not recorded/);
     assert.deepEqual(v.all('caprel-commit-gap').map(v.textOf), ['Deal-room commitments could not be read.', 'Closings are not recorded yet.']);
     assert.match(v.text('caprel-close'), /First close[\s\S]*Target 2026-11-14 · Wired \$150,000 · Signed \$250,000 · Soft \$0 ?, not counted/);
     await v.click('caprel-round-open');
@@ -361,9 +361,9 @@ test('Activity: every change with who, when and its source; a filter is a new re
   const v = await mounted('/raise/capital-relationships/activity?project_id=3');
   try {
     assert.deepEqual(v.all('caprel-activity-row').map(v.textOf), [
-      '21 Oct 2026 09:12 Fixture Founder Founder Investor edited: stage Meeting → Diligence · Bluefern Capital Typed',
-      '21 Oct 2026 08:40 Eadwyn Proposes only Drafted 2 proposals from your note on Bluefern Capital · Bluefern Capital Proposed by Eadwyn',
-      '14 Oct 2026 10:00 Fixture Founder Founder Investor imported at Identified · Fund X, "the" fund Document · CSV',
+      'When 21 Oct 2026 09:12 Who Fixture Founder Founder What Investor edited: stage Meeting → Diligence · Bluefern Capital Source Typed',
+      'When 21 Oct 2026 08:40 Who Eadwyn Proposes only What Drafted 2 proposals from your note on Bluefern Capital · Bluefern Capital Source Proposed by Eadwyn',
+      'When 14 Oct 2026 10:00 Who Fixture Founder Founder What Investor imported at Identified · Fund X, "the" fund Source Document · CSV',
     ]);
     assert.equal(v.text('caprel-activity-count'), '1–3 of 30');
     await v.change('caprel-activity-kind', 'steps');
@@ -434,4 +434,22 @@ test('no browser pop-up, no old write, and every new colour has its dark pair', 
     }
   }
   assert.match(read('frontend/src/pages/raise/caprel/README.md'), /CapRelMatch\.jsx[\s\S]*capRelTabsModel\.js/);
+});
+
+
+test('phone records keep a long fund name and exact amount when switching views', async () => {
+  const name = 'NorthwindInternationalInstitutionalCapital'.repeat(4);
+  const cents = 987654321099;
+  const match = { ...MATCH, items: [{ ...MATCH.items[0], name, fund_size_cents: cents, size_currency: 'EUR' }] };
+  const v = await mounted('/raise/capital-relationships/match?project_id=3', { phone: true, match });
+  try {
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], false);
+    assert.match(v.text('caprel-match-row'), new RegExp(name));
+    assert.match(v.text('caprel-match-size'), /€9,876,543,210\.99/);
+    await v.click('caprel-view-records');
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], true);
+    assert.match(v.text('caprel-match-size'), /€9,876,543,210\.99/);
+    await v.click('caprel-view-records');
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], false);
+  } finally { await v.close(); }
 });

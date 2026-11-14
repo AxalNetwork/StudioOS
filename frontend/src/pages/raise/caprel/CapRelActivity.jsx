@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useEffect, useState } from 'react';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
@@ -18,8 +19,8 @@ import { ACTIVITY_FILTERS, useTabFilters } from './capRelUrlFilters';
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
-const BTN_S = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const BTN_S = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[32px] justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const SOURCE_TONE = {
   eadwyn: 'border-violet-200 bg-axal-lavender text-axal-violet-deep dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300',
   document: 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300',
@@ -76,22 +77,24 @@ export default function CapRelActivity({ projectId }) {
       {read.status === 'unreadable' ? <div className="px-4 py-3"><Unreadable what="Activity" claim="This is not a claim that nothing changed." onRetry={() => setN((x) => x + 1)} /></div> : null}
       {read.status === 'loading' && !d ? <div className="m-4 h-40 animate-pulse rounded-lg bg-axal-ground dark:bg-gray-800" data-testid="caprel-activity-loading" /> : null}
       {d ? (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
-            <thead><tr className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
-              {['When', 'Who', 'What', 'Source'].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.id} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-activity-row">
-                  <td className={`whitespace-nowrap px-3 py-2 font-mono ${MUTED}`}>{whenText(i.at)}</td>
-                  <td className="px-3 py-2"><div className={`font-bold ${INK}`}>{i.who}</div>{i.who_role ? <div className={`text-[11.5px] ${MUTED}`}>{i.who_role}</div> : null}</td>
-                  <td className={`px-3 py-2 text-[13px] ${INK}`}>{i.what}{i.investor ? <span className={MUTED}> · {i.investor.name}</span> : null}</td>
-                  <td className="px-3 py-2"><span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${SOURCE_TONE[i.source] || SOURCE_TONE.typed}`}>{i.source_label}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <ResponsiveRecords>
+            <table role="table" className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
+              <thead role="rowgroup"><tr role="row" className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
+                {['When', 'Who', 'What', 'Source'].map((h) => <th role="columnheader" key={h} className="px-3 py-2">{h}</th>)}
+              </tr></thead>
+              <tbody role="rowgroup">
+                {items.map((i) => (
+                  <tr role="row" key={i.id} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-activity-row">
+                    <td role="cell" className={`whitespace-nowrap px-3 py-2 font-mono ${MUTED}`}><RecordLabel>When</RecordLabel>{whenText(i.at)}</td>
+                    <td role="cell" className="px-3 py-2"><RecordLabel>Who</RecordLabel><div className={`font-bold ${INK}`}>{i.who}</div>{i.who_role ? <div className={`text-[11.5px] ${MUTED}`}>{i.who_role}</div> : null}</td>
+                    <td role="cell" className={`px-3 py-2 text-[13px] ${INK}`}><RecordLabel>What</RecordLabel>{i.what}{i.investor ? <span className={MUTED}> · {i.investor.name}</span> : null}</td>
+                    <td role="cell" className="px-3 py-2"><RecordLabel>Source</RecordLabel><span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${SOURCE_TONE[i.source] || SOURCE_TONE.typed}`}>{i.source_label}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ResponsiveRecords>
           {!items.length ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="caprel-activity-none">{f.q || f.kind || f.investor ? 'Nothing matches these filters.' : 'Nothing has changed in this pipeline yet.'}</p> : null}
         </div>
       ) : null}

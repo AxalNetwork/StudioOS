@@ -13,7 +13,7 @@ import { NUM } from './parts';
  * pop-up; each act is the Worker's to decide, and one the act table refuses
  * this viewer is drawn as its sentence (`FundActControl`).
  */
-const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
+const LABEL = 'text-[13px] font-semibold text-zinc-700 dark:text-gray-200';
 
 function Form({ onSubmit, error, busy, submit, onClose, testId, children, disabled = false }) {
   return (
@@ -90,7 +90,7 @@ export function AddLpDialog({ apis, access, funds, fundId, onClose, onAdded }) {
               {LP_TYPES.map((t) => <option key={t} value={t}>{LP_TYPE_LABELS[t]}</option>)}
             </select>
           </label>
-          <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">The commitment date is recorded as the day the LP is added.</p>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">The commitment date is recorded as the day the LP is added.</p>
           <FundActControl access={access} act="capital_call.issue" testId="lps-add-first-call-refused" className="block text-[12px] font-semibold text-axal-muted dark:text-gray-400">
             <label className={LABEL}>First capital call ($) · optional<input className={`${INPUT} mt-1 ${NUM}`} inputMode="decimal" value={form.firstCall} onChange={set('firstCall')} disabled={busy} data-testid="lps-add-first-call" /></label>
             {String(form.firstCall).trim() && (

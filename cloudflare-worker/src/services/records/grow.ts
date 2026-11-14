@@ -189,6 +189,13 @@ async function roadmapItems(env: Env, projectId: number): Promise<Array<{ value:
   return (res.results || []).map((r) => ({ value: String(r.id), label: String(r.objective).slice(0, 200) }));
 }
 
+/**
+ * D6097 (#6097): Build's Add item with Answers feedback theme chosen (`forms.js` `buildItem.fromQuery`).
+ * Saving it links the theme's open rows that have no roadmap item yet (`buildCreates.ts` `feedbackLink`).
+ */
+export const addToRoadmapHref = (projectId: number, theme: string) =>
+  `/build/product-roadmap/new?project_id=${projectId}&feedback_theme=${encodeURIComponent(theme)}`;
+
 const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship'] as const;
 
 const productImprovement = spec('product_feedback', 'product-improvement', GROW_OLD_ROWS['product-improvement'], async (rc, id) => {
@@ -218,11 +225,12 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
 }, [
   section('theme', 'Theme', async (_rc, _id, record) => {
     const { f, byStatus } = loadedOf(record);
-    if (!f?.theme) return { rows: [], empty: 'No theme yet.', action: 'change-theme' };
+    // D6097: Add to roadmap answers a theme, so a row with none has no Add to roadmap; the sentence says why.
+    if (!f?.theme) return { rows: [], empty: 'No theme yet. Add to roadmap needs a theme.', action: 'change-theme' };
     const n = [...(byStatus as Map<string, number>).values()].reduce((a, b) => a + b, 0);
     const status = themeStatus(byStatus);
-    // No impact store, so the row never says "High impact" (decision 10).
-    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status] }], action: 'change-theme' };
+    // No impact store, so the row never says "High impact" (decision 10). The route strips the row's action for a reader.
+    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status], action: 'add-to-roadmap' }], action: 'change-theme' };
   }),
   section('closing-the-loop', 'Closing the loop', async (_rc, _id, record) => {
     const { f } = loadedOf(record);
@@ -265,6 +273,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       return { ok: true, record: await setFeedbackTheme(c.env, c.projectId, uid, next, Number(c.user.id)) };
     }),
   }];
+  // D6097: the theme's Add item in Build. Actions reach writers only (`cycle_records.ts`), so a reader never sees it.
+  if (f.theme) actions.push({ key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: addToRoadmapHref(rc.projectId, String(f.theme)) });
   if (Number(f.notify_on_ship) === 1 && f.status === 'shipped' && !f.told_at) {
     actions.push({
       key: 'mark-told', label: 'Mark told', kind: 'form',
@@ -800,6 +810,12 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
 // ── Market expansion — id: the market's uid ─────────────────────────────────
 
 const MARKET_EDIT = ['state', 'decision', ...MARKET_PARTS.flatMap(([k]) => [`${k}_score`, `${k}_source`]), 'geography_ref', 'size_cents', 'size_currency', 'size_source'] as const;
+const marketDecisions = [{ value: '', label: 'Not decided' }, ...opts(DECISIONS, LABEL)];
+
+async function marketGeographies(rc: RecordContext) {
+  const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => null);
+  return (res?.results ?? []).map(({ code, name }) => ({ value: code, label: name }));
+}
 
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -839,8 +855,9 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     const size = money(m.size_cents, m.size_currency);
     return { rows: [size ? { a: 'Size', b: size, c: m.size_source ?? '' } : notRecorded('Size', 'No size recorded')] };
   }, { side: true }),
-], async (_rc, id, record): Promise<RecordAction[]> => {
+], async (rc, id, record): Promise<RecordAction[]> => {
   const { m } = loadedOf(record);
+  const countries = await marketGeographies(rc);
   const part = (k: string, l: string): RecordField[] => [
     { key: `${k}_score`, label: `${l} (0–10)`, kind: 'T', value: m[`${k}_score`] ?? '' },
     { key: `${k}_source`, label: `${l} source`, kind: 'T', value: m[`${k}_source`] ?? '' },
@@ -848,7 +865,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
   return [{
     key: 'change-decision', label: 'Change decision', kind: 'form',
     form: { title: 'Change decision', cta: 'Save', fields: [
-      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: [{ value: '', label: 'Not decided' }, ...opts(DECISIONS, LABEL)] },
+      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: marketDecisions },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, { decision: field(body, 'decision') ?? null }) })),
   }, {
@@ -866,8 +883,10 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
     form: { title: 'Edit market', cta: 'Save', foot: 'A score names where it came from.', fields: [
       { key: 'state', label: 'State', kind: 'CH', value: m.state, options: opts(MARKET_STATES, LABEL) },
+      { key: 'decision', label: 'Decision', kind: 'CH', value: m.decision ?? '', options: marketDecisions },
       ...MARKET_PARTS.flatMap(([k, l]) => part(k, l)),
-      { key: 'geography_ref', label: 'Attach a country', kind: 'T', value: m.geography_ref ?? '', placeholder: 'Two-letter code' },
+      { key: 'geography_ref', label: 'Attach a country', kind: 'CH', value: m.geography_ref ?? '',
+        options: [{ value: '', label: 'Nothing yet' }, ...countries] },
       { key: 'size_cents', label: 'Size', kind: 'T', input: 'money', value: m.size_cents ?? '' },
       { key: 'size_currency', label: 'Currency', kind: 'T', value: m.size_currency ?? '' },
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
@@ -875,9 +894,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
   }];
 }, async (rc) => {
-  const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => ({ results: [] as Array<{ code: string; name: string }> }));
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
-    geographies: (res.results || []).map((c) => ({ value: c.code, label: c.name })) };
+    geographies: await marketGeographies(rc) };
 });
 
 // ── Durable company-building — id: the obligation's id ──────────────────────
