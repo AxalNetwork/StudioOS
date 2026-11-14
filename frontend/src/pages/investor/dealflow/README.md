@@ -23,6 +23,7 @@ The Deals root at `/deals` for an Investor, and Compare at `/deals/compare`, fro
 | `DealsPipelineRedirect.jsx` | D1243 (#3256): `/deals/pipeline` and an investor's `/pipeline` land on the table, the query and hash kept (`dealFlowModel.pipelineMovedHref`); `/pipeline` counts itself (#2301's `ROLE_REDIRECTS`), since it is still a page for a partner, a founder and an admin |
 | `StudioLens.jsx` | D1242: the Studio lens (DLS11, DLS11b, DLS12): the board on the round's status, the table with Lead partner, Investors and Source, each row's ⋯, the Advance and terms dialogs, and `StudioLensRoute`, which `App.jsx` mounts at `/deals` for an admin or an Operating Partner |
 | `StudioParts.jsx` | D1242: the dialogs and panels moved from `DealsPage` as they were: the pass dialog, the terms editor, the draft, Why we passed, the stage funnel and the Stage SLA |
+| `FlowHistory.jsx` | D6146: collapsed lazy event history for flow rows, newest first, with independent retry and the current row's return rule labeled separately |
 
 `../../../workspaces/investor/InvestorDealsRoutes.jsx` mounts it: the root renders `DealFlow` alone (D4815: the zones' bucket board no longer renders there; the deal rooms moved to `/deals/rooms`, which renders `components/deals/DealRoomsPanel`, and My tasks to Studio), and `/deals/compare` renders `DealCompare`. The zone pages under `../deals/` are Screening, Commit and Closing; Pipeline retired into the table (D1243).
 
