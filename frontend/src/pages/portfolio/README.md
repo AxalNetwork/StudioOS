@@ -54,3 +54,15 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 - No issue number, decision id or build-phase name in member copy (#5365 F-09).
 - The rail's structure is #5130's; the Account-menu move is #4473's. The frame
   places the rail and links Portfolio's own routes, and changes neither.
+
+D4817 part 6 (canvas PF-06) draws one company's workspace
+(`../investor/PortfolioCompanyPage.jsx` at `/portfolio/companies/:uid`, with
+`/financials`, `/reports`, `/support` and `/activity`; the old `/terms` lands
+on Financials' Ownership & rights) in the same frame, through its optional
+`title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
+(tabs and titles, who the company is to the caller, the holding route, the
+six key facts, evidence and next actions, rounds, return, support and each
+source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+Activity; `company.css` holds their styles on the frame's tokens. The name is
+drawn only once an authorised read has named the company. Decision notes:
+`documentation/architecture/decisions/D4817-p6.md`.
