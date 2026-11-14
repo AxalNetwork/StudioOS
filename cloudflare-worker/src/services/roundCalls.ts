@@ -11,8 +11,9 @@ import { investorEvidence, RaiseEvidenceError } from './raiseEvidence';
 
 import { run as aiRouterRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { formatMinor } from '../../../frontend/src/lib/money.js';
 
-const termMoney = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+const termMoney = (cents: number) => formatMinor(cents, 'USD', { locale: 'en-US' })!;
 
 // The model writes around opaque markers. Only the Worker renders financial facts.
 export function renderRoundTermsDraft(output: string, fields: Record<string, string>): string | null {
