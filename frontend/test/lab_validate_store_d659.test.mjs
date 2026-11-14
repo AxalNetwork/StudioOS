@@ -65,9 +65,9 @@ test('D659: "not saved yet" is said only of a source whose save failed', () => {
 
 test('D659: the client names the project on every call and the routes the Worker mounts', () => {
   assert.deepEqual(Object.keys(cycleValidateApi).sort(), [
-    'addCompetitorMention', 'addDemandSignal', 'addMarketSource', 'addSegment', 'marketReadiness', 'module',
-    'overview', 'removeMarketSource', 'setDemandSignalStatus', 'setEvidenceStrength', 'setHypothesisPlan',
-    'setInterviewSegment', 'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
+    // D6020 (#6020): six writes no page called are gone; the record actions and forms make them.
+    'addMarketSource', 'marketReadiness', 'module', 'overview', 'removeMarketSource', 'setEvidenceStrength',
+    'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
   ]);
   const src = raw('frontend/src/lib/api/cycleValidate.js');
   for (const line of src.split('\n').filter((l) => l.includes('request(`'))) {
