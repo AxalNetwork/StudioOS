@@ -370,7 +370,15 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const askPrice = pricing?.prices?.[askModel] || null;
 
   const strip = ASK_STRIP[role] || [];
-  const ready = Boolean(payload && thread.payload);
+  // #6264: a failed history read is an answer too, and the strip draws it
+  // through `UNREADABLE` like the #4610 tiles say, not as a skeleton forever.
+  const ready = Boolean(payload && (thread.payload || thread.error));
+  // #6264: the banner draws as soon as pricing answers, which can be before the
+  // history read. Pending shows the rate alone; a failed read (or one without
+  // totals) says Unreadable, never $0.00.
+  const spent = totals
+    ? `this session: ${formatCost(totals.cost_usd)}`
+    : thread.loading ? null : `this session: ${UNREADABLE}`;
   const ctx = { indexed, docs: items.length, totals, rows: all, pageSize: all.length, hasMore };
 
   const libRows = items.map((d) => {
@@ -428,7 +436,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       {askPrice ? (
         <MeteredNote
           rate={`${formatRate(askPrice.in)} / M in · ${formatRate(askPrice.out)} / M out`}
-          spent={`this session: ${formatCost(totals.cost_usd)}`}
+          spent={spent}
         >
           Each question is charged on what it retrieves, then on what the answer costs to
           write. A question the library cannot answer never reaches the model and is
