@@ -283,6 +283,13 @@ binding targets and branch isolation.
 `--write` changes it, after the owner deploys both bot hosts. Its pure helper
 `lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.
 
+`check-meeting-bot-teams.mjs` (D5815, #5815) checks the Teams recorder's
+deployment matrix offline: each environment's site → host binding, run-state
+object, private chunk bucket, callback origin, signing audience, container,
+pinned browser, readiness/egress, revision order and switch values. It prints
+`pass`/`FAIL` per row, never a value. `lib/meetingBotTeamsMatrix.test.mjs` fails
+each row on its own mutation.
+
 ## Review harnesses
 
 | Script | What it does |
