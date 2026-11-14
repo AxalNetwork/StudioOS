@@ -520,7 +520,7 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Q3 2026', key: 'quarter', label: 'This quarter' },
     { canvas: 'Q2 2026', key: 'prev_quarter', label: 'Last quarter' },
     { canvas: 'Year to date', key: 'ytd' },
-    { canvas: 'All time', key: 'all' },
+    { canvas: 'By shape', key: 'all', label: 'All time' },
   ],
 };
 

@@ -154,11 +154,11 @@ export default function PartnerPipelineAnalyticsZone() {
 
   const d = state.data;
   const windowLabel = WINDOWS[windowOf(view)];
-  const p = d?.pipeline || null;
+  const p = d?.pipeline ? { ...d.pipeline, win_rate_pct: recordedRate(d.pipeline.win_rate_pct) } : null;
   const f = d?.forecast || null;
   // How many open quotes the forecast is over (D4838): none is "nothing open to forecast", never $0.
   const forecastOpen = Array.isArray(f?.by_stage) ? f.by_stage.reduce((n, s) => n + (Number(s?.count) || 0), 0) : 0;
-  const shapes = useMemo(() => (Array.isArray(d?.by_shape) ? d.by_shape : []), [d]);
+  const shapes = useMemo(() => (Array.isArray(d?.by_shape) ? d.by_shape.map((shape) => ({ ...shape, win_rate_pct: recordedRate(shape.win_rate_pct) })) : []), [d]);
   const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter.map((q) => ({ ...q, win_rate_pct: recordedRate(q.win_rate_pct) })) : []), [d]);
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
   const lostCount = d?.lost_count ?? 0;
@@ -248,7 +248,7 @@ export default function PartnerPipelineAnalyticsZone() {
               value={forecastOpen ? moneyDollars(f.weighted_value) : ''}
               nr={!forecastOpen}
               note={forecastOpen
-                ? `${forecastOpen} open quotes · ${moneyDollars(f.unweighted_value)} total · every window`
+                ? `${forecastOpen} open quote${forecastOpen === 1 ? '' : 's'} · ${moneyDollars(f.unweighted_value)} total · every window`
                 : 'nothing open to forecast'}
             />
             {/* THE FOURTH TILE IS THE ARTBOARD'S ARGUMENT. It counts explained
@@ -324,7 +324,7 @@ export default function PartnerPipelineAnalyticsZone() {
                     ['Shape', shapeName(s.shape)], ['Quotes', s.quote_count], ['Won', s.accepted],
                     ['Win rate', s.win_rate_pct == null ? 'Not recorded' : `${s.win_rate_pct}%`],
                     ['Median cycle', s.median_cycle_days == null ? 'Not recorded' : `${s.median_cycle_days} d`],
-                    ['Won value', s.accepted ? moneyDollars(s.won_value) : 'Not recorded'],
+                    ['Won value', s.accepted && Number.isFinite(s.won_value) ? moneyDollars(s.won_value) : 'Not recorded'],
                   ].map(([label, value]) => (
                     <div key={label} className="min-w-0 [overflow-wrap:anywhere]">
                       <dt className="text-xs font-semibold text-axal-muted lg:sr-only">{label}</dt><dd>{value}</dd>

@@ -30,13 +30,19 @@ test('PP07 keeps the selected period when an older response arrives', async () =
     await act(async () => root.render(React.createElement(MemoryRouter, null, React.createElement(AnalyticsZone))));
     await act(async () => props(button('All time')).onClick());
     assert.equal(props(button('All time'))['aria-pressed'], true);
-    await act(async () => pending.get('all')({ ...answer(1, 3, 2), by_quarter: [{ quarter: '2026-Q3', accepted: 1, decided: 4, win_rate_pct: 140 }] }));
+    await act(async () => pending.get('all')({
+      ...answer(1, 3, 2),
+      pipeline: { ...answer(1, 3, 2).pipeline, win_rate_pct: 140 },
+      by_shape: [{ shape: 'advisory', quote_count: 4, accepted: 1, rejected: 3, win_rate_pct: 140, won_value: 1234, losses_with_reason: 0 }],
+      by_quarter: [{ quarter: '2026-Q3', accepted: 1, decided: 4, win_rate_pct: 140 }],
+    }));
     await act(async () => pending.get('quarter')(answer(8, 2, 0)));
-    assert.match(words(host), /1 of 4 decided/);
+    assert.match(words(host), /Latest quarter:\s+1\s+of\s+4\s+decided/);
     assert.doesNotMatch(words(host), /8 of 10 decided/);
     assert.match(words(host), /Other\s+1\s+Not recorded\s+2/);
     assert.match(words(host), /View win rate table.*2026-Q3.*1\s+\/\s+4.*Not recorded/);
     assert.doesNotMatch(words(host), /140%/);
+    assert.match(words(host), /Won value.*\$1\.2K/);
     await act(async () => props(button('Cycle time')).onClick());
     assert.match(words(host), /Quarterly cycle times are unavailable/);
   } finally {

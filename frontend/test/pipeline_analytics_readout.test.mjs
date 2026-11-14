@@ -162,7 +162,7 @@ test('the chip row narrows decisions in the worker, and never the forecast', () 
   const chips = [...between(P5DATA, 'a_views: views([', '])').matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(chips, ['Q3 2026', 'Q2 2026', 'Year to date', 'By shape']);
   const row = between(filters, "'pipeline/analytics': [", '],');
-  assert.deepEqual([...row.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]), [...chips.slice(0, 3), 'All time'],
+  assert.deepEqual([...row.matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]), chips,
     'the chip row drifted from the artboard');
   assert.ok(!/unbuilt/.test(row), 'an analytics chip went back to being prose');
   // THE QUARTERS ARE RELATIVE TO TODAY. `Q3 2026` is when the artboard was
@@ -214,6 +214,10 @@ test('the shape rows preserve the selected population and stack on phones', () =
   }
   assert.match(shape, /grid-cols-2.*lg:grid-cols-6/);
   assert.match(shape, /shapeRead\(s\)/);
+  assert.doesNotMatch(zoneRaw, /win_rate_pct \?\? 0|win_rate_pct \|\| 0/);
+  const quarters = between(engine, 'export function analyseByQuarter', '\n}');
+  assert.match(quarters, /win_rate_pct: winRate\(s\.accepted, s\.decided - s\.accepted\)\.pct/);
+  assert.match(quarters, /\.sort\(byShapeName\)/);
 });
 
 test('the ops row is the artboard’s two, and the export carries the loss columns', () => {
