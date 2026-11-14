@@ -15,7 +15,7 @@ const deferred = () => { let resolve; let reject; const promise = new Promise((a
 
 function setup(props = {}) {
   const calls = { portfolio: [], events: [], fund: [], notices: [], trust: [], booklet: [] };
-  const read = (key) => () => { const d = deferred(); calls[key].push(d); return d.promise; };
+  const read = (key) => (...args) => { const d = { ...deferred(), args }; calls[key].push(d); return d.promise; };
   const client = {
     positionsAnalytics: read('portfolio'),
     listCalendarEvents: read('events'),
@@ -35,6 +35,7 @@ test('both reads start together, and each is on the page the moment it settles',
   const t = setup();
   const m = await t.mount(); await settle(m);
   assert.equal(t.calls.portfolio.length, 1); assert.equal(t.calls.events.length, 1, 'both asked before either answered');
+  assert.deepEqual(t.calls.fund[0].args, [{ view: 'studio' }]);
   assert.deepEqual(t.seen.current.records, Object.fromEntries(Object.keys(t.calls).map(key => [key, undefined])));
   await act2(m, () => t.calls.portfolio[0].resolve({ total: 3 }));
   assert.deepEqual(t.seen.current.records, { ...Object.fromEntries(Object.keys(t.calls).map(key => [key, undefined])), portfolio: { total: 3 } }, 'the portfolio is drawn while the other sources are still loading');

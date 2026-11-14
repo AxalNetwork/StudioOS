@@ -32,7 +32,7 @@ export function useInvestorSources({ previewing = false, client = api, noticesCl
   const sources = useMemo(() => ({
     portfolio: () => client.positionsAnalytics(),
     events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }),
-    fund: () => client.fundsLpPortal(),
+    fund: () => client.fundsLpPortal({ view: 'studio' }),
     notices: () => noticesClient.mine(),
     trust: () => client.trustMe(),
     booklet: () => bookletClient.mine().catch(error => { if (error?.status === 404) return null; throw error; }),

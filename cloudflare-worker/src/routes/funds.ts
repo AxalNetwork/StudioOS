@@ -148,7 +148,8 @@ funds.get('/lp-portal', async (c) => {
   const user = await requireAuth(c);
   // listByUser selects the fund's GP-of-record and service-provider columns so a
   // quarterly report can name the responsible fiduciary without an admin call.
-  await ensureFundGpColumns(c.env);
+  const readOnly = c.req.query('view') === 'studio';
+  if (!readOnly) await ensureFundGpColumns(c.env);
 
   // Claim first, then read. This handler is where the two LP predicates used to
   // meet: the positions came back on `user_id` alone while the capital calls
@@ -156,17 +157,19 @@ funds.get('/lp-portal', async (c) => {
   // whose position the same page had just failed to find. Claiming links those
   // rows to the account once; every query beneath is then the same question,
   // asked once, through lpSelfScope.
-  await claimLpRowsByEmail(c.env, Number(user.id), user.email);
+  // Studio only sees account-linked rows. The portal claims any legacy email match.
+  const actor = readOnly ? { ...user, email: undefined } : user;
+  if (!readOnly) await claimLpRowsByEmail(c.env, Number(user.id), user.email);
 
-  const my = await LPs.listByUser(c.env, user);
+  const my = await LPs.listByUser(c.env, actor);
   const lpRows: any[] = my.results || [];
 
   // Aggregate cash flows per-fund for TVPI / DPI
-  const distRows = await Distributions.listByUser(c.env, user, 200);
+  const distRows = await Distributions.listByUser(c.env, actor, 200);
 
   // Self-view, so lpSelfScope and not lpMembershipScope: an admin's own
   // portal must show their own positions, not the sum of everyone's.
-  const callScope = lpSelfScope(user as any);
+  const callScope = lpSelfScope(actor);
   // D372: each line carries what the ledger (D371) knows about it — the cents
   // it owes, the cents received against it, the call's number and its fund —
   // so the My-commitment card can say called, due and uncalled without

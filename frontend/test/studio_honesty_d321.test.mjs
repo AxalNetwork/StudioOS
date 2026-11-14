@@ -156,19 +156,27 @@ test('Fund and Needs you use recorded LP, booklet and Trust data and retry failu
   const retryKeys = [];
   const quick = quickStats({ dashboard, lifecycle, dealCount: 0 });
   const fund = { lp_holdings: [{ id: 2, fund_id: 9, fund_name: 'Seed Fund', commitment_amount: 1000, lpa_signed: false }],
-    capital_calls: [{ id: 1, fund_id: 9, limited_partner_id: 2, owed_cents: 10000, received_cents: 2500, due_date: '2000-01-02' }] };
+    capital_calls: [{ id: 1, fund_id: 9, limited_partner_id: 2, owed_cents: 10000, received_cents: 2500, due_date: '2000-01-02' },
+      { id: 2, fund_id: 9, limited_partner_id: 2, owed_cents: 1000, received_cents: 0, due_date: null }] };
   const records = { fund, notices: { notices: [] }, booklet: { status: 'open' },
-    trust: { obligations: [{ required: true, status: 'pending', obligation_key: 'identity', label: 'Verify identity' }] } };
+    trust: { obligations: [
+      { required: 1, status: 'pending', obligation_key: 'kyc_v1' },
+      { required: 1, status: 'in_review', obligation_key: 'accreditation_v1' },
+      { required: 1, status: 'verified', obligation_key: 'investor_nda_v1' },
+    ] } };
   const opts = { quick, retrySource: key => retryKeys.push(key) };
   const tiles = investorTiles({ ...opts, records });
   assert.match(draw(tiles.fund_commitment.body), /Committed\s*\$1,000\.00/);
-  assert.match(draw(tiles.fund_commitment.body), /Due\s*\$75\.00/);
-  assert.match(draw(tiles.needs_you.body), /Sign the LPA.*Capital call overdue.*Submit the subscription booklet.*Verify identity/s);
+  assert.match(draw(tiles.fund_commitment.body), /Due\s*\$85\.00/);
+  assert.match(draw(tiles.needs_you.body), /Sign the LPA.*Capital call overdue.*Submit the subscription booklet.*Identity check/s);
+  const actions = draw(tiles.needs_you.body);
+  assert.match(actions, /Capital call outstanding · due date not recorded/);
+  assert.doesNotMatch(actions, /Accreditation|Investor NDA|Review a required Trust item/);
   const partial = investorTiles({ ...opts, records: { ...records, fund: undefined }, failures: { fund: 'failed' } });
   assert.equal(partial.fund_commitment.state, 'unreadable');
   partial.fund_commitment.onRetry();
   assert.deepEqual(retryKeys, ['fund']);
-  assert.match(draw(partial.needs_you.body), /Verify identity/);
+  assert.match(draw(partial.needs_you.body), /Identity check/);
   const empty = investorTiles({ ...opts, records: { fund: { lp_holdings: [] }, notices: { notices: [] }, booklet: null, trust: { obligations: [] } } });
   assert.equal(empty.fund_commitment.state, 'empty');
   assert.equal(empty.needs_you.state, 'empty');

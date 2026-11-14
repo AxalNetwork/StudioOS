@@ -22,7 +22,7 @@
 // commitment process, application form, underwriting KPIs, report archive,
 // participation-rights ladder, IR, allocation gate, onboarding requirements and
 // the compliance footer — is preserved.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Landmark, Lock, Check, Clock, ShieldCheck, FileText,
@@ -205,10 +205,25 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(true);
   const { hash } = useLocation();
+  const workspaceContent = useRef(null);
   useEffect(() => {
-    if (!loading && ['#my-commitment', '#my-notices', '#subscription-booklet'].includes(hash)) {
-      document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
-    }
+    if (loading || !['#my-commitment', '#my-notices', '#subscription-booklet'].includes(hash)) return undefined;
+    const target = document.getElementById(hash.slice(1));
+    if (!target) return undefined;
+    const scroll = () => target.scrollIntoView?.({ block: 'start' });
+    scroll();
+    if (typeof ResizeObserver !== 'function' || !workspaceContent.current) return undefined;
+    // The booklet and notices settle independently. Keep the anchor in view
+    // through layout changes until the reader starts interacting.
+    const observer = new ResizeObserver(scroll);
+    observer.observe(workspaceContent.current);
+    const stop = () => observer.disconnect();
+    const inputs = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+    for (const event of inputs) window.addEventListener(event, stop, { once: true, passive: true });
+    return () => {
+      stop();
+      for (const event of inputs) window.removeEventListener(event, stop);
+    };
   }, [hash, loading]);
   const [err, setErr] = useState('');
   // Admin-only preview override. Never consulted for a non-admin, so it cannot
@@ -447,7 +462,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   };
 
   const body = (
-    <div className="space-y-6">
+    <div ref={workspaceContent} className="space-y-6">
       {/* confidentiality */}
       <div className="flex items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
         <Lock size={12} />

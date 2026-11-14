@@ -14,6 +14,8 @@ import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
+import { waitingOn } from '../../../lib/trustCenter';
+import { requirementLabel } from '../../trust/memberTrustModel';
 import { commitmentsByFund } from '../../../lib/lpCommitmentModel';
 import { canSignBooklet } from '../../../lib/bookletSigning';
 import { formatMinor } from '../../../lib/money.js';
@@ -117,10 +119,11 @@ function commitmentTiles(records, failures, retry) {
     if (!holding.lpa_signed) rows.fund.push({ key: `lpa-${holding.lp_id}`, label: 'Sign the LPA' + (holding.fund_name ? ` · ${holding.fund_name}` : ''), to: COMMITMENT });
     for (const call of holding.calls) {
       if (call.limited_partner_id != null && call.limited_partner_id !== holding.lp_id) continue;
-      if (seenCalls.has(call.id) || call.status === 'paid' || !(call.outstanding_cents > 0) || !call.due_date) continue;
+      if (seenCalls.has(call.id) || call.status === 'paid' || !(call.outstanding_cents > 0)) continue;
       seenCalls.add(call.id);
       const notice = notices?.notices?.find?.(item => !item.superseded && item.type === 'capital_call_notice' && item.fund_id === holding.fund_id && item.limited_partner_id === holding.lp_id && String(item.call_number) === String(call.call_number));
-      rows.fund.push({ key: `call-${call.id}`, label: `Capital call ${call.state === 'overdue' ? 'overdue' : 'due'} · ${call.due_date}`, to: notice ? LP_WORKSPACE + '#my-notices' : COMMITMENT });
+      const label = call.due_date ? `Capital call ${call.state === 'overdue' ? 'overdue' : 'due'} · ${call.due_date}` : 'Capital call outstanding · due date not recorded';
+      rows.fund.push({ key: `call-${call.id}`, label, to: notice ? LP_WORKSPACE + '#my-notices' : COMMITMENT });
     }
   }
   if (!sourceState.booklet.unreadable) {
@@ -129,8 +132,8 @@ function commitmentTiles(records, failures, retry) {
   }
   if (!sourceState.trust.unreadable) {
     for (const obligation of trust?.obligations || []) {
-      if (obligation.required && !['satisfied', 'waived'].includes(obligation.status) && obligation.obligation_key) {
-        rows.trust.push({ key: obligation.obligation_key, label: obligation.label || obligation.title || 'Review a required Trust item', to: '/trust/me?requirement=' + encodeURIComponent(obligation.obligation_key) });
+      if (Number(obligation.required) === 1 && waitingOn(obligation.status) === 'you' && obligation.obligation_key) {
+        rows.trust.push({ key: obligation.obligation_key, label: requirementLabel(obligation), to: '/trust/me?requirement=' + encodeURIComponent(obligation.obligation_key) });
       }
     }
   }
@@ -149,7 +152,7 @@ function commitmentTiles(records, failures, retry) {
             <Row label="Called" value={moneyCents(row.called_cents)} state={row.calls_known ? undefined : 'unreadable'} />
             <Row label="Due" value={moneyCents(row.due_cents)} state={row.calls_known ? undefined : 'unreadable'} />
             <Row label="Uncalled" value={moneyCents(row.uncalled_cents)} state={row.calls_known ? undefined : 'unreadable'} />
-            <Row label="Next call due" value={row.next_due} state={row.calls_known ? undefined : 'unreadable'} />
+            <Row label="Next call due" value={row.next_due ?? (row.calls_known && !row.due_cents ? 'None scheduled' : null)} state={row.calls_known ? undefined : 'unreadable'} />
           </section>)}
         </> },
     needs_you: !incomplete && !any ? { state: TILE.EMPTY, empty: 'Nothing needs your attention right now.' }
