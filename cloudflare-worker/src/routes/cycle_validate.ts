@@ -110,7 +110,7 @@ const idParam = (v: string | undefined): number | null => (/^[1-9][0-9]{0,9}$/.t
 cycleValidate.get('/overview', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
-  const ctx = ctxOf(c, s.projectId);
+  const ctx = { ...ctxOf(c, s.projectId), canWrite: canWrite(s.project, s.user) };
   const decisions = canReadDecision(s.project, s.user);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx, { decisions })]);
   // D685 §5.12, D692 — the phone's focus, meter and index rows. Each fails on
@@ -173,6 +173,17 @@ cycleValidate.get('/modules/:slug', async (c) => {
   }
   const google = GOOGLE_MODULE[slug];
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
+  if (slug === 'demand-signals' && card.state !== 'unreadable') {
+    const series = card.series as { bar?: number | null } | null;
+    parts = { ...parts, waitlist_bar: series?.bar ?? null };
+  }
+  if (slug === 'demand-signals' && writer) {
+    const linked = await c.env.DB.prepare(
+      `SELECT 1 AS connected FROM lovable_app_links
+       WHERE project_id = ? AND module = 'experiments' AND last_status = 'live' LIMIT 1`
+    ).bind(s.projectId).first<{ connected: number }>().catch(() => null);
+    parts = { ...parts, lovable_connected: linked?.connected === 1 };
+  }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
     records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },
     // D693 decision 7: every Validate module read says so too.

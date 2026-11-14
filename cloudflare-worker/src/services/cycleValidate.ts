@@ -887,10 +887,10 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     counts.pre_sale += demand.paid.length;
     const toConfirm = demand.signals.filter((s) => s.status === 'to_confirm').length;
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
-      return { state: 'empty', series: null, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
+      return { state: 'empty', series: bar ? { bar: Number(bar.target_value) } : null, next: ctx.canWrite === false ? null : { text: 'Open the landing-page builder', href: `/build/brand?project_id=${ctx.projectId}` }, reason: 'No waitlist connected.' };
     }
-    const next = !bar
-      ? { text: 'Set the bar for waitlist sign-ups', href: href(ctx, 'demand-signals') }
+    const next = !bar && ctx.canWrite !== false
+      ? { text: 'Set the bar for waitlist sign-ups', href: `${href(ctx, 'demand-signals')}#waitlist-bar` }
       : toConfirm > 0
         ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
         : null;
