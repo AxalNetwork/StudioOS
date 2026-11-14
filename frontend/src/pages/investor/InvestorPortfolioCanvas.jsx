@@ -237,6 +237,7 @@ export default function InvestorPortfolioCanvas() {
   const reporting = useMemo(() => reportingSummaryOf(reads.compliance, reads.updates), [reads.compliance, reads.updates]);
   const support = useMemo(() => valueAddSummaryOf(reads.support), [reads.support]);
   const quarterEnd = lastQuarterEndOf(reads.positions, reads.compliance);
+  const navChange = quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null;
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
   const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
 
@@ -276,12 +277,7 @@ export default function InvestorPortfolioCanvas() {
         />
       )}
     >
-      <PerformanceSummary
-        perf={perf}
-        loading={reads.analytics.state === 'loading'}
-        onRetry={() => retry('analytics')}
-        change={quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null}
-      />
+      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} change={navChange} />
       <NeedsAttention attention={attention} reads={reads} retry={retry} />
       <div className="pf-two">
         <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />
