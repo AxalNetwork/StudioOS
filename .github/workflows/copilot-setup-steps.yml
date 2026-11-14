@@ -62,4 +62,4 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci

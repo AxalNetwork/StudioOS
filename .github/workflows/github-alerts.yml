@@ -265,7 +265,7 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci
       - name: Install age and libfaketime
         run: sudo apt-get update -qq && sudo apt-get install -y -qq age faketime
       - name: Build the SPA

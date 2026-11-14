@@ -235,7 +235,7 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci
       # D5398: D4558's independent-recovery tests require the real age CLI.
       # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
       # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.
