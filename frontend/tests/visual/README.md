@@ -79,3 +79,4 @@ browser is a different build.
 - **Nothing leaves 127.0.0.1.** A screen that needs the network shows what it
   shows when the read fails, and that is what is drawn.
 - `test-results/` and `playwright-report/` are output and are not committed.
+- `report_print_6094.spec.mjs`: #6094 native print document, audience boundary, light paper in both themes, cleanup/focus and print failure recovery.
