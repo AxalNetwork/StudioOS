@@ -241,7 +241,8 @@ test('the list: rows with commitment and next step; three picked move together t
     assert.match(v.text('caprel-move-dialog'), /Move 3 investors/);
     await v.change('caprel-move-to', 'passed');
     await v.click('caprel-move-go');
-    assert.deepEqual(v.writes().map((c) => [c.url.match(/prospects\/(\d+)/)[1], c.body]), [['41', { stage: 'passed' }], ['42', { stage: 'passed' }], ['47', { stage: 'passed' }]]);
+    // D6077: the list is in the bar's sort (Next step due), so the writes are compared as a set.
+    assert.deepEqual(v.writes().map((c) => [c.url.match(/prospects\/(\d+)/)[1], c.body]).sort(), [['41', { stage: 'passed' }], ['42', { stage: 'passed' }], ['47', { stage: 'passed' }]]);
   } finally { await v.close(); }
 });
 

@@ -129,7 +129,7 @@ test('an address value the tab does not allow reads as its default', () => {
   assert.deepEqual(readFilters(ACTIVITY_FILTERS, '?kind=eadwyn&investor=41&page=3'), { q: '', kind: 'eadwyn', investor: '41', page: 3 });
   assert.deepEqual(readFilters(COMMITMENT_FILTERS, '?status=everything'), { q: '', status: '' });
   assert.deepEqual(readFilters(COMMITMENT_FILTERS, '?status=not_recorded'), { q: '', status: 'not_recorded' });
-  assert.deepEqual(readFilters(PIPELINE_FILTERS, '?passed=true'), { passed: false });
+  assert.equal(readFilters(PIPELINE_FILTERS, '?passed=true').passed, false);
   assert.equal(readFilters(MATCH_FILTERS, `?q=${'x'.repeat(300)}`).q.length, 100, 'a search is cut to the length the Worker reads');
 });
 

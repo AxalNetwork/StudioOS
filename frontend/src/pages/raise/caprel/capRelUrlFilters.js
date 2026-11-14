@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import {
+  PIPELINE_FIT_VALUES, PIPELINE_NEXT_VALUES, PIPELINE_PATH_VALUES, PIPELINE_SORT_VALUES, PIPELINE_SOURCE_VALUES, PIPELINE_STAGE_VALUES,
+} from './capRelPipelineFilters.js';
 
 /**
  * D5377 (#5377): the filters, sort and page of Match, Activity and
@@ -63,8 +66,21 @@ export const COMMITMENT_FILTERS = Object.freeze({
   status: oneOf(COMMIT_STATUS_VALUES),
 });
 
-/** Pipeline's board: whether the Passed column is open. */
-export const PIPELINE_FILTERS = Object.freeze({ passed: flag });
+/**
+ * Pipeline (CRL2, CRL3): whether the board's Passed column is open, and
+ * D6077's search, filters and sort (`sort` defaults to Next step due), all
+ * applied to the loaded read (`capRelPipelineFilters.js`), never sent.
+ */
+export const PIPELINE_FILTERS = Object.freeze({
+  passed: flag,
+  q: text(100),
+  stage: oneOf(PIPELINE_STAGE_VALUES),
+  fit: oneOf(PIPELINE_FIT_VALUES),
+  path: oneOf(PIPELINE_PATH_VALUES),
+  source: oneOf(PIPELINE_SOURCE_VALUES),
+  next: oneOf(PIPELINE_NEXT_VALUES),
+  sort: { def: 'due', read: (v) => (PIPELINE_SORT_VALUES.includes(v) ? v : 'due') },
+});
 
 /** Which key a filter change resets to its default (the page), per spec. */
 const PAGE_KEY = new Map([[MATCH_FILTERS, 'offset'], [ACTIVITY_FILTERS, 'page']]);

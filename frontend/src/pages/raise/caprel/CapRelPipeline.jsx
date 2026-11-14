@@ -8,12 +8,13 @@ import { Lightbox, Unreadable } from '../../../ui';
 import { RecordFacts, RecordSection } from '../../cycles/RecordView';
 import { recordHref } from '../../cycles/recordModel';
 import {
-  IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, boardColumns, chunks,
+  IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, chunks,
   importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
 import CapRelExportMenu from './CapRelExportMenu.jsx';
 import { pipelineCsv } from './capRelExports.js';
+import { CLEAR_PATCH, PIPELINE_OPTIONS, activeFilters, pipelineView, sortedColumns } from './capRelPipelineFilters.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
 import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -32,6 +33,12 @@ import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.j
  * (50 rows a request), a next step through `PUT …/next-step`, and a step and
  * feedback through the record's own actions (`log`, `add-feedback`). Every
  * change opens an in-page dialog that says what it changes.
+ *
+ * D6077 (#6077): the bar above both views (the canvas's `pipeBar`): Search
+ * investors; Stage, Fit, Warm path, Source and Next step; Sort, Next step due
+ * first. They live in the address (`PIPELINE_FILTERS`) and narrow the loaded
+ * read, so the Board and the List show the same investors, and bulk Move acts
+ * only on picked rows still shown.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -56,7 +63,8 @@ export function useProspects(projectId) {
     // D5073: a re-read of the SAME venture keeps its investors drawn until the new answer lands; another venture's never are.
     setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
     Promise.resolve().then(() => api.raiseProspects(projectId))
-      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId }); })
+      // D6077: whether the read carried Fit, Source and last contact, and whether round calls are on.
+      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId, signals: typeof d?.signals === 'string' ? d.signals : 'not_read', roundCalls: d?.round_calls === true }); })
       // D5079 (#5079): a refusal is not a failed read. Mapping a 403 to
       // `unreadable` told the founder the pipeline "could not be read", which
       // is a claim about the store rather than about access.
@@ -65,7 +73,7 @@ export function useProspects(projectId) {
   }, [projectId, n]);
   // The frame before the effect runs still holds the previous venture's state: never draw it.
   const own = read.projectId === projectId ? read : { status: 'loading', items: null };
-  return { status: own.status, items: own.items, message: own.message ?? '', reload: () => setN((x) => x + 1) };
+  return { status: own.status, items: own.items, message: own.message ?? '', signals: own.signals ?? 'not_read', roundCalls: own.roundCalls === true, reload: () => setN((x) => x + 1) };
 }
 
 /* ------------------------------------------------------------------ *
@@ -394,8 +402,10 @@ function Card({ p, onOpen, onMove }) {
   );
 }
 
-function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed }) {
-  const [one, setOne] = useState(STAGES[0]);
+function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed, stage = '' }) {
+  const [one, setOne] = useState(STAGES.includes(stage) ? stage : STAGES[0]);
+  // D6077: a Stage filter picks the phone's one column too.
+  useEffect(() => { if (STAGES.includes(stage)) setOne(stage); }, [stage]);
   const visible = phone ? cols.columns.filter((c) => c.stage === one) : cols.columns;
   return (
     <div className="flex flex-col gap-3" data-testid="caprel-board">
@@ -469,6 +479,51 @@ function List({ items, onOpen, onBulk }) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * The bar (D6077, the canvas's `pipeBar`)
+ * ------------------------------------------------------------------ */
+
+const CHIP = 'min-h-11 rounded-lg border border-axal-hairline bg-white px-2.5 text-[12.5px] font-semibold text-axal-ink focus-visible:outline-2 focus-visible:outline-violet-600 disabled:opacity-50 lg:min-h-[32px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const SIGNALS_LINE = {
+  unreadable: 'Fit, source and last contact are unreadable right now, so those filters and that sort are off.',
+  not_read: 'Fit, source and last contact were not read, so those filters and that sort are off.',
+};
+
+export function PipelineBar({ f, setF, signals, roundCalls, shown, total }) {
+  const [typed, setTyped] = useState(f.q);
+  // Back, Forward or a venture switch moves the address: the box follows it, unless it already says the same.
+  useEffect(() => { setTyped((t) => (t.trim() === f.q ? t : f.q)); }, [f.q]);
+  const read = signals === 'ok';
+  const on = activeFilters(f, { signals, roundCalls });
+  const chip = (key, label, any, { disabled = false } = {}) => (
+    <select className={CHIP} aria-label={label} value={f[key]} disabled={disabled} onChange={(e) => setF({ [key]: e.target.value })} data-testid={`caprel-pipe-${key}`}>
+      <option value="">{any}</option>
+      {PIPELINE_OPTIONS[key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="caprel-pipe-bar">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Search, filter and sort investors">
+        <input type="search" className={`${CHIP} w-full font-normal sm:w-52`} placeholder="Search investors" aria-label="Search investors" maxLength={100} value={typed}
+          onChange={(e) => { setTyped(e.target.value); setF({ q: e.target.value }, { replace: true }); }} data-testid="caprel-pipe-q" />
+        {chip('stage', 'Stage', 'Any stage')}
+        {chip('fit', 'Fit', 'Any fit', { disabled: !read })}
+        {chip('path', 'Warm path', 'Any warm path')}
+        {roundCalls ? chip('source', 'Source', 'Any source', { disabled: !read }) : null}
+        {chip('next', 'Next step', 'Any next step')}
+        <select className={CHIP} aria-label="Sort" value={f.sort} onChange={(e) => setF({ sort: e.target.value })} data-testid="caprel-pipe-sort">
+          {PIPELINE_OPTIONS.sort.map(([v, l]) => <option key={v} value={v} disabled={v === 'last_contact' && !read}>Sort: {l}</option>)}
+        </select>
+        {on.length ? <button type="button" className={BTN_S} onClick={() => setF(CLEAR_PATCH)} data-testid="caprel-pipe-clear">Clear filters</button> : null}
+      </div>
+      <p className={`m-0 text-[12px] ${MUTED}`} role="status" data-testid="caprel-pipe-count">
+        {on.length ? `Showing ${shown} of ${total} ${total === 1 ? 'investor' : 'investors'}.` : `${total} ${total === 1 ? 'investor' : 'investors'}.`}
+        {!read && SIGNALS_LINE[signals] ? ` ${SIGNALS_LINE[signals]}` : ''}
+      </p>
+    </div>
+  );
+}
+
 const usePhone = () => {
   const q = '(max-width: 767px)';
   const [phone, setPhone] = useState(() => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false));
@@ -508,7 +563,12 @@ export default function CapRelPipeline({ projectId, search = '' }) {
     setDialog(null);
     setParams((p) => { const n = clearFilters(PIPELINE_FILTERS, p); n.delete('investor'); return n; }, { replace: true });
   }, [projectId, setParams]);
-  const cols = useMemo(() => boardColumns(items), [items]);
+  // D6077: the bar's filters and sort narrow both views alike; the List's picks follow what is shown.
+  const today = new Date().toISOString().slice(0, 10);
+  const visible = useMemo(() => pipelineView(items, board, { signals: read.signals, roundCalls: read.roundCalls, today }),
+    [items, board, read.signals, read.roundCalls, today]);
+  const cols = useMemo(() => sortedColumns(visible, board.sort), [visible, board.sort]);
+  const noMatch = items.length > 0 && visible.length === 0;
   const onMove = (p, to) => setDialog({ kind: 'move', prospects: [p], to });
   return (
     <div className="flex flex-col gap-4" data-testid="caprel-pipeline">
@@ -516,7 +576,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
         <div className="inline-flex rounded-lg border border-axal-hairline p-0.5 text-[12px] font-semibold dark:border-gray-700" role="radiogroup" aria-label="Show as">
           {[['board', 'Board'], ['list', 'List']].map(([k, l]) => (
             <button key={k} type="button" role="radio" aria-checked={view === k} onClick={() => setView(k)} data-testid={`caprel-view-${k}`}
-              className={view === k ? 'rounded-md bg-violet-50 px-2.5 py-1 text-axal-ink dark:bg-violet-950 dark:text-gray-100' : `rounded-md px-2.5 py-1 ${MUTED}`}>{l}</button>
+              className={`min-h-11 lg:min-h-0 focus-visible:outline-2 focus-visible:outline-violet-600 ${view === k ? 'rounded-md bg-violet-50 px-2.5 py-1 text-axal-ink dark:bg-violet-950 dark:text-gray-100' : `rounded-md px-2.5 py-1 ${MUTED}`}`}>{l}</button>
           ))}
         </div>
         <div className="flex gap-2">
@@ -538,8 +598,16 @@ export default function CapRelPipeline({ projectId, search = '' }) {
           <div className="flex gap-2"><button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })}>Add investor</button><button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })}>Import</button></div>
         </section>
       ) : null}
-      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
-      {items.length && view === 'list' ? <List items={items} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
+      {items.length ? <PipelineBar f={board} setF={setBoard} signals={read.signals} roundCalls={read.roundCalls} shown={visible.length} total={items.length} /> : null}
+      {noMatch ? (
+        <section className={`${CARD} flex flex-col items-center gap-2 px-6 py-8 text-center`} data-testid="caprel-pipe-nomatch">
+          <h3 className={`m-0 text-[15px] font-bold ${INK}`}>No investor matches these filters</h3>
+          <p className={`m-0 max-w-md text-[12.5px] ${MUTED}`}>{items.length} {items.length === 1 ? 'investor is' : 'investors are'} in the pipeline. Clear the filters to see them.</p>
+          <button type="button" className={BTN_S} onClick={() => setBoard(CLEAR_PATCH)} data-testid="caprel-pipe-nomatch-clear">Clear filters</button>
+        </section>
+      ) : null}
+      {visible.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} stage={board.stage} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
+      {visible.length && view === 'list' ? <List items={visible} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
       {cols.unknown.length ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-unknown-stage">{cols.unknown.length} {cols.unknown.length === 1 ? 'investor has' : 'investors have'} a stage the board does not draw; the list shows them.</p> : null}
 
       {open ? <InvestorLightbox key={`${projectId}:${open.id}`} projectId={projectId} prospect={open} search={search} onClose={() => setOpen(null)} onChanged={reload} /> : null}
