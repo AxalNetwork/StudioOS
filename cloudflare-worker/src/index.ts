@@ -2343,6 +2343,16 @@ export default {
           } catch {
             taskFailed('meeting bot operations');
           }
+          // D5674 (#5988): the recording-stage bridge. Stores firing/recovered/coverage receipts
+          // against the stored episode inventory; forwards them only when CF_BOT_DELIVERY_URL and
+          // CF_BOT_DELIVERY_SECRET are both set. Unset, receipts stay pending and nothing is sent.
+          try {
+            const { runBotSourceBridge } = await import('./services/cloudflareBotBridge');
+            const r = await runBotSourceBridge(env, { now: now.getTime() });
+            if (r.stored || r.forwarded || r.delivery === 'pending') cronSummary.push(`bot stage receipts stored=${r.stored} forwarded=${r.forwarded} delivery=${r.delivery}`);
+          } catch {
+            taskFailed('meeting bot stage bridge');
+          }
         }
         // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
         // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
