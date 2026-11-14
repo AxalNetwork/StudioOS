@@ -7,6 +7,8 @@
  *   GET  /summary        connected integrations, scheduled-job health, the
  *                        monitoring and broadcast consoles, and the platform's
  *                        switches, read-only
+ *   GET  /scopes         every subsidiary the scope switcher can narrow to (D5786)
+ *   GET  /scopes/:code   one subsidiary's attributable health signals, HQ-only and unavailable ones named (D5786)
  *   GET  /switches       the switches an operator can throw, both halves (D203)
  *   POST /switches/:key  throw or release one, with a reason, audited (D203)
  *   GET  /topology       what this Worker binds, exports and calls, and what
@@ -115,6 +117,7 @@ import {
 } from '../services/platformCapacityHistory';
 import { branchOf } from '../util/branch';
 import { readPlatformSummary } from '../services/platformSummary';
+import { listScopes, readScope, ScopeRefused } from '../services/platformScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -126,6 +129,36 @@ r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
   // D4859: every panel is read at once, each in its own state; a reader that fails or hangs answers for its own block only.
   return c.json({ ...(await readPlatformSummary(c.env)), ...DERIVED_UNAVAILABLE });
+});
+
+// ---------------------------------------------------------------------------
+// D5786 (#5786) — Platform readings scoped to one subsidiary, for the scope switcher (#5757). SUPER ADMIN ONLY,
+// as the three HQ-wide reads it sits beside are: one branch's health and traffic is that branch's, and only the
+// Super Admin supervises every branch (D161). On a branch `requireSuperAdmin` answers "HQ only".
+//
+//   GET /scopes        every subsidiary HQ can scope to, by code and licence
+//   GET /scopes/:code  that subsidiary's attributable signals, each with availability, observation time and source;
+//                      the signals that are HQ-only or unavailable for it, named with the reason; one state by the
+//                      summary's rule. `/summary` is unchanged and stays the HQ-wide reading.
+// A code that is not a branch code is 400 and one HQ does not know is 404; nothing is read for either.
+// ---------------------------------------------------------------------------
+r.get('/scopes', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await listScopes(c.env));
+});
+
+r.get('/scopes/:code', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    return c.json(await readScope(c.env, c.req.param('code')));
+  } catch (refused) {
+    if (refused instanceof ScopeRefused) {
+      return c.json({ error: refused.message, code: refused.code }, refused.code === 'invalid_scope' ? 400 : 404);
+    }
+    throw refused;
+  }
 });
 
 // ---------------------------------------------------------------------------
