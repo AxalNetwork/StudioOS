@@ -863,12 +863,17 @@ async function loadDemand(ctx: Ctx) {
   return { signals: signals.results || [], paid: paid.results || [] };
 }
 
+export async function readWaitlistBar(ctx: Ctx): Promise<number | null> {
+  const row = await ctx.env.DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+    .bind(ctx.projectId, WAITLIST_TARGET_KEY).first<{ target_value: number }>();
+  return row ? Number(row.target_value) : null;
+}
+
 export async function demandCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('demand-signals', 'Last 13 weeks', 'Waitlist sign-ups against the bar you set, and the share calling it a need-to-have.', 'Waitlist, demand signals and the revenue ledger'), async (): Promise<CardBody> => {
     const [{ weeks, total }, bar, demand, sev, interviews] = await Promise.all([
       weeklySignups(ctx, 13),
-      ctx.env.DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
-        .bind(ctx.projectId, WAITLIST_TARGET_KEY).first<{ target_value: number }>(),
+      readWaitlistBar(ctx),
       loadDemand(ctx), loadSeverities(ctx), loadInterviews(ctx),
     ]);
     // Need-to-have: of the interviews in which a severity was judged at all,
@@ -887,20 +892,19 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     counts.pre_sale += demand.paid.length;
     const toConfirm = demand.signals.filter((s) => s.status === 'to_confirm').length;
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
-      return { state: 'empty', series: null, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
+      return { state: 'empty', series: null, next: ctx.canWrite === false ? null : { text: 'Open the landing-page builder', href: `/build/brand?project_id=${ctx.projectId}` }, reason: 'No waitlist connected.' };
     }
-    const next = !bar
-      ? { text: 'Set the bar for waitlist sign-ups', href: href(ctx, 'demand-signals') }
-      : toConfirm > 0
-        ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
-        : null;
+    const next = ctx.canWrite === false ? null
+      : bar == null ? { text: 'Set the bar for waitlist sign-ups', href: `${href(ctx, 'demand-signals')}#waitlist-bar` }
+      : toConfirm > 0 ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
+      : null;
     const state = seriesState(weeks);
     return {
       state: state === 'empty' && (demand.signals.length > 0 || demand.paid.length > 0 || judged.size > 0) ? 'too_little' : state,
       series: {
         signups: cumulative(weeks, total).map((n, i) => ({ week_start: daysBefore(ctx.today, (13 - i) * 7 - 1), total: n })),
-        bar: bar ? Number(bar.target_value) : null,
-        bar_reason: bar ? null : 'No bar set',
+        bar,
+        bar_reason: bar == null ? 'No bar set' : null,
         need_to_have: judged.size > 0 ? { interviews: need.size, of: judged.size } : null,
         need_to_have_reason: judged.size > 0 ? null : 'No interview has a pain judged yet',
         signals: counts,

@@ -143,13 +143,13 @@ test('D659: a new venture — every card empty with its one starting action, eve
   assert.equal(r.status, 200);
   for (const c of r.body.cards) {
     assert.equal(c.state, 'empty', c.slug);
-    assert.ok(c.next && c.next.text && c.next.href.startsWith('/validate/'), `${c.slug} names its starting action`);
+    assert.ok(c.next && c.next.text && (c.next.href.startsWith('/validate/') || c.slug === 'demand-signals'), `${c.slug} names its starting action`);
     assert.equal(c.series, null, `${c.slug} draws nothing`);
   }
   assert.equal(card(r.body, 'problem-discovery').next.text, 'Record your first session');
   assert.equal(card(r.body, 'ideal-customer-profile').next.text, 'Start the profile');
   assert.equal(card(r.body, 'market-intelligence').next.text, 'Add the total market, with its source');
-  assert.equal(card(r.body, 'demand-signals').next.text, 'Connect a landing page');
+  assert.deepEqual(card(r.body, 'demand-signals').next, { text: 'Open the landing-page builder', href: `/build/brand?project_id=${P}` });
   assert.equal(card(r.body, 'experiments').next.text, 'Write the claim you most need to be true');
   assert.equal(card(r.body, 'verdict').next.text, 'Record a decision');
   for (const f of r.body.figures) {
@@ -163,6 +163,19 @@ test('D659: a new venture — every card empty with its one starting action, eve
 // ---------------------------------------------------------------------------
 // The five states
 // ---------------------------------------------------------------------------
+
+test('a waitlist bar persists without sign-ups; the card stays empty until sign-ups arrive', async () => {
+  const db = fixture();
+  const url = `/modules/demand-signals?project=${P}`;
+  const target = `/waitlist-target?project=${P}`;
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: 40 })).status, 200);
+  const saved = (await call(db, FOUNDER, 'GET', url)).body;
+  assert.equal(saved.card.state, 'empty');
+  assert.equal(saved.card.series, null);
+  assert.equal(saved.parts.waitlist_bar, 40);
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: null })).status, 200);
+  assert.equal((await call(db, FOUNDER, 'GET', url)).body.parts.waitlist_bar, null);
+});
 
 test('D659: one failing source makes only its own card unreadable, naming the source', async () => {
   const db = fixture();
@@ -452,7 +465,11 @@ test('D659: a demand signal — an amount of 0 is refused, a typed signal is con
   const d = card(o.body, 'demand-signals');
   assert.equal(d.series.signals.loi, 1);
   assert.equal(d.series.signals.pre_sale, 1, 'the paid deposit counts; the unconfirmed one does not yet');
-  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}` });
+  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}#waitlist-bar` });
+  assert.equal(card((await overview(db, PARTNER)).body, 'demand-signals').next, null);
+  const partnerModule = await call(db, PARTNER, 'GET', `/modules/demand-signals?project=${P}`);
+  assert.equal(partnerModule.body.parts.can_write, false);
+  assert.equal(partnerModule.body.card.next, null);
   assert.equal((await call(db, FOUNDER, 'PUT', `/waitlist-target?project=${P}`, { value: 40 })).status, 200);
   const o2 = await overview(db);
   assert.equal(card(o2.body, 'demand-signals').series.bar, 40);

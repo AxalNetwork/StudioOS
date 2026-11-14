@@ -192,11 +192,12 @@ test('D704 test 5 (the door): the Validate chapter lists the modules, and its li
   for (const door of Object.values(DOORS)) {
     for (const i of door.live) assert.doesNotMatch(i.route, /^\/validate\/(interviews|pain-map|hypotheses)$/, `${i.t} links an old page`);
   }
-  // Validate's tools give no old path: only Market intelligence keeps a tool.
+  // Validate's tools give no old path. Demand signals now opens the landing-page builder.
   const route = readFileSync('frontend/src/pages/cycles/defs/validate.jsx', 'utf8'); // D5615: Validate's entry
   const at = route.indexOf('tools: toFnMap({');
   const tools = route.slice(at, route.indexOf('\n  }),', at));
-  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence']);
+  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence', 'demand-signals']);
+  assert.match(tools, /'demand-signals':.*\/build\/brand/);
 });
 
 /** Test 6's pattern: an old page path, not part of a longer path or name. */
