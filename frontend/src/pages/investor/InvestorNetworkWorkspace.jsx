@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, CircleAlert, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { WorkerRail } from '../../ui';
+import { WorkerRail, Unreadable } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorNetworkWorkspace.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
-import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue } from '../../lib/networkBook';
+import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue, shortDate, touchHistory, touchRecorder, openReminderFor, reminderLists } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
 import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
@@ -178,13 +178,18 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
   const [actionError, setActionError] = useState(initialActionError);
-  const [touchLog, setTouchLog] = useState([]);
+  // #6259: the touch log is read back, so it has the three states every read
+  // has — null while loading, the rows, or the failure (never shown as empty).
+  const [touchLog, setTouchLog] = useState(null);
+  const [touchLogError, setTouchLogError] = useState('');
+  // #6259: the Reminders view — upcoming and done, opened by the header op.
+  const [remindersOpen, setRemindersOpen] = useState(false);
 
   const load = useCallback(async (refresh = false) => {
     setRefreshing(refresh);
     setActionError('');
     const calls = await Promise.allSettled([
-      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(), api.partnerReminders(),
+      api.partnerRelationships(), api.partnerSummary(), api.introPropositions(refresh ? { refresh: true } : {}), api.listIntroductions(), api.partnerReminders(true),
     ]);
     const [relationshipResult, summaryResult, introResult, askResult, reminderResult] = calls;
     if (relationshipResult.status === 'fulfilled') {
@@ -206,6 +211,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (remindersOpen) document.getElementById('network-reminders')?.scrollIntoView?.({ block: 'start' });
+  }, [remindersOpen]);
 
   useEffect(() => {
     if (highlightedIntro && introductions) {
@@ -303,31 +311,41 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
    * of the last exchange is the only way the flag moves. A reminder surfaces
    * on the desk when it is due; there is no notification fan-out.
    */
+  // #6259: the log is READ BACK now, not only used to draw void buttons. A
+  // failed read is the panel's own "could not be read" state, never an empty
+  // history — and the note it carries is personal content, so nothing here
+  // logs it.
+  const readTouchLog = async (id) => {
+    setTouchLog(null);
+    setTouchLogError('');
+    try {
+      const log = await api.partnerInteractionLog(id);
+      setTouchLog(touchHistory(log?.items));
+    } catch {
+      setTouchLogError('unreadable');
+    }
+  };
   const openTouch = async (item) => {
     setActionError('');
     const open = touchFor === item.id ? null : item.id;
     setTouchFor(open);
     setReminderFor(null);
     setPrivateNoteFor(null);
-    setTouchLog([]);
+    setTouchLog(null);
+    setTouchLogError('');
     if (!open) return;
-    try {
-      const log = await api.partnerInteractionLog(item.id);
-      setTouchLog(Array.isArray(log?.items) ? log.items : []);
-    } catch (cause) {
-      setActionError(cause?.message || 'The touch log could not be read.');
-    }
+    await readTouchLog(item.id);
   };
   const voidTouch = async (rel, uid) => {
     setActionError('');
     try {
       await api.partnerInteractionVoid(rel.id, uid);
-      const log = await api.partnerInteractionLog(rel.id);
-      setTouchLog(Array.isArray(log?.items) ? log.items : []);
-      load();
     } catch (cause) {
       setActionError(cause?.message || 'The touch could not be voided.');
+      return;
     }
+    await readTouchLog(rel.id);
+    load();
   };
   const logTouch = async (rel) => {
     setActionError('');
@@ -341,7 +359,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     if (date) body.interacted_at = `${date}T12:00:00.000Z`;
     try {
       await api.partnerInteractionAdd(rel.id, body);
-      setTouchFor(null); setTouchNote(''); setTouchDate('');
+      // #6259: the panel stays open and its history is read again, so the
+      // member sees the touch they just recorded at the top of the list.
+      setTouchNote(''); setTouchDate('');
+      readTouchLog(rel.id);
       load();
     } catch (cause) { setActionError(cause?.message || 'The touch could not be recorded.'); }
   };
@@ -421,11 +442,23 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // investor /network zone down; investor_network_render_d307.test.mjs now
   // renders the page, and `no-use-before-define` in eslint.config.mjs refuses
   // the ordering in any component.
-  const setRemindersOp = useMemo(() => {
-    const target = visibleRelationships[0];
-    if (!target) return { onClick: () => {}, disabled: true, title: 'No relationship is showing, so there is nothing to remind you about.' };
-    return { onClick: () => { setActionError(''); setReminderFor(target.id); } };
-  }, [visibleRelationships]);
+  //
+  // #6259: it USED TO open the reminder form on the first row the view showed,
+  // silently — a member pressed "Set reminders" and got a form for whoever
+  // happened to sort first. It now opens the Reminders view: the open ones and
+  // the done ones, each tie named. A new reminder is still set on its tie.
+  const setRemindersOp = useMemo(() => ({
+    onClick: () => {
+      setActionError('');
+      setReminderFor(null); setTouchFor(null); setPrivateNoteFor(null);
+      setRemindersOpen(true);
+    },
+  }), []);
+  const reminderTie = (r) => {
+    const tie = (relationships || []).find((item) => Number(item.id) === Number(r.relationship_id));
+    return tie ? personName(tie) : ([r.a_name, r.b_name].filter(Boolean).join(' · ') || 'Tie not recorded');
+  };
+  const { upcoming: upcomingReminders, done: doneReminders } = reminderLists(reminders);
   const pending = propositionRows.filter((item) => item.status === 'pending');
 
   // No zone means the overview, where every section shows. An unknown slug
@@ -480,6 +513,48 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 </span>
               </div>
             )}
+            {remindersOpen && (
+              <div className="inw-reminders" id="network-reminders" data-testid="panel-reminders" aria-labelledby="reminders-heading" role="region">
+                <div className="inw-reminders-head">
+                  <h3 id="reminders-heading">Reminders</h3>
+                  <button type="button" onClick={() => setRemindersOpen(false)} data-testid="button-reminders-close">Close</button>
+                </div>
+                {errors.reminders ? (
+                  <div data-testid="reminders-unreadable"><Unreadable what="Your reminders" claim="This is not a claim that none exist." onRetry={() => load()} /></div>
+                ) : reminders === null ? (
+                  <div role="status" aria-busy="true" data-testid="reminders-loading"><Skeleton rows={2} /><p className="inw-footnote">Loading reminders…</p></div>
+                ) : <>
+                  <h4>Upcoming</h4>
+                  {upcomingReminders.length === 0 ? <div className="inw-empty" data-testid="reminders-upcoming-empty">No reminder set. Set one on a tie with Remind me.</div> : (
+                    <ul className="inw-history" data-testid="list-reminders-upcoming">
+                      {upcomingReminders.map((r) => {
+                        const due = reminderDue(r.remind_at, Date.now(), viewerZone);
+                        return (
+                          <li key={r.uid} data-testid={`reminder-upcoming-${r.uid}`}>
+                            <time>{shortDate(r.remind_at) || 'Date not recorded'}</time>
+                            <span className="inw-history-body"><strong>{reminderTie(r)}</strong> {r.note || 'Re-surface this tie'}</span>
+                            <span className="inw-history-meta">{due ? <i className="inw-state inw-cold">Due</i> : <i className="inw-state">Upcoming</i>}
+                              <button type="button" onClick={() => doneReminder(r.uid)} data-testid={`button-reminder-mark-done-${r.uid}`}>Mark done</button></span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <h4>Done</h4>
+                  {doneReminders.length === 0 ? <div className="inw-empty" data-testid="reminders-done-empty">No reminder marked done.</div> : (
+                    <ul className="inw-history" data-testid="list-reminders-done">
+                      {doneReminders.map((r) => (
+                        <li key={r.uid} data-testid={`reminder-done-${r.uid}`}>
+                          <time>{shortDate(r.remind_at) || 'Date not recorded'}</time>
+                          <span className="inw-history-body"><strong>{reminderTie(r)}</strong> {r.note || 'Re-surface this tie'}</span>
+                          <span className="inw-history-meta"><i className="inw-state">{r.done_at ? `Done ${shortDate(r.done_at)}` : 'Done'}</i></span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>}
+              </div>
+            )}
             {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{bookView === 'founders' ? `No tie with a founder account is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.` : bookView === 'cold' ? `Nothing is going cold — every tie with a recorded touch is inside ${COLD_AFTER_DAYS} days, and a tie with none is unknown, not cold.` : `No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
@@ -490,6 +565,13 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                     <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
                     <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
                     <span className="inw-row-actions max-sm:col-span-2">
+                      {(() => {
+                        // #6259: the tie's open reminder, read back. Nothing is
+                        // drawn while the reminders load or when their read
+                        // failed — the alert above says which.
+                        const open = openReminderFor(reminders, item.id);
+                        return open ? <i className="inw-state" data-testid={`text-open-reminder-${item.id}`}>Reminder {shortDate(open.remind_at) || 'date not recorded'}</i> : null;
+                      })()}
                       <button type="button" onClick={() => openTouch(item)} data-testid={`button-log-touch-${item.id}`}>Log a touch</button>
                       <button type="button" onClick={() => { setActionError(''); setReminderFor(reminderFor === item.id ? null : item.id); setTouchFor(null); setPrivateNoteFor(null); }} data-testid={`button-remind-${item.id}`}>Remind me</button>
                       <button type="button" onClick={() => {
@@ -502,17 +584,44 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                     </span>
                     {role === 'investor' && <div style={{ gridColumn: '1 / -1' }}>{introAction([introTarget(item)].filter(Boolean))}</div>}
                   </div>
-                  {touchFor === item.id && (
+                  {touchFor === item.id && (<>
                     <div className="inw-inline-form" data-testid={`form-touch-${item.id}`}>
                       <input type="date" value={touchDate} onChange={(e) => setTouchDate(e.target.value)} aria-label="When it happened" data-testid={`input-touch-date-${item.id}`} />
                       <input value={touchNote} onChange={(e) => setTouchNote(e.target.value)} placeholder="What the last exchange was (kept to 2,000 characters)" aria-label="Touch note" maxLength={2000} />
-                      {touchLog.filter((row) => !row.voided_at && Number(row.recorded_by) === Number(user?.id)).map((row) => (
-                        <button type="button" key={row.uid} onClick={() => voidTouch(item, row.uid)} data-testid={`button-void-touch-${row.uid}`}>Void this touch</button>
-                      ))}
                       <button type="button" onClick={() => logTouch(item)} data-testid={`button-touch-save-${item.id}`}>Record the touch</button>
                       <button type="button" onClick={() => setTouchFor(null)}>Cancel</button>
                     </div>
-                  )}
+                    {/* #6259: the recorded touches, newest first — date, note,
+                        who recorded it, voided or not. Void stays the
+                        recorder's own (the route refuses anyone else's). */}
+                    <div className="inw-touch-log" data-testid={`touch-log-${item.id}`}>
+                      <h4>Recorded touches</h4>
+                      {touchLogError ? (
+                        <div data-testid="touch-log-unreadable"><Unreadable what="The touch log" claim="This is not a claim that none exist." onRetry={() => readTouchLog(item.id)} /></div>
+                      ) : touchLog === null ? (
+                        <div role="status" aria-busy="true" data-testid="touch-log-loading"><Skeleton rows={2} /><p className="inw-footnote">Loading recorded touches…</p></div>
+                      ) : touchLog.length === 0 ? (
+                        <div className="inw-empty" data-testid="touch-log-empty">No touch recorded</div>
+                      ) : (
+                        <ol className="inw-history" data-testid="list-touch-log">
+                          {touchLog.map((row) => {
+                            const mine = Number(row.recorded_by) === Number(user?.id);
+                            return (
+                              <li key={row.uid} className={row.voided_at ? 'inw-voided' : ''} data-testid={`touch-${row.uid}`}>
+                                <time>{shortDate(row.interacted_at) || 'Date not recorded'}</time>
+                                <span className="inw-history-body">{row.note || <em>No note recorded</em>}</span>
+                                <span className="inw-history-meta">
+                                  <span data-testid={`text-touch-recorder-${row.uid}`}>Recorded by {touchRecorder(row, user?.id, item.other?.id)}</span>
+                                  {row.voided_at ? <i className="inw-state" data-testid={`status-touch-voided-${row.uid}`}>Voided</i> : null}
+                                  {!row.voided_at && mine ? <button type="button" onClick={() => voidTouch(item, row.uid)} data-testid={`button-void-touch-${row.uid}`}>Void this touch</button> : null}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      )}
+                    </div>
+                  </>)}
                   {privateNoteFor === item.id && (
                     <div className="inw-inline-form" data-testid={`form-private-note-${item.id}`}>
                       <input value={privateNoteDraft} onChange={(e) => setPrivateNoteDraft(e.target.value)} placeholder="Only you see this note (kept to 2,000 characters)" aria-label="Private note" data-testid={`input-private-note-${item.id}`} maxLength={2000} />
