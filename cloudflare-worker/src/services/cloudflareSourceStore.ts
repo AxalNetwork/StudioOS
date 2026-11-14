@@ -1,7 +1,9 @@
 /** D5673: D1 compare-and-swap source cursor + immutable redacted receipts; this is not a second incident or Slack outbox. */
 import { parseCfReceipt, forwardCfReceipt, type CfDeliveryPort, type CfReceipt, type CfSourceStore } from './cloudflareSourceReceipt';
+export const CF_SOURCE_KEY=/^(deployments:(studioos|studioos-meeting-bot|studioos-meeting-bot-preview|studioos-tail)|recording:(studioos-meeting-bot|studioos-meeting-bot-preview))$/;
 export function d1CfSourceStore(db:D1Database): CfSourceStore {
-  const valid=(key:string)=>{if(!/^deployments:(studioos|studioos-meeting-bot|studioos-meeting-bot-preview|studioos-tail)$/.test(key))throw Error('invalid_cf_cursor');};
+  // #5988: `recording:<bot script>` is the meeting-bot stage bridge's own cursor and receipt partition.
+  const valid=(key:string)=>{if(!CF_SOURCE_KEY.test(key))throw Error('invalid_cf_cursor');};
   return {
     async read(key){valid(key);await db.prepare('INSERT OR IGNORE INTO cf_source_cursors (source_key,revision,through_ms,active_id,active_versions,write_token) VALUES (?,0,0,NULL,?,?)').bind(key,'[]','').run();
       const row=await db.prepare('SELECT revision,through_ms,active_id,active_versions FROM cf_source_cursors WHERE source_key=?').bind(key).first<{revision:number;through_ms:number;active_id:string|null;active_versions:string}>();
@@ -21,15 +23,18 @@ export function d1CfSourceStore(db:D1Database): CfSourceStore {
     },
   };
 }
-export async function pendingCfSourceReceipts(db:D1Database,limit=100):Promise<CfReceipt[]> {
-  if(!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error('invalid_cf_page');
-  const rows=await db.prepare('SELECT receipt_json FROM cf_source_receipts WHERE forwarded_ms IS NULL ORDER BY observed_ms,receipt_id LIMIT ?').bind(limit).all<{receipt_json:string}>();
+/** Without `sourceKey` every pending receipt; with it only that source's (#5988: the bot bridge forwards its own partition only). */
+export async function pendingCfSourceReceipts(db:D1Database,limit=100,sourceKey?:string):Promise<CfReceipt[]> {
+  if(!Number.isSafeInteger(limit)||limit<1||limit>100||(sourceKey!==undefined&&!CF_SOURCE_KEY.test(sourceKey)))throw Error('invalid_cf_page');
+  const rows=await (sourceKey===undefined
+    ?db.prepare('SELECT receipt_json FROM cf_source_receipts WHERE forwarded_ms IS NULL ORDER BY observed_ms,receipt_id LIMIT ?').bind(limit)
+    :db.prepare('SELECT receipt_json FROM cf_source_receipts WHERE forwarded_ms IS NULL AND source_key=? ORDER BY observed_ms,receipt_id LIMIT ?').bind(sourceKey,limit)).all<{receipt_json:string}>();
   if((rows.success as unknown)===false||!Array.isArray(rows.results))throw Error('cf_receipts_unreadable');return rows.results.map(r=>parseCfReceipt(JSON.parse(r.receipt_json)));
 }
 
 /** Sender acceptance is durable enqueue only; the shared sender retains actual Slack receipts and owns retries. */
-export async function forwardPendingCfSourceReceipts(db:D1Database,port:CfDeliveryPort,now=Date.now()):Promise<number>{
-  const rows=await pendingCfSourceReceipts(db);let count=0;
+export async function forwardPendingCfSourceReceipts(db:D1Database,port:CfDeliveryPort,now=Date.now(),sourceKey?:string):Promise<number>{
+  const rows=await pendingCfSourceReceipts(db,100,sourceKey);let count=0;
   for(const row of rows){await forwardCfReceipt(port,row);
     const written=await db.prepare('UPDATE cf_source_receipts SET forwarded_ms=? WHERE receipt_id=? AND forwarded_ms IS NULL').bind(now,row.id).run();
     if((written.success as unknown)===false)throw Error('cf_forward_ack_failed');count+=written.meta.changes??0;
