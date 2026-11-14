@@ -24,6 +24,7 @@ import { newVersionLine } from '../raise/narrative/narrativeModel.js';
 import { CHANNEL_KINDS, channelOptions } from './distribution/channelsModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
+import { currencyCode, plainAmount } from '../../lib/money.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -892,11 +893,10 @@ const asSame = (x) => (Array.isArray(x) ? x.map(String).sort().join('\n') : x ==
 const sentChanged = (v, body, was, carried, from = {}) => (was && typeof was === 'object'
   ? Object.fromEntries(Object.entries(body).filter(([k]) => { const f = from[k] ?? k; return asSame(v[f]) !== asSame(was[f]); }))
   : sentOnly(v, body, carried, from));
-/** Whole cents as the dollars a founder types ("90,000", "40.5"); '' for none. */
-const centsText = (c) => {
+/** #6111: a stored minor amount as a founder types it ("90,000", "40.50"), at its currency's decimals (D5373); '' for none. */
+const centsText = (c, code) => {
   if (c == null || c === '') return '';
-  const n = Number(c);
-  return Number.isFinite(n) ? (n / 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
+  return plainAmount(Number(c), currencyCode(String(code || '').toUpperCase()) || 'USD', { trimWhole: true }) ?? '';
 };
 /** A field with no default, so an Edit never sends a value the founder did not choose. */
 const bare = ({ def: _def, required: _required, ...f }) => f;
@@ -1013,7 +1013,7 @@ const editRole = {
   // #6111: the record's Edit gives the band as cents and the jobs-board switch as ['1'].
   valuesOf: (row) => {
     const e = growEdit(row) || {};
-    const lo = centsText(e.comp_min_cents); const hi = centsText(e.comp_max_cents);
+    const lo = centsText(e.comp_min_cents, e.comp_currency); const hi = centsText(e.comp_max_cents, e.comp_currency);
     const shown = Array.isArray(e.comp_public) ? e.comp_public.map(String).includes('1') : Number(e.comp_public) === 1;
     return { title: asText(e.title), team: asText(e.team), type: asText(e.type ?? e.employment_type), target_start: asText(e.target_start),
       band: lo && hi && lo !== hi ? `${lo}–${hi}` : lo || hi, equity: asText(e.equity_pct), comp_public: shown ? [SHOW_BAND] : [] };
@@ -1051,7 +1051,7 @@ const editPartner = {
   // #6111: the typed terms as the one Amount box takes them ("20%", or dollars), and the contact.
   valuesOf: (row) => {
     const e = growEdit(row) || {};
-    const amount = e.terms_pct != null && e.terms_pct !== '' ? `${e.terms_pct}%` : centsText(e.terms_amount_cents);
+    const amount = e.terms_pct != null && e.terms_pct !== '' ? `${e.terms_pct}%` : centsText(e.terms_amount_cents, e.terms_currency);
     const has = (k) => Object.hasOwn(e, k);
     return {
       ...(has('name') ? { name: asText(e.name) } : {}), type: asText(e.type), stage: asText(e.stage),
