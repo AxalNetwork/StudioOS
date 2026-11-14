@@ -677,7 +677,7 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
 });
 
 test('every link that carried the old address carries the new one', () => {
-  assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to="\/raise\/pitch\/edit" title=\{PROBLEM_SLIDE_NOTE\}/);
+  assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to=\{`\/raise\/pitch\/edit\$\{ventureSearch\(projectId\)\}`\} title=\{PROBLEM_SLIDE_NOTE\}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
   assert.doesNotMatch(rail, /\/raise\/pitch\?mode=workspace/);
   // D898 group E: the builder retired; Fill from project is the studio's, a template New deck's.
