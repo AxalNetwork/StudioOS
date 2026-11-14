@@ -2,8 +2,8 @@
  * D1506 (#3757, A13) — text a model must read as data, never obey.
  *
  * Imported decks, transcripts, web pages, editing instructions, data-room
- * documents, connector rows and the text a venture's records hold all reach
- * models. Each is wrapped by `untrustedBlock` between a BEGIN and an END line
+ * documents, connector rows, the text a venture's records hold and a file
+ * attached to an Eadwyn question (D6420) all reach models. Each is wrapped by `untrustedBlock` between a BEGIN and an END line
  * that carry its kind and a nonce drawn per block, and the system prompt
  * carries `UNTRUSTED_RULE`. The nonce is 128 random bits, so the data cannot
  * close its own block: a delimiter inside the data is left as written, as the
@@ -26,6 +26,7 @@ export const UNTRUSTED_KINDS = {
   data_room_document: 'DATA_ROOM_DOCUMENT',
   connector_row: 'CONNECTOR_ROW',
   record_text: 'RECORD_TEXT',
+  attached_file: 'ATTACHED_FILE',
 } as const;
 export type UntrustedKind = keyof typeof UNTRUSTED_KINDS;
 
