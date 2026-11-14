@@ -39,9 +39,12 @@ refuses: read "In a Claude Code session" below before you run any of them.
    (the owner had not removed the ruleset bypass actor or applied the
    settings he chose on 2026-11-11). Re-read them every time; do not trust
    this paragraph. If any fails, the gate `agents may queue` prints `FAIL`.
-   Do not queue, do not mark the PR ready to make it land, and post a STATUS
+   Do not queue. Post a STATUS
    with `state: READY_FOR_REVIEW` that says "green; the owner lands".
-2. **Run the gates.** From any checkout of this repository:
+2. **Run the gates.** When the work is finished, mark the PR ready with
+   `gh pr ready <pr>` to start the full suite on its current head. Leave it
+   draft if the owner asked for that; the draft fast tier leaves the required
+   full-suite context pending. Once the full suite finishes, from any checkout:
    `node scripts/land-pr.mjs <pr>`. It checks, in the order it prints them:
    - **agents may queue**: step 1.
    - **PR open on main**: open, not merged, base `main`.
@@ -55,7 +58,6 @@ refuses: read "In a Claude Code session" below before you run any of them.
    under `unread:`, means the owner lands.
 3. **Queue, only if the verdict is `queue`.** Run exactly what it prints,
    in order, with `gh`:
-   - `gh pr ready <pr>` (only if the PR is still a draft: GitHub does not merge drafts, D5607);
    - `gh pr merge <pr> --auto --squash --match-head-commit <sha>`, where `<sha>` is the head SHA the gates were checked on. `--match-head-commit` makes GitHub refuse if the head moved.
 
    In a Claude Code session both commands fail with HTTP 403 (no GraphQL).
