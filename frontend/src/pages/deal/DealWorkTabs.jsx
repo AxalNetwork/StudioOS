@@ -105,7 +105,7 @@ function ConfirmDialog({ title, sub, act, danger = false, onConfirm, onClose, te
 // ---------------------------------------------------------------- DL7 Diligence
 
 export function DealDiligence({ deal, userId }) {
-  const [list, reloadList] = useRead(() => dd.listCases({ subject_type: 'project' }), [deal.project_id]);
+  const [list, reloadList] = useRead(() => dd.listCases({ subject_type: 'project', subject_id: deal.project_id }), [deal.project_id]);
   const found = caseForDeal(list, deal.project_id);
   const uid = found.state === 'ready' ? found.row.uid : null;
   const [detail, setDetail] = useState({ status: 'idle' });
@@ -125,11 +125,11 @@ export function DealDiligence({ deal, userId }) {
     <div className="grid gap-3.5 md:grid-cols-2" data-testid="deal-diligence">
       {found.state === 'loading' && <Card title="Diligence case"><Reading /></Card>}
       {found.state === 'unreadable' && <Unreadable what="Your diligence cases" claim="That is not a claim that no case exists." onRetry={reloadList} />}
-      {(found.state === 'none' || found.state === 'not_in_read') && (
+      {found.state === 'none' && (
         <section className={`${CARD} flex flex-col items-start gap-2 p-5 md:col-span-2`} data-testid="deal-dd-none">
           <span aria-hidden="true" className="text-[18px] text-axal-muted dark:text-gray-400">○</span>
           <h3 className={H3}>No diligence case on this company yet.</h3>
-          <p className={`m-0 ${SUB}`}>{found.line || 'A case holds the checklist, the requests to the founder and the risk band.'}</p>
+          <p className={`m-0 ${SUB}`}>A case holds the checklist, the requests to the founder and the risk band.</p>
           <button type="button" className={BTN_S} onClick={() => setOpening(true)} data-testid="deal-dd-open">Open a diligence case</button>
         </section>
       )}

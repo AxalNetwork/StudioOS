@@ -45,7 +45,9 @@ const RISK_WORD = { low: 'Low risk', moderate: 'Moderate risk', medium: 'Moderat
 /**
  * This investor's case on the deal's company, from their own case list (the
  * Worker lists only cases they opened, lead or review). The newest that is not
- * archived; a list that stopped at its page says so rather than "no case".
+ * archived. D6181 (#6181): the list is read for this company alone
+ * (`subject_id`), so it is never cut short by the caller's other cases and an
+ * empty answer is "no case"; the subject check below stays as a guard.
  */
 export function caseForDeal(read, projectId) {
   if (!read || read.status === 'loading') return { state: 'loading' };
@@ -53,8 +55,6 @@ export function caseForDeal(read, projectId) {
   const items = Array.isArray(read.data?.items) ? read.data.items : [];
   const mine = items.filter((c) => c.subject_type === 'project' && Number(c.subject_id) === Number(projectId) && c.status !== 'archived');
   if (mine.length) return { state: 'ready', row: mine[0] };
-  const total = Number(read.data?.total);
-  if (Number.isFinite(total) && total > items.length) return { state: 'not_in_read', line: `Only your newest ${items.length} cases were read, and none of them is on this company.` };
   return { state: 'none' };
 }
 
