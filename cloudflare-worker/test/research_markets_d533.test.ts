@@ -17,7 +17,9 @@ import { SignJWT } from 'jose';
 import { stripForeignKeys } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
-import researchMarkets, { indexSeries } from '../src/routes/research_markets.ts';
+import researchMarkets, {
+  indexSeries, NO_COMPANY_REASON, NO_COUNTRY_REASON, NO_SOURCE_REASON, SOURCES_CAP,
+} from '../src/routes/research_markets.ts';
 import { EUR_SOURCE } from '../src/services/researchFundDirectory.ts';
 import { periodKey } from '../src/services/market_intel/scoring.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -55,6 +57,7 @@ function freshDb() {
   db.exec(migration('406'));
   db.exec(tableFrom('136', 'signals'));
   db.exec(tableFrom('136', 'signal_companies'));
+  db.exec(tableFrom('136', 'signal_evidence'));
   db.exec(migration('376'));
   db.exec(tableFrom('037', 'market_intel_rows'));
   db.exec(tableFrom('037', 'market_intel_indexes'));
@@ -556,4 +559,108 @@ test('listed companies: migration 412\'s rows page and count from the store', as
   const row = apple.body.items.find((i: any) => i.cik === '0000320193');
   assert.deepEqual([row?.symbol, row?.name, row?.source], ['AAPL', 'Apple Inc.', 'sec_edgar']);
   assert.equal(apple.body.sources.find((s: any) => s.key === 'sec_edgar').store_total, 8016, 'the store total is the whole store, whatever the search');
+});
+
+// --- D6284 (#6284, RS-03): per-market countries, source count and freshness -------
+
+function seedEvidence(db: DatabaseSync) {
+  const e = db.prepare(`INSERT INTO signal_evidence (signal_id, kind, title, source_key, observed_at) VALUES (?, 'news', 't', ?, ?)`);
+  e.run('s1', 'gdelt', '2026-10-05 09:00:00');   // s1 names payments and fintech
+  e.run('s1', 'gdelt', '2026-10-04 09:00:00');
+  e.run('s1', 'hn', '2026-09-20 09:00:00');
+  e.run('s2', 'gdelt', '2026-11-01 09:00:00');   // archived signal: never counted
+  e.run('s3', 'hn', '2026-10-06 09:00:00');      // vertical-saas: not on this index
+  db.prepare(`INSERT INTO signals (id, type, title, thesis, region, country, sector, niche, market_cap_band, tags, status, rank_score)
+              VALUES ('s4', 'x', 'Resale', 't', 'r', 'France', 'Consumer', 'n', 'mid', '["fashion tech"]', 'active', 0)`).run();
+  e.run('s4', 'gdelt', '2026-10-07 09:00:00');   // fashion: no tracked sector, evidence only
+}
+
+test('D6284: countries come from the crosswalk; no company or no placeable country reads null with a reason', async () => {
+  const r = await get(freshDb(), '/markets');
+  const by = Object.fromEntries(r.body.items.map((i: any) => [i.slug, i]));
+  assert.deepEqual(by.fintech.countries, {
+    status: 'recorded', value: [{ code: 'GB', count: 1 }, { code: 'US', count: 1 }],
+  }, 'Epsilon Fin\'s "Not recorded" country is not a country');
+  assert.deepEqual(by.autotech.countries, { status: 'recorded', value: [{ code: 'JP', count: 1 }] });
+  assert.deepEqual(by.fashion.countries, { status: 'not_recorded', value: null, reason: NO_COMPANY_REASON });
+
+  const db = freshDb();
+  db.prepare(`UPDATE research_company_directory SET country = 'Atlantis' WHERE uid = 'c3'`).run();
+  const auto = (await get(db, '/markets')).body.items.find((i: any) => i.slug === 'autotech');
+  assert.deepEqual(auto.countries, { status: 'not_recorded', value: null, reason: NO_COUNTRY_REASON });
+});
+
+test('D6284: a market with no live source reads null with a reason, never 0', async () => {
+  const r = await get(freshDb(), '/markets');
+  for (const i of r.body.items) {
+    assert.deepEqual(i.source_count, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON }, i.slug);
+    assert.deepEqual(i.newest_source_at, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON }, i.slug);
+    assert.deepEqual(i.sources, [], i.slug);
+  }
+});
+
+test('D6284: source count and newest date join live market-intel sources and active-signal evidence', async () => {
+  const db = freshDb();
+  seedIndex(db);
+  seedEvidence(db);
+  const by = Object.fromEntries((await get(db, '/markets')).body.items.map((i: any) => [i.slug, i]));
+  // fintech: live fred and arxiv (the stub and uncited rows drop out), plus s1's gdelt and hn.
+  assert.deepEqual(by.fintech.source_count, { status: 'recorded', value: 4 });
+  assert.deepEqual(by.fintech.newest_source_at, { status: 'recorded', value: '2026-10-05 09:00:00' },
+    'the archived signal\'s November evidence is not counted');
+  assert.deepEqual(by.fintech.sources.map((s: any) => [s.kind, s.key, s.rows]), [
+    ['signal_evidence', 'gdelt', 2],
+    ['market_intel', 'fred', 2],
+    ['signal_evidence', 'hn', 1],
+    ['market_intel', 'arxiv', 1],
+  ]);
+  // payments shares FinTech's tracked sector and s1's evidence.
+  assert.equal(by.payments.mi_sector, 'Fintech / DeFi');
+  assert.deepEqual(by.payments.source_count, { status: 'recorded', value: 4 });
+  // fashion has no tracked sector: only s4's evidence counts.
+  assert.equal(by.fashion.mi_sector, null);
+  assert.deepEqual(by.fashion.source_count, { status: 'recorded', value: 1 });
+  assert.deepEqual(by.fashion.newest_source_at, { status: 'recorded', value: '2026-10-07 09:00:00' });
+  // autotech has no tracked sector and no signal names it.
+  assert.deepEqual(by.autotech.source_count, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+  assert.deepEqual(by.autotech.newest_source_at, { status: 'not_recorded', value: null, reason: NO_SOURCE_REASON });
+});
+
+test('D6284: coverage is read for the page in a fixed number of queries, and the source list is capped', async () => {
+  const db = freshDb();
+  seedIndex(db);
+  seedEvidence(db);
+  const r = db.prepare(`INSERT INTO market_intel_rows (source_key, sector, metric_key, metric_value, ts, citation_url)
+                        VALUES (?, 'Fintech / DeFi', 'm', 1, '2026-08-01T00:00:00Z', 'https://example.org/x')`);
+  for (let n = 0; n < SOURCES_CAP + 5; n++) r.run(`src${String(n).padStart(2, '0')}`);
+  const fin = (await get(db, '/markets?q=FinTech')).body.items[0];
+  assert.equal(fin.source_count.value, 4 + SOURCES_CAP + 5, 'the count counts every source');
+  assert.equal(fin.sources.length, SOURCES_CAP, 'the list is capped');
+
+  // Count the statements one /markets read prepares: the same for one tracked market or all four.
+  const count = async (path: string) => {
+    let n = 0;
+    const d1 = d1Over(db) as any;
+    const counted = { ...d1, prepare: (sql: string) => { n += 1; return d1.prepare(sql); } };
+    const tok = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const res = await app.fetch(new Request(`http://x/api/research${path}`, { headers: { Authorization: `Bearer ${tok}` } }),
+      { JWT_SECRET, ENVIRONMENT: 'development', DB: counted } as any);
+    assert.equal(res.status, 200);
+    return n;
+  };
+  assert.equal(await count('/markets?q=FinTech'), await count('/markets?limit=100'), 'no query per market');
+});
+
+test('D6284: paging still pages, and the derived fields ride on the page only', async () => {
+  const db = freshDb();
+  seedIndex(db);
+  seedEvidence(db);
+  const page = await get(db, '/markets?limit=2&offset=2');
+  assert.deepEqual(page.body.items.map((i: any) => i.slug), ['fintech', 'payments']);
+  assert.equal(page.body.total, 4);
+  for (const i of page.body.items) {
+    for (const k of ['countries', 'source_count', 'newest_source_at']) assert.ok(['recorded', 'not_recorded'].includes(i[k].status), k);
+  }
+  assert.ok(!JSON.stringify(page.body).includes('market_size') && !JSON.stringify(page.body).includes('growth'), 'no invented size or growth');
 });
