@@ -906,11 +906,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
-        rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
-          () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })) || {
+        rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
+          // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
+          ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}

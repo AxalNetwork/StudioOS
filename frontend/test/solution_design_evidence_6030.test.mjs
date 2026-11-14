@@ -87,7 +87,11 @@ test('BD7: "Link evidence" is the row action of a feature with no evidence, and 
 // Mutation checked: the route opening Edit without the focus (fails); FormLightbox ignoring focusField (fails).
 test('BD7: Link evidence opens the existing Edit form, focused on the link fields, and saves through its PATCH', () => {
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /linkEvidenceAction\(row, [^)]*\),\s*\(\) => navigate\(`\$\{location\.pathname\}\$\{location\.search\}`, \{ state: \{ editing: String\(row\.id\), editingFocus: 'pain_group_id' \} \}\)\)/);
+  const at = route.indexOf('...linkEvidenceAction(row, ');
+  assert.ok(at > 0, 'the Edit row action spreads Link evidence');
+  const tail = route.slice(at, route.indexOf(': undefined}', at));
+  assert.match(tail, /editing: String\(row\.id\), editingFocus: 'pain_group_id'/, 'Link evidence opens Edit focused on the link fields');
+  assert.match(tail, /\)\),\s*\}\) $/, 'Link evidence is last in the literal, so it overrides the Edit');
   assert.equal((route.match(/focusField=\{typeof location\.state\?\.editingFocus === 'string' \? location\.state\.editingFocus : null\}/g) || []).length, 2, 'both Edit forms take the focus');
   const form = readFileSync(new URL('../src/pages/cycles/FormLightbox.jsx', import.meta.url), 'utf8');
   assert.match(form, /document\.getElementById\(`\$\{id\}-\$\{focusField\}`\) \|\| document\.getElementById\(`\$\{id\}-\$\{focusField\}-0`\)/);
