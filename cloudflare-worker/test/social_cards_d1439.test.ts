@@ -19,8 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
-  CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, rewriteShell, sectionTags, serveSocialCard,
+  CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, resolveCard, rewriteShell, sectionTags, serveSocialCard,
 } from '../src/services/socialCards.ts';
+import { eventSocialCard } from '../../frontend/src/lib/eventSocialCard.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -108,6 +109,17 @@ async function get(env: any, path: string, init: RequestInit = {}) {
 }
 const meta = (html: string, prop: string) => new RegExp(`<meta (?:property|name)="${prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" content="([^"]*)"`).exec(html)?.[1] ?? null;
 const titleOf = (html: string) => /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? null;
+
+test('the published event uses exactly the editor’s social metadata for the same fields', async () => {
+  const { env } = envFor(fixture());
+  const draft = {
+    title: 'Synthetic Demo Day', summary: 'Founders pitch.', starts_at: '2026-12-01 17:00:00',
+    timezone: 'UTC', location_kind: 'virtual', cover_url: null, location_url: 'https://meet.example.test/join-secret',
+    capacity: 40, price_cents: 2500, seats: 20,
+  };
+  const match = { kind: 'event' as const, key: 'demo-day', path: '/events/demo-day' };
+  assert.deepEqual(await resolveCard(env, match), { ...eventSocialCard(draft), url: 'https://axal.vc/events/demo-day' });
+});
 
 test('1. a published public event previews as itself; the shell\'s scripts are untouched', async () => {
   // Mutation checked: the admin_published term dropped → test 2's unreviewed event gets a card; a different block → the script check fails.
