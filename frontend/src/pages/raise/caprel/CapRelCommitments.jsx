@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -5,6 +6,8 @@ import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
 import { ProRataPanel } from '../RoundClosesPanel';
 import { Dialog, Footer, useWrite } from './CapRelPipeline';
+import CapRelExportMenu from './CapRelExportMenu.jsx';
+import { commitmentsCsv } from './capRelExports.js';
 import { CLOSING, amountText, centsText, tabHref } from './capRelModel';
 import { COMMITMENT_FILTERS, useTabFilters } from './capRelUrlFilters';
 import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, roundBody, sourceGaps } from './capRelTabsModel';
@@ -25,9 +28,9 @@ import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS,
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
-const BTN_S = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_S = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[32px] justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const H3 = `m-0 text-[14px] font-extrabold ${INK}`;
 /** The counted statuses solid, the listed ones hatched, as the canvas draws them. */
 const SEG = {
@@ -42,19 +45,20 @@ const STATUS_TONE = {
   not_recorded: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
 };
 
-function useRead(fn, deps) {
+function useRead(fn, projectId) {
   const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', data: null });
+  const [read, setRead] = useState({ status: 'loading', data: null, projectId });
   useEffect(() => {
     let alive = true;
-    setRead((r) => ({ status: 'loading', data: r.data }));
+    setRead((r) => ({ status: 'loading', data: r.projectId === projectId ? r.data : null, projectId }));
     Promise.resolve().then(fn)
-      .then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', data: null }); });
+      .then((data) => { if (alive) setRead({ status: 'ready', data, projectId }); })
+      .catch(() => { if (alive) setRead({ status: 'unreadable', data: null, projectId }); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, n]);
-  return { ...read, reload: () => setN((x) => x + 1) };
+  }, [projectId, n]);
+  const own = read.projectId === projectId ? read : { status: 'loading', data: null };
+  return { ...own, reload: () => setN((x) => x + 1) };
 }
 
 /** Round settings (CRL10): name, target, currency, close date, notes and (D4086) the exemption; the change shows in Activity. */
@@ -191,27 +195,29 @@ function Every({ read, f, setF }) {
           <option value="">Any status</option>{statuses.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-left text-[12.5px]">
-          <thead><tr className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
-            {['Investor', 'Amount', 'Status', 'Source', 'Date', ''].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-commit-row">
-                <td className={`px-3 py-2 font-bold ${INK}`}>{r.investor}</td>
-                <td className={`px-3 py-2 font-mono ${r.amount === 'Not recorded' ? MUTED : INK}`}>{r.amount}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[r.counted ? 'counted' : r.status === 'not_recorded' ? 'not_recorded' : 'listed']}`}>{r.status_label}</span>
-                  {r.why ? <div className={`mt-1 text-[11.5px] ${MUTED}`}>{r.why}</div> : null}
-                </td>
-                <td className={`px-3 py-2 ${INK}`}>{r.source_label}</td>
-                <td className={`px-3 py-2 font-mono ${r.on ? INK : MUTED}`}>{r.on || '—'}</td>
-                <td className="px-3 py-2 text-right">{r.status === 'not_recorded' || r.status === 'soft' ? <span className={`text-[12px] ${MUTED}`}>Set status on Pipeline</span> : null}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <ResponsiveRecords>
+          <table role="table" className="w-full min-w-[820px] border-collapse text-left text-[12.5px]">
+            <thead role="rowgroup"><tr role="row" className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
+              {['Investor', 'Amount', 'Status', 'Source', 'Date', ''].map((h) => <th role="columnheader" key={h} className="px-3 py-2">{h}</th>)}
+            </tr></thead>
+            <tbody role="rowgroup">
+              {rows.map((r) => (
+                <tr role="row" key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-commit-row">
+                  <td role="cell" className={`px-3 py-2 font-bold ${INK}`}><RecordLabel>Investor</RecordLabel>{r.investor}</td>
+                  <td role="cell" className={`px-3 py-2 font-mono ${r.amount === 'Not recorded' ? MUTED : INK}`}><RecordLabel>Amount</RecordLabel>{r.amount}</td>
+                  <td role="cell" className="px-3 py-2"><RecordLabel>Status</RecordLabel>
+                    <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[r.counted ? 'counted' : r.status === 'not_recorded' ? 'not_recorded' : 'listed']}`}>{r.status_label}</span>
+                    {r.why ? <div className={`mt-1 text-[11.5px] ${MUTED}`}>{r.why}</div> : null}
+                  </td>
+                  <td role="cell" className={`px-3 py-2 ${INK}`}><RecordLabel>Source</RecordLabel>{r.source_label}</td>
+                  <td role="cell" className={`px-3 py-2 font-mono ${r.on ? INK : MUTED}`}><RecordLabel>Date</RecordLabel>{r.on || '—'}</td>
+                  <td role="cell" className="px-3 py-2 text-right">{r.status === 'not_recorded' || r.status === 'soft' ? <span className={`text-[12px] ${MUTED}`}>Set status on Pipeline</span> : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveRecords>
         {!rows.length ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="caprel-commit-none">{(read.investors || []).length ? 'No commitment matches.' : 'No commitment is recorded yet.'}</p> : null}
       </div>
       <p className={`m-0 border-t border-axal-hairline px-4 py-2 text-[11.5px] ${MUTED} dark:border-gray-800`}>Close or tranche, and route: not recorded on a commitment until a closing exists.</p>
@@ -220,7 +226,7 @@ function Every({ read, f, setF }) {
 }
 
 function Closes({ projectId }) {
-  const read = useRead(() => api.raiseCloses(projectId), [projectId]);
+  const read = useRead(() => api.raiseCloses(projectId), projectId);
   const [dialog, setDialog] = useState(null);
   const closes = read.data?.closes || [];
   const money = (v) => amountText(v) || 'Not recorded';
@@ -269,7 +275,7 @@ function Mercury({ read }) {
 }
 
 export default function CapRelCommitments({ projectId, search = '' }) {
-  const read = useRead(() => capitalRelationshipsApi.commitments(projectId), [projectId]);
+  const read = useRead(() => capitalRelationshipsApi.commitments(projectId), projectId);
   const [filters, setFilters] = useTabFilters(COMMITMENT_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
   const [err, setErr] = useState('');
@@ -278,7 +284,8 @@ export default function CapRelCommitments({ projectId, search = '' }) {
     <div className="flex flex-col gap-4" data-testid="caprel-commitments">
       <div className="flex flex-wrap items-center gap-2">
         <p className={`m-0 mr-auto text-[13px] ${INK}`}><Link to={tabHref(CLOSING, search)} className="font-semibold underline" data-testid="caprel-closing-door">Open the closing room</Link> for the paper, the lines and what is received.</p>
-        <button type="button" className={BTN_S} onClick={() => setDialog('round')} data-testid="caprel-round-open">Round settings</button>
+        <CapRelExportMenu zone="commitments" csv={read.status === 'ready' ? commitmentsCsv(read.data) : null}
+          buttonClass={BTN_S} otherLabel="Round settings" otherTestId="caprel-round-open" onOther={() => setDialog('round')} />
       </div>
       {err ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="caprel-commitments-error">{err}</p> : null}
       {read.status === 'unreadable' ? <Unreadable what="The commitments" claim="This is not a claim that nobody committed." onRetry={read.reload} /> : null}
