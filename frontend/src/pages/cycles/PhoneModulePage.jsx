@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
+import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
@@ -35,10 +35,11 @@ export const PHONE_GUTTER = 'px-[22px] pt-[14px] pb-[18px]';
  * #1661's `PhoneBar`, lifted out of the body's gutter and kept at the top of
  * the scroll area (CO:24-25), with the body's 14px under it.
  */
-export function CycleBar({ back, title, sub, eadwynLabel }) {
+export function CycleBar({ back, title, sub, eadwynLabel, more }) {
   return (
     <div className="sticky top-0 z-10 -mx-[22px] -mt-[14px] mb-[14px]" data-testid="cycle-bar">
-      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel} />
+      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel}
+        action={more ? <div className="flex shrink-0 items-center gap-2">{more}{eadwynLabel && <EadwynButton label={eadwynLabel} />}</div> : undefined} />
     </div>
   );
 }

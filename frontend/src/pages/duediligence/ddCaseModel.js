@@ -543,3 +543,13 @@ export function caseRefusal(e, fallback) {
   const code = e?.code || e?.data?.code;
   return (code && CASE_REFUSALS[code]) || refusalText(e, fallback);
 }
+
+
+/** D6292 (#6292): recorded numeric context ids only, on member routes, never an admin address. */
+export function caseContextLinks(cs) {
+  const id = value => /^[1-9]\d*$/.test(String(value ?? '')) && Number.isSafeInteger(Number(value)) ? String(value) : null;
+  if (cs?.scoped) return { deal: null, company: null, dataRoom: null };
+  const deal = id(cs?.deal_id), company = cs?.subject_type === 'project' ? id(cs.subject_id) : null;
+  return { deal: deal ? `/deals/${deal}` : null, company: company ? `/projects/${company}` : null,
+    dataRoom: deal ? `/deals/${deal}/documents` : null };
+}

@@ -60,3 +60,5 @@ The rules for adding here: every figure no read holds is "Not recorded" with
 its reason, a read that failed is "Unreadable" with Try again and leaves the
 rest of the page standing, every change opens an in-page dialog, and colours
 come from the axal tokens with a `dark:` counterpart — never a hex value.
+
+D6177 (#6177): Traction retains its route/export, draws DL18b for a successful unreported history, names Last shared and each chart’s source as-of, and exports the already-read monthly rows to CSV. Gaps stay Not reported and recorded zeroes stay 0. Scorecard/Evidence replacement and the eight-tab frame remain with their own tasks; no source-update URL is guessed.

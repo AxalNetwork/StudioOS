@@ -61,3 +61,5 @@ building blocks.
   calls `api.*` is taking ownership it usually should not have.
 - Dark mode is required (`check-dark-mode` runs on every build).
 - No component invents data to fill a gap. An absent value renders as absent.
+
+D6135 (#6135): `OnboardingWizard.jsx` optionally requires a confirmed final progress save and accepts a completion renderer with a resumed-completion flag. Investor onboarding uses these hooks for an honest profile-copy result; founder and partner defaults stay unchanged.

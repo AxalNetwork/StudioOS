@@ -19,8 +19,10 @@ The tabs of the Due diligence desk under `/admin/due-diligence` and `/due-dilige
 | `DdCaseWork.jsx` | D1251: the tabs a section reviewer sees too — Overview (DDL3), Checklist (DDL4), Flags (DDL5) and Activity (DDL11) — and the blocks the other tabs share |
 | `DdCaseDeal.jsx` | D1251: the deal team's tabs — Requests (DDL6), Documents (DDL7), Cross-checks (DDL8), Team (DDL9) and Sign-off with the memo, IC and the reports (DDL10) |
 | `DdCaseDialogs.jsx` | D1251: the case's dialogs — verdict, raise and update a flag, the decision, notify founder, report, widen (DDL14 A–H), compose, due date, withdraw, assign (DDL9b) and the checklist's bulk changes |
-| `useDiligenceInvolvement.js` | D1252: whether a partner, investor or advisor leads or reviews any case, for the sidebar's "Diligence" row (`withDiligenceRow` in `../../sidebarConfig.js`) |
+| `useDiligenceInvolvement.js` | D1252/D6292: eligible investors always get the door; partners/advisors need case involvement, for the sidebar's "Diligence" row (`withDiligenceRow` in `../../sidebarConfig.js`) |
 
 `../AdminDueDiligencePage.jsx` mounts the list tabs (and sends a founder to their requests), and `../AdminDueDiligenceCasePage.jsx` reads the case, mounts the reviewer's panel and the case tabs, draws the tab its address names, and holds the open dialog. `../DueDiligenceRequestsPage.jsx` is the subject's own page (DDL15): the requests addressed to them, never the case.
 
 **Adding to it:** every tab is an address, never `?tab=`. A block with no read says "Not read here yet" with its reason from `WAITS`, never a zero. A case control is drawn only when the read's `allowed` says so, otherwise one sentence says who does it; every change is an in-page dialog, never a browser pop-up or a toast. A link stays on the caller's base, so a member never reaches an `/admin/…` address.
+
+D6292 (#6292): Cases filters, stage, search, sort and paging live in the query string and survive reload/back; stale responses cannot replace the current address. Empty Cases links to Deals and names a deal’s Diligence tab. The unscoped Overview links recorded deal/project ids on member addresses; missing ids and scoped reads expose no context link. No permission or Worker read changed.

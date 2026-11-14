@@ -127,4 +127,8 @@ and citations by number keep working.
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
+| `D6093.md` | Reporting phone writers reach Reminder settings through the existing More menu, with reader gates and the Prepare bar preserved (#6093). |
+| `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
+| `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
+| `D6292.md` | Investor Diligence door, recorded member context links and validated Cases list state in the address (#6292). |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |

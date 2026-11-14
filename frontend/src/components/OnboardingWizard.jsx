@@ -12,13 +12,14 @@ import { ONBOARDING_COMPLETE_EVENT } from '../lib/onboarding';
 //   skip?: { label, clears: [keys] } }]. A step with `skip` offers a quiet "skip for now": it
 //   drops the step's own answers (`clears`), skips its validation, and moves on, or finishes.
 
-export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish', onDark = false }) {
+export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish', onDark = false, renderComplete, requireFinalSave = false }) {
   const [stepIdx, setStepIdx] = useState(0);
   const [values, setValues] = useState({});
   const [hydrated, setHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [completed, setCompleted] = useState(false);
+  const [resumedComplete, setResumedComplete] = useState(false);
 
   // Hydrate from server so refresh / re-login resumes.
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           // last saved; never resume past the last step.
           const safeStep = Math.max(0, Math.min(steps.length - 1, p.step || 0));
           setStepIdx(safeStep);
-          if (p.completed_at) setCompleted(true);
+          if (p.completed_at) { setCompleted(true); setResumedComplete(true); }
         }
       } catch {
         // Surface nothing — first-time users have no row yet.
@@ -56,10 +57,12 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
         total_steps: steps.length,
         data: nextValues,
       });
+      return true;
     } catch (e) {
       // Persistence failure shouldn't block forward motion — surface as
       // a soft warning the next render.
       setError('Could not save progress. Your changes may not persist.');
+      return false;
     }
   }, [flow, steps.length]);
 
@@ -93,7 +96,8 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
       setBusy(false);
     } else {
       // Final step — persist final values then mark complete.
-      await persist(stepIdx, nextValues);
+      const saved = await persist(stepIdx, nextValues);
+      if (!saved && requireFinalSave) { setBusy(false); return; }
       try {
         await api.onboardingComplete(flow);
         setCompleted(true);
@@ -132,6 +136,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
   }
 
   if (completed) {
+    if (renderComplete) return renderComplete(values, { resumed: resumedComplete });
     return (
       <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-800">
         <div className="mx-auto h-12 w-12 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center mb-4">

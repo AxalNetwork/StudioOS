@@ -6,10 +6,11 @@
  * `ddCaseModel.js`; the dialogs are `DdCaseDialogs.jsx`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { dd } from '../../lib/api';
 import {
   ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, NOT_RECORDED, SOURCE_WORD, WHO, activityFilters,
-  activityRows, bandWord, caseTiles, decisionStrip, evidenceByItem, filterItems, flagRows, flagSourceWord, flagsHeadline,
+  activityRows, bandWord, caseContextLinks, caseTiles, decisionStrip, evidenceByItem, filterItems, flagRows, flagSourceWord, flagsHeadline,
   fmtDay, itemCounts, may, maySection, peopleOf, personName, sectionRow,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
@@ -99,6 +100,7 @@ export function DecisionStrip({ data, onDecide }) {
 
 export function OverviewTab({ data, focusSection, open, sectionRefs }) {
   const cs = data.case;
+  const links = caseContextLinks(cs);
   const score = cs.risk_score != null ? Math.round(Number(cs.risk_score) * 100) : null;
   const assign = may(data, 'assign') && !cs.scoped;
   return (
@@ -150,7 +152,9 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
               <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
                 <dt className={muted}>Round</dt><dd className="m-0">{cs.round_label || NOT_RECORDED}</dd>
                 <dt className={muted}>Cheque</dt><dd className="m-0">{cs.cheque_cents != null ? codeAmount(Number(cs.cheque_cents), cs.cheque_currency, { trimWhole: true }) : NOT_RECORDED}</dd>
-                <dt className={muted}>Deal</dt><dd className="m-0">{cs.deal_id != null ? `Deal #${cs.deal_id}` : NOT_RECORDED}</dd>
+                <dt className={muted}>Deal</dt><dd className="m-0">{links.deal ? <Link className="text-violet-700 underline dark:text-violet-300" to={links.deal} data-testid="dd-context-deal">Deal #{cs.deal_id}</Link> : NOT_RECORDED}</dd>
+                {cs.subject_type === 'project' && <><dt className={muted}>Company</dt><dd className="m-0">{links.company ? <Link className="text-violet-700 underline dark:text-violet-300" to={links.company} data-testid="dd-context-company">{cs.subject_label || 'Open company'}</Link> : NOT_RECORDED}</dd></>}
+                {links.dataRoom && <><dt className={muted}>Data room</dt><dd className="m-0"><Link className="text-violet-700 underline dark:text-violet-300" to={links.dataRoom} data-testid="dd-context-data-room">Open data room</Link></dd></>}
               </dl>
             </Block>
           )}
