@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { isPlainClick } from './cycleModel';
-import { phoneFocus } from './validatePhone';
+import CycleMeter from './CycleMeter';
+import { cycleValidateApi } from '../../lib/api/cycleValidate';
+import { phoneFocus, rootMeter } from './validatePhone';
 
 /**
  * D4589 (#4589) — Validate's next action on the desktop overview: the same
@@ -52,5 +54,33 @@ export default function ValidateNextAction({ raw, search = '', openAction }) {
         )}
       </div>
     </section>
+  );
+}
+
+/** The desktop meter's frame: the lead row's white card (Raise's lead cards, `RaiseOverviewLead.jsx`), the phone's meter inside it. */
+const METER_CARD = 'rounded-xl border border-axal-hairline bg-white px-[18px] py-3.5 dark:border-gray-800 dark:bg-gray-900';
+
+/**
+ * #5999 — Validate's desktop lead row: the next action and, beside it, the
+ * monthly interviews meter with "Set a target" (`CycleMeter.jsx`, the phone
+ * root's own, lifted), from the same read through the same `rootMeter`, so
+ * one read draws one meter on both widths. The owner chose to add it to
+ * desktop (2026-11-14), though the Validate v2 desktop canvas (PR #5858)
+ * draws the count alone. Laid out as Raise's lead row: the two at 3fr / 2fr
+ * from 1280px, stacked below. With no meter the next action draws alone, as
+ * before; with neither, nothing.
+ *
+ *   projectId  the venture a writer saves to, as the phone root takes it; null for a reader
+ *   onChanged  a saved target re-reads the overview
+ */
+export function ValidateLead({ raw, search = '', openAction, projectId = null, api = cycleValidateApi, onChanged }) {
+  const meter = rootMeter(raw, phoneFocus(raw, search, 'validate'), 'validate');
+  const next = <ValidateNextAction raw={raw} search={search} openAction={openAction} />;
+  if (!meter) return next;
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-testid="validate-lead">
+      {next}
+      <CycleMeter meter={meter} cycle="validate" projectId={projectId} api={api} onChanged={onChanged} ids="validate" className={METER_CARD} />
+    </div>
   );
 }
