@@ -10,7 +10,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
 import { SearchInput } from '../../advisor/network/kit';
-import { PASS_TAXONOMY, passReasonRevisit } from '../../../lib/dealFlow';
+import { PASS_TAXONOMY, NEXT_ROUND_LINE, dayWithYear, passReasonLabel, passReturnWord } from '../../../lib/dealFlow';
 import { DealStrip, StripKey, useScopeStrips } from '../../../components/scoring/scorecard/Scorecard';
 import { SCOPES, stripOf } from '../../../components/scoring/scorecard/scorecardModel';
 import { PassDialog } from '../dealflow/StageDialogs';
@@ -39,7 +39,8 @@ import { confidenceCell, decisionOf, flowStateOf, screeningSummary } from './scr
  *   · Your decision: `GET /api/deals/flow` (D1238). Move to diligence moves
  *     the deal in your deal flow; Pass opens the deal flow's reason dialog
  *     (`PassDialog`), so Passed is reached only with a reason;
- *   · Pass reasons: `GET /api/deals/pass-analytics`, the studio's passes;
+ *   · Pass reasons: `GET /api/deals/flow/passes` (D6148), the firm's own
+ *     passes in its deal flow, each reason opening the deals passed for it;
  *   · Material risks, Last change and Stale screens: no read carries them,
  *     so each says Not recorded (named in D4815).
  *
@@ -49,6 +50,8 @@ import { confidenceCell, decisionOf, flowStateOf, screeningSummary } from './scr
  */
 
 const UNAVAILABLE = Symbol('unavailable');
+/** D6148: an account with no investor licence has no deal flow, so no passes of its own. */
+const NOT_INVESTOR = Symbol('not-investor');
 const LINK = 'text-[10.5px] font-semibold text-axal-violet-deep underline underline-offset-2 hover:text-axal-violet dark:text-violet-300';
 const MUTED = 'text-[11.5px] text-gray-600 dark:text-gray-400';
 // 44px targets on a phone, as the deal rooms (D4815 slice 2); compact from md up.
@@ -118,6 +121,7 @@ export default function InvestorScreeningZone() {
   const [busyId, setBusyId] = useState(null);
   const [refusals, setRefusals] = useState({});
   const [result, setResult] = useState('');
+  const [reason, setReason] = useState(null);
 
   const loadFlow = useCallback(() => {
     setFlowRead({ status: 'loading' });
@@ -126,17 +130,22 @@ export default function InvestorScreeningZone() {
       (e) => { if (e?.status !== 403) reportError('Screening:flow', e); setFlowRead({ status: 'error', error: { status: e?.status ?? null } }); },
     );
   }, []);
+  /** D6148: the firm's own passes; a pass made in the table below lands here too, so it is re-read after one. */
+  const loadPasses = useCallback(() => {
+    dealFlowApi.passes().then(setPasses, (e) => setPasses(e?.code === 'investor_required' ? NOT_INVESTOR : UNAVAILABLE));
+  }, []);
   const load = useCallback(() => {
     setDesk(null);
     setPasses(null);
     api.dealScreening().then(setDesk, () => setDesk(UNAVAILABLE));
-    api.dealPassAnalytics().then(setPasses, () => setPasses(UNAVAILABLE));
+    loadPasses();
     loadFlow();
-  }, [loadFlow]);
+  }, [loadFlow, loadPasses]);
   useEffect(() => { load(); }, [load]);
 
   const deskReady = desk && desk !== UNAVAILABLE;
-  const passesReady = passes && passes !== UNAVAILABLE;
+  const passesReady = passes && passes !== UNAVAILABLE && passes !== NOT_INVESTOR;
+  const whose = passesReady && passes.scope === 'you' ? 'your' : 'your firm’s';
   const deals = deskReady ? desk.desk : null;
   const dealRows = useMemo(() => (deals?.available ? deals.rows : []), [deals]);
   const ids = useMemo(() => dealRows.map((r) => r.deal_id), [dealRows]);
@@ -174,7 +183,8 @@ export default function InvestorScreeningZone() {
   }, [strips, dealRows]);
   const summary = useMemo(() => screeningSummary({ deals, strips, flow }), [deals, strips, flow]);
 
-  const revisitable = useMemo(() => PASS_TAXONOMY.filter((r) => r.revisit), []);
+  /** The firm's passed deals for the reason opened, newest first (the read's order). */
+  const passedFor = useMemo(() => (passesReady && reason ? (passes.items || []).filter((i) => i.reason === reason) : []), [passesReady, passes, reason]);
 
   /** The decision table always leads; search narrows its rows. Pass reasons is the secondary view under it. */
   const rows = dealRows;
@@ -220,7 +230,7 @@ export default function InvestorScreeningZone() {
   };
 
   const anyRead = deskReady || passesReady;
-  const bothFailed = desk === UNAVAILABLE && passes === UNAVAILABLE;
+  const bothFailed = desk === UNAVAILABLE && (passes === UNAVAILABLE || passes === NOT_INVESTOR);
 
   return (
     <>
@@ -247,7 +257,7 @@ export default function InvestorScreeningZone() {
             title="Nothing to screen yet"
             body={
               'A deal appears here once you can read it, with its venture scorecard, and a pass appears once '
-              + 'one has been recorded with its reason. Both reads are readable and empty, which is a different '
+              + 'you pass on a deal in Deal flow. Both reads are readable and empty, which is a different '
               + 'fact from a desk that could not be read.'
             }
           />
@@ -373,51 +383,88 @@ export default function InvestorScreeningZone() {
           >
             <span className="flex flex-col gap-0.5 md:flex-row md:items-baseline md:gap-3">
               <b className="text-[13px] text-axal-ink dark:text-gray-100">Pass reasons</b>
-              <span className={MUTED}>What the fund has passed on, and why — fund memory</span>
+              <span className={MUTED}>What {whose} deal flow has passed on, and why</span>
+              {/* D6148's "Your passes" figure: no figure when the read failed, a sentence for an account with no deal flow. */}
+              <span className="text-[11.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="screening-passes-total">
+                {passesReady
+                  ? `${passes.total} pass${passes.total === 1 ? '' : 'es'} in ${whose} deal flow`
+                  : passes === NOT_INVESTOR ? 'Passes are an investor’s own' : passes === null ? 'Reading…' : 'Your passes could not be read'}
+              </span>
             </span>
             <span aria-hidden="true" className="text-gray-500">{passesOpen ? '▴' : '▾'}</span>
           </button>
           {passesOpen && (
             <div id="screening-pass-reasons">
               {passesReady ? (
-                <Instrument
-                  testid="screening-passes"
-                  title="Pass reasons — the fund’s memory"
-                  meta="Queryable · a pass is data, not a deletion"
-                  cols="1.1fr .7fr 1fr 1.9fr"
-                  head={['Reason', 'Passes', 'Share', 'What it means']}
-                  rows={[
-                    ...passes.buckets.map((b) => ({
+                <>
+                  <Instrument
+                    testid="screening-passes"
+                    title={`Pass reasons — ${whose} passes`}
+                    meta="From your deal flow · a pass is data, not a deletion"
+                    cols="1.1fr .7fr 1fr 1.9fr"
+                    head={['Reason', 'Passes', 'Share', 'What it means']}
+                    rows={passes.buckets.map((b) => ({
                       key: b.reason,
+                      rowClass: reason === b.reason ? 'bg-violet-50/60 dark:bg-violet-950/30' : '',
                       cells: [
-                        { text: b.label },
+                        {
+                          text: b.label,
+                          node: b.count > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => setReason(reason === b.reason ? null : b.reason)}
+                              aria-expanded={reason === b.reason}
+                              className="text-[10.5px] font-semibold text-axal-violet-deep underline underline-offset-2 hover:text-axal-violet dark:text-violet-300"
+                              data-testid={`screening-passes-open-${b.reason}`}
+                            >
+                              {reason === b.reason ? 'Hide its deals' : 'Show its deals'}
+                            </button>
+                          ) : undefined,
+                        },
                         { text: String(b.count) },
                         b.pct === null ? { nr: true } : { text: `${b.pct}%`, barPct: b.pct },
-                        {
-                          text: PASS_TAXONOMY.find((r) => r.key === b.reason)?.hint || '',
-                          sub: passReasonRevisit(b.reason) || undefined,
-                        },
+                        { text: PASS_TAXONOMY.find((r) => r.key === b.reason)?.hint || '' },
                       ],
-                    })),
-                    ...(passes.unrecorded
-                      ? [{
-                        key: '__unrecorded',
+                    }))}
+                    note={passes.total === 0
+                      ? `No passes in ${whose} deal flow yet. A pass appears here once you pass on a deal in Deal flow, with its reason and when it comes back.`
+                      : `These are ${whose} own passes in Deal flow, the same ones its Passed column holds. A pass with a date comes back in New for you on that date. ${NEXT_ROUND_LINE}`}
+                  />
+                  {reason && (
+                    <Instrument
+                      testid="screening-passes-deals"
+                      title={`Passed for ${passReasonLabel(reason).toLowerCase()}`}
+                      meta={`${passedFor.length} deal${passedFor.length === 1 ? '' : 's'}`}
+                      cols="1.4fr 1fr 1.2fr"
+                      head={['Venture', 'Passed on', 'Comes back']}
+                      rows={passedFor.map((i) => ({
+                        key: i.deal_id,
                         cells: [
-                          { text: 'No reason recorded', sub: 'not a taxonomy entry' },
-                          { text: String(passes.unrecorded) },
-                          { nr: true },
-                          { text: passes.unrecorded_note || '' },
+                          {
+                            text: i.venture || `Deal #${i.deal_id}`,
+                            sub: i.sector || undefined,
+                            node: i.can_open ? <Link to={`/deals/${i.deal_id}`} className={LINK}>Open deal room</Link> : undefined,
+                          },
+                          dayWithYear(i.passed_at) ? { text: dayWithYear(i.passed_at) } : { nr: true },
+                          passReturnWord(i)
+                            ? { text: passReturnWord(i), sub: i.due ? 'due: listed in New for you' : i.revisit === 'next_round' ? 'not detected; look again yourself' : undefined }
+                            : { nr: true },
                         ],
-                      }]
-                      : []),
-                  ]}
-                  note={`These are the studio's passes, each of which closes a round; a pass you record in the table above is your own and stays in your deal flow. Passes are kept because they are the most queryable thing a fund owns — "show everything we passed on valuation" is a real question, and these rows are what answers it. ${revisitable.length} of the ${PASS_TAXONOMY.length} reasons carry an explicit re-entry condition, which turns a no into a maybe with a trigger on it: ${revisitable.map((r) => r.label.toLowerCase()).join(' and ')}. A pass recorded before a reason was required stays unrecorded rather than being backfilled — a guessed reason would corrupt the record.`}
-                />
+                      }))}
+                      note="Moving a deal off Passed in Deal flow takes it out of this list and keeps its history."
+                    />
+                  )}
+                </>
               ) : passes === null ? (
                 <p className={MUTED}>Reading…</p>
+              ) : passes === NOT_INVESTOR ? (
+                <p className="text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400" data-testid="screening-passes-not-investor">
+                  Pass reasons counts an investor firm&rsquo;s own passes, and this account holds no investor
+                  licence. The studio&rsquo;s round-level passes are on the studio&rsquo;s own Deal flow, for an admin or an Operating Partner.
+                </p>
               ) : (
                 <p className="text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400" data-testid="screening-passes-unreadable">
-                  <NotRecorded /> — the pass record could not be read. That is not a claim that the fund has
+                  <NotRecorded /> — your passes could not be read. That is not a claim that you have
                   passed on nothing.
                 </p>
               )}
@@ -452,6 +499,7 @@ export default function InvestorScreeningZone() {
           onClose={() => setDialog(null)}
           onPassed={(next) => {
             keep(next);
+            loadPasses();
             setResult(`You passed on ${nameOf(dialog)}. The round stays open for other investors.`);
             setDialog(null);
           }}

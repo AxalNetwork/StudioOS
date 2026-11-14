@@ -49,7 +49,6 @@ export const ROOM_FAILED = Object.freeze({
 /** What the room draws that no mounted route serves. Never a zero, never "none". */
 export const ROOM_WAITS = Object.freeze({
   account: 'Your company’s receiving account is not read here yet: its route (D1217) is not mounted yet (#3214). Investors see no payment instructions until it is.',
-  instructions: 'Payment instructions are not read here yet: the company’s receiving account route (D1217) is not mounted yet (#3214). Nothing here tells you where to pay. Never pay from details sent in an email.',
   sentWord: 'Your word that you sent it is recorded when you accept a match from your Mercury. No route records it without one yet.',
   clause: 'Eadwyn’s summary of a clause and the comments on this paper are not read here yet. Eadwyn summarises and never gives advice; your counsel decides.',
   modelled: 'The fully diluted before and after is not read here yet: no read models a closing line’s change. Accepting records your decision; Raise › Cap table writes the holder (#2432).',
@@ -329,4 +328,82 @@ export function matchesFor(proposals, lines) {
   return (Array.isArray(proposals) ? proposals : [])
     .filter((p) => p?.state === 'proposed' && p?.target_kind === 'deal_commitment' && ids.has(Number(p.target_id)))
     .map((p) => ({ uid: p.uid, cents: cents(p.amount_cents), postedOn: dayOf(p.posted_on), lastFour: /^\d{2,4}$/.test(String(p.account_last_four ?? '')) ? String(p.account_last_four) : null }));
+}
+
+// ─────────────────────────────────────────────── CP9: where to pay (D6189)
+
+/**
+ * The words the payment drawer draws around the Worker's own. Every refusal
+ * prints the Worker's sentence (`e.message`); these are the fallbacks for an
+ * answer that carried none, and the drawer's fixed lines.
+ */
+export const PAY_WORDS = Object.freeze({
+  notRecorded: 'The company has not recorded a receiving account.',
+  notRecordedNext: 'Nothing here tells you where to pay yet. Never pay from details sent in an email.',
+  unreadable: 'These instructions could not be read or saved. Try again.',
+  unreadableClaim: 'That is not a sign the company has no account.',
+  support: 'Receiving account instructions are not available in a support session.',
+  unsigned: 'A signed investment line is required to reveal these instructions.',
+  noLine: 'This line has no commitment of yours, so the full number cannot be revealed from it.',
+  lineUnreadable: 'Your commitment on this line could not be read, so the full number is not shown. Try again.',
+  revealTitle: 'Reveal the full account number?',
+  revealRecorded: 'This is recorded, without the number.',
+  revealHides: 'The number shows for a short time, then hides again.',
+  revealNote: 'Revealing the full number is recorded. A change to the account is announced to every investor with an unpaid line.',
+});
+
+const shown = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/**
+ * The read's answer as one state: `none` (no account set), `ok` (the masked
+ * account), else the refusal's kind. A body with neither shape is unreadable,
+ * never "no account".
+ */
+export function payState(result, error) {
+  if (error) {
+    if (error.code === 'support_session_refused') return { kind: 'support', text: shown(error.message) || PAY_WORDS.support };
+    if (Number(error.status) === 404) return { kind: 'gone', text: shown(error.message) || 'That receiving account is not available here.' };
+    return { kind: 'unreadable', text: shown(error.message) || PAY_WORDS.unreadable };
+  }
+  if (result?.recorded === false) return { kind: 'none', text: shown(result.reason) || PAY_WORDS.notRecorded };
+  if (result?.recorded === true && result.account && typeof result.account === 'object') return { kind: 'ok', account: result.account };
+  return { kind: 'unreadable', text: PAY_WORDS.unreadable };
+}
+
+/** CP9's rows, in the canvas's order. A field the account does not carry reads Not recorded, never blank. */
+export function payRows(account, amount) {
+  const a = account || {};
+  return [
+    ['payee', 'Payee', shown(a.payee_name)],
+    ['bank', 'Bank', shown(a.bank_name)],
+    ['account', 'Account', shown(a.account_number)],
+    ['routing', 'Routing (ABA)', shown(a.routing_number)],
+    ['swift', 'SWIFT', shown(a.swift_code)],
+    ['currency', 'Currency', shown(a.currency)],
+    ['reference', 'Reference', shown(a.payment_reference)],
+    ['amount', 'Amount', shown(amount)],
+  ].map(([key, label, value]) => ({ key, label, value, mono: key !== 'payee' && key !== 'bank' }));
+}
+
+/** A reveal's refusal as one state; only a failure to read or record offers Try again. */
+export function revealRefusal(error) {
+  const text = shown(error?.message);
+  if (error?.code === 'support_session_refused') return { kind: 'support', text: text || PAY_WORDS.support, retry: false };
+  if (error?.code === 'signed_line_required') return { kind: 'unsigned', text: text || PAY_WORDS.unsigned, retry: false };
+  const status = Number(error?.status);
+  if (status === 400 || status === 403 || status === 404 || status === 409) return { kind: 'refused', text: text || PAY_WORDS.unsigned, retry: false };
+  return { kind: 'unreadable', text: text || PAY_WORDS.unreadable, retry: true };
+}
+
+/** The commitment uid the reveal names, from the investor's own commitments: null when this line's is not among them. */
+export function commitmentUidFor(list, commitmentId) {
+  if (commitmentId == null || !Array.isArray(list)) return null;
+  const hit = list.find((k) => k && Number(k.id) === Number(commitmentId) && typeof k.uid === 'string' && k.uid);
+  return hit ? hit.uid : null;
+}
+
+/** How long the Worker said to show the full number, in whole seconds; 0 when it gave none, so nothing shows. */
+export function revealSeconds(reply) {
+  const n = Number(reply?.expires_in_seconds);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 300) : 0;
 }

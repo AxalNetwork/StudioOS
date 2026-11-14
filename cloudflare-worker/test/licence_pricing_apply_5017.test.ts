@@ -56,6 +56,11 @@ function fixture(countries: string[] = ['FR']) {
   db.prepare(`INSERT INTO licence_fee_invoices (uid, licence_uid, period_label, period_start, period_end, amount_cents, currency,
       reference, issued_at, due_at, status, figures_json, figures_sha256)
     VALUES ('inv_1', ?, '2026–27', '2026-01-01', '2026-12-31', 1000000, 'EUR', 'REF-1', '2026-11-01', '2026-12-01', 'issued', '{}', 'x')`).run(LIC);
+  // D5954 — an issued initial invoice, which a later apply or override must leave as it is.
+  db.prepare(`INSERT INTO licence_fee_invoices (uid, licence_uid, kind, period_label, period_start, period_end, amount_cents, currency,
+      reference, issued_at, due_at, status, figures_json, figures_sha256, initial_fee_cents, regulatory_surcharge_cents, pricing_decision_uid)
+    VALUES ('inv_initial', ?, 'initial', 'Initial fee', '2025-01-01', '2025-12-31', 1250000, 'EUR', 'REF-I', '2025-01-02', '2025-02-01', 'issued', '{}', 'y',
+      1200000, 50000, 'dec_earlier')`).run(LIC);
   const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
   const app = new Hono<any>();
   for (const m of mount) app.route(m.path, m.router);

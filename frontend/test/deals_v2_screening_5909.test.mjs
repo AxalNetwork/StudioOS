@@ -46,7 +46,8 @@ const BATCH = {
   ],
 };
 const FLOW = { items: [{ deal_id: 2, stage: 'diligence' }] };
-const PASSES = { total: 4, buckets: [{ reason: 'valuation', label: 'Valuation', count: 4, pct: 100 }], unrecorded: 0, unrecorded_note: null };
+// D6148: the firm's own passes, from its deal flow (`GET /api/deals/flow/passes`).
+const PASSES = { scope: 'you', total: 4, buckets: [{ reason: 'valuation', label: 'Valuation', count: 4, pct: 100 }], items: [] };
 const FITS = { items: [{ deal_id: 1, state: 'scored', score: 84, confidence_label: 'High' }] };
 
 const stripsOf = (batch) => ({ status: 'ready', items: new Map(batch.items.map((i) => [i.deal_id, i])) });
@@ -104,12 +105,13 @@ const settle = async (v) => { for (let i = 0; i < 6; i += 1) await v.flush(); };
 
 function stub({ flow = async () => FLOW } = {}) {
   const saved = {
-    screening: api.dealScreening, passes: api.dealPassAnalytics, flow: dealFlowApi.flow, add: dealFlowApi.add,
+    screening: api.dealScreening, passes: dealFlowApi.passes, flow: dealFlowApi.flow, add: dealFlowApi.add,
     update: dealFlowApi.update, pass: dealFlowApi.pass, fit: dealViewsApi.fit, batch: ventureScoresApi.batch,
   };
   const calls = [];
   api.dealScreening = async () => DESK;
-  api.dealPassAnalytics = async () => PASSES;
+  const reads = { passes: 0 };
+  dealFlowApi.passes = async () => { reads.passes += 1; return PASSES; };
   dealFlowApi.flow = flow;
   dealFlowApi.add = async (body) => { calls.push(['add', body]); return { deal_id: body.deal_id, stage: body.stage }; };
   dealFlowApi.update = async (id, body) => { calls.push(['update', id, body]); return { deal_id: id, stage: body.stage }; };
@@ -117,11 +119,11 @@ function stub({ flow = async () => FLOW } = {}) {
   dealViewsApi.fit = async () => FITS;
   ventureScoresApi.batch = async () => BATCH;
   const restore = () => {
-    Object.assign(api, { dealScreening: saved.screening, dealPassAnalytics: saved.passes });
-    Object.assign(dealFlowApi, { flow: saved.flow, add: saved.add, update: saved.update, pass: saved.pass });
+    Object.assign(api, { dealScreening: saved.screening });
+    Object.assign(dealFlowApi, { passes: saved.passes, flow: saved.flow, add: saved.add, update: saved.update, pass: saved.pass });
     dealViewsApi.fit = saved.fit; ventureScoresApi.batch = saved.batch;
   };
-  return { calls, restore };
+  return { calls, reads, restore };
 }
 
 test('the page: the summary, the seven columns, the decision actions and the secondary Pass reasons', async () => {
@@ -170,6 +172,8 @@ test('Pass opens the reason dialog, and nothing is written without a reason', as
     await settle(v);
     assert.deepEqual(s.calls, [['pass', 3, { reason: 'valuation', revisit: 'next_round' }]]);
     assert.ok(v.text().includes('Passed · Valuation'));
+    // D6148: Pass reasons counts these same deal-flow passes, so a pass made here re-reads them.
+    assert.equal(s.reads.passes, 2, 'the pass reasons were not re-read after a pass');
   } finally { await v.unmount(); s.restore(); }
 });
 
