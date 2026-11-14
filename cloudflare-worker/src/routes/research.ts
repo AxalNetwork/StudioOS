@@ -109,7 +109,10 @@ const EXT_BY_MIME: Record<string, string> = {
   'text/markdown': 'md',
   'text/csv': 'csv',
 };
-const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal']);
+// D6282: `diligence` is the investor's own kind (a memo, a data-room extract,
+// a reference call note). There is deliberately no `benchmark` kind: a
+// benchmark is a row in Benchmarking with its own source and sample size.
+const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal', 'diligence']);
 
 /**
  * THE FLOOR BELOW WHICH ASK REFUSES TO ANSWER.

@@ -174,9 +174,19 @@ export const coverageTile = (g) => ({
   newest: recordDay(g.newest) ? `newest ${recordDay(g.newest)}` : 'date not recorded',
 });
 
-/** What the deal page says when the read is refused or fails (D1265 §4). */
-export function refusalOf(error) {
-  if (error?.status === 403 && (error?.code === 'investor_only' || error?.data?.code === 'investor_only')) return { kind: 'founder', line: 'This is the investor’s view. You read your evidence in Raise › Evidence.' };
+/** D6167: the deal staff (D4631) — the admin and an Operating Partner — as the deal page names their role. */
+const DEAL_STAFF = new Set(['admin', 'partner']);
+export const STAFF_READ_LINE = 'You are reading what an investor on this deal reads, as staff. Each open is logged.';
+
+/**
+ * What the deal page says when the read is refused or fails (D1265 §4). D6167: only the venture's own founder is
+ * pointed to Raise › Evidence; staff are never told to open a founder's page that is not theirs, even if an older
+ * Worker still answers them `investor_only`.
+ */
+export function refusalOf(error, role = null) {
+  const code = error?.code ?? error?.data?.code;
+  if (error?.status === 403 && DEAL_STAFF.has(role)) return { kind: 'closed', line: 'This deal’s evidence could not be opened for staff. Nothing was shown.' };
+  if (error?.status === 403 && code === 'investor_only') return { kind: 'founder', line: 'This is the investor’s view. You read your evidence in Raise › Evidence.' };
   if (error?.status === 403 || error?.status === 404) return { kind: 'closed', line: 'The founder’s evidence is not open to you on this deal.' };
   return { kind: 'unreadable', line: 'The evidence could not be read. That is not the same as none.' };
 }
