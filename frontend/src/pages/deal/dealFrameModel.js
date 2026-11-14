@@ -1,7 +1,8 @@
 /**
  * D1152 (#3057, part 4 of #2421) — the deal page's frame as pure functions:
- * the stage track and its one next action (DL2), the key strip (DL1), what is
- * new and the terms at a glance (DL1's Overview), the notes' tags (DL14) and
+ * the stage track and its one next action (DL2), what is new and the terms
+ * at a glance (DL1's Overview); since D4815 part 4 (#5903, DE04) the header,
+ * the investor's progress chip, the one financial strip and Your position, the notes' tags (DL14) and
  * the states (DL18–DL22). No React here, so `node --test` loads it alone.
  *
  * THE TRACK IS PART 2's READ. `GET /api/deals/:id/stage` (D1150) returns
@@ -68,52 +69,141 @@ export function trackOf(read) {
   };
 }
 
-const notRecorded = (reason) => ({ value: 'Not recorded', missing: true, reason });
-
 /**
- * The key strip (DL1): the round, what is committed, your commitment (an
- * investor) or how many investors (staff and the founder), and when it
- * closes. `mine` is the commitments read: `{ status, items }`.
+ * D4815 part 4 (#5903, board DE04): the page's header, in the canvas's order.
+ * Back to Deals (a founder goes back to Capital relationships, as before);
+ * the venture; its sector and place; the company-stage chip; the website.
+ * The deal read (`GET /api/deals/:id`) carries the sector (`project_sector`)
+ * and the deal's website (`deals.website`). It carries no place and no
+ * company stage, so each says Not recorded and names why; neither is made up
+ * from another field. A website is only ever an http(s) address.
  */
-export function keyStrip(deal, mine, role) {
-  const cur = deal?.currency || 'USD';
-  const target = dealMoney(roundAsk(deal), cur);
-  const committed = dealMoney(deal?.capital_committed, cur);
-  const pct = Number.isFinite(Number(deal?.progress_pct)) && deal?.progress_pct != null ? Math.max(0, Math.min(100, Number(deal.progress_pct))) : null;
-  const tiles = [
-    { key: 'round', label: 'Round', ...(target ? { value: target } : notRecorded('No round size is recorded on this deal.')), sub: deal?.instrument || 'Instrument not recorded' },
-    { key: 'committed', label: 'Committed', ...(committed ? { value: committed } : notRecorded('No committed total is recorded.')), sub: pct == null ? 'Share of the round not recorded' : `${pct}% of the round`, bar: pct },
-  ];
-  if (role === 'investor') {
-    // D4633: your live commitment in the firm the read was for, as the Commitment tab reads it.
-    const own = Array.isArray(mine?.items) ? mine.items.find((c) => (c.status === 'pending' || c.status === 'confirmed') && c.in_context !== false) : null;
-    tiles.push(mine?.status === 'unreadable'
-      ? { key: 'mine', label: 'Your commitment', value: 'Unreadable', missing: true, reason: 'Your commitment could not be read. That is not a claim that you have none.' }
-      : mine?.status !== 'ready' ? { key: 'mine', label: 'Your commitment', value: '', loading: true, sub: 'Reading…' }
-        : own ? { key: 'mine', label: 'Your commitment', value: dealMoney(own.amount, cur) || 'Not recorded', sub: own.status === 'confirmed' ? 'Confirmed' : 'Pending' }
-          : { key: 'mine', label: 'Your commitment', value: '—', sub: 'Not committed yet' });
-  } else {
-    const all = Array.isArray(mine?.items) ? mine.items.filter((c) => c.status === 'pending' || c.status === 'confirmed') : null;
-    tiles.push(mine?.status === 'unreadable'
-      ? { key: 'investors', label: 'Investors', value: 'Unreadable', missing: true, reason: 'The commitments could not be read.' }
-      : mine?.status !== 'ready' ? { key: 'investors', label: 'Investors', value: '', loading: true, sub: 'Reading…' }
-        : all ? { key: 'investors', label: 'Investors', value: String(new Set(all.map((c) => c.investor_user_id)).size), sub: 'With a pending or confirmed commitment' }
-          : { key: 'investors', label: 'Investors', ...notRecorded('This view reads the committed total only.') });
-  }
-  tiles.push(deal?.closing_deadline
-    ? { key: 'closes', label: 'Closes', value: String(deal.closing_deadline).slice(0, 10), sub: 'Closing deadline' }
-    : { key: 'closes', label: 'Closes', ...notRecorded('No closing deadline is recorded.'), sub: 'Closing deadline' });
-  return tiles;
+export const NO_PLACE = 'The deal read carries no place for this company.';
+export const NO_COMPANY_STAGE = 'The deal read carries no company stage.';
+
+export function backOf(role) {
+  return role === 'founder' ? { path: '/raise/capital-relationships', label: 'Back to Capital relationships' } : { path: '/deals', label: 'Back to Deals' };
 }
 
-/** The terms at a glance (DL1), each from the deal or Not recorded. */
+export function websiteHref(raw) {
+  const v = String(raw ?? '').trim();
+  if (!v || /\s/.test(v)) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`;
+  try {
+    const u = new URL(withScheme);
+    return (u.protocol === 'https:' || u.protocol === 'http:') && u.hostname.includes('.') ? u.href : null;
+  } catch { return null; }
+}
+
+export function headerOf(deal) {
+  const sector = deal?.project_sector ? String(deal.project_sector) : null;
+  return {
+    name: deal?.project_name || `Deal #${deal?.id ?? ''}`,
+    sector: sector || 'Sector not recorded',
+    sectorMissing: !sector,
+    place: 'Place not recorded',
+    placeMissing: true,
+    placeReason: NO_PLACE,
+    stage: { value: 'Not recorded', missing: true, reason: NO_COMPANY_STAGE },
+    website: websiteHref(deal?.website),
+  };
+}
+
+/**
+ * The investor's progress, its own element in the header ("Diligence · Step 3
+ * of 8"), from the same stage read as the sequence. Nothing is drawn as a step
+ * the read did not name.
+ */
+export function progressChip(track) {
+  if (!track || track.state === 'loading') return { state: 'loading', text: 'Reading your step…' };
+  if (track.state === 'unreadable') return { state: 'unreadable', text: 'Your step: Unreadable' };
+  if (track.state === 'none') return { state: 'none', text: 'No step recorded for you' };
+  if (track.passed) return { state: 'passed', text: track.passed };
+  return { state: 'ready', text: `${track.stage} · Step ${track.current + 1} of ${STEPS.length}` };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A recorded date as "20 Dec 2026"; null when the value is not a date. */
+export function closesOn(raw) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw ?? ''));
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (d.getUTCFullYear() !== Number(m[1]) || d.getUTCMonth() !== Number(m[2]) - 1 || d.getUTCDate() !== Number(m[3])) return null;
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+const blank = (v) => v == null || v === '';
+
+/**
+ * The one financial strip (DE04): Round, Instrument, Committed, Minimum,
+ * Closes, every figure from the deal read and nowhere else above the fold.
+ * A field the deal does not hold is Not recorded; a field it holds that
+ * cannot be read as what it is (an amount that is not a number, a currency
+ * that is not a code, a date that is not a date) is Unreadable. Never 0 for
+ * either. Committed is the round's confirmed total across every investor,
+ * said as such, and never the viewer's own commitment.
+ */
+export function financialStrip(deal) {
+  const cur = deal?.currency || 'USD';
+  const money = (v) => (blank(v) ? { state: 'nr' } : dealMoney(v, cur) ? { state: 'value', value: dealMoney(v, cur) } : { state: 'ur' });
+  const ask = roundAsk(deal);
+  const askRaw = !blank(deal?.target_raise) ? deal.target_raise : deal?.amount;
+  const round = ask != null ? money(ask) : blank(askRaw) ? { state: 'nr' } : { state: 'ur' };
+  const instrument = blank(deal?.instrument) ? { state: 'nr' } : { state: 'value', value: String(deal.instrument) };
+  const closes = blank(deal?.closing_deadline) ? { state: 'nr' } : closesOn(deal.closing_deadline) ? { state: 'value', value: closesOn(deal.closing_deadline) } : { state: 'ur' };
+  const cells = [
+    ['round', 'Round', round, 'No round size is recorded on this deal.'],
+    ['instrument', 'Instrument', instrument, 'No instrument is recorded on this deal.'],
+    ['committed', 'Committed', money(deal?.capital_committed), 'No committed total is recorded on this deal.'],
+    ['minimum', 'Minimum', money(deal?.minimum_check), 'No minimum check is recorded on this deal.'],
+    ['closes', 'Closes', closes, 'No closing date is recorded on this deal.'],
+  ];
+  return cells.map(([key, label, c, why]) => ({
+    key, label, state: c.state,
+    value: c.state === 'value' ? c.value : c.state === 'nr' ? 'Not recorded' : 'Unreadable',
+    reason: c.state === 'nr' ? why : c.state === 'ur' ? `The ${label.toLowerCase()} on this deal could not be read. That is not a claim that none is recorded.` : null,
+    sub: key === 'committed' && c.state === 'value' ? 'Confirmed, all investors' : null,
+  }));
+}
+
+/**
+ * Your position (DE04), and the one rule that keeps it yours: a row is the
+ * viewer's commitment only when it is theirs (`investor_user_id`), on this
+ * deal, live (pending or confirmed), and held in the firm context the Worker
+ * read under (`in_context` true and its `company_id` that context). A row
+ * from a read for another deal or another selected firm is not drawn: the
+ * page reads again and shows Reading until it lands. Another firm's
+ * commitment, or another investor's, is never shown as the viewer's.
+ */
+export function viewerCommitment(read, { userId, dealId, firmId } = {}, currency = 'USD') {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (dealId !== undefined && read.dealId !== undefined && String(read.dealId) !== String(dealId)) return { state: 'loading' };
+  if (firmId !== undefined && read.firmId !== undefined && String(read.firmId ?? '') !== String(firmId ?? '')) return { state: 'loading' };
+  if (read.status === 'unreadable') return { state: 'unreadable' };
+  const rows = Array.isArray(read.items) ? read.items : [];
+  const own = rows.find((r) => r
+    && userId != null && String(r.investor_user_id) === String(userId)
+    && (dealId === undefined || String(r.deal_id) === String(dealId))
+    && (r.status === 'pending' || r.status === 'confirmed')
+    && r.in_context === true
+    && String(r.company_id ?? '') === String(r.firm_context ?? ''));
+  if (!own) return { state: 'none' };
+  return {
+    state: 'ready',
+    amount: dealMoney(own.amount, currency) || 'Not recorded',
+    status: own.status === 'confirmed' ? 'Confirmed' : 'Pending',
+    firm: own.company_id == null ? 'Held in your own name.' : `Held for ${own.company_name || 'your firm'}.`,
+  };
+}
+
+/** The terms at a glance (DL1), each from the deal or Not recorded; the strip's figures are not repeated. */
 export function termsAtGlance(deal) {
   const cur = deal?.currency || 'USD';
   const pct = (v) => (v == null || v === '' ? null : `${v}%`);
+  // D4815 part 4: Instrument and Minimum are the strip's; DE04 draws each figure once above the fold.
   return [
-    ['Instrument', deal?.instrument || null],
     ['Valuation cap', dealMoney(deal?.valuation_cap, cur)],
-    ['Minimum', dealMoney(deal?.minimum_check, cur)],
     ['Carry', pct(deal?.carry_pct)],
     ['Management fee', pct(deal?.management_fee_pct)],
   ].map(([label, value]) => ({ label, value: value ?? 'Not recorded', missing: value == null }));
