@@ -360,3 +360,4 @@ catalogue version only in the fixture.
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `deal_flow_thesis_6147.test.ts` | D6147: New for you's thesis source: the High-fit threshold, open rounds only, no repeat of another way in, the uninvited round compared on marketplace facts, dismissal, Add and Pass, the cap, bounded statements, no thesis, and an isolated failed fit read. |
