@@ -118,6 +118,7 @@ export default {
         'Open /grow/focus to agree on the most important objective; then use /grow/talent for team capacity and /grow/customers for customer progress.',
         'Track partner work at /grow/partnerships and the current milestones at /grow/launch. Use /build/brand for brand work where that page is available.',
         'Use /grow/reporting to inspect available growth reporting. Reporting access may extend to advisor or partner roles, but editing is more restricted.',
+        'Open a sent report and choose Print or save as PDF to keep its frozen figures, sources, narrative and revision. Choose a printer or Save as PDF in your browser. Download any attached statements separately.',
         'Outcome: recorded priorities, responsibilities and launch status; if a zone or report is unavailable, state the missing permission or unreadable source rather than making up a completion state.',
       ],
       tips: ['Connect each activity to a measurable outcome and date when the corresponding store supports them.'],
