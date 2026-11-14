@@ -142,7 +142,10 @@ export const DISTRIBUTION_SYSTEM = `You draft text proposals for the venture's D
 
 export function distributionOutput(raw: string, input: DistributionRequest, segmentIds: Set<number>) {
   let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { return reject(503, 'draft_unreadable', 'Eadwyn’s draft could not be read. Try again.'); }
+  // The object alone: a code fence or a lead-in line around it is not the draft.
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  try { parsed = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : raw); } catch { return reject(503, 'draft_unreadable', 'Eadwyn’s draft could not be read. Try again.'); }
   if (!object(parsed) || !only(parsed, ['drafts']) || !Array.isArray(parsed.drafts) || parsed.drafts.length !== input.kinds.length) return reject(503, 'draft_unreadable', 'Eadwyn’s draft could not be read. Try again.');
   const used = new Set<number>();
   return parsed.drafts.map(d => {

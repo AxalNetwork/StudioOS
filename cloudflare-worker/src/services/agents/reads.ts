@@ -13,10 +13,11 @@
  *     JSON: what a person typed into a record is data, never instructions;
  *   - never answers an email or a numeric user id.
  *
- * Built: the project and company summaries, the team roster, and the four
- * cycles' records (their activity lines, D690). The others (cap table, data
- * room, research, network, compliance, and the connected tools Mercury,
- * Stripe, GitHub and Vercel) are not built yet and refuse `read_unavailable`.
+ * Built: the project and company summaries, the team roster, the four
+ * cycles' records (their activity lines, D690) and the typed records
+ * (Mercury balances, Stripe revenue, the cap table, board metrics, burn, the
+ * raise pipeline, transcripts and diligence). The data room, research, network,
+ * compliance, GitHub and Vercel are not built yet and refuse `read_unavailable`.
  *
  * D4667 (#4667) — EVIDENCE, NOT JUST DATA. A read says what it covers. A collection
  * carries `returned`, `total` and `omitted` (counted, not guessed: `total` is

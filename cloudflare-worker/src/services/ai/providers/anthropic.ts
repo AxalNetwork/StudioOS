@@ -56,7 +56,8 @@ export const anthropic: ProviderAdapter = {
         max_tokens: req.maxTokens,
         ...(req.system ? { system: req.system } : {}),
         messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
-        ...(req.temperature == null ? {} : { temperature: req.temperature }),
+        // `req.temperature` is not sent: Claude Sonnet 5.5, the one model this
+        // adapter serves, answers a non-default sampling parameter with a 400.
       }),
     };
   },
