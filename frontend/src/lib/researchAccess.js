@@ -21,15 +21,22 @@ export const RESEARCH_ACCESS = Object.freeze({
   library: ALL,
   companies: ['admin', 'founder', 'advisor'],
   funds: ['admin', 'founder'],
-  diligence: ['admin', 'investor'],
-  benchmarking: ['admin', 'investor'],
-  clientPrep: ['admin', 'advisor', 'partner'],
+  // #6265: these three are `adminToResearch(guard([...]))`, not labRoles: the
+  // founder shell an admin browses Research as has none of them, and an active
+  // Lab does not admit a role whose shell lacks them. No admin, no Lab shortcut.
+  diligence: ['investor'],
+  benchmarking: ['investor'],
+  clientPrep: ['advisor', 'partner'],
 });
+
+/** The areas whose routes take a plain `guard`, so neither shortcut below applies. */
+export const PLAIN_GUARD_AREAS = Object.freeze(['diligence', 'benchmarking', 'clientPrep']);
 
 /** True when `user` (its role, or the page's research role) may open `area`. */
 export function canOpenResearch(area, user, role = user?.role) {
   const roles = RESEARCH_ACCESS[area];
   if (!roles) return false;
+  if (PLAIN_GUARD_AREAS.includes(area)) return roles.includes(role || user?.role);
   if (user?.role === 'admin') return true;
   if (user?.spinout_lab_active === 1 || user?.spinout_lab_active === true) return true;
   return roles.includes(role || user?.role);
