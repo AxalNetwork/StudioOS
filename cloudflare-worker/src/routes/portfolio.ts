@@ -181,9 +181,22 @@ r.get('/health', async (c) => {
     const notMeasured: Array<{ uid: string; name: string; state: string; reason: string }> = [];
     const filtered = Boolean(badge) || interventionOnly;
     for (const p of projects) {
+      // Find the last different badge, then the first snapshot after it.
+      // A single snapshot, or a history with one badge, proves no transition.
       const row = await c.env.DB.prepare(
-        'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT 1'
-      ).bind(p.id).first<SnapRow>();
+        `WITH latest AS (
+           SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT 1
+         ), previous AS (
+           SELECT h.badge, h.snapshot_date FROM portfolio_health_snapshots h
+           JOIN latest l ON h.project_id = l.project_id
+           WHERE h.badge <> l.badge AND h.snapshot_date < l.snapshot_date
+           ORDER BY h.snapshot_date DESC LIMIT 1
+         )
+         SELECT l.*, p.badge AS previous_status,
+           (SELECT MIN(h.snapshot_date) FROM portfolio_health_snapshots h
+            WHERE h.project_id = l.project_id AND h.snapshot_date > p.snapshot_date) AS status_changed_at
+         FROM latest l LEFT JOIN previous p ON 1 = 1`
+      ).bind(p.id).first<SnapRow & { previous_status: string | null; status_changed_at: string | null }>();
       if (!row) {
         // Only when the caller asked for the whole portfolio: a badge filter
         // is a request for a subset, and an unscored project is in no subset.
@@ -197,7 +210,8 @@ r.get('/health', async (c) => {
       }
       if (badge && row.badge !== badge) continue;
       if (interventionOnly && !row.intervention) continue;
-      items.push({ ...snapDto(row, p), ...staleness(row.snapshot_date) });
+      items.push({ ...snapDto(row, p), ...staleness(row.snapshot_date),
+        previous_status: row.previous_status, status_changed_at: row.status_changed_at });
       if (!asOf || row.snapshot_date > asOf) asOf = row.snapshot_date;
     }
     items.sort((a, b) => (Number(b.intervention) - Number(a.intervention)) || (a.score - b.score));

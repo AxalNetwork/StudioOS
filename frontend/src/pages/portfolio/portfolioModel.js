@@ -217,7 +217,7 @@ export function healthFor(position, health) {
   if (item) {
     const state = BADGE[item.badge];
     if (!state) return { state: 'Not recorded', reason: 'The snapshot carries no badge.' };
-    return { state, date: item.snapshot_date || null, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
+    return { state, date: item.snapshot_date || null, previous: BADGE[item.previous_status] || null, changedAt: item.status_changed_at || null, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
   }
   const nm = (health.value.not_measured || []).find((n) => uid && n.uid === uid);
   if (nm && /insufficient|not_enough/.test(String(nm.state))) return { state: 'Not enough evidence', reason: nm.reason || 'Not enough evidence to score health.' };
@@ -304,6 +304,14 @@ export function runwayFor(position, updates) {
   return null;
 }
 
+function recentAttentionChange(health) {
+  if (health.state !== 'Attention' || !health.previous || health.previous === 'Attention' || health.ageDays == null) return null;
+  const daysToSnapshot = daysBetween(health.changedAt, health.date);
+  if (daysToSnapshot == null || daysToSnapshot < 0 || health.ageDays < 0 || daysToSnapshot + health.ageDays > 90) return null;
+  const changed = day(health.changedAt);
+  return changed ? `Health turned to Attention on ${changed} · first snapshot with this status` : null;
+}
+
 /**
  * The evidence for one company, each line `{ label, text, weight }` with
  * weight 3 urgent, 2 watch, 1 incomplete. A company with no evidence line is
@@ -316,6 +324,8 @@ export function evidenceFor(position, { health, compliance, updates }, reference
   if (h.state === 'Attention') lines.push({ label: 'Health', text: `Attention in the snapshot of ${day(h.date) || 'an undated day'}${h.intervention ? ' · flagged for intervention' : ''}`, weight: 3 });
   else if (h.state === 'Watch') lines.push({ label: 'Health', text: `Watch in the snapshot of ${day(h.date) || 'an undated day'}${h.intervention ? ' · flagged for intervention' : ''}`, weight: 2 });
   else if (h.state === 'Not enough evidence' || h.state === 'Not recorded') lines.push({ label: 'Health', text: h.reason, weight: 1 });
+  const change = recentAttentionChange(h);
+  if (change) lines.push({ label: 'Health', text: change, weight: 3 });
   if (h.stale && h.date) lines.push({ label: 'Health', text: `Snapshot ${h.ageDays != null ? `${h.ageDays} days old` : 'stale'} · ${day(h.date)}`, weight: 1 });
 
   const runway = runwayFor(position, updates);
@@ -604,12 +614,10 @@ export function ageWords(days) {
 
 /**
  * The attention rules the addendum maps for Positions (PFA06), each with its
- * hits, or the state of the source it reads. `flips` is
- * `{ [uid]: true | false | 'unreadable' }` from each Attention company's
- * 90-day health history. `overview` says whether the rule also feeds the
- * Overview's queue.
+ * hits, or the state of the source it reads.
+ * `overview` says whether the rule also feeds the Overview's queue.
  */
-export function attentionRulesOf(reads, rows, flips = {}) {
+export function attentionRulesOf(reads, rows) {
   const { positions, health, compliance, updates } = reads;
   const list = rows || [];
   const byKey = new Map(list.map((r) => [r.key, r]));
@@ -633,18 +641,11 @@ export function attentionRulesOf(reads, rows, flips = {}) {
           : 'No update received',
       })),
   };
-  const red = list.filter((r) => r.health.state === 'Attention' && r.uid);
-  let healthFlip;
-  if (health.state !== 'ok') healthFlip = { state: health.state };
-  else if (red.some((r) => flips[r.uid] === undefined)) healthFlip = { state: 'loading' };
-  else {
-    healthFlip = {
-      state: 'ok',
-      partial: red.filter((r) => flips[r.uid] === 'unreadable').map((r) => r.name),
-      hits: red.filter((r) => flips[r.uid] === true)
-        .map((r) => ({ key: r.key, name: r.name, text: `Attention in the snapshot of ${day(r.health.date) || 'an undated day'}; an earlier snapshot inside 90 days was not` })),
-    };
-  }
+  const healthFlip = health.state !== 'ok' ? { state: health.state } : {
+    state: 'ok',
+    hits: list.map((r) => ({ key: r.key, name: r.name, text: recentAttentionChange(r.health) }))
+      .filter((r) => r.text),
+  };
   const below = positions.state !== 'ok' ? { state: positions.state } : {
     state: 'ok',
     hits: list.filter((r) => r.below).map((r) => ({ key: r.key, name: r.name, text: `${r.multiple || 'Multiple not recorded'} · ${r.basis || 'basis not recorded'}${r.markDate ? ` · ${r.markDate}` : ''}` })),
@@ -657,7 +658,7 @@ export function attentionRulesOf(reads, rows, flips = {}) {
   return [
     { key: 'runway', rule: 'Runway under 6 months', reason: 'Attention · short runway', source: 'Founder updates', retry: 'updates', overview: true, ...runway },
     { key: 'stale-update', rule: 'Update older than 30 days', reason: 'Watch · stale update', source: 'Reporting', retry: 'compliance', overview: false, ...staleUpdate },
-    { key: 'health-red', rule: 'Health turned red within 90 days', reason: 'Attention · recent health change', source: 'Health', retry: 'health', overview: false, ...healthFlip },
+    { key: 'health-red', rule: 'Health turned red within 90 days', reason: 'Attention · recent health change', source: 'Health', retry: 'health', overview: true, ...healthFlip },
     { key: 'below-cost', rule: 'Latest mark below cost', reason: 'Watch · marked down', source: 'Positions', retry: 'positions', overview: true, ...below },
     { key: 'no-evidence', rule: 'No positive scoring evidence', reason: 'Not enough evidence', source: 'Health', retry: 'health', overview: true, ...noEvidence },
   ];

@@ -399,30 +399,6 @@ export function MarkHistory({ state, onClose }) {
   );
 }
 
-/** Each Attention company's 90-day health history: did it turn red inside the window? */
-function useHealthFlips(rows, health) {
-  const [flips, setFlips] = useState({});
-  const asked = useRef(new Set());
-  const red = (rows || []).filter((r) => r.health.state === 'Attention' && r.uid).map((r) => r.uid);
-  const key = health.state === 'ok' ? red.join(',') : '';
-  useEffect(() => {
-    let alive = true;
-    for (const uid of key ? key.split(',') : []) {
-      if (asked.current.has(uid)) continue;
-      asked.current.add(uid);
-      api.portfolioHealthGet(uid, 90).then(
-        (r) => {
-          const history = Array.isArray(r?.history) ? r.history : [];
-          if (alive) setFlips((f) => ({ ...f, [uid]: history.slice(1).some((s) => s.badge && s.badge !== 'red') }));
-        },
-        () => { if (alive) setFlips((f) => ({ ...f, [uid]: 'unreadable' })); },
-      );
-    }
-    return () => { alive = false; };
-  }, [key]);
-  return flips;
-}
-
 export default function InvestorPortfolioPositions() {
   const [asOf, setAsOf] = useState('');
   const [filter, setFilter] = useState('all');
@@ -446,8 +422,7 @@ export default function InvestorPortfolioPositions() {
   const rows = useMemo(() => registerRowsOf(reads, reference, attention), [reads, reference, attention]);
   const counts = useMemo(() => markCountsOf(rows, reference), [rows, reference]);
   const total = useMemo(() => registerTotalOf(rows), [rows]);
-  const flips = useHealthFlips(rows, reads.health);
-  const rules = useMemo(() => attentionRulesOf(reads, rows, flips), [reads, rows, flips]);
+  const rules = useMemo(() => attentionRulesOf(reads, rows), [reads, rows]);
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
 
   /** Mark history, book-wide: toggling closed sets `null`, so a reopen re-reads. */

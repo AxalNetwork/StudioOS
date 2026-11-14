@@ -102,7 +102,7 @@ const POSITIONS = {
 const HEALTH = {
   items: [
     { project_id: 1, badge: 'green', snapshot_date: '2026-11-01' },
-    { project_id: 2, badge: 'red', snapshot_date: '2026-11-01', intervention: true },
+    { project_id: 2, badge: 'red', snapshot_date: '2026-11-01', age_days: 12, previous_status: 'yellow', status_changed_at: '2026-10-22', intervention: true },
     { project_id: 3, badge: 'yellow', snapshot_date: '2026-11-01' },
   ],
   not_measured: [],
@@ -134,7 +134,6 @@ const NORTHWIND = {
 function book({ path }) {
   if (path === '/api/positions') return json(POSITIONS);
   if (path === '/api/portfolio/health') return json(HEALTH);
-  if (path === '/api/portfolio/health/northwind') return json({ history: [{ badge: 'red' }, { badge: 'yellow' }] });
   if (path === '/api/positions/kpi-compliance') return json(COMPLIANCE);
   if (path === '/api/portfolio-updates/latest') return json(UPDATES);
   if (path === '/api/positions/northwind') return json(NORTHWIND);
@@ -179,7 +178,8 @@ test('populated: the register, its three mark counts, the total and the attentio
     assert.match(view.text('rule-runway'), /Northwind Labs 4\.8 months · founder-reported · 2026-Q3 · 20 Jul 2026/);
     assert.match(view.text('rule-stale-update'), /Northwind Labs Last update received 20 Jul 2026 · 116 days.*Kite Systems No update received.*Fjord Data Last update received 29 Sep 2026 · 45 days/);
     assert.doesNotMatch(view.text('rule-stale-update'), /Lumen|Pelican|T09:00/);
-    assert.match(view.text('rule-health-red'), /Northwind Labs Attention in the snapshot of 1 Nov 2026/);
+    assert.match(view.text('rule-health-red'), /Also in the Overview queue.*Northwind Labs Health turned to Attention on 22 Oct 2026/);
+    assert.equal(view.calls.some((path) => path.startsWith('/api/portfolio/health/')), false);
     assert.match(view.text('rule-below-cost'), /Pelican Pay 0\.88× · Secondary · 30 Sep 2026/);
     assert.match(view.text('rule-no-evidence'), /Kite Systems.*Fjord Data/);
     assert.equal(view.text('status-investor-positions-partial'), null);
@@ -227,8 +227,7 @@ test('Unreadable: a failed positions read is never an empty book, and each sourc
     const before = view.calls.length;
     positionsUp = true;
     await view.click('button-retry-investor-positions');
-    // The one other call is the lazy 90-day history of the company now readable as Attention.
-    assert.deepEqual(view.calls.slice(before).filter((c) => !c.startsWith('/api/portfolio/health/')), ['/api/positions'], 'Retry re-read more than the positions');
+    assert.deepEqual(view.calls.slice(before), ['/api/positions'], 'Retry re-read more than the positions');
     // The reporting read still failed: mark age has no reference date, so stale reads Unreadable, never a count.
     assert.match(view.text('positions-count-stale'), /Unreadable.*reporting read’s date, which could not be read/);
     assert.match(view.text('positions-count-coverage'), /3 of 5/);

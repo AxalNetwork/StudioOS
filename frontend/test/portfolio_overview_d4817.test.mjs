@@ -121,6 +121,16 @@ const book = (over = {}) => ({ path }) => {
   return path in routes ? json(routes[path]) : json({});
 };
 
+test('Needs attention names the first red snapshot within 90 days', async () => {
+  const health = { ...HEALTH_READ, items: HEALTH_READ.items.map((item) => item.project_id === 2
+    ? { ...item, previous_status: 'yellow', status_changed_at: '2026-10-20', age_days: 7 }
+    : item) };
+  const view = await mount(book({ '/api/portfolio/health': json(health) }));
+  try {
+    assert.match(view.text('attention-2'), /HealthHealth turned to Attention on 20 Oct 2026 · first snapshot with this status/);
+  } finally { await view.close(); }
+});
+
 test('1. populated: performance with basis and as-of, evidence-backed attention, and the company table in the frame', async () => {
   const view = await mount(book());
   try {
@@ -147,6 +157,7 @@ test('1. populated: performance with basis and as-of, evidence-backed attention,
       'Report2026-Q3 not received · last reported 12 Jul 2026MarkLatest mark below cost · 0.80× · 31 Mar 2026',
       'MarkLatest mark 31 Mar 2026, older than two quartersOpen Northwind Labs',
     ].join(''));
+    assert.doesNotMatch(view.text('attention-2'), /Health turned to Attention/, 'one snapshot proves no status change');
     assert.match(view.text('attention-3'), /Kite SystemsNot recordedHealthNo health snapshot is recorded for this company\..*MarkNo mark recorded · carried at cost \$1,000,000/);
     // Summaries.
     assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1Period2026-Q3Complete$/);
