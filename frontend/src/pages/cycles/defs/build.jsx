@@ -8,6 +8,9 @@ import ConnectToolSheet from '../../account/ConnectToolSheet';
 import { buildPartsMap } from '../buildParts';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
+import { cyclesWrite } from '../../../lib/api/cycles';
+import MvpSummary from '../MvpSummary';
+import { mvpPhoneRow } from '../mvpTable';
 
 /**
  * Build's read (#1475, D662) is already in D661's shape (chart specs,
@@ -42,6 +45,14 @@ const build = {
   }),
   add: toFnMap({}),
   fills: {},
+  // D6031 (#6031, BD8): Prototype / MVP's summary line above its table ("N of M must-haves complete ·
+  // target <date> · N blocked", with Set for a missing date), and its phone rows carrying Due, Test, Built and Tested.
+  aboveRecords: toFnMap({
+    'prototype-mvp': (module, { projectId, reload }) => (
+      <MvpSummary facts={module?.facts} save={(date) => cyclesWrite.build.mvpTarget(projectId, date)} onSaved={reload} />
+    ),
+  }),
+  phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
   // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
   // they read: the roadmap tradeoff on Product roadmap; the Monday plan, the
   // Friday retro and the KPI annotation on Operating systems, the weekly

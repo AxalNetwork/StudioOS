@@ -376,9 +376,12 @@ export const PAGES = Object.freeze({
     facts: ['Who: Advisors', 'Join: Assigned by an admin', 'Cycle: monthly cohorts of four weeks'],
     tabs: [
       { key: 'overview', label: 'Overview', path: MENTOR_PATH },
-      { key: 'how', label: 'How it runs', path: MENTOR_HOW_PATH },
-      { key: 'people', label: 'People', path: MENTOR_PEOPLE_PATH },
-      { key: 'activity', label: 'Activity', path: MENTOR_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: MENTOR_HOW_PATH },
+      { key: 'availability', label: 'Availability & grants', path: `${MENTOR_PATH}/availability` },
+      { key: 'participation', label: 'Participation', path: `${MENTOR_PATH}/participation` },
+      { key: 'people', label: 'Cohorts', path: MENTOR_PEOPLE_PATH, module: 'cohorts' },
+      { key: 'activity', label: 'History', path: MENTOR_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: `${MENTOR_PATH}/settings` },
     ],
   },
   'refer-and-earn': {

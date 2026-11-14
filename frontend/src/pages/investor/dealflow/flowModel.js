@@ -166,6 +166,8 @@ export function flowRows(scope, { flow, deals }) {
     daysInStage: f ? num(f.days_in_stage) : null,
     // D1241: the firm's note on its row, for the peek (DLS7).
     note: f?.note ?? null,
+    // D6148: the firm's pass on a passed row ({ reason, passed_at, revisit, revisit_at }), for when it comes back.
+    pass: f?.pass ?? null,
     // A door only where DEAL's rule holds (D1238 `can_open`); a listed round alone is never one.
     canOpen: !!f?.can_open,
   });
