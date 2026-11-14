@@ -92,7 +92,7 @@ test('1. the SQL page answers exactly what the in-memory path answers, and offer
 });
 
 /** The card and facts as the reader computed them before #4603 part 2b, from every feature row. */
-function referenceCard(features: any[], target: string | null) {
+function referenceCard(features: any[], target: string | null, today: string) {
   const must = features.filter(f => Number(f.is_must_have ?? 0) === 1);
   const done = must.filter(f => f.delivery_status === 'Done');
   const history = new Map<string, number>();
@@ -111,16 +111,21 @@ function referenceCard(features: any[], target: string | null) {
   const due = open.filter(f => typeof f.due_date === 'string' && f.due_date > '').sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
   const missing = blocked ?? due ?? open[0];
   return { series, state: must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok', next: missing ? `${blocked ? 'Unblock' : 'Complete'} ${missing.title}` : null,
-    facts: { done: done.length, total: must.length, blocked: must.filter(f => f.delivery_status === 'Blocked').length, target_date: target } };
+    facts: { done: done.length, total: must.length, blocked: must.filter(f => f.delivery_status === 'Blocked').length,
+      // #6027 (D6027): must-haves not Done whose due date is before today (UTC).
+      overdue: open.filter(f => typeof f.due_date === 'string' && f.due_date !== '' && f.due_date.slice(0, 10) < today).length, target_date: target } };
 }
 
-test('2. the card and facts are what the old full read computed', async () => {
+test('2. the card and facts are what the old full read computed', async (t) => {
   // Mutation checked: the history without `delivery_status = 'Done'` → the stale done_at adds a month;
   // `missing` ordered by id alone → the card's next names another must-have.
+  // #6027: a fixed today inside the seeded 2027 due dates, so some open must-haves are overdue and some are not.
+  // Mutation checked: overdue counting Done must-haves, or `<=` today → the facts differ.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2027, 4, 4, 12) });
   for (const h of [varied, large]) {
     const features = h.db.prepare(`SELECT * FROM mvp_features WHERE project_id = ? ORDER BY sort_order, id`).all(PROJECT) as any[];
     const target = (h.db.prepare('SELECT mvp_target_date AS t FROM projects WHERE id = ?').get(PROJECT) as any).t;
-    const want = referenceCard(features, target);
+    const want = referenceCard(features, target, '2027-05-04');
     const r = await page(h);
     assert.deepEqual(r.body.card.series, want.series);
     assert.equal(r.body.card.state, want.state);

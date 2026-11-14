@@ -113,7 +113,9 @@ test('5. the summary counts the blocked; the dominant action is the next blocked
   const h = await seeded();
   try {
     let r = await page(h);
-    assert.deepEqual(r.body.facts, { done: 2, total: 6, blocked: 1, target_date: r.body.facts.target_date, can_set_target: true });
+    assert.deepEqual(r.body.facts, { done: 2, total: 6, blocked: 1, target_date: r.body.facts.target_date, can_set_target: true,
+      // #6027: the overdue count depends on today against these December due dates; build_overview_6027 pins it.
+      overdue: r.body.facts.overdue });
     assert.equal(r.body.card.next?.text, 'Unblock Synthetic blocked');
     h.db.exec(`UPDATE mvp_features SET delivery_status = 'In Progress' WHERE id = 4`);
     r = await page(h);

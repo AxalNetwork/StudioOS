@@ -129,3 +129,4 @@ and citations by number keep working.
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+| `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
