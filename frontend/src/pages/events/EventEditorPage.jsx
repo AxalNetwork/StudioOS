@@ -7,6 +7,8 @@ import EventSyndicationPanel from './EventSyndicationPanel';
 // what happens and who is told; the save is the dialog's button.
 // D1036 (#2877): the shared host header (MEV12a) carries that one action, and
 // /events/new has its own (MEV12b); a new event lands on its Details tab.
+// #5868 (D3724 gap 5, NE1): the topics picker, up to five of the Worker's
+// `EVENT_TOPICS`, saved as `topics` on create and edit and read back on edit.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -24,6 +26,7 @@ import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
 import { eventLocalInput, eventTimePayload } from './eventTimeModel';
+import { TOPICS_UNREAD, topicPicker, toggleTopic } from './myEventsTabsModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -45,6 +48,39 @@ const COMMON_TZS = [
 
 const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-200';
 const inputCls = 'mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500';
+
+/** NE1's topics: the ten chips, "N of 5", and why a sixth cannot be picked. */
+function TopicsPicker({ topics, onChange }) {
+  if (!Array.isArray(topics)) {
+    return (
+      <div data-testid="event-topics">
+        <span className={labelCls}>Topics</span>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-unread">Unreadable — {TOPICS_UNREAD}</p>
+      </div>
+    );
+  }
+  const picker = topicPicker(topics);
+  return (
+    <div role="group" aria-labelledby="event-topics-label" data-testid="event-topics">
+      <div className="flex items-center justify-between gap-2">
+        <span id="event-topics-label" className={labelCls}>Topics</span>
+        <span className="font-mono text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-count">{picker.count}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {picker.chips.map((t) => (
+          <button key={t.key} type="button" aria-pressed={t.on} disabled={t.disabled}
+            title={t.disabled ? picker.note : undefined}
+            onClick={() => onChange(toggleTopic(topics, t.key))}
+            className={`inline-flex min-h-[32px] items-center whitespace-nowrap rounded-full border px-3 text-[12.5px] ${t.on
+              ? 'border-violet-500 bg-violet-50 font-bold text-violet-800 dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-200'
+              : 'border-gray-300 bg-white font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'} disabled:cursor-not-allowed disabled:opacity-50`}
+            data-testid={`event-topic-${t.key}`}>{t.on ? '✓ ' : ''}{t.label}</button>
+        ))}
+      </div>
+      {picker.note ? <p role="status" className="mt-1.5 text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-full">{picker.note}</p> : null}
+    </div>
+  );
+}
 
 export default function EventEditorPage() {
   const { id } = useParams();
@@ -69,6 +105,9 @@ export default function EventEditorPage() {
     cover_alt: '', cover_source: null, cover_focal: null, cover_crops: null,
     capacity: '', waitlist_enabled: true, approval_required: false,
     visibility: 'private',
+    // #5868: the event's topics. `null` is "not read" (the reply carried no
+    // list), which the picker says and the save leaves alone, never [].
+    topics: [],
   });
   const [rules, setRules] = useState({});
   const [status, setStatus] = useState('draft');
@@ -126,6 +165,7 @@ export default function EventEditorPage() {
           waitlist_enabled: ev.waitlist_enabled !== 0 && ev.waitlist_enabled !== false,
           approval_required: ev.approval_required === 1 || ev.approval_required === true,
           visibility: ev.visibility || 'private',
+          topics: Array.isArray(ev.topics) ? ev.topics : null,
         });
         setStatus(ev.status || 'draft');
         setRules(ev.audience_rules || {});
@@ -162,6 +202,7 @@ export default function EventEditorPage() {
     approval_required: form.approval_required ? 1 : 0,
     visibility: form.visibility,
     audience_rules_json: JSON.stringify(rules),
+    ...(Array.isArray(form.topics) ? { topics: form.topics } : {}),
   }), [form, rules, saved]);
 
   const save = async () => {
@@ -270,6 +311,7 @@ export default function EventEditorPage() {
               <EventCoverStep id={id} form={form} set={set} coverQuote={coverQuote} coverDraw={coverDraw} onCoverDrawn={onCoverDrawn} />
             </div>
           </div>
+          <TopicsPicker topics={form.topics} onChange={(next) => set('topics', next)} />
           <div>
             <label className={labelCls}>Summary</label>
             <input className={inputCls} value={form.summary} onChange={(e) => set('summary', e.target.value)} placeholder="One-line teaser" />
