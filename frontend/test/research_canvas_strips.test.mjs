@@ -19,6 +19,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import {
+  AGE_AT, ATTACH_COPY, STALE_AT, ageBand, attachState, daysSince,
+} from '../src/pages/research/marketReadingRead.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const read = (p) => codeOnly(raw(p));
@@ -48,39 +51,50 @@ function tilesIn(code, from = 0) {
 
 // ── Markets ───────────────────────────────────────────────────────────────
 //
-// THE ZONE MOVED, AND THAT IS WHAT THIS BLOCK NOW RECORDS. Its four tests read
-// `SignalsPage`'s `MARKETS_STRIP` — the two age-band tiles drawn over the
+// THE ZONE MOVED TWICE, AND THAT IS WHAT THIS BLOCK NOW RECORDS. Its four tests
+// read `SignalsPage`'s `MARKETS_STRIP` — the two age-band tiles drawn over the
 // `market_intel_rows` sector feed when `/research/markets` mounted it embedded.
 // The `pr3` artboard is about a different object: comparable RANGES for the
 // firm's own service lines, each attachable to a proposal. A sector signal is
-// not a price. So the zone mounts `pages/research/MarketZone`. The feed kept
-// `/signals` with no zone header until D670 retired that page, and with it the
-// two tests that held `SignalsPage` to that.
+// not a price. So the zone mounted `pages/research/MarketZone`, until D593's
+// market directory replaced it; the feed kept `/signals` until D670 retired it.
 //
-// EVERY RULE THOSE FOUR TESTS HELD IS STILL HELD, one file over, and each is
-// worth more on the new page than it was on the old one:
-//   · the windows are the artboard's own numbers, transcribed and not chosen;
-//   · age is never read off `updated_at`;
-//   · a tile counts the whole population and never the chip-narrowed list;
-//   · a tile with no store is not drawn.
+// D6285 DELETED `MarketZone`, WHICH NOTHING HAD MOUNTED SINCE D593, and this
+// block had gone on reading it. The rules it held that live on are held where
+// they live now: the age windows, `daysSince` and `ageBand` in
+// `marketReadingRead.js`, the run-date reads in the two mounted pages, and the
+// attachment gate in `attachState`. The tile-count test went with the body it
+// read: the directory's readings card draws no tiles and no chip row.
 
-const market = read('frontend/src/pages/research/MarketZone.jsx');
+const marketRead = read('frontend/src/pages/research/marketReadingRead.js');
+const MOUNTED_MARKET_PAGES = [
+  'frontend/src/pages/research/MarketDirectoryZone.jsx',
+  'frontend/src/pages/research/MarketReading.jsx',
+];
 
 test('the age windows are still the artboard’s own numbers', () => {
   // `Pages · Partner Research` declares `const STALE_AT = 90, AGE_AT = 30`.
-  // Transcribed, never chosen — and now exported, because the guard below and
-  // the zone's own copy would otherwise be two numbers that can part company.
-  assert.match(market, /export const STALE_AT = 90;/, 'the stale window has moved off its artboard');
-  assert.match(market, /export const AGE_AT = 30;/, 'the ageing window has moved off its artboard');
+  // Transcribed, never chosen — and exported, because the guard below and the
+  // pages' own copy would otherwise be two numbers that can part company.
+  assert.equal(STALE_AT, 90, 'the stale window has moved off its artboard');
+  assert.equal(AGE_AT, 30, 'the ageing window has moved off its artboard');
 });
 
 test('age comes from the run date and never from a touched-at column', () => {
   // `updated_at` moves when a row is edited, so every reading would look
   // current the moment anyone touched one — the same trap the signals feed had
   // with its ingestion timestamp, where one run stamped every row it saw.
-  assert.match(market, /const daysSince = \(iso\) => \{/, 'the age helper is gone');
-  assert.match(market, /daysSince\(r\.ran_at\)/, 'age is no longer computed from the run date');
-  assert.doesNotMatch(codeOnly(market), /updated_at/, 'age is being read off a touched-at column');
+  assert.equal(daysSince(null), null, 'no date is no age, not zero');
+  assert.equal(daysSince('not a date'), null, 'an unreadable date is no age, not zero');
+  assert.ok(daysSince('2020-01-01T00:00:00Z') > 365, 'a dated run has an age in whole days');
+  assert.ok(Number.isInteger(daysSince('2020-01-01T00:00:00Z')), 'an age is whole days');
+  assert.doesNotMatch(marketRead, /updated_at/, 'age is being read off a touched-at column');
+  // Every age the mounted pages compute is computed from the reading's run date.
+  for (const path of MOUNTED_MARKET_PAGES) {
+    const calls = read(path).match(/daysSince\([^)]*\)/g) || [];
+    assert.ok(calls.length > 0, `${path} no longer computes a reading's age`);
+    for (const call of calls) assert.match(call, /\.ran_at\)$/, `${path}: ${call} is not the run date`);
+  }
 });
 
 test('a reading that has never been run is its own answer, not a stale one', () => {
@@ -88,25 +102,12 @@ test('a reading that has never been run is its own answer, not a stale one', () 
   // market for has not gone out of date — there is nothing to have aged — and
   // bucketing it as stale would tell a firm to re-run a reading it has never
   // run once.
-  assert.match(market, /if \(days === null\) return null;/,
-    'a never-run reading is being sorted into an age band');
-  const band = market.slice(market.indexOf('export function ageBand('), market.indexOf('const BAND_PILL'));
-  assert.match(band, /if \(days > STALE_AT\) return 'stale';/, 'the stale band no longer uses the artboard’s window');
-  assert.match(band, /if \(days > AGE_AT\) return 'ageing';/, 'the ageing band no longer uses the artboard’s window');
-});
-
-test('the tiles count every reading, never the rows a chip left showing', () => {
-  // `visible` is already narrowed by the selected chip, so counting it would
-  // make `Attachable now` read zero the moment a reader clicked `Stale`. A tile
-  // that changes because you looked at it is not reporting what it claims to.
-  const code = codeOnly(market);
-  const tiles = code.slice(code.indexOf('const attachable = rows.filter('), code.indexOf('const openForm ='));
-  assert.ok(tiles.length > 0, 'the tile counts are gone');
-  assert.doesNotMatch(tiles, /\bvisible\b/, 'the tile counts read the chip-narrowed list');
-  assert.match(tiles, /const stale = rows\.filter\(\(r\) => r\.band === 'stale'\);/,
-    'the stale tile no longer counts the stale band');
-  assert.match(tiles, /const neverRun = rows\.filter\(\(r\) => r\.band === null\);/,
-    'the never-run tile no longer counts the readings with no run date');
+  assert.equal(ageBand(null), null, 'a never-run reading is being sorted into an age band');
+  assert.equal(ageBand(0), 'current');
+  assert.equal(ageBand(AGE_AT), 'current', 'the ageing window starts after its day, not on it');
+  assert.equal(ageBand(AGE_AT + 1), 'ageing', 'the ageing band no longer uses the artboard’s window');
+  assert.equal(ageBand(STALE_AT), 'ageing', 'the stale window starts after its day, not on it');
+  assert.equal(ageBand(STALE_AT + 1), 'stale', 'the stale band no longer uses the artboard’s window');
 });
 
 test('age gates attachment rather than labelling it', () => {
@@ -114,16 +115,14 @@ test('age gates attachment rather than labelling it', () => {
   // BLOCKED from a proposal, not marked. "A client shown a range from May,
   // presented as current reasoning behind a September quote, is a worse outcome
   // than a proposal with no market figure at all."
-  const code = codeOnly(market);
-  assert.match(code, /stale: 'Blocked from proposals'/,
+  assert.equal(attachState({ stale: true, attachments: [{ quote_id: 7 }], proposals: [{ id: 8 }] }), 'blocked',
     'a stale reading is labelled rather than blocked');
-  assert.match(code, /text: 'Re-run before attaching'/,
-    'the attachment column no longer says what to do about a stale reading');
-  // THREE OUTCOMES, NOT TWO. "Nothing to attach" is not a weaker "blocked":
-  // one is a reading that went out of date and one is a service line nobody
-  // has ever priced.
-  assert.match(code, /text: 'Nothing to attach'/,
-    'a never-run reading reads as blocked instead of as never run');
+  assert.equal(ATTACH_COPY.blocked.pill, 'Re-run before attaching',
+    'the reading no longer says what to do about a stale reading');
+  // The reading page decides `stale` with the artboard's band, not a number of its own.
+  assert.match(read('frontend/src/pages/research/MarketReading.jsx'),
+    /const stale = item \? ageBand\(daysSince\(item\.ran_at\)\) === 'stale' : false;/,
+    'the reading page decides staleness some other way');
 });
 
 // ── Companies ─────────────────────────────────────────────────────────────

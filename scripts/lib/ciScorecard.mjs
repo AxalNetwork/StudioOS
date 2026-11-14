@@ -1,4 +1,5 @@
 import * as ci from './ciClassify.mjs';
+import { REQUIRED } from './requiredChecks.mjs';
 
 const minute = 60_000;
 const stamp = Date.parse;
@@ -139,10 +140,116 @@ export function cancelledShare(runs) {
   return mean(completed.map(r => Number(r.conclusion === 'cancelled')));
 }
 
+// D5973 (#5973): the request plan. Each phase stops when the running count
+// reaches its line, so the comment (up to ten pages and one write) always fits
+// under the cap. `ci-scorecard.mjs` reads these and states no other number.
+export const BUDGET = Object.freeze({ cap: 200, runPages: 10, rules: 1, jobsUntil: 145, prPages: 2, timelinesUntil: 185, commentPages: 10, writes: 1 });
+
+// The workflows whose merge_group jobs report a required check.
+export const QUEUE_WORKFLOWS = Object.freeze([...new Set(Object.values(REQUIRED))].sort().map(f => `.github/workflows/${f}`));
+export const OUTCOMES = Object.freeze(['deadline-expired', 'failed-check', 'cancelled-or-superseded', 'merged', 'missing-evidence']);
+// GitHub removes an expired entry at about its deadline; a removal later than
+// this after it is not read as the deadline's.
+export const DEADLINE_SLACK_MIN = 15;
+const queueRun = run => run.event === 'merge_group' && QUEUE_WORKFLOWS.includes(run.path);
+const isSha = sha => /^[0-9a-f]{40}$/.test(sha || '');
+
+/** Queue entries from one PR timeline: start, end, the event that ended it and the reason GitHub recorded (REST gives none today). */
+export function queueEntries(events) {
+  const entries = [];
+  let current = null;
+  for (const event of [...events].sort((a, b) => stamp(a.created_at) - stamp(b.created_at))) {
+    if (event.event === 'added_to_merge_queue' && !current) {
+      current = { start: event.created_at, end: null, endEvent: null, reason: null };
+      entries.push(current);
+    } else if (['removed_from_merge_queue', 'merged', 'closed'].includes(event.event) && current) {
+      Object.assign(current, { end: event.created_at, endEvent: event.event,
+        reason: typeof event.reason === 'string' && event.reason.trim() ? event.reason.trim().slice(0, 200) : null });
+      current = null;
+    }
+  }
+  return entries;
+}
+
+/** The commit a PR's `merged` timeline event names, or null. */
+export const mergeCommit = events => {
+  const sha = events.findLast(e => e.event === 'merged')?.commit_id;
+  return isSha(sha) ? sha : null;
+};
+
+/** The merge queue's response deadline in minutes from `GET rules/branches/main`, or null when unread. */
+export function queueDeadline(rules) {
+  const value = Array.isArray(rules) ? rules.find(r => r?.type === 'merge_queue')?.parameters?.check_response_timeout_minutes : null;
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function outcome({ runsAt, required, sampled, removal, removedAt, elapsed, mergedHere, mergedElsewhere, deadline }) {
+  const by = at => !removedAt || stamp(at) <= stamp(removedAt);
+  if (mergedHere) return ['merged', 'the PR timeline merged this commit'];
+  const failedJob = required.find(j => failed(j) && by(j.completed_at));
+  if (failedJob) return ['failed-check', `${failedJob.name} concluded ${failedJob.conclusion}`];
+  const failedRun = runsAt.find(r => complete(r) && ['failure', 'timed_out'].includes(r.conclusion) && by(r.updated_at));
+  if (failedRun) return ['failed-check', `${failedRun.path.split('/').pop()} concluded ${failedRun.conclusion}`];
+  if (removal?.reason && /time[ds]?[ -]?out|deadline/i.test(removal.reason)) return ['deadline-expired', 'GitHub recorded a timeout reason'];
+  const pending = sampled && removedAt ? required.filter(j => !j.completed_at || stamp(j.completed_at) > stamp(removedAt)).map(j => j.name) : [];
+  if (deadline && pending.length && elapsed !== null && elapsed >= deadline && elapsed <= deadline + DEADLINE_SLACK_MIN) {
+    return ['deadline-expired', `removed ${elapsed.toFixed(1)} min after the request, past the ${deadline} min deadline, with ${pending.join(', ')} pending`];
+  }
+  if (runsAt.some(r => r.conclusion === 'cancelled')) return ['cancelled-or-superseded', 'a queue run was cancelled'];
+  if (sampled && removedAt && mergedElsewhere) return ['cancelled-or-superseded', 'removed, and the PR merged as another commit'];
+  if (sampled && removedAt && deadline && elapsed !== null && elapsed < deadline) {
+    return ['cancelled-or-superseded', `removed ${elapsed.toFixed(1)} min after the request, before the ${deadline} min deadline, with no failed required check`];
+  }
+  return ['missing-evidence', [!sampled && 'required jobs not sampled', !removedAt && 'no queue removal or merge recorded',
+    !deadline && 'deadline unread'].filter(Boolean).join('; ') || 'no rule matched'];
+}
+
+/**
+ * One row per merge_group head SHA: request time (first queue run created),
+ * first runner start, wait and runtime of the last required check to finish,
+ * queue entry and removal from the PR timeline, the recorded reason, and one
+ * outcome from OUTCOMES. `deadline-expired` needs a recorded timeout reason,
+ * or every required job sampled with one still pending at a removal that came
+ * at the deadline; anything short of that is `missing-evidence`.
+ */
+export function candidateRows({ runs, prs, deadline }) {
+  const names = Object.keys(REQUIRED);
+  const shas = [...new Set(runs.filter(r => !r.priorAttempt && queueRun(r) && isSha(r.head_sha)).map(r => r.head_sha))];
+  return shas.map(sha => {
+    const runsAt = runs.filter(r => !r.priorAttempt && queueRun(r) && r.head_sha === sha);
+    const requestedAt = runsAt.map(r => r.created_at).sort((a, b) => stamp(a) - stamp(b))[0];
+    const number = runsAt.map(queuePr).find(Number.isSafeInteger) ?? null;
+    const jobs = runsAt.flatMap(r => r.jobs || []);
+    const required = names.map(name => jobs.find(j => j.name === name)).filter(Boolean);
+    const sampled = QUEUE_WORKFLOWS.every(path => runsAt.some(r => r.path === path && Array.isArray(r.jobs))) && required.length === names.length;
+    const starts = jobs.filter(j => j.conclusion !== 'skipped' && j.started_at).map(j => j.started_at).sort((a, b) => stamp(a) - stamp(b));
+    const last = sampled && required.every(j => j.completed_at)
+      ? [...required].sort((a, b) => stamp(b.completed_at) - stamp(a.completed_at))[0] : null;
+    const pr = prs.find(p => p.number === number);
+    const entry = pr?.entries.find(e => stamp(e.start) <= stamp(requestedAt) && (!e.end || stamp(requestedAt) <= stamp(e.end))) || null;
+    const removedAt = entry?.end || null;
+    const elapsed = removedAt ? minutes(requestedAt, removedAt) : null;
+    const [kind, evidence] = outcome({ runsAt, required, sampled, removal: entry, removedAt, elapsed, deadline,
+      mergedHere: pr?.mergeCommit === sha, mergedElsewhere: Boolean(pr?.mergeCommit) && pr.mergeCommit !== sha });
+    return {
+      headSha: sha, pr: number, requestedAt, firstRunnerStartedAt: starts[0] || null,
+      lastRequired: last ? { name: last.name, completedAt: last.completed_at,
+        waitMinutes: minutes(last.created_at, last.started_at), runtimeMinutes: minutes(last.started_at, last.completed_at) } : null,
+      queueEnteredAt: entry?.start || null, queueRemovedAt: removedAt, removalEvent: entry?.endEvent || null,
+      removalReason: entry?.reason || null, outcome: kind, evidence,
+    };
+  }).sort((a, b) => stamp(a.requestedAt) - stamp(b.requestedAt) || a.headSha.localeCompare(b.headSha));
+}
+
+export function outcomeCounts(rows) {
+  return { n: rows.length, counts: Object.fromEntries(OUTCOMES.map(k => [k, rows.filter(r => r.outcome === k).length])) };
+}
+
 const show = ({ value, n }, scale = 1) => value === null ? `n/a (n=${n})` : `${(value * scale).toFixed(1)} (n=${n})`;
 const pair = result => `p50 ${show(result.p50)}, p90 ${show(result.p90)}`;
 
-export function report({ runs, prs, start, now, requests }) {
+export function report({ runs, prs, start, now, requests, rows = candidateRows({ runs, prs, deadline: null }), deadline = null }) {
+  const outcomes = outcomeCounts(rows);
   const waits = runnerWait(runs);
   const failures = failureClasses(runs);
   const cost = runnerMinPerMergedPr(runs, prs);
@@ -162,5 +269,6 @@ export function report({ runs, prs, start, now, requests }) {
     `| Peak observed concurrent jobs | ${show(peakConcurrentJobs(runs, start, now))} |`,
     `| Main push SHAs without a green queue run | ${show(pushesWithoutQueueRun(runs))} |`,
     `| Cancelled run share (%) | ${show(cancelledShare(runs), 100)} |`,
+    `| Merge-group candidates by outcome | ${outcomes.n ? Object.entries(outcomes.counts).map(([k, v]) => `${k} ${v}`).join(', ') : 'n/a'} (n=${outcomes.n}); deadline ${deadline ? `${deadline} min` : 'unread'}; one row per head SHA in the candidates artifact |`,
   ].join('\n');
 }

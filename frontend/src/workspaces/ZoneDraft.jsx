@@ -167,6 +167,12 @@ export default function ZoneDraft({
   // the profile's list in `lib/railOptions/`, where it differs from the
   // registry's `draft:<surface>`. Left out, the band names that key (D770).
   railOption = null,
+  // D5938 (#5938): the edit control's own words where a canvas names it
+  // otherwise ("Edit terms" on the negotiation counter), and a short status
+  // drawn beside the label only while a draft is shown ("Not sent"). Left
+  // out, every other mount draws "Edit first" and no status, as before.
+  editLabel = 'Edit first',
+  status = null,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -291,6 +297,11 @@ export default function ZoneDraft({
           <Sparkles aria-hidden="true" className="h-3 w-3" />
           {label}
         </span>
+        {item && status ? (
+          <span data-testid="zone-draft-status" className={`rounded-[4px] border border-current px-1.5 py-0.5 text-[10px] font-extrabold ${skin.ink}`}>
+            {status}
+          </span>
+        ) : null}
         {item ? (
           <span className={`ml-auto whitespace-nowrap font-mono text-[10.5px] ${skin.ink}`}>
             {formatCost(item.cost_usd)}
@@ -321,7 +332,7 @@ export default function ZoneDraft({
               onClick={() => setEditing(editing != null ? null : item.body)}
               disabled={busy !== ''}
             >
-              {editing != null ? 'Stop editing' : 'Edit first'}
+              {editing != null ? 'Stop editing' : editLabel}
             </button>
             <button type="button" className={GHOST} onClick={doDiscard} disabled={busy !== ''}>
               {busy === 'discard' ? 'Discarding…' : 'Discard'}

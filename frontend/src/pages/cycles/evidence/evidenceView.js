@@ -135,6 +135,18 @@ export function needRank(c, itemsByUid = new Map()) {
   return 4;
 }
 
+/**
+ * D6048 (#6048): RA-15's Needs you and RA-26's claim card, one action each, named by why the claim needs the
+ * founder: a mismatch to review, nothing behind it, the founder's own figure, or a record that changed or went
+ * stale since. A backed, current claim has none. Each opens the claim's drawer, where the change is made.
+ */
+export const CLAIM_ACTION = Object.freeze({ mismatch: 'Review', not_backed: 'Add evidence', founders_figure: 'Back it' });
+export function claimAction(c, itemsByUid = new Map()) {
+  if (CLAIM_ACTION[c?.state]) return CLAIM_ACTION[c.state];
+  const best = itemsByUid.get(c?.record?.items?.[0]);
+  return best?.source_state === 'changed' || best?.stale ? 'Re-check' : null;
+}
+
 /** A count over a page: "100+" when the page has more, never a false total. */
 export const countOf = (n, more) => (n == null ? null : more ? `${n}+` : String(n));
 
@@ -164,7 +176,9 @@ export function viewModel(read) {
       opens: read?.opens?.state === 'recorded' ? read.opens.count : null, openers: read?.opens?.state === 'recorded' ? read.opens.investors : null,
       more,
     },
-    empty: !!(items && proposals && claims && !items.length && !proposals.length && !claims.length),
+    // D6048 (#6048): RA-15's first use. Nothing pinned, nothing waiting and no claim, every one of the three read,
+    // and the claim check not failed; a block that could not be read is never taken for none.
+    empty: !!(items && proposals && claims && !items.length && !proposals.length && !claims.length && read?.claim_check?.outcome !== 'unreadable'),
     unreadableSources: (read?.live_sources || []).filter((b) => b.state === 'unreadable').map((b) => datasetName(b.dataset)),
   };
 }

@@ -31,3 +31,13 @@ jobs:
       - run: node scripts/ci-scorecard.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CI_SCORECARD_ROWS: ${{ runner.temp }}/ci-scorecard-candidates.json
+      # D5973: one row per merge-group head SHA with its classified outcome.
+      - name: Keep the candidate rows
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-scorecard-candidates
+          path: ${{ runner.temp }}/ci-scorecard-candidates.json
+          if-no-files-found: warn
+          retention-days: 30

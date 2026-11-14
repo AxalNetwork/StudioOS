@@ -100,6 +100,17 @@
 .pf-search{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--pf-hair2);border-radius:8px;padding:0 9px;background:var(--pf-card);color:var(--pf-mu);min-height:32px}
 .pf-search input{border:0;outline:none;background:transparent;color:var(--pf-ink);font:inherit;font-size:12.5px;min-width:170px}
 .pf-select select{min-height:32px;border:1px solid var(--pf-hair2);border-radius:8px;background:var(--pf-card);color:var(--pf-ink);font:inherit;font-size:12.5px;padding:0 8px}
+/* D6208: Export in the header (one button, or a menu of choices) and the filter count line */
+.pf-export{position:relative;display:inline-flex;flex-direction:column;align-items:flex-end;gap:6px}
+button.pf-btn{font-family:inherit;cursor:pointer}
+.pf-btn:disabled{opacity:.55;cursor:not-allowed}
+.pf-export-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:20;min-width:200px;display:flex;flex-direction:column;padding:4px;border:1px solid var(--pf-hair2);border-radius:9px;background:var(--pf-card);box-shadow:0 8px 24px rgba(15,14,23,.16)}
+.pf-export-item{display:contents}
+.pf-export-choice{display:block;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:var(--pf-ink);font:inherit;font-size:12.5px;font-weight:600;padding:8px 10px;min-height:36px;cursor:pointer}
+.pf-export-choice:hover:not(:disabled),.pf-export-choice:focus-visible{background:var(--pf-lav);color:var(--pf-vt)}
+.pf-export-choice:disabled{color:var(--pf-mu);cursor:not-allowed}
+.pf-export-failed{max-width:360px}
+.pf-fchips{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 14px 8px}
 .pf-table-wrap{overflow-x:auto}
 .pf-table{width:100%;border-collapse:collapse;font-size:12px}
 .pf-table caption{caption-side:top;text-align:left;padding:0 14px 8px;font:700 10px var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--pf-mu)}
@@ -124,6 +135,8 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-hero>b{font-size:26px}
   .pf-attn-item .pf-btn{width:100%;justify-content:center;min-height:44px}
   .pf-tools{width:100%}.pf-search{flex:1 1 100%}.pf-search input{min-width:0;width:100%}.pf-select{flex:1 1 auto}.pf-select select{width:100%}
+  .pf-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.pf-filters .pf-search{grid-column:1/-1}.pf-filters .pf-btn{grid-column:1/-1;justify-content:center}.pf-select{min-width:0}
+  .pf-export{align-items:stretch}.pf-export-menu{left:0;right:auto;min-width:min(280px,calc(100vw - 32px))}.pf-export-choice{min-height:44px}.pf-export-failed{max-width:none}
   .pf-table caption{display:block;width:auto;padding:0 14px 8px}
   .pf-search,.pf-select select,.pf-btn,.pf-icon-button,.pf-failure button{min-height:44px}
   .pf-table thead{display:none}

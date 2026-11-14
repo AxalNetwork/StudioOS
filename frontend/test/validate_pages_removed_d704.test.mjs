@@ -166,7 +166,8 @@ test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interview
   const tools = route.slice(at, route.indexOf('\n  }),', at)); // Validate's block, to its closing line
   assert.doesNotMatch(tools, /'customer-research':/, 'Customer research has no tool link: its module is the tool');
   assert.doesNotMatch(tools, /\/validate\/interviews/);
-  assert.match(tools, /'market-intelligence': \(\) => \(\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}\)/, 'Market intelligence keeps its tool');
+  // D6010 (#6010): beside it, Size the market.
+  assert.match(tools, /\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}/, 'Market intelligence keeps its tool');
   assert.equal(FOUNDER_TOOLS.some((t) => t.path === '/validate/interviews' || t.aliases?.includes('/validate/interviews')), false, 'FOUNDER_TOOLS has no /validate/interviews');
   // `/build/discovery` was the third, until #2335 retired it.
   assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/build/marketplace'), 'the other Customer research tools stay');

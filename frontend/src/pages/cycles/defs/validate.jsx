@@ -16,6 +16,8 @@ import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
+import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
+import { projectSearch } from '../founderToolNavigation';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection } from '../ValidateSections';
@@ -130,7 +132,14 @@ const validate = {
   Mount: ValidateMount,
   action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
   tools: toFnMap({
-    'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
+    // D6010 (#6010): Size the market opens the sizing tool for this venture, to any founder of it.
+    'market-intelligence': (q) => {
+      const venture = new URLSearchParams(projectSearch(q)).get('project_id');
+      return [
+        { label: 'Open the competitor tracker', href: '/build/competitors' },
+        { label: 'Size the market', href: venture ? sizingHref(venture) : '/validate/market-intelligence/sizing' },
+      ];
+    },
   }),
   add: toFnMap({
     'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
@@ -153,8 +162,14 @@ const validate = {
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
       </>
     ),
+    // D6010 (#6010): the stored positioning and assumptions marks and the sources, under the table.
     // D1087 (#2952): research pages from Notion, as sources (title and link).
-    'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
+    'market-intelligence': (_data, ctx) => (
+      <>
+        <MarketReadiness projectId={ctx.projectId} />
+        <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
+      </>
+    ),
     'demand-signals': (data, ctx) => (
       <>
         <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />

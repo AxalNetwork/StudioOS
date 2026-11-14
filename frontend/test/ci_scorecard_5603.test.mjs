@@ -55,9 +55,9 @@ test('failure classes distinguish infra, later success, inherited, PR-specific, 
   assert.deepEqual(results, { n: 5, counts: { pr: 1, inherited: 1, unknown: 1, infra: 1, flaky: 1 } });
 });
 
-test('empty report has ten unavailable metrics and excludes untrusted job names', () => {
+test('empty report has eleven unavailable metrics and excludes untrusted job names', () => {
   const output = m.report({ runs: [], prs: [], start: Date.parse(at(0)), now: Date.parse(at(13)), requests: 0 });
-  assert.equal(output.match(/n\/a/g).length, 12);
+  assert.equal(output.match(/n\/a/g).length, 13);
   assert.deepEqual(m.runnerWait([run('pull_request', 'x', [job('unsafe | <b>', 1, 2)])]), {});
 });
 

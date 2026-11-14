@@ -1513,31 +1513,6 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
-  'research/market': {
-    // The artboard: "on six comparables — a thin base, which the reading states
-    // rather than smoothing", and "points to the two stale readings as the ones
-    // to re-run". Both halves are instructions, because a model summarising
-    // ranges will otherwise average them and drop the sample size.
-    instruction: [
-      'Summarise what these comparable readings say about the firm’s own service lines.',
-      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
-      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
-    ].join(' '),
-    gather: async (c, userId) => {
-      const rows = await c.env.DB.prepare(
-        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
-           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
-      ).bind(userId).all<{
-        metric: string; range_low_cents: number; range_high_cents: number;
-        comparable_count: number; ran_at: string; scope: string | null;
-      }>();
-      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
-      return (rows.results || []).map((r) =>
-        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
-        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
-    },
-  },
-
   'network/relationships': {
     // The artboard: "who at the firm has the most recorded interactions with
     // that organization — Aoife Brennan sits against Thornbury Capital, where
