@@ -77,7 +77,6 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/hq/team', 'HQ › Team (D5044): the one supervision read, the roster, the branch search, each action on its shared state model, and what each act invalidates'],
   ['frontend/src/pages/hq/revenue', 'HQ › Revenue v2 (D5039): the read-only cockpit parts, its value-state vocabulary, the Data coverage drawer and the pure model they draw by'],
   ['frontend/src/pages/hq/aiAgents', 'HQ › AI agents (D4137): the roster, the From Axal lifecycle (D4160), company skills, operations and the Policies controls (D4162), and the words for every refusal'],
-  ['frontend/src/pages/portfolio',    'Portfolio v2 (D4817): the one frame, the shared parts, and the pure model each board draws by'],
   ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/lib/api',            'one module per API domain, re-exported through the generated apiModules.generated.js (D527, #4105)'],
