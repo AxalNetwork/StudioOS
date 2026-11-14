@@ -195,11 +195,13 @@ import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
 import {
-  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
+  CapitalAccessError, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
+import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
+import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -215,7 +217,7 @@ function capitalFailure(c: any, error: unknown): Response {
 }
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
+async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef; caprel?: CapRelCapabilities } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -235,15 +237,16 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
     return refuse(c, 403, { code: 'support_session_refused', message: 'Use your own staff account and give a reason for a support read.' });
   }
   if (capitalPath(path)) {
-    if (capitalStaff(user)) {
+    // D5074 slice 4: who the caller is, once, as the capability map the module read returns.
+    let caprel: CapRelCapabilities;
+    try { caprel = capRelCapabilities(await capRelStanding(c.env, project, user)); }
+    catch (error) { return capitalFailure(c, error); }
+    if (capRelCan(caprel, 'admin_reason_required')) {
       if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
         ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }
         : { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
-    } else {
-      try { if (!await capitalCanWork(c.env, project, user)) return c.json({ detail: 'Forbidden' }, 403); }
-      catch (error) { return capitalFailure(c, error); }
-    }
-    return { user, projectId, project };
+    } else if (!capRelCan(caprel, 'work')) return c.json({ detail: 'Forbidden' }, 403);
+    return { user, projectId, project, caprel };
   }
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId, project };
@@ -382,6 +385,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
     const rows = summary.stages.map(row => ({ id: `summary-${row.stage}`, cells: { stage: row.stage.replace(/_/g, ' '), count: row.count } }));
     if (summary.state === 'ok') rows.push({ id: 'summary-unrecorded', cells: { stage: 'Status not recorded', count: summary.status_not_recorded } });
     return c.json({ module: { slug: mod.slug, name: mod.name, records_title: 'Pipeline counts' }, mode: 'summary', read_only: true,
+      capabilities: (s as { caprel?: CapRelCapabilities }).caprel,
       card: await capitalSummaryCard(c.env, s.projectId), summary,
       records: { state: summary.state, reason: summary.reason, cols: [{ key: 'stage', label: 'Stage' }, { key: 'count', label: 'Investors' }],
         rows, total: summary.state === 'ok' ? rows.length : null, page: 1, page_size: 25, linkable: false } });
@@ -438,7 +442,9 @@ cycleRaise.get('/modules/:slug', async (c) => {
     } catch { parts.google = { state: 'unreadable', reason: 'What Google fed this module could not be read' }; }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
-    ...(Object.keys(parts).length ? { parts } : {}) });
+    ...(Object.keys(parts).length ? { parts } : {}),
+    // D5074 slice 4: Capital relationships' read carries the caller's capabilities; its requests refuse from the same map.
+    ...(slug === 'capital-relationships' ? { capabilities: (s as { caprel?: CapRelCapabilities }).caprel } : {}) });
 });
 
 // D1190 (#3124): Commitments and Match, each one read. The module's gate (`scope`) applies.
@@ -457,6 +463,8 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
+    // D5074: the reasoned support view is `support_read` in the capability map.
+    if (!capRelCan(s.caprel, 'support_read')) return refuse(c, 403, { code: 'admin_required', message: 'Admin role required' });
     const input = await body(c);
     const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
     if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
@@ -477,7 +485,8 @@ cycleRaise.get('/capital-relationships/support-reads', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
-    if (!await capitalCanWork(c.env, s.project, s.user)) return c.json({ detail: 'Forbidden' }, 403);
+    // D5074: the founder's list of reasoned reads is `support_reads` in the capability map.
+    if (!capRelCan(s.caprel, 'support_reads')) return c.json({ detail: 'Forbidden' }, 403);
     return c.json(await capitalSupportHistory(c.env, s.projectId, capitalPage(c.req.query('page'))));
   } catch (error) { return capitalFailure(c, error); }
 });
@@ -859,7 +868,8 @@ cycleRaise.get('/narrative/reads', async (c) => {
 cycleRaise.delete('/narrative/reads/mine', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
-  if (!isAdmin(s.user)) return c.json({ detail: 'Only an admin ends a narrative read.', code: 'admins_only' }, 403);
+  // D5074: `end_read` from the narrative's capability map, the one the versions read returns.
+  if (!narrativeCan(narrativeCapabilities({ admin: isAdmin(s.user), founder: false }), 'end_read')) return c.json({ detail: 'Only an admin ends a narrative read.', code: 'admins_only' }, 403);
   try {
     return c.json({ read: await endRead(c.env, s.projectId, s.user) });
   } catch (e) {
@@ -990,7 +1000,7 @@ cycleRaise.delete('/narrative/objections/:objection/answer', async (c) => {
 async function keptScope(c: any): Promise<{ user: User; projectId: number; key: string } | Response> {
   const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return refuse(c, 403, { code: 'founder_only', message: QA_FOUNDER_ONLY });
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return refuse(c, 403, { code: 'founder_only', message: QA_FOUNDER_ONLY });
   const key = String(c.req.param('question') || '');
   if (!QUESTION_KEY.test(key)) return refuse(c, 404, { code: 'question_not_found', message: 'That question is not one of this deck’s likely questions.' });
   return { user: s.user, projectId: s.projectId, key };
@@ -1070,16 +1080,9 @@ cycleRaise.get('/narrative/:version', async (c) => {
 // D912 (#2696): the narrative's claims (NAR6, NAR7) and its check (NAR8).
 // The states are D1264's; reading them as the founder checks the version, as
 // the Evidence read checks the newest. An admin with a reason reads states.
-async function narrativeFounder(c: any, user: User, projectId: number): Promise<boolean> {
-  if (isAdmin(user) || await isSupportSession(c)) return false;
-  try {
-    const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
-    return (await raiseEvidenceContext(c.env, user, projectId, company)).founder;
-  } catch (e) {
-    if (e instanceof RaiseEvidenceError) return false;
-    throw e;
-  }
-}
+/** D5074: the check's writes refuse from the narrative's capability map, the one the versions read returns. */
+const narrativeChecks = async (c: any, user: User, projectId: number): Promise<boolean> =>
+  narrativeCan(narrativeCapabilities(await narrativeStanding(c, user, projectId)), 'check');
 const founderOnlyCheck = (c: any) => c.json({ code: 'founder_only', detail: 'Only the venture’s founder checks the narrative against the records.' }, 403);
 const savedVersion = async (c: any, projectId: number): Promise<number | Response> => {
   try {
@@ -1094,7 +1097,7 @@ cycleRaise.get('/narrative/:version/claims', async (c) => {
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
   try {
-    const founder = await narrativeFounder(c, s.user, s.projectId);
+    const founder = await narrativeChecks(c, s.user, s.projectId);
     const check = founder ? await checkNarrativeVersion(c.env, s.projectId, version) : null;
     return c.json({ ...(await narrativeClaims(c.env, s.projectId, version, { founder, computed: check?.claims })), can_check: founder });
   } catch (e) { return unreadable(c, e); }
@@ -1108,7 +1111,7 @@ cycleRaise.get('/narrative/:version/check', async (c) => {
   try {
     const at = await c.env.DB.prepare(`SELECT MAX(checked_at) AS at FROM raise_claims WHERE project_id = ? AND surface = 'narrative' AND surface_version = ?`)
       .bind(s.projectId, `v${version}`).first<{ at: string | null }>();
-    return c.json({ ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at?.at ?? null, can_check: await narrativeFounder(c, s.user, s.projectId) });
+    return c.json({ ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at?.at ?? null, can_check: await narrativeChecks(c, s.user, s.projectId) });
   } catch (e) { return unreadable(c, e); }
 });
 
@@ -1117,7 +1120,7 @@ cycleRaise.post('/narrative/:version/check', async (c) => {
   if (s instanceof Response) return s;
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return founderOnlyCheck(c);
   try {
     await runCheck(c.env, s.projectId, version);
     const now = new Date().toISOString();
@@ -1142,7 +1145,7 @@ cycleRaise.post('/narrative/:version/claims/:uid/use-record', async (c) => {
   if (s instanceof Response) return s;
   const version = await savedVersion(c, s.projectId);
   if (version instanceof Response) return version;
-  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
+  if (!(await narrativeChecks(c, s.user, s.projectId))) return founderOnlyCheck(c);
   const b = await body(c);
   const expected = Number(b.record_value);
   if (b.record_value == null || !Number.isFinite(expected)) return c.json({ code: 'record_value_required', detail: 'Say which record figure to use.' }, 400);

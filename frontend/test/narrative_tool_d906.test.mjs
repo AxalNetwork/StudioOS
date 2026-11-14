@@ -12,6 +12,7 @@ import {
   CHECK_RUNS, HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, previousVersion,
   storyRows, tabHref, tabSearch, versionHref, versionsOf,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -19,7 +20,8 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 
 // The Worker's shapes (`services/records/raise.ts`): form-options' versions,
 // and a version record's "The narrative" and "Consistency check" sections.
-const OPTIONS = { versions: [{ value: '2', label: 'v2 · angel' }, { value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · pre-seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '2', label: 'v2 · angel' }, { value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · pre-seed fund' }] });
 const version = (n, oneLiner) => ({
   title: `v${n} · seed fund`, sub: 'Saved 20 Oct 2026', pills: [], facts: [],
   main: [
@@ -217,7 +219,7 @@ test('a numbered address is still the version\'s record page, and Home draws the
 });
 
 test('no versions offers New version; a failed versions read says so, and reads no record', async () => {
-  const none = await mounted('/raise/investor-narrative/story?project_id=3', { handle: (u) => (u.includes('/form-options') ? response({ versions: [] }) : handler(u)) });
+  const none = await mounted('/raise/investor-narrative/story?project_id=3', { handle: (u) => (u.includes('/form-options') ? response(withNarrativeCapabilities({ versions: [] })) : handler(u)) });
   try {
     assert.ok(none.testIds().includes('narrative-no-version'));
     assert.ok(none.hrefs().includes(`${HOME_PATH}/new?project_id=3`), 'New version is the module\'s own Add');

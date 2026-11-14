@@ -29,6 +29,7 @@ import {
   ANSWER_FOOT, ANSWERS_UNREADABLE, OBJECTIONS_NONE, OBJECTIONS_UNREADABLE, answerItHref, answerSaveLines, answeredOf, clearDialog, homeTiles, markDialog,
   objectionRow, objectionsOf, objectionsTile, objectionsTileSub, sectionHref,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -52,7 +53,8 @@ const NARRATIVE = () => ({
   positioning: { state: 'ok', core: [], overrides: [], effective: [] },
   bindings: { state: 'ok', items: [] },
 });
-const OPTIONS = { versions: [{ value: '2', label: 'v2 · seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '2', label: 'v2 · seed fund' }] });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 const ANSWER = { version: 2, section: 'market', objection: K_MARKET, text: 'Mid-market finance teams are the first of many we serve.', removed: 0 };
 

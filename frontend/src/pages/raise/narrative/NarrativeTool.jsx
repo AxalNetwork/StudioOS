@@ -7,7 +7,7 @@ import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
   HOME_PATH, LINE, NEEDS_NONE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE,
   chosenVersion, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles, homeUnreadable,
-  needsYou, nextVersion, readByLine, startFromHref, tabHref, tabSearch, versionHref, versionSub, versionsOf,
+  narrativeStanding, needsYou, nextVersion, readByLine, startFromHref, tabHref, tabSearch, versionHref, versionSub, versionsOf,
 } from './narrativeModel';
 import StoryTab from './StoryTab';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
@@ -73,7 +73,10 @@ export function NarrativeTabBar({ active, search = '', versions = [], version = 
   );
 }
 
-/** The saved versions (form-options), and one version's record, each read on its own. */
+/**
+ * The saved versions (form-options), and one version's record, each read on its own. D5074: the versions read also
+ * carries the viewer's narrative capabilities, the map every narrative write refuses from.
+ */
 function useVersions(projectId, reload) {
   const [state, setState] = useState({ status: 'loading', versions: [] });
   useEffect(() => {
@@ -81,7 +84,7 @@ function useVersions(projectId, reload) {
     let alive = true;
     setState({ status: 'loading', versions: [] });
     cyclesWrite.formOptions('raise', projectId, SLUG)
-      .then((data) => { if (alive) setState({ status: 'ready', versions: versionsOf(data) }); })
+      .then((data) => { if (alive) setState({ status: 'ready', versions: versionsOf(data), capabilities: data?.capabilities ?? null }); })
       .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', versions: [], message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, reload]);
@@ -92,11 +95,11 @@ function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
 
-function NoVersion({ search, admin }) {
+function NoVersion({ search, readOnly }) {
   return (
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
-      {admin ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
+      {readOnly ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
     </div>
   );
 }
@@ -161,7 +164,7 @@ function DuplicateDialog({ projectId, version, next, onClose, onDone }) {
  * side by side through D908's compare, who reads each, and Duplicate or "Make
  * vN the start of a new version". No Delete is drawn.
  */
-function VersionsTab({ projectId, versions, search, reload, onChanged, admin = false }) {
+function VersionsTab({ projectId, versions, search, reload, onChanged, readOnly = false }) {
   const [a, setA] = useState(() => versions[1]?.value ?? null);
   const [b, setB] = useState(() => versions[0]?.value ?? null);
   const [dup, setDup] = useState(null);
@@ -244,7 +247,7 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, admin = f
           ))}
           {!picked.length && <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`}>{read.status === 'loading' ? 'Reading…' : NOT_RECORDED}</p>}
         </section>
-        {!admin && b != null && (
+        {!readOnly && b != null && (
           <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="narrative-actions">
             <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Actions</h2>
             {row(b) && <button type="button" className={BTN_SECONDARY} onClick={() => setDup(row(b))} data-testid="narrative-duplicate">Duplicate v{b}</button>}
@@ -253,7 +256,7 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, admin = f
           </section>
         )}
       </div>
-      {!admin && dup && <DuplicateDialog projectId={projectId} version={dup} next={nextVersion(versions)} onClose={() => setDup(null)} onDone={onChanged} />}
+      {!readOnly && dup && <DuplicateDialog projectId={projectId} version={dup} next={nextVersion(versions)} onClose={() => setDup(null)} onDone={onChanged} />}
     </div>
   );
 }
@@ -325,10 +328,15 @@ export function NarrativeHome({ data, search, admin = false, projectId = null })
  * `cards` are the Raise modules for the header's rail; `action` is Call for
  * Capital, as on every Raise module page.
  */
-export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false, admin = false }) {
+export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false, admin: adminAccount = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const list = useVersions(projectId, reload);
+  // D5074 slice 3: every control below is the versions read's capability map (`narrativeStanding`). `adminAccount`
+  // (the account, from CycleRoute) only words a refused read, which carries no map; it never draws a write.
+  const standing = narrativeStanding(list.capabilities);
+  const admin = standing.admin;
+  const readOnly = standing.readOnly;
   const wanted = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('version');
   const version = chosenVersion(list.versions, wanted);
   // Story reads the narrative's own stores (D910); Claims and Check read D912's claim routes.
@@ -339,24 +347,24 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (list.status === 'loading') body = <Skeleton testId="narrative-loading" />;
   // D914, NAR14b: the Worker refuses another venture's narrative; an admin's refusal is the reason gate's, above this page.
-  else if (list.status === 'refused') body = admin
+  else if (list.status === 'refused') body = adminAccount
     ? <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>
     : <NarrativeOtherVenture />;
   else if (list.status === 'error') body = <Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." onRetry={retry} />;
   // Positioning may be read without a saved narrative version; admin controls remain read only.
-  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={admin} />;
-  else if (!list.versions.length) body = <NoVersion search={search} admin={admin} />;
+  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={readOnly} />;
+  else if (!list.versions.length) body = <NoVersion search={search} readOnly={readOnly} />;
 
-  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} admin={admin} />;
+  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} readOnly={readOnly} />;
   else if (tab === 'story') body = (
     <>
-      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={admin} aiOn={fixOn} />
+      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={readOnly} aiOn={fixOn} />
       <NarrativeNotes projectId={projectId} version={version} admin={admin} />
       {admin ? null : <NarrativeReads projectId={projectId} />}
     </>
   );
   else if (tab === 'claims') body = <ClaimsTab key={version} projectId={projectId} version={version} search={search} admin={admin} phone={phone} />;
-  else body = <CheckTab key={version} projectId={projectId} version={version} search={search} admin={admin} fixOn={fixOn && !admin} />;
+  else body = <CheckTab key={version} projectId={projectId} version={version} search={search} admin={admin} fixOn={fixOn && !readOnly} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

@@ -33,6 +33,7 @@
  * grows the derivation when its read lands.
  */
 
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { SECTIONS } from './storyModel.js';
 
@@ -72,9 +73,8 @@ export const isNarrativeTab = (slug, id) => slug === SLUG && TAB_WORDS.has(Strin
  */
 export function tabSearch(search = '', version = null, withVersion = true) {
   const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const out = new URLSearchParams();
-  const project = from.get('project_id') || from.get('project');
-  if (project) out.set('project_id', project);
+  // D5074: the venture comes from the route helpers, in the one form (`ventureQuery.js`).
+  const out = new URLSearchParams(ventureSearch(ventureRef(search)?.id).replace(/^\?/, ''));
   const v = version ?? from.get('version');
   if (withVersion && v != null && /^\d+$/.test(String(v))) out.set('version', String(v));
   const s = out.toString();
@@ -308,6 +308,18 @@ export { NOT_RECORDED };
 
 /** An admin reads the narrative read only. Admins previewing another role through "View as" are that role here. */
 export const isNarrativeAdmin = (user, viewMode = null) => String(user?.role || '') === 'admin' && (!viewMode || viewMode === 'admin');
+
+/**
+ * D5074 slice 3 (#5074): who the viewer is on this narrative, from the versions read's `capabilities` alone
+ * (`cloudflare-worker/src/services/narrative/capabilities.ts`, the map the narrative's writes refuse from). `true`
+ * allows; no map, an unknown key or any other value allows nothing. `admin` is the reasoned read (notes, no writes);
+ * `readOnly` is "no narrative write"; `checks` is the founder's check against the records.
+ */
+export function narrativeStanding(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  return { known: !!caps, can, admin: can('admin_reason_required'), readOnly: !can('edit'), checks: can('check'), notes: can('note') };
+}
 
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 export const REASON_TITLE = 'Why are you opening this narrative?';
