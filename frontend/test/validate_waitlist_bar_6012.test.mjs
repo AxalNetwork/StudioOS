@@ -30,6 +30,12 @@ test('writers set and clear a waitlist bar, and a refusal preserves the saved va
   const words = () => walk(host).map((n) => n.textContent).join(' ');
   try {
     await act(async () => render());
+    for (const value of ['', '3.5', '10000001']) {
+      await act(async () => props(node('INPUT')).onChange({ target: { value } }));
+      assert.equal(props(node('BUTTON', 'submit')).disabled, true);
+      await act(async () => props(node('FORM')).onSubmit({ preventDefault() {} }));
+    }
+    assert.deepEqual(calls, []);
     await act(async () => props(node('INPUT')).onChange({ target: { value: '50' } }));
     await act(async () => props(node('FORM')).onSubmit({ preventDefault() {} }));
     assert.match(words(), /50 sign-ups/);

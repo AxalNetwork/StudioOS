@@ -32,19 +32,20 @@ export default function WaitlistBar({ projectId, value, unreadable = false, canW
 
   const inputClass = 'min-h-11 rounded-lg border border-axal-hairline px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600';
   const target = Number(draft);
+  const canSave = !busy && Number.isInteger(target) && target >= 1 && target <= 10_000_000 && target !== value;
 
   return (
     <section id="waitlist-bar" className="grid gap-2 rounded-xl border border-axal-hairline p-4">
       <h2 className="text-sm font-bold">Waitlist bar</h2>
       <p className="text-sm">{unreadable ? 'Waitlist bar could not be read.' : value == null ? 'No bar set' : `${value.toLocaleString()} sign-ups`}</p>
       {canWrite && (
-        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (!busy && Number.isInteger(target) && target >= 1 && target <= 10000000) save(target); }}>
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (canSave) save(target); }}>
           <label className="grid min-w-0 gap-1 text-sm">
             Target sign-ups
             <input className={`${inputClass} w-36 max-w-full`} type="number" inputMode="numeric" min="1" max="10000000" step="1" required value={draft}
               disabled={busy} onChange={(event) => setDraft(event.target.value)} />
           </label>
-          <button className={inputClass} type="submit" disabled={busy || target === value}>Save bar</button>
+          <button className={inputClass} type="submit" disabled={!canSave}>Save bar</button>
           {(value != null || unreadable) && <button className={inputClass} type="button" disabled={busy} onClick={() => save(null)}>Clear bar</button>}
         </form>
       )}
