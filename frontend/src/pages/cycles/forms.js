@@ -1744,6 +1744,11 @@ const itemBody = (v) => {
   const owner = idOrNull(v.owner_user_id);
   return { title: str(v.title), column: v.column || null, kpi_key: str(v.kpi_key), feedback_theme: str(v.feedback_theme), ...(owner == null ? {} : { owner_user_id: owner }), target_date: str(v.target_date) };
 };
+/** A theme as Grow stores one (trimmed, at most 80 characters); anything else chooses nothing. */
+const feedbackThemeOf = (raw) => {
+  const theme = typeof raw === 'string' ? raw.trim() : '';
+  return theme && theme.length <= 80 && !/[\u0000-\u001f\u007f]/.test(theme) ? { feedback_theme: theme } : {};
+};
 const buildItem = {
   key: 'item', cta: 'Add item', button: 'Add item',
   title: 'Add item',
@@ -1751,6 +1756,8 @@ const buildItem = {
   foot: 'Issues from a connected GitHub repository land here too.',
   fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
   toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  // D6097: a feedback record's Add to roadmap (`/build/product-roadmap/new?feedback_theme=Speed`) opens it with that theme chosen.
+  fromQuery: (q) => feedbackThemeOf(q.get('feedback_theme')),
   // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
   loadOptions: buildOptions('product-roadmap', (read) => ({
     kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
