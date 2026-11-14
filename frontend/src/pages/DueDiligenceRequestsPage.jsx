@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, FileText, Link as LinkIcon, Send } from 'lucide-react';
 import { api, dd } from '../lib/api';
 import { reportError } from '../lib/log';
 // Lightbox and Unreadable from their own modules: the `../ui` barrel also exports the rail, and this page draws none.
 import Lightbox from '../ui/Lightbox';
 import { Unreadable } from '../ui/Honesty';
+import { HOME_PATH } from './raise/dataroom/dataRoomModel';
+import { ventureSearch } from './cycles/ventureQuery';
 import { answerBody, dueOf, fileChoices, fmtDay, requestChips, requestWord } from './duediligence/ddReviewModel';
 
 // Build queue #128 — the subject-facing half of the DD request list. This is
@@ -32,7 +35,7 @@ const MUTED = 'text-axal-muted dark:text-gray-400';
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 /** The subject's own data room, to pick one file as the answer. */
-function FilePicker({ projectUid, readRoom, onPick, onClose }) {
+function FilePicker({ projectUid, roomHref, readRoom, onPick, onClose }) {
   const [read, setRead] = useState({ status: 'loading', files: [] });
   const [tick, setTick] = useState(0);
   const [choice, setChoice] = useState(null);
@@ -55,7 +58,12 @@ function FilePicker({ projectUid, readRoom, onPick, onClose }) {
       <div className="flex flex-col gap-1 px-5 py-4">
         {read.status === 'loading' && <p className={`m-0 text-sm ${MUTED}`} aria-busy="true">Reading your data room…</p>}
         {read.status === 'unreadable' && <Unreadable what="Your data room" claim="This is not a claim that it is empty." onRetry={() => setTick((t) => t + 1)} />}
-        {read.status === 'ready' && !read.files.length && <p className={`m-0 text-sm ${MUTED}`} data-testid="dd-request-files-empty">Your data room has no file yet. Upload it there, then pick it here.</p>}
+        {read.status === 'ready' && !read.files.length && (
+          <div className="flex flex-col items-start gap-2" data-testid="dd-request-files-empty">
+            <p className={`m-0 text-sm ${MUTED}`}>Your data room has no files yet. Upload a file there, then pick it here.</p>
+            <Link to={roomHref} className={BTN} data-testid="dd-request-empty-room-link">Open your data room</Link>
+          </div>
+        )}
         {read.status === 'ready' && read.files.map((f) => (
           <label key={f.uid} className="flex min-h-[44px] items-center gap-2 text-sm text-gray-900 dark:text-gray-100" data-testid={`dd-request-file-${f.uid}`}>
             <input type="radio" name="dd-request-file" checked={choice === f.uid} onChange={() => setChoice(f.uid)} data-testid={`dd-request-file-pick-${f.uid}`} />
@@ -79,6 +87,8 @@ function RequestCard({ req, today, onRespond, readRoom }) {
   const actionable = req.state !== 'reviewed';
   const due = dueOf(req, today);
   const files = Array.isArray(req.file_names) ? req.file_names : [];
+  const roomSearch = ventureSearch(req.project_id) || (req.project_uid ? `?project=${encodeURIComponent(req.project_uid)}` : '');
+  const roomHref = `${HOME_PATH}/files${roomSearch}`;
 
   const submit = async (e) => {
     e?.preventDefault?.();
@@ -95,6 +105,10 @@ function RequestCard({ req, today, onRespond, readRoom }) {
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-[220px] flex-1">
           <div className="text-[14.5px] font-bold text-gray-900 dark:text-gray-100">{req.title}</div>
+          {req.subject_type === 'project' && (req.project_name || req.subject_label) && (
+            <div className={`mt-1 text-[12.5px] font-semibold ${MUTED}`}>{req.project_name || req.subject_label}</div>
+          )}
+          {req.asking_team_name && <div className={`mt-1 text-[12.5px] ${MUTED}`}>Requested by {req.asking_team_name}</div>}
           {req.details && <div className={`mt-1 text-[13px] leading-relaxed ${MUTED}`}>{req.details}</div>}
         </div>
         <div className={`flex flex-wrap items-center gap-3 text-[12.5px] ${MUTED}`}>
@@ -139,7 +153,12 @@ function RequestCard({ req, today, onRespond, readRoom }) {
                     <FileText size={14} aria-hidden="true" />{file.name}
                     <button type="button" className="ml-auto text-[12.5px] font-semibold text-violet-700 dark:text-violet-300" onClick={() => setFile(null)}>Remove</button>
                   </span>
-                ) : <button type="button" className={`${BTN} w-full`} onClick={() => setPicking(true)} data-testid={`dd-request-pick-${req.id}`}><FileText size={14} aria-hidden="true" />Pick a file from your data room</button>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={BTN} onClick={() => setPicking(true)} data-testid={`dd-request-pick-${req.id}`}><FileText size={14} aria-hidden="true" />Pick a file</button>
+                    <Link to={roomHref} className={BTN} data-testid={`dd-request-room-link-${req.id}`}>Open your data room</Link>
+                  </div>
+                )
               ) : <span className={`text-[12px] ${MUTED}`} data-testid={`dd-request-no-room-${req.id}`}>A data-room file answers a request made of a startup. Paste a link instead.</span>}
             </div>
           </div>
@@ -150,7 +169,7 @@ function RequestCard({ req, today, onRespond, readRoom }) {
           </div>
         </form>
       )}
-      {picking && <FilePicker projectUid={req.project_uid} readRoom={readRoom} onClose={() => setPicking(false)} onPick={(f) => { setFile(f || null); setPicking(false); }} />}
+      {picking && <FilePicker projectUid={req.project_uid} roomHref={roomHref} readRoom={readRoom} onClose={() => setPicking(false)} onPick={(f) => { setFile(f || null); setPicking(false); }} />}
     </div>
   );
 }
