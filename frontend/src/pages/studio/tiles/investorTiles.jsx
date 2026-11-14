@@ -16,6 +16,7 @@ import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
 import { commitmentsByFund } from '../../../lib/lpCommitmentModel';
 import { canSignBooklet } from '../../../lib/bookletSigning';
+import { formatMinor } from '../../../lib/money.js';
 import { formatRate } from '../../../lib/rate';
 import { parseStamp } from '../../../ui/parseStamp.js';
 
@@ -92,7 +93,7 @@ export function PortfolioRows({ data }) {
 const LP_WORKSPACE = '/spinout-lab/investor-workspace';
 const COMMITMENT = LP_WORKSPACE + '#my-commitment';
 const BOOKLET = LP_WORKSPACE + '#subscription-booklet';
-const moneyCents = cents => Number.isSafeInteger(cents) ? (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null;
+const moneyCents = cents => formatMinor(cents, 'USD', { locale: 'en-US' });
 
 function ActionSource({ label, loading, unreadable, onRetry, children }) {
   if (unreadable) return <Unreadable what={label} onRetry={onRetry} />;
