@@ -113,6 +113,9 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   if (model?.milestones.value?.some((m:any)=>m.state==='Not costed')) needs_you.push({code:'milestones_not_costed',reason:'Some milestones are Not costed. Their affordability is unknown.'});
   if (model?.milestones.value?.some((m:any)=>m.state==='At risk')) needs_you.push({code:'milestones_at_risk',reason:'Some milestone costs exceed their section allocation.'});
   if (model?.runway.value?.relation==='exact'&&model.runway.value.months<baseBlock.value.target_runway_months) needs_you.push({code:'target_shortfall',reason:'The modelled cash runs out before your target.'});
-  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:!s.readOnly,mercury:mercuryAllowed},base:projection,round,
+  const exportable=baseBlock.state==='ok'&&projection.state==='ok'&&(projection.value as any)?.hires?.state==='ok';
+  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:!s.readOnly,mercury:mercuryAllowed,
+    // D6084 (#6084), in #5074's capability names: the plan's Export, off while the base is not readable; filing to the data room is a write.
+    capabilities:{export:exportable,add_to_data_room:exportable&&!s.readOnly}},base:projection,round,
     runway_today:runway,forecast,ties:{deck,cap_table:round.sources.cap_table},needs_you};
 }

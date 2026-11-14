@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
+import { userFacingRaiseError } from '../../../lib/raiseErrors';
 import { Unreadable, usePhoneWidth } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
@@ -234,6 +235,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="violet">Base · {base?.name || 'Base'}</Pill>
                 {plan.viewer?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
+                {!phone ? <ExportMenu projectId={projectId} capabilities={plan.viewer?.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
               <Tiles plan={plan} />
@@ -259,6 +261,43 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
           );
         }}
       </PlanFrame>
+    </div>
+  );
+}
+
+/**
+ * D6084 (#6084): UF1's `Export ▾` (CSV or PDF), beside Edit split on the
+ * desktop as the canvas draws it; the phone toolbar has no Export. It is drawn
+ * only when the plan read says `capabilities.export` (#5074's names), which is
+ * false while the plan is Unreadable. "Add to the data room" files a dated PDF
+ * and says where; it needs `capabilities.add_to_data_room` (a support session
+ * reads, and cannot file).
+ */
+export function ExportMenu({ projectId, capabilities, api = useOfFundsApi }) {
+  const [busy, setBusy] = useState(null);
+  const [said, setSaid] = useState('');
+  if (!capabilities?.export) return null;
+  const run = async (key, fn, done) => {
+    setBusy(key); setSaid('');
+    try { setSaid(done(await fn())); }
+    catch (e) { setSaid(userFacingRaiseError(e, { fallback: 'The plan could not be exported. Nothing was downloaded.' })); }
+    finally { setBusy(null); }
+  };
+  const item = 'block w-full rounded-md px-3 py-2 text-left text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="uof-export">
+      <details className="relative">
+        <summary className={`${BTN_GHOST} cursor-pointer list-none`} aria-label="Export as CSV or PDF" data-testid="uof-export-open">{busy ? 'Exporting…' : 'Export ▾'}</summary>
+        <div className="absolute left-0 z-20 mt-1 w-64 rounded-lg border border-axal-hairline bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" role="menu">
+          <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-csv"
+            onClick={() => run('csv', () => api.exportCsv(projectId), () => 'Downloaded the plan as CSV.')}>CSV · the base scenario</button>
+          <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-pdf"
+            onClick={() => run('pdf', () => api.exportPdf(projectId), () => 'Downloaded the plan as PDF.')}>PDF · the base scenario</button>
+          {capabilities.add_to_data_room ? <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-room"
+            onClick={() => run('room', () => api.snapshot(projectId), (out) => `Added to the data room as “${out?.file?.name || 'the plan'}”, under NDA and seen by nobody until you share it.`)}>Add to the data room</button> : null}
+        </div>
+      </details>
+      {said ? <span role="status" className={`text-[12px] ${MUTED}`} data-testid="uof-export-said">{said}</span> : null}
     </div>
   );
 }
