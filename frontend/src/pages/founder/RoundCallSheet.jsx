@@ -188,7 +188,7 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     if(!context.data||!resume.data)return;
     const p=resume.data.page;
     const seeded=recordedRoundFields(context.data,p?p.call:resume.data.call||null);
-    setFields(seeded);
+    setFields(seeded);setWording(null);
     if(p){
       setUid(p.call.uid);setPage(p);saved.current=seeded;
       const at=resumeStep(p);setStep(at.step);setNote(at.reason);
@@ -205,11 +205,15 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
   },[step,uid,chosen,matchRun]);
-  function change(key,value){setFields(current=>{
-    const next={...current,[key]:value};
-    // A new instrument takes its own seeded terms where none is typed yet.
-    if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
-    return next;});}
+  function change(key,value){
+    if(fields[key]!==value&&(['amount','instrument','minimum','target'].includes(key)||(TERM_KEYS[fields.instrument]||[]).includes(key)))setWording(null);
+    setFields(current=>{
+      const next={...current,[key]:value};
+      // A new instrument takes its own seeded terms where none is typed yet.
+      if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
+      return next;
+    });
+  }
   async function run(action){setBusy(true);setError('');try{await action();}catch(e){reportError('round-calls:action',e);setError(e.code==='counsel_approval_required'?'Counsel has not approved the terms yet.':
       e.code==='nda_required'?'A signed NDA is required first.':e.code==='round_calls_disabled'?'Coming soon. Round calls are not enabled.':
       e.status>=500||!e.status?'The action could not be confirmed. Check the call before retrying.':e.message||'The action was refused. Check the recorded fields.');}finally{setBusy(false);}}
@@ -242,19 +246,19 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     const gap=firstMissingRow(fields);if(gap){setError('Complete the round name, amounts, instrument, terms and target close to save a draft.');return;}
     await run(async()=>{await persist(ROUND_KEYS);setSavedDraft(true);});
   }
-  const termsMaterial = JSON.stringify({
-    project_id:projectId, amount_cents:dollarsToCents(fields.amount), instrument:fields.instrument,
-    minimum_cheque_cents:dollarsToCents(fields.minimum), target_close:fields.target, ...termsBody(fields),
-  });
-  const draftKey = JSON.stringify([uid, termsMaterial]);
   async function draftTerms() {
-    setWording({key:draftKey,loading:true});
+    const request={uid,projectId,loading:true};
+    setWording(request);
+    const finish=(answer)=>setWording(current=>current===request?{...request,loading:false,...answer}:current);
     try {
-      const result=await roundCallsApi.termsDraft(uid,JSON.parse(termsMaterial));
+      const result=await roundCallsApi.termsDraft(uid,{
+        project_id:projectId, amount_cents:dollarsToCents(fields.amount), instrument:fields.instrument,
+        minimum_cheque_cents:dollarsToCents(fields.minimum), target_close:fields.target, ...termsBody(fields),
+      });
       if(typeof result?.draft!=='string'||!result.draft.trim())throw new Error('No draft was returned.');
-      setWording({key:draftKey,text:result.draft});
+      finish({text:result.draft});
     } catch (e) {
-      setWording({key:draftKey,error:e.message||'Eadwyn could not draft these words. Try again.'});
+      finish({error:e.message||'Eadwyn could not draft these words. Try again.'});
     }
   }
   const on={change,next,send,saveDraft,
@@ -265,7 +269,7 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.key===draftKey?wording:null}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 

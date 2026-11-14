@@ -252,3 +252,29 @@ test('Eadwyn drafts only on request and only an explicit edit or accept applies 
     assert.equal(s.value('call-terms'), 'Reviewed wording from recorded terms.');
   } finally { await s.done(); }
 });
+
+test('editing draft inputs discards even equivalent values and responses still in flight', async () => {
+  let complete;
+  const late = new Promise(resolve => { complete = resolve; });
+  const s = await mountSheet({
+    availability: { enabled: true }, context: CONTEXT, list: { items: [] },
+    termsDraft: [{ draft: 'First wording.' }, () => late, { draft: 'Latest wording.' }],
+  });
+  try {
+    await s.click('SAFE');
+    await s.set('call-minimum', '25000');
+    await s.click('Ask Eadwyn to draft');
+    assert.match(s.text(), /First wording/);
+    await s.set('call-minimum', '25000.00');
+    assert.doesNotMatch(s.text(), /First wording|Proposed by Eadwyn/);
+    await s.click('Ask Eadwyn to draft');
+    await s.set('call-minimum', '26000');
+    await s.set('call-minimum', '25000.00');
+    await s.click('Ask Eadwyn to draft');
+    assert.match(s.text(), /Latest wording/);
+    complete({ draft: 'Late wording.' });
+    await s.view.flush();
+    assert.match(s.text(), /Latest wording/);
+    assert.doesNotMatch(s.text(), /Late wording/);
+  } finally { await s.done(); }
+});
