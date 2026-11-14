@@ -72,6 +72,7 @@ import {
   CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION,
   channelRows, checklist, growFigures, marketRows, readiness, type Ctx, type GrowSlug,
 } from '../services/growCycle';
+import { growChanges } from '../services/growChanges';
 import { ensureProjectMetricsSchema } from './progress';
 import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
@@ -151,10 +152,15 @@ r.get('/overview', async (c) => {
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
     // D1333 (#3481): Publish to… from Overview, and what was published from here.
     const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
+    let writer = false;
     let attention;
-    try { attention = await growAttention(x, !(await isSupportSession(c)) && await writes(c, user, pid), { user, figures, cards }); }
+    try {
+      writer = !(await isSupportSession(c)) && await writes(c, user, pid);
+      attention = await growAttention(x, writer, { user, figures, cards });
+    }
     catch { console.warn('[cycle_grow] attention availability unreadable'); attention = unreadableGrowAttention(x); }
-    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, attention, ...(await growPhone(x, user, figures, cards)) });
+    const [changes, phone] = await Promise.all([growChanges(x, figures, writer), growPhone(x, user, figures, cards)]);
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, attention, changes, ...phone });
   } catch (e) { return fail(c, e); }
 });
 

@@ -1,7 +1,7 @@
 /** #4862: approved GR-01/02/13/16 focus, attention and compact domains on desktop and phone. */
 import { Link } from 'react-router-dom';
 import { CycleHeader, FigureTile } from './CycleOverview';
-import { isPlainClick } from './cycleModel';
+import { figureDelta, isPlainClick } from './cycleModel';
 import { metricLabel, readTarget } from '../../lib/metricTargets';
 import { GROW_AREAS, focusValue, growPrimary, signalCount, growPeriod } from './growOverviewModel';
 import { projectSearch } from './founderToolNavigation';
@@ -52,6 +52,28 @@ function Attention({ attention, onRetry, readOnly }) {
   );
 }
 
+function WhatChanged({ changes, onRetry }) {
+  return (
+    <section className={CARD} aria-labelledby="grow-changes-title" data-testid="grow-changes">
+      <h2 id="grow-changes-title" className={H2}>What changed</h2>
+      {changes?.state !== 'ready'
+        ? <Unreadable what="Recent Grow changes" onRetry={onRetry} />
+        : changes.items.length ? (
+          <ul className="m-0 mt-2 list-none p-0">
+            {changes.items.map((item) => (
+              <li key={item.key} className="border-t border-axal-hairline py-2 first:border-0 dark:border-gray-700">
+                <Link className="text-[13px] font-bold text-axal-violet-deep dark:text-violet-300" to={item.href}>
+                  {item.label}{item.figure ? ` · ${figureDelta(item.figure)}` : ''}
+                </Link>
+                <div className={MUTED}><time dateTime={item.at.slice(0, 10)}>{item.at.slice(0, 10)}</time> · {item.source}</div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className={MUTED}>Nothing recorded in the last 30 days.</p>}
+    </section>
+  );
+}
+
 function Setup({ attention, search }) {
   const signals = attention?.signals || {};
   const facts = [
@@ -87,6 +109,7 @@ export default function GrowOverview({ raw, data, status, search, action, onRetr
             {locked ? <p className={MUTED} role="status">Read only · you can inspect this venture’s Grow records.</p> : null}
             <div className={sparse ? 'hidden lg:block' : ''}><Focus attention={attention} primary={primary} /></div>
             <div className="order-1 lg:order-2"><Attention attention={attention} onRetry={onRetry} readOnly={locked} /></div>
+            <div className="order-2 lg:order-3"><WhatChanged changes={raw?.changes} onRetry={onRetry} /></div>
             {sparse && !locked ? <div className="order-2"><Setup attention={attention} search={search} /></div> : null}
             <div className={sparse ? 'order-3' : 'order-3 lg:order-1'}>{snapshot}</div>
             <section className="order-4" aria-labelledby="grow-domains-title"><h2 id="grow-domains-title" className={`${H2} mb-3`}>What is happening</h2>
