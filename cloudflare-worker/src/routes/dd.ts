@@ -1358,10 +1358,10 @@ dd.post('/cases/:uid/requests/:id/withdraw', async (c) => {
 // ---------- subject-facing request surface ----------
 //
 // The ONLY DD endpoints a founder may touch. They expose a request's
-// own fields (title/details/state) plus the case's subject_label — and
-// deliberately nothing else: no case uid, no score/band, no sections,
-// no findings. Auth is subject-resolution, not role: any authenticated
-// user sees exactly the requests addressed to them.
+// own fields (title/details/state), the subject's venture identity, and
+// the requester's display name where already visible on a shared deal.
+// Case identifiers, findings and reviewer details stay on the reviewing side.
+// Any authenticated user sees exactly the requests addressed to them.
 
 dd.get('/requests/mine', async (c) => {
   const user = await requireAuth(c);
@@ -1373,10 +1373,31 @@ dd.get('/requests/mine', async (c) => {
              -- D1252 (DDL15): the subject's own venture, so "Pick a file from your data room" reads that
              -- room (the data-room routes check ownership again), and the names of the files already
              -- matched to the request. Never the case's uid, score or sections.
-             CASE WHEN c.subject_type = 'project' THEN (SELECT p.uid FROM projects p WHERE p.id = c.subject_id) END AS project_uid,
+             p.id AS project_id, p.uid AS project_uid, p.name AS project_name,
+             (SELECT CASE WHEN COUNT(DISTINCT team_name) = 1 THEN MIN(team_name) END FROM (
+                SELECT COALESCE(NULLIF(TRIM(cp.company_name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  JOIN commitments k ON k.deal_id = d.id AND k.investor_user_id = requester.id
+                  LEFT JOIN company_profiles cp ON cp.id = k.company_id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                UNION ALL
+                SELECT NULLIF(TRIM(requester.name), '') AS team_name
+                  FROM deals d
+                  JOIN deal_invitations i ON i.deal_id = d.id AND i.investor_user_id = requester.id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND NOT EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = requester.id)
+                UNION ALL
+                SELECT COALESCE(NULLIF(TRIM(partner.name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  LEFT JOIN partners partner ON partner.id = d.partner_id AND LOWER(partner.email) = LOWER(requester.email)
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND (d.lead_partner_id = requester.id OR partner.id IS NOT NULL)
+             )) AS asking_team_name,
              (SELECT json_group_array(f.name) FROM data_room_files f WHERE f.dd_request_id = r.id) AS file_names
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
+        LEFT JOIN projects p ON c.subject_type = 'project' AND p.id = c.subject_id
+        LEFT JOIN users requester ON requester.id = r.created_by_user_id
        WHERE r.withdrawn_at IS NULL AND ((c.subject_type != 'project' AND c.subject_id = ${user.id})
           OR (c.subject_type = 'project' AND c.subject_id IN (
                 SELECT p.id FROM projects p

@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -280,7 +280,8 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
     writing.current = true; setActionError('');
     try {
       const result = action.key === 'edit'
-        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values)
+        // #6111: with the values the Edit opened with, so an untouched field is not sent.
+        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values, formSpec.current)
         : await cyclesApi.recordAction(cycle, projectId, slug, id, action.key, recordActionBody(action, values));
       if (currentKey.current !== key) return result;
       await finishRecordWrite(result, {
@@ -693,10 +694,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
         <FormLightbox key={`edit-${projectId}-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
+          focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
           renderAssistant={uofAssistant}
           fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
-          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values, rowEdit.spec.current)}
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (
@@ -705,6 +707,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${projectId}-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
+        focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
         renderAssistant={uofAssistant}
         fill={fillFor(edit, edit.idOf(editing))}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -882,6 +885,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
+    // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
+    const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
+    const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     body = (
       <ModulePage
         cycle={cycle}
@@ -908,6 +914,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
+          // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
+          ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
@@ -919,7 +928,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
-          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
+          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+        {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).

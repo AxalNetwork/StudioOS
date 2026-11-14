@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
-import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
@@ -76,6 +76,8 @@ function Cta({ add }) {
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
+  phoneRow: rowOf = phoneRow,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -129,7 +131,7 @@ export default function PhoneModulePage({
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
     rows: rows.map((r, i) => {
-      const base = phoneRow(cols, r);
+      const base = rowOf(cols, r);
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {
@@ -177,7 +179,7 @@ export default function PhoneModulePage({
               <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
                 onChange={(e) => set({ filter: { ...(query.filter || {}), [f.key]: e.target.value } })}>
                 <option value="">{f.label}: all</option>
-                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{optionLabel(o)}</option>)}
               </select>
             ))}
             {sorts.length > 0 && (
