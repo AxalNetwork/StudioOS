@@ -11,8 +11,9 @@ const sent = (reader) => ({ uid: UID, status: 'sent', view: reader ? 'reader' : 
   recipients: [{ name: 'Private recipient', audience: 'investor', delivered: true }], documents: [], meets: [],
 });
 
-async function open(page, request, { dark = false, reader = false, printFailure = false } = {}) {
-  const m = await prepare(page, request);
+async function open(page, request, { dark = false, reader = false, printFailure = false, investor = false, phone = false } = {}) {
+  const m = await prepare(page, request, investor ? { as: 'security' } : {});
+  if (phone) await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(({ dark, printFailure }) => {
     localStorage.setItem('theme', dark ? 'dark' : 'light');
     window.__reportPrints = [];
@@ -36,14 +37,26 @@ async function open(page, request, { dark = false, reader = false, printFailure 
     reads.push(route.request().method());
     return route.fulfill({ json: sent(reader) });
   });
-  await page.goto(`/grow/reporting/${UID}?project_id=${m.oneClick.projectId}`);
+  if (investor) {
+    const company = { uid: 'p-print6094', name: 'Synthetic Company', duties: [{ uid: 'd-print', kind: 'quarterly_kpi', title: 'Quarterly KPI report', cadence: 'quarterly', source: {}, holding: { route: 'direct' } }],
+      periods: [{ uid: 'period-print', duty_uid: 'd-print', label: '2026-Q3', state: 'sent', sent_at: '2026-10-02', report_uid: UID }] };
+    await page.route('**/api/positions', (route) => route.fulfill({ json: { items: [{ project_id: 7, project: { uid: company.uid, name: company.name }, total_invested: 10000 }] } }));
+    await page.route('**/api/reporting/companies/p-print6094', (route) => route.fulfill({ json: { ok: true, company } }));
+    await page.route('**/api/portfolio/health/p-print6094', (route) => route.fulfill({ json: { history: [] } }));
+    await page.route('**/api/portfolio-support**', (route) => route.fulfill({ json: { items: [] } }));
+    await page.route('**/api/portfolio-updates**', (route) => route.fulfill({ json: { items: [] } }));
+    await page.goto(`/portfolio/companies/${company.uid}/reports`);
+    await page.getByTestId(phone ? 'company-period-period-print' : 'company-period-read-period-print').click();
+    await expect(page.getByTestId('company-reader')).toBeVisible();
+  } else await page.goto(`/grow/reporting/${UID}?project_id=${m.oneClick.projectId}`);
   await expect(page.getByTestId('report-print')).toBeVisible();
   return reads;
 }
 
-for (const { dark, reader } of [{ dark: true, reader: false }, { dark: false, reader: true }]) {
-  test(`${reader ? 'read-only' : 'team'} report prints frozen provenance on light paper from ${dark ? 'dark' : 'light'} mode`, async ({ page, request }) => {
-    const reads = await open(page, request, { dark, reader });
+for (const { dark, reader, investor, phone } of [{ dark: true, reader: false }, { dark: false, reader: true },
+  { dark: true, reader: true, investor: true }, { dark: false, reader: true, investor: true, phone: true }]) {
+  test(`${investor ? `investor ReportReader ${phone ? 'phone' : 'desktop'}` : reader ? 'read-only' : 'team'} prints frozen provenance on light paper from ${dark ? 'dark' : 'light'} mode`, async ({ page, request }) => {
+    const reads = await open(page, request, { dark, reader, investor, phone });
     await page.getByTestId('report-print').click();
     await expect.poll(() => page.evaluate(() => window.__reportPrints.length)).toBe(1);
     const printed = await page.evaluate(() => window.__reportPrints[0]);

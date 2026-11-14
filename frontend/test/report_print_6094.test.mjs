@@ -1,11 +1,13 @@
 /** #6094: frozen report provenance, audience privacy and literal print content. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { reportPrintData, renderReportPrint } from '../src/pages/cycles/reporting/printing/reportPrint.js';
 import ReportPrintButton from '../src/pages/cycles/reporting/printing/ReportPrintButton.jsx';
-import { installDocument } from './_contracts_dom.mjs';
+import { installDocument, mountContracts } from './_contracts_dom.mjs';
+import { reportingApi } from '../src/lib/api/reporting.js';
+import { ReportReader } from '../src/pages/investor/CompanyReports.jsx';
 
 const figure = (extra) => ({ key: 'mrr', label: 'MRR', value: 48200, unit: 'usd', included: true,
   source: { word: 'Connector', provider: 'stripe' }, as_of: '2026-09-30', ...extra });
@@ -18,6 +20,25 @@ const report = (extra = {}) => ({ status: 'sent', view: 'team', title: 'Frozen S
     figure({ key: 'cash', label: 'Confidential cash', value: 987654321, team_only: true, shared: false })],
   highlights: [{ text: 'Launched the pilot', source: { label: 'Project milestone', as_of: '2026-09-22' } }],
   lowlights: [{ text: 'A delayed delivery', source: { label: 'Delivery log' } }], ...extra });
+
+test('the investor ReportReader offers printing only after a sent report loads, and keeps unreadable reads retryable', async () => {
+  const original = reportingApi.report;
+  try {
+    for (const unreadable of [false, true]) {
+      let resolve, reject;
+      reportingApi.report = () => new Promise((yes, no) => { resolve = yes; reject = no; });
+      const view = await mountContracts(React.createElement(ReportReader, { uid: 'report-6094', company: 'Synthetic Company', onClose() {} }));
+      const hasPrint = () => view.nodes().some((n) => view.props(n)?.['data-testid'] === 'report-print');
+      try {
+        assert.equal(hasPrint(), false, 'loading report cannot print');
+        await act(async () => { if (unreadable) reject(new Error('synthetic read failure')); else resolve(report({ view: 'reader' })); });
+        assert.equal(hasPrint(), !unreadable);
+        if (unreadable) assert.match(view.text(), /could not be read/);
+        else assert.match(view.text(), /Print or save as PDF/);
+      } finally { await view.unmount(); }
+    }
+  } finally { reportingApi.report = original; }
+});
 
 test('a reader prints the frozen figures and provenance, including zero, without private team data or recipients', () => {
   const result = reportPrintData(report(), { reader: true, company: 'Synthetic Studio' });
