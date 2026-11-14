@@ -2,7 +2,7 @@ import React from 'react';
 import { eventTimeFields } from '../../../../cloudflare-worker/src/services/eventTimes.ts';
 import { eventSocialCard } from '../../lib/eventSocialCard.js';
 import { eventTimePayload } from './eventTimeModel.js';
-import { CARD, EventLine } from './MyEventsTabs';
+import { CARD, EventLine } from './MyEventsCard';
 
 const heading = 'm-0 text-xs font-bold text-axal-muted dark:text-gray-400';
 
