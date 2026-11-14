@@ -78,17 +78,18 @@ test('Portfolio: each board\'s route answers its page key for an investor; the r
 
 test('Portfolio: each board draws exactly one rail of its own', () => {
   for (const f of ['pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioPositions.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
-    'pages/investor/InvestorPortfolioValueAdd.jsx']) {
+    'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/investor/InvestorPortfolioPerformance.jsx']) {
     assert.equal((read(f).match(/<WorkerRail\b/g) || []).length, 1, f);
   }
-  // PortfolioWorkspace draws one rail per viewer, each in its own branch: the
-  // investor's Performance (PR 1) and, since D773, the operating partner's Delivery.
+  // PortfolioWorkspace draws the operating partner's Delivery rail (D773). The
+  // investor's Performance rail it drew since PR 1 is the PF-03 board's own
+  // now (D4817 part 3), so the workspace draws none for an investor.
   const pw = read('pages/PortfolioWorkspace.jsx');
-  assert.equal((pw.match(/<WorkerRail\b/g) || []).length, 2);
-  assert.equal((pw.match(/<WorkerRail workspace="Portfolio" role="investor"/g) || []).length, 1, 'the investor\'s');
+  assert.equal((pw.match(/<WorkerRail\b/g) || []).length, 1);
+  assert.equal((pw.match(/<WorkerRail workspace="Portfolio" role="investor"/g) || []).length, 0, 'the investor\'s is the board\'s');
   assert.equal((pw.match(/<WorkerRail workspace="Delivery" role="partner"/g) || []).length, 1, 'the partner\'s');
   assert.match(pw, /if \(viewer === 'partner'\) \{\s*return \(/, 'the partner\'s rail is a branch of its own');
-  // Performance's one rail is PortfolioWorkspace's frame (PR 1); its page draws none of its own.
+  // The admin's Performance page (PortfolioPerformancePage) still draws no rail of its own; the investor's is the PF-03 board's (D4817 part 3).
   assert.doesNotMatch(read('pages/PortfolioPerformancePage.jsx'), /<WorkerRail\b|<RailFrame\b/);
 });
 

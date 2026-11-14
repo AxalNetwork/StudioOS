@@ -417,3 +417,69 @@ test('a founder cannot revoke a stranger\'s share by naming their OWN project', 
   assert.equal(r.status, 404);
   assert.equal(rows(db)[0].status, 'active', "another tenant's share is untouched");
 });
+
+// ---------------------------------------------------------------------------
+// D4570-p7 — revoking the grant revokes the shares made under it
+// ---------------------------------------------------------------------------
+
+const shareRow = (db: any, docId: number) => db.prepare(
+  'SELECT status FROM advisor_client_document_shares WHERE document_id = ? AND advisor_user_id = ?',
+).get(docId, ADVISOR)?.status;
+
+async function sharedThenRevoked(db: any) {
+  const shared = await call(env(db), 'POST', '/p-live/documents', founder,
+    { email: 'avery@example.com', document_uid: 'doc-mine' });
+  assert.equal(shared.status, 201);
+  // Another founder's document, shared with the same advisor under that
+  // founder's own grant: revoking THIS founder's grant must not touch it.
+  db.prepare(`INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status)
+              VALUES ('g-other', 8, ?, ?, 'active')`).run(ADVISOR, OTHER_FOUNDER);
+  db.prepare(`INSERT INTO advisor_client_document_shares (uid, document_id, advisor_user_id, shared_by_user_id, status)
+              VALUES ('s-other', 12, ?, ?, 'active')`).run(ADVISOR, OTHER_FOUNDER);
+  return call(env(db), 'DELETE', '/p-live/g-1', founder);
+}
+
+test('revoking a grant revokes that advisor\'s shares of this founder\'s documents, and only those', async () => {
+  const db = freshDb();
+  const r = await sharedThenRevoked(db);
+  assert.equal(r.status, 200);
+  assert.equal(db.prepare("SELECT status FROM advisor_client_grants WHERE uid = 'g-1'").get().status, 'revoked');
+  assert.equal(shareRow(db, 11), 'revoked', 'the share made under the revoked grant');
+  assert.equal(shareRow(db, 12), 'active', 'another founder\'s share to the same advisor');
+  // A state, never a delete: the rows stay for the founder's record.
+  assert.equal(rows(db).length, 2);
+  // And the founder's list no longer shows a share that would not open.
+  const listed = await call(env(db), 'GET', '/p-live/documents', founder);
+  assert.deepEqual(listed.body.items, []);
+});
+
+test('a live grant over another of the founder\'s projects keeps the shares', async () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (9, 'p-second', 'Second', 100, NULL)").run();
+  db.prepare(`INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status)
+              VALUES ('g-2', 9, ?, ?, 'active')`).run(ADVISOR, FOUNDER);
+  assert.equal((await sharedThenRevoked(db)).status, 200);
+  assert.equal(shareRow(db, 11), 'active');
+});
+
+test('an expired grant over another project does not keep them', async () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (9, 'p-second', 'Second', 100, NULL)").run();
+  db.prepare(`INSERT INTO advisor_client_grants (uid, project_id, advisor_user_id, granted_by_user_id, status, expires_at)
+              VALUES ('g-2', 9, ?, ?, 'active', '2000-01-01 00:00:00')`).run(ADVISOR, FOUNDER);
+  assert.equal((await sharedThenRevoked(db)).status, 200);
+  assert.equal(shareRow(db, 11), 'revoked');
+});
+
+test('revoking a grant that is not this project\'s changes nothing', async () => {
+  const db = freshDb();
+  await call(env(db), 'POST', '/p-live/documents', founder,
+    { email: 'avery@example.com', document_uid: 'doc-mine' });
+  const r = await call(env(db), 'DELETE', '/p-live/no-such-grant', founder);
+  assert.equal(r.status, 404);
+  assert.equal(shareRow(db, 11), 'active');
+  const stranger = await call(env(db), 'DELETE', '/p-other/g-1', { user: OTHER_FOUNDER, role: 'founder' });
+  assert.equal(stranger.status, 404);
+  assert.equal(shareRow(db, 11), 'active');
+  assert.equal(db.prepare("SELECT status FROM advisor_client_grants WHERE uid = 'g-1'").get().status, 'active');
+});

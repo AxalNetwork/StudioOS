@@ -193,13 +193,42 @@ grants.delete('/:projectUid/:grantUid', async (c) => {
   const user = await requireAuth(c);
   const project = await ownedProject(c, user, c.req.param('projectUid'));
   if (!project) return c.json({ detail: 'Project not found' }, 404);
+  const grant = await c.env.DB.prepare(
+    'SELECT advisor_user_id FROM advisor_client_grants WHERE uid = ? AND project_id = ?',
+  ).bind(c.req.param('grantUid'), project.id).first<{ advisor_user_id: number }>();
+  if (!grant) return c.json({ detail: 'Not found' }, 404);
+  const now = nowIso();
   // A STATE, NEVER A DELETE. The access log points at rows whose grant would
   // be gone, and the founder still needs to read what that advisor opened.
-  const res = await c.env.DB.prepare(
-    `UPDATE advisor_client_grants SET status = 'revoked', updated_at = ?
-      WHERE uid = ? AND project_id = ?`,
-  ).bind(nowIso(), c.req.param('grantUid'), project.id).run();
-  if (!res.meta?.changes) return c.json({ detail: 'Not found' }, 404);
+  //
+  // D4570-p7: REVOKING THE GRANT REVOKES THE SHARES MADE UNDER IT, in the same
+  // batch. A share names a document and an advisor, not a project, so it goes
+  // with the last live grant this advisor holds over any project of this
+  // founder: one still live over another of their projects keeps it. The
+  // research read paths also require a live grant, which is what covers expiry;
+  // this is what keeps a re-grant from silently reopening old shares and the
+  // founder's list from showing shares that no longer open.
+  const [res] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE advisor_client_grants SET status = 'revoked', updated_at = ?
+        WHERE uid = ? AND project_id = ?`,
+    ).bind(now, c.req.param('grantUid'), project.id),
+    c.env.DB.prepare(
+      `UPDATE advisor_client_document_shares SET status = 'revoked', updated_at = ?
+        WHERE advisor_user_id = ? AND status = 'active'
+          AND document_id IN (
+            SELECT d.id FROM research_documents d
+              JOIN users ou ON ou.id = d.owner_user_id
+             WHERE ou.founder_id = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM advisor_client_grants g
+              JOIN projects p ON p.id = g.project_id
+             WHERE g.advisor_user_id = ? AND g.status = 'active'
+               AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+               AND p.founder_id = ?)`,
+    ).bind(now, grant.advisor_user_id, project.founder_id, grant.advisor_user_id, project.founder_id),
+  ]);
+  if (!res?.meta?.changes) return c.json({ detail: 'Not found' }, 404);
   return c.json({ ok: true });
 });
 

@@ -67,7 +67,9 @@
   "GET /api/research/documents/:uid/download": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/research_share_live_grant.test.ts",
+    "note": "The document's owner reads it. A share recipient reads it only while the advisor grant the share was made under is live (active and not past expires_at) over a project of the owner; a revoked or expired grant, no grant, or a grant over another founder's project get the same 404 a missing document gets."
   },
   "GET /api/research/fund-directory/:uid": {
     "review": "record_without_ownership_check",

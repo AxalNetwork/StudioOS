@@ -661,3 +661,194 @@ export function attentionRulesOf(reads, rows, flips = {}) {
     { key: 'no-evidence', rule: 'No positive scoring evidence', reason: 'Not enough evidence', source: 'Health', retry: 'health', overview: true, ...noEvidence },
   ];
 }
+
+/* ------------------------------------------- quarter-end series (PF-03) */
+
+/**
+ * D4817 part 3 (#5311, canvas PF-03): NAV at each quarter-end, read with
+ * `/api/positions/analytics?as_of=<quarter-end>` once per quarter. The chart
+ * and the table draw the one list of points this returns, so they cannot
+ * disagree. A quarter that was not read, or was read and holds no book, is a
+ * gap in words; nothing is interpolated between two reads.
+ */
+
+/** How many completed quarter-ends the board reads, newest last (two years). */
+export const QUARTER_LIMIT = 8;
+
+const QUARTER_DAYS = ['03-31', '06-30', '09-30', '12-31'];
+
+/** True for an ISO date that is the last day of a calendar quarter. */
+export function isQuarterEnd(iso) {
+  const m = /^(\d{4})-(\d{2}-\d{2})$/.exec(String(iso || ''));
+  return Boolean(m) && QUARTER_DAYS.includes(m[2]);
+}
+
+/** Every quarter-end from the first quarter of `firstYear` through `last` (a quarter-end), oldest first. */
+export function quarterEndsBetween(firstYear, last) {
+  if (!isQuarterEnd(last) || !Number.isInteger(firstYear)) return [];
+  const out = [];
+  for (let y = firstYear; y <= Number(last.slice(0, 4)); y += 1) {
+    for (const d of QUARTER_DAYS) {
+      const iso = `${y}-${d}`;
+      if (iso > last) return out;
+      out.push(iso);
+    }
+  }
+  return out;
+}
+
+/**
+ * Which quarter-ends to read. The first is the first quarter of the earliest
+ * cheque's year (`vintage` on the positions read); the last is the reporting
+ * read's last completed quarter (`period_until`, the Worker's own date, never
+ * the browser clock). At most `limit`, the newest kept.
+ */
+export function quarterWindowOf(positions, compliance, limit = QUARTER_LIMIT) {
+  if (positions.state === 'loading' || compliance.state === 'loading') return { state: 'loading', dates: [] };
+  if (positions.state !== 'ok') {
+    return { state: 'unreadable', dates: [], retry: 'positions', reason: 'The quarter-ends start at the first recorded cheque, and the positions could not be read.' };
+  }
+  const items = positions.value.items;
+  if (items.length === 0) return { state: 'not_recorded', dates: [], reason: 'No position is recorded, so there is no quarter-end to read.' };
+  const years = items.map((p) => Number(p.vintage)).filter((y) => Number.isInteger(y) && y > 0);
+  if (years.length === 0) return { state: 'not_recorded', dates: [], reason: 'No position records the date of its first cheque.' };
+  if (compliance.state !== 'ok') {
+    return { state: 'unreadable', dates: [], retry: 'compliance', reason: 'The last completed quarter-end comes from the reporting read, which could not be read.' };
+  }
+  const c = compliance.value;
+  const last = c.period_until;
+  if (!isQuarterEnd(last) || c.period_complete === false || (c.cadence && c.cadence !== 'quarterly')) {
+    return { state: 'not_recorded', dates: [], reason: 'The reporting read names no completed quarter to end the series at.' };
+  }
+  const all = quarterEndsBetween(Math.min(...years), last);
+  if (all.length === 0) return { state: 'not_recorded', dates: [], reason: 'No quarter-end has passed since the first recorded cheque.' };
+  const dates = all.slice(-limit);
+  return { state: 'ok', dates, earlier: all.length - dates.length, last };
+}
+
+/** The analytics read for one quarter-end must answer for that date, or it is not that quarter's read. */
+export const quarterShape = (date) => (v) => SHAPES.analytics(v) && v.as_of === date;
+
+/**
+ * One quarter-end point: `{ date, label, state, nav, navText, paidIn,
+ * distributed, tvpi, coverage, reason }`. `state` is 'ok' (drawn),
+ * 'not_recorded' (read, and holds no book or no NAV), 'unreadable' (the read
+ * failed or did not answer for this date) or 'loading'. Only 'ok' is drawn.
+ */
+export function quarterPointOf(date, read) {
+  const base = { date, label: day(date) };
+  if (!read || read.state === 'loading') return { ...base, state: 'loading' };
+  if (read.state !== 'ok') return { ...base, state: 'unreadable', reason: 'This quarter-end could not be read.' };
+  const a = read.value;
+  if (isNum(a.position_count) && Number(a.position_count) === 0) {
+    return { ...base, state: 'not_recorded', reason: 'No position is recorded on or before this date.' };
+  }
+  if (!isNum(a.nav)) return { ...base, state: 'not_recorded', reason: 'The read returned no NAV for this date.' };
+  const count = isNum(a.position_count) ? Number(a.position_count) : null;
+  const unmarked = isNum(a.unmarked_position_count) ? Number(a.unmarked_position_count) : null;
+  return {
+    ...base,
+    state: 'ok',
+    nav: Number(a.nav),
+    navText: money(a.nav),
+    paidIn: money(a.paid_in) || NOT_RECORDED,
+    distributed: money(a.distributed) || NOT_RECORDED,
+    tvpi: ratio(a.returns?.tvpi, a.tvpi, multiple),
+    coverage: count != null && unmarked != null ? `${count - unmarked} of ${count}` : NOT_RECORDED,
+  };
+}
+
+/** `2026-09-30` → `Q3 2026`, the chart's column name. */
+export function quarterName(iso) {
+  if (!isQuarterEnd(iso)) return null;
+  return `Q${QUARTER_DAYS.indexOf(iso.slice(5)) + 1} ${iso.slice(0, 4)}`;
+}
+
+/** Millions with one decimal, for a bar's label: $11.1m. */
+export function moneyShort(value) {
+  if (!isNum(value)) return null;
+  const n = Number(value);
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return money(n);
+}
+
+/**
+ * The series both views draw. `reads` maps each quarter-end to its read.
+ * `change` compares the newest point with the quarter before it, only when
+ * both were read: never across a gap.
+ */
+export function quarterSeriesOf(dates, reads = {}) {
+  const points = dates.map((d) => quarterPointOf(d, reads[d]));
+  const drawn = points.filter((p) => p.state === 'ok');
+  const n = points.length;
+  let change = null;
+  if (n >= 2 && points[n - 1].state === 'ok' && points[n - 2].state === 'ok') {
+    const delta = points[n - 1].nav - points[n - 2].nav;
+    change = { from: points[n - 2].label, to: points[n - 1].label, text: delta === 0 ? 'unchanged' : `${delta > 0 ? 'up' : 'down'} ${money(Math.abs(delta))}` };
+  }
+  return {
+    points,
+    drawn: drawn.length,
+    gaps: points.filter((p) => p.state === 'not_recorded' || p.state === 'unreadable').length,
+    max: drawn.reduce((m, p) => Math.max(m, p.nav), 0),
+    change,
+  };
+}
+
+/** The rows the chart library draws: a gap's value is null (no bar), never 0. */
+export function chartRowsOf(series) {
+  return series.points.map((p) => ({ date: p.date, label: p.label, nav: p.state === 'ok' ? p.nav : null }));
+}
+
+/** The words a point reads as, the same in the chart and the table. */
+export function pointWords(p) {
+  if (p.state === 'ok') return p.navText;
+  if (p.state === 'unreadable') return UNREADABLE;
+  if (p.state === 'not_recorded') return NOT_RECORDED;
+  return 'Reading…';
+}
+
+/** The chart's text alternative: every point, gaps included, in order. */
+export function seriesLabel(series) {
+  if (series.points.length === 0) return 'NAV at quarter-ends: no quarter-end to draw.';
+  return `NAV at quarter-ends, gross: ${series.points.map((p) => `${p.label}, ${pointWords(p)}`).join('; ')}. Bars only where a quarter-end was read; nothing is drawn between them.`;
+}
+
+/* ------------------------------------------------------ vintage cohorts */
+
+/**
+ * Vintage cohorts (addendum PFA07: cohorts stay in Performance), grouped by
+ * the year of each company's first cheque. Carrying value is the positions
+ * read's own (a mark, else cost). Distributions are not on that read per
+ * company, so a cohort's multiple is carrying value ÷ invested and is
+ * labelled so, never called TVPI.
+ */
+export function cohortsOf(positions) {
+  if (positions.state !== 'ok') return { state: positions.state };
+  const items = positions.value.items;
+  if (items.length === 0) return { state: 'not_recorded', reason: NO_BOOK };
+  const by = new Map();
+  let undated = 0;
+  for (const p of items) {
+    const y = Number(p.vintage);
+    if (!Number.isInteger(y) || y <= 0) { undated += 1; continue; }
+    const c = by.get(y) || { vintage: y, invested: 0, carrying: 0, count: 0, atCost: 0 };
+    const invested = isNum(p.total_invested) ? Number(p.total_invested) : 0;
+    c.invested += invested;
+    c.carrying += isNum(p.fmv) ? Number(p.fmv) : invested;
+    c.count += 1;
+    if (markOf(p).kind !== 'marked') c.atCost += 1;
+    by.set(y, c);
+  }
+  const rows = [...by.values()].sort((a, b) => a.vintage - b.vintage).map((c) => ({
+    key: String(c.vintage),
+    vintage: String(c.vintage),
+    companies: c.count,
+    invested: money(c.invested),
+    carrying: money(c.carrying),
+    multiple: c.invested > 0 ? multiple(c.carrying / c.invested) : null,
+    atCost: c.atCost,
+  }));
+  return { state: 'ok', rows, undated };
+}
