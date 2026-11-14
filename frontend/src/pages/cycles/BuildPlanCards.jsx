@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import {
-  DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landedHref, landsIn, moduleName, opensRecord, writeRefusal,
+  DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landedAbsence, landedHref, landsIn, moduleName, opensRecord, writeRefusal,
 } from './buildPlanModel';
 
 /**
@@ -126,16 +126,19 @@ export function ProposalCard({ item, phone = false, readOnly = false, paused = f
  */
 export function DoneRow({ item, module, search = '', readOnly = false }) {
   const dismissed = item.status === 'discarded';
+  const href = landedHref(item, module, search);
+  const absence = landedAbsence(item);
   return (
     <div className={`${CARD} ${PLAIN_CARD} !flex-row flex-wrap items-center !gap-3 !py-2.5`} data-testid={`plan-done-${item.uid}`}>
       <span aria-hidden="true" className={`text-[15px] ${dismissed ? 'text-axal-muted' : 'text-emerald-700 dark:text-emerald-300'}`}>{dismissed ? '–' : '✓'}</span>
       <div className="flex min-w-0 flex-1 flex-col">
         <span className={`text-[13.5px] font-bold ${dismissed ? 'text-axal-muted line-through dark:text-gray-500' : 'text-axal-ink dark:text-gray-100'}`}>{String(item.payload?.title ?? '')}</span>
         <span className={LAND}>{item.status === 'edited' ? `${decidedLine(item)} · edited` : decidedLine(item)}</span>
+        {absence ? <span className={MUTED} data-testid={`plan-done-absence-${item.uid}`}>{absence}</span> : null}
       </div>
-      {!dismissed && !readOnly && item.kind !== 'connect-door'
+      {!dismissed && !readOnly && item.kind !== 'connect-door' && href
         ? (
-          <Link to={landedHref(item, module, search)} className={`${BTN_G} min-h-[30px]`}
+          <Link to={href} className={`${BTN_G} min-h-[30px]`}
             title={opensRecord(item, module) ? `Opens this item's record in ${moduleName(module)}` : `Opens ${moduleName(module)}`}
             data-testid={`plan-done-open-${item.uid}`}>
             {opensRecord(item, module) ? 'Open the record' : 'Open the module'}

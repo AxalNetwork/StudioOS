@@ -101,10 +101,11 @@ export default {
         'Use /build/roadmap to connect this week’s tasks to longer-term milestones. Review /build/cadence for the current meeting or review rhythm.',
         'Open /build/kpi to enter only observed figures and their measurement dates. If no source exists, say Not recorded instead of estimating.',
         'At the weekly review, carry over unfinished tasks explicitly and revisit the next week’s priorities.',
+        'To remove a mistaken feature, open its record in /build/solution-design and choose Remove feature from the actions, then confirm in the page. To keep the feature but take it off the must-have list, open its record in /build/prototype-mvp and choose No longer a must-have, then confirm.',
         'Outcome: a reviewable plan, work state and KPI snapshot; a failed save requires verification before assuming changes persisted.',
       ],
-      tips: ['A KPI read error means Unreadable, not zero.'],
-      pitfalls: ['Do not silently move unfinished work into Done or backfill unsupported measurements.'],
+      tips: ['A KPI read error means Unreadable, not zero.', 'The Build Plan keeps its original acceptance and shows Feature removed or No longer a must-have when the target leaves the list.'],
+      pitfalls: ['Do not silently move unfinished work into Done or backfill unsupported measurements.', 'Removing a feature is permanent and removes its design links and release checks. Linked roadmap items, risks or test sessions prevent removal. No longer a must-have keeps the feature and its related work.'],
       related: [{ label: 'Roadmap', href: '#build/roadmap' }],
     },
     {

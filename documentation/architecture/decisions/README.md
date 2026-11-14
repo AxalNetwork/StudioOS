@@ -128,4 +128,5 @@ and citations by number keep working.
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
+| `D6024.md` | Confirmed Build feature removal and must-have demotion, protected references, atomic audit and honest Build Plan history without stale links (#6024). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |

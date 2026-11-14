@@ -187,8 +187,10 @@ export async function readPlan(env: Env, projectId: number, scope = 'venture', p
   const verdict = partner ? undefined : await planVerdict(env, projectId, scope === 'venture' ? 'venture' : Number(scope.slice(2)));
   if (!plan) return { plan: null, modules, brief: null, ...(partner ? {} : { verdict }) };
   const rows = (await env.DB.prepare(`SELECT i.uid, i.module, i.kind, i.item_key, i.evidence_json, i.landed_table, i.landed_id, i.marker,
-    q.uid AS proposal_uid, q.status, q.payload_json, q.decided_payload_json, q.source_kind, q.source_ref, q.source_label, q.updated_at AS decided_at
+    q.uid AS proposal_uid, q.status, q.payload_json, q.decided_payload_json, q.source_kind, q.source_ref, q.source_label, q.updated_at AS decided_at,
+    f.id AS feature_id, f.is_must_have AS feature_is_must_have
     FROM build_plan_items i JOIN ai_rail_proposals q ON q.uid = i.proposal_uid JOIN build_plans p ON p.id = i.plan_id
+    LEFT JOIN mvp_features f ON i.landed_table = 'mvp_features' AND f.id = CAST(i.landed_id AS INTEGER) AND f.project_id = i.project_id
     WHERE p.scope = ? AND p.project_id = ? AND i.project_id = p.project_id
       AND (i.plan_id = ? OR q.status IN ('accepted', 'edited'))
       AND (? = 0 OR (q.status IN ('accepted', 'edited') AND i.landed_table IS NOT NULL AND i.landed_id IS NOT NULL))
@@ -199,6 +201,8 @@ export async function readPlan(env: Env, projectId: number, scope = 'venture', p
     if (partner && payload) delete payload.from_commitment;
     modules[r.module].push({ uid: r.uid, kind: r.kind, ...(partner ? {} : { item_key: r.item_key }), proposal_uid: r.proposal_uid, status: r.status,
       payload, evidence, landed_table: r.landed_table, landed_id: r.landed_id, marker: r.marker,
+      ...(r.landed_table === 'mvp_features' ? { landed_state: r.feature_id == null ? 'removed'
+        : r.module === 'prototype-mvp' && Number(r.feature_is_must_have) !== 1 ? 'not_must_have' : 'present' } : {}),
       ...(partner ? {} : { source_kind: r.source_kind, source_ref: r.source_ref, source_label: r.source_label, decided_at: r.status === 'proposed' ? null : r.decided_at ?? null }) });
   }
   const brief = partner ? null : parse(plan.brief_json);
