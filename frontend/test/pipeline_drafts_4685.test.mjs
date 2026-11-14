@@ -277,7 +277,7 @@ const chooseProposal = async (m, id) => {
   await act(async () => { m.props(sel).onChange({ target: { value: id == null ? '' : String(id) } }); });
 };
 
-test('a version typed for one proposal is submitted to that proposal, whatever History is open', async () => {
+test('a version typed for one proposal is submitted to that proposal, whatever sheet is open', async () => {
   const calls = [];
   const { m, restore, u } = await mountProposals(
     [{ ...proposal(1, 'Acme'), versions: [{ id: 11, version: 1, change_summary: 'first', created_at: '2026-11-01', price_cents: null, note: '' }] }, proposal(2, 'Birch')].map((p, i) => (i === 1 ? { ...p, versions: [{ id: 21, version: 1, change_summary: 'b first', created_at: '2026-11-01', price_cents: null, note: '' }] } : p)),
@@ -287,8 +287,10 @@ test('a version typed for one proposal is submitted to that proposal, whatever H
     await chooseProposal(m, 1);
     const [what] = versionInputs(m);
     await u.type(what, 'Split into phases');
-    // Look at the other proposal's history. This used to retarget the form to it.
-    await u.press('History', 1);
+    // Look at the other proposal's history, in its sheet (D4838 PP04, #5937). Its
+    // History button used to retarget the form to it; opening the sheet must not either.
+    await u.press('Birch');
+    await u.press('Versions');
     assert.match(m.text(), /Version history · Birch/);
     await u.press('Add the version');
     await m.flush();

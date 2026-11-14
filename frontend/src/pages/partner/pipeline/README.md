@@ -9,7 +9,8 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `PipelineCommandCentre.jsx` | `/pipeline` itself since D4838: the first-run setup path (PP01) or the command centre (PP02): Needs attention, four metrics with their basis, the lifecycle strip, Recent movement (Not recorded) and Risks. It also hands the Eadwyn rail its next steps. |
 | `commandCentre.js` | D4838: the pure rules the root reads. They cover setup steps from the record, when first run applies, metrics that print a zero only over a population, attention and risks from recorded fields, the lifecycle strip and the rail's steps. |
 | `LeadsZone.jsx` | `/pipeline/leads`: open needs scored against the firm's own fit rules, with receipts, and a recorded pass reason. |
-| `ProposalsZone.jsx` | `/pipeline/proposals`: every quote, its versions and its outcome with a loss reason. |
+| `ProposalsZone.jsx` | `/pipeline/proposals` since D4838 PP04: a follow-up list (client, value, state, last activity, next action), a phone card per proposal, and a sheet with each quote's versions and its outcome with a loss reason. |
+| `proposalsFollowUp.js` | D4838 PP04: the pure rules the Proposals list reads. They cover last activity, next action, the sheet's tabs and the strip, and they never count an open. |
 | `NegotiationsZone.jsx` | `/pipeline/negotiations`: stage, ball, the open question and clause-level terms. |
 | `RetainersZone.jsx` | `/pipeline/retainers`: cadence, monthly equivalent, usage against retained hours and renewal. |
 | `AnalyticsZone.jsx` | `/pipeline/analytics`: win rate, cycle, weighted forecast and loss reasons, by window and by shape. |
