@@ -6,6 +6,7 @@
  * otherwise one sentence says who does it.
  */
 import React, { useEffect, useState } from 'react';
+import { Lightbox } from '../../ui';
 import { dd } from '../../lib/api';
 import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
@@ -25,6 +26,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const ACTION_LABEL = { review: 'Mark reviewed', remind: 'Send a reminder', due: 'Change due date', withdraw: 'Withdraw…' };
 
 export function RequestsTab({ data, open }) {
+  const [actionRequest, setActionRequest] = useState(null);
   const requests = data.requests || [];
   const writes = may(data, 'requests') && data.case.status !== 'archived';
   const sectionTitle = (id) => (data.sections || []).find((s) => Number(s.id) === Number(id))?.title || 'Case-wide';
@@ -47,7 +49,8 @@ export function RequestsTab({ data, open }) {
                   <Td>{Array.isArray(r.files) ? (r.files.length || 'None') : NOT_RECORDED}</Td>
                   <Td>{r.reminders ? (r.reminders.count ? `${r.reminders.count} · last ${fmtDay(r.reminders.last_at) || NOT_RECORDED}` : 'None') : NOT_RECORDED}</Td>
                   <Td>
-                    <div className="flex flex-wrap gap-1">
+                    {acts.length ? <button type="button" className={`${btnCls} md:hidden`} onClick={() => setActionRequest(r)}>Request actions</button> : null}
+                    <div className="hidden flex-wrap gap-1 md:flex">
                       {acts.map((a) => (
                         <button key={a} type="button" className={`${btnCls} h-8 px-2 text-[12px]`} onClick={() => open(`req-${a}`, { req: r })} data-testid={`dd-request-${r.id}-${a}`}>{ACTION_LABEL[a]}</button>
                       ))}
@@ -59,6 +62,18 @@ export function RequestsTab({ data, open }) {
           </Table>
         )}
       </Block>
+      {actionRequest ? (
+        <Lightbox label={actionRequest.title} title={actionRequest.title} phone="sheet" onClose={() => setActionRequest(null)} testId="dd-request-actions-sheet">
+          <div className="grid gap-2 p-4">
+            {requestActions(actionRequest).map((action) => (
+              <button key={action} type="button" className={btnCls} onClick={() => {
+                setActionRequest(null);
+                open(`req-${action}`, { req: actionRequest });
+              }}>{ACTION_LABEL[action]}</button>
+            ))}
+          </div>
+        </Lightbox>
+      ) : null}
     </div>
   );
 }

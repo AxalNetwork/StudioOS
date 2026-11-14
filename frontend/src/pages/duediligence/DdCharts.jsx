@@ -38,8 +38,8 @@ export function StackColumns({ rows, height = 220, testId }) {
   const step = Math.ceil(max / 2);
   const scale = step * 2;
   return (
-    <div ref={ref} className="w-full" data-testid={testId}>
-      <svg width={W} height={height} aria-hidden="true" className="block overflow-visible text-[10.5px]">
+    <div ref={ref} className="w-full min-w-0" data-testid={testId}>
+      <svg width={W} height={height} aria-hidden="true" className="block max-w-full overflow-hidden text-[10.5px] lg:overflow-visible">
         {[0, step, scale].map((v) => {
           const y = top + ch - (ch * v) / scale;
           return (
@@ -91,11 +91,11 @@ export function StackColumns({ rows, height = 220, testId }) {
 export function ChartCard({ title, chart, state, onRetry, testId }) {
   const [asTable, setAsTable] = useState(false);
   return (
-    <section className={`${cardCls} flex flex-col gap-2 p-4`} data-testid={testId}>
+    <section className={`${cardCls} flex min-w-0 flex-col gap-2 p-4`} data-testid={testId}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="m-0 text-[15px] font-bold text-gray-900 dark:text-gray-100">{title}</h3>
         {chart ? (
-          <button type="button" onClick={() => setAsTable((v) => !v)} className="text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300" data-testid={`${testId}-toggle`}>
+          <button type="button" onClick={() => setAsTable((v) => !v)} className="min-h-11 shrink-0 text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300 md:min-h-0" data-testid={`${testId}-toggle`}>
             {asTable ? 'View as chart' : 'View as table'}
           </button>
         ) : null}
