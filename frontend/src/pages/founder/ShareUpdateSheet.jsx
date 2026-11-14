@@ -143,9 +143,10 @@ const money = (v) => `$${Number(v).toLocaleString('en-US')}`;
 /** A metric as the sheet prints it: the figure, or "Not recorded" with its reason. Never 0 for a missing one. */
 export function metricText(m) {
   if (m == null || m.value == null) return { value: 'Not recorded', detail: m?.reason || 'Not recorded' };
-  const v = m.unit === 'usd' ? money(m.value) : m.unit === 'pct' ? `${m.value > 0 ? '+' : ''}${m.value}%${m.key === 'growth' ? ' month on month' : ''}`
+  const v = m.unit === 'usd' ? money(m.value) : m.unit === 'pct' ? `${m.key === 'growth' && m.value > 0 ? '+' : ''}${m.value}%${m.key === 'growth' ? ' month on month' : ''}`
     : m.unit === 'months' ? `${m.value} months` : Number(m.value).toLocaleString('en-US');
-  return { value: v, detail: `${m.source}${m.as_of ? ` · ${m.as_of}` : ''}` };
+  const source = /^(typed|manual)$/i.test(m.source || '') ? 'Typed · the founder’s own figure' : m.source;
+  return { value: v, detail: `${source}${m.as_of ? ` · ${m.as_of}` : ''}` };
 }
 
 /** What the network will receive, in words, from the audience choice. */

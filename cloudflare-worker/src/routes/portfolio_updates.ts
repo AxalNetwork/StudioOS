@@ -20,7 +20,7 @@ import { investorProjectIds, investorActiveCompany } from './_investorProjectSco
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics, validMetricUnit,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -143,7 +143,7 @@ const REPORT_ROW = { detail: 'This is a report. Change and send it from Reportin
 /**
  * D1057 (#2927, #2427 finding 4): the figures an update carries, each with its
  * source. A Share an update row stores them in `metrics_json` (D654), keyed
- * by `METRIC_KEYS` (mrr, growth, customers, burn, runway); part 3's
+ * by `METRIC_KEYS` (including recorded ARR and net_retention, #6178); part 3's
  * `REPORT_FIGURES` keys report figures the same way. A row from the older KPI
  * form stores bare values in `kpis_json`, which carry no source. A figure
  * nothing recorded stays null with its reason, never 0.
@@ -159,6 +159,7 @@ export function updateFigures(u: { kpis_json?: string | null; metrics_json?: str
   const raw = jload(u.metrics_json ?? null, []);
   const figures = (Array.isArray(raw) ? raw : []).flatMap((m: any) => {
     if (!m || typeof m !== 'object' || !(METRIC_KEYS as readonly string[]).includes(String(m.key))) return [];
+    if (!validMetricUnit(String(m.key), m.unit)) return [];
     const value = typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : null;
     const source = typeof m.source === 'string' && m.source.trim() ? m.source.trim() : null;
     // A recorded figure with no source is not one the update may show (D654's rule).
@@ -474,9 +475,9 @@ async function periodSnapshots(env: Env, projectId: number, start: string, end: 
     const [year, month] = start.slice(0, 7).split('-').map(Number);
     const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10);
     const [inPeriod, before] = await Promise.all([
-      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date`)
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, arr, nrr_pct, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date, id`)
         .bind(projectId, start, end).all<Snapshot>(),
-      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date < ? ORDER BY snapshot_date`)
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, arr, nrr_pct, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date < ? ORDER BY snapshot_date, id`)
         .bind(projectId, previousMonth, start).all<Snapshot>(),
     ]);
     return { inPeriod: inPeriod.results || [], before: before.results || [] };
