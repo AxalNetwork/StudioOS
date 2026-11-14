@@ -18,6 +18,7 @@ its `ZONE` map.
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 | `DeliverableSheet.jsx` | Practice v2 PX-06 B–D · Delivery detail | `/practice/delivery` | SHEET + DIALOGS | One work product's detail sheet (latest version, immutable history with each version's own recipient and receipts), Add version and the send confirmation; no store of its own (D4833) |
 | `EngagementSheet.jsx` | Practice v2 PX-03b–d · Engagement detail | `/practice/engagements` | SHEET | One engagement in six tabs (Overview, Scope, Sessions, Delivery, Agreement, Activity): the PX-03c outcome choice for a signed engagement (D5316's reason), the #4684 warning naming who its work was sent to, and an Agreement tab that says none is linked; reads only its history (D4831) |
+| `ClientSheet.jsx` | Practice v2 PX-04 · Client Sheet | every Practice zone that names a linked client | SHEET | One client in seven tabs (Overview, Engagements, Sessions, Delivery, Agreements, Access, Notes). Reads each source for itself, joins every row by the client's account id (`clientSheetModel.js`), and keeps a note "Private to you" in `advisor_client_notes`. Opened from Engagements; #4829, #4830 and #4832 import it (D4831) |
 | `SourceState.jsx` | Practice v2 PX-08 · States | every Practice zone | STATE | One source's loading, empty, unreadable, not-recorded or withheld state in PX-08's words; a small stand-in for #5129's shared component; no store of its own (D4834) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
@@ -104,6 +105,7 @@ feature is not an instruction to delete it.
 A zone with real derivations keeps them in a sibling module that imports nothing:
 
 - `opportunityLog.js` — PR1's decision log.
+- `clientSheetModel.js` — PX-04's derivations: the account join, the relationship line, next session, last delivery to this client, recorded outstanding, recent activity and the client's own grants (D4831).
 - `engagementBoard.js` — PR2's lanes, renewal rules and stored **calendar days**; since D4831 also PX-03's chips, price, scope and activity lines, and the #4684 recipients.
 - `deliveryTrail.js` — PR3's version tags, open-state tones, seam line, median
   label and nudge targets, over **instants**.

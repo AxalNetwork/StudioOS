@@ -32,7 +32,7 @@ import { historyLine } from './engagementCorrection';
  * matched by name.
  */
 export default function EngagementSheet({
-  e, bookings, deliverables, busy = false, note = null, onClose, onDecide, initialTab = 'Overview',
+  e, bookings, deliverables, busy = false, note = null, onClose, onDecide, onOpenClient = null, initialTab = 'Overview',
 }) {
   const [tab, setTab] = useState(SHEET_TABS.includes(initialTab) ? initialTab : 'Overview');
   const [events, setEvents] = useState({ loading: true, items: null, error: '' });
@@ -92,7 +92,7 @@ export default function EngagementSheet({
         ))}
       </div>
       <div role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)} data-testid={`engagement-tab-${tab.toLowerCase()}`}>
-        {tab === 'Overview' && <Overview e={e} deliverables={deliverables} events={events} busy={busy} onDecide={onDecide} />}
+        {tab === 'Overview' && <Overview e={e} deliverables={deliverables} events={events} busy={busy} onDecide={onDecide} onOpenClient={onOpenClient} />}
         {tab === 'Scope' && <ScopeTab e={e} />}
         {tab === 'Sessions' && <SessionsTab e={e} bookings={bookings} />}
         {tab === 'Delivery' && <DeliveryTab e={e} deliverables={deliverables} />}
@@ -131,14 +131,17 @@ export const OUTCOMES = [
   { key: 'other', label: 'Ended for another reason', body: { decision: 'ended', end_reason: 'other' } },
 ];
 
-function Overview({ e, deliverables, events, busy, onDecide }) {
+function Overview({ e, deliverables, events, busy, onDecide, onOpenClient }) {
   const recipients = priorRecipients(e, deliverables);
   const latest = latestActivity(events);
   return (
     <div className="grid gap-4">
       {canDecideRenewal(e.lane) && <OutcomeForm e={e} busy={busy} onDecide={onDecide} />}
       <KV rows={[
-        ['Client', <>{e.client_name || <Unrecorded>Client not named</Unrecorded>}{' '}
+        ['Client', <>{e.founder_user_id && onOpenClient
+          ? <button type="button" className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300" data-testid="engagement-open-client"
+            onClick={() => onOpenClient(e)}>{e.client_name || 'Client not named'}</button>
+          : e.client_name || <Unrecorded>Client not named</Unrecorded>}{' '}
           <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
             {e.founder_user_id ? 'Founder account linked' : 'Name only, no account linked'}
           </span></>],

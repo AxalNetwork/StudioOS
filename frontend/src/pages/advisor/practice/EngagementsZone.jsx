@@ -11,6 +11,7 @@ import {
   laneMoves, priceLine, scopeLine, shapeNote,
 } from './engagementBoard';
 import EngagementSheet from './EngagementSheet';
+import ClientSheet from './ClientSheet';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
@@ -87,6 +88,10 @@ export default function EngagementsZone() {
   // #4831 (D4831): the engagement whose sheet is open, by id, so the sheet
   // always draws the row as the last read returned it.
   const [openId, setOpenId] = useState(null);
+  // #4831 part 2: the client whose sheet is open, `{ id, name }`. Only a linked
+  // account opens one: a client who is only a name has nothing to join by.
+  const [client, setClient] = useState(null);
+  const openClient = (e) => { if (e?.founder_user_id) { setOpenId(null); setClient({ id: e.founder_user_id, name: e.client_name }); } };
   // The bookings and the deliverables, as read: null when a read failed, so
   // the cards say "could not be read" rather than counting zero.
   const [bookings, setBookings] = useState(null);
@@ -412,7 +417,8 @@ export default function EngagementsZone() {
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
                       onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient}
-                      activity={activityLine(e, bookings, deliverables)} onOpen={() => setOpenId(e.id)} />)}
+                      activity={activityLine(e, bookings, deliverables)} onOpen={() => setOpenId(e.id)}
+                      onOpenClient={openClient} />)}
                 </div>
               </div>
             );
@@ -647,8 +653,10 @@ export default function EngagementsZone() {
     <AdvisorAccessLog />
     {opened && (
       <EngagementSheet key={opened.id} e={opened} bookings={bookings} deliverables={deliverables}
-        busy={busy === opened.id} note={note} onClose={() => { setOpenId(null); setNote(null); }} onDecide={decideFromSheet} />
+        busy={busy === opened.id} note={note} onClose={() => { setOpenId(null); setNote(null); }} onDecide={decideFromSheet}
+        onOpenClient={openClient} />
     )}
+    {client && <ClientSheet key={client.id} clientUserId={client.id} clientName={client.name} onClose={() => setClient(null)} />}
     </>
   );
 }
@@ -661,7 +669,7 @@ export default function EngagementsZone() {
  * rather than a disabled one: there is no move to make, and a greyed button
  * implies there is.
  */
-function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink, activity = null, onOpen }) {
+function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink, activity = null, onOpen, onOpenClient }) {
   const due = e.lane === 'renewal_due';
   const moves = laneMoves(e.lane);
   // The linked account may not be among the candidates any more — a booking can
@@ -678,7 +686,10 @@ function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLi
       {/* #4831 (D4831): PX-03's card. Client and state, what it is, its price,
           its date line, its scope and its activity, then Open engagement. */}
       <div className="flex items-start justify-between gap-1.5">
-        <div className="text-[12px] font-bold tracking-tight">{e.client_name}</div>
+        {e.founder_user_id && onOpenClient
+          ? <button type="button" onClick={() => onOpenClient(e)} data-testid={`client-pr2-${e.id}`}
+            className="text-left text-[12px] font-bold tracking-tight hover:underline">{e.client_name}</button>
+          : <div className="text-[12px] font-bold tracking-tight">{e.client_name}</div>}
         <Pill tone={due ? 'warn' : 'neutral'}>{LANE_LABEL[e.lane] || 'Lane not recorded'}</Pill>
       </div>
       <div className="mt-1 text-[10.5px] leading-relaxed text-axal-faint">
