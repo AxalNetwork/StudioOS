@@ -94,8 +94,8 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
       )}
       <ZoneHeading
         title="Fund & manager benchmarking"
-        sub="What you are measuring, what the peer set says, and how many it was measured over."
-        right={data ? <Pill tone="neutral">{`${data.comparison_count} of ${data.metric_count} carry a peer set`}</Pill> : null}
+        blurb="What you are measuring, what the peer set says, and how many it was measured over."
+        action={data ? <Pill tone="neutral">{`${data.comparison_count} of ${data.metric_count} carry a peer set`}</Pill> : null}
       />
 
       {data?.sample_note && (

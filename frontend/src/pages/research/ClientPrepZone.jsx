@@ -179,7 +179,7 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
       )}
       <ZoneHeading
         title={active ? `Client brief — ${active.project_name}` : 'Client prep'}
-        sub="One client. Founder-sourced rows are read-only."
+        blurb="One client. Founder-sourced rows are read-only."
         /* THE ARTBOARD'S SCOPE PILL, WITH THE SWITCHER INSIDE IT. The picker was
            a separate card below the heading, which is the same control in a
            place that does not say what it scopes. Here the pill names the
