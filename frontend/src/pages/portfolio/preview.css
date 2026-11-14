@@ -1,0 +1,19 @@
+/* D4817 part 8 (#5311, canvas PF-08): the Admin Investor preview banner, the
+   "Private in preview" chip and the withheld board. Colours come from the
+   frame's tokens on .pf-shell, which .dark redefines; the banner is the
+   canvas's dark band in both modes. */
+.pf-preview-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;border-radius:10px;background:#18181b;color:#fff;font-size:12.5px;line-height:1.45}
+.dark .pf-preview-banner{background:#0b0a12;border:1px solid var(--pf-lavE)}
+.pf-preview-banner-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+.pf-preview-banner-text b{font-weight:700}
+.pf-preview-banner-text span{color:#d4d4d8;font-size:12px}
+.pf-preview-exit{border:1px solid #c4b5fd;background:transparent;color:#c4b5fd;border-radius:8px;padding:0 12px;min-height:32px;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
+.pf-preview-exit:hover,.pf-preview-exit:focus-visible{background:#c4b5fd;color:#18181b}
+.pf-private{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font-size:12px;font-weight:600;color:var(--pf-mu);padding:3px 9px;border:1px dashed var(--pf-hair2);border-radius:999px;background:var(--pf-raised);white-space:nowrap}
+.pf-metric b .pf-private,.pf-tile b .pf-private{font-family:var(--font-app);font-size:12px;font-weight:600;letter-spacing:0}
+.pf-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.pf-preview-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pf-preview-writes{display:flex;flex-wrap:wrap;gap:8px}
+.pf-preview-writes button{opacity:.55;cursor:not-allowed}
+@media(max-width:850px){.pf-preview-grid{grid-template-columns:1fr}.pf-preview-tiles{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.pf-preview-banner{align-items:flex-start}.pf-preview-exit{width:100%}}
