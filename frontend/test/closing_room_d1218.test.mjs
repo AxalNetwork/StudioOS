@@ -15,8 +15,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import ClosingRoom from '../src/pages/closing/ClosingRoom.jsx';
 import {
-  NO_ACCESS, ROOM_FAILED, ROOM_WAITS, canEnter, captableView, dayOf, dutyRows, evidenceRows, matchesFor, needsYou, nextOnLine, paperPhrase,
-  roomLines, roomTiles, signingRows, stepStrip,
+  NO_ACCESS, ROOM_FAILED, ROOM_WAITS, canEnter, captableView, commitmentUidFor, dayOf, dutyRows, evidenceRows, matchesFor, needsYou, nextOnLine, paperPhrase,
+  payRows, payState, revealRefusal, revealSeconds, roomLines, roomTiles, signingRows, stepStrip,
 } from '../src/pages/closing/roomModel.js';
 import { CaptableDialog, PAY_WARNING } from '../src/pages/closing/RoomDialogs.jsx';
 
@@ -161,7 +161,7 @@ async function mount({ role = 'founder', routes = {}, phone = false, deal = { id
     asked.push({ path, method });
     const hit = routes[`${method} ${path.split('?')[0]}`] ?? routes[path.split('?')[0]];
     const out = typeof hit === 'function' ? await hit(path, opts) : hit;
-    if (out instanceof Error) return response({ detail: out.message }, Number(out.status) || 500);
+    if (out instanceof Error) return response({ detail: out.message, ...(out.code ? { code: out.code } : {}) }, Number(out.status) || 500);
     if (out && out.__pending) return new Promise(() => {});
     return response(out ?? {});
   };
@@ -327,18 +327,130 @@ test('mounted CP2: an investor sees their own line and the round’s total, neve
   } finally { await v.close(); }
 });
 
-test('mounted CP9: payment instructions open with the warning first, and say they are not read here yet', async () => {
-  const v = await mount({ role: 'investor', routes: INVESTOR_ROUTES() });
+/* CP9 (D6189): the company's receiving account, masked, revealed for this line's own commitment. */
+const ACCOUNT = { uid: 'a1', revision: 2, created_at: '2026-10-12T09:00:00Z', payee_name: 'Acme Robotics, Inc.', bank_name: 'First Bank', account_number: '••••4821',
+  routing_number: '021000021', swift_code: null, currency: 'USD', payment_reference: 'ACME-SEED-0007', warning: 'w' };
+const PAY = '/closings/company-receiving-accounts/5';
+const MY_COMMITMENTS = [{ id: 12, uid: 'k-12', deal_id: 7, amount: 300000, status: 'pending' }, { id: 99, uid: 'k-99' }];
+
+test('CP9 model: the read’s states, the rows in order, the reveal’s refusals and its seconds', () => {
+  assert.equal(payState({ recorded: false, reason: 'The company has not recorded a receiving account.' }).kind, 'none');
+  assert.equal(payState({ recorded: true, account: ACCOUNT }).kind, 'ok');
+  assert.equal(payState({}).kind, 'unreadable', 'an answer of neither shape is unreadable, never “no account”');
+  assert.deepEqual(payState(null, Object.assign(new Error('Receiving account instructions are not available in a support session.'), { status: 403, code: 'support_session_refused' })),
+    { kind: 'support', text: 'Receiving account instructions are not available in a support session.' });
+  assert.equal(payState(null, Object.assign(new Error('These instructions cannot be read.'), { status: 503 })).text, 'These instructions cannot be read.', 'the Worker’s sentence');
+  const rows = payRows(ACCOUNT, '$300,000.00');
+  assert.deepEqual(rows.map((r) => r.label), ['Payee', 'Bank', 'Account', 'Routing (ABA)', 'SWIFT', 'Currency', 'Reference', 'Amount']);
+  assert.equal(rows.find((r) => r.key === 'swift').value, null, 'a missing SWIFT is null, drawn Not recorded');
+  assert.deepEqual(revealRefusal(Object.assign(new Error('A signed investment line is required to reveal these instructions.'), { status: 403, code: 'signed_line_required' })),
+    { kind: 'unsigned', text: 'A signed investment line is required to reveal these instructions.', retry: false });
+  assert.equal(revealRefusal(Object.assign(new Error('x'), { status: 503, code: 'company_reveal_unrecorded' })).retry, true);
+  assert.equal(revealRefusal(Object.assign(new Error('Currency differs.'), { status: 409 })).retry, false);
+  assert.equal(commitmentUidFor(MY_COMMITMENTS, 12), 'k-12');
+  assert.equal(commitmentUidFor(MY_COMMITMENTS, 13), null);
+  assert.equal(commitmentUidFor(null, 12), null);
+  assert.deepEqual([{ expires_in_seconds: 30 }, { expires_in_seconds: 0 }, {}, { expires_in_seconds: '12' }].map(revealSeconds), [30, 0, 0, 12]);
+  assert.ok(!('instructions' in ROOM_WAITS), 'the stale “not mounted yet (#3214)” wait is gone');
+});
+
+test('mounted CP9: the warning first, then payee, bank, masked account, routing, SWIFT, currency and reference', async () => {
+  const v = await mount({ role: 'investor', routes: INVESTOR_ROUTES({ [PAY]: { recorded: true, account: ACCOUNT } }) });
   try {
     await v.click('closing-see-instructions');
     assert.equal(v.props('closing-pay').role, 'dialog', 'D1317: the payment instructions opens as the shared Sheet');
     assert.ok(v.props('closing-pay')['aria-labelledby']);
     assert.equal(v.props('closing-pay')['data-width'], 520);
     const t = v.text('closing-pay');
-    assert.ok(t.indexOf(PAY_WARNING('Acme Robotics')) >= 0 && t.indexOf(PAY_WARNING('Acme Robotics')) < t.indexOf('Not read here yet'), 'the warning comes first');
-    assert.match(v.text('closing-pay-wait'), /not mounted yet \(#3214\).*Nothing here tells you where to pay/);
-    assert.doesNotMatch(t, /\d{6,}/, 'no account number is drawn');
-    assert.deepEqual(v.writes(), []);
+    const w = t.indexOf(PAY_WARNING('Acme Robotics'));
+    assert.ok(w >= 0 && w < t.indexOf('Payee'), 'the warning comes first');
+    assert.match(v.text('closing-pay-rows'), /Payee Acme Robotics, Inc\. Bank First Bank Account ••••4821 Reveal full number Routing \(ABA\) 021000021 SWIFT Not recorded Currency USD Reference ACME-SEED-0007 Amount \$300,000\.00/);
+    assert.match(v.text('closing-pay-note'), /^Set on 12 Oct 2026\. Revealing the full number is recorded/);
+    assert.doesNotMatch(t, /not mounted yet|#3214/, 'the stale wait is gone');
+    assert.ok(v.asked.some((a) => a.path === PAY && a.method === 'GET'));
+    assert.deepEqual(v.writes(), [], 'opening the drawer writes nothing');
+  } finally { await v.close(); }
+});
+
+test('mounted CP9: Reveal asks first, names this line’s commitment, shows the number for the Worker’s seconds, then masks again', async () => {
+  const posted = [];
+  const routes = INVESTOR_ROUTES({
+    [PAY]: { recorded: true, account: ACCOUNT },
+    '/deals/7/commitments': MY_COMMITMENTS,
+    [`POST ${PAY}/reveal`]: (p, o) => { posted.push(JSON.parse(o.body)); return { account: { ...ACCOUNT, account_number: '000123454821' }, expires_in_seconds: 1 }; },
+  });
+  const v = await mount({ role: 'investor', routes });
+  try {
+    await v.click('closing-see-instructions');
+    await v.click('closing-pay-reveal');
+    assert.equal(v.props('closing-pay-ask').role, 'dialog');
+    assert.match(v.text('closing-pay-ask'), /Reveal the full account number\?.*This is recorded, without the number\./);
+    assert.deepEqual(v.writes(), [], 'nothing is revealed before the press');
+    await v.click('closing-pay-reveal-confirm');
+    assert.deepEqual(posted, [{ commitment_uid: 'k-12' }], 'the reveal names this line’s own commitment');
+    assert.ok(!v.has('closing-pay-ask'));
+    assert.equal(v.text('closing-pay-full'), '000123454821');
+    assert.match(v.text('closing-pay-hides'), /^Hides in 1 ?s$/);
+    await act(async () => { await new Promise((r) => setTimeout(r, 1100)); });
+    await v.flush();
+    assert.ok(!v.has('closing-pay-full'), 'after the Worker’s seconds the number is masked again');
+    assert.match(v.text('closing-pay-account'), /••••4821/);
+  } finally { await v.close(); }
+});
+
+test('mounted CP9: no account set yet, unreadable with Try again, and a support session, each in the Worker’s sentence', async () => {
+  const none = await mount({ role: 'investor', routes: INVESTOR_ROUTES({ [PAY]: { recorded: false, reason: 'The company has not recorded a receiving account.' } }) });
+  try {
+    await none.click('closing-see-instructions');
+    assert.match(none.text('closing-pay-none'), /^The company has not recorded a receiving account\. Nothing here tells you where to pay yet\./);
+    assert.ok(!none.has('closing-pay-rows') && !none.has('closing-pay-reveal'));
+    assert.ok(none.text('closing-pay').indexOf(PAY_WARNING('Acme Robotics')) < none.text('closing-pay').indexOf('has not recorded'), 'the warning still comes first');
+  } finally { await none.close(); }
+  let calls = 0;
+  const down = await mount({ role: 'investor', routes: INVESTOR_ROUTES({ [PAY]: () => { calls += 1; return calls === 1 ? err(503, 'These instructions could not be read or saved. Try again.') : { recorded: true, account: ACCOUNT }; } }) });
+  try {
+    await down.click('closing-see-instructions');
+    assert.match(down.text('closing-pay-unreadable'), /These instructions could not be read or saved\. Try again\. That is not a sign the company has no account\./);
+    await down.click('closing-pay-retry');
+    assert.ok(down.has('closing-pay-rows'), 'Try again reads again');
+    assert.equal(calls, 2);
+  } finally { await down.close(); }
+  const support = await mount({ role: 'investor', routes: INVESTOR_ROUTES({ [PAY]: () => Object.assign(err(403, 'Receiving account instructions are not available in a support session.'), { code: 'support_session_refused' }) }) });
+  try {
+    await support.click('closing-see-instructions');
+    assert.equal(support.text('closing-pay-support'), 'Receiving account instructions are not available in a support session.');
+    assert.ok(!support.has('closing-pay-retry'), 'a support session is refused, not offered Try again');
+  } finally { await support.close(); }
+});
+
+test('mounted CP9: a line not signed yet is refused in the Worker’s sentence, with no Try again; a failed reveal offers one', async () => {
+  const routes = (reveal) => INVESTOR_ROUTES({ [PAY]: { recorded: true, account: ACCOUNT }, '/deals/7/commitments': MY_COMMITMENTS, [`POST ${PAY}/reveal`]: reveal });
+  const v = await mount({ role: 'investor', routes: routes(() => Object.assign(err(403, 'A signed investment line is required to reveal these instructions.'), { code: 'signed_line_required' })) });
+  try {
+    await v.click('closing-see-instructions');
+    await v.click('closing-pay-reveal');
+    await v.click('closing-pay-reveal-confirm');
+    assert.equal(v.text('closing-pay-reveal-unsigned'), 'A signed investment line is required to reveal these instructions.');
+    assert.ok(!v.has('closing-pay-reveal-retry'));
+    assert.ok(!v.has('closing-pay-full'));
+  } finally { await v.close(); }
+  const w = await mount({ role: 'investor', routes: routes(() => err(503, 'The reveal could not be recorded, so the instructions are not shown.')) });
+  try {
+    await w.click('closing-see-instructions');
+    await w.click('closing-pay-reveal');
+    await w.click('closing-pay-reveal-confirm');
+    assert.match(w.text('closing-pay-reveal-unreadable'), /The reveal could not be recorded, so the instructions are not shown\./);
+    assert.ok(w.has('closing-pay-reveal-retry'));
+    assert.ok(!w.has('closing-pay-full'));
+  } finally { await w.close(); }
+});
+
+test('mounted CP9 on a phone: a bottom sheet with 44px targets', async () => {
+  const v = await mount({ role: 'investor', phone: true, routes: INVESTOR_ROUTES({ [PAY]: { recorded: true, account: ACCOUNT } }) });
+  try {
+    await v.click('closing-see-instructions');
+    assert.ok(v.has('closing-pay'));
+    assert.match(v.props('closing-pay-reveal').className, /min-h-\[44px\]/);
   } finally { await v.close(); }
 });
 

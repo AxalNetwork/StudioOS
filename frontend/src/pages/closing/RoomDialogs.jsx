@@ -6,15 +6,19 @@
  * as its own sentence. Nothing here moves money, and nothing here is a
  * browser pop-up.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../../lib/api';
 import { closingsApi } from '../../lib/api/closings';
+import { companyReceivingAccountsApi } from '../../lib/api/companyReceivingAccounts';
 import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
-import { Lightbox, Unrecorded } from '../../ui';
+import { Lightbox, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN } from '../account/AccountCenter';
 import { Err } from './ClosingDialogs';
 import { closingHrefFor, moneyCents } from './deskModel';
-import { ROOM_WAITS, evidenceRows, signingRows } from './roomModel';
+import {
+  PAY_WORDS, ROOM_WAITS, commitmentUidFor, dayOf, evidenceRows, payRows, payState, revealRefusal, revealSeconds, signingRows,
+} from './roomModel';
 import Sheet from '../../ui/Sheet.jsx';
 
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
@@ -101,17 +105,116 @@ export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
   );
 }
 
-/** CP9: the warning first, then the instructions, which no mounted route serves yet (D1217, #3214). */
-export function PaymentDrawer({ company, amount, onClose }) {
+/**
+ * CP9 (D6189): the warning first, then the company's receiving account as the
+ * Worker reads it (D1217), masked. Revealing the full number asks first, names
+ * this line's commitment, and shows the number for the seconds the Worker
+ * returns, then masks it again. Each refusal prints the Worker's sentence.
+ */
+export function PaymentDrawer({ company, amount, projectId, dealId, commitmentId, onClose }) {
+  const phone = usePhoneWidth();
+  const [tick, setTick] = useState(0);
+  const [read, setRead] = useState({ result: null, error: null, done: false });
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(null);
+  const [full, setFull] = useState(null);
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setRead({ result: null, error: null, done: false });
+    companyReceivingAccountsApi.read(projectId).then(
+      (result) => { if (live) setRead({ result, error: null, done: true }); },
+      (error) => { if (live) setRead({ result: null, error, done: true }); },
+    );
+    return () => { live = false; };
+  }, [projectId, tick]);
+  useEffect(() => {
+    if (!full) return undefined;
+    if (left <= 0) { setFull(null); return undefined; }
+    const t = setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [full, left]);
+  const state = read.done ? payState(read.result, read.error) : { kind: 'loading' };
+  const reveal = async () => {
+    setBusy(true); setRefused(null);
+    try {
+      let list;
+      try { list = await api.dealCommitments(dealId); } catch { setRefused({ kind: 'unreadable', text: PAY_WORDS.lineUnreadable, retry: true }); return; }
+      const uid = commitmentUidFor(list, commitmentId);
+      if (!uid) { setRefused({ kind: 'refused', text: PAY_WORDS.noLine, retry: false }); return; }
+      const reply = await companyReceivingAccountsApi.reveal(projectId, uid);
+      const seconds = revealSeconds(reply);
+      const number = typeof reply?.account?.account_number === 'string' ? reply.account.account_number : '';
+      if (seconds > 0 && number) { setFull(number); setLeft(seconds); }
+      else setRefused({ kind: 'unreadable', text: PAY_WORDS.unreadable, retry: true });
+    } catch (e) {
+      setRefused(revealRefusal(e));
+    } finally { setBusy(false); setAsking(false); }
+  };
+  const tap = phone ? 'min-h-[44px]' : '';
+  const rows = state.kind === 'ok' ? payRows(state.account, amount) : [];
   return (
     <Sheet label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
-      footer={<Foot><button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
+      footer={<Foot><button type="button" className={`${BTN.ghost} ${tap}`} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <Warning testId="closing-pay-warning">{PAY_WARNING(company)}</Warning>
-        <span className={NOT_YET_PILL}>Not read here yet</span>
-        <p className={mutedText} data-testid="closing-pay-wait">{ROOM_WAITS.instructions}</p>
-        <p className={mutedText}>When the account is read here, revealing its full number is recorded and shows for 30 seconds. A change to the account is announced to every investor with an unpaid line.</p>
+        {state.kind === 'loading' ? <p className={mutedText} data-testid="closing-pay-reading">Reading the company’s receiving account…</p> : null}
+        {state.kind === 'none' ? (
+          <section className="flex flex-col gap-1" data-testid="closing-pay-none">
+            <p className="m-0 text-[13px] font-semibold">{state.text}</p>
+            <p className={mutedText}>{PAY_WORDS.notRecordedNext}</p>
+          </section>
+        ) : null}
+        {state.kind === 'support' || state.kind === 'gone' ? <p className={mutedText} data-testid={`closing-pay-${state.kind}`}>{state.text}</p> : null}
+        {state.kind === 'unreadable' ? (
+          <section className="flex flex-col gap-2" data-testid="closing-pay-unreadable">
+            <p className="m-0 text-[13px] text-red-700 dark:text-red-300" role="alert">{state.text}</p>
+            <p className={mutedText}>{PAY_WORDS.unreadableClaim}</p>
+            <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={() => setTick((n) => n + 1)} data-testid="closing-pay-retry">Try again</button>
+          </section>
+        ) : null}
+        {state.kind === 'ok' ? (
+          <>
+            <dl className="m-0 flex flex-col" data-testid="closing-pay-rows">
+              {rows.map((r, i) => (
+                <div key={r.key} className={`grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3 py-2 text-[13px] ${i ? 'border-t border-gray-100 dark:border-gray-800' : ''}`} data-testid={`closing-pay-${r.key}`}>
+                  <dt className="text-gray-500 dark:text-gray-400">{r.label}</dt>
+                  <dd className="m-0 flex min-w-0 flex-wrap items-center gap-2">
+                    {r.key === 'account' && full ? <span className="font-mono font-semibold" data-testid="closing-pay-full">{full}</span>
+                      : r.value ? <span className={r.mono ? 'font-mono break-all' : 'break-words'}>{r.value}</span> : <Unrecorded reason={`The company’s account carries no ${r.label.toLowerCase()}.`} />}
+                    {r.key === 'account' && full ? <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="closing-pay-hides">Hides in {left}s</span> : null}
+                    {r.key === 'account' && !full && commitmentId != null ? (
+                      <button type="button" className={`${BTN.link} ${tap}`} onClick={() => { setRefused(null); setAsking(true); }} disabled={busy} data-testid="closing-pay-reveal">Reveal full number</button>
+                    ) : null}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {refused ? (
+              <div className="flex flex-col gap-2" data-testid={`closing-pay-reveal-${refused.kind}`}>
+                <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert">{refused.text}</p>
+                {refused.retry ? <button type="button" className={`${BTN.ghost} w-fit ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-retry">Try again</button> : null}
+              </div>
+            ) : null}
+            <p className={mutedText} data-testid="closing-pay-note">{dayOf(state.account.created_at) ? `Set on ${dayOf(state.account.created_at)}. ` : ''}{PAY_WORDS.revealNote}</p>
+          </>
+        ) : null}
       </div>
+      {asking ? (
+        <Lightbox label="Reveal the full account number" title={PAY_WORDS.revealTitle} onClose={() => setAsking(false)} width={440} phone="sheet" testId="closing-pay-ask"
+          footer={(
+            <Foot>
+              <button type="button" className={`${BTN.ghost} ${tap}`} onClick={() => setAsking(false)} disabled={busy}>Cancel</button>
+              <button type="button" className={`${BTN.primary} ${tap}`} onClick={reveal} disabled={busy} data-testid="closing-pay-reveal-confirm">Reveal</button>
+            </Foot>
+          )}>
+          <div className="flex flex-col gap-2 px-5 py-4">
+            <p className="m-0 text-[13px]">{PAY_WORDS.revealRecorded}</p>
+            <p className={mutedText}>{PAY_WORDS.revealHides}</p>
+          </div>
+        </Lightbox>
+      ) : null}
     </Sheet>
   );
 }
