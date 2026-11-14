@@ -43,6 +43,11 @@ test('only explicitly shared Mercury figures print for a reader; excluded figure
   assert.match(data.figures[0].source, /shared by the founder/);
   assert.deepEqual([data.figures[1].value, data.figures[1].source], ['Not included', 'Shared at the board meeting']);
   assert.doesNotMatch(JSON.stringify(data), /999999|999,999/);
+  for (const left_out of [undefined, false]) {
+    const onlyIncludedFlag = reportPrintData(report({ figures: [figure({ included: false, left_out, value: 999999 })] }), { reader: true });
+    assert.equal(onlyIncludedFlag.figures[0].value, 'Not included');
+    assert.doesNotMatch(JSON.stringify(onlyIncludedFlag), /999999|999,999/);
+  }
   assert.equal(reportPrintData(report()).figures.find((f) => f.label === 'Confidential cash').value, '$987,654,321');
 });
 
