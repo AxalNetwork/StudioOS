@@ -10,6 +10,9 @@ import type { Card, Figure } from '../src/services/cycleCards';
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE reporting_reminder_settings (project_id INTEGER, offsets_json TEXT);
+    CREATE TABLE reporting_duties (id INTEGER, project_id INTEGER, kind TEXT, status TEXT);
+    CREATE TABLE reporting_periods (id INTEGER, duty_id INTEGER, period_label TEXT, due_on TEXT, met_update_id INTEGER, waived_at TEXT);`);
   db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER); INSERT INTO projects VALUES (1,11,101), (2,22,202); CREATE TABLE user_company_links (company_id INTEGER, user_id INTEGER); CREATE TABLE growth_channels (project_id INTEGER); CREATE TABLE waitlist_signups (project_id INTEGER, created_at TEXT, invited_at TEXT, followed_up_at TEXT, promoted_at TEXT); CREATE TABLE mercury_partner_proposals (project_id INTEGER, state TEXT);');
   for (const [name, table] of [['173_metrics_board_reporting.sql', 'metric_targets'], ['249_project_metrics.sql', 'project_metrics']]) {
     const sql = readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -47,6 +50,32 @@ test('a chosen target needs its first value; a real zero changes the action to R
     assert.equal(r.primary?.key, 'review_growth');
     assert.deepEqual(r.measurement, { state: 'recorded', value: { value: 0, as_of: '2026-11-12', source: 'manual' } });
     assert.equal(r.focus.value?.target_value, 0);
+  } finally { f.db.close(); }
+});
+
+test('reporting signals respect the reminder window, urgency, failure and write access', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`INSERT INTO reporting_reminder_settings VALUES (1, '[3]');
+      INSERT INTO reporting_duties VALUES (1, 1, 'quarterly_update', 'active'), (2, 2, 'quarterly_update', 'active');
+      INSERT INTO reporting_periods VALUES (1, 1, 'Q4', '2026-11-17', NULL, NULL), (2, 2, 'Other', '2026-11-10', NULL, NULL);`);
+    const get = (writable = true) => growAttention(f.x(), writable);
+    assert.equal((await get()).items.some((i) => i.key === 'report_due'), false);
+    f.db.exec("UPDATE reporting_periods SET due_on = '2026-11-16' WHERE id = 1");
+    const due = await get();
+    assert.equal(due.primary?.label, 'Share an update');
+    assert.equal(due.items[0]?.href, '/grow/reporting?project_id=1');
+    assert.match(due.items[0].label, /Q4/);
+    assert.equal(due.items.length, 4);
+    f.db.exec("UPDATE reporting_periods SET due_on = '2026-11-10' WHERE id = 1");
+    assert.match((await get()).items[0].why, /Late since/);
+    assert.equal((await get(false)).signals.reporting.state, 'restricted');
+    assert.equal((await growAttention(f.x(), true, { user: { id: 9, role: 'admin', founder_id: null } })).signals.reporting.state, 'restricted');
+    f.db.exec('UPDATE reporting_periods SET met_update_id = 9 WHERE id = 1');
+    assert.equal((await get()).signals.reporting.value, 0);
+    f.db.exec('DROP TABLE reporting_periods');
+    assert.equal((await get()).state, 'partial');
+    assert.equal((await get()).signals.reporting.state, 'unreadable');
   } finally { f.db.close(); }
 });
 
