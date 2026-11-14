@@ -13,9 +13,9 @@ D1213 (#2424), built to the owner's canvas: `design/incoming/Closing Room Page.d
 | `RoutePanels.jsx` | The SPV (CP6, exported for the room), the Axal VC fund card (CP7) and the third-party fund drawer (CP8, the shared Sheet, D1317) (D1219). |
 | `ActivityDrawer.jsx` | A closing's activity (CP15), the shared Sheet (D1317): append-only, newest first, by step, as CSV (D1219). |
 | `deskModel.js` | Pure: the desk's rows, filters and tiles, line and route words, Axal acts per viewer, the paper's fields, activity steps (D1219). |
-| `RecordRoom.jsx` | The room from the closings store, for the founder (CP1), an investor (CP2, CP20) and an Admin under the deal: steps, tiles, lines with route, paper, money and next, reporting after Closed, the investor's Mercury matches, the states (CP16–CP19) (D1218). |
-| `RoomDialogs.jsx` | The room's drawers and dialogs: Review and sign (CP4), payment instructions with the warning first (CP9), the receipt drawer (CP10), the cap-table decision (CP11), the investor's match (D1218). All but the match, a centred confirmation, are the shared `Sheet` (D1317). |
-| `roomModel.js` | Pure: who acts next on a line, the seven steps and the tiles, the signing order, the evidence, the cap-table view, reporting duties and Mercury matches for one closing (D1218). |
+| `RecordRoom.jsx` | The room from the closings store, for the founder (CP1), an investor (CP2, CP20) and an Admin under the deal: steps, tiles, lines with route, paper, money and next, reporting after Closed, the investor's Mercury matches, the states (CP16–CP19) (D1218); the founder's receiving account card, with Set or Change (CP1, #6190). |
+| `RoomDialogs.jsx` | The room's drawers and dialogs: Review and sign (CP4), payment instructions with the warning first (CP9), the receipt drawer (CP10), the cap-table decision (CP11), the investor's match (D1218), the founder's receiving account dialog (#6190). All but the match, a centred confirmation, are the shared `Sheet` (D1317). |
+| `roomModel.js` | Pure: who acts next on a line, the seven steps and the tiles, the signing order, the evidence, the cap-table view, reporting duties and Mercury matches for one closing (D1218); the receiving account card's state, fields and body (#6190). |
 | `PaperState.jsx` | A line's paper as the agreement lifecycle's pill and its detail, or words only where no lifecycle word applies (D4811 part 22). |
 
 ## Where it lives

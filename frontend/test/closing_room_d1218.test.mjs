@@ -216,7 +216,7 @@ test('mounted CP1: the founder’s room from the store — strip, tiles, lines w
     assert.ok(!v.asked.some((a) => a.path.startsWith('/legal/esign/staged/line/null')), 'a prospect line reads no paper');
     assert.deepEqual(v.asked.filter((a) => a.path.startsWith('/legal/esign/staged/line/')).map((a) => a.path).sort(), ['/legal/esign/staged/line/11', '/legal/esign/staged/line/12', '/legal/esign/staged/line/13']);
     assert.match(v.text('closing-needs-you'), /Harbor Ventures: Your turn: sign/);
-    assert.match(v.text('closing-account'), /Not read here yet.*#3214/);
+    assert.match(v.text('closing-account'), /Your company’s receiving account.*could not be read/, '#6190: an answer with no account shape is unreadable, never "No account set"');
     assert.match(v.text('closing-reporting'), /start when the closing is marked Closed/);
     assert.ok(!v.asked.some((a) => a.path.startsWith('/reporting')), 'no reporting read before Closed');
     assert.deepEqual(v.writes(), [], 'reading the room writes nothing');
@@ -456,7 +456,7 @@ test('the wiring: no browser pop-up, every read is a mounted route, light classe
   assert.match(read('cloudflare-worker/src/routes/esign.ts'), /esign\.get\('\/staged\/line\/:commitmentId'/);
   assert.match(read('cloudflare-worker/src/routes/mercury_investor.ts'), /app\.post\('\/proposals\/:uid\/accept'/);
   // D1217's follow-up (#3214) mounted the receiving-account route before the Closing router. The room
-  // reads it in a later part, and until then still says "Not read here yet" (D1218 §4).
+  // founder's card reads and saves it since #6190 (closing_receiving_account_6190.test.mjs).
   assert.match(worker, /app\.route\('\/api\/closings\/company-receiving-accounts', companyReceivingAccounts\);\n(?:\/\/[^\n]*\n)?app\.route\('\/api\/closings', closings\)/);
   for (const src of files.slice(0, 3)) {
     for (const m of src.matchAll(/className="([^"]+)"/g)) {
