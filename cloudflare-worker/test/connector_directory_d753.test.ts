@@ -183,17 +183,21 @@ test('/available stays light: no page body on any item', async () => {
 });
 
 // 5 ───────────────────────────────────────────────────────────────────────────
-test('LinkedIn is one first_party card, never an item', async () => {
+test('LinkedIn and Microsoft Teams (D5810) are first_party cards, never items', async () => {
   // Mutation checked: dropping first_party from the answer.
   const db = fixture();
   const r = (await call(db, 'founder', '/available')).body;
-  assert.equal(r.first_party.length, 1);
+  assert.deepEqual(r.first_party.map((x: any) => x.key), ['linkedin', 'teams']);
   const li = r.first_party[0];
   assert.deepEqual([li.key, li.display_name, li.category, li.status, li.sign_in.kind, li.page_href],
     ['linkedin', 'LinkedIn', 'Data', 'live', 'first_party', '/account/connectors/linkedin']);
   assert.ok(!('has_implementation' in li) && !('already_connected' in li));
   for (const f of PAGE_FIELDS) assert.ok(f in li, f);
   assert.ok(!r.items.some((x: any) => x.key === 'linkedin'));
+  const teams = r.first_party[1];
+  assert.deepEqual([teams.display_name, teams.category, teams.sign_in.kind, teams.page_href, teams.connection_source, teams.shares_connection],
+    ['Microsoft Teams', 'Calendar and workspace', 'first_party', '/account/connectors/teams', 'microsoft_oauth_tokens', 'microsoft']);
+  assert.ok(!r.items.some((x: any) => x.key === 'teams'));
   assert.deepEqual(Object.keys(FIRST_PARTY_CARDS).sort(), Object.keys(FIRST_PARTY_PAGES).sort());
 });
 
@@ -211,8 +215,10 @@ test('the page read is the catalogue entry, without the connection, plus the bod
       for (const [k, v] of Object.entries(item)) if (k !== 'already_connected') assert.deepEqual(d.body.connector[k], v, `${role} ${item.key}.${k}`);
       for (const f of BODY_FIELDS.filter((x) => x !== 'calls')) assert.ok(f in d.body.connector, `${role} ${item.key}: ${f}`);
     }
-    const li = await call(db, role, '/directory/linkedin', { branch });
-    for (const [k, v] of Object.entries(avail.first_party[0])) assert.deepEqual(li.body.connector[k], v, `${role} linkedin.${k}`);
+    for (const card of avail.first_party) {
+      const fp = await call(db, role, `/directory/${card.key}`, { branch });
+      for (const [k, v] of Object.entries(card)) assert.deepEqual(fp.body.connector[k], v, `${role} ${card.key}.${k}`);
+    }
   }
 });
 
