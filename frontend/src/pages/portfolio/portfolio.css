@@ -220,3 +220,27 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-qaxis b{font-size:10.5px}
   .pf-qaxis span{font-size:9.5px}
 }
+/* D4817 part 4 (PF-04): the reporting obligations inbox and the report detail */
+.pf-pad{padding:0 14px 12px}
+.pf-tiles.pf-tiles-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pf-missing{color:var(--pf-amT);font-weight:700;font-size:12px}
+.pf-obligations td[data-label="Due"]{max-width:130px;white-space:normal}
+.pf-obligations td small{max-width:280px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pf-obligations td[data-label="Period"],.pf-obligations td[data-label="Last chase"]{white-space:nowrap}
+.pf-obligations td[data-label="Last chase"] small{text-align:left}
+.pf-obligations td.pf-row-actions{white-space:nowrap;text-align:right}
+.pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:6px}
+.pf-obligations td.pf-row-actions .pf-btn:disabled{opacity:.55;cursor:not-allowed}
+.pf-ruleset tbody th small{text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+.pf-required{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.pf-required li{display:flex;align-items:center;gap:8px}
+.pf-quote{margin:0;padding:10px 12px;border-left:3px solid var(--pf-lavE);background:var(--pf-raised);border-radius:0 9px 9px 0;font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--pf-ink)}
+.pf-sheet .pf-kv>div{grid-template-columns:96px minmax(0,1fr)}
+@media(max-width:850px){.pf-tiles.pf-tiles-4{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){
+  .pf-obligations td.pf-row-actions{text-align:left!important}
+  .pf-obligations td.pf-row-actions::before{content:none}
+  .pf-obligations td.pf-row-actions .pf-btn{flex:1 1 auto;justify-content:center}
+  .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
+  .pf-obligations td[data-label="Due"]{max-width:none}
+}

@@ -79,7 +79,8 @@ test('the book reads as of a date, and the route cuts both stores at it', () => 
 
 test('the chase is wired to the log, per row and in bulk', () => {
   assert.match(UPDATES, /api\.portfolioChase\(overdueRows\.map/, 'Chase all overdue must hand the page’s own overdue set');
-  assert.match(UPDATES, /api\.portfolioChase\(\[row\.project_id\]\)/, 'the per-row chase is gone');
+  // D4817 part 4 (#5311, PF-04): the inbox row names its company by `projectId`.
+  assert.match(UPDATES, /api\.portfolioChase\(\[row\.projectId\]\)/, 'the per-row chase is gone');
   assert.match(UPDATES, /api\.portfolioChases\(\)/, 'the chase log is never read back');
   assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
   // The rail no longer denies the outbound the page now has.
