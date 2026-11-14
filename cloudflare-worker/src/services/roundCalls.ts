@@ -48,7 +48,7 @@ export async function wordRoundTerms(env: Env, project: ProjectFacts, user: User
     CLOSE: 'target close date', CAP: 'valuation cap', DISCOUNT: 'discount', PRE_MONEY: 'pre-money valuation',
   };
   const result = await aiRouterRun(env, {
-    task: 'rail_write', userId: Number(user.id), surface: AI_SURFACE.raisePitch, rail,
+    task: 'rail_write', userId: Number(user.id), surface: AI_SURFACE.raiseCapitalRelationships, rail,
     systemPrompt: 'Write a short plain-language draft for the founder to review. Use each provided marker exactly once, with its given meaning. Keep markers verbatim including braces. Only state the listed facts. Add no amounts, dates, terms, promises, advice, headings, Markdown or other content. Return the paragraph alone.',
     messages: [{ role: 'user', content: Object.keys(fields).map(key => '{'+key+'}: '+meanings[key]).join('\n') }],
     maxTokens: 220,
