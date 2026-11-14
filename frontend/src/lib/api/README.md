@@ -346,7 +346,9 @@ lines and the round's total. Nothing in it moves money.
 D1217 (#3214): `companyReceivingAccounts.js` reads the company's receiving
 account (always masked), saves it (the venture's founder), and reveals it once
 for an investor with a signed line, logged without the number
-(`/api/closings/company-receiving-accounts/:projectId`). No page calls it yet.
+(`/api/closings/company-receiving-accounts/:projectId`). The closing room's
+payment drawer (CP9, D6189) reads it and reveals the number for an investor's
+own line; no page saves it yet.
 
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
