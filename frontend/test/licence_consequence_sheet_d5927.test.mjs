@@ -181,7 +181,7 @@ async function mount(licence = LICENCE) {
   const nodes = () => walk(container);
   const rootNode = createRoot(container);
   await act(async () => rootNode.render(h(MemoryRouter, null, h(Detail, { uid: 'lic_fr', held: new Map(), tab: 'overview', onTab: () => {} }))));
-  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
