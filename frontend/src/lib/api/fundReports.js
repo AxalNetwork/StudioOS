@@ -8,4 +8,6 @@ const id = (value) => {
 export const fundReportsApi = {
   fund: (fundId) => request(`/funds/${id(fundId)}/page`),
   period: (fundId, periodId) => request(`/funds/${id(fundId)}/report-periods/${id(periodId)}`),
+  deleteDraft: (fundId, periodId, revision) =>
+    request(`/funds/${id(fundId)}/report-periods/${id(periodId)}`, { method: 'DELETE', body: JSON.stringify({ revision }) }),
 };

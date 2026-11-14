@@ -4,6 +4,7 @@ import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
 import { useLeaveGuard } from '../lib/leaveGuard';
+import { fundReportsApi } from '../lib/api/fundReports.js';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
@@ -93,7 +94,7 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
     if (!editable || !form.id || !deleting || pending) return;
     setPending(true); setError(null);
     try {
-      const result = await api.fundsDeleteReportPeriod(data.fund.id, form.id, form.revision);
+      const result = await fundReportsApi.deleteDraft(data.fund.id, form.id, form.revision);
       if (result?.ok !== true) throw new Error('Delete was not confirmed.');
       allowLeave.current = true;
       onDeleted();

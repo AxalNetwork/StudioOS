@@ -3304,8 +3304,6 @@ export const api = {
   // GP-only. Quarterly reporting periods; a period is a DRAFT until issued, and
   // issuing freezes the fund-level snapshot and the GP's letter.
   fundsReportPeriods: (fundId) => request(`/funds/${fundId}/report-periods`),
-  fundsDeleteReportPeriod: (fundId, periodId, revision) =>
-    request(`/funds/${encodeURIComponent(fundId)}/report-periods/${encodeURIComponent(periodId)}`, { method: 'DELETE', body: JSON.stringify({ revision }) }),
   fundsSaveReportPeriod: (fundId, data) =>
     request(`/funds/${fundId}/report-periods`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSyndication: () => request('/funds/syndication'),
