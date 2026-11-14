@@ -60,6 +60,7 @@ import { eadwynToolInfo, runEadwynToolCalls, type EadwynContext } from '../servi
 import { DECK_PAGE } from '../services/decks/eadwynDeckTools';
 import { DECK_TOOLS } from '../mcp/tools/decks';
 import { pageFromPath, railFor, refuseAssistOff, runRefusalView } from '../util/railContext';
+import { UNTRUSTED_RULE, untrustedBlock } from '../services/ai/untrusted';
 import {
   SEND_TARGETS,
   actionEnvelope,
@@ -409,6 +410,9 @@ const ASK_PROMPT = [
   'connector the person switched on returned. Those lines and the conversation',
   'are everything you know about their business.',
   '',
+  // D1506, D6420: connector lines and an attached file arrive in the last message as delimited blocks.
+  UNTRUSTED_RULE,
+  '',
   'Rules:',
   '- Never state a figure that is not in the lines you were given.',
   '- If nothing given answers the question, say what is missing.',
@@ -548,14 +552,18 @@ async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskB
  */
 export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskInputs): RunOptions {
   const { question, fileText } = x;
-  const context = [
+  // The connectors a send may name come from the catalogue, so they stay in the system message.
+  const canPropose = x.sendable.length
+    ? `Can propose:\n${x.sendable.map((r) => `- ${r.provider_key}: payload field ${SEND_TARGETS[r.provider_key].map((t) => `${t.field} (${t.label})`).join(' or ')}`).join('\n')}`
+    : 'Can propose: nothing.';
+  // D6420 (D1506): what a connector returned and what the member attached are outside text. They
+  // leave the system message and travel with the question, each inside its own block. The file's
+  // name is caller-typed and is no longer sent.
+  const data = [
     x.reads.length
-      ? `Connector data:\n${x.reads.map((r) => `[${r.source.name}]\n${r.facts.map((f) => `- ${f}`).join('\n')}`).join('\n\n')}`
+      ? `Connector data:\n${x.reads.map((r) => `[${r.source.name}]\n${untrustedBlock('connector_row', r.facts.map((f) => `- ${f}`).join('\n'))}`).join('\n\n')}`
       : 'Connector data: none. No connector is switched on, or none returned anything.',
-    x.sendable.length
-      ? `Can propose:\n${x.sendable.map((r) => `- ${r.provider_key}: payload field ${SEND_TARGETS[r.provider_key].map((t) => `${t.field} (${t.label})`).join(' or ')}`).join('\n')}`
-      : 'Can propose: nothing.',
-    x.fileText ? `Attached file "${x.fileName || 'file'}":\n${x.fileText}` : '',
+    x.fileText ? `Attached file:\n${untrustedBlock('attached_file', x.fileText)}` : '',
   ].filter(Boolean).join('\n\n');
   return {
     task: 'workspace_explain',
@@ -564,8 +572,8 @@ export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskI
     surface: x.page,
     // D765: the rail's page, else the page's workspace; asking Eadwyn is the option.
     rail: railFor(c, { page: pageFromPath(x.page, 'eadwyn'), option: 'ask:eadwyn' }),
-    systemPrompt: `${ASK_PROMPT}\n\n${context}`,
-    messages: [...x.turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: x.question }],
+    systemPrompt: `${ASK_PROMPT}\n\n${canPropose}`,
+    messages: [...x.turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: `${data}\n\nQuestion:\n${x.question}` }],
     maxTokens: 600,
     temperature: 0.2,
     // D763: the guard checks what the member typed and attached, once, before
