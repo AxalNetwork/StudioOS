@@ -13,6 +13,12 @@
  * B · Mark history for one company, in the shared Sheet, with what "stale"
  * means. The book-wide history stays one toolbar action away.
  *
+ * C · Ask HQ (D6205, #6205): from the Sheet, or from "Request…" beside a
+ * Stale chip or a missing or unusable mark, the investor asks HQ to record a
+ * mark, correct one, or record a missing follow-on round, and reads the
+ * request's state afterwards (`MarkRequestPanel`). The requests are their own
+ * read: unreadable, they offer no form and no chip, never "none sent".
+ *
  * Every read stands alone (`usePortfolioReads`): a failed source labels its
  * own column or panel Unreadable with a Retry, and never reads as zero or as
  * an empty book. A Worker `detail` never reaches the page.
@@ -32,6 +38,9 @@ import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import FromMercury from './FromMercury';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
+import { markRequestsApi } from '../../lib/api/markRequests';
+import { requestsByCompany } from '../portfolio/markRequestModel';
+import MarkRequestPanel, { RequestChip } from './MarkRequestPanel';
 import { HealthStatus, ObligationStatus, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import {
   NOT_RECORDED, SHAPES, ageWords, attentionOf, attentionRulesOf, basisLabel, day, filterRegister, markCountsOf, markHistoryOf,
@@ -129,7 +138,7 @@ function FmvCell({ r }) {
   );
 }
 
-function MarkDateCell({ r, onOpen }) {
+function MarkDateCell({ r, onOpen, requests }) {
   const label = r.mark.kind === 'marked' ? (r.markDate || NOT_RECORDED) : NOT_RECORDED;
   const body = r.uid ? (
     <button type="button" className="pf-link-button pf-mark-open" onClick={() => onOpen(r)} aria-label={`Mark history for ${r.name}`} data-testid={`button-mark-history-${r.key}`}>{label}</button>
@@ -138,11 +147,13 @@ function MarkDateCell({ r, onOpen }) {
     <>
       {body}
       {r.stale ? <span className="pf-chip is-late pf-stale-chip" data-testid={`stale-${r.key}`}>Stale · {ageWords(r.ageDays)}</span> : null}
+      {r.uid && requests.state === 'ok' && (r.stale || r.mark.kind !== 'marked')
+        ? <RequestChip request={requests.byCompany.get(r.uid)} name={r.name} onRequest={() => onOpen(r, { request: true })} /> : null}
     </>
   );
 }
 
-function Register({ rows, total, asOf, filter, setFilter, query, setQuery, stage, setStage, onOpen, markHistory }) {
+function Register({ rows, total, asOf, filter, setFilter, query, setQuery, stage, setStage, onOpen, markHistory, requests }) {
   const shown = filterRegister(rows, { query, keep: (r) => (REGISTER_FILTERS[filter] || REGISTER_FILTERS.all)(r, stage) });
   const stages = [...new Set(rows.map((r) => r.stage).filter(Boolean))].sort();
   const periods = [...new Set(rows.map((r) => r.reporting.period).filter(Boolean))];
@@ -205,7 +216,7 @@ function Register({ rows, total, asOf, filter, setFilter, query, setQuery, stage
                   <td className={`n${r.below ? ' is-below' : ''}`} data-label="Multiple">
                     {r.multiple || <NotRecorded />}{r.multiple && r.mark.kind !== 'marked' ? <small>At cost</small> : null}{r.below ? <small>Below cost</small> : null}
                   </td>
-                  <td data-label="Mark date"><MarkDateCell r={r} onOpen={onOpen} /></td>
+                  <td data-label="Mark date"><MarkDateCell r={r} onOpen={onOpen} requests={requests} /></td>
                   <td data-label="Basis">{r.basis || (r.mark.kind === 'marked' ? <NotRecorded /> : <span className="pf-muted">At cost</span>)}</td>
                   <td data-label={period ? `Reporting · ${period}` : 'Reporting'}><ObligationStatus reporting={r.reporting} compact={Boolean(period)} /></td>
                   <td data-label="Health"><HealthStatus health={r.health} /></td>
@@ -284,7 +295,7 @@ function AttentionRules({ rules, retry }) {
 }
 
 /** PF-02b: one company's mark history, in the shared Sheet. */
-function MarkDrawer({ drawer, reference, asOf, onClose, onRetry }) {
+function MarkDrawer({ drawer, reference, asOf, onClose, onRetry, requests, onSendRequest, onRetryRequests }) {
   const { row } = drawer;
   const history = drawer.state === 'ok' ? markHistoryOf(drawer.detail, reference) : null;
   let body;
@@ -322,7 +333,7 @@ function MarkDrawer({ drawer, reference, asOf, onClose, onRetry }) {
   }
   return (
     <Sheet title={row.name} eyebrow="Mark history" label={`Mark history for ${row.name}`} width={560} testId="positions-mark-drawer" onClose={onClose}
-      footer={<p className="pf-foot pf-sheet-foot">Recording a mark is an HQ admin act. This book is your read of it.</p>}>
+      footer={<p className="pf-foot pf-sheet-foot">Recording a mark is an HQ admin act. This book is your read of it; Ask HQ sends a request, not a mark.</p>}>
       <div className="pf-sheet" data-testid="mark-drawer-body">
         <div className="pf-sheet-meta">
           {status}
@@ -334,6 +345,10 @@ function MarkDrawer({ drawer, reference, asOf, onClose, onRetry }) {
           <h3>What “stale” means</h3>
           <p className="pf-foot">No mark newer than two quarters{reference.date ? `, measured at ${day(reference.date)}` : ''}. The latest mark still counts toward NAV; nothing is extrapolated.</p>
         </section>
+        {row.uid ? (
+          <MarkRequestPanel key={row.key} row={row} read={requests} request={requests.state === 'ok' ? requests.byCompany.get(row.uid) : null}
+            startOpen={drawer.requestOpen} onSend={(draft) => onSendRequest(row, draft)} onRetry={onRetryRequests} />
+        ) : null}
         {row.uid ? <Link className="pf-btn" to={companyHref(row.uid)} data-testid="link-mark-drawer-company">Open {row.name}</Link> : null}
       </div>
     </Sheet>
@@ -462,11 +477,32 @@ export default function InvestorPortfolioPositions() {
     });
   }, []);
 
-  const readDrawer = useCallback((row) => {
-    setDrawer({ row, state: 'loading' });
+  // The investor's own requests, a read of their own (D6205).
+  const [requests, setRequests] = useState({ state: 'loading', byCompany: new Map() });
+  const readRequests = useCallback(() => {
+    setRequests((r) => ({ ...r, state: 'loading' }));
+    markRequestsApi.list().then(
+      (res) => setRequests(Array.isArray(res?.items) ? { state: 'ok', byCompany: requestsByCompany(res.items) } : { state: 'unreadable', byCompany: new Map() }),
+      () => setRequests({ state: 'unreadable', byCompany: new Map() }),
+    );
+  }, []);
+  useEffect(() => { readRequests(); }, [readRequests]);
+  // Sent, the new request is the company's; refused as already open, the open one is.
+  const sendRequest = useCallback(async (row, draft) => {
+    const put = (req) => setRequests((r) => ({ ...r, byCompany: new Map(r.byCompany).set(row.uid, req) }));
+    try {
+      put(await markRequestsApi.create({ projectUid: row.uid, kind: draft.kind, reason: draft.reason }));
+    } catch (err) {
+      if (err?.code === 'request_open' && err?.data?.request) put(err.data.request);
+      throw err;
+    }
+  }, []);
+
+  const readDrawer = useCallback((row, opts = {}) => {
+    setDrawer({ row, state: 'loading', requestOpen: Boolean(opts.request) });
     api.positionsByProject(row.uid).then(
-      (detail) => setDrawer((d) => (d && d.row.key === row.key ? { row, state: detail && typeof detail === 'object' && Array.isArray(detail.marks) ? 'ok' : 'unreadable', detail } : d)),
-      () => setDrawer((d) => (d && d.row.key === row.key ? { row, state: 'unreadable' } : d)),
+      (detail) => setDrawer((d) => (d && d.row.key === row.key ? { ...d, row, state: detail && typeof detail === 'object' && Array.isArray(detail.marks) ? 'ok' : 'unreadable', detail } : d)),
+      () => setDrawer((d) => (d && d.row.key === row.key ? { ...d, row, state: 'unreadable' } : d)),
     );
   }, []);
 
@@ -506,7 +542,7 @@ export default function InvestorPortfolioPositions() {
         <>
           <MarkCounts counts={counts} />
           <Register rows={rows} total={total} asOf={asOf} filter={filter} setFilter={setFilter} query={query} setQuery={setQuery}
-            stage={stage} setStage={setStage} onOpen={readDrawer} markHistory={markHistory} />
+            stage={stage} setStage={setStage} onOpen={readDrawer} markHistory={markHistory} requests={requests} />
         </>
       ) : null}
       <MarkHistory state={marks} onClose={markHistory} />
@@ -527,7 +563,8 @@ export default function InvestorPortfolioPositions() {
       </section>
       <FromMercury section="portfolio" />
       <p className="pf-boundary">Investor workspace. Data shown is restricted to this investor’s accessible position book.</p>
-      {drawer ? <MarkDrawer drawer={drawer} reference={reference} asOf={asOf} onClose={() => setDrawer(null)} onRetry={() => readDrawer(drawer.row)} /> : null}
+      {drawer ? <MarkDrawer drawer={drawer} reference={reference} asOf={asOf} onClose={() => setDrawer(null)}
+        onRetry={() => readDrawer(drawer.row, { request: drawer.requestOpen })} requests={requests} onSendRequest={sendRequest} onRetryRequests={readRequests} /> : null}
     </PortfolioFrame>
   );
 }

@@ -26,7 +26,7 @@ export const INFRA_STEPS = Object.freeze([
 ]);
 
 /** Jobs whose failure is only a summary of others: the gate reports the suite parts. */
-const SUMMARY_JOBS = new Set(['test:drift (full suite)']);
+const SUMMARY_JOBS = new Set(['test:drift (full suite)', 'landing gate']);
 /**
  * A job name as it may appear in the summary: letters, digits, spaces and `( ) - _ : . / ↔`, at most 100 characters.
  * Job names come from the workflow file, which a pull request can change, so anything else is dropped rather than
