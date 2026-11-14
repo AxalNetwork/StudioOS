@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import {
@@ -56,7 +56,12 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
       setState({ loading: false, error: e?.detail || e?.message || 'The benchmark set did not load.', data: null });
     }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  // D6275: every arrival re-reads the list, keyed to the navigation rather
+  // than to the mount, so a benchmark deleted on its own page is gone here
+  // even when the zone stayed mounted behind it.
+  const location = useLocation();
+  const removed = location.state?.removedBenchmark || null;
+  useEffect(() => { load(); }, [load, location.key]);
 
   const add = async (event) => {
     event.preventDefault();
@@ -97,6 +102,12 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
         sub="What you are measuring, what the peer set says, and how many it was measured over."
         right={data ? <Pill tone="neutral">{`${data.comparison_count} of ${data.metric_count} carry a peer set`}</Pill> : null}
       />
+
+      {removed && (
+        <p data-testid="benchmark-removed" role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+          {`Deleted “${removed}” and the constituents named against it.`}
+        </p>
+      )}
 
       {data?.sample_note && (
         <Card variant="dashed" padding="lg">
