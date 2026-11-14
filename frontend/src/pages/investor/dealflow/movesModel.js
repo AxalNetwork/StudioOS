@@ -12,7 +12,7 @@
  * The pass is the investor's alone: the round stays open for everyone else.
  */
 import { PASS_TAXONOMY } from '../../../lib/dealFlow.js';
-import { BOARD_STAGES, ENTERED_WORD, shortDayOf } from './flowModel';
+import { BOARD_STAGES, ENTERED_WORD, STAGE_WORD, shortDayOf } from './flowModel';
 
 const order = (s) => BOARD_STAGES.indexOf(s);
 
@@ -104,3 +104,24 @@ export function unreadSources(sources = {}) {
 /** Matches to the thesis, when the read says none are recorded: the reason, never "no matches". */
 export const thesisLine = (sources = {}) => (sources?.thesis && sources.thesis.recorded === false
   ? (sources.thesis.reason || 'Matches to your thesis are not recorded yet.') : null);
+
+/** #6146: describe only the event's recorded fields; actor/time are rendered separately. */
+export function flowEventSentence(event, enteredVia) {
+  const stage = (key) => STAGE_WORD[key] || 'Not recorded';
+  switch (event?.kind) {
+    case 'entered': return `Entered at ${stage(event.to)} · ${ENTERED_WORD[enteredVia] || 'Not recorded'}.`;
+    case 'moved': return `Moved from ${stage(event.from)} to ${stage(event.to)}.`;
+    case 'passed': return `Passed · ${PASS_REASONS.find((r) => r.key === event.reason)?.label || 'Reason: Not recorded'}.`;
+    case 'owner': return 'Owner changed.';
+    case 'note': return 'Note changed.';
+    default: return `Recorded change: ${event?.kind || 'Not recorded'}.`;
+  }
+}
+
+/** The current row's return rule is not historical event data. Never attach it to an old pass. */
+export function currentReturnLine(pass) {
+  if (!pass) return null;
+  if (pass.revisit === 'next_round') return 'Current pass · returns next round.';
+  if (pass.revisit === 'date' && pass.revisit_at) return `Current pass · return date: ${pass.revisit_at}.`;
+  return 'Current pass · return date: Not recorded.';
+}

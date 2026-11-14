@@ -383,7 +383,7 @@ export default function DealFlow({ view, scope }) {
         <DeleteViewDialog view={dialog.view} onClose={() => setDialog(null)} onDeleted={() => { setDialog(null); retryViews(); if (viewUid === dialog.view.uid) navigate(settingsHref({ view, scope, settings }), { replace: true }); }} />
       )}
       {peekRow && (
-        <PeekDrawer row={peekRow} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
+        <PeekDrawer row={peekRow} pass={entries?.find((entry) => String(entry.deal_id) === String(peekRow.id))?.pass || null} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
       )}
       {dialog?.kind === 'pass' && (
         <PassDialog row={dialog.row} invited={dialog.row.enteredVia === 'invited'} onClose={() => setDialog(null)}
