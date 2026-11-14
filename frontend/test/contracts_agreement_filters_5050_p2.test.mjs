@@ -98,7 +98,7 @@ test('CT-17 rules: chips per value, a removed type keeps the others, Clear all k
   const f = { agreement_type: 'package,program_licence', licence: 'AXL-001', territory: 'fr', signed_from: '2026-01-01', q: 'north', status: 'signed' };
   // Mutation checked: one chip for the whole type list → the first two labels read "Type: package,program_licence".
   assert.deepEqual(activeAgreementChips(f).map((c) => c.label),
-    ['Type: Package agreement', 'Type: Program licence', 'Licence: AXL-001', 'Territory: FR', 'Signed from 2026-01-01']);
+    ['Type: Package agreement', 'Type: Program licence', 'Licence: AXL-001', 'Territory: France', 'Signed from 2026-01-01']);
   assert.equal(withoutChip(f, activeAgreementChips(f)[0]).agreement_type, 'program_licence', 'removing one type keeps the other');
   assert.equal(withoutChip(f, { key: 'licence' }).licence, '');
   const cleared = withoutAgreementFilters(f);
@@ -107,7 +107,7 @@ test('CT-17 rules: chips per value, a removed type keeps the others, Clear all k
   assert.equal(toggleType('program_licence', 'territory_licence'), 'territory_licence,program_licence');
   assert.equal(toggleType('territory_licence,package', 'territory_licence'), 'package');
   // A set button reads its value, or the count when several types are chosen.
-  assert.deepEqual(['type', 'licence', 'state', 'signed'].map((id) => filterButtonValue(id, f)), ['2', 'FR · AXL-001', null, '2026-01-01 – …']);
+  assert.deepEqual(['type', 'licence', 'state', 'signed'].map((id) => filterButtonValue(id, f)), ['2', 'France · AXL-001', null, '2026-01-01 – …']);
   assert.equal(filterButtonValue('type', { agreement_type: 'package' }), 'Package agreement');
   // Mutation checked: accept any two letters without upper-casing → the territory reads "fr".
   assert.deepEqual(checkFilterText('territory', 'fr'), { ok: true, value: 'FR' });
@@ -118,7 +118,7 @@ test('CT-17 rules: chips per value, a removed type keeps the others, Clear all k
 
 test('CT-18/19 rules: the context line in the canvas\'s order; a never-sent version; where a document opens', () => {
   // Mutation checked: put the program before the package → "… · Spin-Out Lab · Venture Building v1".
-  assert.equal(agreementContextLine(context()), 'FR · AXL-001 · Venture Building v1 · Spin-Out Lab');
+  assert.equal(agreementContextLine(context()), 'France · AXL-001 · Venture Building v1 · Spin-Out Lab');
   assert.equal(agreementContextLine(context({ territory: [], holder: { type: 'user', id: '5', name: 'Lea Example' }, package_name: null, program_name: null, licence_ref: 'UL-FND-0042' })),
     'Lea Example · UL-FND-0042');
   // An envelope created but not yet sent is a draft too, yet it has an envelope: it is not "no envelope".
@@ -191,7 +191,7 @@ test('CT-18/19 mounted: context, legal state beside the pill, deep links; the ne
   try {
     await settle(view);
     const text = view.text();
-    assert.match(text, /FR · AXL-001 · Venture Building v1 · Spin-Out Lab/);
+    assert.match(text, /France · AXL-001 · Venture Building v1 · Spin-Out Lab/);
     assert.match(text, /From template program_licence v3/);
     // Mutation checked: show the union status instead of the legal state → the schedule reads "executed" here.
     const words = view.nodes().filter((n) => view.props(n)?.['data-testid'] === 'agreement-legal-state').map(walk);
@@ -215,7 +215,7 @@ test('CT-18/19 mounted: context, legal state beside the pill, deep links; the ne
     // CT-20 phone: the same rows as cards, each with its pill and legal state.
     const cards = view.nodes().filter((n) => view.props(n)?.['data-testid'] === 'agreement-card');
     assert.equal(cards.length, 4);
-    assert.match(walk(cards[1]), /Program licence.*FR · AXL-001 · Spin-Out Lab|Program licence.*FR · AXL-001 · Perks/);
+    assert.match(walk(cards[1]), /Program licence.*France · AXL-001 · Spin-Out Lab|Program licence.*France · AXL-001 · Perks/);
     assert.match(walk(cards[1]), /Prepared · not sent · no envelope.*legal state · draft/);
   } finally { await view.unmount(); restore(); }
 });
@@ -226,8 +226,8 @@ test('CT-20 mounted: None names the filters and says the read succeeded; Unavail
   const view = await mountContracts(element(), '/admin/contracts?agreement_type=program_licence&territory=IE', user);
   try {
     await settle(view);
-    // Mutation checked: drop the filters summary → "Type: Program licence · Territory: IE" is missing.
-    assert.match(view.text(), /No agreements match these filters.*Type: Program licence · Territory: IE\. Read succeeded\./s);
+    // Mutation checked: drop the filters summary → "Type: Program licence · Territory: Ireland" is missing.
+    assert.match(view.text(), /No agreements match these filters.*Type: Program licence · Territory: Ireland\. Read succeeded\./s);
     reply = { status: 500, body: { error: 'down' } };
     await view.click('Clear filters'); await settle(view);
     assert.match(view.text(), /Agreements couldn’t be read.*The list is never shown as empty/s);

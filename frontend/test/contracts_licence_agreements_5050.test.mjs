@@ -34,12 +34,12 @@ const packageDraft = {
 
 test('D5050 a row carries its licence, territory and program without being opened', () => {
   // Part 2 (CT-18): territory · licence · package and version · program; the type is the row's own line.
-  assert.equal(agreementContextLine(schedule), 'FR · AXL-001 · Spin-Out Lab');
-  assert.equal(agreementContextLine(packageDraft), 'FR · AXL-001 · Venture Building v2');
+  assert.equal(agreementContextLine(schedule), 'France · AXL-001 · Spin-Out Lab');
+  assert.equal(agreementContextLine(packageDraft), 'France · AXL-001 · Venture Building v2');
   assert.equal(agreementTemplateLine(packageDraft), 'package_venture_building_master v3');
   assert.equal(agreementContextLine(null), null);
   const html = render(schedule);
-  assert.match(html, /FR · AXL-001 · Spin-Out Lab/);
+  assert.match(html, /France · AXL-001 · Spin-Out Lab/);
   assert.match(html, /href="\/admin\/licences\/lic_1"[^>]*>Open licence/);
   assert.match(html, /href="\/admin\/licences\/programs\/studio\/lic_1"[^>]*>Open Program access/);
   assert.match(word(schedule), /legal state · <b[^>]*>executed<\/b>$/);
