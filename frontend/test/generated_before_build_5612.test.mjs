@@ -223,7 +223,7 @@ test('focused contract jobs retain generation and contracts; the required sharde
       assert.match(commands, /check-dark-mode\.mjs/);
       assert.match(commands, /npm\s+run\s+build\b/);
       assert.doesNotMatch(commands, /npm\s+run\s+test:drift\b/, 'the serial duplicate suite times out; required sharded coverage stays in CI');
-      assert.match(ciSource, /name: test:drift \(full suite\)/);
+      assert.match(ciSource, /^    name: .*\|\| 'test:drift \(full suite\)'/m);
       assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
     };
     check(source, ci);
@@ -233,6 +233,6 @@ test('focused contract jobs retain generation and contracts; the required sharde
       assert.throws(() => check(source.replace(`node scripts/${command}.mjs`, 'true'), ci));
     }
     assert.throws(() => check(source.replace('run: npm run build', 'run: true'), ci));
-    assert.throws(() => check(source, ci.replace('name: test:drift (full suite)', 'name: incomplete suite')));
+    assert.throws(() => check(source, ci.replace("'test:drift (full suite)'", "'incomplete suite'")));
   }
 });
