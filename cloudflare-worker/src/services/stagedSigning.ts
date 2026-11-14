@@ -27,9 +27,21 @@
  *
  * NOTHING SECRET IS LOGGED: a log names a code and an id, never a token, a
  * name, an email or the text.
+ *
+ * THE AUDIT (D4811 part 24). A closing's paper is on the agreement lifecycle
+ * (part 22), so its transitions are audited as an agreement's are. Each
+ * stage's envelope already writes the e-sign trail (`esign_created`,
+ * `esign_sent`, the signature). On top of that, an admin who starts the paper
+ * on a founder's closing writes `closing_paper_sent`, and the Super Admin who
+ * releases Axal's countersign writes `closing_paper_countersign_released`, both
+ * through `logAdminAction`, since each acts for someone else. An envelope voided
+ * because its text did not match the recorded digest writes `envelope_voided`
+ * to its own trail, as a sender's void does. No row carries a token, a name,
+ * an email or the text.
  */
 import type { Env } from '../types';
-import { createAndSendEnvelope, templateBodyFor } from '../routes/esign';
+import { appendAudit, createAndSendEnvelope, templateBodyFor } from '../routes/esign';
+import { logAdminAction } from './adminAudit';
 import { applyMergeFields, mergeTokensIn } from './mergeFields';
 import { AXAL_SIGNATORY_NAME } from './legalDocFormat';
 
@@ -198,7 +210,15 @@ export async function createStaged(env: Env, caller: Caller, input: CreateInput,
   }
   await env.DB.batch(rows);
   const staged = await stagedById(env, stagedId);
-  await sendStage(env, staged!, 1, { senderId: caller.id, senderName: caller.name || 'Axal VC', appUrl });
+  const sent = await sendStage(env, staged!, 1, { senderId: caller.id, senderName: caller.name || 'Axal VC', appUrl });
+  if (caller.role === 'admin') {
+    // An admin acting on a founder's closing; the paper's lifecycle state after the act is Sent.
+    await logAdminAction(env, Number(caller.id), String(caller.email ?? ''), 'closing_paper_sent', {
+      uid: staged!.uid, deal_id: dealId, commitment_id: commitmentId, document_type: staged!.document_type,
+      stages: rows.length, countersign: !!input.countersign, position: 1, envelope_uuid: sent.envelope_uuid,
+      lifecycle: 'sent',
+    });
+  }
   return { uid: staged!.uid };
 }
 
@@ -252,9 +272,16 @@ async function sendStage(
   }).catch(() => { console.warn(`[stagedSigning] send failed staged=${staged.id} position=${position}`); return null; });
   if (!out) throw new StagedRefusal(503, 'send_failed', 'The envelope could not be sent just now. Try again.');
   if (out.already_pending) throw new StagedRefusal(409, 'stage_already_sent', 'This stage is already out for signature.');
-  const sha = await env.DB.prepare('SELECT body_sha256 FROM esign_envelopes WHERE envelope_uuid = ?').bind(out.envelope_uuid).first<{ body_sha256: string | null }>();
+  const sha = await env.DB.prepare('SELECT id, body_sha256 FROM esign_envelopes WHERE envelope_uuid = ?').bind(out.envelope_uuid).first<{ id: number; body_sha256: string | null }>();
   if (sha?.body_sha256 !== staged.digest) {
-    await env.DB.prepare(`UPDATE esign_envelopes SET status = 'void' WHERE envelope_uuid = ? AND status = 'sent'`).bind(out.envelope_uuid).run();
+    const voided = await env.DB.prepare(`UPDATE esign_envelopes SET status = 'void' WHERE envelope_uuid = ? AND status = 'sent'`).bind(out.envelope_uuid).run();
+    if (sha && Number(voided.meta?.changes ?? 0) > 0) {
+      // Audited as a sender's void is (D4811 part 24): the envelope's own trail, mirrored to activity_logs.
+      await appendAudit(env, Number(sha.id), {
+        ts: new Date().toISOString(), signer_id: opts.senderId, signer_email: null, action: 'envelope_voided', ip: 'system',
+        meta: { by: 'system', reason: 'text_changed', staged_uid: staged.uid, position },
+      });
+    }
     throw new StagedRefusal(409, 'text_changed', 'The text could not be sent exactly as recorded, so nothing was sent.');
   }
   await env.DB.prepare(
@@ -282,6 +309,11 @@ export async function releaseCountersign(env: Env, superAdmin: Caller, uid: stri
   const out = await sendStage(env, staged, axal.position, {
     senderId: Number(staged.created_by), senderName: 'Axal VC', appUrl,
     recipient: { id: Number(superAdmin.id), name: AXAL_SIGNATORY_NAME, email: String(superAdmin.email || '') },
+  });
+  // The Super Admin acts for Axal; the stage's e-sign trail names the paper's creator as sender, so this row names who released it.
+  await logAdminAction(env, Number(superAdmin.id), String(superAdmin.email ?? ''), 'closing_paper_countersign_released', {
+    uid: staged.uid, deal_id: staged.deal_id, commitment_id: staged.commitment_id, position: axal.position,
+    envelope_uuid: out.envelope_uuid, lifecycle: 'sent',
   });
   return { envelope_uuid: out.envelope_uuid, token: out.signing_url.split('/esign/').pop() || '' };
 }

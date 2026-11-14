@@ -234,6 +234,15 @@ async function ownDoc(env: Env, userId: number, uid: string): Promise<DocRow | n
  * namespace, which is why `dto()` computes `in_ask` as `source === 'own' && …`.
  * This grants a download; it says nothing about Ask, and `in_ask` is unchanged.
  */
+/*
+ * LIVE SHARE GRANT (written out in each query below so the SQL stays literal).
+ * A share reads only through the newest LIVE grant the share's advisor holds
+ * over a project of the document's owner. Live means `status = 'active'` and
+ * not past `expires_at`, the predicate `advisor_grants.ts`'s `activeGrant`
+ * uses. `projects.founder_id` names a founders row, so the owner is matched
+ * through `users.founder_id`, as the brief does. A share whose grant is revoked
+ * or expired matches nothing and is neither listed nor read.
+ */
 async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row: DocRow; source: 'own' | 'client'; projectId: number | null } | null> {
   const own = await ownDoc(env, userId, uid);
   if (own) return { row: own, source: 'own', projectId: null };
@@ -247,9 +256,11 @@ async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row
               SELECT g.project_id
                 FROM advisor_client_grants g
                 JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
                WHERE g.advisor_user_id = s.advisor_user_id
                  AND g.status = 'active'
-                 AND p.founder_id = d.owner_user_id
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
                ORDER BY g.id DESC LIMIT 1
             ) AS grant_project_id
        FROM advisor_client_document_shares s
@@ -257,7 +268,9 @@ async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row
       WHERE d.uid = ? AND s.advisor_user_id = ? AND s.status = 'active'
       LIMIT 1`
   ).bind(uid, userId).first<DocRow & { grant_project_id: number | null }>();
-  if (!shared) return null;
+  // A share is only as live as the grant it was made under. No live grant over
+  // a project of the document's owner, no read.
+  if (!shared || shared.grant_project_id == null) return null;
   const projectId = Number.isSafeInteger(Number(shared.grant_project_id)) ? Number(shared.grant_project_id) : null;
   return { row: shared, source: 'client', projectId };
 }
@@ -286,19 +299,33 @@ research.get('/documents', async (c) => {
   // project belonging to the document's owner, which is the client the file
   // came from.
   const shared = await c.env.DB.prepare(
-    `SELECT d.*, (
+    `SELECT * FROM (
+       SELECT d.*, (
+              SELECT g.project_id
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS grant_project_id, (
               SELECT p.name
                 FROM advisor_client_grants g
                 JOIN projects p ON p.id = g.project_id
+                JOIN users ou ON ou.founder_id = p.founder_id
                WHERE g.advisor_user_id = s.advisor_user_id
                  AND g.status = 'active'
-                 AND p.founder_id = d.owner_user_id
+                 AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+                 AND ou.id = d.owner_user_id
                ORDER BY g.id DESC LIMIT 1
             ) AS project_name
-       FROM advisor_client_document_shares s
-       JOIN research_documents d ON d.id = s.document_id
-      WHERE s.advisor_user_id = ? AND s.status = 'active'
-      ORDER BY d.created_at DESC LIMIT 200`
+         FROM advisor_client_document_shares s
+         JOIN research_documents d ON d.id = s.document_id
+        WHERE s.advisor_user_id = ? AND s.status = 'active'
+     ) WHERE grant_project_id IS NOT NULL
+     ORDER BY created_at DESC LIMIT 200`
   ).bind(user.id).all<DocRow & { project_name: string | null }>();
 
   const items = [
@@ -1448,7 +1475,9 @@ const DRAFT_SURFACES: Record<string, {
                 g.scope_project AS scope_project
            FROM advisor_client_grants g
            JOIN projects p ON p.id = g.project_id
-          WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+          WHERE g.advisor_user_id = ? AND g.status = 'active'
+            AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+            AND p.uid = ?
           ORDER BY g.id DESC LIMIT 1`
       ).bind(userId, scope).first<{
         id: number; name: string; sector: string | null; stage: string | null; scope_project: number;

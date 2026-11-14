@@ -18,6 +18,7 @@ of `.github/workflows/deck-visual.yml`.
 | `grow_overview_4862.spec.mjs` | #4862: sparse/active overview, Share lightbox, failed-read retry and read-only states at desktop and phone widths. |
 
 | `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
+| `revenue_completion_5039.spec.mjs` | #5039: Stream filtering, native invoice figures, governed dispute/due-date receipts, lazy history and checkout read-back at desktop, 834, 390 and dark; unknown replay and stale-period responses. |
 
 ### Rules
 

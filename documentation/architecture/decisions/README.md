@@ -122,5 +122,7 @@ and citations by number keep working.
 | `D4862-p2.md` | Focus-first Grow overview, recorded attention and one taxonomy over existing routes (#4862). |
 
 | `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
+| `D5039-p3.md` | Governed statement disputes and due dates, actual action history, Stream control and dated branch checkout read-back (#5039). |
 | `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
 | `D5024-p2.md` | Immutable package offers, atomic Program Grants/legal-policy acceptance, source-bound contracts and normal branch-copy delivery. |
+| `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |

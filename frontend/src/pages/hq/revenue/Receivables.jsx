@@ -3,6 +3,7 @@ import { Unreadable } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
 import { StateShape } from '../security/StatusBadge.jsx';
 import { Figure, StateMark, Section, When, Why, TABLE, TD, TH, NUM, BTN } from './RevenueStates.jsx';
+import { StatementActionHistory } from './StatementActionHistory.jsx';
 import { StatementActions } from './StatementActions.jsx';
 import { StatementActionFlow } from './StatementActionFlow.jsx';
 import {
@@ -17,8 +18,7 @@ import {
  * A statement is an intercompany claim: what the branch reported times the
  * licence's revenue share, with paid and disputed as HQ recorded them. It is
  * point in time ("As of now"), so it does not follow the Period selector.
- * Statements record no due date, so Due is Not recorded and there is no
- * Overdue status; disputed claims sort first. Drawing a new statement is held
+ * Only explicit due dates can establish Overdue; overdue claims sort first. Drawing a new statement is held
  * by the owner's policy (D514): a policy state, with no action.
  *
  * Below 1024px the table becomes cards (RV14a, RV14c), so nothing shrinks to
@@ -26,6 +26,7 @@ import {
  */
 
 const STATUS_TONE = {
+  overdue: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200',
   disputed: 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200',
   issued: 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200',
   draft: 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-300',
@@ -89,7 +90,7 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
                 type="button"
                 aria-pressed={filter === f.key}
                 onClick={() => setFilter(f.key)}
-                className={`min-h-[32px] rounded-full border px-3 text-[13px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet ${filter === f.key ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}
+                className={`min-h-[44px] sm:min-h-[32px] rounded-full border px-3 text-[13px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet ${filter === f.key ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}
               >
                 {f.word}<span className="ml-1 font-mono font-normal text-axal-muted dark:text-gray-400">{counts[f.key]}</span>
               </button>
@@ -112,7 +113,7 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
               <div className="relative hidden overflow-x-auto lg:block">
                 <table className={TABLE}>
                   <caption className="px-3 pb-2 text-left font-mono text-[12px] font-bold uppercase tracking-[.05em] text-axal-muted dark:text-gray-400">
-                    {shown.length} of {rows.length} shown · disputed first
+                    {shown.length} of {rows.length} shown · overdue first
                   </caption>
                   <thead>
                     <tr>
@@ -134,7 +135,7 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
                         <td className={`${TD} ${NUM}`}><Figure figure={r.owed} /></td>
                         <td className={`${TD} ${NUM}`}><Figure figure={r.paid} /></td>
                         <td className={`${TD} ${NUM}`}><b><Figure figure={r.outstanding} /></b></td>
-                        <td className={TD}><StateMark state="not_recorded" /></td>
+                        <td className={TD}>{r.statement.due_on || <StateMark state="not_recorded" />}</td>
                         <td className={TD}><ReceivableStatus status={r.status} /></td>
                         <td className={`${TD} text-right`}>
                           <button type="button" className={BTN} onClick={() => onOpen(r.uid)} aria-label={`Open ${r.who} ${r.receivable}`}>Open ›</button>
@@ -153,6 +154,7 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
                     </div>
                     <span className="font-mono text-[12.5px] text-axal-muted dark:text-gray-400">{r.receivable}</span>
                     <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[13.5px]">
+                      <dt className="text-axal-muted dark:text-gray-400">Due · UTC</dt><dd className="text-right">{r.statement.due_on || <StateMark state="not_recorded" />}</dd>
                       <dt className="text-axal-muted dark:text-gray-400">Owed</dt><dd className="text-right"><Figure figure={r.owed} /></dd>
                       <dt className="text-axal-muted dark:text-gray-400">Paid</dt><dd className="text-right"><Figure figure={r.paid} /></dd>
                       <dt className="text-axal-muted dark:text-gray-400">Outstanding</dt><dd className="text-right font-bold"><Figure figure={r.outstanding} /></dd>
@@ -170,11 +172,11 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
                 <span key={t.currency} className="inline-flex items-center gap-1.5">
                   <span className="text-axal-muted dark:text-gray-400">Outstanding in {t.currency === UNRECORDED_CURRENCY ? 'an unrecorded currency' : t.currency}</span>
                   <Figure figure={t.figure} />
-                  <span className="text-axal-muted dark:text-gray-400">· {t.count} issued or disputed</span>
+                  <span className="text-axal-muted dark:text-gray-400">· {t.count} open claims</span>
                 </span>
               ))}
               {/* Same rule as the stream table: per currency, never one figure. */}
-              <span className="text-[12.5px] text-axal-muted dark:text-gray-400">One line per currency; statements are not summed across them. Due dates are not recorded. <Why source="statements" onOpen={onWhy} /></span>
+              <span className="text-[12.5px] text-axal-muted dark:text-gray-400">One line per currency; statements are not summed across them. Due dates appear only when explicitly recorded. <Why source="statements" onOpen={onWhy} /></span>
             </div>
           )}
         </>
@@ -192,7 +194,7 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
  * (`StatementActionFlow.jsx`) takes the drawer's body until it is done.
  * Escape closes the flow first, and does nothing while its request is out.
  */
-export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onChanged }) {
+export function StatementDrawer({ statement: s, onClose, onAction, onChanged }) {
   const [flow, setFlow] = useState(null);
   const [flowBusy, setFlowBusy] = useState(false);
   const f = statementFacts(s);
@@ -204,11 +206,6 @@ export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onC
       <dd className="border-b border-axal-hairline py-2 text-right font-semibold dark:border-gray-800">{node}</dd>
     </React.Fragment>
   );
-  const history = [
-    f.drawnAt && [f.drawnAt, 'Drawn'],
-    s.status !== 'draft' && f.updatedAt && [f.updatedAt, `Last changed · now ${s.status}`],
-    f.paidAt && [f.paidAt, `Paid total entered${f.paidNote ? ` · ${f.paidNote}` : ''}`],
-  ].filter(Boolean);
   return (
     <Sheet
       eyebrow="Receivable · revenue-share statement"
@@ -217,7 +214,7 @@ export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onC
       onEscape={flow ? () => { if (!flowBusy) setFlow(null); } : undefined}
       width={560}
       testId="hq-revenue-statement-drawer"
-      footer={flow ? null : <StatementActions statement={s} onUpdate={onUpdate} onStart={onAction ? setFlow : undefined} />}
+      footer={flow ? null : <StatementActions statement={s} onStart={onAction ? setFlow : undefined} />}
     >
       {flow ? (
         <StatementActionFlow
@@ -231,7 +228,7 @@ export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onC
         />
       ) : (
       <div className="flex flex-col gap-5 px-5 py-4 text-[13.5px]">
-        <div className="flex flex-wrap items-center gap-2"><ReceivableStatus status={receivableStatus(s)} /><span className="text-[13px] text-axal-muted dark:text-gray-400">Due date not recorded</span></div>
+        <div className="flex flex-wrap items-center gap-2"><ReceivableStatus status={receivableStatus(s)} /><span className="text-[13px] text-axal-muted dark:text-gray-400">{s.due_on ? `Due ${s.due_on} UTC` : 'Due date not recorded'}</span></div>
         <section>
           <h3 className="mb-1 font-mono text-[12px] font-bold uppercase tracking-[.05em] text-axal-muted dark:text-gray-400">Outstanding</h3>
           <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4">
@@ -243,7 +240,7 @@ export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onC
             {row('Outstanding', <b><Figure figure={f.outstanding} /></b>)}
           </dl>
           {f.floorReason && <p className="mt-2 text-[13px] text-amber-800 dark:text-amber-300">{f.floorReason}</p>}
-          {f.disputeNote && <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-400">Dispute: {f.disputeNote} · who entered it, and when, is not recorded.</p>}
+          {f.disputeNote && <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-400">Dispute: {f.disputeNote}. See action history for recorded actor and time.</p>}
           <p className="mt-2 text-[12.5px] text-axal-muted dark:text-gray-400">An intercompany claim drawn from what the branch reported. It is not reconciled against a bank and is not recognised revenue.</p>
         </section>
         <section>
@@ -254,13 +251,7 @@ export function StatementDrawer({ statement: s, onClose, onUpdate, onAction, onC
             {row('Streams estimated', <Figure figure={countFigure(s.estimated_streams)} />)}
           </dl>
         </section>
-        <section>
-          <h3 className="mb-1 font-mono text-[12px] font-bold uppercase tracking-[.05em] text-axal-muted dark:text-gray-400">History</h3>
-          {history.length
-            ? <ul className="divide-y divide-dashed divide-axal-hairline dark:divide-gray-800">{history.map(([d, t]) => <li key={`${d}${t}`} className="grid grid-cols-[110px_minmax(0,1fr)] gap-2 py-1.5"><span className="font-mono text-[12.5px] text-axal-muted dark:text-gray-400">{d}</span>{t}</li>)}</ul>
-            : <StateMark state="not_recorded" />}
-          <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-400">The row keeps when it was drawn, last changed and paid. Since D5039 each governed action also keeps who, why and the before and after, in the action record and the audit log.</p>
-        </section>
+        <StatementActionHistory key={`${s.uid}:${s.revision}`} uid={s.uid} revision={s.revision} />
       </div>
       )}
     </Sheet>

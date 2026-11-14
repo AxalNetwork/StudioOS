@@ -34,6 +34,18 @@ browser clock), the register's rows, counts and total, one company's mark
 history, and the attention rules with their evidence (`attentionRulesOf`).
 Decision notes: `documentation/architecture/decisions/D4817-p2.md`.
 
+D4817 part 3 (canvas PF-03) draws Performance
+(`../investor/InvestorPortfolioPerformance.jsx` at `/portfolio/performance`)
+in the same frame (`tab="performance"`). NAV at each quarter-end is one series
+(`quarterSeriesOf`), read once per quarter-end with
+`/api/positions/analytics?as_of=`, and drawn twice from that one list:
+`QuarterEndChart.jsx` holds the plot with its labelled columns and the table,
+and `QuarterEndBars.jsx` holds the recharts bars, loaded lazily. A quarter-end
+with no book is a Not recorded gap and a failed one an Unreadable gap with its
+own Retry; neither is a bar or a zero. The Overview's summary moved here as
+`PerformanceSummary`, and `Skeleton` is shared. Decision notes:
+`documentation/architecture/decisions/D4817-p3.md`.
+
 ## Rules
 
 - A failed read reads **Unreadable** with a Retry for that source alone; a
