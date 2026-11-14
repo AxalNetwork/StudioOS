@@ -105,8 +105,17 @@ const uids = (items: any[]) => items.map((x) => x.uid).sort();
 
 test('portfolio health: a partner reads the ventures where they hold an accepted seat; a partner without one reads none; an admin reads all', async () => {
   const db = fixture();
+  db.exec(`INSERT INTO portfolio_health_snapshots (uid, project_id, snapshot_date, score, badge) VALUES
+    ('h-old-red', 8, '2026-07-01', 30, 'red'), ('h-watch', 8, '2026-08-01', 50, 'yellow'),
+    ('h-first-red', 8, '2026-09-01', 30, 'red'), ('h-next-red', 8, '2026-10-01', 30, 'red')`);
   const admin = await call(db, ADMIN, '/portfolio/health');
   assert.deepEqual(pids(admin.body.items), [7, 8, 9]);
+  const statusChange = (projectId: number) => {
+    const item = admin.body.items.find((row: { project_id: number }) => row.project_id === projectId);
+    return [item.previous_status, item.status_changed_at];
+  };
+  assert.deepEqual(statusChange(8), ['yellow', '2026-09-01']);
+  assert.deepEqual(statusChange(7), [null, null]);
 
   // mutation: a partner returning null (every venture) again fails this and the next three.
   const seated = await call(db, SEATED, '/portfolio/health');
