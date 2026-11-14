@@ -195,12 +195,13 @@ import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
 import {
-  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
+  CapitalAccessError, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
+import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -216,7 +217,7 @@ function capitalFailure(c: any, error: unknown): Response {
 }
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
+async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef; caprel?: CapRelCapabilities } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -236,15 +237,16 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
     return refuse(c, 403, { code: 'support_session_refused', message: 'Use your own staff account and give a reason for a support read.' });
   }
   if (capitalPath(path)) {
-    if (capitalStaff(user)) {
+    // D5074 slice 4: who the caller is, once, as the capability map the module read returns.
+    let caprel: CapRelCapabilities;
+    try { caprel = capRelCapabilities(await capRelStanding(c.env, project, user)); }
+    catch (error) { return capitalFailure(c, error); }
+    if (capRelCan(caprel, 'admin_reason_required')) {
       if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
         ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }
         : { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
-    } else {
-      try { if (!await capitalCanWork(c.env, project, user)) return c.json({ detail: 'Forbidden' }, 403); }
-      catch (error) { return capitalFailure(c, error); }
-    }
-    return { user, projectId, project };
+    } else if (!capRelCan(caprel, 'work')) return c.json({ detail: 'Forbidden' }, 403);
+    return { user, projectId, project, caprel };
   }
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId, project };
@@ -383,6 +385,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
     const rows = summary.stages.map(row => ({ id: `summary-${row.stage}`, cells: { stage: row.stage.replace(/_/g, ' '), count: row.count } }));
     if (summary.state === 'ok') rows.push({ id: 'summary-unrecorded', cells: { stage: 'Status not recorded', count: summary.status_not_recorded } });
     return c.json({ module: { slug: mod.slug, name: mod.name, records_title: 'Pipeline counts' }, mode: 'summary', read_only: true,
+      capabilities: (s as { caprel?: CapRelCapabilities }).caprel,
       card: await capitalSummaryCard(c.env, s.projectId), summary,
       records: { state: summary.state, reason: summary.reason, cols: [{ key: 'stage', label: 'Stage' }, { key: 'count', label: 'Investors' }],
         rows, total: summary.state === 'ok' ? rows.length : null, page: 1, page_size: 25, linkable: false } });
@@ -439,7 +442,9 @@ cycleRaise.get('/modules/:slug', async (c) => {
     } catch { parts.google = { state: 'unreadable', reason: 'What Google fed this module could not be read' }; }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
-    ...(Object.keys(parts).length ? { parts } : {}) });
+    ...(Object.keys(parts).length ? { parts } : {}),
+    // D5074 slice 4: Capital relationships' read carries the caller's capabilities; its requests refuse from the same map.
+    ...(slug === 'capital-relationships' ? { capabilities: (s as { caprel?: CapRelCapabilities }).caprel } : {}) });
 });
 
 // D1190 (#3124): Commitments and Match, each one read. The module's gate (`scope`) applies.
@@ -458,6 +463,8 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
+    // D5074: the reasoned support view is `support_read` in the capability map.
+    if (!capRelCan(s.caprel, 'support_read')) return refuse(c, 403, { code: 'admin_required', message: 'Admin role required' });
     const input = await body(c);
     const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
     if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
@@ -478,7 +485,8 @@ cycleRaise.get('/capital-relationships/support-reads', async (c) => {
   try {
     const s = await scope(c);
     if (s instanceof Response) return s;
-    if (!await capitalCanWork(c.env, s.project, s.user)) return c.json({ detail: 'Forbidden' }, 403);
+    // D5074: the founder's list of reasoned reads is `support_reads` in the capability map.
+    if (!capRelCan(s.caprel, 'support_reads')) return c.json({ detail: 'Forbidden' }, 403);
     return c.json(await capitalSupportHistory(c.env, s.projectId, capitalPage(c.req.query('page'))));
   } catch (error) { return capitalFailure(c, error); }
 });
