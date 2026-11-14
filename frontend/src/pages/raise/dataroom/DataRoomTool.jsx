@@ -12,7 +12,7 @@ import DataRoomFiles from './DataRoomFiles.jsx';
 import DataRoomFile from './DataRoomFile.jsx';
 import DataRoomHome from './DataRoomHome.jsx';
 import DataRoomAccess from './DataRoomAccess.jsx';
-import DataRoomRequests from './DataRoomRequests.jsx';
+import DataRoomRequests, { DiligenceRequestsLink } from './DataRoomRequests.jsx';
 import DataRoomActivity from './DataRoomActivity.jsx';
 import DataRoomChecklist from './DataRoomChecklist.jsx';
 import DataRoomPreview from './DataRoomPreview.jsx';
@@ -79,6 +79,7 @@ export function DataRoomHomeNav({ search = '', onRefused = null }) {
   return (
     <div className="flex flex-col gap-3">
       <DataRoomTabBar active="home" search={search} />
+      {read.status === 'ready' && !withheld && <DiligenceRequestsLink reload={reload} />}
       {venture.projectId ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
     </div>
   );
