@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { checkProbeConfig, gatewaySlugOk, liveCheckNames, liveCheckVerdict, productionCompat, renderProbeConfig } from './gatewayLiveCheck.mjs';
+import { checkProbeConfig, gatewaySlugOk, liveCheckNames, liveCheckVerdict, probeFacts, productionCompat, renderProbeConfig } from './gatewayLiveCheck.mjs';
 
 const TOML = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
 
@@ -43,7 +43,9 @@ test('checkProbeConfig refuses anything that could reach production', () => {
     'the production switch': `${t}AI_PROVIDER_GATEWAY_OPENAI = "on"\n`,
     'the name studioos': t.replace('name = "studioos-s4870-a1"', 'name = "studioos"'),
   };
-  for (const [why, text] of Object.entries(refused)) assert.throws(() => checkProbeConfig(text, 'studioos-s4870-a1'), new RegExp(why.replace(/[[\]*.]/g, '\\$&')), why);
+  for (const [why, text] of Object.entries(refused)) {
+    assert.throws(() => checkProbeConfig(text, 'studioos-s4870-a1'), (e) => e instanceof Error && e.message.includes(why), why);
+  }
   assert.throws(() => checkProbeConfig(t, 'studioos-s4870-a2'), /the name/);
 });
 
@@ -76,4 +78,25 @@ test('the verdict fails on each check', () => {
   assert.equal(fails({ log: { ...PASS.log, cost_usd: null } }).checks.cost, 'not_recorded');
   assert.equal(fails({ charge: { settled_microusd: null } }).checks.cost, 'not_recorded');
   for (const p of [null, undefined, 'x']) assert.equal(liveCheckVerdict(p).verdict, 'fail');
+});
+
+test('probeFacts rebuilds the answer from known fields; anything else never reaches the summary', () => {
+  const raw = {
+    latency_ms: 812, model: 'openai/gpt-5-mini', extra: 'SECRET',
+    call: { ok: true, status: 200, finish_reason: 'stop', output_chars: 5, text: 'SECRET' },
+    pin: { served_model_ok: true, key_source: 'Unified' },
+    usage: { tokens_in: 40, tokens_cached: 0, tokens_out: 120 }, reasoning_tokens: 100,
+    charge: { settled_microusd: 250, rates: { tokens_in: 'SECRET' } },
+    log: { state: 'no_payload', reads: 1, tokens_in: 40, tokens_out: 120, cost_usd: 0.00025, request_head: 'SECRET' },
+    reconcile_marked: 0,
+  };
+  const f = probeFacts(raw);
+  assert.doesNotMatch(JSON.stringify(f), /SECRET/);
+  assert.equal(liveCheckVerdict(f).verdict, 'pass', 'the verdict reads the rebuilt facts');
+  const odd = probeFacts({ call: { ok: false, error: 'pwned\nSECRET', completion: 'x', status: '500' }, pin: { key_source: 'SECRET' }, log: { state: 'SECRET' }, reconcile_marked: '1' });
+  assert.deepEqual(odd.call, { ok: false, status: null, error: 'other', completion: 'other', code: null });
+  assert.equal(odd.pin.key_source, 'other');
+  assert.equal(odd.log.state, 'other');
+  assert.equal(odd.reconcile_marked, null);
+  assert.equal(probeFacts(null), null);
 });

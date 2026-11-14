@@ -70,12 +70,44 @@ export function checkProbeConfig(text, worker) {
   if (/^\s*\[\[?routes\]?\]?|^\s*routes\s*=|^\s*route\s*=/m.test(text)) problems.push('a route');
   if (/custom_domain|axal\.vc/.test(text)) problems.push('a production host');
   if (/^\s*\[\[(d1_databases|kv_namespaces|r2_buckets|queues|durable_objects|services|workflows)/m.test(text)) problems.push('a binding other than AI');
-  if (/^\s*\[triggers\]|crons\s*=/m.test(text)) problems.push('a cron');
+  if (/^\s*\[triggers\]/m.test(text) || /^\s*crons\s*=/m.test(text)) problems.push('a cron');
   if (/AI_PROVIDER_GATEWAY_OPENAI/.test(text)) problems.push('the production switch');
   const name = /^name\s*=\s*"([^"]+)"/m.exec(text)?.[1];
   if (name !== worker || !/^studioos-s4870-[a-z0-9]+$/.test(name)) problems.push(`the name ${name ?? '(none)'}`);
   if (problems.length) throw new Error(`the probe config is refused: ${problems.join(', ')}`);
   return true;
+}
+
+const pick = (list, v) => { const i = list.indexOf(v); return i === -1 ? 'other' : list[i]; };
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? Number(v) : null);
+const LOG_STATES = Object.freeze(['absent', 'no_payload', 'payload_present', 'no_log_id']);
+const ERRORS = Object.freeze(['auth', 'billing', 'rate_limited', 'overloaded', 'timeout', 'invalid', 'server', 'refused', 'unknown']);
+const COMPLETIONS = Object.freeze(['none', 'unknown']);
+const KEY_SOURCES = Object.freeze(['Unified', 'BYOK']);
+const FINISH = Object.freeze(['stop', 'length', 'content_filter']);
+
+/**
+ * The probe's answer rebuilt from known fields only, for the summary file: every
+ * string from a fixed list, every amount a finite number. Nothing the probe
+ * sent is written as it came.
+ */
+export function probeFacts(p) {
+  if (!p || typeof p !== 'object') return null;
+  const call = p.call && typeof p.call === 'object' ? p.call : {};
+  const u = p.usage && typeof p.usage === 'object' ? p.usage : null;
+  const l = p.log && typeof p.log === 'object' ? p.log : {};
+  return {
+    latency_ms: num(p.latency_ms),
+    call: call.ok === true
+      ? { ok: true, finish_reason: pick(FINISH, call.finish_reason), output_chars: num(call.output_chars) }
+      : { ok: false, status: num(call.status), error: pick(ERRORS, call.error), completion: pick(COMPLETIONS, call.completion), code: num(call.code) },
+    pin: p.pin && typeof p.pin === 'object' ? { served_model_ok: p.pin.served_model_ok === true, key_source: pick(KEY_SOURCES, p.pin.key_source) } : null,
+    usage: u ? { tokens_in: num(u.tokens_in), tokens_cached: num(u.tokens_cached), tokens_out: num(u.tokens_out) } : null,
+    reasoning_tokens: num(p.reasoning_tokens),
+    charge: { settled_microusd: num(p.charge?.settled_microusd) },
+    log: { state: pick(LOG_STATES, l.state), reads: num(l.reads), tokens_in: num(l.tokens_in), tokens_out: num(l.tokens_out), cost_usd: num(l.cost_usd) },
+    reconcile_marked: p.reconcile_marked === 1 ? 1 : p.reconcile_marked === 0 ? 0 : null,
+  };
 }
 
 /** How close the gateway log's cost must be to D851's settled charge: a micro-dollar, or 1%. */

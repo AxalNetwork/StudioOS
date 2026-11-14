@@ -26,7 +26,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { checkProbeConfig, gatewaySlugOk, liveCheckNames, liveCheckVerdict, renderProbeConfig } from './lib/gatewayLiveCheck.mjs';
+import { checkProbeConfig, gatewaySlugOk, liveCheckNames, liveCheckVerdict, probeFacts, renderProbeConfig } from './lib/gatewayLiveCheck.mjs';
 
 const ROOT = process.cwd();
 const WORKER_DIR = resolve(ROOT, 'cloudflare-worker');
@@ -99,8 +99,9 @@ try {
       if (r.status === 403 && i < 5) { await new Promise((ok) => setTimeout(ok, 5_000)); continue; }
       if (r.status !== 200) throw new Error(`the probe answered ${r.status}`);
       const body = await r.json();
-      if (body?.error) throw new Error(`the probe refused: ${body.error}`);
-      return { probe: body };
+      if (body?.error) throw new Error(`the probe refused (${body.error === 'misconfigured' ? 'misconfigured' : 'other'})`);
+      // Only known fields, rebuilt, ever reach the summary file.
+      return { probe: probeFacts(body) };
     }
     throw new Error('the probe never accepted the run token');
   });
