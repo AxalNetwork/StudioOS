@@ -160,6 +160,7 @@ export default function PartnerPipelineAnalyticsZone() {
   const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter : []), [d]);
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
   const lostCount = d?.lost_count ?? 0;
+  const hasQuotes = (d?.rows_read ?? p?.quote_count ?? 0) > 0 || forecastOpen > 0 || quarters.length > 0;
 
   // The tallest reason sets the bar scale, so the chart is read against its own
   // largest category rather than against a hundred nothing reaches.
@@ -189,7 +190,7 @@ export default function PartnerPipelineAnalyticsZone() {
         loading={state.loading}
         error={state.error}
         onRetry={load}
-        isEmpty={!p || (d.rows_read === 0 && p.quote_count === 0)}
+        isEmpty={!p || !hasQuotes}
         empty={(
           <NothingYet
             title="No quotes to analyse yet"
