@@ -1,126 +1,95 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { WorkerRail } from '../../ui';
-import ZoneHeader from '../../workspaces/ZoneHeader';
-import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+/**
+ * D4817 part 5 (#5311, canvas PF-05, addendum PFA08 and PFA12): the investor's
+ * Value-add, in the shared Portfolio frame (`tab="value-add"`), at
+ * `/portfolio/value-add`.
+ *
+ * In the canvas's order: the figure row (open commitments, in progress,
+ * delivered, introductions made, overdue commitments, no support recorded),
+ * the line saying what the ledger does not record, and the commitments table
+ * (company, support item, owner, state, recorded, delivered, next or linked).
+ * Then the introductions the ledger records, each with its meeting Not
+ * recorded, and the Eadwyn summary band.
+ *
+ * ONE STORE. `portfolio_support_entries` (canvas IP3, migration 237) is read by
+ * `GET /api/portfolio-support`: every row was written by a member recording
+ * their own work. Introductions requested through the quota, dealroom
+ * membership and calendar activity are access, not support, and none of them
+ * is read into this page. The ledger records Promised, Delivered and
+ * Withdrawn (D4642 added amendments and their history); In progress,
+ * Cancelled, a due date and the meetings resulting are not recorded, and read
+ * Not recorded with that reason, never 0.
+ *
+ * Every read stands alone (`usePortfolioReads`): the ledger, its figures (their
+ * own aggregate read on the Worker, `totals: null` when it fails), a filtered
+ * or later page of the commitments, and one entry's history. A failed one
+ * reads Unreadable with a Retry for that source, and never as an empty ledger.
+ * Writes (Log support, Mark delivered, Withdraw) report against the one entry
+ * or form they touched, and leave the ledger's read standing.
+ */
+import { useCallback, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuthSync';
+import { WorkerRail } from '../../ui';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
-import './investorPortfolioCanvas.css';
-import './investorPortfolioValueAdd.css';
+import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import PortfolioFrame from '../portfolio/PortfolioFrame';
+import { usePortfolioReads } from '../portfolio/usePortfolioReads';
+import { FinancialMetric, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
+import {
+  HISTORY_LABEL, KINDS, NOT_IN_LEDGER, NOT_RECORDED, commitmentsOf, companySupportOf, figuresOf, hoursOf,
+  inView, introductionsOf, ledgerParams, ledgerShape, totalsOf,
+} from '../portfolio/valueAddModel';
+import { day } from '../portfolio/portfolioModel';
+import '../portfolio/valueAdd.css';
 
-/**
- * Portfolio · Value-add — canvas IP3, the one zone in this series whose
- * `unbuilt` reasons were all TRUE.
- *
- * Five zones before it carried a sentence that the schema contradicted. This
- * one said "no support ledger exists to write to", and the schema agreed:
- * every table joining an investor to a company records the investor gaining
- * ACCESS to one — an intro REQUESTED against a paid quota, a dealroom joined, a
- * data room granted — never work done for one. Migration 237's header lists
- * them and why each fails.
- *
- * So this page was not corrected, it was built. `portfolio_support_entries` is
- * the store, `GET /portfolio-support` is the read, and the four chips are the
- * predicates over `state` that the artboard always specified.
- *
- * THE PAGE PREVIOUSLY MADE NO `api.*` CALL AT ALL and its four chips were dead
- * for a good reason. They are live now because there is something to filter.
- */
-
-const KINDS = [
-  ['intro', 'Introduction'],
-  ['board_prep', 'Board prep'],
-  ['hiring', 'Hiring'],
-  ['customer', 'Customer'],
-  ['fundraising', 'Fundraising'],
-  ['other', 'Other'],
-];
-const KIND_LABEL = Object.fromEntries(KINDS);
-const STATE_LABEL = { promised: 'Promised', delivered: 'Delivered', withdrawn: 'Withdrawn' };
-// D4642: an amendment's own verb. `amended` covers a change that moved no
-// state, which the other two labels would misreport as a transition.
-const HISTORY_LABEL = { amended: 'Amended', delivered: 'Delivered', withdrawn: 'Withdrawn' };
-const dateLabel = (value) => (value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null);
-/**
- * Hours, and the one place a zero must not be manufactured.
- *
- * `null` means nobody recorded a duration; `0` means someone recorded that it
- * took none. The column and every total keep them apart (D56/D68), which is
- * why the route returns `entries_without_hours` beside the sum instead of
- * folding the unmeasured entries in at zero.
- */
-const hoursLabel = (value) => (value == null ? 'Not recorded' : `${Number(value).toLocaleString('en-US', { maximumFractionDigits: 12 })} h`);
-
-const EMPTY = {
-  entries: [], companies: [], untouched: [],
-  totals: {
-    delivered: 0, promised: 0, withdrawn: 0, entries: 0, hours_recorded: 0,
-    entries_without_hours: 0, companies_in_book: 0, companies_supported: 0,
-  },
+const SOURCES = {
+  ledger: { call: () => api.portfolioSupportList(), shape: ledgerShape },
 };
 
+const companyHref = (uid) => `/portfolio/companies/${encodeURIComponent(uid)}`;
+const LEDGER_CLAIM = 'That is not a claim that no support was given.';
+
 export default function InvestorPortfolioValueAdd() {
+  const { user } = useAuth();
+  const me = user?.id ?? null;
+  const { reads, retry } = usePortfolioReads(SOURCES);
+  const ledger = reads.ledger;
   const [filter, setFilter] = useState('all');
   const [offset, setOffset] = useState(0);
-  const generation = useRef(0);
-  const [state, setState] = useState({ loading: true, error: '', data: EMPTY });
+  const [pageKey, setPageKey] = useState(0);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState('');
-  // D4642 (#4642): the outcome of a write against ONE entry, named. It is kept
-  // apart from `state.error`, which means the LEDGER READ failed: a refused
-  // Deliver used to be written into that field, so one entry's 409 blanked
-  // every stat to "Unavailable" and the page said the ledger could not be
-  // read — about a ledger it had just read.
+  // D4642: the outcome of a write against ONE entry, named. It is kept apart
+  // from the ledger's read: a refused Deliver says nothing about whether the
+  // ledger could be read.
   const [notice, setNotice] = useState(null);
-  // D4642: the amendment history of ONE entry, fetched on demand. The ledger
-  // row carries the latest state; `recorded_by` says who created the entry.
-  // Neither says who amended it, which is the question a second member's edit
-  // raises, so the row offers the recorded history rather than the page
-  // guessing from what changed.
+  // The Mark delivered / Withdraw confirmation (PFA08): the entry, the act and
+  // a failed save's message, kept in place until the member confirms or cancels.
+  const [confirming, setConfirming] = useState(null);
+  // D4642: the amendment history of ONE entry, read on demand.
   const [history, setHistory] = useState(null);
 
-  const load = useCallback(async () => {
-    const request = ++generation.current;
-    setState((current) => ({ ...current, loading: true, error: '' }));
-    try {
-      const params = {};
-      if (offset) params.offset = offset;
-      if (filter === 'outstanding' || filter === 'delivered') params.state = filter === 'outstanding' ? 'promised' : 'delivered';
-      const result = await api.portfolioSupportList(params);
-      if (request !== generation.current) return;
-      if (offset && result?.entries?.length === 0) {
-        setOffset(Math.max(0, offset - (result.page?.limit || offset)));
-        return;
-      }
-      setState({ loading: false, error: '', data: { ...EMPTY, ...result, totals: { ...EMPTY.totals, ...(result?.totals || {}) } } });
-    } catch (error) {
-      if (request !== generation.current) return;
-      // An unreadable ledger is not an empty one. The page says which it is
-      // rather than drawing the empty state over a failed read.
-      setState({ loading: false, error: error?.message || 'The support ledger could not be read.', data: EMPTY });
-    }
-  }, [filter, offset]);
-  useEffect(() => { load(); }, [load]);
-
-  const { entries, companies, untouched, totals, page } = state.data;
-  // `company` is a VIEW, not a row predicate — the rollup rather than a
-  // narrower set of entries. The other three read `state` directly.
+  const companies = ledger.state === 'ok' ? ledger.value.companies : [];
+  const figures = useMemo(() => figuresOf(ledger), [ledger]);
+  const hours = useMemo(() => hoursOf(ledger), [ledger]);
+  const intros = useMemo(() => introductionsOf(ledger, me), [ledger, me]);
   const byCompany = filter === 'company';
-  const visible = useMemo(() => entries.filter((row) => (
-    filter === 'delivered' ? row.state === 'delivered'
-      : filter === 'outstanding' ? row.state === 'promised'
-        : true
-  )), [entries, filter]);
+  const pagedView = !byCompany && (filter !== 'all' || offset > 0);
+
+  /** Read the ledger and the commitments view again, each on its own. */
+  const reload = useCallback(() => { retry('ledger'); setPageKey((n) => n + 1); }, [retry]);
 
   const logSupport = useCallback(() => {
-    setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', summary: '', outcome: '', error: '' }));
+    setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', summary: '', outcome: '', error: '', invalid: null }));
   }, []);
-  const changeFilter = useCallback((next) => { setOffset(0); setFilter(next); }, []);
+  const changeFilter = useCallback((next) => { setOffset(0); setFilter(next); setConfirming(null); }, []);
   const byCompanyView = useCallback(() => { changeFilter('company'); }, [changeFilter]);
 
   // D1595 (#3868) / D1424 (#3700): Ask on Log support's "What happened". The
@@ -137,16 +106,18 @@ export default function InvestorPortfolioValueAdd() {
     event.preventDefault();
     if (busy) return; // D4642: one pending save per card; a second submit waits
     if (!form?.project_uid || !form.summary.trim()) {
-      setForm((current) => ({ ...current, error: 'A company and a description of what happened are both required.' }));
+      setForm((current) => ({
+        ...current,
+        invalid: !current.project_uid ? 'company' : 'summary',
+        error: !current.project_uid ? 'Choose the company this support is for.' : 'Describe the support before saving.',
+      }));
       return;
     }
-    // D4642: the draft's company must still be one this book holds. Without
-    // this the form kept a `project_uid` the reloaded book no longer has and
-    // sent it, and the member read "Project not found" about a company they
-    // had picked from this very list.
+    // D4642: the draft's company must still be one this book holds.
     if (!companies.some((x) => x.project_uid === form.project_uid)) {
       setForm((current) => ({
         ...current,
+        invalid: 'company',
         error: 'That company is no longer in this book, so this entry cannot be recorded against it. Pick a company again.',
       }));
       return;
@@ -165,15 +136,16 @@ export default function InvestorPortfolioValueAdd() {
       });
       setForm(null);
       await fill.afterSave(created?.item?.id);
-      await load();
+      reload();
     } catch (error) {
-      setForm((current) => ({ ...current, error: error?.message || 'That entry could not be recorded.' }));
+      // PFA08: the entries stay in the form, and the form says it did not save.
+      setForm((current) => ({ ...current, invalid: null, error: `This did not save. Your entries are kept.${error?.message ? ` ${error.message}` : ''}`, failed: true }));
     } finally { setBusy(''); }
   };
 
-  // D4642: one entry's transition. The request says which record and which
-  // revision it means, so the server can refuse a stale edit instead of
-  // overwriting a newer one; the outcome is reported against THAT entry.
+  // D4642: one entry's transition, sent with the record and the revision the
+  // page read, so the server refuses a stale edit instead of overwriting a
+  // newer one. The outcome is reported against THAT entry.
   const move = async (row, next) => {
     if (busy) return; // a pending save owns the ledger until it settles
     setBusy(row.uid);
@@ -184,103 +156,135 @@ export default function InvestorPortfolioValueAdd() {
         project_uid: row.project_uid ?? undefined,
         ...(row.revision == null ? {} : { expected_revision: Number(row.revision) }),
       });
-      await load();
+      setConfirming(null);
+      reload();
     } catch (error) {
       const company = row.project_name || error?.data?.project_name || null;
       if (error?.code === 'changed_since_open') {
-        // Someone else's change is the accepted one. Take the row the server
-        // handed back so the page shows their work rather than this stale copy,
-        // and say so instead of silently discarding either edit.
-        const fresh = error?.data?.item || null;
-        if (fresh) {
-          setState((current) => ({
-            ...current,
-            data: {
-              ...current.data,
-              entries: current.data.entries.map((x) => (x.uid === row.uid ? { ...x, ...fresh } : x)),
-            },
-          }));
-        }
+        // Someone else's change is the accepted one: read the ledger again so
+        // the page shows their work, and say so.
+        setConfirming(null);
         setNotice({
           entryUid: row.uid, kind: 'conflict',
           message: `${company ? `${company}: ` : ''}someone else changed this entry since this page read it. Their change is shown. Apply yours again if it still applies.`,
         });
+        reload();
         return;
       }
-      setNotice({
-        entryUid: row.uid,
-        kind: error?.code === 'state_is_terminal' ? 'blocked' : 'error',
-        message: `${company ? `${company}: ` : ''}${error?.message || 'that entry could not be updated.'}`,
-      });
+      if (error?.code === 'state_is_terminal') {
+        setConfirming(null);
+        setNotice({ entryUid: row.uid, kind: 'blocked', message: `${company ? `${company}: ` : ''}${error?.message || 'this entry is already closed.'}` });
+        return;
+      }
+      // PFA08: a failed save leaves the entry and its confirmation in place.
+      setConfirming((current) => (current && current.uid === row.uid
+        ? { ...current, error: `${company ? `${company}: ` : ''}this did not save. ${error?.message || 'The entry is unchanged.'}` }
+        : current));
     } finally { setBusy(''); }
   };
 
-  // Toggling, so a second click closes rather than re-fetching. A failed fetch
-  // is reported in place: an unreadable history is not an empty one, and the
-  // row's own state is not in doubt because of it.
-  const openHistory = async (row) => {
-    if (history?.uid === row.uid) { setHistory(null); return; }
-    setHistory({ uid: row.uid, loading: true, error: '', items: [] });
+  // Toggling, so a second click closes. A failed read is reported in place,
+  // with its own Retry: an unreadable history is not an empty one.
+  const readHistory = async (row) => {
+    setHistory({ uid: row.uid, loading: true, error: false, items: [] });
     try {
       const result = await api.portfolioSupportHistory(row.uid);
-      setHistory({ uid: row.uid, loading: false, error: '', items: result?.items || [] });
-    } catch (error) {
-      setHistory({ uid: row.uid, loading: false, error: error?.message || 'This entry\u2019s history could not be read.', items: [] });
+      setHistory((h) => (h?.uid === row.uid ? { uid: row.uid, loading: false, error: false, items: Array.isArray(result?.items) ? result.items : [] } : h));
+    } catch {
+      setHistory((h) => (h?.uid === row.uid ? { uid: row.uid, loading: false, error: true, items: [] } : h));
     }
   };
+  const openHistory = (row) => {
+    if (history?.uid === row.uid) { setHistory(null); return; }
+    readHistory(row);
+  };
 
-  const unreadable = Boolean(state.error);
-  const totalsUnreadable = unreadable || state.data.page_state === 'unreadable';
-  const hours = totals.entries > 0 && totals.entries_without_hours === totals.entries
-    ? 'Not recorded'
-    : hoursLabel(totals.hours_recorded);
+  const table = {
+    filter, me, busy, history, confirming, noticeFor: notice?.entryUid || null,
+    onAsk: (row, next) => { setNotice(null); setConfirming({ uid: row.uid, next, error: '' }); },
+    onCancel: () => setConfirming(null),
+    onConfirm: move,
+    onHistory: openHistory,
+    onHistoryRetry: readHistory,
+    onPage: setOffset,
+  };
 
-  return <ZonePrimaryScope><div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add">
-    <ZoneHeader bucketPath="/portfolio" title="Value-add desk" intro="Support ledger — introductions, hours and outcomes per company."
-      refresh={<button type="button" className="i4-icon-button" onClick={load} aria-label="Reload the support ledger"><RefreshCw size={15} /></button>} />
-    <ZoneToolbar
-      role="investor"
-      className="mb-3"
-      filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: changeFilter })}
-      actions={investorZoneActions('portfolio/value-add', {
-        handlers: { logSupport, byCompany: byCompanyView },
-        view: {
-          header: ['Company', 'Kind', 'State', 'Hours', 'What happened', 'Outcome'],
-          rows: visible,
-          cells: (row) => [row.project_name, KIND_LABEL[row.kind] || row.kind, STATE_LABEL[row.state] || row.state, row.hours, row.summary, row.outcome],
-        },
-      })}
-    />
-    {state.error && <div className="i4-error" data-testid="status-investor-value-add-error"><span>The support ledger could not be read. That is not a claim that no support was given.</span><button type="button" onClick={load}>Retry</button></div>}
-    {/* D4642: ONE entry's write outcome, naming the entry's company and the
-        next action. The ledger beside it stays readable, because it was read. */}
-    {notice && <div className={notice.kind === 'conflict' ? 'i4-notice' : 'i4-error'} data-testid={`status-ip3-support-${notice.kind}`}>
-      <span>{notice.message}</span>
-      <button type="button" onClick={() => { setNotice(null); load(); }}>Reload the ledger</button>
-    </div>}
-    {state.loading ? <Skeleton /> : <>
-      <section className="i4-stats">
-        <Stat label="Delivered" value={totalsUnreadable ? 'Unavailable' : totals.delivered} note={totalsUnreadable ? 'Ledger totals unavailable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
-        <Stat label="Hours logged" value={totalsUnreadable ? 'Unavailable' : hours} note={totalsUnreadable ? 'Ledger totals unavailable' : totals.entries_without_hours === 0 ? (totals.entries ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
-        <Stat label="Outstanding" value={totalsUnreadable ? 'Unavailable' : totals.promised} note={totalsUnreadable ? 'Ledger totals unavailable' : 'Promised and not yet delivered'} />
-        <Stat label="No support at all" value={totalsUnreadable ? 'Unavailable' : untouched.length} note={totalsUnreadable ? 'Ledger totals unavailable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
-      </section>
-      {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} />}
-      {byCompany
-        ? <PerCompany companies={companies} unreadable={unreadable} />
-        : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} history={history} onHistory={openHistory} noticeFor={notice?.entryUid || null} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
-      {!byCompany && !totalsUnreadable && page && (page.offset > 0 || page.next_offset != null) && (
-        <nav aria-label="Support ledger pages" className="flex flex-wrap items-center gap-3 py-2 text-sm">
-          <button type="button" className="underline disabled:opacity-40" disabled={!page.offset || Boolean(busy)}
-            onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>Previous</button>
-          <span aria-live="polite">{page.offset + 1}–{page.offset + entries.length} of {page.matching_total ?? page.total} matching entries</span>
-          <button type="button" className="underline disabled:opacity-40" disabled={page.next_offset == null || Boolean(busy)}
-            onClick={() => setOffset(page.next_offset)}>Next</button>
-        </nav>
+  const totalsLost = ledger.state === 'ok' && !totalsOf(ledger);
+  return (
+    <PortfolioFrame
+      tab="value-add"
+      testid="investor-portfolio-value-add"
+      description="Support promised and delivered to each company, with who recorded it and when."
+      context="Support ledger · every entry recorded by a member"
+      tools={(
+        <ZoneHeaderTools role="investor">
+          <button type="button" className="pf-icon-button" onClick={reload} aria-label="Reload the support ledger" data-testid="button-refresh-investor-value-add"><RefreshCw size={15} aria-hidden="true" /></button>
+        </ZoneHeaderTools>
       )}
-      {/* The artboard's band. Its foot read "Feeds the LP reporting pack." —
-          false: accepting a draft stamps `accepted_at` and nothing else, and
-          no LP report reads this store, so the foot now says what happens. */}
+      notice={ledger.state === 'unreadable' ? (
+        <SourceFailure what="The support ledger" claim={LEDGER_CLAIM} onRetry={() => retry('ledger')} testid="status-investor-value-add-error" retryTestid="button-retry-value-add-ledger" />
+      ) : null}
+      rail={<ValueAddRail ledger={ledger} />}
+    >
+      {/* D4642: ONE entry's write outcome, naming its company and the next action. */}
+      {notice ? (
+        <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} role="status" data-testid={`status-va-support-${notice.kind}`}>
+          <span>{notice.message}</span>
+          <button type="button" className="pf-link-button" onClick={() => { setNotice(null); reload(); }}>Reload the ledger</button>
+        </div>
+      ) : null}
+
+      <section className="pf-card va-figures-card" aria-labelledby="va-figures-title" data-testid="va-figures">
+        <h2 id="va-figures-title" className="pf-sr">Support at a glance</h2>
+        {totalsLost ? (
+          <SourceFailure what="The ledger’s figures" claim="No count is shown in their place; the entries below were read." onRetry={() => retry('ledger')} testid="status-va-figures-unreadable" retryTestid="button-retry-va-figures" />
+        ) : null}
+        <div className="va-figures">
+          {figures.map((f) => <FinancialMetric key={f.key} metric={f} onRetry={f.state === 'unreadable' ? () => retry('ledger') : undefined} />)}
+        </div>
+        <p className="pf-foot" data-testid="va-hours">
+          Hours recorded: <b>{hours.state === 'loading' ? 'Reading…' : hours.text}</b>{hours.note ? ` · ${hours.note}` : ''}
+        </p>
+        <p className="pf-foot" data-testid="va-not-in-ledger">
+          The ledger records Promised, Delivered and Withdrawn. In progress, Cancelled, a due date for a commitment and the meetings that came of an introduction are not recorded by it, so they read {NOT_RECORDED}.
+        </p>
+      </section>
+
+      {form ? <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} /> : null}
+
+      <section className="pf-card pf-table-card" aria-labelledby="va-commitments-title" data-testid="va-commitments">
+        <div className="pf-card-head">
+          <div>
+            <h2 id="va-commitments-title">{byCompany ? 'Per-company support' : 'Commitments'}</h2>
+            <p className="pf-sm">{byCompany ? 'Every company in the book, including those with nothing recorded' : filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : 'Promised, delivered and withdrawn, newest first'}</p>
+          </div>
+        </div>
+        <ZoneToolbar
+          role="investor"
+          className="pf-toolbar"
+          filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: changeFilter })}
+          actions={investorZoneActions('portfolio/value-add', {
+            handlers: { logSupport, byCompany: byCompanyView },
+            view: {
+              header: ['Company', 'Kind', 'State', 'Hours', 'What happened', 'Outcome'],
+              rows: commitmentsOf(ledger, me).map((c) => c.row).filter(inView(filter)),
+              cells: (row) => [row.project_name, row.kind, row.state, row.hours, row.summary, row.outcome],
+            },
+          })}
+        />
+        {byCompany ? <PerCompany read={ledger} onRetry={() => retry('ledger')} />
+          : pagedView ? (
+            <PagedCommitments key={`${filter}:${offset}:${pageKey}`} params={ledgerParams(filter, offset)}>
+              {(read, again) => <Commitments read={read} onRetry={again} {...table} />}
+            </PagedCommitments>
+          ) : <Commitments read={ledger} onRetry={() => retry('ledger')} {...table} />}
+        <p className="pf-foot va-boundary"><b>Evidence boundary.</b> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p>
+      </section>
+
+      <Introductions intros={intros} onRetry={() => retry('ledger')} />
+
+      {/* The artboard's band. Accepting a draft stamps `accepted_at` and
+          nothing else, and no LP report reads this store, so the foot says so. */}
       <ZoneDraft
         surface="portfolio/value-add"
         railOption="draft:support-summary"
@@ -291,111 +295,294 @@ export default function InvestorPortfolioValueAdd() {
         empty="Per company: what was delivered, what is still owed, and the hours recorded — written so an unmade promise appears rather than being rounded away."
         nothingToDraft="No support entry is recorded against an accessible company, so there is nothing to summarise."
       />
-      <footer className="i4-boundary">Investor workspace · the ledger is restricted to this investor’s accessible portfolio.</footer>
-    </>}
-  </main><ValueAddRail totals={totals} unreadable={totalsUnreadable} /></div></ZonePrimaryScope>;
+      <p className="pf-boundary">Investor workspace. The ledger is restricted to this investor’s accessible portfolio.</p>
+    </PortfolioFrame>
+  );
+}
+
+/** A filtered or later page of the commitments: its own read, retried on its own. */
+function PagedCommitments({ params, children }) {
+  const sources = useMemo(() => ({ page: { call: () => api.portfolioSupportList(params), shape: ledgerShape } }), [params]);
+  const { reads, retry } = usePortfolioReads(sources);
+  return children(reads.page, () => retry('page'));
 }
 
 /**
- * The ledger. `Deliver` and `Withdraw` are the reason this table is a ledger
- * rather than a list: without a transition the `state` column would freeze at
- * `promised`, which is the exact defect that makes `investor_introductions`
- * useless for this purpose — its status is written once and updated by nothing.
+ * The commitments table (canvas PF-05): company, support item, owner, state,
+ * recorded, delivered, next or linked, and the row's act. `Mark delivered…`
+ * and `Withdraw…` confirm in place, naming the entry and the company
+ * (PFA08); a closed entry offers its recorded history.
  */
-function Ledger({ rows, filter, unreadable, onMove, busy, history = null, onHistory = null, noticeFor = null }) {
-  if (unreadable) return <div className="i4-empty"><AlertCircle size={16} />The support ledger could not be read. No claim is being made about what was or was not done.</div>;
-  if (!rows.length) {
-    return <div className="i4-empty ip3-empty"><AlertCircle size={18} /><div><strong>{filter === 'outstanding' ? 'No promise is outstanding.' : filter === 'delivered' ? 'No entry is recorded as delivered.' : 'No support entry is recorded yet.'}</strong><p>{filter === 'all' ? 'The ledger is empty because nothing has been logged, not because nothing was done. Log support records the first entry.' : 'Every recorded entry sits under another state.'}</p></div></div>;
+function Commitments({ read, onRetry, filter, me, busy, history, confirming, noticeFor, onAsk, onCancel, onConfirm, onHistory, onHistoryRetry, onPage }) {
+  if (read.state === 'loading') return <div className="va-pad"><Skeleton rows={3} /></div>;
+  if (read.state === 'unreadable') {
+    return <div className="va-pad"><SourceFailure what="The support ledger" claim={LEDGER_CLAIM} onRetry={onRetry} testid="status-va-commitments-unreadable" retryTestid="button-retry-va-commitments" /></div>;
   }
-  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Kind</th><th>State</th><th>Hours</th><th>What happened</th></tr></thead><tbody>{rows.map((row) => <tr key={row.uid} data-testid={`row-ip3-support-${row.uid}`} className={noticeFor === row.uid ? 'is-contested' : undefined}>
-    <td><strong>{row.project_name || `Startup ${row.project_id}`}</strong><small>{dateLabel(row.delivered_at || row.promised_at || row.created_at) || 'Date not recorded'}</small></td>
-    <td>{KIND_LABEL[row.kind] || row.kind}</td>
-    <td><span className={`ip3-state is-${row.state}`}>{STATE_LABEL[row.state] || row.state}</span>{row.state === 'promised' && <span className="ip3-move">{/* D4642: the whole row, so the request can name the record and the revision it read. */}<button type="button" disabled={!!busy} onClick={() => onMove(row, 'delivered')}>Deliver</button><button type="button" disabled={!!busy} onClick={() => onMove(row, 'withdrawn')}>Withdraw</button></span>}</td>
-    <td>{hoursLabel(row.hours)}</td>
-    <td><strong>{row.summary}</strong><small>{row.outcome || 'No outcome recorded yet'}</small>
-      {/* D4642: amended entries say so and offer the recorded history. An
-          entry still at revision 1 has none, and claims none. */}
-      {Number(row.revision) > 1
-        ? <span className="ip3-amended"><small>{`Amended ${Number(row.revision) - 1} ${Number(row.revision) === 2 ? 'time' : 'times'}`}</small><button type="button" onClick={() => onHistory && onHistory(row)} aria-expanded={history?.uid === row.uid}>{history?.uid === row.uid ? 'Hide history' : 'History'}</button></span>
-        : <span className="ip3-amended"><small>Not amended since it was recorded</small></span>}
-      {history?.uid === row.uid && <div className="ip3-history" data-testid={`history-ip3-support-${row.uid}`}>
-        {history.loading ? <small>Reading the history…</small>
-          : history.error ? <small>{history.error}</small>
-            : history.items.length === 0 ? <small>No amendment is recorded.</small>
-              : <ul>{history.items.map((item) => <li key={item.uid}>
-                <strong>{HISTORY_LABEL[item.action] || item.action}</strong>
-                <span>{` by ${item.actor?.name || 'a member no longer on the account'}`}</span>
-                <small>{`${dateLabel(item.created_at) || 'Date not recorded'} · revision ${item.revision}${item.changed?.length ? ` · ${item.changed.join(', ')}` : ''}`}</small>
-              </li>)}</ul>}
-      </div>}
-    </td>
-  </tr>)}</tbody></table></div>;
+  const rows = commitmentsOf(read, me).filter(inView(filter));
+  const page = read.value.page;
+  if (!rows.length) {
+    return (
+      <p className="pf-note va-pad-note" data-testid="va-commitments-empty">
+        <b>{filter === 'outstanding' ? 'No promise is outstanding.' : filter === 'delivered' ? 'No entry is recorded as delivered.' : 'No support entry is recorded yet.'}</b>{' '}
+        {filter === 'all' ? 'The ledger is empty because nothing has been logged, not because nothing was done. Log support records the first entry.' : 'Every recorded entry sits under another state.'}
+      </p>
+    );
+  }
+  return (
+    <>
+      <div className="pf-table-wrap">
+        <table className="pf-table va-table">
+          <caption>Support ledger · {rows.length} {rows.length === 1 ? 'entry' : 'entries'} on this page</caption>
+          <thead><tr>
+            <th scope="col">Company</th><th scope="col">Support item</th><th scope="col">Owner</th><th scope="col">State</th>
+            <th scope="col">Recorded</th><th scope="col">Delivered</th><th scope="col">Next / linked</th><th scope="col"><span className="pf-sr">Act</span></th>
+          </tr></thead>
+          <tbody>
+            {rows.map((c) => (
+              <CommitmentRow key={c.uid} c={c} busy={busy} history={history} confirming={confirming} contested={noticeFor === c.uid}
+                onAsk={onAsk} onCancel={onCancel} onConfirm={onConfirm} onHistory={onHistory} onHistoryRetry={onHistoryRetry} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {page && (page.offset > 0 || page.next_offset != null) ? (
+        <nav aria-label="Support ledger pages" className="va-pages">
+          <button type="button" className="pf-btn" disabled={!page.offset || Boolean(busy)} onClick={() => onPage(Math.max(0, page.offset - page.limit))}>Previous</button>
+          <span aria-live="polite">{page.offset + 1}–{page.offset + read.value.entries.length} of {page.matching_total ?? page.total} matching entries</span>
+          <button type="button" className="pf-btn" disabled={page.next_offset == null || Boolean(busy)} onClick={() => onPage(page.next_offset)}>Next</button>
+        </nav>
+      ) : null}
+    </>
+  );
+}
+
+function CommitmentRow({ c, busy, history, confirming, contested, onAsk, onCancel, onConfirm, onHistory, onHistoryRetry }) {
+  const asking = confirming?.uid === c.uid ? confirming : null;
+  const open = history?.uid === c.uid ? history : null;
+  return (
+    <>
+      <tr data-testid={`row-va-commitment-${c.uid}`} data-state={c.state} className={contested ? 'is-contested' : undefined}>
+        <th scope="row" data-label="Company">
+          {c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}
+          <small>{c.kind}</small>
+        </th>
+        <td data-label="Support item">{c.summary}<small>Hours: {c.hours}</small></td>
+        <td data-label="Owner"><span title={c.owner.note || undefined}>{c.owner.text}</span></td>
+        <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
+        <td data-label="Recorded" className="va-date">{c.recorded || 'Date not recorded'}{c.promised ? <small>promised {c.promised}</small> : null}</td>
+        <td data-label="Delivered" className="va-date">
+          {c.closed.date ? (c.state === 'withdrawn' ? `Withdrawn ${c.closed.date}` : c.closed.date) : <span className="pf-not-recorded">{c.closed.missing}</span>}
+        </td>
+        <td data-label="Next / linked">
+          {c.outcome ? <>Outcome: {c.outcome}</> : <span className="pf-not-recorded">No outcome recorded yet</span>}
+          {c.isIntro ? <small data-testid={`va-meeting-${c.uid}`}>Meeting resulting: <span className="pf-not-recorded" title={NOT_IN_LEDGER.meeting}>{NOT_RECORDED}</span></small> : null}
+        </td>
+        <td data-label="Act" className="va-act">
+          {c.state === 'promised' ? (
+            <span className="va-moves">
+              <button type="button" className="pf-btn" disabled={!!busy} onClick={() => onAsk(c.row, 'delivered')} data-testid={`button-va-deliver-${c.uid}`}>Mark delivered…</button>
+              <button type="button" className="pf-btn is-quiet" disabled={!!busy} onClick={() => onAsk(c.row, 'withdrawn')} data-testid={`button-va-withdraw-${c.uid}`}>Withdraw…</button>
+            </span>
+          ) : null}
+          {c.revision > 1 ? (
+            <button type="button" className="pf-btn is-quiet" onClick={() => onHistory(c.row)} aria-expanded={!!open} data-testid={`button-va-history-${c.uid}`}>
+              {open ? 'Hide history' : `History · amended ${c.revision - 1} ${c.revision === 2 ? 'time' : 'times'}`}
+            </button>
+          ) : c.state !== 'promised' ? <small>Not amended since it was recorded</small> : null}
+        </td>
+      </tr>
+      {asking ? (
+        <tr className="va-sub"><td colSpan={8}>
+          <div className="va-confirm" role="group" aria-label={`Confirm for ${c.company}`} data-testid={`va-confirm-${c.uid}`}>
+            <p>
+              {asking.next === 'delivered'
+                ? <>Mark “{c.summary}” for <b>{c.company}</b> as delivered? Today’s date is recorded as the delivery date, and a delivered entry cannot be reopened.</>
+                : <>Withdraw “{c.summary}” for <b>{c.company}</b>? The entry stays in the ledger as withdrawn and cannot be reopened.</>}
+            </p>
+            {asking.error ? <p className="va-error" role="alert" data-testid={`va-confirm-error-${c.uid}`}>{asking.error}</p> : null}
+            <div className="pf-tools">
+              <button type="button" className="pf-btn is-primary" disabled={!!busy} onClick={() => onConfirm(c.row, asking.next)} data-testid={`button-va-confirm-${c.uid}`}>
+                {busy === c.uid ? 'Saving…' : asking.error ? 'Try saving again' : asking.next === 'delivered' ? 'Mark delivered' : 'Withdraw entry'}
+              </button>
+              <button type="button" className="pf-btn" disabled={busy === c.uid} onClick={onCancel}>Cancel</button>
+            </div>
+          </div>
+        </td></tr>
+      ) : null}
+      {open ? (
+        <tr className="va-sub"><td colSpan={8}>
+          <div className="va-history" data-testid={`history-va-support-${c.uid}`}>
+            {open.loading ? <small>Reading the history…</small>
+              : open.error ? <SourceFailure what="This entry’s history" claim="The entry itself is as shown." onRetry={() => onHistoryRetry(c.row)} testid={`status-va-history-unreadable-${c.uid}`} retryTestid={`button-retry-va-history-${c.uid}`} />
+                : open.items.length === 0 ? <small>No amendment is recorded.</small>
+                  : (
+                    <ul>{open.items.map((item) => (
+                      <li key={item.uid}>
+                        <b>{HISTORY_LABEL[item.action] || item.action}</b>
+                        <span>{` by ${item.actor?.name || 'a member no longer on the account'}`}</span>
+                        <small>{`${day(item.created_at) || 'Date not recorded'} · revision ${item.revision}${item.changed?.length ? ` · ${item.changed.join(', ')}` : ''}`}</small>
+                      </li>
+                    ))}</ul>
+                  )}
+          </div>
+        </td></tr>
+      ) : null}
+    </>
+  );
+}
+
+/** The introductions the ledger records, each with its meeting Not recorded and why. */
+function Introductions({ intros, onRetry }) {
+  let body;
+  if (intros.state === 'loading') body = <Skeleton rows={2} />;
+  else if (intros.state === 'unreadable') body = <SourceFailure what="Introductions" claim="That is not a claim that none was made." onRetry={onRetry} testid="status-va-intros-unreadable" retryTestid="button-retry-va-intros" />;
+  else if (!intros.rows.length) {
+    body = (
+      <p className="pf-note" data-testid="va-intros-none">
+        <span className="pf-not-recorded">{NOT_RECORDED}</span> · {intros.complete ? 'No introduction entry is recorded in the support ledger.' : 'No introduction entry is among the entries read.'}
+      </p>
+    );
+  } else {
+    body = (
+      <div className="pf-table-wrap">
+        <table className="pf-table va-table" data-testid="va-intros-table">
+          <caption>Introduction entries · {intros.rows.length}</caption>
+          <thead><tr>
+            <th scope="col">Company</th><th scope="col">Introduction</th><th scope="col">State</th><th scope="col">Recorded</th><th scope="col">Delivered</th><th scope="col">Meeting resulting</th>
+          </tr></thead>
+          <tbody>
+            {intros.rows.map((c) => (
+              <tr key={c.uid} data-testid={`row-va-intro-${c.uid}`} data-state={c.state}>
+                <th scope="row" data-label="Company">{c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}</th>
+                <td data-label="Introduction">{c.summary}{c.outcome ? <small>Outcome: {c.outcome}</small> : null}</td>
+                <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
+                <td data-label="Recorded" className="va-date">{c.recorded || 'Date not recorded'}</td>
+                <td data-label="Delivered" className="va-date">{c.closed.date || <span className="pf-not-recorded">{c.closed.missing}</span>}</td>
+                <td data-label="Meeting resulting"><span className="pf-not-recorded">{NOT_RECORDED}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <section className="pf-card" aria-labelledby="va-intros-title" data-testid="va-intros">
+      <div className="pf-card-head">
+        <h2 id="va-intros-title">Introductions</h2>
+        {intros.state === 'ok' && intros.complete ? <span className="pf-sm">{intros.delivered} delivered · {intros.promised} promised</span> : null}
+      </div>
+      {intros.state === 'ok' && !intros.complete ? <p className="pf-partial" data-testid="va-intros-partial">{intros.reason}</p> : null}
+      {body}
+      <p className="pf-foot">
+        These are the introduction entries members recorded in the support ledger. Meetings resulting: <span className="pf-not-recorded">{NOT_RECORDED}</span> — {NOT_IN_LEDGER.meeting.charAt(0).toLowerCase()}{NOT_IN_LEDGER.meeting.slice(1)} An introduction requested through the quarterly quota is access to a company, not support given to one, and is not counted here.
+      </p>
+    </section>
+  );
 }
 
 /**
- * The per-company rollup — the `By company` chip and the `Per-company view` op,
- * which the artboard draws as two controls over one view.
- *
- * A company with no entry is shown WITH the others rather than hidden, because
- * "nothing was done for this one" is the row an LP report needs most and the
- * one a ledger of activity naturally omits.
+ * The per-company rollup — the `By company` chip and the `Per-company view`
+ * op. A company with no entry is shown WITH the others rather than hidden.
  */
-function PerCompany({ companies, unreadable }) {
-  if (unreadable) return <section className="i4-card i4-positions ip3-ledger" data-testid="ip3-per-company"><div className="i4-section-head"><div><h2>Per-company support</h2></div></div><div className="i4-empty"><AlertCircle size={16} />The support ledger could not be read.</div></section>;
-  return <section className="i4-card i4-positions ip3-ledger" data-testid="ip3-per-company">
-    <div className="i4-section-head"><div><h2>Per-company support</h2><p>Every company in the book, including the ones with nothing recorded</p></div><span>Rollup · no write</span></div>
-    {!companies.length
-      ? <div className="i4-empty"><AlertCircle size={16} />No accessible portfolio company is recorded for this investor.</div>
-      : <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Entries</th><th>Delivered</th><th>Outstanding</th><th>Hours</th></tr></thead><tbody>{companies.map((row) => <tr key={row.project_id} data-testid={`row-ip3-company-${row.project_id}`}>
-        <td><strong>{row.name}</strong>{row.entries === 0 && <small>Nothing recorded</small>}</td>
-        <td>{row.entries}</td>
-        <td>{row.delivered}</td>
-        <td>{row.promised}</td>
-        <td>{row.entries_without_hours === row.entries ? 'Not recorded' : `${Math.round(row.hours * 100) / 100} h`}{row.entries_without_hours > 0 && row.entries_without_hours < row.entries && <small>{row.entries_without_hours} without hours</small>}</td>
-      </tr>)}</tbody></table></div>}
-    <p className="i4-seam-note"><span>Counting rule</span> A company counts as supported when it has a recorded entry, never because it is in the book, sent an update, or appears in an introduction row.</p>
-  </section>;
+function PerCompany({ read, onRetry }) {
+  if (read.state === 'loading') return <div className="va-pad"><Skeleton rows={3} /></div>;
+  if (read.state === 'unreadable') return <div className="va-pad" data-testid="va-per-company"><SourceFailure what="The support ledger" claim={LEDGER_CLAIM} onRetry={onRetry} testid="status-va-per-company-unreadable" /></div>;
+  const rows = companySupportOf(read);
+  return (
+    <div data-testid="va-per-company">
+      {!rows.length ? <p className="pf-note va-pad-note">No accessible portfolio company is recorded for this investor.</p> : (
+        <div className="pf-table-wrap">
+          <table className="pf-table va-table">
+            <caption>Per company · all entries in scope</caption>
+            <thead><tr>
+              <th scope="col">Company</th><th scope="col" className="n">Entries</th><th scope="col" className="n">Delivered</th>
+              <th scope="col" className="n">Outstanding</th><th scope="col" className="n">Withdrawn</th><th scope="col" className="n">Hours</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.key} data-testid={`row-va-company-${r.key}`}>
+                  <th scope="row" data-label="Company">
+                    {r.uid ? <Link className="pf-co" to={companyHref(r.uid)}>{r.name}</Link> : <span className="pf-co">{r.name}</span>}
+                    {r.entries === 0 ? <small>No support recorded</small> : null}
+                  </th>
+                  <td className="n" data-label="Entries">{r.entries}</td>
+                  <td className="n" data-label="Delivered">{r.delivered}</td>
+                  <td className="n" data-label="Outstanding">{r.promised}</td>
+                  <td className="n" data-label="Withdrawn">{r.withdrawn}</td>
+                  <td className="n" data-label="Hours">{r.hours}{r.untimed > 0 && r.untimed < r.entries ? <small>{r.untimed} without hours</small> : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="pf-foot va-pad-note"><b>Counting rule.</b> A company counts as supported when it has a recorded entry, never because it is in the book, sent an update, or appears in an introduction row.</p>
+    </div>
+  );
 }
 
-/** The `Log support` op. Writes one entry against a company already in the book. */
+/**
+ * The `Log support` op (addendum PFA08): labelled fields, the error tied to
+ * its field, and a failed save that keeps every entry.
+ */
 function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = null }) {
-  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, error: '' }));
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, error: '', invalid: null, failed: false }));
+  const companyError = form.invalid === 'company';
+  const summaryError = form.invalid === 'summary';
   return (
-    <form className="i4-card ip3-form" onSubmit={onSubmit} data-testid="ip3-log-support">
-      <div className="i4-section-head"><div><h2>Log support</h2><p>One entry, against one company in this book</p></div><button type="button" onClick={onCancel}>Cancel</button></div>
-      <div className="ip3-fields">
-        <label>Company<select value={form.project_uid} onChange={set('project_uid')} required><option value="">Choose a company</option>{companies.filter((x) => x.project_uid).map((x) => <option key={x.project_id} value={x.project_uid}>{x.name}</option>)}</select></label>
-        <label>Kind<select value={form.kind} onChange={set('kind')}>{KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>State<select value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="delivered">Delivered</option></select></label>
+    <form className="pf-card va-form" onSubmit={onSubmit} data-testid="va-log-support" noValidate>
+      <div className="pf-card-head">
+        <div><h2>Log support</h2><p className="pf-sm">One entry, against one company in this book. Owner: you.</p></div>
+        <button type="button" className="pf-btn" onClick={onCancel}>Cancel</button>
+      </div>
+      <div className="va-fields">
+        <label htmlFor="va-company">Company</label>
+        <select id="va-company" value={form.project_uid} onChange={set('project_uid')} aria-invalid={companyError || undefined} aria-describedby={companyError ? 'va-form-error' : undefined}>
+          <option value="">Choose a company</option>
+          {companies.filter((x) => x.project_uid).map((x) => <option key={x.project_id} value={x.project_uid}>{x.name}</option>)}
+        </select>
+        <label htmlFor="va-kind">Support type</label>
+        <select id="va-kind" value={form.kind} onChange={set('kind')}>{KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        <label htmlFor="va-state">State</label>
+        <select id="va-state" value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="delivered">Delivered</option></select>
         {/* Blank is sent as absent. An hours box that defaulted to 0 would put
             a measured zero in the ledger for every entry nobody timed. */}
-        <label>Hours<input type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} placeholder="Leave blank if untimed" /></label>
+        <label htmlFor="va-hours">Hours</label>
+        <input id="va-hours" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} placeholder="Leave blank if untimed" />
       </div>
       <FillFormBar fill={fill} />
-      <div className="ip3-wide">
-        <FillLabel fill={fill} name="summary" label="What happened" value={form.summary}><label htmlFor="ip3-summary">What happened</label></FillLabel>
-        <textarea id="ip3-summary" rows={2} value={form.summary} onChange={set('summary')} placeholder="Introduced them to a buyer at …" required />
+      <div className="va-wide">
+        <FillLabel fill={fill} name="summary" label="What happened" value={form.summary}><label htmlFor="va-summary">What happened</label></FillLabel>
+        <textarea id="va-summary" rows={2} value={form.summary} onChange={set('summary')} placeholder="Introduced them to a buyer at …"
+          aria-invalid={summaryError || undefined} aria-describedby={summaryError ? 'va-form-error' : undefined} />
       </div>
-      <label className="ip3-wide">Outcome <em>(optional)</em><textarea rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" /></label>
-      {form.error && <p className="ip3-form-error">{form.error}</p>}
-      <div className="ip3-actions"><button type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record entry'}</button></div>
+      <div className="va-wide">
+        <label htmlFor="va-outcome">Outcome <em>(optional)</em></label>
+        <textarea id="va-outcome" rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" />
+      </div>
+      {form.error ? <p id="va-form-error" className="va-error" role="alert" data-testid="va-form-error">{form.error}</p> : null}
+      <div className="pf-tools">
+        <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : 'Record entry'}</button>
+      </div>
     </form>
   );
 }
 
-function Stat({ label, value, note }) { return <article className="i4-stat ip3-stat"><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
-function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }
-function ValueAddRail({ totals, unreadable }) {
+function ValueAddRail({ ledger }) {
+  const t = totalsOf(ledger);
   return (
     <WorkerRail
       workspace="Portfolio"
       role="investor"
-      className="i4-rail ip3-rail"
+      className="pf-rail"
       stance="Support ledger"
       note="Recorded support work, written by the people who did it. Introductions requested through the quota, dealroom membership and calendar activity are never relabelled as value-add."
       coverage={[
-        unreadable ? 'Support ledger unreadable' : `${totals.entries} recorded ${totals.entries === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
-        unreadable ? 'Hours unavailable' : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hour count`,
+        ledger.state === 'loading' ? 'Reading the support ledger'
+          : !t ? 'Support ledger figures unreadable'
+            : `${t.entries} recorded ${t.entries === 1 ? 'entry' : 'entries'} across ${t.companies_in_book} accessible ${t.companies_in_book === 1 ? 'company' : 'companies'}`,
+        !t ? 'Hours unavailable' : `${t.entries_without_hours} ${t.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hour count`,
       ]}
       unavailable={[
         ['Inferred support', 'A company is counted as supported only from a recorded entry, never from the position book, an update, or an introduction row.'],

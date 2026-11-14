@@ -47,7 +47,8 @@ const PORTFOLIO_ROUTES = {
   '/portfolio/positions': 'Portfolio',
   '/portfolio/updates': 'Updates & KPI collection',
   '/portfolio/performance': 'Portfolio',
-  '/portfolio/value-add': 'Value-add desk',
+  // D4817 part 5 (#5311): Value-add draws in the same frame, headed "Portfolio".
+  '/portfolio/value-add': 'Portfolio',
 };
 /** Other workspaces a licence owns, and what each reads as. */
 const OTHER_ROUTES = {

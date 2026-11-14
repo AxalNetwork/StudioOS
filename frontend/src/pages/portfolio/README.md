@@ -54,3 +54,16 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 - No issue number, decision id or build-phase name in member copy (#5365 F-09).
 - The rail's structure is #5130's; the Account-menu move is #4473's. The frame
   places the rail and links Portfolio's own routes, and changes neither.
+
+D4817 part 5 (canvas PF-05) draws Value-add
+(`../investor/InvestorPortfolioValueAdd.jsx` at `/portfolio/value-add`) in the
+same frame (`tab="value-add"`). `valueAddModel.js` is its pure model over the
+support ledger (`/api/portfolio-support`): the six figures (`figuresOf`), the
+commitments with owner, state and dates (`commitmentOf`), the introductions
+(`introductionsOf`, counted only over a read that holds every entry), hours
+(`hoursLabel`, `hoursOf`) and the per-company rollup. In progress, Cancelled,
+a due date and the meetings that came of an introduction are not recorded by
+the ledger and read Not recorded with that reason; failed figures (`totals:
+null`) read Unreadable beside the entries that were read. `valueAdd.css` holds
+its figure row, tables, in-place confirmation and Log support form. Decision
+notes: `documentation/architecture/decisions/D4817-p5.md`.
