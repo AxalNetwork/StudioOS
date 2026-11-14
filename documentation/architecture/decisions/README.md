@@ -124,6 +124,6 @@ and citations by number keep working.
 | `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
 | `D5039-p3.md` | Governed statement disputes and due dates, actual action history, Stream control and dated branch checkout read-back (#5039). |
 | `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
-| `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
+| `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
