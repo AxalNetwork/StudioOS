@@ -16,7 +16,7 @@ import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
 import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
-import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import { investorEvidence, RaiseEvidenceError, staffEvidence } from '../services/raiseEvidence';
 import {
   DEAL_MOVED, DEAL_STATUSES, DB_NOW, MOVE_COLUMNS, PASS_THROUGH_ROUTE, PASSED_STATUS, PIPELINE as DEAL_PIPELINE,
   createDeal, initialStatus, runMove, writeFields, type MoveColumn,
@@ -1042,14 +1042,30 @@ deals.get('/:id/documents', async (c) => {
 // D1265 (#3288): the deal page's Evidence block. An investor the deal admits (invited or committed)
 // reads the venture's shared evidence through `investorEvidence`, which applies the NDA and each
 // item's sharing; the founder reads the whole pack at /raise/evidence. Each open logs `open_evidence`.
+// D6167 (#6167): by D4631's audience. Staff (the admin, a partner-licence holder) read the same investor
+// projection through `staffEvidence`, logged as `open_evidence_staff`; the NDA exempts the admin and binds a
+// partner. Only the venture's own founder is pointed to Raise › Evidence (`investor_only`); anyone else the
+// read admits without the investor licence is told the evidence is not open to them (`evidence_closed`).
 deals.get('/:id/evidence', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user } = ctx;
+  const { sql, deal, user, audience } = ctx;
   await sql.end();
-  if (!holdsLicence(user, 'investor')) {
+  if (audience === 'staff') {
+    if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
+    try {
+      const nda = ndaExempt(user, deal.project_founder_id) || await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id);
+      return c.json(await staffEvidence(c.env, Number(deal.project_id), Number(user.id), nda));
+    } catch {
+      return c.json({ code: 'unreadable', detail: 'The evidence could not be read. Try again.' }, 503);
+    }
+  }
+  if (audience === 'owner') {
     return c.json({ code: 'investor_only', detail: 'This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.' }, 403);
+  }
+  if (!holdsLicence(user, 'investor')) {
+    return c.json({ code: 'evidence_closed', detail: 'The founder’s evidence is not open to you on this deal.' }, 403);
   }
   if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
   try {
