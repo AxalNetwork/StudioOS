@@ -32,7 +32,7 @@ import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
   addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
-  latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus,
+  latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme,
 } from '../validateWriters';
@@ -1395,7 +1395,9 @@ const experiments: ModuleSpec = {
             a: e.label, b: joined(EVIDENCE_KIND[e.kind], dMon(e.date)),
             c: joined(e.direction === 'contradicts' ? 'Contradicts' : 'Supports', e.strength ? STRENGTH[e.strength] : null),
             tone: e.direction === 'contradicts' ? 'bad' : e.strength === 'measured' ? 'ok' : 'vio',
-            action: { key: 'unlink', body: { link: e.link } },
+            // D6020 (#6020): a row carries one action, and it is Change strength. Unlink evidence stays
+            // among the record's own actions, where it names the link in its own form.
+            action: { key: 'evidence-strength', body: { link: e.link } },
           })),
           empty: 'No evidence linked yet.',
           action: 'add-evidence',
@@ -1528,6 +1530,24 @@ const experiments: ModuleSpec = {
         },
         execute: (c, _id, body) => refusing(async () => {
           await unlinkEvidence(c.env, { projectId: c.projectId, userId: userId(c), hypothesisId, link: field(body, 'link') });
+          return { ok: true };
+        }),
+      },
+      {
+        // D6020 (#6020): a pain link's strength through `setEvidenceStrength`, an evidence link's through its own update.
+        key: 'evidence-strength', label: 'Change strength', kind: 'form',
+        form: { title: 'Change strength', cta: 'Save', foot: 'Anecdote, pattern or measured: how strongly this evidence bears on the claim.', fields: [
+          { key: 'link', label: 'Evidence', kind: 'CH', options: unlinkable.map((e) => ({ value: e.link, label: e.label })), required: true },
+          { key: 'strength', label: 'Strength', kind: 'CH', options: EVIDENCE_STRENGTHS.map((s) => ({ value: s, label: STRENGTH[s] })), required: true },
+        ] },
+        references: (body) => {
+          const link = String(field(body, 'link') ?? '');
+          if (link.startsWith('pain-')) return [{ store: 'hypothesis_pain_links', id: link.slice(5) }];
+          if (link.startsWith('evidence-')) return [{ store: 'hypothesis_evidence_links', id: link.slice(9) }];
+          return [{ store: 'hypothesis_evidence_links', id: '' }];
+        },
+        execute: (c, _id, body) => refusing(async () => {
+          await setLinkStrength(c.env, { projectId: c.projectId, userId: userId(c), hypothesisId, link: field(body, 'link'), strength: field(body, 'strength') });
           return { ok: true };
         }),
       },
