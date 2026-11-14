@@ -151,3 +151,28 @@ test('both homes draw the canvas context line: Studio, and the investor\'s role 
   assert.match(investor, /data-testid="badge-investor-studio-role">Investor</);
   assert.match(investor, /data-testid="text-investor-studio-date">\{new Intl\.DateTimeFormat/);
 });
+
+test('Fund and Needs you use recorded LP, booklet and Trust data and retry failures independently', () => {
+  const retryKeys = [];
+  const quick = quickStats({ dashboard, lifecycle, dealCount: 0 });
+  const fund = { lp_holdings: [{ id: 2, fund_id: 9, fund_name: 'Seed Fund', commitment_amount: 1000, lpa_signed: false }],
+    capital_calls: [{ id: 1, fund_id: 9, limited_partner_id: 2, owed_cents: 10000, received_cents: 2500, due_date: '2000-01-02' }] };
+  const records = { fund, notices: { notices: [] }, booklet: { status: 'open' },
+    trust: { obligations: [{ required: true, status: 'pending', obligation_key: 'identity', label: 'Verify identity' }] } };
+  const opts = { quick, retrySource: key => retryKeys.push(key) };
+  const tiles = investorTiles({ ...opts, records });
+  assert.match(draw(tiles.fund_commitment.body), /Committed\s*\$1,000\.00/);
+  assert.match(draw(tiles.fund_commitment.body), /Due\s*\$75\.00/);
+  assert.match(draw(tiles.needs_you.body), /Sign the LPA.*Capital call overdue.*Submit the subscription booklet.*Verify identity/s);
+  const partial = investorTiles({ ...opts, records: { ...records, fund: undefined }, failures: { fund: 'failed' } });
+  assert.equal(partial.fund_commitment.state, 'unreadable');
+  partial.fund_commitment.onRetry();
+  assert.deepEqual(retryKeys, ['fund']);
+  assert.match(draw(partial.needs_you.body), /Verify identity/);
+  const empty = investorTiles({ ...opts, records: { fund: { lp_holdings: [] }, notices: { notices: [] }, booklet: null, trust: { obligations: [] } } });
+  assert.equal(empty.fund_commitment.state, 'empty');
+  assert.equal(empty.needs_you.state, 'empty');
+  const preview = investorTiles({ ...opts, records, previewing: true });
+  assert.equal(preview.fund_commitment.state, 'withheld');
+  assert.equal(preview.needs_you.state, 'withheld');
+});

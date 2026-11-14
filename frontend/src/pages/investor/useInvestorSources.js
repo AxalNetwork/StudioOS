@@ -16,6 +16,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../lib/api';
+import { fundNoticesApi } from '../../lib/api/fundNotices.js';
+import { fundBookletsApi } from '../../lib/api/fundBooklets.js';
 import { reportError } from '../../lib/log';
 import { INVESTOR_AGENDA_KINDS } from '../studio/studioAgenda';
 
@@ -23,14 +25,22 @@ export function useInvestorSources({ previewing = false, client = api } = {}) {
   const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
   const [failures, setFailures] = useState({});
   const alive = useRef(true);
-  const sequence = useRef({ portfolio: 0, events: 0 });
+  const sequence = useRef({});
   // listCalendarEvents has no "upcoming" flag contract; filtering locally
   // retains only dated future records and never invents a calendar item.
   // D5203 (#5203): it asks only for the kinds the tile depends on, not every source.
-  const sources = useMemo(() => ({ portfolio: () => client.positionsAnalytics(), events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }) }), [client]);
+  const sources = useMemo(() => ({
+    portfolio: () => client.positionsAnalytics(),
+    events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }),
+    fund: () => client.fundsLpPortal(),
+    notices: () => fundNoticesApi.mine(),
+    trust: () => client.trustMe(),
+    booklet: () => fundBookletsApi.mine().catch(error => { if (error?.status === 404) return null; throw error; }),
+  }), [client]);
 
   const read = useCallback((key) => {
-    const mine = (sequence.current[key] += 1);
+    const mine = (sequence.current[key] || 0) + 1;
+    sequence.current[key] = mine;
     setRecords((r) => ({ ...r, [key]: undefined }));
     setFailures((f) => { const { [key]: _gone, ...rest } = f; return rest; });
     let call;
@@ -48,17 +58,17 @@ export function useInvestorSources({ previewing = false, client = api } = {}) {
   useEffect(() => {
     alive.current = true;
     if (previewing) {
-      sequence.current.portfolio += 1; sequence.current.events += 1;
-      setRecords({ portfolio: null, events: null });
+      const keys = Object.keys(sources);
+      keys.forEach(key => { sequence.current[key] = (sequence.current[key] || 0) + 1; });
+      setRecords(Object.fromEntries(keys.map(key => [key, null])));
       setFailures({});
     } else {
-      read('portfolio');
-      read('events');
+      Object.keys(sources).forEach(read);
     }
     return () => { alive.current = false; };
-  }, [previewing, read]);
+  }, [previewing, read, sources]);
 
-  const readAll = useCallback(() => { read('portfolio'); read('events'); }, [read]);
+  const readAll = useCallback(() => { if (!previewing) Object.keys(sources).forEach(read); }, [previewing, read, sources]);
   /** Ask again only for what failed; `calendarPartial` adds the calendar when it answered incompletely. */
   const retryFailed = useCallback((calendarPartial = false) => {
     const keys = new Set(Object.keys(failures));

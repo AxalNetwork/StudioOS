@@ -23,7 +23,7 @@
 // participation-rights ladder, IR, allocation gate, onboarding requirements and
 // the compliance footer — is preserved.
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Landmark, Lock, Check, Clock, ShieldCheck, FileText,
   AlertCircle, RefreshCw, FileDown, Loader2,
@@ -204,6 +204,12 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // back to the operator-maintained model in lib/spinoutFundModel.js.
   const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!loading && ['#my-commitment', '#my-notices', '#subscription-booklet'].includes(hash)) {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+    }
+  }, [hash, loading]);
   const [err, setErr] = useState('');
   // Admin-only preview override. Never consulted for a non-admin, so it cannot
   // be used to self-grant access; see the file header.

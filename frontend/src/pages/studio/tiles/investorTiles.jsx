@@ -14,6 +14,8 @@ import InvestorQuotaBars from '../../../components/InvestorQuotaBars';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { Row, StatGroup, number } from '../../investor/investorStudioParts';
 import { TILE } from '../studioLayoutModel';
+import { commitmentsByFund } from '../../../lib/lpCommitmentModel';
+import { canSignBooklet } from '../../../lib/bookletSigning';
 import { formatRate } from '../../../lib/rate';
 import { parseStamp } from '../../../ui/parseStamp.js';
 
@@ -87,19 +89,93 @@ export function PortfolioRows({ data }) {
   );
 }
 
+const LP_WORKSPACE = '/spinout-lab/investor-workspace';
+const COMMITMENT = LP_WORKSPACE + '#my-commitment';
+const BOOKLET = LP_WORKSPACE + '#subscription-booklet';
+const moneyCents = cents => Number.isSafeInteger(cents) ? (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : null;
+
+function ActionSource({ label, loading, unreadable, onRetry, children }) {
+  if (unreadable) return <Unreadable what={label} onRetry={onRetry} />;
+  if (loading) return <p role="status">Reading {label.toLowerCase()}…</p>;
+  return children;
+}
+
+function commitmentTiles(records, failures, retry) {
+  const { fund, notices, trust, booklet } = records;
+  const sourceState = {
+    fund: { unreadable: !!failures.fund || (fund !== undefined && !Array.isArray(fund?.lp_holdings)), loading: fund === undefined },
+    notices: { unreadable: !!failures.notices || (notices !== undefined && !Array.isArray(notices?.notices)), loading: notices === undefined },
+    trust: { unreadable: !!failures.trust || (trust !== undefined && !Array.isArray(trust?.obligations)), loading: trust === undefined },
+    booklet: { unreadable: !!failures.booklet || (booklet != null && (!['open', 'submitted', 'withdrawn'].includes(booklet.status) || booklet.status === 'submitted' && !booklet.signing?.state)), loading: booklet === undefined },
+  };
+  const holdings = sourceState.fund.unreadable ? [] : commitmentsByFund(fund);
+  const callsUnreadable = holdings.some(row => !row.calls_known);
+  const rows = { fund: [], notices: [], booklet: [], trust: [] };
+  const seenCalls = new Set();
+  for (const holding of holdings) {
+    if (!holding.lpa_signed) rows.fund.push({ key: `lpa-${holding.lp_id}`, label: 'Sign the LPA' + (holding.fund_name ? ` · ${holding.fund_name}` : ''), to: COMMITMENT });
+    for (const call of holding.calls) {
+      if (call.limited_partner_id != null && call.limited_partner_id !== holding.lp_id) continue;
+      if (seenCalls.has(call.id) || call.status === 'paid' || !(call.outstanding_cents > 0) || !call.due_date) continue;
+      seenCalls.add(call.id);
+      const notice = notices?.notices?.find?.(item => !item.superseded && item.type === 'capital_call_notice' && item.fund_id === holding.fund_id && item.limited_partner_id === holding.lp_id && String(item.call_number) === String(call.call_number));
+      rows.fund.push({ key: `call-${call.id}`, label: `Capital call ${call.state === 'overdue' ? 'overdue' : 'due'} · ${call.due_date}`, to: notice ? LP_WORKSPACE + '#my-notices' : COMMITMENT });
+    }
+  }
+  if (!sourceState.booklet.unreadable) {
+    if (booklet?.status === 'open') rows.booklet.push({ key: 'booklet', label: 'Submit the subscription booklet', to: BOOKLET });
+    else if (canSignBooklet(booklet) || booklet?.signing?.state === 'sent') rows.booklet.push({ key: 'booklet', label: 'Sign the subscription booklet', to: BOOKLET });
+  }
+  if (!sourceState.trust.unreadable) {
+    for (const obligation of trust?.obligations || []) {
+      if (obligation.required && !['satisfied', 'waived'].includes(obligation.status) && obligation.obligation_key) {
+        rows.trust.push({ key: obligation.obligation_key, label: obligation.label || obligation.title || 'Review a required Trust item', to: '/trust/me?requirement=' + encodeURIComponent(obligation.obligation_key) });
+      }
+    }
+  }
+  const incomplete = callsUnreadable || Object.values(sourceState).some(source => source.loading || source.unreadable);
+  const any = Object.values(rows).some(items => items.length);
+  const links = (key) => rows[key].map(item => <li key={item.key}><Link className="underline" to={item.to}>{item.label}</Link></li>);
+  return {
+    fund_commitment: sourceState.fund.unreadable ? { state: TILE.UNREADABLE, onRetry: () => retry('fund') }
+      : sourceState.fund.loading ? { state: TILE.LOADING }
+      : !holdings.length ? { state: TILE.EMPTY, empty: 'No commitment is recorded.', href: COMMITMENT, openLabel: 'Open My commitment' }
+      : { state: TILE.READY, href: COMMITMENT, openLabel: 'Open My commitment', body: <>
+          {callsUnreadable && <Unreadable what="Capital calls" onRetry={() => retry('fund')} />}
+          {holdings.map(row => <section key={row.lp_id}>
+            {row.fund_name && <h4>{row.fund_name}</h4>}
+            <Row label="Committed" value={moneyCents(row.commitment_cents)} />
+            <Row label="Called" value={moneyCents(row.called_cents)} state={row.calls_known ? undefined : 'unreadable'} />
+            <Row label="Due" value={moneyCents(row.due_cents)} state={row.calls_known ? undefined : 'unreadable'} />
+            <Row label="Uncalled" value={moneyCents(row.uncalled_cents)} state={row.calls_known ? undefined : 'unreadable'} />
+            <Row label="Next call due" value={row.next_due} state={row.calls_known ? undefined : 'unreadable'} />
+          </section>)}
+        </> },
+    needs_you: !incomplete && !any ? { state: TILE.EMPTY, empty: 'Nothing needs your attention right now.' }
+      : { state: TILE.READY, body: <>
+          {any && <ul className="space-y-1">{Object.keys(rows).flatMap(links)}</ul>}
+          {Object.entries({ fund: 'Fund records', notices: 'Fund notices', booklet: 'Subscription booklet', trust: 'Trust requirements' }).map(([key, label]) =>
+            <ActionSource key={key} label={label} {...sourceState[key]} onRetry={() => retry(key)} />
+          )}
+          {callsUnreadable && <Unreadable what="Capital calls" onRetry={() => retry('fund')} />}
+        </> },
+  };
+}
+
 /**
  * One spec per investor Studio key. `lifecycle` and the two records are
  * undefined while loading and null (or a `failures` entry) when they failed.
  */
 export function investorTiles({
   user, previewing = false, dashboard, dashboardUnavailable = '', lifecycle, records = {}, failures = {},
-  opportunities = [], stages = [], events = [], eventsCoverage = { state: 'ready', failed: [] }, quick, refreshContext, retryLifecycle, retrySources,
+  opportunities = [], stages = [], events = [], eventsCoverage = { state: 'ready', failed: [] }, quick, refreshContext, retryLifecycle, retrySources, retrySource = retrySources,
 }) {
   const withheld = { state: TILE.WITHHELD };
   if (previewing) {
-    return Object.fromEntries(['usage_quota', 'deal_lifecycle', 'scored_opportunities', 'quick_stats', 'portfolio_glance', 'upcoming_events'].map((k) => [k, withheld]));
+    return Object.fromEntries(['usage_quota', 'deal_lifecycle', 'scored_opportunities', 'quick_stats', 'portfolio_glance', 'upcoming_events', 'fund_commitment', 'needs_you'].map((k) => [k, withheld]));
   }
   return {
+    ...commitmentTiles(records, failures, retrySource),
     usage_quota: { state: TILE.READY, href: '/pricing?for=investor', openLabel: 'Open account', body: <InvestorQuotaBars user={user} compact /> },
     deal_lifecycle: lifecycle === undefined ? { state: TILE.LOADING }
       : lifecycle === null ? { state: TILE.UNREADABLE, onRetry: retryLifecycle }
