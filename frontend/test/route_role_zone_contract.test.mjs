@@ -158,3 +158,92 @@ test('zoneForPath answers a root with its first zone and an unknown slug with nu
       `/research/${slug} resolves to a zone the partner shell does not list`);
   }
 });
+
+/**
+ * #6265: THE ADMIN HALF. The loop above skips `admin`, because an admin has no
+ * shell of its own. Under Research and Network it is not shell-less, though:
+ * it browses as the founder (`researchRole` / `networkRole` in App.jsx). So an
+ * admitted admin at a zone the founder shell does not list resolves to null,
+ * and `ResearchWorkspace` drew "Nothing serves this zone yet" on
+ * `/research/diligence` and `/research/benchmarking`. The rule: under these two
+ * prefixes a route (a zone or a page beneath one) whose zone the founder shell
+ * does not list never admits `admin`, never goes through `labRoles` (which adds
+ * `viewMode`, and that is 'admin' for an admin who is not previewing), and sends
+ * such an admin to `/research` through `adminToResearch`.
+ */
+const FOUNDER_PREVIEW_PREFIXES = ['/research', '/network'];
+
+test('admin, browsing Research and Network as the founder, reaches only zones the founder shell lists', () => {
+  assert.match(appSrc, /const researchRole = \(!effectiveRole \|\| effectiveRole === 'admin'\) \? 'founder' : effectiveRole;/,
+    'an admin no longer previews Research as the founder; this guard must learn the new rule');
+  assert.match(appSrc, /const networkRole = researchRole;/);
+  const founder = declared.get('founder');
+  const offenders = [];
+  let foreign = 0;
+  for (const { path, roles, body } of parsed) {
+    const prefix = FOUNDER_PREVIEW_PREFIXES.find((p) => path.startsWith(`${p}/`));
+    if (!prefix) continue;
+    const zone = `${prefix}/${path.slice(prefix.length + 1).split('/')[0]}`;
+    if (!zoneRoutes.has(zone) || founder.has(zone) || isRetiredRedirect(path)) continue;
+    if (/<Navigate /.test(body) && !/guard\(/.test(body)) continue; // a plain redirect admits no one
+    foreign += 1;
+    if (roles.includes('admin')) offenders.push(`${path} admits admin`);
+    if (/labRoles\(/.test(body)) offenders.push(`${path} uses labRoles, which re-admits admin through viewMode`);
+    if (!/element=\{adminToResearch\(/.test(body)) offenders.push(`${path} does not send a plain admin to /research`);
+  }
+  // diligence x3, benchmarking x2, client-prep: if this drops, the scan stopped seeing them.
+  assert.ok(foreign >= 6, `expected at least 6 Research routes outside the founder shell, saw ${foreign}`);
+  assert.deepEqual(offenders, [], `the founder shell has none of these zones, so an admin resolves to no zone:\n  ${offenders.join('\n  ')}`);
+});
+
+test('the Research routes closed to admin still open for an admin using View as a licence that has them', async () => {
+  const { resolveActiveRole, resolveHeldLicences } = await import('../src/lib/activeRole.js');
+  // RoleGuard's and labRoles' own lines, pinned so the simulation below is the one App.jsx runs.
+  assert.ok(appSrc.includes("const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);"),
+    'RoleGuard no longer reads the previewed role the way this test simulates');
+  assert.ok(appSrc.includes('if (!allowedRoles.includes(effectiveRole) && !held.some((l) => allowedRoles.includes(l))) {'),
+    'RoleGuard no longer admits on the role browsed as or a held licence');
+  assert.ok(appSrc.includes("const adminToResearch = (element) => (effectiveRole === 'admin' ? <Navigate to=\"/research\" replace /> : element);"),
+    'the admin redirect these routes rely on changed');
+
+  const admin = { role: 'admin' };
+  const session = (viewMode) => ({ user: admin, realUser: admin, viewMode, isImpersonating: false });
+  // What the route renders: adminToResearch, then RoleGuard on the plain `guard([...])` list.
+  const outcome = (roles, viewMode) => {
+    const effective = resolveActiveRole(session(viewMode));
+    if (effective === 'admin') return 'redirect:/research';
+    const held = resolveHeldLicences(session(viewMode));
+    return roles.includes(effective) || held.some((l) => roles.includes(l)) ? 'page' : 'refused';
+  };
+  const researchRoleFor = (viewMode) => (!viewMode || viewMode === 'admin' ? 'founder' : viewMode);
+
+  const cases = [
+    ['/research/diligence', 'investor'],
+    ['/research/diligence/:grantUid', 'investor'],
+    ['/research/diligence/:grantUid/files/:fileUid', 'investor'],
+    ['/research/benchmarking', 'investor'],
+    ['/research/benchmarking/:uid', 'investor'],
+    ['/research/client-prep', 'advisor'],
+    ['/research/client-prep', 'partner'],
+  ];
+  for (const [path, preview] of cases) {
+    const row = parsed.find((r) => r.path === path);
+    assert.ok(row, `${path} is not routed`);
+    assert.equal(row.roles.includes('admin'), false, `${path} admits admin again`);
+    // labRoles adds viewMode, which is 'admin' for an admin not previewing: it must not gate these.
+    assert.match(row.body, /element=\{adminToResearch\(guard\(\[/, `${path} is not adminToResearch(guard([...]))`);
+    assert.doesNotMatch(row.body, /labRoles\(/, `${path} uses labRoles, which re-admits admin through viewMode`);
+    assert.equal(outcome(row.roles, preview), 'page', `${path} refuses an admin previewing ${preview}`);
+    assert.equal(outcome(row.roles, 'admin'), 'redirect:/research', `${path} does not send a plain admin to /research`);
+    assert.equal(outcome(row.roles, 'founder'), 'refused', `${path} opens for an admin previewing Founder`);
+    // The previewed shell resolves the zone, so the page drawn is the zone's own.
+    const zonePath = path.split('/').slice(0, 3).join('/');
+    const role = researchRoleFor(preview);
+    assert.equal(zoneForPath(bucketForPath(role, zonePath), zonePath)?.slug, zonePath.split('/')[2],
+      `${zonePath} does not resolve in the ${role} shell`);
+  }
+  // The un-previewed admin browses the founder shell, which has none of the three: why admin is off.
+  for (const zonePath of ['/research/diligence', '/research/benchmarking', '/research/client-prep']) {
+    assert.equal(zoneForPath(bucketForPath('founder', zonePath), zonePath), null, zonePath);
+  }
+});
