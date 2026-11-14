@@ -4,7 +4,7 @@ import Sheet from '../../ui/Sheet.jsx';
 import { Pill } from '../investor/PortfolioReports';
 import { periodWord } from '../investor/portfolioReportsModel';
 import {
-  ASK, WAIVE, actionsOf, confirmLabel, obligationOf, openPeriodsOf, receiptOf, refusalOf, reviewOf,
+  ASK, WAIVE, actionsOf, confirmLabel, obligationOf, openPeriodsOf, receiptOf, refusalOf, reviewOf, waiveRefusalOf,
 } from './reportAsk';
 import './reportAsk.css';
 
@@ -71,6 +71,7 @@ export function ReportObligation({ company, period, access, onAct, others = 0 })
           </div>
         ) : null
       ) : <p className="pf-note" data-testid="report-obligation-no-act">{access?.why}</p>}
+      {access?.can && waiveRefusalOf(period) ? <p className="pf-note" data-testid="report-obligation-no-waive">{waiveRefusalOf(period)}</p> : null}
       {access?.can && !can.ask && (period.state === 'due' || period.state === 'upcoming') ? <p className="pf-foot" data-testid="report-obligation-not-late">You can ask for a report once it is late.</p> : null}
       {access?.can && others > 0 ? <p className="pf-foot" data-testid="report-obligation-others">{others} other open {others === 1 ? 'period is' : 'periods are'} listed below, each with its own actions.</p> : null}
     </section>

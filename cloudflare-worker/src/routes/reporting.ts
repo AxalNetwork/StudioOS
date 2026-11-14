@@ -32,6 +32,15 @@
  * event's time, the period, and for an ask how many of the founder team's
  * in-app notices were stored (email delivery is never confirmed here).
  *
+ * WHO MAY WAIVE A HOLDING THROUGH AN SPV (owner answer 2026-11-14, #5311):
+ * on a duty whose line's route is `syndicate`, only the SPV's lead may waive
+ * a period. The lead is the `created_by` of the syndicate the line's vehicle
+ * names (`vehicle_ref = 'syndicate:<id>'`, D1219). Anyone else is refused
+ * 403 `spv_lead_only`; where no lead is recorded (no vehicle, or no such
+ * syndicate) the waive is refused 409 `spv_lead_not_recorded`, never allowed.
+ * Each period in the investor reads says so (`can_waive`, `waive_refusal`).
+ * Ask is unchanged.
+ *
  * AN INVESTOR NEVER SEES ANOTHER INVESTOR. Every investor read and write is
  * scoped by `holder_user_id = caller`; another investor's duty or period is
  * the same 404 as one that does not exist, and the investor's rows carry no
@@ -80,7 +89,7 @@ type DutyRow = {
   id: number; uid: string; project_id: number; holder_user_id: number | null; holder_name?: string | null; kind: Kind; cadence: Cadence;
   due_rule: DueRule; due_days: number; required_figures: string; required_documents: string; source_document: string; source_clause: string;
   source_kind: string; source_envelope_id: number | null; body_sha256: string | null; defaulted_json: string; starts_on: string; status: string;
-  closing_line_uid: string; holding_route?: string | null;
+  closing_line_uid: string; holding_route?: string | null; spv_lead_user_id?: number | null;
 };
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
@@ -232,7 +241,9 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
     `SELECT d.id, d.uid, d.project_id, d.holder_user_id, d.kind, d.cadence, d.due_rule, d.due_days, d.required_figures, d.required_documents,
             d.source_document, d.source_clause, d.source_kind, d.source_envelope_id, d.body_sha256, d.defaulted_json, d.starts_on, d.status,
             d.closing_line_uid, p.uid AS project_uid, p.name AS project_name,
-            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route
+            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route,
+            (SELECT s.created_by FROM closing_lines l JOIN syndicates s ON l.vehicle_ref = 'syndicate:' || s.id
+              WHERE l.uid = d.closing_line_uid) AS spv_lead_user_id
        FROM reporting_duties d JOIN projects p ON p.id = d.project_id
       WHERE d.holder_user_id = ? AND (? IS NULL OR d.project_id = ?) ORDER BY p.name, d.id`,
   ).bind(userId, projectId, projectId).all<DutyRow & { project_uid: string; project_name: string }>()).results || []);
@@ -259,12 +270,26 @@ async function companies(env: Env, userId: number, projectId: number | null) {
   }
   for (const p of periods) {
     const d = duties.find((x) => x.uid === p.duty_uid)!;
-    byProject.get(d.project_id).periods.push({ ...p, asked: asked.has(p.uid), asked_at: asked.get(p.uid) ?? null, waived_by_you: waivedBy.get(p.uid) ?? null });
+    const rule = waiveRule(d.holding_route, d.spv_lead_user_id, userId);
+    byProject.get(d.project_id).periods.push({
+      ...p, asked: asked.has(p.uid), asked_at: asked.get(p.uid) ?? null, waived_by_you: waivedBy.get(p.uid) ?? null,
+      // Whether this holding lets the caller waive at all (the period's own state still decides): the SPV lead rule.
+      can_waive: !rule, waive_refusal: rule ? rule.sentence : null,
+    });
   }
   return { today: day, companies: [...byProject.values()] };
 }
 
 const ACT_REFUSED = 'A support session cannot ask for a report or waive a period.';
+
+/** Owner answer 2026-11-14: a holding through an SPV is waived only by the SPV's lead; with no lead recorded, by no one here. */
+const SPV_LEAD_ONLY = { status: 403, code: 'spv_lead_only', sentence: 'You hold this through an SPV, and only the SPV’s lead can waive a period.' };
+const SPV_LEAD_NOT_RECORDED = { status: 409, code: 'spv_lead_not_recorded', sentence: 'You hold this through an SPV, and the SPV’s lead is not recorded, so no one can waive a period here.' };
+function waiveRule(route: string | null | undefined, lead: number | null | undefined, userId: number) {
+  if (route !== 'syndicate') return null;
+  if (lead == null) return SPV_LEAD_NOT_RECORDED;
+  return Number(lead) === userId ? null : SPV_LEAD_ONLY;
+}
 /** D4817 part 9: whether the caller may ask or waive here, and the sentence the write would refuse with when not. */
 async function actAs(c: any) {
   const support = await isSupportSession(c);
@@ -292,7 +317,10 @@ r.get('/companies/:projectUid', async (c) => {
 async function ownPeriod(env: Env, userId: number, uid: string) {
   const row = await env.DB.prepare(
     `SELECT p.id, p.uid, p.duty_id, p.period_label, p.period_start, p.period_end, p.due_on, p.waived_at, p.met_update_id,
-            d.project_id, d.kind, d.cadence, d.due_rule, d.due_days, pr.name AS project_name, pr.founder_id
+            d.project_id, d.kind, d.cadence, d.due_rule, d.due_days, pr.name AS project_name, pr.founder_id,
+            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route,
+            (SELECT s.created_by FROM closing_lines l JOIN syndicates s ON l.vehicle_ref = 'syndicate:' || s.id
+              WHERE l.uid = d.closing_line_uid) AS spv_lead_user_id
        FROM reporting_periods p JOIN reporting_duties d ON d.id = p.duty_id JOIN projects pr ON pr.id = d.project_id
       WHERE p.uid = ? AND d.holder_user_id = ?`,
   ).bind(uid, userId).first<any>();
@@ -350,6 +378,8 @@ r.post('/periods/:uid/waive', async (c) => {
   const p = await ownPeriod(c.env, Number(user.id), c.req.param('uid'));
   if (p.state === 'sent') throw new Refusal(409, 'period_sent', 'This period’s report was sent, so there is nothing to waive.');
   if (p.state === 'waived') throw new Refusal(409, 'already_waived', 'You already waived this period.');
+  const rule = waiveRule(p.holding_route, p.spv_lead_user_id, Number(user.id));
+  if (rule) throw new Refusal(rule.status, rule.code, rule.sentence);
   const [upd] = await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE reporting_periods SET waived_at = datetime('now'), waived_by = ? WHERE id = ? AND waived_at IS NULL AND met_update_id IS NULL`)
       .bind(user.id, p.id),

@@ -55,10 +55,21 @@ export function openPeriodsOf(company) {
 
 export const dutyOf = (company, period) => (company?.duties || []).find((d) => d.uid === period?.duty_uid) || null;
 
-/** What each action may do to a period, as the Worker decides it: ask while late or missing and not yet asked; waive while not sent or waived. */
+/**
+ * What each action may do to a period, as the Worker decides it: ask while late
+ * or missing and not yet asked; waive while not sent or waived, and only where
+ * the holding lets the caller waive (`can_waive`: through an SPV, only its
+ * lead may, owner answer 2026-11-14).
+ */
 export function actionsOf(period, access) {
   if (!access?.can || !period) return { ask: false, waive: false };
-  return { ask: (period.state === 'late' || period.state === 'missing') && !period.asked, waive: isOpen(period) };
+  return { ask: (period.state === 'late' || period.state === 'missing') && !period.asked, waive: isOpen(period) && period.can_waive !== false };
+}
+
+/** Why this holding does not let the caller waive an open period: the Worker's own sentence, or null. */
+export function waiveRefusalOf(period) {
+  if (!isOpen(period) || period.can_waive !== false) return null;
+  return (typeof period.waive_refusal === 'string' && period.waive_refusal.trim()) || 'Waiving this period is not available on this holding.';
 }
 
 /** The period's own record, after any act: who asked or waived it and when, read from the company read. */

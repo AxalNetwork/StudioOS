@@ -261,7 +261,8 @@ export function Timeline({ company, onChanged, onAct = null, canAct = true }) {
   const raw = new Map((company?.periods || []).map((p) => [p.uid, p]));
   const acting = Boolean(onAct) && canAct;
   const rows = timelineRows(company).map((r) => ({
-    ...r, record: recordOf(raw.get(r.uid))?.text || null, canAsk: acting && r.canAsk, canWaive: acting && r.canWaive,
+    // canWaive also needs the holding's leave (`can_waive`: through an SPV, only its lead may; owner answer 2026-11-14).
+    ...r, record: recordOf(raw.get(r.uid))?.text || null, canAsk: acting && r.canAsk, canWaive: acting && r.canWaive && raw.get(r.uid)?.can_waive !== false,
   }));
   const [open, setOpen] = useState(null);
   const narrow = usePhoneWidth(SHEET_QUERY);

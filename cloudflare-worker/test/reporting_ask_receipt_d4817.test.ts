@@ -21,7 +21,10 @@
  *   - every founder counted as told, stored notice or not → the ask test and
  *     the not-stored test;
  *   - a waiver with no recorded author read as "by you" → the waive test;
- *   - `can_act` true for a support session → the who-may-act test.
+ *   - `can_act` true for a support session → the who-may-act test;
+ *   - (owner answer 2026-11-14, only the SPV's lead waives) a non-lead
+ *     allowed, no lead recorded allowed, the rule applied to every route, the
+ *     waive skipping the rule, and the read omitting it → the SPV tests.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/reporting_ask_receipt_d4817.test.ts
@@ -188,4 +191,63 @@ test('waive: the receipt is the period as stored, waived by you; the read then c
   assert.deepEqual([b.state, b.waived_at, b.waived_by_you], ['waived', '2026-11-04 08:00:00', null]);
   const twice = await call(db, 'POST', `/api/reporting/periods/${first.uid}/waive`, INV_A);
   assert.deepEqual([twice.status, twice.body?.error], [409, 'already_waived']);
+});
+
+// ---------------------------------------------------------------- owner answer 2026-11-14: only the SPV's lead waives
+
+/** A's line goes through a syndicate; `vehicle` is what the line records, `lead` who created syndicate 55. */
+function throughSpv(db: DatabaseSync, vehicle: string | null, lead: number | null) {
+  if (lead != null) db.prepare(`INSERT INTO syndicates (id, name, created_by, deal_id) VALUES (55, 'Fixture SPV I', ?, 41)`).run(lead);
+  db.prepare(`UPDATE closing_lines SET route = 'syndicate', vehicle_ref = ? WHERE uid = 'ln-a'`).run(vehicle);
+}
+const openOf = async (db: DatabaseSync) => (await call(db, 'GET', '/api/reporting/companies/proj-seven', INV_A)).body.company.periods
+  .find((p: any) => p.state !== 'sent' && p.state !== 'waived');
+const LEAD_ONLY = 'You hold this through an SPV, and only the SPV’s lead can waive a period.';
+const LEAD_NOT_RECORDED = 'You hold this through an SPV, and the SPV’s lead is not recorded, so no one can waive a period here.';
+
+test('SPV: the lead may waive their period; the read says so', async () => {
+  const db = await ready();
+  throughSpv(db, 'syndicate:55', INV_A);
+  const p = await openOf(db);
+  assert.deepEqual([p.can_waive, p.waive_refusal], [true, null]);
+  const waived = await call(db, 'POST', `/api/reporting/periods/${p.uid}/waive`, INV_A);
+  assert.equal(waived.status, 200, waived.text);
+  assert.equal(waived.body.waived_by_you, true);
+});
+
+test('SPV: anyone but the lead is refused 403 spv_lead_only, the read says why, nothing is written; Ask is unchanged', async () => {
+  const db = await ready();
+  throughSpv(db, 'syndicate:55', INV_B);
+  const p = await openOf(db);
+  assert.deepEqual([p.can_waive, p.waive_refusal], [false, LEAD_ONLY]);
+  const refused = await call(db, 'POST', `/api/reporting/periods/${p.uid}/waive`, INV_A);
+  assert.deepEqual([refused.status, refused.body?.error, refused.body?.message], [403, 'spv_lead_only', LEAD_ONLY]);
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM reporting_periods WHERE waived_at IS NOT NULL").n, 0);
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM reporting_events WHERE event = 'waived'").n, 0);
+  const late = lateOf((await call(db, 'GET', '/api/reporting/companies/proj-seven', INV_A)).body.company);
+  assert.equal((await call(db, 'POST', `/api/reporting/periods/${late.uid}/ask`, INV_A)).status, 200, 'Ask is unchanged on an SPV holding');
+});
+
+test('SPV: with no lead recorded (no vehicle, no such syndicate, a free-text vehicle) the waive is refused 409 spv_lead_not_recorded', async () => {
+  for (const vehicle of [null, 'syndicate:999', 'Fixture SPV I']) {
+    const db = await ready();
+    throughSpv(db, vehicle, null);
+    const p = await openOf(db);
+    assert.deepEqual([p.can_waive, p.waive_refusal], [false, LEAD_NOT_RECORDED], String(vehicle));
+    const refused = await call(db, 'POST', `/api/reporting/periods/${p.uid}/waive`, INV_A);
+    assert.deepEqual([refused.status, refused.body?.error, refused.body?.message], [409, 'spv_lead_not_recorded', LEAD_NOT_RECORDED], String(vehicle));
+    assert.equal(one(db, "SELECT COUNT(*) AS n FROM reporting_events WHERE event = 'waived'").n, 0);
+  }
+});
+
+test('SPV: a direct holding, and one with no route, are unchanged: the holder waives', async () => {
+  for (const route of ['direct', null]) {
+    const db = await ready();
+    // A syndicate on the same deal, led by someone else, changes nothing for a line not routed through it.
+    db.prepare(`INSERT INTO syndicates (id, name, created_by, deal_id) VALUES (55, 'Fixture SPV I', ?, 41)`).run(INV_B);
+    db.prepare(`UPDATE closing_lines SET route = ?, vehicle_ref = 'syndicate:55' WHERE uid = 'ln-a'`).run(route);
+    const p = await openOf(db);
+    assert.deepEqual([p.can_waive, p.waive_refusal], [true, null], String(route));
+    assert.equal((await call(db, 'POST', `/api/reporting/periods/${p.uid}/waive`, INV_A)).status, 200, String(route));
+  }
 });

@@ -24,7 +24,9 @@
  *   - `recordOf` reading a waiver with no recorded author as "by you" → tests 6, 9;
  *   - `accessOf` ignoring `can_act: false` → tests 7, 9;
  *   - the timeline drawing Ask and Waive when `canAct` is false → test 7;
- *   - `openPeriodsOf` putting a due period before a late one → tests 1–6, 8, 9.
+ *   - `openPeriodsOf` putting a due period before a late one → tests 1–6, 8, 9;
+ *   - (owner answer 2026-11-14) the card's Waive ignoring `can_waive`, the
+ *     timeline's Waive ignoring it, and the Worker's reason not drawn → test 11.
  * (Reverted, all pass.)
  */
 import test from 'node:test';
@@ -36,7 +38,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import PortfolioCompanyPage from '../src/pages/investor/PortfolioCompanyPage.jsx';
 import {
-  ASK, WAIVE, accessOf, actionsOf, confirmLabel, obligationOf, openPeriodsOf, receiptOf, recordOf, refusalOf, stampOf,
+  ASK, WAIVE, accessOf, actionsOf, confirmLabel, obligationOf, openPeriodsOf, receiptOf, recordOf, refusalOf, stampOf, waiveRefusalOf,
 } from '../src/pages/portfolio/reportAsk.js';
 
 const h = React.createElement;
@@ -372,4 +374,49 @@ test('10 · the wiring: no browser pop-up, no colour without a token, the client
   assert.match(worker, /r\.post\('\/periods\/:uid\/ask'/);
   assert.match(worker, /r\.post\('\/periods\/:uid\/waive'/);
   assert.match(read('frontend/src/lib/api/reporting.js'), /ask: \(periodUid\) => post\(`\$\{period\(periodUid\)\}\/ask`\)/);
+});
+
+/* ------------------------------------------------------------------ owner answer 2026-11-14: only the SPV's lead waives */
+
+const LEAD_ONLY = 'You hold this through an SPV, and only the SPV’s lead can waive a period.';
+const LEAD_NOT_RECORDED = 'You hold this through an SPV, and the SPV’s lead is not recorded, so no one can waive a period here.';
+const spv = (canWaive, refusal) => PERIODS.map((p) => ({ ...p, can_waive: canWaive, waive_refusal: refusal }));
+
+test('11 · Through an SPV, Waive follows the Worker’s can_waive: hidden for a non-lead and where no lead is recorded, with the Worker’s reason; Ask stays', async () => {
+  for (const why of [LEAD_ONLY, LEAD_NOT_RECORDED]) {
+    const v = await reportsAt({ reporting: () => owed(spv(false, why)) });
+    try {
+      assert.ok(!v.has('report-obligation-waive'), why);
+      assert.ok(!v.has('company-period-waive-pm9') && !v.has('company-period-waive-pq3'), why);
+      assert.equal(v.text('report-obligation-no-waive'), why);
+      assert.ok(v.has('report-obligation-ask') && v.has('company-period-ask-pm9'), 'Ask is unchanged');
+      assert.match(v.text('company-holding-note-syndicate'), /only the SPV’s lead can waive a period/, 'the RPT13 note agrees');
+    } finally { await v.close(); }
+  }
+  // The lead: the Worker says they may, so Waive is drawn and no reason is.
+  const lead = await reportsAt({ reporting: () => owed(spv(true, null)), post: { '/reporting/periods/pm9/waive': WAIVE_ANSWER } });
+  try {
+    assert.ok(lead.has('report-obligation-waive') && lead.has('company-period-waive-pm9') && !lead.has('report-obligation-no-waive'));
+    await lead.click('report-obligation-waive');
+    await lead.click('report-review-confirm');
+    assert.deepEqual(lead.posts(), ['/reporting/periods/pm9/waive']);
+  } finally { await lead.close(); }
+  // On a phone, the period's own sheet pins Ask but not Waive.
+  const p = await reportsAt({ width: 390, reporting: () => owed(spv(false, LEAD_ONLY)) });
+  try {
+    await p.click('company-period-pm9');
+    assert.ok(p.has('company-sheet-ask') && !p.has('company-sheet-waive'));
+  } finally { await p.close(); }
+  // A refusal the read did not foresee is still the Worker's sentence and code, in the Review.
+  const late = await reportsAt({ post: { '/reporting/periods/pm9/waive': { __status: 403, body: { error: 'spv_lead_only', message: LEAD_ONLY } } } });
+  try {
+    await late.click('report-obligation-waive');
+    await late.click('report-review-confirm');
+    assert.match(late.text('report-review-error'), /Not waived\. You hold this through an SPV, and only the SPV’s lead can waive a period\. · spv_lead_only/);
+  } finally { await late.close(); }
+  // The model: a sent period gives no reason; an open one with can_waive false gives the Worker's.
+  assert.equal(waiveRefusalOf({ ...PERIODS[2], can_waive: false, waive_refusal: LEAD_ONLY }), LEAD_ONLY);
+  assert.equal(waiveRefusalOf({ ...PERIODS[0], can_waive: false, waive_refusal: LEAD_ONLY }), null);
+  assert.equal(waiveRefusalOf({ ...PERIODS[2], can_waive: true, waive_refusal: null }), null);
+  assert.deepEqual(actionsOf({ ...PERIODS[2], can_waive: false }, { can: true }), { ask: true, waive: false });
 });
