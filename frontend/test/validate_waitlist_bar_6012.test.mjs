@@ -16,8 +16,9 @@ test('writers set and clear a waitlist bar, and a refusal preserves the saved va
   let value = 20;
   let canWrite = true;
   let error = null;
+  let unreadable = false;
   const render = () => root.render(React.createElement(MemoryRouter, null,
-    React.createElement(WaitlistBar, { projectId: 42, value, canWrite, reload: render })));
+    React.createElement(WaitlistBar, { projectId: 42, value, unreadable, canWrite, reload: render })));
   cycleValidateApi.setWaitlistTarget = async (project, target) => {
     calls.push([project, target]);
     if (error) throw new Error(error);
@@ -39,6 +40,12 @@ test('writers set and clear a waitlist bar, and a refusal preserves the saved va
     error = null;
     await act(async () => props(node('BUTTON', 'button')).onClick());
     assert.match(words(), /No bar set/);
+    unreadable = true;
+    await act(async () => render());
+    assert.match(words(), /Waitlist bar could not be read/);
+    assert.equal(node('FORM') !== undefined, true);
+    assert.doesNotMatch(words(), /No bar set/);
+    unreadable = false;
     assert.deepEqual(calls, [[42, 50], [42, null], [42, null]]);
     value = 30;
     canWrite = false;

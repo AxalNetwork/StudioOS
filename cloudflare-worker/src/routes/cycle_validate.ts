@@ -173,12 +173,14 @@ cycleValidate.get('/modules/:slug', async (c) => {
   }
   const google = GOOGLE_MODULE[slug];
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
-  if (slug === 'demand-signals' && card.state !== 'unreadable') {
+  if (slug === 'demand-signals') {
     const series = card.series as { bar?: number | null } | null;
     try {
-      const bar = card.state === 'empty' ? await readWaitlistBar(ctx) : series?.bar ?? null;
-      parts = { ...parts, waitlist_bar: bar };
-    } catch { /* The target is unavailable, so leave the editor hidden. */ }
+      const bar = series ? series.bar ?? null : await readWaitlistBar(ctx);
+      parts = { ...parts, waitlist_bar: bar, waitlist_bar_unreadable: false };
+    } catch {
+      parts = { ...parts, waitlist_bar: null, waitlist_bar_unreadable: true };
+    }
   }
   if (slug === 'demand-signals' && writer) {
     const linked = await c.env.DB.prepare(

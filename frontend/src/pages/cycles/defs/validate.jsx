@@ -161,8 +161,9 @@ const validate = {
     'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
     'demand-signals': (data, ctx) => (
       <>
-        {Object.hasOwn(data?.parts || {}, 'waitlist_bar') && <WaitlistBar key={ctx.projectId} projectId={ctx.projectId}
-          value={data.parts.waitlist_bar} canWrite={data?.parts?.can_write === true} reload={ctx.reload} />}
+        <WaitlistBar key={ctx.projectId} projectId={ctx.projectId}
+          value={data?.parts?.waitlist_bar ?? null} unreadable={data?.parts?.waitlist_bar_unreadable === true}
+          canWrite={data?.parts?.can_write === true} reload={ctx.reload} />
         {data?.parts?.lovable_connected && <Link className={`${MODULE_LINK_CLASS} min-h-11 content-center`}
           to={'/validate/experiments' + projectSearch(ctx.search)}>Open Lovable sign-ups</Link>}
         <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
