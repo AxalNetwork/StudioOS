@@ -76,6 +76,8 @@ function Cta({ add }) {
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
+  phoneRow: rowOf = phoneRow,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -129,7 +131,7 @@ export default function PhoneModulePage({
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
     rows: rows.map((r, i) => {
-      const base = phoneRow(cols, r);
+      const base = rowOf(cols, r);
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {

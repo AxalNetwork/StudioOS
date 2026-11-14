@@ -34,7 +34,7 @@ export function FlowSteps({ at, skipAuth = true, testId = 'money-flow-steps' }) 
         return (
           <li key={label} aria-current={current ? 'step' : undefined} data-testid={`${testId}-${label.toLowerCase()}`}
             className={`inline-flex items-center gap-1 ${current ? 'font-bold text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
-            <span aria-hidden="true" className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px] ${current ? 'border-axal-violet bg-axal-violet text-white' : done ? 'border-axal-positive text-axal-positive dark:border-emerald-400 dark:text-emerald-300' : 'border-axal-hairline dark:border-gray-700'}`}>
+            <span aria-hidden="true" className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[12px] ${current ? 'border-axal-violet bg-axal-violet text-white' : done ? 'border-axal-positive text-axal-positive dark:border-emerald-400 dark:text-emerald-300' : 'border-axal-hairline dark:border-gray-700'}`}>
               {done ? '✓' : i + 1}
             </span>
             <span>{label}{skipped ? ' · not required' : ''}</span>

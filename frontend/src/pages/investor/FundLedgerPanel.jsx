@@ -8,18 +8,26 @@ import { Table } from '../admin/fundAdmin/parts';
 import { entrySource, journalTotals } from '../admin/fundAdmin/fundAdminModel.js';
 const money=value=>value==null ? 'Not recorded' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value/100);
 
-/** Read-only layouts from IF3 and Fund Administration's fee-by-period table. */
-export function FundLedgerView({items=[],loading=false,error=null,reload=()=>{},fundId,onFundChange=()=>{},periodId,onPeriodChange=()=>{},view='summary',onViewChange=()=>{},layout='default'}) {
+/**
+ * Read-only layouts from IF3 and Fund Administration's fee-by-period table.
+ *
+ * D6231 (#6231): `scoped` is the Accounting page's mode. The page chooses the
+ * fund (`fundId`, with `scopeName` for the sentence) and the view, so this
+ * draws neither the fund chips nor the view chips, and it never falls back to
+ * another fund: a chosen fund with no ledger this reader may read says so.
+ */
+export function FundLedgerView({items=[],loading=false,error=null,reload=()=>{},fundId,onFundChange=()=>{},periodId,onPeriodChange=()=>{},view='summary',onViewChange=()=>{},layout='default',scoped=false,scopeName=null}) {
   if (loading) return <div aria-busy="true" className="space-y-3"><Skeleton h={16} w="50%" /><Skeleton.Table rows={4} cols={4} /></div>;
   if (error) return <ErrorState message={`Unreadable: ${error}`} onRetry={reload} />;
-  const fund=items.find(f=>String(f.id)===String(fundId)) || items[0];
+  const fund=items.find(f=>String(f.id)===String(fundId)) || (scoped ? null : items[0]);
+  if (!fund && scoped) return <EmptyState>{`Not recorded: no operational ledger for ${scopeName || 'this fund'} is readable with your access.`}</EmptyState>;
   if (!fund) return <EmptyState>Not recorded: no accessible fund ledger is recorded.</EmptyState>;
   const full=fund.can_manage, selectedView=full ? view : 'summary', summary=fund.summary || {};
   const period=fund.period;
   return <div className="space-y-4" data-testid="fund-ledger-recorded">
-    <FilterChips options={items.map(f=>({id:String(f.id),label:f.name}))} value={String(fund.id)} onChange={onFundChange} />
+    {!scoped && <FilterChips options={items.map(f=>({id:String(f.id),label:f.name}))} value={String(fund.id)} onChange={onFundChange} />}
     {fund.periods?.length>0 && <FilterChips options={fund.periods.map(p=>({id:String(p.id),label:p.label}))} value={String(periodId || period?.id || '')} onChange={onPeriodChange} />}
-    {full && <FilterChips options={[{id:'summary',label:'Summary'},{id:'journal',label:'Journal'},{id:'fees',label:'Fees'}]} value={selectedView} onChange={onViewChange} />}
+    {full && !scoped && <FilterChips options={[{id:'summary',label:'Summary'},{id:'journal',label:'Journal'},{id:'fees',label:'Fees'}]} value={selectedView} onChange={onViewChange} />}
     <p className="text-xs text-gray-500 dark:text-gray-400">Operational fund ledger; not the fund’s statutory books. No opening balances are inferred.</p>
     <Section title={`${fund.name}${period ? ` · ${period.label}` : ''}`}>
       {period && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{period.start_date} to {period.end_date} · {period.closed ? 'Closed' : 'Open'}{full ? ' · Administrator read' : ' · LP summary only'}</p>}
@@ -50,9 +58,25 @@ function LedgerTable({rows}) {
       <td className="block break-words px-4 py-2.5 sm:table-cell text-gray-600 dark:text-gray-400"><span className="mr-2 text-gray-500 sm:hidden">State</span>{state}</td><td className="block break-words px-4 py-2.5 sm:table-cell text-gray-500 dark:text-gray-400"><span className="mr-2 text-gray-500 sm:hidden">Note</span>{note}</td>
     </tr>)}</tbody></table></div>;
 }
-export default function FundLedgerPanel() {
+/**
+ * D6231: with `fundId` the panel follows the page's one chosen fund and its
+ * `view`, and tells the page (`onAccess`) whether this reader may open the
+ * journal and fees there. Without it, the panel keeps its own fund chips.
+ */
+export default function FundLedgerPanel({fundId:scopedId=null,fundName=null,view:scopedView=null,onAccess=null}={}) {
   const state=useFundLedger();
-  const [fundId,setFundId]=useState(null), [periodId,setPeriodId]=useState(null), [view,setView]=useState('summary');
+  const scoped=scopedId!=null;
+  const [ownFundId,setFundId]=useState(null), [periodId,setPeriodId]=useState(null), [ownView,setView]=useState('summary');
+  const fundId=scoped ? String(scopedId) : ownFundId;
+  const view=scoped ? (scopedView || 'summary') : ownView;
+  // A new chosen fund starts at its own current period.
+  useEffect(()=>{ if (scoped) setPeriodId(null); },[scoped,scopedId]);
+  const ledgerRow=scoped ? state.items.find(f=>String(f.id)===String(scopedId)) || null : null;
+  const canManage=Boolean(ledgerRow?.can_manage);
+  useEffect(()=>{
+    if (!scoped || !onAccess) return;
+    onAccess(state.loading ? {status:'loading'} : state.error ? {status:'unreadable'} : {status:'ready',present:Boolean(ledgerRow),canManage});
+  },[scoped,onAccess,state.loading,state.error,Boolean(ledgerRow),canManage]); // eslint-disable-line react-hooks/exhaustive-deps
   const [detail,setDetail]=useState({item:null,loading:false,error:null});
   const [revision,setRevision]=useState(0);
   useEffect(()=>{
@@ -66,7 +90,7 @@ export default function FundLedgerPanel() {
   },[fundId,periodId,revision]);
   const items=detail.item ? state.items.map(f=>String(f.id)===String(detail.item.id) ? detail.item : f) : state.items;
   return <FundLedgerView items={items} loading={state.loading || detail.loading} error={state.error || detail.error}
-    reload={()=>{state.reload();setRevision(n=>n+1);}} fundId={fundId} periodId={periodId} view={view}
+    reload={()=>{state.reload();setRevision(n=>n+1);}} fundId={fundId} periodId={periodId} view={view} scoped={scoped} scopeName={fundName}
     onFundChange={id=>{setDetail({item:null,loading:false,error:null});setFundId(id);setPeriodId(null);setView('summary');}}
     onPeriodChange={id=>{setDetail({item:null,loading:true,error:null});setFundId(String(fundId || items[0]?.id));setPeriodId(id);}}
     onViewChange={setView} />;

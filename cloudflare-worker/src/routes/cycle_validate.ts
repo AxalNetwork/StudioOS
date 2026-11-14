@@ -65,6 +65,7 @@ import { context as workspaceContext, member as workspaceMember } from './google
 import { WorkspaceError } from '../services/google/workspace';
 import { IntakeError } from '../services/interviewIntake';
 import { logCycleWriteStatement } from '../services/cycleActivity';
+import { overviewParts } from '../services/validateOverviewParts';
 import {
   MODULE_SLUG, acceptEvidenceProposal, deleteValidateFact, dismissProposal, previewFormMapping, syncValidateFromGoogle,
   validateFromGoogle, type ValidateGoogleModule,
@@ -123,11 +124,13 @@ cycleValidate.get('/overview', async (c) => {
       { canReadDecision: decisions, ownsVenture: ownsVenture(s.project, s.user) })),
     part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
+  // D5996 (#5996): V2's evidence, needs attention, hypotheses and recent changes, additive, each failing alone.
+  const v2 = await overviewParts(c.env, s.projectId, canWrite(s.project, s.user));
   // D693 decision 7: whether this viewer may see decisions, so the page can
   // drop the Verdict tab for a partner instead of drawing a read that fails.
   return c.json({
     cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index,
-    can_read_decisions: decisions,
+    can_read_decisions: decisions, ...v2,
   });
 });
 

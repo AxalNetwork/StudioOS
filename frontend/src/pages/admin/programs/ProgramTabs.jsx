@@ -50,9 +50,12 @@ export function MentorTabs() {
   return (
     <Strip label="Mentor cohort access">
       <Tab to="/admin/programs/mentor-cohorts" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/people" testId="programs-tab-people">People</Tab>
-      <Tab to="/admin/programs/mentor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/people" testId="programs-tab-people">Cohorts</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }

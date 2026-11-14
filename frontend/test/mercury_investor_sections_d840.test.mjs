@@ -101,7 +101,8 @@ test('each section mounts the part with its own section, and Portfolio\'s book s
     'pages/investor/deals/CommitZone.jsx': '<FromMercury section="commit" />',
     'pages/investor/deals/ClosingZone.jsx': '<FromMercury section="closing" />',
     'pages/investor/InvestorFundCalls.jsx': '<FromMercury section="calls" fundId={fund?.id ?? null} />',
-    'pages/investor/InvestorFundAccounting.jsx': '<FromMercury section="ledger" fundId={fund?.id ?? null} />',
+    // D6231: the chosen fund's id (the page renders no ledger without one), remounted by Refresh.
+    'pages/investor/InvestorFundAccounting.jsx': '<FromMercury key={`mercury-${fund.id}-${refreshKey}`} section="ledger" fundId={fund.id} />',
     'pages/investor/InvestorFundReporting.jsx': '<FromMercury section="reporting" fundId={managed.fund?.id ?? null} />',
     'pages/investor/InvestorPortfolioPositions.jsx': '<FromMercury section="portfolio" />',
   };
