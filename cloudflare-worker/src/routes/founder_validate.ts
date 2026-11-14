@@ -35,8 +35,12 @@ import {
 import { csvResponse, stamp } from '../services/csv';
 import {
   serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
-  type ExportInterviewRow,
+  serializeCompetitorsCsv, serializeSignalsCsv, serializeEvidenceCsv,
+  type ExportInterviewRow, type ExportClaim, type ExportDecisionCitation, type ExportExperiment,
 } from './_founder_validate_exports';
+import { loadTracked, loadDemand, loadCustomerWaitlist, demandRowsOf } from '../services/cycleValidate';
+import { evidenceFor as linkedEvidenceFor } from '../services/validateEvidence';
+import { toMajorString } from '../../../frontend/src/lib/money.js';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
   recordVerdictChanges, loadVerdictHistory,
@@ -66,7 +70,7 @@ import { refuseReason } from '../services/fills/types';
 import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
-import { currentDecision } from '../services/verdict';
+import { currentDecision, decisionCitations } from '../services/verdict';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { HINT_DEPS, HintRefused, THEME_JOBS, hintSection, themeHints } from '../services/ai/themeHints';
 import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
@@ -132,9 +136,12 @@ type InterviewRow = {
  * interviews", and so the verdict history is never written from an incomplete read. A genuinely empty venture reads
  * successfully and exports successfully.
  */
+export type EvidenceSourceName = 'claims' | 'pain links' | 'interviews'
+  // D6019 (#6019): the three exports' own required sources.
+  | 'competitors' | 'demand signals' | 'waitlist' | 'evidence' | 'experiments' | 'decisions';
 export class EvidenceUnreadable extends Error {
-  readonly source: 'claims' | 'pain links' | 'interviews';
-  constructor(source: 'claims' | 'pain links' | 'interviews') { super(`${source} unreadable`); this.source = source; }
+  readonly source: EvidenceSourceName;
+  constructor(source: EvidenceSourceName) { super(`${source} unreadable`); this.source = source; }
 }
 async function required<T>(source: EvidenceUnreadable['source'], read: Promise<T>): Promise<T> {
   try { return await read; } catch (e) {
@@ -516,6 +523,98 @@ founderValidate.get('/summary/:projectId/export.csv', async (c) => {
     serializeSummaryCsv(board.hypotheses as any, cur ? { decision: cur.decision, reasoning: cur.reasoning, decided_at: cur.decided_at } : null),
     exportName(s.project.name, 'validation-summary'),
     { 'X-Export-Rows': String(board.hypotheses.length) },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// D6019 (#6019): the competitor list, the demand signals, and the evidence
+// behind each claim with its experiments. D4585's rule holds for each: a
+// required source that cannot be read refuses the export with 503
+// `evidence_unreadable` naming it, never an empty or partial file.
+// ---------------------------------------------------------------------------
+
+/** Today as `YYYY-MM-DD`, for the cycle readers' context; none of the three exports filters by date. */
+const today = () => new Date().toISOString().slice(0, 10);
+
+// Gated as the board: the list the Market intelligence page shows anyone who may read it.
+founderValidate.get('/competitors/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  let rows: Awaited<ReturnType<typeof loadTracked>>;
+  try {
+    rows = await required('competitors', loadTracked({ env: c.env, projectId: s.project.id, today: today() }));
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
+  rows = rows.slice(0, 5000);
+  return csvResponse(
+    serializeCompetitorsCsv(rows),
+    exportName(s.project.name, 'competitors'),
+    { 'X-Export-Rows': String(rows.length) },
+  );
+});
+
+// Gated as the board. The waitlist read selects no address (`loadCustomerWaitlist`).
+founderValidate.get('/signals/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  const ctx = { env: c.env, projectId: s.project.id, today: today() };
+  let demand: Awaited<ReturnType<typeof loadDemand>>;
+  let signups: Awaited<ReturnType<typeof loadCustomerWaitlist>>;
+  try {
+    demand = await required('demand signals', loadDemand(ctx));
+    signups = await required('waitlist', loadCustomerWaitlist(ctx));
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
+  const rows = demandRowsOf(demand, signups)
+    .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+    .slice(0, 5000)
+    .map((r) => {
+      // The amount through the shared money module, in the currency's own decimals; the evidence reader's USD
+      // default when a recorded amount has no currency. No amount is empty, never 0.
+      const currency = r.amount_cents == null ? null : String(r.currency || 'usd').toUpperCase();
+      return { ...r, currency, amount: r.amount_cents == null ? null : toMajorString(r.amount_cents, currency) };
+    });
+  return csvResponse(
+    serializeSignalsCsv(rows),
+    exportName(s.project.name, 'demand-signals'),
+    { 'X-Export-Rows': String(rows.length) },
+  );
+});
+
+// `canReadDecision`, as the summary: the `decisions` column names the Verdict
+// decisions that rested on each item, which partners may not read.
+founderValidate.get('/evidence/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
+  if (s instanceof Response) return s;
+  const projectId = s.project.id;
+  let claims: { results?: ExportClaim[] };
+  let items: Awaited<ReturnType<typeof linkedEvidenceFor>>;
+  let citations: ExportDecisionCitation[];
+  let experiments: { results?: ExportExperiment[] };
+  try {
+    claims = await required('claims', c.env.DB.prepare(
+      `SELECT id, code, claim, retired_at FROM hypotheses WHERE project_id = ?
+        ORDER BY retired_at IS NOT NULL, sort_order, id LIMIT 5000`,
+    ).bind(projectId).all<ExportClaim>());
+    items = await required('evidence', linkedEvidenceFor({ env: c.env, projectId }));
+    citations = await required('decisions', decisionCitations(c.env, projectId));
+    experiments = await required('experiments', c.env.DB.prepare(
+      `SELECT hypothesis_id, title, method, target, status, result FROM hypothesis_experiments
+        WHERE project_id = ? ORDER BY hypothesis_id, id LIMIT 5000`,
+    ).bind(projectId).all<ExportExperiment>());
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
+  const claimRows = claims.results || [];
+  return csvResponse(
+    serializeEvidenceCsv(claimRows, items, citations, experiments.results || []),
+    exportName(s.project.name, 'hypothesis-evidence'),
+    { 'X-Export-Rows': String(claimRows.length) },
   );
 });
 
