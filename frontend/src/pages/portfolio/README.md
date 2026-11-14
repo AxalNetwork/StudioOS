@@ -80,3 +80,14 @@ redefined under `.dark`, and its phone layout. Before saving, the company is
 read again; if the history the write lands in moved, nothing is sent and the
 draft is kept. Decision notes:
 `documentation/architecture/decisions/D4817-p7.md`.
+D4817 part 6 (canvas PF-06) draws one company's workspace
+(`../investor/PortfolioCompanyPage.jsx` at `/portfolio/companies/:uid`, with
+`/financials`, `/reports`, `/support` and `/activity`; the old `/terms` lands
+on Financials' Ownership & rights) in the same frame, through its optional
+`title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
+(tabs and titles, who the company is to the caller, the holding route, the
+six key facts, evidence and next actions, rounds, return, support and each
+source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+Activity; `company.css` holds their styles on the frame's tokens. The name is
+drawn only once an authorised read has named the company. Decision notes:
+`documentation/architecture/decisions/D4817-p6.md`.

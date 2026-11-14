@@ -1,0 +1,30 @@
+{
+  "Header": {
+    "Time": "2026-11-01T09:13:02-07:00",
+    "ReportName": "ProfitAndLoss",
+    "ReportBasis": "Cash",
+    "StartPeriod": "2026-04-01",
+    "EndPeriod": "2026-09-30",
+    "SummarizeColumnsBy": "Total",
+    "Currency": "USD",
+    "Option": [{ "Name": "NoReportData", "Value": "false" }]
+  },
+  "Columns": { "Column": [{ "ColTitle": "", "ColType": "Account" }, { "ColTitle": "Total", "ColType": "Money" }] },
+  "Rows": { "Row": [
+    { "Header": { "ColData": [{ "value": "Income" }, { "value": "" }] }, "type": "Section", "group": "Income",
+      "Rows": { "Row": [
+        { "ColData": [{ "value": "Subscriptions", "id": "79" }, { "value": "41200.50" }], "type": "Data" },
+        { "ColData": [{ "value": "Refunds", "id": "80" }, { "value": "-310.00" }], "type": "Data" }
+      ] },
+      "Summary": { "ColData": [{ "value": "Total Income" }, { "value": "40890.50" }] } },
+    { "Summary": { "ColData": [{ "value": "Gross Profit" }, { "value": "40890.50" }] }, "type": "Section", "group": "GrossProfit" },
+    { "Header": { "ColData": [{ "value": "Expenses" }, { "value": "" }] }, "type": "Section", "group": "Expenses",
+      "Rows": { "Row": [
+        { "ColData": [{ "value": "Payroll", "id": "58" }, { "value": "96000.00" }], "type": "Data" },
+        { "ColData": [{ "value": "Software", "id": "59" }, { "value": "4410.25" }], "type": "Data" }
+      ] },
+      "Summary": { "ColData": [{ "value": "Total Expenses" }, { "value": "100410.25" }] } },
+    { "Summary": { "ColData": [{ "value": "Net Operating Income" }, { "value": "-59519.75" }] }, "type": "Section", "group": "NetOperatingIncome" },
+    { "Summary": { "ColData": [{ "value": "Net Income" }, { "value": "-59519.75" }] }, "type": "Section", "group": "NetIncome" }
+  ] }
+}

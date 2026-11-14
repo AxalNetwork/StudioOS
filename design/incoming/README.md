@@ -2635,3 +2635,10 @@ Not built yet. Ventures, funds, firms, people and amounts are sample content; th
 ## Portfolio audited-gap addendum — owner review required (#4817)
 
 - `Portfolio v2 · Addendum.dc.html` — D4817 review-only collection of additional company rights/reporting/KPI, responsive/dark, source-state and route/access handoff specimens, imported from the existing Portfolio Page. The landed PF boards are retained; production implementation waits for owner review and #5311. See D4817 for the audit-gap map and current backend fit.
+
+## Landed 2026-11-14 — Expertise v2 (#4823)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the #4823 brief and approved by the owner on 2026-11-10, as a page plus its boards under the names Claude Design gave them:
+- **`Expertise v2 Page.dc.html`**, **`Expertise v2 · Boards.dc.html`**: boards EX-01 to EX-16 (D4823). Each file is byte-for-byte the approved export: SHA-256 `b0c44c7c…5e01a40` (page) and `a3fed64f…e4bd446d` (boards), the digests recorded on #4823.
+
+Not built yet. People, companies, services and articles are sample content; D4823 lists what is frontend-only and what needs backend work (#5315).
