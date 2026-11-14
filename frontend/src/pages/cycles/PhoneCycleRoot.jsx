@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { cycleValidateApi } from '../../lib/api/cycleValidate';
 import { alsoInFor } from '../../lib/adminPlacement.js';
 import { EadwynButton, PhoneRows, Unreadable } from '../../ui';
+import BuildPhoneNav from './BuildPhoneNav';
+import { DOOR_LINE, planHref } from './buildPlanModel';
 import { CYCLE_NAMES, FIRST_FOCUS, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, phoneMeter, targetValue, thenText } from './validatePhone';
 
 /**
@@ -80,10 +82,13 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   const [editing, setEditing] = useState(false);
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
+  // D4602 (#4602, BD2): Build's tabs sit above every state, so the plan is reachable while the overview loads or fails.
+  const nav = cycle === 'build' ? <div className="mb-4"><BuildPhoneNav active="overview" search={search} /></div> : null;
 
   if (status === 'loading') {
     return (
       <div className="flex flex-col gap-3" data-testid="phone-root" data-cycle={cycle} aria-busy="true" aria-label="Loading">
+        {nav}
         <div className="h-[40px] w-1/3 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
         <div className="h-[68px] animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
         <div className="h-[52px] animate-pulse rounded-[14px] bg-gray-100 dark:bg-gray-800" />
@@ -94,6 +99,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   if (status === 'refused') {
     return (
       <div data-testid="phone-root" data-cycle={cycle}>
+        {nav}
         <p role="status" className="m-0 text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid="phone-root-refused">{message || `You cannot open this venture’s ${name}.`}</p>
       </div>
     );
@@ -101,6 +107,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   if (status === 'unreadable' || !raw) {
     return (
       <div data-testid="phone-root" data-cycle={cycle}>
+        {nav}
         <Unreadable what={`The ${name} overview`} claim="This is not a claim that nothing is recorded." onRetry={onRetry} />
       </div>
     );
@@ -117,15 +124,19 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   const rows = phoneIndex(raw, search, cycle);
   const also = alsoInFor('founder', name);
 
+  // D4602 (#4602, BD2): Build's phone root names its plan, one tap away, with the venture.
+  const planRow = cycle === 'build'
+    ? [{ key: 'build-plan', title: 'Build Plan', description: DOOR_LINE, to: planHref('plan', search), testid: 'phone-index-build-plan' }]
+    : [];
   const groups = [{
     label: `Everything else in ${name}`,
     testid: 'phone-index',
     // With no focus the page's Eadwyn button sits beside the index label (D703.md records it).
     action: focus ? undefined : <EadwynButton label={overview} />,
-    rows: rows.map((r) => ({
+    rows: [...planRow, ...rows.map((r) => ({
       key: r.key, title: r.title, description: r.detail || undefined, to: r.href || undefined,
       notRecorded: r.value == null, value: r.value || undefined, testid: `phone-index-${r.key}`,
-    })),
+    }))],
   }];
   if (also.length) {
     groups.push({
@@ -137,6 +148,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
 
   return (
     <div data-testid="phone-root" data-cycle={cycle}>
+      {nav}
       {focus && (
         <section data-testid="phone-focus" aria-labelledby="phone-focus-title">
           <div className="flex min-h-[40px] items-center justify-between gap-2">

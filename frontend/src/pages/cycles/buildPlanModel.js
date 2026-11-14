@@ -208,6 +208,72 @@ export function becauseChips(item) {
   return chips;
 }
 
+/**
+ * D4602 (#4602, BD4) — THE EVIDENCE SHEET'S NODES: each reference an item rests
+ * on, one per row (signals are listed one by one here, where the chip counts
+ * them), with the record page that reads that reference's row, or none.
+ *
+ * A reference opens a record only where a module's own `record()` reader reads
+ * that table BY THAT ID (`services/records/validate.ts`, `verdict.ts`,
+ * `build.ts`): a pain theme is Problem discovery's `pain_groups` row, a
+ * hypothesis is Experiments' `hypotheses` row, a demand signal is Demand
+ * signals' `signal-<id>`, a decision is the Verdict's `validation_decisions`
+ * row, and a feature is Solution design's `mvp_features` row. An experiment, a
+ * customer-research finding and a commitment have no reader keyed by their own
+ * id, so they show their kind only: an id used anyway would open another
+ * table's row with the same number. Nothing but a positive integer reaches a
+ * URL. The record route applies its own access check when opened, so a
+ * reader who may not open the source is refused there, as on any record link.
+ */
+const EVIDENCE_RECORD = {
+  pain_group: (id) => `/validate/problem-discovery/${id}`,
+  hypothesis: (id) => `/validate/experiments/${id}`,
+  signal: (id) => `/validate/demand-signals/signal-${id}`,
+  decision: (id) => `/validate/verdict/${id}`,
+  feature: (id) => `/build/solution-design/${id}`,
+};
+
+/** The record page a reference opens, with the venture; null where none reads it. */
+export function evidenceHref(ref, search = '') {
+  const to = EVIDENCE_RECORD[String(ref?.kind ?? '')];
+  const id = landedId(ref?.ref);
+  return to && id ? `${to(id)}${ventureSearch(search)}` : null;
+}
+
+/** BD4's nodes for one item: kind word, label, source word, and the record it opens (or null). */
+export function evidenceNodes(item, search = '') {
+  const ev = Array.isArray(item?.evidence) ? item.evidence : [];
+  return ev.map((e, n) => {
+    const chip = evidenceChip(e);
+    return {
+      key: `${e?.kind ?? 'evidence'}-${e?.ref ?? n}-${n}`,
+      kind: EVIDENCE_KIND[e?.kind] || 'Evidence',
+      label: e?.kind === 'signal' ? SIGNAL_WORD[e?.label] || String(e?.label ?? '') : String(e?.label ?? ''),
+      source: chip.source,
+      href: evidenceHref(e, search),
+    };
+  });
+}
+
+/** The sheet's count line: how many references there are, and how many open a record. */
+export function evidenceCountLine(nodes) {
+  const n = nodes.length;
+  const open = nodes.filter((x) => x.href).length;
+  const refs = `${n} ${n === 1 ? 'reference' : 'references'}`;
+  if (!n) return 'No evidence is recorded on this item.';
+  if (open === n) return `${refs} · each opens its record`;
+  if (!open) return `${refs} · none has a record page; each shows its kind`;
+  return `${refs} · ${open} open ${open === 1 ? 'its' : 'their'} record`;
+}
+
+export const EVIDENCE_FOOT = 'A reference with no record page shows its kind only. Dates are on each record; the plan stores none.';
+
+/** The evidence a plan page's address names (`?evidence=<uid>`), so Back from a record reopens it. */
+export function evidenceParam(search = '') {
+  const v = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('evidence');
+  return v && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
+}
+
 /** The item's status pill (VB3). Discarded reads Dismissed, the word the button used. */
 export const STATUS_WORD = {
   proposed: '○ Proposed', accepted: '✓ Accepted', edited: '✎ Edited and accepted', withdrawn: '↺ Withdrawn', discarded: '– Dismissed',

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import {
-  DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landedHref, landsIn, moduleName, opensRecord, writeRefusal,
+  DISCARD, EDIT_FIELDS, EVIDENCE_FOOT, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, evidenceCountLine, evidenceNodes,
+  landedHref, landsIn, moduleName, opensRecord, writeRefusal,
 } from './buildPlanModel';
 
 /**
@@ -41,14 +42,74 @@ const EYE = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-m
 /** Buttons are 44px tall on a phone (VB21), 34px on a desk. */
 const tall = (phone) => (phone ? 'min-h-[44px]' : 'min-h-[34px]');
 
-/** The "Because" chips, each with its source word (Recorded, Typed, Document). */
-export function Because({ item, testId }) {
+/**
+ * The "Because" chips, each with its source word (Recorded, Typed, Document).
+ *
+ * D4602 (#4602, BD4, BD16): with `onEvidence`, each chip is a button that opens
+ * the item's evidence sheet, where each reference opens its own record. The
+ * sheet takes focus and gives it back to the chip on close (`Sheet`).
+ */
+export function Because({ item, testId, onEvidence = null, phone = false }) {
   const chips = becauseChips(item);
   if (!chips.length) return null;
   return (
     <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Because" data-testid={testId}>
-      {chips.map((c, n) => <li key={n} className={CHIP}>{c.source} · {c.text}</li>)}
+      {chips.map((c, n) => (
+        <li key={n} className={onEvidence ? 'inline-flex' : CHIP}>
+          {onEvidence
+            ? (
+              <button type="button" onClick={() => onEvidence(item)} aria-haspopup="dialog"
+                className={`${CHIP} ${phone ? 'min-h-[44px]' : ''} cursor-pointer hover:border-axal-violet hover:text-axal-violet-deep focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet dark:hover:border-violet-500 dark:hover:text-violet-300`}
+                data-testid={`${testId}-chip-${n}`}>
+                {c.source} · {c.text}<span className="sr-only"> — open the evidence</span>
+              </button>
+            )
+            : <>{c.source} · {c.text}</>}
+        </li>
+      ))}
     </ul>
+  );
+}
+
+/**
+ * D4602 (#4602, BD4) — the evidence sheet: the chain an item rests on, one
+ * reference per row with its kind, its label, its source word, and Open record
+ * where a record page reads it (`evidenceNodes`). A reference with no record
+ * page shows its kind only. The sheet is named by the item; its heading takes
+ * focus on open, and focus returns to the chip that opened it.
+ */
+export function EvidenceSheet({ item, search = '', onClose }) {
+  const head = useRef(null);
+  const title = String(item?.payload?.title ?? '');
+  const nodes = evidenceNodes(item, search);
+  return (
+    <Sheet label={`Evidence for “${title}”`} onClose={onClose} width={520} testId="plan-evidence-sheet" initialFocus={head}
+      footer={<p className={MUTED}>{EVIDENCE_FOOT}</p>}>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <span className={EYE}>Evidence</span>
+          <h2 ref={head} tabIndex={-1} className="m-0 text-[18px] font-extrabold tracking-[-.02em] text-axal-ink outline-none dark:text-gray-100" data-testid="plan-evidence-title">Evidence for “{title}”</h2>
+          <p className={MUTED} data-testid="plan-evidence-count">{evidenceCountLine(nodes)}</p>
+        </div>
+        <ol className="m-0 flex list-none flex-col gap-2 p-0" data-testid="plan-evidence-chain">
+          {nodes.map((x, n) => (
+            <li key={x.key} className="flex gap-3 rounded-[10px] border border-axal-hairline bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900" data-testid={`plan-evidence-node-${n}`}>
+              <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-axal-lavender font-mono text-[11px] font-bold text-axal-violet-deep dark:bg-violet-900/40 dark:text-violet-300">{n + 1}</span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <b className="text-[13px] text-axal-ink dark:text-gray-100">{x.kind}</b>
+                {x.label ? <span className="text-[13px] text-axal-ink dark:text-gray-200">{x.label}</span> : null}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11.5px] text-axal-muted dark:text-gray-400">
+                  <span>{x.source}</span>
+                  {x.href
+                    ? <Link to={x.href} className="inline-flex min-h-[44px] items-center font-sans text-[12.5px] font-bold text-axal-violet hover:text-axal-violet-deep sm:min-h-0 dark:text-violet-300 dark:hover:text-violet-200" data-testid={`plan-evidence-open-${n}`}>Open record →<span className="sr-only"> ({x.kind}{x.label ? `: ${x.label}` : ''})</span></Link>
+                    : <span data-testid={`plan-evidence-kind-only-${n}`}>No record page</span>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </Sheet>
   );
 }
 
@@ -67,7 +128,7 @@ function detailOf(item) {
  * (D1071): drawn in lavender, the rule's plain title kept beneath, with Keep
  * wording (the item's Save) and Discard wording.
  */
-export function ProposalCard({ item, phone = false, readOnly = false, paused = false, busy = false, error = '', words = null, onAccept, onEdit, onDismiss, onKeep, onDiscard, onRetry }) {
+export function ProposalCard({ item, phone = false, readOnly = false, paused = false, busy = false, error = '', words = null, onAccept, onEdit, onDismiss, onKeep, onDiscard, onRetry, onEvidence = null }) {
   const withdrawn = item.status === 'withdrawn';
   const lands = landsIn(item);
   const detail = detailOf(item);
@@ -89,7 +150,7 @@ export function ProposalCard({ item, phone = false, readOnly = false, paused = f
         </div>
       ) : null}
       {withdrawn ? <p className={MUTED}>A newer decision replaced this plan.</p> : detail ? <p className="m-0 text-[13px] leading-[1.55] text-axal-ink dark:text-gray-100">{detail}</p> : null}
-      <Because item={item} testId={`plan-item-because-${item.uid}`} />
+      <Because item={item} testId={`plan-item-because-${item.uid}`} onEvidence={onEvidence} phone={phone} />
       {lands && !withdrawn ? <p className={LAND}>Lands in {lands}</p> : null}
       {error ? (
         <div role="alert" className={ERR} data-testid={`plan-item-error-${item.uid}`}>
@@ -229,9 +290,13 @@ export function PlanConfirm({ title, body, button, danger = false, run, onClose,
  * draw the selected and focused states, and the input stays in the accessible
  * tree (`sr-only`, never `display: none`, which would take it out). The
  * `<fieldset>`/`<legend>` is the group's accessible name.
+ *
+ * Step 2 (BD16): the selected chip also carries a check mark beside its
+ * weight, so selection is never colour alone; `phone` makes each chip 44px;
+ * `testPrefix` lets Progress's filter sheet reuse the same field.
  */
-export function ChoiceField({ field, value, onPick, name }) {
-  const chip = 'inline-flex min-h-[34px] cursor-pointer items-center rounded-full border px-3 text-[12px] border-axal-hairline bg-white font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 '
+export function ChoiceField({ field, value, onPick, name, testPrefix = 'plan-edit', phone = false }) {
+  const chip = `inline-flex ${phone ? 'min-h-[44px]' : 'min-h-[34px]'} cursor-pointer items-center rounded-full border px-3 text-[12px] border-axal-hairline bg-white font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 `
     + 'peer-checked:border-axal-violet peer-checked:bg-axal-lavender peer-checked:font-bold peer-checked:text-axal-violet-deep dark:peer-checked:border-violet-500 dark:peer-checked:bg-violet-900/30 dark:peer-checked:text-violet-300 '
     + 'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-axal-violet dark:peer-focus-visible:outline-violet-400';
   return (
@@ -241,8 +306,8 @@ export function ChoiceField({ field, value, onPick, name }) {
         {field.options.map((o) => (
           <span key={o} className="inline-flex">
             <input type="radio" name={name} value={o} checked={value === o} onChange={() => onPick(o)}
-              className="peer sr-only" id={`${name}-${o}`} data-testid={`plan-edit-${field.key}-${o}`} />
-            <label htmlFor={`${name}-${o}`} className={chip}>{field.words?.[o] || o}</label>
+              className="peer sr-only" id={`${name}-${o || 'any'}`} data-testid={`${testPrefix}-${field.key}-${o || 'any'}`} />
+            <label htmlFor={`${name}-${o || 'any'}`} className={chip}>{value === o ? <span aria-hidden="true" className="mr-1">✓</span> : null}{field.words?.[o] || o}</label>
           </span>
         ))}
       </span>
