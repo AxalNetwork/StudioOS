@@ -153,13 +153,26 @@ function demandSignals(s) {
   if (!s || typeof s !== 'object') return [];
   const out = [];
   const signups = list(s.signups);
-  if (signups.length) {
+  if (s.chart_ready !== false && signups.length) {
     out.push({
       kind: 'line',
       values: signups.map((w) => (num(w?.total) ? w.total : null)),
       ...(num(s.bar) ? { target: s.bar, target_label: `bar · ${s.bar.toLocaleString('en-US')}` } : {}),
       labels: weekTicks(signups.map((w) => w?.week_start)),
     });
+  }
+  if (s.signals && typeof s.signals === 'object' && !Array.isArray(s.signals)) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: Object.entries(SIGNAL).map(([key, label]) => ({
+      label, value: num(s.signals[key]) ? s.signals[key].toLocaleString('en-US') : '0',
+    })) });
+  }
+  const committed = list(s.committed).filter(row => typeof row?.currency === 'string' && num(row.amount_cents));
+  if (committed.length) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: committed.map(row => ({
+      label: `Committed · ${row.currency}`,
+      value: money(row.amount_cents, row.currency, row.period)
+        + (row.period === 'not_recorded' ? ' · period not recorded' : row.period === 'once' ? ' · once' : ''),
+    })) });
   }
   const n = s.need_to_have;
   if (n && num(n.interviews) && num(n.of) && n.of > 0) {

@@ -184,12 +184,15 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
   // D1466 (#3714, RO01, RO06): an empty or too-little card is one muted line
   // and, when the read names one, the module's first step: no dashed box
   // taking half the page.
+  const sparseSummary = Array.isArray(card?.series)
+    ? card.series.filter(spec => spec.showWhenSparse) : [];
   if (view.state === 'empty') {
     const next = card?.next;
     const href = nextHref(next?.href, search);
     return (
       <div className="flex flex-col items-start gap-1.5" data-testid="card-empty">
         <span className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</span>
+        {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}
         {next?.text && (href
           ? <Link to={href} className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text} ›</Link>
           : <span className="text-[12.5px] font-semibold text-axal-violet-deep dark:text-violet-300">{next.text}</span>)}
@@ -197,7 +200,10 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
     );
   }
   if (view.state === 'too_little') {
-    return <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="card-too-little">{view.reason}</p>;
+    return <div data-testid="card-too-little">
+      <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</p>
+      {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}
+    </div>;
   }
   if (view.state === 'not_recorded') {
     return (
