@@ -311,7 +311,7 @@ test('mounted table (DLS2): every round, its stage or Add to my deal flow, sorta
     assert.equal(t.all(/^dealflow-row-/).length, 1);
     await t.click('dealflow-chips-clear');
     // Columns: untick Risk and its column goes.
-    await t.click('dealflow-columns');
+    await t.click('dealflow-view-settings');
     await t.change('dealflow-col-risk', false, 'checked');
     assert.match(t.text(t.byId('probe')), /cols=/);
     assert.equal(t.byId('dealflow-cell-1-risk'), undefined);
@@ -351,7 +351,7 @@ test('mounted filters (DLS4) and saved views (DLS5): Show writes the address, ch
     await t.click('dealflow-chips-clear');
     assert.equal(t.byId('dealflow-chips'), undefined);
     // A saved view applies its settings and its uid; a change marks it edited.
-    await t.click('dealflow-views');
+    await t.click('dealflow-view-settings');
     await t.click(t.all(/^dealflow-view-item$/)[0]);
     assert.match(t.text(t.byId('probe')), /view=table.*v=v1.*min_team=strong.*sort=market/);
     assert.equal(t.byId('dealflow-view-edited'), undefined);
@@ -362,7 +362,7 @@ test('mounted filters (DLS4) and saved views (DLS5): Show writes the address, ch
     const [, uid, version, body] = s.calls.find((c) => c[0] === 'vupdate');
     assert.deepEqual([uid, version, body.name, body.spec.sort.by, body.shared_with_firm], ['v1', 3, 'Strong team', 'team', false]);
     // Save as new: a name is required, and My firm needs a firm account.
-    await t.click('dealflow-views');
+    await t.click('dealflow-view-settings');
     await t.click('dealflow-views-save');
     assert.equal(t.props(t.byId('dealflow-save-view-go')).disabled, true);
     assert.equal(t.props(t.byId('dealflow-save-view-firm')).disabled, true);
