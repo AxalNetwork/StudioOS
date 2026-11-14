@@ -12,6 +12,9 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { mountContracts } from './_contracts_dom.mjs';
+import { api } from '../src/lib/api.js';
+import InvestorMyThesisCard from '../src/pages/account/InvestorMyThesisCard.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 import WorkspaceShell from '../src/workspaces/WorkspaceShell.jsx';
 import { PRIMARY_ACCENT, ZonePrimary } from '../src/workspaces/ZoneActions.jsx';
@@ -114,10 +117,10 @@ test('the header Ask is "Ask", never "Fill", and the shared button is the one dr
 
 test('Deal flow: "Set your thesis" is the Deals root primary only while no deal is in the flow (owner C)', () => {
   assert.equal(THESIS_PRIMARY.label, 'Set your thesis');
-  assert.equal(THESIS_PRIMARY.to, '/account/security-privacy', 'the My thesis card is on the security-privacy section');
+  assert.equal(THESIS_PRIMARY.to, '/account/security-privacy?from=deal-flow#my-thesis', 'the My thesis card is on the security-privacy section');
   const html = routed(h(ZonePrimary, { item: THESIS_PRIMARY }));
   assert.match(html, /data-primary="true"/);
-  assert.match(html, /href="\/account\/security-privacy"/);
+  assert.ok(html.includes(`href="${THESIS_PRIMARY.to}"`));
   assert.match(html, /bg-indigo-600/);
   const flow = codeOnly(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'));
   const empty = flow.slice(flow.indexOf('function EmptyFlow()'), flow.indexOf('export default function DealFlow'));
@@ -148,7 +151,8 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.match(unreadable, />Try again</);
   const empty = routed(h(ThesisBandView, { state: { kind: 'empty' } }));
   assert.match(empty, /No thesis set/);
-  assert.match(empty, new RegExp(`href="${THESIS_HREF}"`));
+  assert.equal(THESIS_HREF, '/account/security-privacy?from=home#my-thesis');
+  assert.ok(empty.includes(`href="${THESIS_HREF}"`));
   const set = routed(h(ThesisBandView, { state: { kind: 'set', text: 'Seed B2B infra' } }));
   assert.match(set, /Seed B2B infra/);
   assert.match(set, /Edit in Settings ›/);
@@ -236,4 +240,51 @@ test('no new client method: every read and write here is one main already serves
   }
   assert.match(codeOnly(read('frontend/src/pages/investor/InvestorThesisBand.jsx')), /api\.getInvestorProfile\(\)/);
   assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(days\)/);
+});
+
+test('the linked thesis card has an anchor and offers a return only after a save for a known source', async () => {
+  const originals = [api.getInvestorProfile, api.saveInvestorProfile];
+  const profile = { completed_at: '2026-11-14', sectors: [], stages: [], geos: [], thesis_text: 'Initial thesis' };
+  api.getInvestorProfile = async () => ({ profile });
+  api.saveInvestorProfile = async (input) => ({ profile: { ...profile, ...input } });
+  try {
+    for (const [source, label, href] of [
+      ['home', 'Back to Investor Home', '/studio'],
+      ['deal-flow', 'Back to Deal flow', '/deals'],
+      ['unknown', null, null],
+    ]) {
+      const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'investor', linked: true }),
+        `/account/security-privacy?from=${source}#my-thesis`);
+      try {
+        assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+        assert.doesNotMatch(view.text(), /Back to (Investor Home|Deal flow)/);
+        await view.click('Save thesis');
+        if (label) {
+          const returnLink = view.nodes().find(node => node.tagName === 'A' && view.props(node)?.children === label);
+          assert.equal(view.props(returnLink)?.href, href);
+          await view.click('AI/ML');
+        }
+        assert.doesNotMatch(view.text(), /Back to (Investor Home|Deal flow)/);
+      } finally { await view.unmount(); }
+    }
+  } finally { [api.getInvestorProfile, api.saveInvestorProfile] = originals; }
+});
+
+test('a linked thesis shows its loading and unavailable states with the same anchor', async () => {
+  const restore = api.getInvestorProfile;
+  let finish;
+  api.getInvestorProfile = () => new Promise(resolve => { finish = resolve; });
+  const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'partner', linked: true }),
+    '/account/security-privacy?from=deal-flow#my-thesis');
+  try {
+    assert.match(view.text(), /Loading/);
+    assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+    finish({ profile: { completed_at: null } });
+    await view.flush();
+    assert.match(view.text(), /No investor thesis is available/);
+    assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+  } finally {
+    await view.unmount();
+    api.getInvestorProfile = restore;
+  }
 });

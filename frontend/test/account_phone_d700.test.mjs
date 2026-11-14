@@ -187,6 +187,7 @@ test('3. AccountSectionNav draws no Section select below lg, and its column keep
 test('4. the address rules: a phone\'s bare /account is the index; the profile pane gets /account/profile', () => {
   assert.equal(accountViewFor({ pathname: '/account', phone: true }), 'index');
   assert.equal(accountViewFor({ pathname: '/account', phone: false }), 'account');
+  assert.equal(accountViewFor({ pathname: '/account', hash: '#my-thesis', phone: true }), 'security-privacy');
   assert.equal(accountViewFor({ pathname: '/account', hash: '#security-recovery-codes', phone: true }), 'security-privacy');
   assert.equal(accountViewFor({ pathname: '/account', hash: '#security-recovery-codes', phone: false }), 'security-privacy');
   assert.equal(accountViewFor({ pathname: '/account/profile', phone: true }), 'account');
