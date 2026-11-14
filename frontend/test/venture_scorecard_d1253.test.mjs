@@ -69,11 +69,11 @@ test('the panel draws the eleven scopes unread, the method door, and no number',
   const out = html(h(VentureScorecard));
   for (const s of SCOPES) assert.ok(out.includes(`data-testid="scorecard-scope-${s.key}"`), s.key);
   assert.ok(out.includes(`href="${METHOD}"`));
-  // D1257: with no deal there is nothing to read, so the scores' wait is gone; the weighting is part 5's.
-  assert.ok(!out.includes('scorecard-wait-scores') && out.includes('data-testid="scorecard-wait-weighting"'));
+  // D1257: with no deal there is nothing to read, so the scores' wait is gone; #6169: the weighting is read, not waited on.
+  assert.ok(!out.includes('scorecard-wait-scores') && !out.includes('scorecard-wait-weighting') && out.includes('data-testid="scorecard-weighting-control"'));
   assert.ok(!/>\s*0\s*</.test(out), 'no zero is drawn');
   const founder = html(h(VentureScorecard, { audience: 'founder' }));
-  assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-wait-weighting'));
+  assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-weighting'));
 });
 
 test('the strip: unread is one outlined strip read as Not read here yet; locked hides every bar', () => {

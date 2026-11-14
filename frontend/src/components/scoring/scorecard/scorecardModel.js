@@ -328,11 +328,13 @@ export const METHOD = '/scoring/method';
 export const FOUNDER_PAGE = '/raise/scorecard';
 export const HQ_PAGE = '/admin/platform/scoring';
 
+/** #6169: under the investor's weighting on a deal's Scorecard tab. */
+export const WEIGHTING_LINE = 'Your weighting changes your sort on Deal flow only. It never changes a score.';
+
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
   founder: 'Your own scorecard, every input with its source and grade, and “What investors see” are not read here yet (part 5).',
   sharing: 'Who sees your scorecard is not stored yet. Until it is, no investor sees a score of yours (part 3).',
   trajectory: 'The trajectory across model versions is not stored yet (part 5).',
-  weighting: 'Your weighting, the sort it drives on the deal list, is not stored yet (parts 3 and 5).',
   fairness: 'The quarterly fairness check by stage, sector, studio and connector use is not computed yet (part 3).',
 });
