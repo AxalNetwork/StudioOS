@@ -23,7 +23,7 @@ export function Alert({ text }) {
   return text ? <p role="alert" className="px-4 pb-2.5 text-[12px] text-red-700 sm:px-5 dark:text-red-300">{text}</p> : null;
 }
 
-export const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
+export const LABEL = 'text-[13px] font-semibold text-zinc-700 dark:text-gray-200';
 
 /**
  * The fund chooser, and the states that leave a per-fund tab with no fund.
