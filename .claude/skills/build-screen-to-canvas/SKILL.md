@@ -174,7 +174,8 @@ Claim the issue, post STATUS and open the PR as AGENTS.md § Task protocol and
     (`grep -lE "<YourPage>|<your route>" frontend/test/*.test.mjs`), your own
     new test, and the full suite before you mark the PR ready:
     `npm run test:drift > drift.log 2>&1; echo EXIT=$?` (AGENTS.md § House
-    rules, Tests). Mutation-check each new assertion both ways.
+    rules, Tests), or its parts with the `verify-before-push` skill when one
+    run would outlast the session. Mutation-check each new assertion both ways.
 
 11. **See it in a browser.** The repository has two ways; neither reaches
     production data.

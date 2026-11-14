@@ -25,7 +25,7 @@ From AGENTS.md § Task protocol:
 
 - Exactly one `state:` label: `ready`, `in-progress`, `blocked` or `review`. There is no `state:in-review`.
 - `needs-decision` and `needs-design` only with `state:blocked`.
-- `state:review` only while a PR for the issue is open. Merged work that waits on the owner's live check is `state:blocked` + `needs-decision`.
+- `state:review` only while a PR for the issue is open.
 - Slots are `slot:S01` to `slot:S37` (AGENTS.md § Slots).
 
 Coordinator conventions (D6312; not in AGENTS.md, and AGENTS.md wins if they ever disagree):

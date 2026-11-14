@@ -10,9 +10,10 @@ export const meta = {
 }
 
 // args: { out, mainSha, runId, repo, chunks: [[n,...],...], sections: [{key, who, pages:[...]}] (optional) }
-// `repo` is a checkout at mainSha that agents read (default /home/user/StudioOS).
+// `repo` is a checkout at mainSha that agents read (required: SKILL.md step 2).
 // The script only reads. scripts/coordinator.mjs plan|apply|file does every write.
-const { out: OUT, mainSha: SHA, runId: RUN, repo: REPO = '/home/user/StudioOS', chunks = [], sections = [] } = args
+const { out: OUT, mainSha: SHA, runId: RUN, repo: REPO, chunks = [], sections = [] } = args
+if (!REPO) throw new Error('coordinator-audit: args.repo is required, the path of a checkout at mainSha (SKILL.md step 2)')
 
 const RULES = `
 HARD RULES (read-only):

@@ -9,8 +9,8 @@ AGENTS.md § Task protocol, step 5 ("Finish"): the owner lands T2 and any PR
 without an eligible report. An agent may queue a T0 or T1 PR only once the
 owner's landing settings are in effect and every check below holds for the
 exact current head SHA. This skill is that check, then the two commands.
-Today the answer is almost always "the owner lands"; the first step tells you
-so in one read.
+The first step tells you in one read whether agents may queue at all; when
+they may not, the owner lands.
 
 `node scripts/land-pr.mjs <pr>` reads every fact below with GET requests and
 prints one line per gate, `ok` or `FAIL`, then the verdict. It prints the
@@ -33,12 +33,8 @@ refuses: read "In a Claude Code session" below before you run any of them.
    - #5500 (queue admission enforced and proven): the issue is closed as
      completed.
 
-   On 2026-11-14 none of the three held: `allow_auto_merge` and
-   `allow_update_branch` were `false`, `LANDING_AUTO` was `false` in the
-   landing-policy logs, and #5500 and #5605 were open and `state:blocked`
-   (the owner had not removed the ruleset bypass actor or applied the
-   settings he chose on 2026-11-11). Re-read them every time; do not trust
-   this paragraph. If any fails, the gate `agents may queue` prints `FAIL`.
+   Read all three every time; their state is not recorded here. If any
+   fails, the gate `agents may queue` prints `FAIL`.
    Do not queue, do not mark the PR ready to make it land, and post a STATUS
    with `state: READY_FOR_REVIEW` that says "green; the owner lands".
 2. **Run the gates.** From any checkout of this repository:

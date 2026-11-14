@@ -6,11 +6,8 @@ description: Run StudioOS's local checks before pushing a branch or marking a PR
 # Verify before push
 
 The full local suite, `npm run test:drift`, takes longer than one session
-allows. On #5815 (PR #5993) a rerun "hit the session's 1-hour background
-limit inside the worker suite", so the remaining stages ran one by one. On
-#6078 and #5881 the local build stopped on modules whose names differ only by
-case. This skill runs the same checks as CI, in steps that each finish, and
-keeps every exit code.
+allows. This skill runs the same checks as CI, in steps that each finish,
+and keeps every exit code.
 
 Read `AGENTS.md` § House rules (the **Tests** bullet) and § Red main first.
 They win where this file disagrees.
@@ -161,7 +158,7 @@ output and treat the failure as the PR's.
 
 Three more the log alone does not show:
 
-- **Case-insensitive file system** (macOS, Windows). Fourteen pairs of
+- **Case-insensitive file system** (macOS, Windows). Some pairs of
   modules under `frontend/src` differ only by case, e.g.
   `pages/account/WhatsAppWayB.jsx` and `pages/account/whatsappWayB.js`. On such
   a disk an extensionless import can resolve to the wrong file, so the build or

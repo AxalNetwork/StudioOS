@@ -136,9 +136,12 @@ header comment fails the build (#4104). Adding such a file edits no README.
 - **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
   entry. FastAPI is not deployable on Workers.
 - **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
-  files, applied via `wrangler d1 execute studioos-db --file=...`. Mirror the
-  same change in `backend/app/models/migrations.py` only if you need dev
-  parity for a feature you're actively iterating on.
+  files. The production deploy workflow applies the pending ones
+  (`node scripts/migrate-d1.mjs --remote`, after admission) and records each
+  in the `schema_migrations` ledger; do not apply one to `studioos-db` by
+  hand. `npm run d1:migrate:local` applies them to a local D1. Mirror the same
+  change in `backend/app/models/migrations.py` only if you need dev parity for
+  a feature you're actively iterating on.
 - **Work is handed out as GitHub issues.** Read `AGENTS.md` before you take
   one. It covers slots, the `state:*` labels, STATUS comments, and who gives
   instructions.
