@@ -164,6 +164,34 @@ test('Import: every data row is kept for the writer to judge, the columns are ma
 
 const PIPE = '/raise/capital-relationships/pipeline?project_id=3';
 
+test('Pipeline exports the loaded prospects in the browser without another read or write', async () => {
+  const v = await mounted(PIPE);
+  const create = document.createElement;
+  const createUrl = URL.createObjectURL;
+  let downloaded;
+  let csv;
+  document.createElement = (tag) => {
+    const node = create(tag);
+    if (tag === 'a') {
+      node.click = () => { downloaded = node.download; };
+      node.remove = () => node.parentNode.removeChild(node);
+    }
+    return node;
+  };
+  URL.createObjectURL = (blob) => { csv = blob; return createUrl(blob); };
+  try {
+    const requests = v.calls.length;
+    await v.click('caprel-pipeline-export');
+    assert.match(downloaded, /^capital-relationships-pipeline-7-rows-\d{4}-\d{2}-\d{2}\.csv$/);
+    assert.match(await csv.text(), /Bluefern Capital,,,Meeting,,Send the deck,2026-10-20/);
+    assert.equal(v.calls.length, requests);
+  } finally {
+    document.createElement = create;
+    URL.createObjectURL = createUrl;
+    await v.close();
+  }
+});
+
 test('the board: five columns and Passed collapsed; moving a card to Committed asks the status and writes it through the one writer', async () => {
   // Mutation checked: the status field not drawn for Committed → Signed never sent; the write sent through contacts' PUT → no PATCH.
   const v = await mounted(PIPE);
