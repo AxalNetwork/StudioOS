@@ -230,3 +230,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `scan_remediation_6935.test.mjs` | D6935 automated tracking, Autofix publishing, retries and default-branch verification. |
 | `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |
 | `d1_backup_upload.test.mjs` | Exercises large D1 exports with user and account R2 credentials, failed uploads, and redacted output (#7127). |
+| `grow_export_6103.test.mjs` | D6103: `canExport` covers only Feedback and KPIs, `exportCsv`'s path and query against the Worker route, Export drawn only with `onExport` (and only on `can_export` in CycleRoute), the saved row count and the Worker's refusal sentence. |

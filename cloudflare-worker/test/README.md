@@ -367,3 +367,4 @@ catalogue version only in the fixture.
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `grow_export_6103.test.ts` | D6103: Grow's Feedback and KPI CSV exports: writers only (and `records.can_export`), the table's search/filter/sort, names for writers and never an email, monthly KPI history in cents with currency, empty never 0, formula cells neutralised, the 5,000-row cap refused with a sentence, each export logged. |
