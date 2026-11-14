@@ -898,6 +898,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
+        // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
+        onExport={def.exportRecords && projectId && !narrativeAdmin
+          ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : null}
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
