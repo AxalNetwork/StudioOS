@@ -862,6 +862,16 @@ const buildId = (prefix) => (row) => {
 /** An Edit saves with "Save" (D695 decision 7); its row button stays "Edit". */
 const EDIT = { button: 'Edit', cta: 'Save' };
 
+/**
+ * Validate's rows carry no `edit`, so each Edit opens from its record's own
+ * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
+ * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
+ * (`recordModel.js`'s `recordFormFor`). #6111: Grow's Roles, Partners,
+ * Markets and Obligations open the same way, so their Edits show every
+ * stored value, not the few a module row carries.
+ */
+const FROM_RECORD = { readsRecord: true };
+
 // Grow's Edits (D695 decision 9, #1657): the Add's fields each PATCH takes.
 // A row carries only some current values (`adapters/grow.js`), so an Edit's
 // chips have no default and a field is sent only when the row carried it or
@@ -872,6 +882,22 @@ const sentOnly = (v, body, carried, from = {}) => Object.fromEntries(Object.entr
   const f = from[k] ?? k;
   return carried.includes(f) || filled(v[f]);
 }));
+/** A value as the form holds it, for comparing: a list in any order, nothing as ''. */
+const asSame = (x) => (Array.isArray(x) ? x.map(String).sort().join('\n') : x == null ? '' : String(x).trim());
+/**
+ * #6111: an Edit opened from its record (`was`, the values it opened with)
+ * sends only the keys whose field the founder changed, so Save on an
+ * untouched Edit sends nothing. Without `was` it is `sentOnly`.
+ */
+const sentChanged = (v, body, was, carried, from = {}) => (was && typeof was === 'object'
+  ? Object.fromEntries(Object.entries(body).filter(([k]) => { const f = from[k] ?? k; return asSame(v[f]) !== asSame(was[f]); }))
+  : sentOnly(v, body, carried, from));
+/** Whole cents as the dollars a founder types ("90,000", "40.5"); '' for none. */
+const centsText = (c) => {
+  if (c == null || c === '') return '';
+  const n = Number(c);
+  return Number.isFinite(n) ? (n / 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
+};
 /** A field with no default, so an Edit never sends a value the founder did not choose. */
 const bare = ({ def: _def, required: _required, ...f }) => f;
 // A stored value the Add does not offer is still a choice on Edit.
@@ -973,74 +999,124 @@ const enterKpi = {
 
 // Opened from a row it draws no Post to: publishing is the role's host's, declared on the record (#1698).
 const editRole = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-role',
   title: 'Edit role',
   sub: role.sub,
-  fields: [{ ...roleFields[0], required: false }, bare(roleFields[1]), bare(roleFields[2]), roleFields[3], roleFields[4], roleFields[5]],
+  // #6111: a stored team the chips do not list is kept as a chip, and the start is typed as the
+  // record stores it ("2027-01" or a day), which a date box would refuse.
+  fields: [{ ...roleFields[0], required: false }, { ...bare(roleFields[1]), keep: (c) => (asText(c.team) ? { value: c.team, label: c.team } : null) },
+    bare(roleFields[2]), { ...roleFields[3], input: 'text', ph: 'YYYY-MM or YYYY-MM-DD' }, roleFields[4], roleFields[5]],
   check: roleCheck,
+  loadOptions: role.loadOptions,
   idOf: (row) => { const n = Number(row?.recordId ?? row?.edit?.id ?? row?.id); return Number.isSafeInteger(n) && n > 0 ? n : null; },
-  valuesOf: () => ({}),
-  toBody: (v) => sentOnly(v, roleBody(v), [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', comp_public: 'band', equity_pct: 'equity' }),
-  submit: (w, projectId, id, v) => w.grow.roleUpdate(projectId, id, editRole.toBody(v)),
+  // #6111: the record's Edit gives the band as cents and the jobs-board switch as ['1'].
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const lo = centsText(e.comp_min_cents); const hi = centsText(e.comp_max_cents);
+    const shown = Array.isArray(e.comp_public) ? e.comp_public.map(String).includes('1') : Number(e.comp_public) === 1;
+    return { title: asText(e.title), team: asText(e.team), type: asText(e.type ?? e.employment_type), target_start: asText(e.target_start),
+      band: lo && hi && lo !== hi ? `${lo}–${hi}` : lo || hi, equity: asText(e.equity_pct), comp_public: shown ? [SHOW_BAND] : [] };
+  },
+  // The switch goes with a changed band (so a typed band with it off turns it off), and on its own once it changes.
+  toBody: (v, was) => {
+    const full = roleBody(v);
+    const body = sentChanged(v, full, was, [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', comp_public: 'band', equity_pct: 'equity' });
+    if (was && Object.hasOwn(full, 'comp_public') && asSame(v.comp_public) !== asSame(was.comp_public)) body.comp_public = full.comp_public;
+    return body;
+  },
+  submit: (w, projectId, id, v, was) => w.grow.roleUpdate(projectId, id, editRole.toBody(v, was)),
 };
 
 const PARTNER_CARRIED = ['type', 'stage', 'terms'];
 const editPartner = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-partner',
   title: 'Edit partner',
   sub: partner.sub,
   fields: [
+    // #6111: the name and renewal, as the record's own Edit draws them.
+    partner.fields[0],
     { ...withChips(partner.fields[1], [['other', 'Other']]), required: true },
     { ...withChips(partner.fields[2], [['ended', 'Ended']]), required: true },
-    bare(termsFields[0]), termsFields[1], termsFields[2],
-    // The free text an older partner was added with.
+    bare(termsFields[0]), termsFields[1],
+    { kind: 'T', name: 'renewal_on', k: 'Renewal', input: 'date' },
+    termsFields[2],
+    // The free text an older partner was added with. The record's Edit does not carry it, so it is drawn only from a row that does.
     { kind: 'T', name: 'terms', k: 'Notes on terms', input: 'textarea', max: 400 },
   ],
   check: termsCheck,
   idOf: (row) => growEdit(row)?.uid ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { type: asText(e.type), stage: asText(e.stage), terms: asText(e.terms) }; },
-  toBody: (v) => sentOnly(v, { type: v.type, stage: v.stage, ...termsBody(v), terms: str(v.terms) }, PARTNER_CARRIED,
+  // #6111: the typed terms as the one Amount box takes them ("20%", or dollars), and the contact.
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const amount = e.terms_pct != null && e.terms_pct !== '' ? `${e.terms_pct}%` : centsText(e.terms_amount_cents);
+    const has = (k) => Object.hasOwn(e, k);
+    return {
+      ...(has('name') ? { name: asText(e.name) } : {}), type: asText(e.type), stage: asText(e.stage),
+      ...(has('terms_kind') ? { terms_kind: asText(e.terms_kind), amount } : {}),
+      ...(has('renewal_on') ? { renewal_on: dateText(e.renewal_on) } : {}),
+      ...(has('contact_name') ? { contact_name: asText(e.contact_name) } : {}),
+      ...(has('contact_email') ? { contact_email: asText(e.contact_email) } : {}),
+      ...(has('terms') ? { terms: asText(e.terms) } : {}),
+    };
+  },
+  toBody: (v, was) => sentChanged(v, { name: str(v.name), type: v.type, stage: v.stage, ...termsBody(v), renewal_on: str(v.renewal_on), terms: str(v.terms) }, was, PARTNER_CARRIED,
     { terms_pct: 'amount', terms_amount_cents: 'amount', terms_currency: 'amount' }),
-  submit: (w, projectId, id, v) => w.grow.partnerUpdate(projectId, id, editPartner.toBody(v)),
+  submit: (w, projectId, id, v, was) => w.grow.partnerUpdate(projectId, id, editPartner.toBody(v, was)),
 };
 
+/** A market record's decision, from its Change decision form; undefined when the read has none. */
+function marketDecision(record) {
+  const action = (Array.isArray(record?.actions) ? record.actions : []).find((a) => a?.key === 'change-decision');
+  const f = (action?.form?.fields || []).find((x) => (x?.key ?? x?.name) === 'decision');
+  return f && Object.hasOwn(f, 'value') ? f.value : undefined;
+}
 const MARKET_CARRIED = ['state', 'decision', ...MARKET_PARTS.flatMap(([k]) => [`${k}_score`, `${k}_source`])];
 const editMarket = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-market',
   title: 'Edit market',
   sub: 'Its state, your decision, and each part’s score with its source. Emptying a score clears it.',
   fields: [
     { ...withChips(market.fields[1], [['entering', 'Entering'], ['not_now', 'Not now']]), required: true },
     { kind: 'CH', name: 'decision', k: 'Decision', opts: opts([['enter', 'Enter'], ['not_yet', 'Not yet'], ['exit', 'Exit']]) },
-    { ...scoreField, opts: scoreField.opts.map((o) => ({ ...o, checked: false })) }, ...partFields, bare(attachField),
+    { ...scoreField, opts: scoreField.opts.map((o) => ({ ...o, checked: false })) }, ...partFields,
+    // #6111: the attached country is kept as a chip until the geographies answer, or if they do not list it.
+    { ...bare(attachField), keep: (c) => (asText(c.geography_ref) ? { value: c.geography_ref, label: c.geography_ref } : null) },
   ],
   check: marketCheck,
+  loadOptions: market.loadOptions,
   idOf: (row) => growEdit(row)?.uid ?? null,
+  // #6111: the decision is the record's own Change decision form, so it is read from there.
   valuesOf: (row) => {
     const e = growEdit(row) || {};
-    const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null);
-    return { state: asText(e.state), decision: asText(e.decision), parts: scored,
-      ...Object.fromEntries(MARKET_PARTS.flatMap(([k]) => [[`${k}_score`, asText(e[`${k}_score`])], [`${k}_source`, asText(e[`${k}_source`])]])) };
+    const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null && e[`${k}_score`] !== '');
+    const decided = marketDecision(row?.record);
+    const decision = Object.hasOwn(e, 'decision') ? e.decision : decided;
+    return { state: asText(e.state), ...(decision !== undefined ? { decision: asText(decision) } : {}), parts: scored,
+      ...Object.fromEntries(MARKET_PARTS.flatMap(([k]) => [[`${k}_score`, asText(e[`${k}_score`])], [`${k}_source`, asText(e[`${k}_source`])]])),
+      ...(Object.hasOwn(e, 'geography_ref') ? { geography_ref: asText(e.geography_ref) } : {}) };
   },
   // Every carried part is sent: a row scored before is cleared only when its score is emptied.
-  toBody: (v) => {
+  toBody: (v, was) => {
     const parts = Object.fromEntries(MARKET_PARTS.flatMap(([k]) => {
       const sc = toScore(v[`${k}_score`]);
       return [[`${k}_score`, sc], [`${k}_source`, sc == null ? null : str(v[`${k}_source`])]];
     }));
-    return sentOnly(v, { state: v.state, decision: v.decision || null, ...parts, geography_ref: str(v.geography_ref) }, MARKET_CARRIED);
+    return sentChanged(v, { state: v.state, decision: v.decision || null, ...parts, geography_ref: str(v.geography_ref) }, was, MARKET_CARRIED);
   },
-  submit: (w, projectId, id, v) => w.grow.marketUpdate(projectId, id, editMarket.toBody(v)),
+  submit: (w, projectId, id, v, was) => w.grow.marketUpdate(projectId, id, editMarket.toBody(v, was)),
 };
 
 const OBLIGATION_STATE = opts([['upcoming', 'Upcoming'], ['scheduled', 'Scheduled'], ['draft', 'Draft'], ['done', 'Done'], ['not_set_up', 'Not set up']]);
 // #4046: the title is carried too, now that the Edit draws it (and Ask fills it when blank).
 const OBLIGATION_CARRIED = ['title', 'status', 'owner_name', 'due_at'];
+// #6111: every reminder the record can hold, labelled as the Worker labels it (`growDaily.ts`).
+const REMIND_PRESETS = [30, 14, 7, 1, 0];
+const reminderLabel = (n) => (n === 0 ? 'On the day' : n === 1 ? 'The day before' : `${n} days before`);
 const editObligation = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-obligation',
   title: 'Edit obligation',
   sub: 'Its title, kind, date, owner, how it repeats, its reminders and its state.',
@@ -1051,14 +1127,22 @@ const editObligation = {
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date' },
     obligation.fields[3],
     bare(obligation.fields[4]),
-    { ...remindField, opts: remindField.opts.map((o) => ({ ...o, checked: false })) },
-    { kind: 'CH', name: 'status', k: 'State', opts: OBLIGATION_STATE, required: true },
+    { ...remindField, opts: REMIND_PRESETS.map((n) => ({ value: String(n), label: reminderLabel(n), checked: false })) },
+    // Overdue and Snoozed are states the record reads, so its Edit can open on them.
+    { kind: 'CH', name: 'status', k: 'State', opts: [...OBLIGATION_STATE, ...opts([['overdue', 'Overdue'], ['snoozed', 'Snoozed']])], required: true },
   ],
   idOf: (row) => growEdit(row)?.id ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at) }; },
-  toBody: (v) => sentOnly(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
-    OBLIGATION_CARRIED, { remind_days: 'remind' }),
-  submit: (w, projectId, id, v) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v)),
+  // #6111: the record's Edit gives the reminders as `remind_days`, which this form calls Remind.
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const has = (k) => Object.hasOwn(e, k);
+    return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at),
+      ...(has('kind') ? { kind: asText(e.kind) } : {}), ...(has('repeats') ? { repeats: asText(e.repeats) } : {}),
+      ...(has('remind_days') ? { remind: (Array.isArray(e.remind_days) ? e.remind_days : []).map(String) } : {}) };
+  },
+  toBody: (v, was) => sentChanged(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
+    was, OBLIGATION_CARRIED, { remind_days: 'remind' }),
+  submit: (w, projectId, id, v, was) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v, was)),
 };
 
 // Raise's Edits (D695 decision 9, #1657): the fields each PATCH takes. A
@@ -1538,14 +1622,6 @@ export function editFieldsFor(form, current) {
  * where they differ.
  */
 const onlyShown = (v, body, from = {}) => Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k)));
-
-/**
- * Validate's rows carry no `edit`, so each Edit opens from its record's own
- * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
- * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
- * (`recordModel.js`'s `recordFormFor`).
- */
-const FROM_RECORD = { readsRecord: true };
 
 const editTheme = {
   ...EDIT, ...FROM_RECORD,
