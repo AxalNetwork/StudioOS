@@ -123,7 +123,7 @@ async function market(env: Env, project: any) {
 }
 
 async function traction(env: Env, project: any, user: { id: number; role: string }) {
-  return { history: await block(async () => {
+  const history = await block(async () => {
     // NDA is necessary, not a sharing grant. Drafts, private snapshots, legacy KPIs
     // and grants to a different investor are deliberately excluded for every role.
     const { results } = await env.DB.prepare(`SELECT id, period, metrics_json FROM portfolio_updates
@@ -145,9 +145,21 @@ async function traction(env: Env, project: any, user: { id: number; role: string
       return { month, state: figures.length ? 'reported' : 'not_reported', figures,
         reason: figures.length ? null : 'Not reported' };
     });
-  }), arr: { value: null, ...notRecorded('No founder-shared ARR recorded; MRR is not annualised') },
-  nrr: { value: null, ...notRecorded('No founder-shared NRR recorded') },
-  evidence: notRecorded('Shared evidence is not available in this view yet') };
+  });
+  const sharedMetric = (key: string, reason: string) => {
+    if (history.state !== 'recorded') return { value: null, state: history.state, reason: 'Shared figures are unreadable. Try again.' };
+    const months = history.data as Array<{ figures: Array<{ key: string; value: number | null; source: string | null; as_of: string | null }> }>;
+    for (const month of [...months].reverse()) {
+      const figure = month.figures.find((f) => f.key === key && f.value != null && f.source);
+      if (figure) return { ...figure, state: 'recorded' };
+    }
+    return { value: null, ...notRecorded(reason) };
+  };
+  const netRetention = sharedMetric('net_retention', 'No founder-shared NRR recorded');
+  return { history, arr: sharedMetric('arr', 'No founder-shared ARR recorded; MRR is not annualised'),
+    net_retention: netRetention,
+    // Retain the old read-only placeholder name for older clients; no metric is stored as nrr.
+    nrr: netRetention, evidence: notRecorded('Shared evidence is not available in this view yet') };
 }
 
 function handler(section: 'team' | 'market' | 'traction') {
