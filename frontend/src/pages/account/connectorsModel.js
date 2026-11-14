@@ -104,6 +104,9 @@ export const FIRST_PARTY = [
  * one Microsoft 365's page manages: the same status read, sign-in and
  * disconnect, so both pages always say the same thing.
  */
+// D5810: the Teams sign-in marker, for `IntegrationsRedirect` (App.jsx's import list is frozen, D5615).
+export { takeSignInFrom } from './teamsConnector.js';
+
 export const SHARED_CONNECTION = Object.freeze({ teams: 'microsoft' });
 /** The first-party key whose connection a key uses: its own, or the one it shares. */
 export const connectionKeyOf = (key) => (Object.hasOwn(SHARED_CONNECTION, key) ? SHARED_CONNECTION[key] : key);
