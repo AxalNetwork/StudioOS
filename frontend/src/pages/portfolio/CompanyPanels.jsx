@@ -9,18 +9,20 @@
  *   - `CompanySupport`: this company's entries on the support ledger, each
  *     with its recorded history on request (`/api/portfolio-support/:uid/
  *     history`). Recording or amending support stays on Value-add.
- *   - `CompanyActivity`: each source's own history — financial, reports,
- *     support — side by side. No read joins them, so nothing here does.
+ *   - `CompanyActivity` (D6227): one timeline, newest first, from the
+ *     Worker's joined read `GET /api/positions/:uid/activity`; a source that
+ *     failed is named with its own Retry, and older pages are read on request.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { positionActivityApi } from '../../lib/api/positionActivity';
 import { NOT_RECORDED } from '../../lib/absence';
 import { usePortfolioReads } from './usePortfolioReads';
 import { FinancialMetric, Skeleton, SourceFailure } from './PortfolioParts';
 import { day, markHistoryOf } from './portfolioModel';
 import {
-  COMPANY_SHAPES, distributionsOf, financialEventsOf, owedIn, reportEventsOf, returnOf, roundsOf, supportEventsOf, supportOf,
+  COMPANY_SHAPES, activityOf, distributionsOf, returnOf, roundsOf, supportOf,
 } from './companyModel';
 
 const NR = ({ children = NOT_RECORDED, title }) => <span className="pf-not-recorded" title={title}>{children}</span>;
@@ -215,23 +217,33 @@ export function CompanySupport({ uid, name, read, onRetry }) {
 
 const SOURCES = [['all', 'All'], ['financial', 'Financial'], ['reports', 'Reports'], ['support', 'Support']];
 
-function EventList({ id, title, children }) {
-  return (
-    <section className="pf-card" aria-labelledby={`pf-co-act-${id}`} data-testid={`company-activity-${id}`}>
-      <h2 className="pf-h2" id={`pf-co-act-${id}`}>{title}</h2>
-      {children}
-    </section>
-  );
+/** D6227: the company's joined activity, read and retried as one Worker read. */
+function useActivity(uid) {
+  const sources = useMemo(() => ({ activity: { call: () => positionActivityApi.companyActivity(uid), shape: COMPANY_SHAPES.activity } }), [uid]);
+  return usePortfolioReads(sources);
 }
 
-const Events = ({ items, none }) => (items.length
-  ? <ul className="pf-hist">{items.map((e) => <li key={e.key}><span>{e.date || NOT_RECORDED}</span><span>{e.text}</span></li>)}</ul>
-  : <p className="pf-note">{none}</p>);
-
-export function CompanyActivity({ uid, owed, support, retry }) {
+export function CompanyActivity({ uid }) {
   const [show, setShow] = useState('all');
-  const { reads, retry: retryDetail } = useDetail(uid);
-  const want = (k) => show === 'all' || show === k;
+  const { reads, retry } = useActivity(uid);
+  const read = reads.activity;
+  // Older pages, read on request from the cursor the last page gave. Dropped when the first page is read again.
+  const [older, setOlder] = useState({ items: [], cursor: undefined, state: 'idle' });
+  useEffect(() => { setOlder({ items: [], cursor: undefined, state: 'idle' }); }, [read]);
+  const cursor = older.cursor !== undefined ? older.cursor : (read.state === 'ok' ? read.value.page?.next_cursor || null : null);
+  const readOlder = () => {
+    if (!cursor) return;
+    setOlder((o) => ({ ...o, state: 'loading' }));
+    Promise.resolve().then(() => positionActivityApi.companyActivity(uid, { before: cursor })).then(
+      (v) => {
+        if (!v || !Array.isArray(v.items)) { setOlder((o) => ({ ...o, state: 'unreadable' })); return; }
+        setOlder((o) => ({ items: [...o.items, ...v.items], cursor: v.page?.next_cursor || null, state: 'idle' }));
+      },
+      () => setOlder((o) => ({ ...o, state: 'unreadable' })),
+    );
+  };
+  const tl = activityOf(read, show, older.items);
+  const none = show === 'all' ? 'No activity is recorded for this company.' : `No ${SOURCES.find(([k]) => k === show)[1].toLowerCase()} activity is recorded for this company.`;
   return (
     <>
       <div className="pf-card-head">
@@ -239,28 +251,25 @@ export function CompanyActivity({ uid, owed, support, retry }) {
           {SOURCES.map(([k, label]) => <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)} data-testid={`button-company-activity-${k}`}>{label}</button>)}
         </div>
       </div>
-      {want('financial') ? (
-        <EventList id="financial" title="Financial · rounds, marks and distributions">
-          {reads.detail.state === 'loading' ? <Skeleton rows={2} /> : null}
-          {reads.detail.state === 'unreadable' ? <SourceFailure what="Rounds, marks and distributions" claim="It is not a claim that nothing happened." onRetry={() => retryDetail('detail')} testid="company-activity-financial-unreadable" retryTestid="button-retry-company-activity-financial" /> : null}
-          {reads.detail.state === 'ok' ? <Events items={financialEventsOf(reads.detail.value)} none="No round, mark or distribution is recorded for this company." /> : null}
-        </EventList>
-      ) : null}
-      {want('reports') ? (
-        <EventList id="reports" title="Reports · received and waived">
-          {owed.state === 'loading' ? <Skeleton rows={2} /> : null}
-          {owed.state === 'unreadable' ? <SourceFailure what="The reports owed to you" claim="It is not a claim that none arrived." onRetry={() => retry('owed')} testid="company-activity-reports-unreadable" retryTestid="button-retry-company-activity-reports" /> : null}
-          {owed.state === 'ok' ? <Events items={reportEventsOf(owedIn(owed))} none={owedIn(owed) ? 'No report has been received or waived yet.' : 'This company owes you no report under a document you signed.'} /> : null}
-        </EventList>
-      ) : null}
-      {want('support') ? (
-        <EventList id="support" title="Support · promised, delivered and withdrawn">
-          {support.state === 'loading' ? <Skeleton rows={2} /> : null}
-          {support.state === 'unreadable' ? <SourceFailure what="The support ledger" claim="It is not a claim that no support was given." onRetry={() => retry('support')} testid="company-activity-support-unreadable" retryTestid="button-retry-company-activity-support" /> : null}
-          {support.state === 'ok' ? <Events items={supportEventsOf(support, uid)} none="No support is recorded for this company on the ledger’s current page." /> : null}
-        </EventList>
-      ) : null}
-      <p className="pf-note" data-testid="company-activity-joined">One timeline joining marks, reports, chases and support is {NOT_RECORDED.toLowerCase()}: each lives in its own record, so each is listed on its own here. Chases are not part of these reads.</p>
+      <section className="pf-card" aria-labelledby="pf-co-act" data-testid="company-activity-timeline">
+        <h2 className="pf-h2" id="pf-co-act">Activity · newest first</h2>
+        {tl.state === 'loading' ? <Skeleton rows={3} /> : null}
+        {tl.state === 'unreadable' ? <SourceFailure what="This company’s activity" claim="It is not a claim that nothing happened." onRetry={() => retry('activity')} testid="company-activity-unreadable" retryTestid="button-retry-company-activity" /> : null}
+        {tl.state === 'ok' ? (
+          <>
+            {tl.failed.map((f) => <SourceFailure key={f.source} what={f.what} claim="Its events are missing from this timeline; it is not a claim that none happened." onRetry={() => retry('activity')} testid={`company-activity-${f.source}-unreadable`} retryTestid={`button-retry-company-activity-${f.source}`} />)}
+            {tl.outOfScope.map((f) => <p key={f.source} className="pf-note" data-testid={`company-activity-${f.source}-out-of-scope`}>{f.what}: {f.reason || NOT_RECORDED}</p>)}
+            {tl.rows.length ? (
+              <ul className="pf-hist" data-testid="company-activity-rows">
+                {tl.rows.map((e) => <li key={e.key} data-testid={`company-activity-row-${e.key}`}><span>{e.date || NOT_RECORDED}</span><span>{e.href ? <Link to={e.href}>{e.text}</Link> : e.text}</span></li>)}
+              </ul>
+            ) : <p className="pf-note" data-testid="company-activity-none">{tl.complete ? none : 'Nothing is recorded in the sources that answered.'}</p>}
+            {older.state === 'unreadable' ? <SourceFailure what="Older activity" claim="The rows above stand." onRetry={readOlder} testid="company-activity-older-unreadable" retryTestid="button-retry-company-activity-older" /> : null}
+            {cursor && older.state !== 'unreadable' ? <button type="button" className="pf-link-button" onClick={readOlder} disabled={older.state === 'loading'} data-testid="button-company-activity-older">{older.state === 'loading' ? 'Reading…' : 'Show older activity'}</button> : null}
+          </>
+        ) : null}
+      </section>
+      <p className="pf-note" data-testid="company-activity-joined">One timeline, newest first: investments, valuation marks, distributions, the reports you received and their corrections, your own asks and waivers, and support with its amendments. Another investor’s asks, waivers and names are never in it.</p>
     </>
   );
 }

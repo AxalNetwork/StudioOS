@@ -73,8 +73,14 @@ D4817 part 6 (canvas PF-06) draws one company's workspace
 on Financials' Ownership & rights) in the same frame, through its optional
 `title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
 (tabs and titles, who the company is to the caller, the holding route, the
-six key facts, evidence and next actions, rounds, return, support and each
-source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+six key facts, evidence and next actions, rounds, return, support and the
+joined activity timeline); `CompanyPanels.jsx` draws Financials, Support and
 Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
+
+D6227 (#6227) turns Activity into one timeline: the Worker's joined read
+`GET /api/positions/:uid/activity` (client `../../lib/api/positionActivity.js`),
+drawn by `CompanyActivity` through `companyModel.js`' `activityOf`. A source
+the Worker reports as failed is named with its own Retry, never read as no
+activity. Decision notes: `documentation/architecture/decisions/D6227.md`.

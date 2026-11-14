@@ -23,7 +23,14 @@
  *     Ownership & rights → test 1;
  *   - the Activity filter leaving the other sources drawn → test 1;
  *   - the Ask dialog's confirm posting to `/waive` → test 4.
- * (Reverted, all five pass.)
+ * D6227 (#6227) moved Activity onto the Worker's joined read; test 6 checks
+ * it, each mutation both ways:
+ *   - `activityOf` dropping the failed sources → test 6;
+ *   - `activityOf` reading an empty group beside a failed source as complete → test 6;
+ *   - the older page read without its cursor → test 6;
+ *   - the Activity switch ignoring its group → tests 1 and 6;
+ *   - a measured $0 amount dropped from a row → test 6.
+ * (Reverted, all six pass.)
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,7 +39,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import PortfolioCompanyPage from '../src/pages/investor/PortfolioCompanyPage.jsx';
-import { companyDocTitle, companyTabOfPath, identityOf, keyFactsOf, returnOf } from '../src/pages/portfolio/companyModel.js';
+import { activityOf, companyDocTitle, companyTabOfPath, identityOf, keyFactsOf, returnOf } from '../src/pages/portfolio/companyModel.js';
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body), blob: async () => new Blob(['x']) });
@@ -82,6 +89,29 @@ const HISTORY = { items: [
   { uid: 'e1', revision: 1, action: 'create', to_state: 'promised', actor: { name: 'M. Okafor' }, created_at: '2026-08-02T09:31:00Z' },
   { uid: 'e2', revision: 2, action: 'deliver', to_state: 'delivered', actor: { name: 'M. Okafor' }, created_at: '2026-08-20T16:10:00Z' },
 ] };
+/** D6227: the joined read, newest first, one page with a cursor to an older one. */
+const SRC_OK = ['investments', 'marks', 'distributions', 'reports', 'requests', 'support'].map((source) => ({ source, state: 'ok', count: 1 }));
+const fin = (tab) => ({ tab, href: `/portfolio/companies/p-abc/${tab}` });
+const ACTIVITY = {
+  project: { uid: 'p-abc', name: 'Acme Robotics' },
+  items: [
+    { id: 'support_promised:s-1', kind: 'support_promised', at: '2026-10-14', date: '2026-10-14', source: 'support', label: 'Support promised: Intro to two climate-fund partners', link: fin('support') },
+    { id: 'waived:7', kind: 'waived', at: '2026-09-02T10:00:00', date: '2026-09-02', source: 'requests', label: 'You waived the 2026-08 Monthly financial statements', link: fin('reports') },
+    { id: 'distribution:x-1', kind: 'distribution', at: '2026-09-01', date: '2026-09-01', source: 'distributions', label: 'Distribution · secondary', amount: 50000, link: fin('financials') },
+    { id: 'support_delivered:s-2', kind: 'support_delivered', at: '2026-08-20', date: '2026-08-20', source: 'support', label: 'Support delivered: Pricing workshop', link: fin('support') },
+    { id: 'report_received:r2', kind: 'report_received', at: '2026-08-18T10:00:00', date: '2026-08-18', source: 'reports', label: '2026-Q2 report received', link: fin('reports') },
+  ],
+  sources: SRC_OK, partial: false, order: 'newest_first',
+  page: { limit: 50, before: null, total: 7, next_cursor: 'Y3Vyc29y' },
+};
+const ACTIVITY_OLDER = {
+  ...ACTIVITY,
+  items: [
+    { id: 'mark:m-1', kind: 'mark', at: '2026-03-31', date: '2026-03-31', source: 'marks', label: 'Valuation mark · round price · Priced round', amount: 400000, link: fin('financials') },
+    { id: 'investment:r-1', kind: 'investment', at: '2025-06-15', date: '2025-06-15', source: 'investments', label: 'Investment · Seed', amount: 150000, link: fin('financials') },
+  ],
+  page: { limit: 50, before: 'Y3Vyc29y', total: 7, next_cursor: null },
+};
 const ROUTES = (over = {}) => ({
   '/positions': { items: [POSITION] },
   '/positions/p-abc': DETAIL,
@@ -90,6 +120,7 @@ const ROUTES = (over = {}) => ({
   '/portfolio/health/p-abc': HEALTH,
   '/portfolio-support': SUPPORT,
   '/portfolio-support/s-2/history': HISTORY,
+  '/positions/p-abc/activity': ACTIVITY,
   '/portfolio-updates?project_id=4': { items: [{ uid: 'u9', project_id: 4, title: 'September note', submitted_at: '2026-10-02 10:00:00' }] },
   ...over,
 });
@@ -208,14 +239,12 @@ test('1 · populated: each tab drawn from its own read, with the company named a
     assert.deepEqual(s.writes(), []);
   } finally { await s.close(); }
 
+  // Activity (D6227): the Worker's joined timeline; the switch narrows it to one group.
   const a = await at('/portfolio/companies/p-abc/activity', ROUTES());
   try {
-    assert.match(a.text('company-activity-financial'), /1 Sep 2026 Distribution: \$50,000 · secondary 31 Mar 2026 Investment: \$100,000 · Seed extension 31 Mar 2026 Mark recorded: \$400,000 · Priced round · Priced round/);
-    assert.match(a.text('company-activity-reports'), /2 Sep 2026 Period waived: Aug 2026.*18 Aug 2026 Report received: Q2 2026/);
-    assert.match(a.text('company-activity-support'), /14 Oct 2026 Support promised: Intro to two climate-fund partners 20 Aug 2026 Support delivered: Pricing workshop/);
-    assert.match(a.text('company-activity-joined'), /One timeline joining marks, reports, chases and support is not recorded/);
+    assert.equal(a.text('company-activity-rows'), '14 Oct 2026 Support promised: Intro to two climate-fund partners 2 Sep 2026 You waived the 2026-08 Monthly financial statements 1 Sep 2026 Distribution · secondary · $50,000 20 Aug 2026 Support delivered: Pricing workshop 18 Aug 2026 2026-Q2 report received');
     await a.click('button-company-activity-support');
-    assert.ok(a.has('company-activity-support') && !a.has('company-activity-financial') && !a.has('company-activity-reports'));
+    assert.ok(!a.has('company-activity-row-distribution:x-1') && a.has('company-activity-row-support_delivered:s-2'));
     assert.equal(a.props('button-company-activity-support')['aria-pressed'], true);
   } finally { await a.close(); }
 });
@@ -328,10 +357,13 @@ test('3 · Unreadable: each failed source says so with its own Retry; its neighb
     await s.click('button-retry-company-support');
     assert.equal(s.count('/portfolio-support'), n + 1);
   } finally { await s.close(); }
-  const a = await at('/portfolio/companies/p-abc/activity', ROUTES({ '/positions/p-abc': { __status: 503 } }));
+  const a = await at('/portfolio/companies/p-abc/activity', ROUTES({ '/positions/p-abc/activity': { __status: 503 } }));
   try {
-    assert.ok(a.has('company-activity-financial-unreadable') && a.has('button-retry-company-activity-financial'));
-    assert.match(a.text('company-activity-reports'), /Report received: Q2 2026/, 'the other sources stand');
+    assert.match(a.text('company-activity-unreadable'), /This company’s activity could not be read\. It is not a claim that nothing happened/);
+    assert.ok(!a.has('company-activity-none'), 'a failed read is not an empty timeline');
+    const n = a.count('/positions/p-abc/activity');
+    await a.click('button-retry-company-activity');
+    assert.equal(a.count('/positions/p-abc/activity'), n + 1);
   } finally { await a.close(); }
 });
 
@@ -374,4 +406,55 @@ test('5 · the model: tabs and titles, identity, facts and return', () => {
   assert.deepEqual(facts.map((x) => x.state), ['ok', 'ok', 'ok', 'ok', 'loading', 'unreadable']);
   const ret = returnOf(DETAIL);
   assert.deepEqual(ret.map((m) => [m.key, m.value]), [['moic', '1.60×'], ['distributed', '$50,000'], ['irr', 'Not recorded'], ['coverage', '2']]);
+});
+
+test('6 · Activity (D6227): one joined timeline — populated with an older page, empty, and one source failed with its own Retry', async () => {
+  // Populated: the first page, then the older one from its cursor; each row links to the tab that holds it.
+  const v = await at('/portfolio/companies/p-abc/activity', ROUTES({ '/positions/p-abc/activity?before=Y3Vyc29y': ACTIVITY_OLDER }));
+  try {
+    assert.equal(v.count('/positions/p-abc'), 0, 'Activity reads the joined feed, not the detail read');
+    assert.equal(v.count('/reporting/companies/p-abc/figures'), 0);
+    assert.equal(v.props('company-activity-row-distribution:x-1').children[1].props.children.props.to, '/portfolio/companies/p-abc/financials');
+    assert.ok(!v.has('company-activity-none') && !v.has('company-activity-marks-unreadable'));
+    assert.match(v.text('company-activity-joined'), /One timeline, newest first.*Another investor’s asks, waivers and names are never in it/);
+    // mutation: reading the older page without `before` (the first page again) fails the next line.
+    await v.click('button-company-activity-older');
+    assert.match(v.text('company-activity-rows'), /18 Aug 2026 2026-Q2 report received 31 Mar 2026 Valuation mark · round price · Priced round · \$400,000 15 Jun 2025 Investment · Seed · \$150,000$/);
+    assert.ok(!v.has('button-company-activity-older'), 'the last page offers no older one');
+    await v.click('button-company-activity-financial');
+    assert.equal(v.text('company-activity-rows'), '1 Sep 2026 Distribution · secondary · $50,000 31 Mar 2026 Valuation mark · round price · Priced round · $400,000 15 Jun 2025 Investment · Seed · $150,000');
+  } finally { await v.close(); }
+
+  // Empty: every source answered with nothing.
+  const e = await at('/portfolio/companies/p-abc/activity', ROUTES({ '/positions/p-abc/activity': { ...ACTIVITY, items: [], sources: SRC_OK.map((x) => ({ ...x, count: 0 })), page: { limit: 50, total: 0, next_cursor: null } } }));
+  try {
+    assert.equal(e.text('company-activity-none'), 'No activity is recorded for this company.');
+    assert.ok(!e.has('button-company-activity-older'));
+  } finally { await e.close(); }
+
+  // One source failed: named with its own Retry; the rows of the others stand; never "no activity".
+  const failed = { ...ACTIVITY, items: ACTIVITY.items.filter((x) => x.source !== 'support'), sources: SRC_OK.map((x) => (x.source === 'support' ? { source: 'support', state: 'failed', reason: 'Unreadable: support could not be read. Try again.' } : x)), partial: true, page: { limit: 50, total: 3, next_cursor: null } };
+  const f = await at('/portfolio/companies/p-abc/activity', ROUTES({ '/positions/p-abc/activity': failed }));
+  try {
+    // mutation: `activityOf` dropping failed sources (no `failed` list) fails this line.
+    assert.match(f.text('company-activity-support-unreadable'), /Support could not be read\. Its events are missing from this timeline; it is not a claim that none happened/);
+    assert.match(f.text('company-activity-rows'), /You waived the 2026-08 Monthly financial statements/);
+    await f.click('button-company-activity-support');
+    assert.ok(f.has('company-activity-support-unreadable'));
+    // mutation: reading an empty group with a failed source as complete says "No support activity is recorded".
+    assert.equal(f.text('company-activity-none'), 'Nothing is recorded in the sources that answered.');
+    await f.click('button-company-activity-financial');
+    assert.ok(!f.has('company-activity-support-unreadable'), 'a failure is shown with its own group');
+    await f.click('button-company-activity-all');
+    const n = f.count('/positions/p-abc/activity');
+    await f.click('button-retry-company-activity-support');
+    assert.equal(f.count('/positions/p-abc/activity'), n + 1, 'Retry reads again');
+  } finally { await f.close(); }
+
+  // The model, alone.
+  assert.deepEqual(activityOf({ state: 'unreadable' }), { state: 'unreadable' });
+  const m = activityOf({ state: 'ok', value: { items: [{ id: 'x:1', at: '2026-01-02', source: 'marks', label: 'Valuation mark', amount: 0 }], sources: [{ source: 'marks', state: 'ok' }, { source: 'support', state: 'not_in_scope', reason: 'Support is read for companies in your investor book.' }] } });
+  assert.deepEqual(m.rows, [{ key: 'x:1', date: '2 Jan 2026', source: 'marks', text: 'Valuation mark · $0', href: null }], 'a measured zero stays $0');
+  assert.deepEqual(m.outOfScope.map((x) => x.source), ['support']);
+  assert.equal(m.complete, true);
 });
