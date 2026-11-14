@@ -360,3 +360,4 @@ catalogue version only in the fixture.
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `deck_share_feedback_6064.test.ts` | D6064: the founder's feedback read: reactions by uid and by place, the link fallback, anonymity, the owner and co-founder gate, the cap, and a missing store read as empty. |
