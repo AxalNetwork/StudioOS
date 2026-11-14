@@ -26,7 +26,8 @@ import policiesRoute from '../src/routes/admin_licence_agreement_policies.ts';
 import contractsRoute from '../src/routes/admin_contracts.ts';
 import { onAgreementEnvelopeCompleted } from '../src/services/programAgreements.ts';
 import { programCopy, studioPrograms, parseProgramCopy } from '../src/services/licencePrograms.ts';
-import { requirementFor, programLegalStatus, gateSyncStatements, ledgerLegalSignals, readLicenceLegal } from '../src/services/agreementPolicies.ts';
+import { requirementFor, programLegalStatus, gateSyncStatements, ledgerLegalSignals, readLicenceLegal,
+  latestPolicy, holdingsOf, alreadyHolds, freezeHoldingStatements, replacementOnPackageMoveStatement, syncLegalGate } from '../src/services/agreementPolicies.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -108,8 +109,22 @@ const policy = (db: DatabaseSync, kind: 'program' | 'package', key: string, b: R
   call(db, 'POST', `${P}/${kind}/${key}`, { reason: 'Set by HQ legal at the November review.', ...b });
 const grant = (db: DatabaseSync, program: string, terms: Record<string, unknown> = NO_SCHEDULE) =>
   call(db, 'POST', `${G}/${program}`, { reason: 'Granted at the November HQ review.', terms });
-const accept = (db: DatabaseSync, packageKey: string, offer: string | null = null) =>
-  call(db, 'POST', `${P}/licences/${LIC}/package-acceptances`, { package_key: packageKey, package_offer_uid: offer, reason: 'The studio accepted the package offer.' });
+// These D5052 scenarios start with legacy frozen holdings. #5024 retires the
+// stand-in HTTP endpoint; real commercial acceptance is tested by package_offers_5024.
+const legacyHolding = async (db: DatabaseSync, packageKey: string, offer: string | null = null) => {
+  const env = { DB: d1Over(db) } as any;
+  const policy = await latestPolicy(env, 'package', packageKey);
+  if (!policy) return { status: 409, body: { error: 'no_policy' } };
+  if (alreadyHolds(await holdingsOf(env, LIC), 'package', packageKey, policy, offer)) return { status: 200, body: { unchanged: true } };
+  const at = new Date().toISOString(), uid = crypto.randomUUID(), reason = 'Legacy accepted policy fixture';
+  await env.DB.batch([
+    replacementOnPackageMoveStatement(env, { licenceUid: LIC, packageKey, actorId: SUPER, at, reason }),
+    ...freezeHoldingStatements(env, { uid, licenceUid: LIC, scopeKind: 'package', scopeKey: packageKey,
+      origin: 'package_offer_accepted', packageOfferUid: offer, actorId: SUPER, at, reason }),
+  ]);
+  await syncLegalGate(env, LIC, { actorId: SUPER, reason });
+  return { status: 201, body: { unchanged: false } };
+};
 const legal = async (db: DatabaseSync) => (await call(db, 'GET', `${P}/licences/${LIC}`)).body;
 const statusOf = async (db: DatabaseSync, program: string) => (await legal(db)).programs.find((p: any) => p.program_key === program);
 const draft = (db: DatabaseSync, o: Record<string, unknown>) => call(db, 'POST', `${A}/licences/${LIC}/drafts`, { reason: REASON, ...o });
@@ -202,7 +217,7 @@ test('2/7. package master + schedules: the master is needed by every program, a 
     programs: ['learning', 'perks', 'mentor-cohorts'], required_schedules: ['learning', 'perks', 'mentor-cohorts'],
   });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal((await accept(db, 'core_network', 'offer_1')).status, 201);
+  assert.equal((await legacyHolding(db, 'core_network', 'offer_1')).status, 201);
   for (const p of ['learning', 'perks', 'mentor-cohorts']) assert.equal((await grant(db, p)).status, 201);
   let s = await statusOf(db, 'learning');
   assert.equal(s.requirement.basis, 'package');
@@ -331,12 +346,12 @@ test('11. the branch copy carries legal readiness: a package move holds its prog
   const db = fixture();
   await policy(db, 'package', 'core_network', { strategy: 'package_master', programs: ['learning'] });
   await policy(db, 'package', 'venture_building', { strategy: 'package_master', programs: ['learning'] });
-  await accept(db, 'core_network');
+  await legacyHolding(db, 'core_network');
   await grant(db, 'learning');
   await execute(db, CORE_MASTER, '3'.repeat(64));
   assert.equal((await branchSees(db, 'learning')).standing, 'in_force');
   // The licence moves package: the old master stays executed, needs replacing, and no longer counts.
-  const moved = await accept(db, 'venture_building');
+  const moved = await legacyHolding(db, 'venture_building');
   assert.equal(moved.status, 201);
   const l = await legal(db);
   assert.equal(l.programs[0].status, 'granted_agreement_required');
@@ -365,11 +380,11 @@ test('12. a legacy grant with only schedule_contract_uid stays readable: not rec
 
 // ═══════════════════════════════════════════════════════════════════ 13
 
-test('13. no duplicate rows from repeated send, acceptance, grant or gate sync', async () => {
+test('13. no duplicate rows from repeated send, legacy policy freeze, grant or gate sync', async () => {
   const db = fixture();
   await policy(db, 'package', 'core_network', { strategy: 'package_master', programs: ['learning'] });
-  assert.equal((await accept(db, 'core_network', 'offer_9')).status, 201);
-  const again = await accept(db, 'core_network', 'offer_9');
+  assert.equal((await legacyHolding(db, 'core_network', 'offer_9')).status, 201);
+  const again = await legacyHolding(db, 'core_network', 'offer_9');
   assert.equal(again.status, 200);
   assert.equal(again.body.unchanged, true);
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM licence_agreement_policy_holdings'), 1);
@@ -427,7 +442,7 @@ test('a policy is refused when it does not fit its scope', async () => {
   assert.equal(await bad('package', 'core_network', { strategy: 'package_master', programs: ['learning'], required_schedules: ['perks'] }), 400);
   assert.equal(await bad('package', 'core_network', { strategy: 'per_program', programs: ['learning'], required_schedules: ['learning'] }), 400);
   assert.equal(await bad('program', 'learning', { strategy: 'per_program', reason: 'short' }), 400);
-  assert.equal((await accept(db, 'core_network')).status, 409, 'a package with no policy was frozen');
+  assert.equal((await legacyHolding(db, 'core_network')).status, 409, 'a package with no policy was frozen');
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM licence_agreement_policies'), 0);
 });
 

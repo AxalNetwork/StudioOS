@@ -64,6 +64,8 @@ export type Holding = {
   origin: 'program_granted' | 'package_offer_accepted'; package_offer_uid: string | null; frozen_at: string;
   frozen_by_user_id: number | null; superseded_at: string | null; superseded_by_uid: string | null;
   policy: Policy;
+  /** Present only for a real commercial offer frozen by #5024, never a legacy stand-in. */
+  package_version?: number;
 };
 
 function list(v: string | null): string[] | null {
@@ -149,7 +151,7 @@ export function policyVersionStatements(env: Env, p: PolicyInput, o: { uid: stri
  */
 export function freezeHoldingStatements(env: Env, o: {
   uid: string; licenceUid: string; scopeKind: ScopeKind; scopeKey: string; origin: Holding['origin'];
-  packageOfferUid: string | null; actorId: number | null; at: string; reason: string | null;
+  packageOfferUid: string | null; packageVersion?: number; actorId: number | null; at: string; reason: string | null;
 }): D1PreparedStatement[] {
   return [
     env.DB.prepare(
@@ -169,7 +171,8 @@ export function freezeHoldingStatements(env: Env, o: {
        SELECT h.licence_uid, 'policy_frozen', h.scope_kind, h.scope_key,
               CASE WHEN h.scope_kind = 'program' THEN h.scope_key END, CASE WHEN h.scope_kind = 'package' THEN h.scope_key END,
               h.policy_uid, h.policy_version, ?, ?, ?, ? FROM licence_agreement_policy_holdings h WHERE h.uid = ?`,
-    ).bind(o.actorId, o.reason, JSON.stringify({ origin: o.origin, package_offer_uid: o.packageOfferUid }), o.at, o.uid),
+    ).bind(o.actorId, o.reason, JSON.stringify({ origin: o.origin, package_offer_uid: o.packageOfferUid,
+      ...(o.packageVersion === undefined ? {} : { package_version: o.packageVersion, holding_uid: o.uid }) }), o.at, o.uid),
   ];
 }
 
@@ -239,6 +242,9 @@ export async function holdingsOf(env: Env, licenceUid: string, all = false): Pro
 async function holdingsForLicences(env: Env, licenceUids: string[], all = false): Promise<Holding[]> {
   const q = await env.DB.prepare(
     `SELECT h.*, p.uid AS p_uid, p.scope_kind AS p_scope_kind, p.scope_key AS p_scope_key, p.version AS p_version, p.strategy AS p_strategy,
+            (SELECT json_extract(e.detail_json, '$.package_version') FROM licence_legal_events e
+              WHERE e.licence_uid = h.licence_uid AND e.action = 'policy_frozen'
+                AND json_extract(e.detail_json, '$.holding_uid') = h.uid ORDER BY e.id DESC LIMIT 1) AS frozen_package_version,
             p.legal_gate AS p_legal_gate, p.programs_json AS p_programs_json, p.required_schedules_json AS p_required_schedules_json,
             p.reason AS p_reason, p.created_at AS p_created_at, p.created_by_user_id AS p_created_by_user_id
        FROM licence_agreement_policy_holdings h JOIN licence_agreement_policies p ON p.uid = h.policy_uid
@@ -247,6 +253,7 @@ async function holdingsForLicences(env: Env, licenceUids: string[], all = false)
   return (q.results || []).map((r) => ({
     uid: r.uid, licence_uid: r.licence_uid, scope_kind: r.scope_kind, scope_key: r.scope_key, policy_uid: r.policy_uid,
     policy_version: Number(r.policy_version), origin: r.origin, package_offer_uid: r.package_offer_uid ?? null, frozen_at: r.frozen_at,
+    ...(r.frozen_package_version == null ? {} : { package_version: Number(r.frozen_package_version) }),
     frozen_by_user_id: r.frozen_by_user_id ?? null, superseded_at: r.superseded_at ?? null, superseded_by_uid: r.superseded_by_uid ?? null,
     policy: policyOf({
       uid: r.p_uid, scope_kind: r.p_scope_kind, scope_key: r.p_scope_key, version: r.p_version, strategy: r.p_strategy, legal_gate: r.p_legal_gate,
@@ -270,6 +277,8 @@ export type RequiredDocument = {
   kind: 'package_master' | 'package_addendum' | 'program_licence' | 'program_schedule';
   /** For a master: the package it must be executed for. */
   package_key: string | null;
+  package_offer_uid?: string | null;
+  package_version?: number | null;
   label: string;
 };
 export type Requirement = {
@@ -294,9 +303,10 @@ export function requirementFor(programKey: string, holdings: Holding[]): Require
   });
   const programLicence = (): RequiredDocument => ({ slot_key: `program_licence:${programKey}`, kind: 'program_licence', package_key: null, label: 'Program licence agreement' });
   if (pkg && pkg.policy.strategy === 'package_master') {
-    const docs: RequiredDocument[] = [{ slot_key: 'package_master', kind: 'package_master', package_key: pkg.scope_key, label: 'Package master agreement' }];
+    const offerBinding = pkg.package_version == null ? {} : { package_offer_uid: pkg.package_offer_uid, package_version: pkg.package_version };
+    const docs: RequiredDocument[] = [{ slot_key: 'package_master', kind: 'package_master', package_key: pkg.scope_key, ...offerBinding, label: 'Package master agreement' }];
     if ((pkg.policy.required_schedules || []).includes(programKey)) {
-      docs.push({ slot_key: `package_addendum:${programKey}`, kind: 'package_addendum', package_key: pkg.scope_key, label: 'Program schedule under the master' });
+      docs.push({ slot_key: `package_addendum:${programKey}`, kind: 'package_addendum', package_key: pkg.scope_key, ...offerBinding, label: 'Program schedule under the master' });
     }
     return out('package', pkg, docs);
   }
@@ -312,10 +322,12 @@ export function requirementFor(programKey: string, holdings: Holding[]): Require
 
 /** Is this document executed, for the right package where it matters? */
 function executedFor(doc: RequiredDocument, rows: AgreementRow[]): AgreementRow | null {
-  return rows.find((r) => r.slot_key === doc.slot_key && r.status === 'executed' && (doc.package_key === null || r.package_key === doc.package_key)) ?? null;
+  return rows.find((r) => r.slot_key === doc.slot_key && r.status === 'executed' && (doc.package_key === null || r.package_key === doc.package_key)
+    && (doc.package_offer_uid == null || (r.package_offer_uid === doc.package_offer_uid && r.package_version === doc.package_version))) ?? null;
 }
 function inFlightFor(doc: RequiredDocument, rows: AgreementRow[]): AgreementRow | null {
-  return rows.find((r) => r.slot_key === doc.slot_key && IN_FLIGHT.includes(r.status) && (doc.package_key === null || r.package_key === doc.package_key)) ?? null;
+  return rows.find((r) => r.slot_key === doc.slot_key && IN_FLIGHT.includes(r.status) && (doc.package_key === null || r.package_key === doc.package_key)
+    && (doc.package_offer_uid == null || (r.package_offer_uid === doc.package_offer_uid && r.package_version === doc.package_version))) ?? null;
 }
 
 export const LEGAL_STATUSES = [

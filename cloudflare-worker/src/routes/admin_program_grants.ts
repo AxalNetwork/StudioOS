@@ -74,7 +74,7 @@ import {
 } from '../services/agreementPolicies';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programNamed, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
-  termsDiff, termsHashOf, termsOf, validateTerms, type LicenceLite, type Terms,
+  termsDiff, termsHashOf, termsOf, validateTerms, insertGrantStatement, type LicenceLite, type Terms,
 } from '../services/programGrants';
 import { exportCsv, readAllHistory } from '../services/programGrantsHistory';
 import { csvResponse, stamp } from '../services/csv';
@@ -187,9 +187,6 @@ async function target(c: any) {
 // text here is built at run time (scripts/check-sql-prepare.mjs). Their term
 // columns are TERM_KEYS in order; `program_grants_d982.test.ts` holds them equal.
 export const SQL_TERM_COLUMNS = 'starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped, cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort, hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule';
-const INSERT_GRANT = `INSERT INTO program_grants
-  (uid, licence_id, program_key, state, starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped, cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort, hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule, note, set_by_user_id, set_at)
-  VALUES (?, ?, ?, 'granted', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 const REGRANT = `UPDATE program_grants SET state = 'granted', starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?,
   note = ?, set_by_user_id = ?, set_at = ?, paused_at = NULL, ended_at = NULL, schedule_contract_uid = NULL, schedule_signed_at = NULL,
   terms_revision = terms_revision + 1
@@ -454,7 +451,7 @@ r.post('/licences/:uid/:program', async (c) => {
     } else {
       try {
         await c.env.DB.batch([
-          c.env.DB.prepare(INSERT_GRANT).bind(grantUid, licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at),
+          insertGrantStatement(c.env, { uid: grantUid, licenceId: licence.id, programKey, terms, note: note.note ?? null, actorId: admin.id, at }),
           history,
           ...pricingRow,
           ...freezeStatements,

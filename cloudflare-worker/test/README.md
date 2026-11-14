@@ -324,5 +324,13 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+
+`package_offers_5024.test.ts` exercises real commercial package acceptance over
+the complete SQLite schema and authenticated routers: frozen prices and
+composition, grant conflicts, atomic rollback and competing decisions, policy
+versions and offer-bound agreements, normal branch delivery failure, and
+read-only historical contract values. Seeded HQ-only/unready items are refused
+without weakening Program Grants; successful cases publish a compatible test
+catalogue version only in the fixture.
 | `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
 | `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |

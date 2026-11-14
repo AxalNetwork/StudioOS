@@ -37,6 +37,7 @@ import { presentGrant, type LicenceLite } from '../services/programGrants';
 import {
   AGREEMENT_TEMPLATES, MERGE_NAMESPACES, agreementMergeValues, catalogRefusal, counselReviewRequired, readinessOf, renderAgreement,
 } from '../services/agreementTemplates';
+import { packageOfferForAgreement, PackageOfferError } from '../services/packageOffers';
 import { ensureLegalTemplatesSchema, getTemplate } from '../services/legalTemplateStore';
 import { templateUseRefusal } from '../services/templateSafety';
 import { readLicenceTerms } from '../services/licenceTerms';
@@ -159,7 +160,8 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     if (wrong) return refuse(c, 422, 'wrong_template', wrong);
     const requestedVersion = b?.package_version == null ? null : Number(b.package_version);
     if (requestedVersion !== null && !(Number.isInteger(requestedVersion) && requestedVersion >= 1)) return refuse(c, 400, 'invalid_package_version', 'A package version is a whole number from 1.');
-    const packageOfferUid = typeof b?.package_offer_uid === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(b.package_offer_uid) ? b.package_offer_uid : null;
+    let packageOfferUid = typeof b?.package_offer_uid === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(b.package_offer_uid) ? b.package_offer_uid : null;
+    if (b?.package_offer_uid != null && !packageOfferUid) return refuse(c, 400, 'invalid_package_offer', 'Choose a valid commercial package offer.');
 
     // The template: its CURRENT version, read now and frozen into the version. A slug HQ has not authored, or
     // one the library restricts, is refused before anything is written.
@@ -169,6 +171,8 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     const blocked = templateUseRefusal(tpl);
     if (blocked) return refuse(c, 409, blocked.code, blocked.message, { template_slug: slug });
 
+    const commercial = scope.package_key ? await packageOfferForAgreement(c.env, licence.uid, scope.package_key, requestedVersion, packageOfferUid) : null;
+    if (commercial) packageOfferUid = commercial.uid;
     const [terr, seats, grant, signer, pkg] = await Promise.all([
       c.env.DB.prepare('SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code').bind(licence.id).all<{ country_code: string }>(),
       c.env.DB.prepare('SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type').bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
@@ -176,7 +180,7 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
         ? c.env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? AND program_key = ?').bind(licence.id, scope.program_key).first<Record<string, unknown>>()
         : Promise.resolve(null),
       signerOf(c.env, licence.id),
-      scope.package_key
+      commercial ? Promise.resolve({ name: commercial.package_name, version: commercial.package_version }) : scope.package_key
         ? c.env.DB.prepare(`SELECT name, version FROM program_packages WHERE package_key = ?1
             AND ((?2 IS NULL AND status = 'active') OR (version = ?2 AND status IN ('active', 'retired')))`)
             .bind(scope.package_key, requestedVersion).first<{ name: string; version: number }>()
@@ -189,6 +193,7 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     const values = agreementMergeValues({
       licence, territories: (terr.results || []).map((t) => t.country_code), seats: seats.results || [], licenceTerms: terms,
       grant: grant ?? null, program_key: scope.program_key, package_key: scope.package_key, package_name: pkg?.name ?? null, package_version: packageVersion,
+      packageOffer: commercial,
       signer: signer ? { name: signer.name, email: signer.email } : null, agreement: { kind, prepared_on: today() },
     });
     const { body, unresolved } = renderAgreement(tpl.body_md, values);
@@ -248,7 +253,10 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     } catch (e) { console.warn('[licence-agreements] replacement_prepared not recorded', (e as Error)?.message); }
     const row = await agreementByUid(c.env, uid);
     return c.json({ ok: true, agreement: presentVersion(row as any, !!signer?.email) }, 201);
-  } catch (e) { return mapError(c, e); }
+  } catch (e) {
+    if (e instanceof PackageOfferError) return refuse(c, e.status, e.code, e.sentence);
+    return mapError(c, e);
+  }
 });
 
 r.get('/:uid', async (c) => {
