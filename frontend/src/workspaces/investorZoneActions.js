@@ -56,9 +56,10 @@ import { makeZoneActions } from './zoneActionBuilder';
  *
  * `primary: true` (D1424, #3700) marks the one row a zone's header draws
  * filled, in indigo: Closing's Record wire, Reports' Chase all overdue,
- * Value-add's Log support, LPs' Add LP, Calls' New call and Research › Ask's
- * New brief. Screening, Commit, Positions, Accounting, Reporting and the
- * Network zones have no live first step, so no primary. Deal flow (the Deals
+ * Value-add's Log support, LPs' Add LP, Calls' New call, Reporting's New
+ * reporting period (#6230) and Research › Ask's New brief. Screening, Commit,
+ * Positions, Accounting and the Network zones have no live first step, so no
+ * primary. Deal flow (the Deals
  * root) has no table: its "Set your thesis" primary is drawn by `DealFlow`
  * while no deal matches (owner answer C).
  */
@@ -158,9 +159,16 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Period close', unbuilt: 'periods are not opened or closed from here' },
   ],
   'funds/reporting': [
-    { label: 'Build pack', unbuilt: 'report packs are not assembled from this desk' },
+    // #6230: `Build pack` said packs were not assembled from this desk, while
+    // `FundReportPeriodPage` at `/funds/:fundId/reporting/new` drafts and issues
+    // one. The page supplies the handler only for a fund the member operates
+    // (`can_manage`, the Worker's own `requireFundGp` test); without one the
+    // action is absent and the archive says why.
+    { canvas: 'Build pack', label: 'New reporting period', kind: 'handler', handler: 'newPeriod', primary: true },
     { label: 'Export archive', kind: 'export' },
-    { label: 'Delivery log', unbuilt: 'per-LP delivery is counted, never itemised' },
+    // Was 'per-LP delivery is counted, never itemised'. Nothing counts it: a
+    // period records when it was issued, and no delivery row exists.
+    { label: 'Delivery log', unbuilt: 'issuing a period records when it was issued, not which LP received it, so there is no delivery to log' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
