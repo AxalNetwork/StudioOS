@@ -25,6 +25,7 @@ import { __resetAssistModeForTest } from '../src/hooks/useAssistMode.js';
 import { ADD_TOKENS_PATH } from '../src/lib/aiTokens.js';
 import { SECTIONS, boundChip, draftOf, inlineSegments, insertAt, runRefusal, savePlan, unplacedFigures } from '../src/pages/raise/narrative/storyModel.js';
 import { MERCURY_STORY_KEY, insertInStoryHref, provenance } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -44,7 +45,8 @@ const NARRATIVE = () => ({
 const MRR = { source_key: 'grow.mrr', area: 'grow', module: 'Grow › Revenue and traction', label: 'MRR', value: 16950, unit: 'usd', as_of: '2026-09-30', grade: 'Measured', source: 'Connector', href: '/grow/revenue', record_ref: 'project_metrics:9', snapshot_hash: H_MRR, state: 'recorded' };
 const MERC = { source_key: 'grow.mercury_revenue', area: 'grow', module: 'Grow › Revenue and traction', label: 'Revenue last month', value: 1721000, unit: 'cents', as_of: '2026-10-01', grade: 'Measured', source: 'Connector', href: '/grow/revenue', record_ref: 'mercury_raise_facts:4', snapshot_hash: 'e'.repeat(24), state: 'recorded' };
 const SOURCES = { project_id: 3, coverage: {}, items: [MRR, MERC] };
-const OPTIONS = { versions: [{ value: '2', label: 'v2 · seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '2', label: 'v2 · seed fund' }] });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 const DRAFT = { version: 2, section: 'traction', mode: 'shorten', text: 'Pilots turn into paying customers.', removed: 1 };
 
