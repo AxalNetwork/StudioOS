@@ -279,7 +279,7 @@ export function StudioRequestsView({
                         </button>{' '}
                         <button type="button" aria-expanded={isOpen && open.outcome === 'answered'} data-testid="studio-request-approve"
                           onClick={() => onOpen?.(isOpen && open.outcome === 'answered' ? null : { uid: it.uid, outcome: 'answered' })}
-                          className={`${actBtn} border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 dark:border-indigo-500 dark:bg-indigo-600`}>
+                          className={`${actBtn} border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 dark:border-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500`}>
                           Approve…
                         </button>
                       </td>
