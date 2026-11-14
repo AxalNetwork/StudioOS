@@ -139,7 +139,7 @@ test('2. nothing attached, and the switch off, draw nothing; a failed read says 
   }
   let calls = 0;
   const v = await mount(h(ShareWalkthrough, { token: TOKEN, slides: SLIDES }), {
-    [READ]: (init) => { calls += 1; return calls === 1 ? json({ error: 'internal', message: 'D1_ERROR: no such table' }, 500)(init) : json({ attached: true, takes: TAKES })(init); },
+    [READ]: () => { calls += 1; return calls === 1 ? json({ error: 'internal', message: 'D1_ERROR: no such table' }, 500)() : json({ attached: true, takes: TAKES })(); },
   });
   try {
     assert.equal(v.has('share-walkthrough-unreadable'), true);
