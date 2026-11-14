@@ -558,7 +558,8 @@ export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskI
     : 'Can propose: nothing.';
   // D6420 (D1506): what a connector returned and what the member attached are outside text. They
   // leave the system message and travel with the question, each inside its own block. The file's
-  // name is caller-typed and is no longer sent.
+  // name is caller-typed and is not written here. The member's stored message keeps it
+  // ("[Attached: name]"), so later turns replay it in a user message, never in the system message.
   const data = [
     x.reads.length
       ? `Connector data:\n${x.reads.map((r) => `[${r.source.name}]\n${untrustedBlock('connector_row', r.facts.map((f) => `- ${f}`).join('\n'))}`).join('\n\n')}`

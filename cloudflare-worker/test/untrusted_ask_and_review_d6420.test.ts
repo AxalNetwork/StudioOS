@@ -70,7 +70,7 @@ test('an ask: the attached file and the connector lines travel as delimited data
   assert.equal(inside.ATTACHED_FILE, `Q3 notes. ${INJECT}`, 'the file text is left as written');
   assert.equal(inside.CONNECTOR_ROW, `- Deal: Acme\n- Deal: ${INJECT}`);
   assert.ok(!outside.toLowerCase().includes('ignore previous instructions'), 'the injected text appears only inside a block');
-  assert.equal(outside, 'Connector data:\n[HubSpot]\n\nAttached file:\n\nQuestion:\nWhat is my MRR?', 'the caller-typed file name is not sent');
+  assert.equal(outside, 'Connector data:\n[HubSpot]\n\nAttached file:\n\nQuestion:\nWhat is my MRR?', 'the caller-typed file name is not written beside the file');
   assert.ok(text.endsWith('\n\nQuestion:\nWhat is my MRR?'), 'the question comes last, as typed');
   // The guard still checks what the member typed and attached.
   assert.equal(o.guardText, `What is my MRR?\n\nQ3 notes. ${INJECT}`);
