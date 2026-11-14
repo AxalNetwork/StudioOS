@@ -116,14 +116,16 @@ export async function deleteFundPeriod(env: Env, fundId: number, periodId: numbe
  if(row.status!=='draft')throw new FundReportRefusal('issued',409);
  const current = shapeFundPeriod(row);
  if(typeof revision!=='string'||revision!==current?.revision)throw new FundReportRefusal('conflict',409);
- const where = `fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
-   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)`;
  const args = [fundId,periodId,row.notes,row.updated_at];
  const results = await env.DB.batch([
   env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
-   SELECT ?,?,?,? FROM fund_report_periods WHERE ${where}`)
+   SELECT ?,?,?,? FROM fund_report_periods
+   WHERE fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
+   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)`)
    .bind('fund_report_draft_deleted',JSON.stringify({fund_id:fundId,period_id:periodId}),String(actorId),actorId,...args),
-  env.DB.prepare(`DELETE FROM fund_report_periods WHERE ${where}`).bind(...args),
+  env.DB.prepare(`DELETE FROM fund_report_periods
+   WHERE fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
+   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)`).bind(...args),
  ]);
  if(results.length!==2||results.some(r=>r.success!==true)||results[0].meta.changes!==results[1].meta.changes)throw new Error('Report transaction unreadable');
  if(Number(results[1].meta.changes)===1)return;
