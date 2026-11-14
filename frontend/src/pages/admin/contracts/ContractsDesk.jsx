@@ -57,8 +57,9 @@ export default function ContractsDesk({ section = null }) {
   const [evidencing, setEvidencing] = useState(null);
   const [revision, setRevision] = useState(0);
   const stats = useRead(() => contractsApi.stats(), [revision]);
-  // D5050 part 2 (CT-17): the territory and signed-date filters persist too (a separate line from D5051's list).
-  const filters = Object.fromEntries([...filterKeys, 'territory', 'signed_from', 'signed_to'].filter(key => params.has(key)).map(key => [key, params.get(key)]));
+  // D5050 part 2 (CT-17): the territory and signed-date filters persist too (a separate line from D5051's list),
+  // and D5060 part 4's licence family, licence type and holder.
+  const filters = Object.fromEntries([...filterKeys, 'territory', 'signed_from', 'signed_to', 'licence_family', 'licence_type', 'holder'].filter(key => params.has(key)).map(key => [key, params.get(key)]));
   function navigate(nextTab, nextFilters = {}) {
     const next = new URLSearchParams();
     if (nextTab !== 'agreements') next.set('tab', nextTab);

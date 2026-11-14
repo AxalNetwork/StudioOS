@@ -8,8 +8,8 @@ import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Link } from 'react-router-dom';
 import AgreementFilterRow from './AgreementFilterRow';
 import {
-  NEVER_SENT_LABEL, activeAgreementChips, agreementContextLine, agreementTemplateLine, documentLink, hasNoEnvelope, isNeverSent,
-  legalStateWord, withoutAgreementFilters,
+  NEVER_SENT_LABEL, activeAgreementChips, agreementContextLine, agreementTemplateLine, documentLink, hasNoEnvelope, holderKey,
+  holderOptions, isNeverSent, legalStateWord, withoutAgreementFilters,
 } from '../../../lib/contractAgreements';
 
 const linkClass = 'font-semibold text-violet-700 underline decoration-transparent hover:decoration-current dark:text-violet-300';
@@ -21,7 +21,7 @@ const linkClass = 'font-semibold text-violet-700 underline decoration-transparen
  * platform has no page for says Not recorded with the Worker's reason. A version with no envelope opens on its
  * licence, never as a document, and says why.
  */
-export function AgreementContextCell({ agreement, row = null }) {
+export function AgreementContextCell({ agreement, row = null, onHolder = null }) {
   if (!agreement) return null;
   const links = agreement.links || {};
   const doc = row ? documentLink(row) : null;
@@ -29,7 +29,12 @@ export function AgreementContextCell({ agreement, row = null }) {
   return <div className="mt-1 space-y-1 text-[12px]" data-testid="agreement-context">
     <p className="flex flex-wrap items-center gap-1.5 text-axal-muted">
       <span className="rounded border border-axal-hairline px-1.5 font-mono text-[9.5px] font-bold uppercase tracking-wider dark:border-gray-700">Agreement</span>
-      <span data-testid="agreement-context-line">{agreementContextLine(agreement) || <Missing reason={agreement.licence_reason || 'No licence is recorded for this agreement.'} />}</span></p>
+      <span data-testid="agreement-context-line">{agreementContextLine(agreement) || <Missing reason={agreement.licence_reason || 'No licence is recorded for this agreement.'} />}</span>
+      {/* D5060 part 4 (CT-17): the holder's name filters the list to their licence agreements. */}
+      {onHolder && holderKey(agreement.holder) && <button type="button" data-testid="agreement-holder-filter"
+        className="font-semibold text-violet-700 underline decoration-transparent hover:decoration-current dark:text-violet-300"
+        aria-label={`Show only agreements held by ${agreement.holder.name || 'this holder'}`}
+        onClick={() => onHolder(holderKey(agreement.holder))}>Only {agreement.holder.name || 'this holder'}</button>}</p>
     <p className="font-mono text-[10px] text-axal-faint" data-testid="agreement-template-line">From template {agreementTemplateLine(agreement)}</p>
     <p className="flex flex-wrap gap-x-3.5 gap-y-1 text-[12px]">
       {links.licence ? <Link className={linkClass} to={links.licence}>Open licence ›</Link> : <Missing reason={agreement.licence_reason || 'No licence is recorded for this agreement.'} />}
@@ -99,12 +104,12 @@ function Title({ row, onOpen }) {
 }
 
 /** CT-20 (phone): a row as a card, its title, context, lifecycle with the legal-state word, and its links. */
-function AgreementCard({ row, onOpen }) {
+function AgreementCard({ row, onOpen, onHolder = null }) {
   const m = agreementRowSemantics(row);
   return <li className="space-y-1.5 rounded-xl border border-axal-hairline bg-white p-3 dark:border-gray-700 dark:bg-gray-900" data-testid="agreement-card">
     <div className="text-[13.5px]"><Title row={row} onOpen={onOpen} /></div>
     <p className="text-[12px] text-axal-muted">{row.agreement?.agreement_type_label || row.doc_type_label || row.doc_type}</p>
-    {row.agreement ? <AgreementContextCell agreement={row.agreement} row={row} /> : <p className="text-[12px]">{m.line}</p>}
+    {row.agreement ? <AgreementContextCell agreement={row.agreement} row={row} onHolder={onHolder} /> : <p className="text-[12px]">{m.line}</p>}
     <div className="flex flex-wrap items-center justify-between gap-2"><RowLifecycle row={row} m={m} /><LegalStateWord agreement={row.agreement} /></div>
   </li>;
 }
@@ -171,7 +176,7 @@ export default function AgreementList({ filters, onFilters, onOpen, revision, on
       <label>Sort<select className={input} value={`${filters.sort || 'sent_at'}:${filters.direction || 'desc'}`} onChange={e => { const [sort, direction] = e.target.value.split(':'); onFilters({ ...filters, sort, direction, offset: 0 }); }}>{[['sent_at:desc', 'Sent, newest'], ['sent_at:asc', 'Sent, oldest'], ['title:asc', 'Title'], ['recipient:asc', 'Recipient'], ['signed_at:desc', 'Signed, newest'], ['days_to_sign:asc', 'Days to sign']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <button type="button" className={button} onClick={() => onFilters({})}>Clear filters</button></div>
     {/* D5050 part 2 (CT-17): the licence, package and program agreement filters, and the active ones as chips. */}
-    <div className="px-3 pb-3"><AgreementFilterRow filters={filters} onFilters={onFilters} total={read.data ? read.data.total : null} /></div>
+    <div className="px-3 pb-3"><AgreementFilterRow filters={filters} onFilters={onFilters} total={read.data ? read.data.total : null} holders={holderOptions(read.data?.items)} /></div>
     {/* D4811 part 3: a metric strip cell's records, named, with a way back to all agreements. */}
     {attentionLabel(filters.attention) && <p role="status" className="flex flex-wrap items-center gap-2 px-3 text-[12.5px]" data-testid="agreement-attention-filter">Showing: <b>{attentionLabel(filters.attention)}</b>
       <button type="button" className={button} onClick={() => onFilters({ ...filters, attention: '', offset: 0 })}>Show all agreements</button></p>}
@@ -182,9 +187,9 @@ export default function AgreementList({ filters, onFilters, onOpen, revision, on
           <button type="button" className={button} onClick={() => onFilters({})}>Clear filters</button></div>
         : <p className="p-6" data-testid="agreements-none">No agreements are recorded yet. Use New envelope to send an agreement.</p>)
         : <>
-          <ul className="space-y-2 p-3 md:hidden" data-testid="agreement-cards">{read.data.items.map(row => <AgreementCard key={`${row.source}:${row.id}:${row.uid}`} row={row} onOpen={onOpen} />)}</ul>
+          <ul className="space-y-2 p-3 md:hidden" data-testid="agreement-cards">{read.data.items.map(row => <AgreementCard key={`${row.source}:${row.id}:${row.uid}`} row={row} onOpen={onOpen} onHolder={(holder) => set('holder', holder)} />)}</ul>
           <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[840px] text-left text-xs"><thead className="border-y border-axal-hairline text-axal-muted"><tr>{['Agreement · store', 'Company · recipient', 'Where it stands', 'Provider', 'Lifecycle · legal state'].map(label => <th className="p-3 font-semibold" key={label}>{label}</th>)}</tr></thead><tbody>{read.data.items.map(row => <tr key={`${row.source}:${row.id}:${row.uid}`} className="border-b border-axal-hairline align-top">
-            <td className="p-3"><Title row={row} onOpen={onOpen} /><p className="text-axal-muted">{row.agreement?.agreement_type_label || row.doc_type_label || row.doc_type}</p><span className="font-mono text-[10px] text-axal-faint">{row.source}</span><AgreementContextCell agreement={row.agreement} row={row} /></td>
+            <td className="p-3"><Title row={row} onOpen={onOpen} /><p className="text-axal-muted">{row.agreement?.agreement_type_label || row.doc_type_label || row.doc_type}</p><span className="font-mono text-[10px] text-axal-faint">{row.source}</span><AgreementContextCell agreement={row.agreement} row={row} onHolder={(holder) => set('holder', holder)} /></td>
             <AgreementCells row={row} onLink={onLink} />
           </tr>)}</tbody></table></div></>}
       <Pagination data={read.data} offset={offset} onPage={value => onFilters({ ...filters, offset: value })} />
