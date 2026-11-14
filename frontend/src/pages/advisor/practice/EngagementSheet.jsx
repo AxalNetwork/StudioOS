@@ -73,7 +73,7 @@ export default function EngagementSheet({
         <span className="text-axal-muted">{SHAPE_LABEL[e.shape] || e.shape} · {priceLine(e, money)}</span>
       </span>}
       onClose={onClose}
-      width={548}
+      width={560}
       testId={`engagement-sheet-${e.id}`}
     >
       {/* A refused write is said here, where it was made, not behind the sheet. */}
@@ -86,7 +86,7 @@ export default function EngagementSheet({
             onClick={() => setTab(t)}
             className={`-mb-px border-b-2 px-0.5 pb-2 text-[12.5px] font-semibold ${tab === t
               ? 'border-emerald-600 text-axal-ink dark:text-white'
-              : 'border-transparent text-axal-faint hover:text-axal-ink'}`}>
+              : 'border-transparent text-axal-faint hover:text-axal-ink dark:hover:text-white'}`}>
             {t}
           </button>
         ))}
