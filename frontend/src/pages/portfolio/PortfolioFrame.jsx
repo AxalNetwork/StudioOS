@@ -23,8 +23,16 @@
  * `notice` (a partial-failure line under the nav), `rail`, `children`, and
  * `banner` (D4817 part 8: the one Admin Investor preview banner, above the
  * crumb; null otherwise).
+ *
+ * D4817 part 6 (PF-06) draws one company's workspace in this same frame, so
+ * four optional props let a board below Portfolio say where it is: `title`
+ * (the heading, default Portfolio), `crumb` (what follows Portfolio in the
+ * crumb, which then links back to `/portfolio`), `nav` (the board's own local
+ * navigation in place of Portfolio's) and `docTitle` (the document title in
+ * place of `portfolioTitle(tab)`).
  */
 import React, { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './portfolio.css';
@@ -53,9 +61,13 @@ export default function PortfolioFrame({
   rail = null,
   children,
   testid,
+  title = 'Portfolio',
+  crumb = null,
+  nav,
+  docTitle: ownTitle,
   banner = null,
 }) {
-  const docTitle = portfolioTitle(tab);
+  const docTitle = ownTitle || portfolioTitle(tab);
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const before = document.title;
@@ -68,10 +80,13 @@ export default function PortfolioFrame({
       <a className="pf-skip" href="#portfolio-content">Skip to Portfolio content</a>
       <section className="pf-frame" id="portfolio-content" tabIndex={-1} aria-labelledby="portfolio-title" data-testid={testid}>
         {banner}
-        <nav className="pf-crumb" aria-label="Breadcrumb"><span>Account</span><span aria-hidden="true">›</span><b>Portfolio</b></nav>
+        <nav className="pf-crumb" aria-label="Breadcrumb">
+          <span>Account</span><span aria-hidden="true">›</span>
+          {crumb ? <><Link to="/portfolio" className="pf-crumb-link">Portfolio</Link><span aria-hidden="true">›</span><b>{crumb}</b></> : <b>Portfolio</b>}
+        </nav>
         <header className="pf-head">
           <div>
-            <h1 id="portfolio-title">Portfolio</h1>
+            <h1 id="portfolio-title">{title}</h1>
             <p>{description}</p>
           </div>
           <div className="pf-head-tools">
@@ -79,7 +94,7 @@ export default function PortfolioFrame({
             {tools}
           </div>
         </header>
-        <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" activeSlug={tab} row={PORTFOLIO_NAV} className="pf-nav" />
+        {nav === undefined ? <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" activeSlug={tab} row={PORTFOLIO_NAV} className="pf-nav" /> : nav}
         {notice}
         <div className="pf-body">{children}</div>
       </section>

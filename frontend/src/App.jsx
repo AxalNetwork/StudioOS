@@ -3794,6 +3794,9 @@ function AppInner() {
       <Route path="/portfolio/companies/:uid" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/reports" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/terms" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/financials" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/support" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/activity" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links

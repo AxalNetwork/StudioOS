@@ -13,7 +13,7 @@
  * them, so the administrator sees what the investor can do without anything
  * being sent. One banner (`PreviewBanner`) sits in the frame's banner slot.
  */
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import PortfolioFrame, { portfolioTitle } from './PortfolioFrame';
 import { SummaryTile } from './PortfolioParts';
@@ -73,20 +73,15 @@ export default function PortfolioPreview({ board = 'overview' }) {
   const spec = PREVIEW_BOARDS[board] || PREVIEW_BOARDS.overview;
   const tab = frameTabOf(board in PREVIEW_BOARDS ? board : 'overview');
 
-  // The frame sets the route's title first (a child's effect runs before its
-  // parent's); the preview's title adds "Investor preview" before Axal VC.
+  // The preview's title adds "Investor preview" before Axal VC; the frame
+  // sets it through its `docTitle` prop (D4817 part 6).
   const docTitle = previewDocTitle(portfolioTitle(tab));
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const before = document.title;
-    document.title = docTitle;
-    return () => { document.title = before; };
-  }, [docTitle]);
 
   return (
     <PortfolioFrame
       tab={tab}
       testid="portfolio-preview"
+      docTitle={docTitle}
       description="The Investor shell’s Portfolio, as an investor would see it, with every investor figure withheld."
       banner={<PreviewBanner superAdmin={view?.superAdmin === true} onExit={view?.exitPreview} />}
     >
