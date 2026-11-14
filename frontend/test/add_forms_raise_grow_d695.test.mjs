@@ -380,7 +380,7 @@ test('9: each Grow Edit sends only what its row carried or the founder filled', 
     ["  toBody: (v, key) => kpiBody({ ...v, kpi: key }),", '  toBody: (v) => kpiBody(v),'],
     ["key: 'edit-role',\n  title: 'Edit role',", "key: 'edit-role',\n  title: 'Edit a role',"],
     ["withChips(partner.fields[1], [['other', 'Other']])", 'bare(partner.fields[1])'],
-    ['const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null);', 'const scored = [];'],
+    ["const scored = MARKET_PARTS.map(([k]) => k).filter((k) => e[`${k}_score`] != null && e[`${k}_score`] !== '');", 'const scored = [];'],
   ]);
 });
 
