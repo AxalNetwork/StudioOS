@@ -1,0 +1,31 @@
+{
+  "skill": "customer-follow-up-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "network.relationships": {
+        "contact": {
+          "name": "Dana Fixture",
+          "company": "Acme Fixtures"
+        }
+      },
+      "validate.records": {
+        "call_notes": "Agreed to a two-week pilot on site 3.",
+        "next_step": "Pilot kickoff"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Dana",
+      "two-week pilot",
+      "date to confirm"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "@"
+    ]
+  }
+}

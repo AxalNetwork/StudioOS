@@ -1,0 +1,770 @@
+/*
+ * The shared Eadwyn AI rail — see ui/WorkerRail.jsx for what each block
+ * says and why, and design/canvases/integrated/AIRail.dc.html for the sizes
+ * and colours (D698).
+ *
+ * SCOPED TO `.fwr`, never to the host's class. The component keeps the page's
+ * own rail class on the same element (`a5-rail`, `fr-pitch-rail`, `a7-rail`, …)
+ * so the page's grid column, border and background continue to place it. That
+ * class is the page's; everything below is the rail's, and the two never
+ * collide because nothing here reaches outside `.fwr`.
+ *
+ * The palette comes from custom properties so a host page that already defines
+ * a rail background does not have to fight this file for it.
+ */
+/*
+ * ONE SPECIFICITY STEP ABOVE THE HOST. The page's own rail class stays on this
+ * element because it draws the frame — padding, background, border-left, and
+ * the responsive rules that flip that border to the top. But some of those
+ * stylesheets also reach the markup this component replaced: `.a5-rail > div`
+ * adds a rule and 14px of padding to every direct child, and `.validate-rail`
+ * becomes a three-column grid below 900px. Both would now land on the rail's
+ * own wrapper. Writing the layout as `aside.fwr` (0,1,1) beats any single-class
+ * host rule regardless of which stylesheet the bundler emits first, and the
+ * child reset below neutralises the descendant rules without deleting the
+ * frame rules that are still doing their job.
+ */
+aside.fwr { display: flex; flex-direction: column; }
+aside.fwr > .fwr-title,
+aside.fwr > .fwr-body { padding: 0; border-top: 0; }
+
+.fwr {
+  --fwr-ink: #29252f;
+  --fwr-muted: #6b6473;
+  --fwr-faint: #8b8494;
+  --fwr-line: #e7e3eb;
+  --fwr-paper: #fff;
+  /* The role supplies both pairs inline (see ui/WorkerRail.jsx); these
+     fallbacks are the founder accent, so a rail mounted without a role still
+     renders the licence it was built for rather than an unset colour. */
+  --fwr-accent: var(--fwr-accent-light, #6d28d9);
+  --fwr-accent-soft: var(--fwr-accent-soft-light, #f5efff);
+  /* Measured 5.25:1 on its own ground — the chip is small text and has to
+     clear 4.5. */
+  --fwr-ok: #0f766e;
+  --fwr-ok-soft: #f0fdfa;
+  --fwr-ok-line: #99f6e4;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--fwr-ink);
+}
+
+.fwr-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--fwr-faint);
+}
+
+/*
+ * THE TOGGLE. It was a bare SVG with `aria-hidden="true"` — the right markup
+ * for decoration and the wrong markup for the only control on this rail. As a
+ * button it needs a hit area a pointer can find, a focus ring a keyboard user
+ * can see, and no default chrome, in that order.
+ */
+.fwr-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 24px; height: 24px; margin: -4px -4px -4px 0;
+  padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--fwr-faint); cursor: pointer;
+}
+.fwr-toggle:hover { color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.fwr-toggle:focus-visible {
+  outline: 2px solid var(--fwr-accent); outline-offset: 1px; color: var(--fwr-accent);
+}
+/* The label the button carries for a screen reader, since the icon alone says
+   nothing. Clipped rather than `display:none`, which would hide it from the
+   accessibility tree along with everything else. */
+.fwr-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.fwr-body { display: flex; flex-direction: column; min-width: 0; }
+
+.fwr-block { padding: 15px 0; border-top: 1px solid var(--fwr-line); }
+.fwr-block:first-child { padding-top: 18px; border-top: 0; }
+.fwr-block > span {
+  display: block;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--fwr-faint);
+}
+.fwr-block strong { display: block; margin-top: 8px; font-size: 11.5px; line-height: 1.45; }
+.fwr-block p { margin: 5px 0 0; color: var(--fwr-muted); font-size: 11px; line-height: 1.55; }
+.fwr-block em { font-style: normal; color: var(--fwr-faint); font-weight: 600; }
+
+/* Absent is absent. A figure the platform could not read is greyed and named,
+   never rendered as a zero. */
+.fwr-absent { color: var(--fwr-faint); font-weight: 600; }
+
+/*
+ * D698 — THE AIRAIL CANVAS'S BLOCKS (design/canvases/integrated/AIRail.dc.html,
+ * AIR:14-36), at the canvas's sizes. Its violet is the founder's accent, so a
+ * selection reads `--fwr-accent` and every licence keeps its own; its greys
+ * are the `--d698-*` properties below. Every rule that sets a colour has a
+ * `.dark` pair at the end of this block.
+ */
+.fwr {
+  --d698-ink: #18181b;
+  --d698-text: #4a4553;
+  --d698-muted: #615c6e;
+  --d698-faint: #716c7e; /* D1511: was #7d7889, 4.27:1 on white; axe (serious) needs 4.5:1 */
+  --d698-sep: #c9c6d2;
+  --d698-line: #ececf1;
+  --d698-ground: #f4f3f7;
+  --d698-paper: #fff;
+  --d698-dot: #d4d1dc;
+}
+.fwr-title .fwr-mark { width: 26px; height: 26px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.fwr-title .fwr-title-text {
+  flex: 1; min-width: 0;
+  font-size: 15px; font-weight: 800; letter-spacing: -.015em; text-transform: none;
+  color: var(--d698-ink);
+}
+.fwr-title { justify-content: flex-start; gap: 9px; }
+.fwr-body { gap: 14px; margin-top: 14px; }
+
+.fwr-who { display: flex; flex-direction: column; gap: 6px; }
+.fwr-pill {
+  align-self: flex-start;
+  font-size: 10.5px; font-weight: 700; border-radius: 99px; padding: 2px 8px;
+  color: var(--fwr-pill-ink-light); background: var(--fwr-pill-bg-light);
+  border: 1px solid var(--fwr-pill-line-light);
+}
+.fwr-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12.5px; line-height: 1.4; }
+.fwr-crumb { font-weight: 500; color: var(--d698-muted); }
+.fwr-crumb[data-last="true"] { font-weight: 700; color: var(--d698-ink); }
+.fwr-crumb-sep { color: var(--d698-sep); }
+
+/* D769 (D720 §6): "Turn off AI assistance on this page", a switch on every
+   page. The track fills with the accent when AI is off, as the canvas draws it. */
+.fwr-ai-switch {
+  font: inherit; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 32px; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+}
+.fwr-ai-switch:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; border-radius: 6px; }
+.fwr-ai-switch-label { font-size: 12.5px; font-weight: 700; color: var(--d698-ink); }
+.fwr-ai-switch-track {
+  width: 34px; height: 20px; border-radius: 99px; position: relative; flex: none;
+  transition: background .15s; background: #dedce4;
+}
+.fwr-ai-switch-track[data-on="true"] { background: var(--fwr-accent); }
+.fwr-ai-switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .15); transition: left .15s;
+}
+.fwr-ai-switch-track[data-on="true"] .fwr-ai-switch-knob { left: 16px; }
+p.fwr-mode-line { margin: 0; font-size: 12px; line-height: 1.5; color: var(--d698-muted); }
+
+.fwr-sug { display: flex; flex-direction: column; gap: 6px; }
+.fwr-eyebrow {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--d698-faint);
+}
+.fwr-cards { display: flex; flex-direction: column; gap: 6px; }
+.fwr-card {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 11px; border-radius: 10px;
+  border: 1px solid var(--d698-line); background: var(--d698-paper); color: inherit;
+}
+button.fwr-card { font: inherit; text-align: left; width: 100%; cursor: pointer; }
+button.fwr-card:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-card[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.fwr-dot {
+  width: 16px; height: 16px; border-radius: 50%; flex: none; margin-top: 1px; box-sizing: border-box;
+  border: 2px solid var(--d698-dot); display: grid; place-items: center;
+}
+.fwr-dot > span { width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+.fwr-card[data-selected="true"] .fwr-dot { border-color: var(--fwr-accent); }
+.fwr-card[data-selected="true"] .fwr-dot > span { background: var(--fwr-accent); }
+.fwr-card-text { flex: 1; min-width: 0; }
+.fwr-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fwr-card-head b { font-size: 13px; font-weight: 700; color: var(--d698-ink); }
+.fwr-role {
+  font-style: normal; font-size: 10px; font-weight: 700; border-radius: 99px; padding: 1px 7px; white-space: nowrap;
+  color: #6b6577; background: var(--d698-ground); border: 1px solid var(--d698-line);
+}
+.fwr-role[data-default="true"] {
+  color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft);
+}
+.fwr-card-line { display: block; font-size: 11.5px; line-height: 1.4; margin-top: 2px; color: var(--d698-muted); }
+/* D769: the Worker's price, in the canvas's units. */
+.fwr-card-price { display: block; font-size: 11px; line-height: 1.4; margin-top: 3px; font-weight: 600; color: var(--d698-text); font-variant-numeric: tabular-nums; }
+p.fwr-models-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+/* D769 PR 2: "On this page", the page's options; the open one in the accent. */
+.fwr-options { display: flex; flex-direction: column; gap: 5px; }
+.fwr-option-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fwr-option {
+  font-size: 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 5px 8px; border-radius: 7px; color: var(--d698-ink);
+}
+.fwr-option-model { font-size: 11px; white-space: nowrap; color: var(--d698-muted); }
+.fwr-option[data-open="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.fwr-all-toggle {
+  font: inherit; font-size: 12px; font-weight: 700; text-align: left;
+  min-height: 28px; display: flex; align-items: center;
+  border: 0; padding: 0; background: none; cursor: pointer; color: var(--fwr-accent);
+}
+.fwr-all-toggle:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-groups { display: flex; flex-direction: column; gap: 10px; }
+.fwr-group-title { font-size: 10.5px; font-weight: 700; margin-bottom: 5px; color: var(--d698-faint); }
+p.fwr-price-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+.fwr-rows { display: flex; flex-direction: column; gap: 2px; }
+/* An All models row: the name, the New badge, and the short price (D769). */
+.fwr-chip {
+  font: inherit; font-size: 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 6px 8px; border-radius: 7px; border: 0; width: 100%; text-align: left;
+  background: transparent; color: var(--d698-ink);
+}
+.fwr-row-name { display: inline-flex; align-items: center; gap: 6px; }
+.fwr-row-price { font-size: 11px; white-space: nowrap; color: var(--d698-muted); font-variant-numeric: tabular-nums; }
+.fwr-new {
+  font-style: normal; font-size: 9.5px; font-weight: 800; border-radius: 99px; padding: 0 6px;
+  color: var(--fwr-accent); background: var(--fwr-accent-soft);
+}
+button.fwr-chip { cursor: pointer; }
+button.fwr-chip:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-chip[data-selected="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+p.fwr-safety { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+
+.fwr-usage {
+  display: flex; flex-direction: column; gap: 9px;
+  border: 1px solid var(--d698-line); border-radius: 12px; padding: 12px;
+}
+.fwr-usage-line { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fwr-usage-line span { color: var(--d698-text); }
+.fwr-usage-line b { font-weight: 700; color: var(--d698-ink); }
+.fwr-usage .fwr-meter { height: 6px; margin-top: 5px; background: var(--d698-line); }
+.fwr-usage-reset { font-size: 10.5px; margin-top: 4px; color: var(--d698-faint); }
+p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+.fwr-add-tokens {
+  display: flex; align-items: center; justify-content: center; min-height: 36px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 700; text-decoration: none;
+  color: var(--fwr-accent); border: 1px solid var(--fwr-accent-soft); background: var(--fwr-accent-soft);
+}
+.fwr-add-tokens:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+/* Drawn even when no pack is on sale (D769): disabled, the reason under it. */
+button.fwr-add-tokens { font: inherit; font-size: 12.5px; font-weight: 700; width: 100%; cursor: pointer; }
+button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
+/* Runs paused, as /account/usage draws it (AccountUsage.jsx, `danger`). */
+.fwr-paused {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; font-size: 11.5px;
+  color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca;
+}
+
+/*
+ * D698 — THE EADWYN PANEL (ui/EadwynPanel.jsx), CO:30-36: a scrim and a 300px
+ * right panel, at z-index 60 (above the tab bar and the phone sheets, below
+ * the lightbox). And the page's own button (CO:26), 40px, radius 12.
+ */
+.ead-panel-layer { position: fixed; inset: 0; z-index: 60; }
+.ead-panel-scrim {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: default;
+  background: rgba(24, 24, 27, .42);
+}
+.ead-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 300px; max-width: 88%;
+  display: flex; flex-direction: column;
+  background: #fff; box-shadow: -8px 0 30px rgba(24, 24, 27, .18);
+}
+.ead-panel-head {
+  display: flex; align-items: center; gap: 9px; flex: none;
+  padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--d698-line);
+}
+.ead-panel-mark { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.ead-panel-titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ead-panel-titles b { font-size: 15px; font-weight: 800; letter-spacing: -.015em; color: var(--d698-ink); }
+.ead-panel-titles span { font-size: 11.5px; color: var(--d698-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ead-panel-close {
+  width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 10px; background: transparent; cursor: pointer; color: var(--d698-muted);
+}
+.ead-panel-close:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 1px; }
+.ead-panel-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.ead-open {
+  width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; cursor: pointer;
+  border: 1px solid #ececf1; background: #fff;
+}
+.ead-open img { width: 22px; height: 22px; object-fit: contain; image-rendering: pixelated; }
+.ead-open:focus-visible { outline: 2px solid #6d28d9; outline-offset: 2px; }
+
+/* The dark pairs for everything above. */
+.dark .fwr {
+  --d698-ink: #f4f3f7;
+  --d698-text: #cfcbd9;
+  --d698-muted: #a9a4b8;
+  --d698-faint: #8b849c;
+  --d698-sep: #4a4655;
+  --d698-line: #2e2b38;
+  --d698-ground: #24212d;
+  --d698-paper: #1a1822;
+  --d698-dot: #4a4655;
+}
+.dark .fwr-title .fwr-title-text { color: var(--d698-ink); }
+.dark .fwr-pill { color: var(--fwr-pill-ink-dark); background: var(--fwr-pill-bg-dark); border-color: var(--fwr-pill-line-dark); }
+.dark .fwr-crumb { color: var(--d698-muted); }
+.dark .fwr-crumb[data-last="true"] { color: var(--d698-ink); }
+.dark .fwr-crumb-sep { color: var(--d698-sep); }
+.dark .fwr-ai-switch-label { color: var(--d698-ink); }
+.dark .fwr-ai-switch-track { background: #4a4655; }
+.dark .fwr-ai-switch-track[data-on="true"] { background: var(--fwr-accent); }
+.dark .fwr-ai-switch-knob { background: #f4f3f7; box-shadow: none; }
+.dark p.fwr-mode-line { color: var(--d698-muted); }
+.dark .fwr-eyebrow { color: var(--d698-faint); }
+.dark .fwr-card { border-color: var(--d698-line); background: var(--d698-paper); }
+.dark .fwr-card[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.dark .fwr-dot { border-color: var(--d698-dot); }
+.dark .fwr-card[data-selected="true"] .fwr-dot { border-color: var(--fwr-accent); }
+.dark .fwr-card[data-selected="true"] .fwr-dot > span { background: var(--fwr-accent); }
+.dark .fwr-card-head b { color: var(--d698-ink); }
+.dark .fwr-role { color: #b8b3c6; background: var(--d698-ground); border-color: var(--d698-line); }
+.dark .fwr-role[data-default="true"] { color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft); }
+.dark .fwr-card-line { color: var(--d698-muted); }
+.dark .fwr-card-price { color: var(--d698-text); }
+.dark p.fwr-models-note { color: var(--d698-faint); }
+.dark .fwr-all-toggle { color: var(--fwr-accent); }
+.dark .fwr-option { color: var(--d698-ink); }
+.dark .fwr-option-model { color: var(--d698-muted); }
+.dark .fwr-option[data-open="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark .fwr-group-title { color: var(--d698-faint); }
+.dark .fwr-chip { background: transparent; color: var(--d698-ink); }
+.dark .fwr-chip[data-selected="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark p.fwr-price-note { color: var(--d698-faint); }
+.dark .fwr-row-price { color: var(--d698-muted); }
+.dark .fwr-new { color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.dark p.fwr-safety { color: var(--d698-faint); }
+.dark .fwr-usage { border-color: var(--d698-line); }
+.dark .fwr-usage-line span { color: var(--d698-text); }
+.dark .fwr-usage-line b { color: var(--d698-ink); }
+.dark .fwr-usage .fwr-meter { background: var(--d698-line); }
+.dark .fwr-usage-reset { color: var(--d698-faint); }
+.dark p.fwr-usage-note { color: var(--d698-faint); }
+.dark .fwr-add-tokens { color: var(--fwr-accent); border-color: var(--fwr-accent-soft); background: var(--fwr-accent-soft); }
+.dark .fwr-paused { color: #fca5a5; background: rgba(69, 10, 10, .45); border-color: #7f1d1d; }
+.dark .ead-panel-scrim { background: rgba(0, 0, 0, .55); }
+.dark .ead-panel { background: #1a1822; }
+.dark .ead-panel-head { border-bottom-color: var(--d698-line); }
+.dark .ead-panel-titles b { color: var(--d698-ink); }
+.dark .ead-panel-titles span { color: var(--d698-muted); }
+.dark .ead-panel-close { color: var(--d698-muted); }
+.dark .ead-open { border-color: #2e2b38; background: #1a1822; }
+.dark .ead-open:focus-visible { outline-color: #a78bfa; }
+/* end D698 */
+
+.fwr-run {
+  font: inherit; font-size: 11px; font-weight: 800;
+  padding: 6px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--fwr-accent);
+  background: var(--fwr-accent-soft); color: var(--fwr-accent);
+}
+.fwr-run:hover:not(:disabled) { background: var(--fwr-accent); color: #fff; }
+.fwr-run:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-run:disabled { opacity: .55; cursor: not-allowed; }
+
+
+.fwr-meter {
+  height: 4px; margin-top: 8px; border-radius: 999px;
+  background: var(--fwr-line); overflow: hidden;
+}
+.fwr-meter i { display: block; height: 100%; background: var(--fwr-accent); }
+.fwr-meter i.fwr-over { background: #b91c1c; }
+
+
+.fwr-foot {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: auto; padding-top: 14px; border-top: 1px solid var(--fwr-line);
+  color: var(--fwr-muted);
+}
+.fwr-foot svg { flex: none; margin-top: 2px; color: var(--fwr-accent); }
+.fwr-foot strong { display: block; font-size: 11px; color: var(--fwr-ink); }
+.fwr-foot p { margin: 4px 0 0; font-size: 10.5px; line-height: 1.5; }
+.fwr-foot-note { color: var(--fwr-faint); }
+
+/*
+ * COLLAPSED — the spine, and the track that has to shrink with it.
+ *
+ * `--fwr-track` is the whole mechanism. Every host declares its rail column as
+ * `calc(var(--fwr-track, 286px) + var(--fwr-ask, 0px))` with its OWN width as the fallback, so while this
+ * property is undefined each page keeps the width it has always had, to the
+ * pixel. Defining it here — once, globally — collapses all twenty at the same
+ * moment, which is what makes one stored preference move the whole product
+ * rather than one page.
+ *
+ * DESKTOP ONLY, and in CSS rather than in React state. Below 1024px the hosts'
+ * own media rules already stack the rail beneath the body, where a 44px spine
+ * would be a bar across the page rather than a column beside it. Putting both
+ * halves behind the same query means the preference is remembered on a narrow
+ * viewport without being applied to one, and there is no second source of
+ * truth about what "desktop" means.
+ */
+@media (min-width: 1024px) {
+  :root[data-worker-rail="collapsed"] { --fwr-track: 44px; }
+
+  aside.fwr[data-collapsed="true"] { padding-left: 0; padding-right: 0; align-items: center; }
+  aside.fwr[data-collapsed="true"] > .fwr-body { display: none; }
+  aside.fwr[data-collapsed="true"] .fwr-title {
+    flex-direction: column-reverse; gap: 12px; height: 100%; justify-content: flex-start;
+  }
+  aside.fwr[data-collapsed="true"] .fwr-toggle { margin: 0; }
+  /* The label turns with the column instead of disappearing: a 44px spine with
+     no word on it is a mystery button, and the rail's whole job is to say what
+     it is. Bottom-to-top so it reads with the head at the top, matching the
+     expanded title's position. */
+  aside.fwr[data-collapsed="true"] .fwr-mark { display: none; }
+  aside.fwr[data-collapsed="true"] .fwr-title-text { flex: none; font-size: 11px; }
+  aside.fwr[data-collapsed="true"] .fwr-title-text {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    letter-spacing: .12em; white-space: nowrap; overflow: hidden;
+    max-height: calc(100% - 40px); text-overflow: ellipsis;
+  }
+}
+
+.dark .fwr {
+  --fwr-ink: #f4f3f7;
+  --fwr-muted: #a9a4b8;
+  --fwr-faint: #8b849c;
+  --fwr-line: #2e2b38;
+  --fwr-paper: #1a1822;
+  --fwr-accent: var(--fwr-accent-dark, #a78bfa);
+  --fwr-accent-soft: var(--fwr-accent-soft-dark, #241d38);
+  /* Same chip, inverted: measured 11.17:1 on #10221f. A dark variant merely
+     existing is not the test — every pair here was computed. */
+  --fwr-ok: #5eead4;
+  --fwr-ok-soft: #10221f;
+  --fwr-ok-line: #164e46;
+}
+.dark .fwr-meter i.fwr-over { background: #f87171; }
+
+/*
+ * D405 — THE PHONE FORM, canvas M5: a floating button and a bottom sheet in
+ * place of the panel, below 1024px only. The panel and the button are never
+ * on screen together: above the breakpoint the button is hidden, below it the
+ * in-flow panel is. The button's `bottom` is set inline by RailFab so it reads
+ * the tab bar's height (`--mobile-tabbar-h`) where the button is declared.
+ *
+ * The button and the sheet are portalled to <body>, outside `.fwr`, so they
+ * read the accent pair the component passes inline rather than `--fwr-accent`.
+ */
+.fwr-fab,
+.fwr-sheet-layer { display: none; }
+
+@media (max-width: 1023.98px) {
+  aside.fwr { display: none; }
+
+  .fwr-fab {
+    position: fixed; right: 16px; z-index: 40;
+    display: none; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 18px; border: 0;
+    color: #fff; background: var(--fwr-accent-light, #6d28d9);
+    box-shadow: 0 5px 18px rgba(24, 24, 27, .24);
+    cursor: pointer;
+  }
+  .fwr-fab:focus-visible { outline: 2px solid var(--fwr-accent-light, #6d28d9); outline-offset: 3px; }
+  /* The mode badge: filled for an AI mode, hollow for Manual — the canvas's
+     one signal, and the button's label says it in words. */
+  .fwr-fab-badge {
+    position: absolute; top: 7px; right: 7px;
+    width: 11px; height: 11px; border-radius: 999px;
+    border: 2px solid #fff; background: transparent;
+  }
+  .fwr-fab-badge[data-mode="ai"] { background: #10b981; }
+
+  .fwr-sheet-layer { display: block; position: fixed; inset: 0; z-index: 50; }
+  .fwr-sheet-backdrop {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    border: 0; padding: 0; cursor: default; background: rgba(24, 24, 27, .38);
+  }
+  .fwr-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    max-height: 85vh;
+    background: var(--fwr-paper);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -6px 30px rgba(24, 24, 27, .2);
+    padding: 9px 16px 0;
+  }
+  .fwr-sheet-grab { width: 38px; height: 4px; border-radius: 999px; background: #d4d2dc; margin: 0 auto 10px; flex: none; }
+  .fwr-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; }
+  .fwr-sheet-head .fwr-title-text { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+  .fwr-sheet-close { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  /* The body scrolls inside the sheet, and its last line clears the home
+     indicator. */
+  .fwr-sheet-scroll {
+    flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; min-height: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.dark .fwr-fab { background: var(--fwr-accent-dark, #a78bfa); color: #1a1822; }
+.dark .fwr-fab-badge { border-color: #1a1822; }
+.dark .fwr-sheet-grab { background: #4a4655; }
+
+/*
+ * D406 — the collapsed spine's status dot and vertical spend. Desktop only,
+ * like the spine itself: below 1024px the rail is the phone button (D405).
+ * The four spend states are styled apart so none of the three that are not a
+ * figure can be read as one.
+ */
+.fwr-spine { display: none; }
+@media (min-width: 1024px) {
+  aside.fwr[data-collapsed="true"] .fwr-spine {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .fwr-spine-dot { width: 8px; height: 8px; border-radius: 999px; background: #a8a4b4; }
+  .fwr-spine-dot[data-state="on"] { background: #10b981; }
+  .fwr-spine-spend {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    font-size: 9px; letter-spacing: .05em; white-space: nowrap;
+    font-variant-numeric: tabular-nums; color: var(--fwr-muted);
+  }
+  .fwr-spine-spend[data-state="figure"] { color: var(--fwr-ink); font-weight: 700; }
+  .fwr-spine-spend[data-state="loading"] { color: var(--fwr-faint); }
+  .fwr-spine-spend[data-state="not_recorded"] { color: var(--fwr-muted); font-style: italic; }
+  .fwr-spine-spend[data-state="unreadable"] { color: #b91c1c; font-weight: 700; }
+}
+.dark .fwr-spine-dot { background: #6f6a80; }
+.dark .fwr-spine-dot[data-state="on"] { background: #34d399; }
+.dark .fwr-spine-spend[data-state="unreadable"] { color: #f87171; }
+
+/*
+ * D556 — THE FRAME (ui/RailFrame.jsx). The founder desks' panel, written once
+ * for every host that does not draw it in its own stylesheet: docked right,
+ * the page's full height, a hairline seam, its own ground and padding, and a
+ * track that narrows to the spine through `--fwr-track`. The figures are the
+ * ones WorkspaceShell's slot already used (280px, 18px inset, 28px under),
+ * which is where this frame came from.
+ *
+ * Below 1024px the column is hidden rather than unmounted: the rail is the
+ * floating button and sheet there (D405), and both live in the component.
+ */
+.fwr-frame-rail { display: none; }
+
+@media (min-width: 1024px) {
+  .fwr-frame { display: flex; align-items: stretch; min-height: 100%; }
+  .fwr-frame-main { flex: 1 1 auto; min-width: 0; }
+  /* #4260: the column draws the seam and the ground; the inset is the rail's.
+     The frame once padded this column 18px 18px 28px around the rail, so the
+     Ask panel, docked to the rail's own box, started 18px under the header,
+     stopped 28px above the column's foot and stood 18px off the seam; and a
+     collapsed rail was only as tall as its spine, so the panel was too. Now
+     the column, the dock and the rail are one height, and the rail carries
+     the inset, so the panel's box is the column's. */
+  .fwr-frame-rail {
+    display: flex; flex-direction: column; flex: none;
+    width: calc(var(--fwr-track, 280px) + var(--fwr-ask, 0px));
+    border-left: 1px solid #ececf1;
+    background: #fff;
+  }
+  /* No scroll of its own. The dock was once sticky with a window-high cap
+     and `overflow-y: auto`, which gave the panel a second scrollbar beside
+     the page's whenever its cards ran taller than the window. The rail now
+     flows with the page: the page's one scrollbar reaches every card. */
+  .fwr-frame-dock { position: static; overflow: visible; flex: 1 0 auto; display: flex; flex-direction: column; }
+  .fwr-frame-dock > aside.fwr { flex: 1 0 auto; box-sizing: border-box; padding: 18px 18px 28px; }
+  /* 18px either side of a 44px column leaves 8px for the control. */
+  .fwr-frame-dock > aside.fwr[data-collapsed="true"] { padding-left: 0; padding-right: 0; }
+  /* The spine stays at the top of the now column-high rail: its title is a
+     reversed column, and at 100% of that height it would pack to the foot. */
+  .fwr-frame-dock > aside.fwr[data-collapsed="true"] > .fwr-title { height: auto; }
+  /* Docked to the edge. The page container pads its content 24px at this
+     width (App.jsx, `md:p-6`); a frame that is a direct child of it takes
+     that padding back with an equal negative margin on the right and the
+     bottom, and on the top too when nothing sits above it, then hands the
+     same padding to the body, so the body does not move and the panel meets
+     the edge. The left is the body's side and keeps the container's padding.
+     A frame nested deeper does not bleed: it is not adjacent to the padding
+     it would be cancelling. */
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"] { margin-right: -24px; margin-bottom: -24px; flex: 1 0 auto; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"] > .fwr-frame-main { padding-right: 24px; padding-bottom: 24px; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"]:first-child { margin-top: -24px; }
+  [data-app-main]:not(.edge-to-edge-surface) > .fwr-frame[data-rail="true"]:first-child > .fwr-frame-main { padding-top: 24px; }
+  /* To the window's edge, and down to the footer. On a licence that is not
+     full-bleed (admin and the HQ consoles), the page container is also
+     `max-w-7xl mx-auto` (App.jsx). Once the window is wider than that cap plus
+     the sidebar, the edge above was the centred column's, 232px short of the
+     window's at 2000px. And nothing gave the container a height, so on a short
+     page the panel ended with the content, above the footer. A container that
+     holds a docked frame drops the cap and grows to the bottom of the scroll
+     column, where the footer's `mt-auto` already sits, and the frame grows
+     with it (its `flex` above). Then the panel runs from under the header to
+     the footer and meets the window's edge, as the founder desks' does. A page
+     with no rail keeps the centred column. */
+  [data-app-main]:not(.edge-to-edge-surface):has(> .fwr-frame[data-rail="true"]) {
+    max-width: none; margin-left: 0; margin-right: 0;
+    flex: 1 0 auto; display: flex; flex-direction: column;
+  }
+  /* #4260: an edge-to-edge page (the cycle pages, the founder desks, the
+     investor workspaces) has no padding to take back, but its rail still has
+     to reach the footer, or the rail column, and the Ask panel docked in it,
+     end where the page's content does. The container grows to the footer and
+     the child that holds the rail grows with it. Once flexed, that child's
+     height is definite, so a host shell's own `min-height: 100%` (`.fb-board`,
+     `.a6-network`, `.i4-shell` …) resolves at last instead of meaning nothing. */
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) {
+    flex: 1 0 auto; display: flex; flex-direction: column;
+  }
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) > :has(aside.fwr) { flex: 1 0 auto; }
+}
+
+/*
+ * A section strip the shell hands the frame (RailFrame's `RailStripSlot`):
+ * HQ's Platform and Content links. Above the page container it ran across the
+ * rail's column too, so the panel started under it. In the frame, it is the
+ * top of the body's column, as a founder desk's tabs are, and the panel runs
+ * from the header. It keeps the place it had: 12px under the header, and the
+ * page's own gap (16px, 24px from 768px) between it and the body.
+ */
+.fwr-frame-strip { margin: -4px 0 16px; }
+.fwr-frame-strip > nav { padding: 0; background: none; }
+@media (min-width: 768px) {
+  .fwr-frame-strip { margin: -12px 0 24px; }
+}
+
+.dark .fwr-frame-rail { border-left-color: #1f2937; background: #111827; }
+
+/*
+ * D652 (#1464) — the composer (ui/EadwynComposer.jsx), from the canvas's
+ * `rail` and `railList` screens: answers on a soft ground with their source
+ * line in the accent, the "Ready to send" card, the "+" menu and its switches.
+ * Colours come from the rail's own properties, so the dark rules above apply.
+ */
+.fwr .ead-thread { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.fwr .ead-msg p { margin: 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.fwr .ead-msg-user { align-self: flex-end; max-width: 90%; padding: 7px 10px; border: 1px solid var(--fwr-line); border-radius: 12px; }
+.fwr .ead-msg-assistant { padding: 9px 11px; border-radius: 12px; background: var(--fwr-accent-soft); }
+.fwr .ead-source { display: block; margin-top: 4px; font-size: 11px; color: var(--fwr-accent); }
+.fwr .ead-action {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 9px 11px;
+  border: 1px solid var(--fwr-accent); border-radius: 12px; background: var(--fwr-paper);
+}
+.fwr .ead-action-title { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--fwr-accent); }
+.fwr .ead-action-what { font-size: 12.5px; }
+.fwr .ead-action-fields { display: grid; gap: 2px; margin: 0; font-size: 11.5px; }
+.fwr .ead-action-field { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; }
+.fwr .ead-action-field dt { color: var(--fwr-muted); overflow-wrap: anywhere; }
+.fwr .ead-action-field dd { margin: 0; overflow-wrap: anywhere; }
+.fwr .ead-action-said, .fwr .ead-action-legacy { font-size: 11px; color: var(--fwr-muted); font-style: italic; }
+.fwr .ead-action-buttons { display: flex; gap: 6px; }
+.fwr .ead-send, .fwr .ead-cancel {
+  font: inherit; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+}
+.fwr .ead-send { border: 1px solid var(--fwr-accent); background: var(--fwr-accent); color: #fff; }
+.fwr .ead-cancel { border: 1px solid var(--fwr-line); background: var(--fwr-paper); color: var(--fwr-ink); }
+.fwr .ead-send:disabled, .fwr .ead-cancel:disabled { opacity: .55; cursor: not-allowed; }
+.fwr .ead-action-done { font-size: 12px; color: var(--fwr-muted); }
+.fwr .ead-thread-tools { display: flex; gap: 12px; flex-wrap: wrap; }
+.fwr .ead-link { font: inherit; font-size: 11px; color: var(--fwr-accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.fwr .ead-compose { position: relative; margin-top: 6px; }
+.fwr .ead-compose-row { display: flex; gap: 6px; align-items: flex-end; }
+.fwr .ead-plus {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent);
+  font: inherit; font-weight: 800;
+}
+.fwr .ead-input {
+  flex: 1; min-width: 0; resize: vertical; font: inherit; font-size: 12.5px; color: var(--fwr-ink);
+  padding: 6px 9px; border: 1px solid var(--fwr-line); border-radius: 10px; background: var(--fwr-paper);
+}
+.fwr .ead-plus:focus-visible, .fwr .ead-input:focus-visible, .fwr .ead-switch:focus-visible,
+.fwr .ead-send:focus-visible, .fwr .ead-cancel:focus-visible, .fwr .ead-menu-item:focus-visible {
+  outline: 2px solid var(--fwr-accent); outline-offset: 2px;
+}
+.fwr .ead-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 3;
+  display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--fwr-line); border-radius: 12px;
+  background: var(--fwr-paper); box-shadow: 0 12px 30px rgba(24, 24, 27, .14);
+}
+.fwr .ead-menu-item {
+  font: inherit; font-size: 13px; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--fwr-ink); cursor: pointer;
+}
+.fwr .ead-menu-sub { display: flex; justify-content: space-between; background: var(--fwr-accent-soft); }
+.fwr .ead-list-head { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; }
+.fwr .ead-list-head a { color: var(--fwr-accent); }
+.fwr .ead-conn { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; }
+.fwr .ead-conn.is-blocked { opacity: .5; }
+.fwr .ead-conn-name { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 13px; font-weight: 600; }
+.fwr .ead-conn-text { display: flex; flex-direction: column; min-width: 0; }
+.fwr .ead-conn-why { font-size: 11px; font-weight: 400; color: #92400e; }
+.fwr a.ead-conn-why { text-decoration: underline; }
+.fwr .ead-conn-icon {
+  flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  font-size: 10px; font-weight: 800; background: var(--fwr-accent-soft); color: var(--fwr-accent);
+}
+.fwr .ead-switch {
+  position: relative; flex: none; width: 32px; height: 18px; border-radius: 99px; border: 0; padding: 0;
+  background: #d4d1dc; cursor: pointer;
+}
+.fwr .ead-switch.is-on { background: var(--fwr-accent); }
+.fwr .ead-switch:disabled { cursor: not-allowed; }
+.fwr .ead-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .12s; }
+.fwr .ead-switch.is-on .ead-knob { left: 16px; }
+.fwr .ead-file { display: inline-flex; gap: 6px; align-items: center; margin-bottom: 6px; font-size: 11.5px; color: var(--fwr-muted); }
+.fwr .ead-note { margin: 6px 0 0; font-size: 11px; color: var(--fwr-muted); }
+.dark .fwr .ead-conn-why { color: #fbbf24; }
+.dark .fwr .ead-switch { background: #4a4655; }
+.dark .fwr .ead-switch.is-on { background: var(--fwr-accent); }
+.dark .fwr .ead-send { color: #1a1822; }
+
+/* In-page recording entry: follows the form instead of floating over it. */
+.ead-open.ead-open-inline { width: 100%; min-height: 48px; height: auto; gap: 10px; padding: 12px 16px; background: #6d28d9; border-color: #6d28d9; color: #fff; font-weight: 700; }
+.dark .ead-open.ead-open-inline { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+
+/* D1604 (#3716, aird1): the element groups a host passes (`RailGroups.jsx`).
+   Every colour is a --d698 token, which `.dark` redefines above. */
+.fwr-rgroups { display: flex; flex-direction: column; gap: 8px; }
+.fwr-presets { display: flex; flex-direction: column; gap: 5px; }
+.fwr-preset-row { display: flex; gap: 4px; }
+.fwr-preset {
+  flex: 1; text-align: center; font-size: 11px; font-weight: 700; padding: 5px 0; border-radius: 8px;
+  border: 1px solid var(--d698-line); background: var(--d698-ground); color: var(--d698-faint);
+}
+.fwr-preset[aria-disabled="true"] { cursor: not-allowed; }
+/* D1549 (#4073) made a pressable preset a <button>: it inherits the rail's type as the
+   other rail buttons do (button.fwr-card, button.fwr-chip), so the row keeps the span's height,
+   and its words read at muted, not faint (axe color-contrast, serious, in dark: #8b849c on the
+   dark ground is under 4.5:1). The preset in force reads as the chosen chip does. */
+button.fwr-preset { font: inherit; font-size: 11px; font-weight: 700; color: var(--d698-muted); cursor: pointer; }
+button.fwr-preset:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-preset[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark .fwr-preset[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.fwr-rgroup { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid var(--d698-line); }
+.fwr-rgroup-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.fwr-rgroup-toggle { min-height: 32px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.fwr-rgroup-toggle:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-rgroup-name { font-size: 12px; font-weight: 700; color: var(--d698-ink); }
+.fwr-rgroup-chev { font-size: 14px; color: var(--d698-faint); }
+.fwr-rgroup-off { font-size: 10.5px; color: var(--d698-faint); }
+.fwr-rgroup[data-off="true"] .fwr-rgroup-name { color: var(--d698-faint); }
+
+/* D1463 (#3713): an admin on a founder's record. One lavender note in place of
+   the switch, the suggestions and the usage; the collapsed spine greys the mark. */
+p.fwr-founder-record {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid #e4d8fb;
+  background: var(--fwr-accent-soft); color: var(--fwr-ink); font-size: 12.5px; line-height: 1.5;
+}
+.fwr-founder-record-mark { flex: none; margin-top: 2px; }
+.fwr-founder-record-spine { display: block; width: 8px; height: 8px; border-radius: 999px; background: var(--fwr-line); }
+.fwr[data-founder-record="true"] .fwr-title .fwr-mark { filter: grayscale(1); opacity: .55; }
+.dark p.fwr-founder-record { border-color: #3b2a63; color: var(--d698-ink); }
+
+/*
+ * D1443 part 5 (#3992) — the rail's fallback Ask, under the title, for a page
+ * whose header has no Ask mount. Empty (a header carries Ask, or Ask does not
+ * serve here) it takes no room.
+ */
+.fwr-ask-entry { margin-top: 10px; display: flex; }
+.fwr-ask-entry:empty { display: none; }
+/* D4860 part 2 (PL-12): "Pin open on this page" on an operations rail. */
+.fwr-pin { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fwr-muted); cursor: pointer; }
+.fwr-pin input { accent-color: var(--fwr-accent); margin: 0; }
+.fwr-pin input:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+/* #4737: Ask at the top of the phone sheet and a founder's Eadwyn panel, where the column's own entry is hidden. */
+.fwr-sheet-ask { display: flex; margin: 0 0 12px; }
+
+/* Distribution keeps its shared frame aligned with its page background. */
+.distribution-frame > .fwr-frame-main{background:#f4f3f7}.dark .distribution-frame > .fwr-frame-main{background:#0b1220}

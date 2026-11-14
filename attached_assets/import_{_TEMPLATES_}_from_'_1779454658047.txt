@@ -1,0 +1,7 @@
+import { TEMPLATES } from './decks/templates';
+
+const { Component } = TEMPLATES['yc_seed'];
+
+<div style={{ transform: 'scale(0.42)', transformOrigin: 'top left' }}>
+  <Component data={projectData} editable onEdit={(path, value) => save(path, value)} />
+</div>

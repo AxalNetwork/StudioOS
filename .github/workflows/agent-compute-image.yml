@@ -1,0 +1,51 @@
+name: General compute image
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/agent-compute-image.yml'
+      - 'agent-compute/**'
+      - 'wrangler.agent-compute.toml'
+      - 'scripts/*agent-compute*'
+permissions:
+  contents: read
+concurrency:
+  group: agent-compute-image-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install and typecheck the separate Worker without remote writes
+        run: |
+          npm ci --prefix cloudflare-worker
+          node scripts/build-generated.mjs
+          node scripts/build-agent-compute-types.mjs
+          cloudflare-worker/node_modules/.bin/tsc -p agent-compute/tsconfig.json --noEmit
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.agent-compute.toml --env preview --dry-run --containers-rollout none --outdir /tmp/compute-host
+      - name: Install checksum-verified scanner
+        env:
+          TRIVY_VERSION: '0.76.2'
+        run: |
+          curl --fail --location --output /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl --fail --location --output /tmp/trivy-checksums.txt "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          cd /tmp
+          expected=$(awk -v name="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" '$2 == name { print $1 }' trivy-checksums.txt)
+          test "${#expected}" = 64
+          printf '%s  trivy.tar.gz\n' "$expected" | sha256sum --check
+          tar -xzf trivy.tar.gz trivy
+      - name: Build, isolate, scan and measure (no registry publish or Cloudflare deployment)
+        run: python3 scripts/check-agent-compute-image.py --trivy /tmp/trivy --output /tmp/compute-image-evidence
+      - name: Retain image evidence
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compute-image-evidence
+          path: /tmp/compute-image-evidence
+          retention-days: 7

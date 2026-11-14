@@ -1,0 +1,34 @@
+{
+  "skill": "design-development-handoff",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Design-to-Development Handoff Specification",
+        "task_scope": "Produces a build-ready handoff contract linking decisions, component states, assets, responsive rules and acceptance tests.",
+        "evidence": [
+          "acceptance criteria traceability"
+        ],
+        "omitted_field": "asset ownership"
+      },
+      "github.repos": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for acceptance criteria traceability."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "acceptance criteria traceability"
+    ],
+    "must_say_not_recorded": [
+      "asset ownership"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

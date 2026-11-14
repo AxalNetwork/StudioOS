@@ -1,0 +1,1212 @@
+import { holdsLicence } from '../services/accountLicences';
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { getSQL } from '../db';
+import { requireAuth, requireApprovedKyc, canAccessFounderResource, entityListScope } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { seedStandardEventsForJurisdiction } from './compliance';
+import { CONTRACT_DOC_TYPES } from './admin_contracts';
+import { getActiveTemplateBody, getTemplate } from '../services/legalTemplateStore';
+import { applyMergeFields } from '../services/mergeFields';
+import { checkCompanyName } from '../services/nameCheck';
+import { stripeCall } from './billing';
+import { ensurePaymentsCustomer } from './payments';
+import { findCatalogPriceById, getCatalog, priceForPlanMetadata } from '../services/catalog';
+import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
+import { devPaymentFallbackAllowed, isProductionEnv } from '../util/paymentMode';
+import {
+  ensureIncorporationsSchema,
+  createPendingIncorporation,
+  createPendingIncorporationOrder,
+  attachIncorporationPaymentIntent,
+  recordPaidIncorporationFromPaymentIntent,
+  getIncorporationForUser,
+} from '../services/incorporations';
+import legal83b from './legal_83b';
+import legalEntities from './legal_entities';
+import {
+  validateCofounderAgreement,
+  renderCofounderAgreement,
+  totalEquityPct,
+} from '../services/cofounderAgreement';
+import { refuse } from '../util/refusal';
+import { listPositions, recordParties, recordPosition } from '../services/cofounderAgreementParties';
+
+const legal = new Hono<{ Bindings: Env }>();
+
+// Security #8 — storage cleanup:
+// Centralised serializer for document rows. The contract body
+// (`content`) is **never** returned in JSON, regardless of viewer role.
+// This keeps the worker on the same policy as the FastAPI backend.
+// When a signed-URL minting flow is added to the worker, this helper
+// will be the single place to attach `content_url`.
+function safeDoc<T extends Record<string, any>>(row: T): Omit<T, 'content' | 'project_founder_id'> & { content_url: null; redacted: true } {
+  const { content: _content, project_founder_id: _pfid, ...rest } = row as any;
+  return { ...rest, content_url: null, redacted: true };
+}
+
+const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = {
+  gp: { label: 'Internal Management (GP Level)', description: 'Governance, partner economics, and decision-making framework' },
+  fund: { label: 'Fund Formation (LP Level)', description: 'Capital raising, investor agreements, and fund structure' },
+  portfolio: { label: 'Investment Execution (Portfolio Level)', description: 'Templates used when investing into startups' },
+  compliance: { label: 'Compliance & Regulatory', description: 'SEC filings, AML/KYC, and tax elections' },
+};
+
+// The 18 documents the /legal page lists, in its order, with their layers
+// (D758). Title and text are read from the library (legal_templates); there
+// is no inline copy, so the page shows what a send would carry.
+const LEGAL_PAGE_DOCUMENTS: ReadonlyArray<{ key: string; layer: string }> = [
+  { key: 'operating_agreement', layer: 'gp' },
+  { key: 'carried_interest', layer: 'gp' },
+  { key: 'ic_charter', layer: 'gp' },
+  { key: 'service_agreement', layer: 'gp' },
+  { key: 'lpa', layer: 'fund' },
+  { key: 'ppm', layer: 'fund' },
+  { key: 'subscription', layer: 'fund' },
+  { key: 'mgmt_company', layer: 'fund' },
+  { key: 'safe', layer: 'portfolio' },
+  { key: 'term_sheet', layer: 'portfolio' },
+  { key: 'bylaws', layer: 'portfolio' },
+  { key: 'equity_split', layer: 'portfolio' },
+  { key: 'ip_license', layer: 'portfolio' },
+  { key: 'spa', layer: 'portfolio' },
+  { key: 'voting_rights', layer: 'portfolio' },
+  { key: 'form_adv', layer: 'compliance' },
+  { key: 'aml_kyc', layer: 'compliance' },
+  { key: 'section_83b', layer: 'compliance' },
+];
+
+// Task #30 — Jurisdiction wizard (worker parity).
+// Read-only catalogue endpoint. Doc generation + entity creation stays
+// on the FastAPI backend, which is the source of truth for both DBs.
+export const JURISDICTIONS = [
+  { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: true, pros: ['Stripe Atlas one-click', 'Universally accepted by US VCs'], cons: ['21% federal corporate tax', 'Annual filings + agent'], tax_summary: '21% federal corporate income tax. DE franchise tax $400–$1,750.', templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
+  // D586 (#1213, the owner's answer A) — Wyoming C-Corp. Priced only from the
+  // catalog (a Stripe price tagged jurisdiction_id = us_wy_ccorp): there is no
+  // JURISDICTION_COSTS entry and no legacy env price. Its Articles of
+  // Incorporation are generated only from a counsel-approved body in the D1
+  // template store (COUNSEL_REQUIRED_TEMPLATES below), never from a stub.
+  { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'A US corporation with no state corporate income tax.', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: false, pros: ['No Wyoming corporate income tax', 'Low annual report fee'], cons: ['Less familiar to US VCs than Delaware', 'Annual report + registered agent'], tax_summary: '21% federal corporate income tax. Wyoming levies no state corporate income tax.', templates: ['articles_of_incorporation_wy', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
+  { id: 'us_de_llc', label: 'Delaware LLC', country: 'United States', country_code: 'US', entity_type: 'Limited Liability Company', summary: 'Pass-through taxation. Hard to take VC.', est_cost_usd: [300, 800], time_to_form_days: [1, 5], fundraising_friendly: false, atlas_supported: false, pros: ['Pass-through tax', 'Flexible operating agreement'], cons: ['Most VCs cannot invest in LLCs', 'Self-employment tax'], tax_summary: 'Pass-through. DE franchise tax flat $300/yr.', templates: ['operating_agreement', 'ein_application_kit', 'member_consent'] },
+  { id: 'uk_ltd', label: 'UK Private Limited (Ltd)', country: 'United Kingdom', country_code: 'GB', entity_type: 'Private Limited Company', summary: 'Fast and credible for European VCs.', est_cost_usd: [50, 250], time_to_form_days: [1, 3], fundraising_friendly: true, atlas_supported: false, pros: ['£50 same-day filing', 'SEIS/EIS angel tax relief'], cons: ['US VCs may want a flip', 'Public PSC register'], tax_summary: 'Corporation tax 25% (19% small-profits up to £50k).', templates: ['uk_memorandum_of_association', 'uk_articles_of_association', 'uk_form_in01_kit'] },
+  { id: 'sg_pte', label: 'Singapore Pte Ltd', country: 'Singapore', country_code: 'SG', entity_type: 'Private Limited (Pte. Ltd.)', summary: 'Asia hub. Strong rule of law, English-language filings.', est_cost_usd: [600, 1500], time_to_form_days: [1, 5], fundraising_friendly: true, atlas_supported: false, pros: ['Startup tax exemption ~75% on first S$100k', '17% headline corporate tax'], cons: ['Need SG-resident director', 'Bank account 2–4 weeks'], tax_summary: '17% corporate tax; effective ~4–8% in years 1–3.', templates: ['sg_constitution', 'sg_acra_form_45_kit', 'sg_first_directors_resolution'] },
+  { id: 'ee_oy', label: 'Estonia OÜ (e-Residency)', country: 'Estonia', country_code: 'EE', entity_type: 'Osaühing (Private Limited)', summary: 'Fully remote, 0% tax on retained earnings.', est_cost_usd: [200, 500], time_to_form_days: [3, 14], fundraising_friendly: false, atlas_supported: false, pros: ['0% tax on retained earnings', '100% online incorporation'], cons: ['20% distribution tax on dividends', 'Need e-Residency first (~6–8 weeks)'], tax_summary: '0% on retained earnings. 20% distribution tax on dividends.', templates: ['ee_articles_of_association', 'ee_e_residency_application_kit', 'ee_founding_resolution'] },
+];
+
+legal.get('/jurisdictions', async (c) => {
+  await requireAuth(c);
+  return c.json({ jurisdictions: JURISDICTIONS });
+});
+
+// Task #10 — live company-name availability check for the Incorporate wizard's
+// Confirm step. Queries the selected jurisdiction's official register (or a
+// documented JSON API) and caches definitive results ~1h in RATE_LIMITS KV.
+// Every failure mode degrades to `status: 'unavailable'` ("verify manually").
+legal.get('/name-check', async (c) => {
+  const user = await requireAuth(c);
+
+  const jurisdictionId = (c.req.query('jurisdiction_id') || '').trim();
+  const name = (c.req.query('name') || '').trim();
+  if (name.length < 2) return c.json({ error: 'A company name of at least 2 characters is required.' }, 400);
+  if (!JURISDICTIONS.some((j) => j.id === jurisdictionId)) {
+    return c.json({ error: `Unknown jurisdiction: ${jurisdictionId}` }, 400);
+  }
+
+  // Per-user rate limit — this endpoint can trigger billable outbound
+  // Browser-Rendering navigations, so requireAuth alone isn't enough.
+  // 30 checks / 10-minute window, counted against a fixed-window key.
+  const windowMs = 10 * 60 * 1000;
+  const rlKey = `namecheck:rl:${user.id}:${Math.floor(Date.now() / windowMs)}`;
+  try {
+    const current = parseInt((await c.env.RATE_LIMITS.get(rlKey)) || '0', 10) || 0;
+    if (current >= 30) {
+      return c.json({ error: 'Too many name checks. Please wait a few minutes and try again.' }, 429);
+    }
+    await c.env.RATE_LIMITS.put(rlKey, String(current + 1), { expirationTtl: 11 * 60 });
+  } catch {
+    /* best-effort limiter — never block the check on a KV hiccup */
+  }
+
+  const result = await checkCompanyName(c.env, jurisdictionId, name);
+  return c.json(result);
+});
+
+// Concise stub bodies for jurisdiction-specific docs. The richer drafts
+// live in the FastAPI backend; this worker variant keeps prod parity so
+// the wizard never silently fails for the user.
+const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
+  certificate_of_incorporation_de: { title: 'Certificate of Incorporation (Delaware C-Corp)' },
+  articles_of_incorporation_wy: { title: 'Articles of Incorporation (Wyoming C-Corp)' },
+  bylaws: { title: 'Corporate Bylaws' },
+  stock_purchase_agreement: { title: "Founders' Restricted Stock Purchase Agreement" },
+  section_83b: { title: 'Section 83(b) Election' },
+  operating_agreement: { title: 'Operating Agreement (LLC)' },
+  ein_application_kit: { title: 'IRS EIN Application Kit (Form SS-4)' },
+  member_consent: { title: 'Initial Member Written Consent' },
+  uk_memorandum_of_association: { title: 'Memorandum of Association (UK Ltd)' },
+  uk_articles_of_association: { title: 'Articles of Association (UK Ltd) — Model Articles' },
+  uk_form_in01_kit: { title: 'UK IN01 Filing Kit (Companies House)' },
+  sg_constitution: { title: 'Company Constitution (Singapore Pte Ltd)' },
+  sg_acra_form_45_kit: { title: 'ACRA Filing Kit — BizFile Incorporation Pack' },
+  sg_first_directors_resolution: { title: "First Directors' Resolution (Singapore)" },
+  ee_articles_of_association: { title: 'Articles of Association (Estonia OÜ)' },
+  ee_e_residency_application_kit: { title: 'Estonia e-Residency Application Kit' },
+  ee_founding_resolution: { title: 'Founding Resolution (Estonia OÜ)' },
+};
+
+// D586 — templates with no stub: a document is generated from these only when
+// the D1 template store holds a counsel-approved, active body
+// (`templates/legal/LEGAL_REVIEW.md`). Until then the wizard lists them under
+// `pending_counsel` and writes no document row.
+const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
+
+// Map our template keys → existing documenttype enum values (anything
+// not in the enum is stored as 'other' with the real key in
+// template_name, mirroring the FastAPI backend behaviour).
+const _ALLOWED_DOC_TYPES = new Set([
+  'safe', 'bylaws', 'equity_split', 'ip_license', 'pitch_deck', 'deal_memo',
+  'diligence_report', 'financial_model', 'other', 'operating_agreement',
+  'carried_interest', 'ic_charter', 'service_agreement', 'lpa', 'ppm',
+  'subscription', 'mgmt_company', 'term_sheet', 'spa', 'voting_rights',
+  'form_adv', 'aml_kyc', 'section_83b',
+]);
+
+legal.post('/incorporate/wizard', async (c) => {
+  // Task #11 — the free wizard is now admin-only; the paid Stripe Checkout flow
+  // replaces the founder-facing submit. This endpoint is retained for doc-gen
+  // reuse by the downstream packet pipeline and for admin back-compat.
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') {
+    return c.json({ error: 'This endpoint is now admin-only. Founders must use the paid checkout flow.' }, 403);
+  }
+  const body = await c.req.json<{
+    project_id: number;
+    jurisdiction_id: string;
+    company_name: string;
+    registered_agent_name?: string;
+    registered_agent_address?: string;
+  }>();
+
+  const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
+  if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
+  if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, name, founder_id, entity_id, company_id FROM projects WHERE id = ${body.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Same access rule as backend: admin/partner OR the founder owning the
+  // project. Investors are NOT permitted to mutate legal state on
+  // projects they don't own.
+  // Bypass `canAccessFounderResource` here — its phase 0.1 semantics still
+  // treat investors as privileged for read-path back-compat, which would be a
+  // cross-project IDOR on this write path. Require explicit founder ownership.
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
+    const ownsProject =
+      project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) {
+      await sql.end();
+      return c.json({ error: 'Forbidden: you do not own this project' }, 403);
+    }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
+  }
+
+  // Reuse existing entity if jurisdictions match (idempotency).
+  let entityRow: any = null;
+  if (project.entity_id) {
+    const er = await sql`SELECT * FROM entities WHERE id = ${project.entity_id}`;
+    if (er.length && (er[0] as any).jurisdiction?.toLowerCase() === j.label.toLowerCase()) {
+      entityRow = er[0];
+    }
+  }
+  const reusedEntity = !!entityRow;
+  if (!entityRow) {
+    const inserted = await sql`
+      INSERT INTO entities (name, entity_type, jurisdiction, status, incorporation_date)
+      VALUES (${body.company_name.trim()}, 'subsidiary', ${j.label}, 'forming', CURRENT_DATE)
+      RETURNING *`;
+    entityRow = inserted[0];
+    await sql`UPDATE projects SET entity_id = ${entityRow.id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${project.id}`;
+  }
+
+  const fill = {
+    company_name: body.company_name.trim(),
+    jurisdiction: j.label,
+    incorporation_date: new Date().toISOString().slice(0, 10),
+    registered_agent_name: body.registered_agent_name || '[Registered Agent]',
+    registered_agent_address: body.registered_agent_address || '[Registered Agent Address]',
+  };
+
+  const generated: Array<{ id: number; title: string; doc_type: string; reused: boolean }> = [];
+  // Task #2 — Contract doc_types are tracked separately so the wizard
+  // response can tell the founder which kit items now require an e-sign
+  // envelope instead of being inserted as 'generated' rows in `documents`.
+  // (esign_envelopes is the single source of truth for active contracts.)
+  const pendingEsign: Array<{ template_key: string; title: string; doc_type: string; reason: string }> = [];
+  const pendingCounsel: Array<{ template_key: string; title: string; reason: string }> = [];
+  // D758 — a non-contract kit item with no body in the library is listed,
+  // never written as a placeholder document.
+  const pendingBody: Array<{ template_key: string; title: string; reason: 'template_has_no_body' }> = [];
+  for (const tkey of j.templates) {
+    const meta = JURISDICTION_TEMPLATES[tkey];
+    if (!meta) continue;
+    // Task #2 — Skip contract doc_types entirely. We surface them in the
+    // response under `pending_esign` so the frontend can prompt the
+    // founder to issue them through POST /api/legal/esign/send.
+    if (CONTRACT_DOC_TYPES.has(String(tkey).toLowerCase())) {
+      pendingEsign.push({
+        template_key: tkey,
+        title: meta.title,
+        doc_type: tkey,
+        reason: 'use_esign_envelope',
+      });
+      continue;
+    }
+    const existing = await sql`SELECT id, title FROM documents WHERE project_id = ${project.id} AND template_name = ${tkey} LIMIT 1`;
+    if (existing.length) {
+      generated.push({ id: (existing[0] as any).id, title: meta.title, doc_type: tkey, reused: true });
+      continue;
+    }
+    const docType = _ALLOWED_DOC_TYPES.has(tkey) ? tkey : 'other';
+    // The document's text is the library's (D758): the canonical D1 store
+    // body, with its {{merge}} tokens filled. No body, no document.
+    const d1Body = await getActiveTemplateBody(c.env, tkey);
+    if (!d1Body && COUNSEL_REQUIRED_TEMPLATES.has(tkey)) {
+      pendingCounsel.push({ template_key: tkey, title: meta.title, reason: 'counsel_approval_pending' });
+      continue;
+    }
+    if (!d1Body) {
+      pendingBody.push({ template_key: tkey, title: meta.title, reason: 'template_has_no_body' });
+      continue;
+    }
+    const content = applyMergeFields(d1Body, fill);
+    const inserted = await sql`
+      INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
+      VALUES (${project.id}, ${meta.title}, ${docType}, 'generated', ${content}, ${tkey})
+      RETURNING id, title`;
+    generated.push({ id: (inserted[0] as any).id, title: meta.title, doc_type: tkey, reused: false });
+  }
+
+  let handoff: any = { type: 'documents_only', next_steps: [] };
+  if (j.atlas_supported) {
+    const params = new URLSearchParams({ company: body.company_name.trim(), ref: `axal-studioos-p${project.id}` });
+    handoff = {
+      type: 'stripe_atlas',
+      provider: 'Stripe Atlas',
+      url: `https://atlas.stripe.com/start?${params.toString()}`,
+      summary: 'Continue incorporation on Stripe Atlas — your company name is pre-filled.',
+    };
+  } else if (j.id === 'us_wy_ccorp') {
+    handoff.next_steps = [
+      'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
+      'Appoint a Wyoming registered agent',
+      'Apply for an EIN with the IRS once the state approves the filing',
+    ];
+  } else if (j.id === 'uk_ltd') {
+    handoff.next_steps = [
+      'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
+      'Register for Corporation Tax with HMRC within 3 months',
+      'Open a UK business bank account',
+    ];
+  } else if (j.id === 'sg_pte') {
+    handoff.next_steps = [
+      'Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)',
+      'Engage a Singapore-resident director (or nominee director service)',
+      'Appoint a company secretary within 6 months',
+    ];
+  } else if (j.id === 'ee_oy') {
+    handoff.next_steps = [
+      "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
+      'Engage a Company Service Provider for the registered address',
+      'File the OÜ via the Estonian Business Register e-portal',
+    ];
+  } else if (j.id === 'us_de_llc') {
+    handoff.next_steps = [
+      'File the Certificate of Formation with the Delaware Division of Corporations',
+      'Apply for an EIN via IRS Form SS-4 (kit included)',
+      'Open a US business bank account',
+    ];
+  }
+
+  await sql.end();
+
+  // T12 — Auto-seed the standard recurring compliance events for this
+  // jurisdiction. Faithful port of the FastAPI flow in
+  // `backend/app/api/routes/legal.py:1917` which calls
+  // `seed_standard_events_for_jurisdiction`. Wrapped in try/catch because
+  // a calendar problem must NEVER block the incorporation response.
+  let seededCompliance: Array<{ id: number; event_type: string; title: string; due_date: string }> = [];
+  try {
+    seededCompliance = await seedStandardEventsForJurisdiction(c.env, {
+      projectId: project.id,
+      entityId: entityRow.id,
+      jurisdictionId: j.id,
+      jurisdictionLabel: j.label,
+      userId: user.id,
+      incorporationDate: entityRow.incorporation_date || null,
+    });
+  } catch (e) {
+    console.warn('incorporate_wizard: compliance seed failed:', (e as Error)?.message);
+  }
+
+  return c.json({
+    ok: true,
+    jurisdiction: j,
+    entity: {
+      id: entityRow.id,
+      name: entityRow.name,
+      jurisdiction: entityRow.jurisdiction,
+      status: entityRow.status,
+      reused: reusedEntity,
+    },
+    documents: generated,
+    pending_esign: pendingEsign,
+    pending_counsel: pendingCounsel,
+    pending_body: pendingBody,
+    seeded_compliance: seededCompliance,
+    handoff,
+  });
+});
+
+// Task #11 — per-jurisdiction Stripe Checkout for incorporation.
+//   POST /incorporate/checkout → creates Stripe Checkout session + pending row
+//   GET  /incorporate/status   → owner-scoped poll
+//   POST /incorporate/dev-complete → dev/test-only simulate paid + enqueue
+
+const JURISDICTION_PRICE_ENV: Record<string, keyof Env> = {
+  us_de_ccorp: 'STRIPE_PRICE_INCORP_US_DE_CCORP' as keyof Env,
+  us_de_llc: 'STRIPE_PRICE_INCORP_US_DE_LLC' as keyof Env,
+  uk_ltd: 'STRIPE_PRICE_INCORP_UK_LTD' as keyof Env,
+  sg_pte: 'STRIPE_PRICE_INCORP_SG_PTE' as keyof Env,
+  ee_oy: 'STRIPE_PRICE_INCORP_EE_OY' as keyof Env,
+};
+
+const JURISDICTION_COSTS: Record<string, number> = {
+  us_de_ccorp: 50000,
+  us_de_llc: 30000,
+  uk_ltd: 5000,
+  sg_pte: 60000,
+  ee_oy: 20000,
+};
+
+legal.post('/incorporate/checkout', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const body = await c.req.json<{
+    project_id: number;
+    jurisdiction_id: string;
+    company_name: string;
+    registered_agent_name?: string | null;
+    registered_agent_address?: string | null;
+  }>();
+
+  const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
+  if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
+  if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, name, founder_id, entity_id, company_id FROM projects WHERE id = ${body.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Ownership: admin/partner OR founder-owns-project. Investors blocked.
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
+  }
+
+  await sql.end();
+
+  const appUrl = c.env.APP_URL || 'http://localhost:5000';
+  const stripeKey = c.env.STRIPE_SECRET_KEY;
+  // Resolve the incorporation SKU from the catalog (single source of truth): an
+  // active product carrying `metadata.jurisdiction_id === j.id` with a one-time
+  // price. Legacy STRIPE_PRICE_INCORP_* env vars are consulted only as a
+  // non-production fallback during the catalog transition — never in prod.
+  let priceId: string | undefined;
+  if (stripeKey) {
+    const price = await priceForPlanMetadata(c.env, 'jurisdiction_id', j.id, null);
+    priceId = price?.id;
+    if (!priceId && !isProductionEnv(c.env)) {
+      priceId = (c.env as unknown as Record<string, unknown>)[JURISDICTION_PRICE_ENV[j.id]] as string | undefined;
+    }
+  }
+
+  // No resolvable SKU. In a keyless dev env we simulate via dev-complete so the
+  // UI flow stays testable; in production (or whenever a Stripe key is present)
+  // we FAIL LOUDLY instead of granting a free incorporation.
+  if (!priceId) {
+    if (devPaymentFallbackAllowed(c.env)) {
+      const devAmount = JURISDICTION_COSTS[j.id] ?? 0;
+      const devSessionId = `dev_session_${user.id}_${Date.now()}`;
+      const incId = await createPendingIncorporation(c.env, {
+        user_id: user.id,
+        project_id: project.id,
+        jurisdiction_id: j.id,
+        company_name: body.company_name.trim(),
+        registered_agent_name: body.registered_agent_name ?? null,
+        registered_agent_address: body.registered_agent_address ?? null,
+        amount_cents: devAmount,
+        currency: 'usd',
+        stripe_session_id: devSessionId,
+      });
+      return c.json({
+        url: `${appUrl}/api/legal/incorporate/dev-complete?id=${incId}`,
+        incorporation_id: incId,
+        dev: true,
+      });
+    }
+    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for jurisdiction=${j.id}` },
+      502,
+    );
+  }
+
+  const params: Record<string, string> = {
+    mode: 'payment',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    success_url: `${appUrl}/incorporate/success?incorporation_id=PENDING`,
+    cancel_url: `${appUrl}/incorporate?cancelled=1`,
+    'metadata[kind]': 'incorporation',
+    'metadata[user_id]': String(user.id),
+    'metadata[jurisdiction_id]': j.id,
+    'metadata[company_name]': body.company_name.trim(),
+    client_reference_id: `incorporation:${user.id}`,
+  };
+  if (user.email) params.customer_email = user.email;
+  // Task #12 — Stripe Tax (flag-gated). Checkout collects the billing address;
+  // this path uses customer_email so Checkout creates + addresses the customer.
+  Object.assign(params, automaticTaxParams(stripeTaxEnabled(c.env), {
+    checkout: true,
+    hasExistingCustomer: !!params.customer,
+  }));
+
+  try {
+    const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params, { moneyKind: 'marketplace' });
+    const incId = await createPendingIncorporation(c.env, {
+      user_id: user.id,
+      project_id: project.id,
+      jurisdiction_id: j.id,
+      company_name: body.company_name.trim(),
+      registered_agent_name: body.registered_agent_name ?? null,
+      registered_agent_address: body.registered_agent_address ?? null,
+      amount_cents: session.amount_total ?? (JURISDICTION_COSTS[j.id] ?? 0),
+      currency: 'usd',
+      stripe_session_id: session.id,
+    });
+    // Patch success_url with the real incorporation_id so the success page can poll.
+    const successUrl = `${appUrl}/incorporate/success?incorporation_id=${incId}`;
+    await stripeCall<{ id: string }>(c.env, `/checkout/sessions/${session.id}`, {
+      success_url: successUrl,
+    }, { idempotencyKey: `incorp_update_url:${session.id}` });
+    return c.json({ url: session.url, incorporation_id: incId, session_id: session.id });
+  } catch (e) {
+    return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// Task #6 — embedded-terminal incorporation order.
+//   POST /incorporation/order → creates a one-time Stripe Invoice (so the fee
+//   appears in the Billing dashboard) whose PaymentIntent is confirmed in-app
+//   via Stripe Elements (no Checkout redirect), plus a pending order row. The
+//   `payment_intent.succeeded` webhook marks the row paid + advances the filing
+//   workflow. Also returns an optional annual "Registered Agent" subscription
+//   offer the founder can opt into via the same embedded terminal.
+
+export interface IncorporationPrice { amountCents: number; currency: string; priceId?: string }
+
+/**
+ * Resolve the incorporation SKU for a jurisdiction from the Stripe catalog (the
+ * single source of truth): an active product carrying
+ * `metadata.jurisdiction_id === jurisdictionId` with a one-time price. Legacy
+ * `STRIPE_PRICE_INCORP_*` env ids are consulted ONLY as a non-production
+ * fallback during the catalog transition. Returns `null` when no catalog SKU is
+ * configured so callers fail closed (production) or simulate (keyless dev) —
+ * never charging the hardcoded `JURISDICTION_COSTS` amount against real Stripe.
+ */
+export async function resolveIncorporationPrice(
+  env: Env,
+  jurisdictionId: string,
+): Promise<IncorporationPrice | null> {
+  // 1) Catalog incorporation SKU tagged with this jurisdiction — prod-allowed.
+  const price = await priceForPlanMetadata(env, 'jurisdiction_id', jurisdictionId, null);
+  if (price && typeof price.unit_amount === 'number' && price.unit_amount > 0) {
+    return { amountCents: price.unit_amount, currency: price.currency || 'usd', priceId: price.id };
+  }
+  // 2) Legacy explicit env price id, resolved against the mirrored catalog —
+  //    non-production fallback only.
+  if (!isProductionEnv(env)) {
+    const envPriceId = (env as unknown as Record<string, unknown>)[JURISDICTION_PRICE_ENV[jurisdictionId]] as string | undefined;
+    if (envPriceId) {
+      try {
+        const p = await findCatalogPriceById(env, envPriceId);
+        if (p && typeof p.unit_amount === 'number' && p.unit_amount > 0) {
+          return { amountCents: p.unit_amount, currency: p.currency || 'usd', priceId: p.id };
+        }
+      } catch { /* fall through to null */ }
+    }
+  }
+  return null;
+}
+
+export interface RegisteredAgentOffer {
+  price_id: string;
+  amount_cents: number | null;
+  currency: string;
+  interval: string | null;
+  product_name: string;
+}
+
+/**
+ * Resolve the annual Registered Agent subscription offer from the catalog: a
+ * `subscription` product whose metadata flags it as the registered-agent SKU
+ * (`metadata.category === 'registered_agent'` or `metadata.plan === 'registered_agent'`).
+ * Returns `null` when not configured so the wizard simply omits the opt-in.
+ */
+export async function resolveRegisteredAgentOffer(env: Env): Promise<RegisteredAgentOffer | null> {
+  try {
+    const products = await getCatalog(env, 'subscription');
+    const prod = products.find(
+      (pp) => pp.active && (pp.metadata.category === 'registered_agent' || pp.metadata.plan === 'registered_agent'),
+    );
+    if (!prod) return null;
+    const recurring = prod.prices.filter((pr) => pr.active && pr.type === 'recurring');
+    const price = recurring.find((pr) => pr.interval === 'year') ?? recurring[0];
+    if (!price) return null;
+    return {
+      price_id: price.id,
+      amount_cents: price.unit_amount,
+      currency: price.currency || 'usd',
+      interval: price.interval,
+      product_name: prod.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
+legal.post('/incorporation/order', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const body = await c.req.json<{
+    project_id: number;
+    jurisdiction_id: string;
+    company_name: string;
+    registered_agent_name?: string | null;
+    registered_agent_address?: string | null;
+  }>().catch(() => ({} as any));
+
+  const j = JURISDICTIONS.find((x) => x.id === body.jurisdiction_id);
+  if (!j) return c.json({ error: `Unknown jurisdiction: ${body.jurisdiction_id}` }, 400);
+  const companyName = body.company_name?.trim();
+  if (!companyName) return c.json({ error: 'company_name is required' }, 400);
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, name, founder_id, company_id FROM projects WHERE id = ${body.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+  // Ownership: admin/partner OR founder-owns-project. Investors blocked.
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
+  }
+  await sql.end();
+
+  const resolved = await resolveIncorporationPrice(c.env, j.id);
+  const raOffer = await resolveRegisteredAgentOffer(c.env);
+
+  const buildOrderArgs = (amount_cents: number, currency: string) => ({
+    user_id: user.id,
+    project_id: project.id,
+    jurisdiction_id: j.id,
+    company_name: companyName,
+    registered_agent_name: body.registered_agent_name ?? null,
+    registered_agent_address: body.registered_agent_address ?? null,
+    amount_cents,
+    currency,
+  });
+
+  // Dev fallback — keyless non-production env only: persist the order and mark
+  // it paid so the wizard's embedded flow is testable without real payment. The
+  // hardcoded JURISDICTION_COSTS amount is used ONLY here (when no catalog SKU is
+  // configured); production never reaches this branch.
+  if (devPaymentFallbackAllowed(c.env)) {
+    const amountCents = resolved?.amountCents ?? (JURISDICTION_COSTS[j.id] ?? 0);
+    const currency = resolved?.currency ?? 'usd';
+    const incId = await createPendingIncorporationOrder(c.env, buildOrderArgs(amountCents, currency));
+    await recordPaidIncorporationFromPaymentIntent(c.env, {
+      id: `dev_pi_${incId}`,
+      metadata: { incorporation_id: String(incId), user_id: String(user.id) },
+      amount: amountCents,
+      currency,
+    });
+    return c.json({
+      dev: true,
+      incorporation_id: incId,
+      status: 'paid',
+      amount_cents: amountCents,
+      currency,
+      registered_agent: raOffer,
+    });
+  }
+
+  // Real Stripe path — REQUIRE a catalog-resolved SKU so a missing price fails
+  // closed instead of silently charging the hardcoded JURISDICTION_COSTS amount.
+  if (!resolved) {
+    if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+    return c.json(
+      { error: 'catalog_price_missing', detail: `No active Stripe price for jurisdiction=${j.id}` },
+      502,
+    );
+  }
+  const { amountCents, currency } = resolved;
+
+  const incId = await createPendingIncorporationOrder(c.env, buildOrderArgs(amountCents, currency));
+  try {
+    const customer = await ensurePaymentsCustomer(c.env, user as any);
+    // 1) Create the invoice WITHOUT pulling other pending items.
+    const inv = await stripeCall<{ id: string }>(c.env, '/invoices', {
+      customer,
+      collection_method: 'charge_automatically',
+      auto_advance: 'false',
+      pending_invoice_items_behavior: 'exclude',
+      'payment_settings[payment_method_types][0]': 'card',
+      'metadata[kind]': 'incorporation',
+      'metadata[incorporation_id]': String(incId),
+      'metadata[user_id]': String(user.id),
+      'metadata[jurisdiction_id]': j.id,
+      // Task #12 — Stripe Tax (flag-gated). Valid on Invoices; the finalized
+      // invoice's PaymentIntent then carries the computed tax in its amount.
+      // Requires the customer to have a tax-determinable address once enabled.
+      ...automaticTaxParams(stripeTaxEnabled(c.env)),
+    }, { moneyKind: 'marketplace' });
+    // 2) Add the incorporation fee as the sole line item on this invoice.
+    await stripeCall(c.env, '/invoiceitems', {
+      customer,
+      invoice: inv.id,
+      amount: String(amountCents),
+      currency,
+      description: `Incorporation — ${j.label} — ${companyName}`,
+    }, { moneyKind: 'marketplace' });
+    // 3) Finalize → Stripe mints the PaymentIntent we confirm in-app.
+    const finalized = await stripeCall<{
+      id: string;
+      payment_intent: { id: string; client_secret: string } | string;
+    }>(c.env, `/invoices/${inv.id}/finalize`, { 'expand[0]': 'payment_intent' });
+
+    let piId: string;
+    let clientSecret: string;
+    if (typeof finalized.payment_intent === 'string') {
+      const piObj = await stripeCall<{ id: string; client_secret: string }>(
+        c.env, `/payment_intents/${finalized.payment_intent}`, {}, { method: 'GET' },
+      );
+      piId = piObj.id; clientSecret = piObj.client_secret;
+    } else {
+      piId = finalized.payment_intent.id;
+      clientSecret = finalized.payment_intent.client_secret;
+    }
+
+    // 4) Stamp metadata so `payment_intent.succeeded` dispatches to the
+    //    incorporation fulfilment branch (the invoice's PI doesn't inherit it).
+    await stripeCall(c.env, `/payment_intents/${piId}`, {
+      'metadata[kind]': 'incorporation',
+      'metadata[incorporation_id]': String(incId),
+      'metadata[user_id]': String(user.id),
+      'metadata[jurisdiction_id]': j.id,
+    }, { moneyKind: 'marketplace' });
+    await attachIncorporationPaymentIntent(c.env, incId, piId);
+
+    return c.json({
+      incorporation_id: incId,
+      client_secret: clientSecret,
+      payment_intent_id: piId,
+      invoice_id: inv.id,
+      amount_cents: amountCents,
+      currency,
+      registered_agent: raOffer,
+    });
+  } catch (e) {
+    return refuse(c, 502, { code: 'order_failed', message: 'The order could not be placed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+});
+
+// D362 — the incorporation price, as the catalog states it.
+//
+// GET /incorporation/quote?jurisdiction_id=us_de_ccorp returns the SAME price
+// POST /incorporation/order would charge (resolveIncorporationPrice), so the
+// figure a founder reads before paying is the figure on the invoice. It is the
+// only price source the Lab page uses: before D362 the page drew a hard-coded
+// $1,200 + $110 package that no catalog held. With no catalog SKU the quote
+// says so (amount_cents null, a reason) rather than falling back to
+// JURISDICTION_COSTS — those are wizard estimates, not a price.
+legal.get('/incorporation/quote', async (c) => {
+  await requireAuth(c);
+  const jurisdictionId = String(c.req.query('jurisdiction_id') || '');
+  const j = JURISDICTIONS.find((x) => x.id === jurisdictionId);
+  if (!j) {
+    return c.json({ error: 'unknown_jurisdiction', message: 'That jurisdiction cannot be formed here.' }, 400);
+  }
+  const resolved = await resolveIncorporationPrice(c.env, j.id);
+  const registeredAgent = await resolveRegisteredAgentOffer(c.env);
+  if (!resolved) {
+    return c.json({
+      jurisdiction_id: j.id,
+      label: j.label,
+      amount_cents: null,
+      currency: null,
+      source: null,
+      reason: 'catalog_price_missing',
+      message: 'No price for this jurisdiction is configured in the catalog, so it cannot be quoted or charged.',
+      registered_agent: registeredAgent,
+    });
+  }
+  return c.json({
+    jurisdiction_id: j.id,
+    label: j.label,
+    amount_cents: resolved.amountCents,
+    currency: resolved.currency,
+    source: 'catalog',
+    registered_agent: registeredAgent,
+  });
+});
+
+/** D1415 Part 3: the uid of the company an order is linked to (`incorporations.company_id`), or null. */
+async function orderCompanyUid(env: Env, orderId: number): Promise<string | null> {
+  const r = await env.DB.prepare('SELECT cp.uid FROM incorporations i JOIN company_profiles cp ON cp.id = i.company_id WHERE i.id = ?')
+    .bind(orderId).first<{ uid: string }>();
+  return r?.uid ?? null;
+}
+
+legal.get('/incorporate/status', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const id = Number(c.req.query('id') ?? 0);
+  if (!id) return c.json({ error: 'id is required' }, 400);
+  const row = await getIncorporationForUser(c.env, id, user.id);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  return c.json({
+    id: row.id,
+    status: row.status,
+    jurisdiction_id: row.jurisdiction_id,
+    company_name: row.company_name,
+    amount_cents: row.amount_cents,
+    currency: row.currency,
+    stripe_session_id: row.stripe_session_id,
+    paid_at: row.paid_at,
+    created_at: row.created_at,
+    // D601 — what HQ recorded: the packet document and the state filing date.
+    packet_document_id: row.packet_document_id ?? null,
+    filed_on: row.filed_on ?? null,
+    // D1415 Part 3 (#3855): the company the filing linked or created, from the order itself, never from the
+    // project's company now (a venture moved later keeps showing the order's company). Null until linked.
+    company_uid: await orderCompanyUid(c.env, Number(row.id)),
+  });
+});
+
+// Task #1 — list all incorporation orders for the current user that have
+// advanced past pending_payment (i.e. paid, processing, ready, failed).
+// Used by the Legal page to surface in-flight or failed orders even when
+// the user navigates away from the wizard DoneStep.
+legal.get('/incorporate/orders', async (c) => {
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const rows = await c.env.DB.prepare(
+    `SELECT i.id, i.project_id, i.status, i.jurisdiction_id, i.company_name, i.amount_cents, i.currency, i.paid_at, i.created_at,
+            i.packet_document_id, i.packet_ready_at, i.filed_on, cp.uid AS company_uid
+     FROM incorporations i LEFT JOIN company_profiles cp ON cp.id = i.company_id
+     WHERE i.user_id = ? AND i.status != 'pending_payment'
+     ORDER BY i.created_at DESC
+     LIMIT 20`,
+  ).bind(user.id).all<Record<string, unknown>>();
+  return c.json({ orders: rows.results ?? [] });
+});
+
+legal.post('/incorporate/dev-complete', async (c) => {
+  // Fail-closed: only run in a keyless non-production env. With a Stripe key
+  // present (or in production) this simulated-payment endpoint is disabled so it
+  // can never mark an incorporation paid for free. The `/incorporate/checkout`
+  // dev branch only emits a link here under the same predicate.
+  if (!devPaymentFallbackAllowed(c.env)) {
+    return c.json({ error: 'not_found' }, 404);
+  }
+
+  const user = await requireAuth(c);
+  await ensureIncorporationsSchema(c.env);
+  const id = Number(c.req.query('id') ?? 0);
+  if (!id) return c.json({ error: 'id is required' }, 400);
+
+  const row = await getIncorporationForUser(c.env, id, user.id);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  if (row.status !== 'pending_payment') return c.json({ error: 'not_pending' }, 409);
+
+  const { recordPaidIncorporation } = await import('../services/incorporations');
+  await recordPaidIncorporation(c.env, {
+    id: 'dev_session',
+    metadata: { incorporation_id: String(id), user_id: String(user.id) },
+    payment_status: 'paid',
+    amount_total: Number(row.amount_cents) || 0,
+    currency: String(row.currency) || 'usd',
+  });
+
+  return c.json({ ok: true, incorporation_id: id, status: 'paid' });
+});
+
+// D758 — the /legal page's library: its 18 documents, titled and read from
+// the store. Full template text is served, so only the page's own audience
+// (admins and founders) may read it.
+const LEGAL_LIBRARY_ROLES = new Set(['admin', 'founder']);
+async function legalLibraryRow(env: Env, doc: { key: string; layer: string }) {
+  const row = await getTemplate(env, doc.key);
+  if (!row) return null;
+  const body = Number(row.is_stub) === 0 && String(row.body_md || '').trim() ? row.body_md : null;
+  return {
+    key: doc.key,
+    title: row.title,
+    layer: doc.layer,
+    layer_label: TEMPLATE_LAYERS[doc.layer]?.label ?? doc.layer,
+    has_body: body != null,
+    body,
+  };
+}
+
+legal.get('/templates', async (c) => {
+  const user = await requireAuth(c);
+  if (!LEGAL_LIBRARY_ROLES.has(String(user.role))) {
+    return refuse(c, 403, { code: 'legal_library_forbidden', message: 'The legal library is for founders and admins.' });
+  }
+  try {
+    const rows = await Promise.all(LEGAL_PAGE_DOCUMENTS.map((d) => legalLibraryRow(c.env, d)));
+    return c.json(rows.filter((r) => r != null).map(({ body: _body, ...r }) => r));
+  } catch (e) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The legal library could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+legal.get('/templates/:key', async (c) => {
+  const user = await requireAuth(c);
+  if (!LEGAL_LIBRARY_ROLES.has(String(user.role))) {
+    return refuse(c, 403, { code: 'legal_library_forbidden', message: 'The legal library is for founders and admins.' });
+  }
+  const doc = LEGAL_PAGE_DOCUMENTS.find((d) => d.key === c.req.param('key'));
+  if (!doc) return refuse(c, 404, { code: 'template_not_found', message: 'That document is not in the legal library.' });
+  let row: Awaited<ReturnType<typeof legalLibraryRow>>;
+  try {
+    row = await legalLibraryRow(c.env, doc);
+  } catch (e) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The legal library could not be read. Try again in a moment.', raw: e });
+  }
+  if (!row) return refuse(c, 404, { code: 'template_not_found', message: 'That document is not in the legal library.' });
+  return c.json(row);
+});
+
+legal.get('/documents', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = c.req.query('project_id');
+  const sql = getSQL(c.env);
+  // D639 — the one document access rule, `canAccessFounderResource`, decides
+  // every row, the same as `GET /documents/:id`, so the list never holds a
+  // document its own read would refuse. Admins see every
+  // document; a founder those of their own projects; outside roles none (this
+  // list used to give investors every document, unmasked). The SQL reads; it
+  // does not restate the rule.
+  const pid = projectId ? parseInt(projectId) : null;
+  const docs = pid != null
+    ? await sql`SELECT d.*, p.founder_id AS project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.project_id = ${pid} ORDER BY d.created_at DESC`
+    : await sql`SELECT d.*, p.founder_id AS project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id ORDER BY d.created_at DESC`;
+  await sql.end();
+  return c.json((docs as any[])
+    .filter((d) => canAccessFounderResource(user, d.project_founder_id ?? null))
+    .map(safeDoc));
+});
+
+legal.get('/documents/:id', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT d.*, p.founder_id as project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
+  await sql.end();
+  if (rows.length === 0) return c.json({ error: 'Document not found' }, 404);
+  // IDOR guard: founders may only read documents tied to their own project.
+  if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  return c.json(safeDoc(rows[0] as any));
+});
+
+legal.post('/documents', async (c) => {
+  const user = await requireAuth(c);
+  const data = await c.req.json();
+  const sql = getSQL(c.env);
+  // IDOR guard: founders can only create documents under their own project.
+  if (data.project_id) {
+    const p = await sql`SELECT founder_id FROM projects WHERE id = ${data.project_id}`;
+    if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+    if (!canAccessFounderResource(user, (p[0] as any).founder_id)) {
+      await sql.end();
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  } else if (user.role === 'founder') {
+    // Founders may not create unattached documents.
+    await sql.end();
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Task #2 — Hard guard: refuse to insert any contract doc_type into
+  // `documents`. esign_envelopes is the single source of truth for active
+  // contracts going forward. Non-contract docs (memos, drafts, 'other')
+  // remain allowed.
+  const requestedType = String(data.doc_type || 'other').toLowerCase();
+  if (CONTRACT_DOC_TYPES.has(requestedType)) {
+    await sql.end();
+    return c.json({
+      error: `doc_type '${requestedType}' is a contract type — create it via POST /api/legal/esign/send so it lives in esign_envelopes.`,
+      code: 'use_esign_envelope',
+    }, 409);
+  }
+  const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, content, template_name) VALUES (${data.project_id || null}, ${data.title}, ${data.doc_type || 'other'}, ${data.content || null}, ${data.template_name || null}) RETURNING *`;
+  await sql.end();
+  return c.json(safeDoc(doc), 201);
+});
+
+legal.put('/documents/:id/sign', async (c) => {
+  // Binding signature → enforce KYC. Limited-access users (kyc !== 'approved')
+  // are blocked; admins still pass through.
+  const user = await requireApprovedKyc(c);
+  const id = parseInt(c.req.param('id'));
+  const { signed_by } = await c.req.json();
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT d.*, p.founder_id as project_founder_id FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Document not found' }, 404); }
+  // IDOR guard: founders may only sign documents on their own project.
+  if (!canAccessFounderResource(user, (rows[0] as any).project_founder_id)) {
+    await sql.end();
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Task #2 — esign_envelopes is the single source of truth for active
+  // contracts. Reject the legacy in-place sign for any contract doc_type;
+  // callers must use POST /api/legal/esign/send to issue a real e-sign
+  // envelope. Non-contract docs (memos, drafts, internal notes) are still
+  // signable here for backward compatibility.
+  const docType = String((rows[0] as any).doc_type || '').toLowerCase();
+  if (CONTRACT_DOC_TYPES.has(docType)) {
+    await sql.end();
+    return c.json({
+      error: 'This is a contract doc_type — use the e-sign envelope flow (POST /api/legal/esign/send) instead.',
+      code: 'use_esign_envelope',
+    }, 409);
+  }
+  await sql`UPDATE documents SET status = 'signed', signed_by = ${signed_by || 'Unknown'}, signed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;
+  await sql.end();
+  return c.json(safeDoc(updated));
+});
+
+/**
+ * POST /legal/cofounder-agreement — generate a founder-terms agreement.
+ *
+ * This existed only in the Replit-dev FastAPI service, which CLAUDE.md is
+ * explicit is never deployed — so on production it 404'd for every caller and
+ * the Co-Founder Agreement tool's entire namesake action did nothing, on both
+ * /spinout-lab/cofounder-agreement and /incorporate/cofounder-agreement (they
+ * post the same payload to the same method).
+ *
+ * The document assembly lives in services/cofounderAgreement.ts, both so it is
+ * unit-testable without this file's heavy import graph — the same reason
+ * legal_83b is a sub-app — and so the template stays a local constant. It must
+ * NOT route through POST /templates/:key/generate: D1 already carries an active
+ * `cofounder_agreement` row in `legal_templates` with a different two-party
+ * {{dotted.path}} vocabulary, `getActiveTemplateBody` prefers the stored body
+ * over any inline one, and `applyMergeFields` leaves unresolved tokens as
+ * literals — so that path would hand a founder a legal document reading
+ * {{founder.legal_name}} with none of the terms they just entered.
+ */
+legal.post('/cofounder-agreement', async (c) => {
+  const user = await requireAuth(c);
+  const parsed = validateCofounderAgreement(await c.req.json().catch(() => null));
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const value = parsed.value;
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, founder_id, company_id FROM projects WHERE id = ${value.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Same rule as /incorporate/wizard, and the same rule the FastAPI original
+  // enforced: admin/partner, or the founder who owns this project. Investors
+  // are NOT privileged on this write path — a co-founder agreement records who
+  // owns the company, so writing one against a project you do not own is a
+  // cross-project IDOR, not a read-path convenience.
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) {
+      await sql.end();
+      return c.json({ error: 'Forbidden: you do not own this project' }, 403);
+    }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
+  }
+
+  const content = renderCofounderAgreement(value);
+  const title = `Co-Founder Agreement — ${value.company_name}`;
+  // `template_name` must stay exactly 'cofounder_agreement': the Lab page
+  // refreshes its list after generating and filters on that literal, so any
+  // other value saves the document but hides it from the founder.
+  const [doc] = await sql`
+    INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
+    VALUES (${project.id}, ${title}, 'other', 'generated', ${content}, 'cofounder_agreement')
+    RETURNING id, uid, title, template_name`;
+  await sql.end();
+
+  // D354 — record who the draft's parties are, each resolved to an account by
+  // email, so a party can record their OWN position on each clause. A failure
+  // here does not unmake the draft: it is reported (`parties_recorded: false`)
+  // and the page says the parties are not on file, never that nobody accepted.
+  let partiesRecorded = false;
+  try {
+    await recordParties(c.env, Number((doc as any).id), value.founders);
+    partiesRecorded = true;
+  } catch (e) {
+    console.error('[legal] cofounder-agreement parties:', (e as Error)?.message);
+  }
+
+  // The /incorporate page dereferences `result.document.title` unguarded, so
+  // this envelope (and the 200, not 201) is part of the contract.
+  return c.json({
+    ok: true,
+    parties_recorded: partiesRecorded,
+    document: doc,
+    summary: {
+      founders: value.founders.length,
+      total_equity_pct: totalEquityPct(value.founders),
+      vesting_years: value.vesting_years,
+      cliff_months: value.cliff_months,
+      acceleration: value.acceleration,
+    },
+  });
+});
+
+/**
+ * D354 — each party's own position on each clause of a co-founder agreement
+ * draft. The rules live in services/cofounderAgreementParties.ts; these two
+ * routes only pass the SESSION user and relay the service's refusals.
+ *
+ *   GET /cofounder-agreement/:docId/positions  — a party, the project's owner
+ *     or staff; anyone else gets the draft-not-found 404.
+ *   PUT /cofounder-agreement/:docId/positions/:clauseKey — { position, note }.
+ *     The caller must be a named party, and records only their own position.
+ *     A body naming a `user_id` other than the caller's is refused
+ *     (`party_mismatch`), never quietly rewritten. `requireApprovedKyc` keeps
+ *     an investor without approved KYC out, as every binding write does.
+ */
+legal.get('/cofounder-agreement/:docId{[0-9]+}/positions', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    const out = await listPositions(c.env, Number(c.req.param('docId')), user);
+    if ('refused' in out) return refuse(c, out.refused.status, { code: out.refused.code, message: out.refused.message });
+    return c.json(out);
+  } catch (e) {
+    return refuse(c, 503, { code: 'positions_unreadable', message: 'The clause positions could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+legal.put('/cofounder-agreement/:docId{[0-9]+}/positions/:clauseKey', async (c) => {
+  const user = await requireApprovedKyc(c);
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  try {
+    const out = await recordPosition(c.env, {
+      documentId: Number(c.req.param('docId')),
+      user,
+      clauseKey: String(c.req.param('clauseKey') || ''),
+      position: body?.position,
+      note: body?.note,
+      claimedUserId: body?.user_id ?? body?.party_user_id,
+    });
+    if ('refused' in out) return refuse(c, out.refused.status, { code: out.refused.code, message: out.refused.message });
+    return c.json(out);
+  } catch (e) {
+    return refuse(c, 503, { code: 'position_not_saved', message: 'Your position was not saved. Try again in a moment.', raw: e });
+  }
+});
+
+/**
+ * Cross-tenant read guard.
+ *
+ * This was `SELECT * FROM entities` behind a bare `requireAuth`, so every
+ * authenticated principal received every incorporated company in the studio:
+ * legal name, jurisdiction, incorporation date, and the `parent_id` chain that
+ * discloses who owns what. Nothing had to be tampered with to trigger it — the
+ * /legal page loads entities in the same `Promise.all` as /legal/documents, and
+ * `GET /documents` (170 lines up) was already scoped correctly. The two routes
+ * disagreed inside one file.
+ *
+ * `entities` carries no owner column; the link is `projects.entity_id`, so an
+ * entity belongs to the founder whose project points at it. Scoping therefore
+ * uses the separate `entityListScope` policy: admin/partner currently
+ * keep the full list, a founder sees only entities reachable from their own
+ * projects, and every other role sees none — unlike the projects list there is
+ * no masked entity view to fall back on, so the safe default is empty.
+ *
+ * The `IN (SELECT ...)` shape rather than a JOIN is deliberate: two of a
+ * founder's projects may share one holding entity, and a JOIN would return it
+ * twice.
+ */
+legal.get('/entities', async (c) => {
+  const user = await requireAuth(c);
+  const scope = entityListScope(user);
+  if (scope.kind === 'none') return c.json([]);
+  const sql = getSQL(c.env);
+  const entities = scope.kind === 'all'
+    ? await sql`SELECT * FROM entities ORDER BY created_at DESC`
+    : await sql`
+        SELECT * FROM entities
+        WHERE id IN (
+          SELECT entity_id FROM projects
+          WHERE founder_id = ${scope.founderId} AND entity_id IS NOT NULL
+        )
+        ORDER BY created_at DESC`;
+  await sql.end();
+  return c.json(entities);
+});
+
+// POST /entities — and the D376 entity writes (fabric role, registration,
+// registered agent, officers, a fund's GP and vehicle) — live in
+// ./legal_entities, mounted below, so node:test can load them without this
+// file's import graph. The create keeps the staff-only gate it had here: it is
+// the write half of the cross-tenant hole the GET above closed.
+legal.route('/', legalEntities);
+
+// Task #13 — Section 83(b) tracker routes (GET/POST /83b/trackers,
+// PATCH /83b/trackers/:id, POST /83b/trackers/:id/receipt). Defined in a
+// standalone sub-app so the route logic stays loadable by the strip-types
+// test gate without legal.ts's heavy import graph.
+legal.route('/', legal83b);
+
+export default legal;

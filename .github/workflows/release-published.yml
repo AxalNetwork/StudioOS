@@ -1,0 +1,27 @@
+name: Release published
+
+# Publishing a release changes no code, so no push to main follows it. This
+# redeploys main so the build picks up the new tag and the version beside the
+# logo shows it. It dispatches the deploy on main rather than running on the
+# release's tag, so it can never ship an older commit than production has.
+on:
+  release:
+    types: [published]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  redeploy:
+    name: redeploy main with the new release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch the Worker deploy on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh workflow run cloudflare-worker-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Release $TAG published: the Worker deploy on main is dispatched, and the logo's badge shows $TAG once it finishes." >> "$GITHUB_STEP_SUMMARY"

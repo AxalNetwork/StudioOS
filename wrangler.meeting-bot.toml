@@ -1,0 +1,72 @@
+# D886 B8: independent deployment; never include this image in studioos.
+name = "studioos-meeting-bot"
+main = "meeting-bot/worker/index.ts"
+compatibility_date = "2026-10-22"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+APP_URL = "https://app.axal.vc"
+
+[[durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+
+[[migrations]]
+tag = "v1-meeting-bot-container"
+new_sqlite_classes = ["MeetingBotContainer"]
+
+[[containers]]
+class_name = "MeetingBotContainer"
+scheduling_policy = "durable_object"
+
+[containers.images.runtime]
+dockerfile = "./meeting-bot/Dockerfile"
+build_context = "./meeting-bot"
+
+[env.preview]
+name = "studioos-meeting-bot-preview"
+workers_dev = true
+
+[env.preview.vars]
+CF_BOT_AUDIENCE = "preview"
+PREVIEW_CANARY_ENABLED = "off"
+# Owner supplies this exact preview script workers.dev origin after private receiver/signing preflight.
+PREVIEW_CANARY_ORIGIN = ""
+APP_URL = "https://studioos-preview.guillaumelauzier.workers.dev"
+
+[[env.preview.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+
+[[env.preview.migrations]]
+tag = "v1-meeting-bot-container"
+new_sqlite_classes = ["MeetingBotContainer"]
+
+[[env.preview.containers]]
+class_name = "MeetingBotContainer"
+scheduling_policy = "durable_object"
+
+[env.preview.containers.images.runtime]
+dockerfile = "./meeting-bot/Dockerfile"
+build_context = "./meeting-bot"
+
+# D5674: private host evidence. No tail consumer, so these logs cannot feed the archive recursively.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
+
+[env.preview.observability]
+enabled = true
+[env.preview.observability.logs]
+enabled = true
+head_sampling_rate = 1
+[env.preview.observability.traces]
+enabled = true
+head_sampling_rate = 0.01

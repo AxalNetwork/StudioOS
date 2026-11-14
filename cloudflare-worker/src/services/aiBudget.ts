@@ -1,0 +1,487 @@
+/** D629: licence allowance and paid AI balance. All durable amounts are integer micro-USD. */
+import type { Env } from '../types';
+import { userMeetsTier } from '../middleware/requireTier';
+import { effectiveInvestorTier } from '../middleware/requireInvestorTier';
+import { planAllowanceFor, type PlanAllowance } from './planAllowance';
+import { chargeMultiplier } from './ai/pricing';
+import { limitRefusal, noteSpendThresholds } from './aiSpendLimit';
+import { hydrateSuperAdmin, isSuperAdmin } from '../auth';
+
+export const AI_USD_SCALE = 1_000_000;
+export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
+export const AI_CAP_VARS = { day: 'WORKERS_AI_BUDGET_USD_DAY', month: 'WORKERS_AI_BUDGET_USD_MONTH' } as const;
+export const AI_LICENCE_KEYS = ['founder:free','founder:growth','founder:studio','investor:free','investor:plus','investor:professional','investor:institutional','advisor','partner','admin','other'] as const;
+export type AiLicenceKey = typeof AI_LICENCE_KEYS[number];
+/**
+ * D762: the multiplier a member's runs are settled at (`chargeMultiplier`), from
+ * their licence. 1 while billing is on cost, and for a system run (no member).
+ */
+export async function memberChargeMultiplier(env: Env, userId: number): Promise<number> {
+  if (!(Number.isSafeInteger(userId) && userId > 0) || chargeMultiplier(env, 'other') === 1) return 1;
+  const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first<any>();
+  if (!user) throw new Error('AI account unreadable');
+  return chargeMultiplier(env, aiLicenceKey(user));
+}
+/** `usd` at `multiplier`, in micro-USD, rounded up once (never rounded, then multiplied). */
+export const billedUsdToMicro = (usd: number, multiplier: number): number => usdToMicro(usd * multiplier);
+export function usdToMicro(value: number): number {
+  const n = Math.ceil(value * AI_USD_SCALE);
+  if (!Number.isFinite(value) || value < 0 || !Number.isSafeInteger(n)) throw new Error('AI amount unreadable');
+  return n;
+}
+function amount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('AI amount unreadable');
+  return value;
+}
+export function environmentAiCaps(env: Env) {
+  const vars = env as unknown as Record<string,string|undefined>;
+  const cap = (key:string, fallback:number) => {
+    const n = Number(vars[key]);
+    return Number.isFinite(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER / AI_USD_SCALE ? n : fallback;
+  };
+  return { day:cap(AI_CAP_VARS.day,AI_CAP_DEFAULTS.day), month:cap(AI_CAP_VARS.month,AI_CAP_DEFAULTS.month),
+    orgMonth:cap('WORKERS_AI_BUDGET_USD_ORG_MONTH',AI_CAP_DEFAULTS.orgMonth) };
+}
+export function aiLicenceKey(user: any): AiLicenceKey {
+  if (user.role === 'founder') return userMeetsTier(user,'studio') ? 'founder:studio' : userMeetsTier(user,'growth') ? 'founder:growth' : 'founder:free';
+  if (user.role === 'investor') return `investor:${effectiveInvestorTier(user)}`;
+  return ['advisor','partner','admin'].includes(user.role) ? user.role : 'other';
+}
+/** D791 (#2216): what a paused member reads, wherever a run is refused. */
+export const AI_PAUSED_MESSAGE = 'AI is paused on this account. Contact support.';
+const missingTable = (e: unknown) => /no such table/i.test(String((e as Error)?.message ?? e));
+/**
+ * D791: whether a Super Admin paused the member's AI (migration 510). A
+ * database before 510 has no pauses, so none is; any other failure throws,
+ * and the hold refuses rather than guess, as `assistOff` does.
+ */
+export async function aiPaused(env: Env, userId: number): Promise<boolean> {
+  try {
+    return !!(await env.DB.prepare('SELECT 1 AS paused FROM member_ai_pauses WHERE user_id = ? LIMIT 1').bind(userId).first());
+  } catch (e) {
+    if (missingTable(e)) return false;
+    throw e;
+  }
+}
+/** D791: the member's own monthly cap in micro-USD (migration 510), or null. Before 510 there is none. */
+export async function memberAiCap(env: Env, userId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare('SELECT monthly_microusd FROM member_ai_caps WHERE user_id = ?').bind(userId).first<{ monthly_microusd: number }>();
+    return row ? amount(row.monthly_microusd) : null;
+  } catch (e) {
+    if (missingTable(e)) return null;
+    throw e;
+  }
+}
+/**
+ * D1367: a Super Admin is capped again, at the admin licence's monthly cap
+ * ($50 unless HQ types another), with no separate daily cap. D1363 had given
+ * them $1 billion; the owner asked for the cap back. A pause (D791) and the
+ * member's own spend limit still apply.
+ */
+/** D783: the one licence whose caps are still typed on HQ. It is staff, not revenue. */
+export const TYPED_CAP_LICENCES: ReadonlySet<AiLicenceKey> = new Set<AiLicenceKey>(['admin']);
+/**
+ * A member's caps. The admin licence keeps its typed caps (`ai_licence_caps`,
+ * else the deployment's vars). Every other licence is a member, whose monthly
+ * allowance is computed from the plans they pay (D783, `planAllowance.ts`) and
+ * who has no daily cap: `daily_microusd` equals the month's, which a day's
+ * spend can never pass first, and `daily_capped` is false so nothing reads it
+ * as a limit.
+ */
+export async function resolveAiCaps(env: Env, userId:number) {
+  const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first<any>();
+  if (!user || !Number.isSafeInteger(userId) || userId <= 0 || user.is_active === 0) throw new Error('AI account unreadable');
+  const licence = aiLicenceKey(user);
+  // D791: a Super Admin's lower monthly cap for this member, read after the licence's; the lower one wins.
+  const own = await memberAiCap(env, userId);
+  const capped = (monthly: number) => (own !== null && own < monthly ? own : monthly);
+  const ownCap = own !== null ? { member_cap_microusd: own } : {};
+  if (!TYPED_CAP_LICENCES.has(licence)) {
+    const plan = await planAllowanceFor(env, user);
+    const monthly = capped(amount(plan.monthly_microusd));
+    return { licence, source: plan.source, daily_capped: false,
+      daily_microusd: monthly, monthly_microusd: monthly, plan, ...ownCap };
+  }
+  const recorded = await env.DB.prepare('SELECT daily_microusd, monthly_microusd FROM ai_licence_caps WHERE licence_key = ?').bind(licence).first<any>();
+  const fallback = environmentAiCaps(env);
+  if (isSuperAdmin(await hydrateSuperAdmin(env, user))) {
+    // D1367: the admin month, no day of its own (the day equals the month, as a member's does).
+    const monthly = capped(recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month));
+    return { licence, source: 'super_admin', daily_capped: false, daily_microusd: monthly, monthly_microusd: monthly, plan: null, ...ownCap };
+  }
+  return { licence, source:recorded ? 'recorded' : 'environment', daily_capped: true,
+    daily_microusd:recorded ? amount(recorded.daily_microusd) : usdToMicro(fallback.day),
+    monthly_microusd:capped(recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month)), plan: null, ...ownCap };
+}
+/**
+ * D783: a member's plan allowance as any read shows it: what each plan gives and
+ * where the figure came from, never the amount the member pays.
+ */
+export function planView(plan: PlanAllowance | null) {
+  return plan ? { share: plan.share, monthly_microusd: plan.monthly_microusd,
+    parts: plan.parts.map(p => ({ family: p.family, source: p.source, interval: p.interval, allowance_microusd: p.allowance_microusd })) } : null;
+}
+export async function listAiLicenceCaps(env:Env) {
+  const rows=await env.DB.prepare(`SELECT c.licence_key,c.daily_microusd,c.monthly_microusd,c.recorded_by,
+    u.name AS recorded_by_name,c.updated_at AS recorded_at FROM ai_licence_caps c
+    LEFT JOIN users u ON u.id=c.recorded_by`).all<any>();
+  if (rows.success !== true) throw new Error('AI caps unreadable');
+  const byKey=new Map(rows.results.map(row=>[row.licence_key,row]));
+  const fallback=environmentAiCaps(env);
+  return AI_LICENCE_KEYS.map(licence_key=>{
+    const recorded=byKey.get(licence_key);
+    // D783: a member licence's allowance is computed from the plans each member pays, never typed.
+    // A row recorded for one before D783 stays in the table and is no longer read.
+    if (!TYPED_CAP_LICENCES.has(licence_key)) return {licence_key,source:'computed' as const,editable:false,
+      daily_microusd:null,monthly_microusd:null,recorded_by:null,recorded_by_name:null,recorded_at:null,
+      ignored_recorded:!!recorded};
+    return {licence_key,source:recorded?'recorded' as const:'environment' as const,editable:true,
+      daily_microusd:recorded?amount(recorded.daily_microusd):usdToMicro(fallback.day),
+      monthly_microusd:recorded?amount(recorded.monthly_microusd):usdToMicro(fallback.month),
+      recorded_by:recorded?amount(recorded.recorded_by):null,
+      recorded_by_name:recorded?recorded.recorded_by_name:null,
+      recorded_at:recorded?recorded.recorded_at:null};
+  });
+}
+async function batch(env:Env, statements:D1PreparedStatement[]) {
+  const results = await env.DB.batch(statements);
+  if (results.length !== statements.length || results.some(r=>r.success !== true)) throw new Error('AI budget unreadable');
+  return results;
+}
+const clock = (now:Date) => ({ day:now.toISOString().slice(0,10),month:now.toISOString().slice(0,7),at:now.toISOString().slice(0,19).replace('T',' ') });
+async function seedSpend(env:Env, userId:number, key:string, length:number) {
+  // D762: a run's charge where migration 493 recorded one, and its cost on an older row.
+  const row = await env.DB.prepare(`SELECT COALESCE(SUM(charged_microusd),0) AS charged,
+      COALESCE(SUM(CASE WHEN charged_microusd IS NULL THEN est_cost_usd ELSE 0 END),0) AS spend FROM ai_usage_logs
+    WHERE user_id = ? AND refusal IS NULL AND substr(created_at,1,?) = ?`).bind(userId,length,key).first<any>();
+  if (!row) throw new Error('AI usage unreadable');
+  let seed = amount(row.charged) + usdToMicro(row.spend);
+  const store = (env as any).AI_SPEND || env.TOKENS;
+  if (store) {
+    // Existing enforcement may exceed the best-effort usage log. Missing is zero; a failed read is unknown.
+    const old = await store.get(`ai_spend:user:${userId}:${key}`);
+    if (old !== null) seed = Math.max(seed,usdToMicro(Number(old)));
+  }
+  return seed;
+}
+async function initialize(env:Env,userId:number,now:Date) {
+  const t=clock(now);
+  for (const [kind,key,len] of [['day',t.day,10],['month',t.month,7]] as const) {
+    const existing=await env.DB.prepare('SELECT spend_microusd FROM ai_included_spend WHERE user_id = ? AND period_kind = ? AND period_key = ?').bind(userId,kind,key).first<any>();
+    if (!existing) {
+      const seed=await seedSpend(env,userId,key,len);
+      const r=await env.DB.prepare('INSERT OR IGNORE INTO ai_included_spend(user_id,period_kind,period_key,spend_microusd) VALUES(?,?,?,?)').bind(userId,kind,key,seed).run();
+      if (r.success !== true) throw new Error('AI budget unreadable');
+    }
+  }
+  const bank=await env.DB.prepare('INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)').bind(userId).run();
+  if (bank.success !== true) throw new Error('AI budget unreadable');
+}
+export interface AiReservation { uid:string; userId:number }
+export class AiBudgetReviewConflict extends Error {}
+export class AiBudgetReviewNotFound extends Error {}
+type ReviewAudit={actorId:number;reason:string;recordedCost:number;action:'charge'|'refund'};
+/** CAS settlement token makes every money update and the optional audit harmless on replay. */
+async function commitSettlement(env:Env,row:any,costMicrousd:number,refund:boolean,expectedStatus:'pending'|'review',audit?:ReviewAudit) {
+  const included=Math.min(costMicrousd,amount(row.included_microusd));
+  const paid=costMicrousd-included;
+  const token=crypto.randomUUID();
+  const statements=[
+    env.DB.prepare(`UPDATE ai_budget_reservations SET status=?, settlement_uid=?, actual_included_microusd=?, actual_topup_microusd=?, updated_at=datetime('now')
+      WHERE uid=? AND user_id=? AND status=?`).bind(refund?'refunded':'settled',token,included,paid,row.uid,row.user_id,expectedStatus),
+    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
+      WHERE user_id=? AND period_kind='day' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.included_microusd-included,row.user_id,row.day_key,row.uid,token),
+    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd-?,updated_at=datetime('now')
+      WHERE user_id=? AND period_kind='month' AND period_key=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.included_microusd-included,row.user_id,row.month_key,row.uid,token),
+    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
+      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
+      .bind(row.topup_microusd-paid,row.user_id,row.uid,token),
+    // D755: the release and spend ledger rows are written by migration 486's trigger on the status change.
+  ];
+  if (audit) {
+    const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+    const details=JSON.stringify({reservation_uid:row.uid,member_id:row.user_id,
+      held_microusd:held,recorded_cost_microusd:audit.recordedCost,charged_microusd:costMicrousd,
+      absorbed_microusd:amount(audit.recordedCost-costMicrousd),
+      included_microusd:included,topup_microusd:paid,reason:audit.reason});
+    statements.push(env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
+      SELECT ?,?,?,user_id FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?`)
+      .bind(`ai_budget_review_${audit.action}`,details,String(audit.actorId),row.uid,token));
+  }
+  const result=await batch(env,statements);
+  return result[0].meta.changes === 1;
+}
+/** A provider overage stays held, with its recorded cost on the same row. */
+export async function settleAiReservation(env:Env, reservation:AiReservation, costMicrousd:number, refund=false) {
+  amount(costMicrousd);
+  const row=await env.DB.prepare('SELECT * FROM ai_budget_reservations WHERE uid = ? AND user_id = ?').bind(reservation.uid,reservation.userId).first<any>();
+  if (!row) throw new Error('AI reservation unreadable');
+  if (row.status !== 'pending') return;
+  const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+  if (costMicrousd > held) {
+    const result=await env.DB.prepare(`UPDATE ai_budget_reservations
+      SET status='review',recorded_cost_microusd=?,updated_at=datetime('now')
+      WHERE uid=? AND user_id=? AND status='pending'`).bind(costMicrousd,reservation.uid,reservation.userId).run();
+    if (result.success !== true) throw new Error('AI budget unreadable');
+    throw new Error('AI usage exceeds reservation');
+  }
+  const changed=await commitSettlement(env,row,costMicrousd,refund,'pending');
+  if (changed && costMicrousd>0) await noteThresholds(env,row.user_id,row.month_key);
+  // D794: a run that drew on the top-up balance may have taken it below the
+  // member's auto-reload threshold. This only queues the reload; it never waits on Stripe.
+  if (!refund && costMicrousd > amount(row.included_microusd)) {
+    const { queueAutoReloadIfDue } = await import('./aiAutoReloadDue');
+    await queueAutoReloadIfDue(env, reservation.userId);
+  }
+}
+/** D788: a settled charge may pass a threshold of the member's spend limit. A notice never fails a settlement. */
+async function noteThresholds(env:Env,userId:number,month:string) {
+  try { await noteSpendThresholds(env,userId,month); }
+  catch(error) { console.warn('[aiBudget] spend-limit notice failed',(error as Error).message); }
+}
+export async function listAiBudgetReviews(env:Env) {
+  const rows=await env.DB.prepare(`SELECT r.uid,r.user_id,u.name AS member_name,r.created_at AS at,
+    r.included_microusd,r.topup_microusd,r.recorded_cost_microusd
+    FROM ai_budget_reservations r JOIN users u ON u.id=r.user_id
+    WHERE r.status='review' ORDER BY r.created_at,r.uid`).all<any>();
+  if (rows.success !== true) throw new Error('AI reviews unreadable');
+  return rows.results.map(row=>({uid:row.uid,member_id:row.user_id,member_name:row.member_name,at:row.at,
+    held_microusd:amount(amount(row.included_microusd)+amount(row.topup_microusd)),
+    recorded_cost_microusd:amount(row.recorded_cost_microusd)}));
+}
+/** Only the Super Admin route calls this after validating its actor and reason. */
+export async function settleAiBudgetReview(env:Env,uid:string,action:'charge'|'refund',actorId:number,reason:string) {
+  if (!Number.isSafeInteger(actorId) || actorId<=0 || typeof reason!=='string' || reason.trim().length<10)
+    throw new Error('AI review decision unreadable');
+  const row=await env.DB.prepare('SELECT * FROM ai_budget_reservations WHERE uid=?').bind(uid).first<any>();
+  if (!row) throw new AiBudgetReviewNotFound('AI review not found');
+  const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
+  const desired=action==='charge'?'settled':'refunded';
+  if (row.status!== 'review') {
+    const alreadyCharged=row.actual_included_microusd==null || row.actual_topup_microusd==null
+      ? null : amount(amount(row.actual_included_microusd)+amount(row.actual_topup_microusd));
+    if (row.status===desired && row.recorded_cost_microusd!=null && alreadyCharged===(action==='charge'?held:0))
+      return {uid,status:desired,already_settled:true,held_microusd:held,recorded_cost_microusd:amount(row.recorded_cost_microusd),
+        charged_microusd:action==='charge'?held:0};
+    throw new AiBudgetReviewConflict('AI hold is not in review');
+  }
+  const recordedCost=amount(row.recorded_cost_microusd);
+  const charged=action==='charge'?held:0;
+  const changed=await commitSettlement(env,row,charged,action==='refund','review',
+    {actorId,reason:reason.trim(),recordedCost,action});
+  if (changed && charged>0) await noteThresholds(env,row.user_id,row.month_key);
+  if (!changed) {
+    const latest=await env.DB.prepare(`SELECT status,recorded_cost_microusd,actual_included_microusd,actual_topup_microusd
+      FROM ai_budget_reservations WHERE uid=?`).bind(uid).first<any>();
+    const latestCharged=latest?.actual_included_microusd==null || latest?.actual_topup_microusd==null
+      ? null : amount(amount(latest.actual_included_microusd)+amount(latest.actual_topup_microusd));
+    if (latest?.status===desired && latest.recorded_cost_microusd!=null && latestCharged===charged)
+      return {uid,status:desired,already_settled:true,held_microusd:held,
+        recorded_cost_microusd:recordedCost,charged_microusd:charged};
+    throw new AiBudgetReviewConflict('AI hold is no longer in review');
+  }
+  return {uid,status:desired,already_settled:false,held_microusd:held,
+    recorded_cost_microusd:recordedCost,charged_microusd:charged};
+}
+async function releaseExpired(env:Env,userId:number,now:Date) {
+  const rows=await env.DB.prepare("SELECT uid FROM ai_budget_reservations WHERE user_id=? AND status='pending' AND expires_at<=? ORDER BY expires_at LIMIT 100")
+    .bind(userId,clock(now).at).all<{uid:string}>();
+  if (rows.success !== true) throw new Error('AI reservations unreadable');
+  for (const r of rows.results) await settleAiReservation(env,{uid:r.uid,userId},0,true);
+}
+/**
+ * D1502 (#3753): keeps a pending hold alive for another `HOLD_TTL_MS` from
+ * `now`. A deck generation run's one parent hold outlives the five-minute rule
+ * while its steps run, so a long run is never released (and charged nothing)
+ * mid-way; each step start extends it. False when the hold is no longer pending.
+ */
+export async function extendAiReservation(env:Env,reservation:AiReservation,now=new Date()):Promise<boolean> {
+  const r=await env.DB.prepare("UPDATE ai_budget_reservations SET expires_at=?,updated_at=datetime('now') WHERE uid=? AND user_id=? AND status='pending'")
+    .bind(clock(new Date(now.getTime()+HOLD_TTL_MS)).at,reservation.uid,reservation.userId).run();
+  return Number(r?.meta?.changes||0)===1;
+}
+/** How long a pending hold lives before the next read releases it: the five-minute rule `reserveAiBudget` writes. */
+export const HOLD_TTL_MS = 300000;
+/**
+ * D1278 (#3304): `GET /api/ai-budget/holds`, the caller's own holds in
+ * progress (pending, or in review), oldest first. An expired pending hold is
+ * released first, as every read of the budget does, so it is never listed.
+ * `expires_at` is the stored one, never computed here. Amounts are integer
+ * micro-USD.
+ */
+export async function memberHolds(env:Env,userId:number,now=new Date()) {
+  await releaseExpired(env,userId,now);
+  const rows=await env.DB.prepare(`SELECT uid,created_at,expires_at,status,included_microusd,topup_microusd,surface,operation,api_key_uid,execution_id
+      FROM ai_budget_reservations WHERE user_id=? AND status IN ('pending','review') ORDER BY created_at,uid LIMIT 200`).bind(userId)
+    .all<{uid:string;created_at:string;expires_at:string;status:'pending'|'review';included_microusd:number;topup_microusd:number;
+      surface:string|null;operation:string|null;api_key_uid:string|null;execution_id:string|null}>();
+  if (rows.success!==true) throw new Error('AI reservations unreadable');
+  return (rows.results||[]).map((r)=>({uid:r.uid,created_at:r.created_at,expires_at:r.expires_at,status:r.status,
+    included_microusd:Number(r.included_microusd),topup_microusd:Number(r.topup_microusd),
+    surface:r.surface??null,operation:r.operation??null,api_key_uid:r.api_key_uid??null,execution_id:r.execution_id??null}));
+}
+export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
+  const caps=await resolveAiCaps(env,userId);
+  await releaseExpired(env,userId,now);
+  await initialize(env,userId,now);
+  const t=clock(now);
+  // One SQLite snapshot for allowance, holds and paid balance.
+  const row=await env.DB.prepare(`SELECT a.balance_microusd,d.spend_microusd AS daily,m.spend_microusd AS monthly,
+      (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND day_key=?) AS day_held,
+      (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND month_key=?) AS month_held,
+      (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review' AND month_key<?) AS earlier_review_held,
+      (SELECT COALESCE(SUM(topup_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review')) AS paid_held
+    FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
+      JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=? WHERE a.user_id=?`)
+    .bind(t.day,t.month,t.month,t.day,t.month,userId).first<any>();
+  if (!row) throw new Error('AI budget unreadable');
+  const held=await env.DB.prepare(`SELECT uid,created_at AS at,included_microusd,topup_microusd,recorded_cost_microusd
+    FROM ai_budget_reservations WHERE user_id=? AND status='review' ORDER BY created_at,uid`).bind(userId).all<any>();
+  if (held.success !== true) throw new Error('AI reviews unreadable');
+  const daily=amount(row.daily),monthly=amount(row.monthly),dayHeld=amount(row.day_held),monthHeld=amount(row.month_held);
+  // D762: a hold still in review from an earlier month is still held, so "Held by runs in progress"
+  // counts it. It was counted in that month's spend row, never this one's, so this month's spend is unchanged.
+  const earlierReview=amount(row.earlier_review_held);
+  const { plan, ...rest } = caps;
+  return { ...rest, plan: planView(plan),
+    day_key:t.day,month_key:t.month,
+    day_spend_microusd:amount(daily-dayHeld),month_spend_microusd:amount(monthly-monthHeld),
+    day_reserved_microusd:dayHeld,month_reserved_microusd:amount(monthHeld+earlierReview),
+    balance_microusd:amount(row.balance_microusd),topup_reserved_microusd:amount(row.paid_held),
+    held_for_review:held.results.map(r=>({uid:r.uid,at:r.at,
+      held_microusd:amount(amount(r.included_microusd)+amount(r.topup_microusd)),
+      recorded_cost_microusd:amount(r.recorded_cost_microusd)})) };
+}
+/**
+ * D844: the hold a member already took under `key`, or null. A database before
+ * migration 525 has no keys, so there is none; any other failure throws.
+ */
+async function heldUnder(env:Env,userId:number,key:string) {
+  try {
+    const row=await env.DB.prepare('SELECT uid,status FROM ai_budget_reservations WHERE user_id=? AND idempotency_key=?').bind(userId,key).first<{uid:string;status:string}>();
+    return row ? {uid:row.uid,userId,status:row.status} : null;
+  } catch(e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) return null;
+    throw e;
+  }
+}
+const idempotencyKey=(opts?:{idempotencyKey?:string|null}) => {
+  const k=opts?.idempotencyKey;
+  if (k==null) return null;
+  if (typeof k!=='string' || !k || k.length>200) throw new Error('AI hold key unreadable');
+  return k;
+};
+/**
+ * The hold's insert, in two literal forms so neither splices SQL. Both split the
+ * quote between the allowance and the bought balance from the counters inside
+ * the write, never from a stale read, and both end with D788's limit, so two
+ * holds racing cannot both pass a limit only one fits. The keyed form (D844)
+ * also writes the key, and a hold that reached the key first makes it a no-op
+ * (`ON CONFLICT DO NOTHING`). The unkeyed form is the statement every caller
+ * used before D844, unchanged. `values` bind up to the expiry, `where` after it.
+ */
+function holdStatement(env:Env,key:string|null,values:unknown[],where:unknown[]) {
+  return key ? env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at,idempotency_key)
+      SELECT ?,a.user_id,?,?,MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),
+        ?-MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),?,?
+      FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
+        JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=?
+      WHERE a.user_id=? AND ?<=MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))+a.balance_microusd
+        AND NOT EXISTS(SELECT 1 FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review')
+        AND (NOT EXISTS(SELECT 1 FROM member_ai_spend_limits WHERE user_id=a.user_id)
+          OR ?+(SELECT COALESCE(SUM(CASE WHEN status IN ('pending','review') THEN included_microusd+topup_microusd
+                ELSE COALESCE(actual_included_microusd,0)+COALESCE(actual_topup_microusd,0) END),0)
+              FROM ai_budget_reservations WHERE user_id=a.user_id AND month_key=?)
+            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))
+      ON CONFLICT DO NOTHING`).bind(...values,key,...where)
+    : env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at)
+      SELECT ?,a.user_id,?,?,MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),
+        ?-MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),?
+      FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
+        JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=?
+      WHERE a.user_id=? AND ?<=MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))+a.balance_microusd
+        AND NOT EXISTS(SELECT 1 FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review')
+        AND (NOT EXISTS(SELECT 1 FROM member_ai_spend_limits WHERE user_id=a.user_id)
+          OR ?+(SELECT COALESCE(SUM(CASE WHEN status IN ('pending','review') THEN included_microusd+topup_microusd
+                ELSE COALESCE(actual_included_microusd,0)+COALESCE(actual_topup_microusd,0) END),0)
+              FROM ai_budget_reservations WHERE user_id=a.user_id AND month_key=?)
+            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))`).bind(...values,...where);
+}
+/**
+ * D844: with `idempotencyKey`, a second call for the same key returns the hold
+ * the first one took, whatever its status since, and takes no other
+ * (`replayed: true`, with that hold's `status`). Without one, every call takes
+ * its own hold, as before.
+ */
+/**
+ * D1278 (#3304): what a hold is for, written with it so `memberHolds` can say
+ * so. Names only: the operation, where it ran, the key and the execution,
+ * never a prompt or an answer. Each is a short id or NULL.
+ */
+export type HoldContext = { operation?:string|null; surface?:HoldSurface|null; apiKeyUid?:string|null; executionId?:string|null };
+export const HOLD_SURFACES = ['mcp','flow','ai'] as const;
+export type HoldSurface = typeof HOLD_SURFACES[number];
+const CONTEXT_ID = /^[A-Za-z0-9._:-]{1,120}$/;
+function holdContext(c?:HoldContext|null) {
+  if (!c) return null;
+  const id=(v:unknown)=>(typeof v==='string'&&CONTEXT_ID.test(v)?v:null);
+  const surface=c.surface&&(HOLD_SURFACES as readonly string[]).includes(c.surface)?c.surface:null;
+  const out={operation:id(c.operation),surface,api_key_uid:id(c.apiKeyUid),execution_id:id(c.executionId)};
+  return Object.values(out).some((v)=>v!=null)?out:null;
+}
+export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date(),opts?:{idempotencyKey?:string|null;context?:HoldContext|null}) {
+  amount(quoteMicrousd);
+  const key=idempotencyKey(opts);
+  const context=holdContext(opts?.context);
+  if (key) {
+    const held=await heldUnder(env,userId,key);
+    if (held) return {ok:true as const,reservation:{uid:held.uid,userId},replayed:true as const,status:held.status};
+  }
+  // D791: a paused member's run is refused at the hold, before anything is held or charged.
+  if (await aiPaused(env,userId)) return {ok:false as const,refusal:'ai_paused' as const};
+  const report=await loadAiBudget(env,userId,now);
+  if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
+  const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+HOLD_TTL_MS)).at;
+  // Compute the split from current counters inside the write transaction, never from a stale read.
+  // D788: the member's own monthly limit is the insert's last clause (`aiSpendLimit.ts`), so two holds
+  // racing cannot both pass a limit that only one fits: the second insert counts the first hold.
+  const results=await batch(env,[
+    holdStatement(env,key,[uid,t.day,t.month,quoteMicrousd,report.daily_microusd,report.monthly_microusd,
+        quoteMicrousd,quoteMicrousd,report.daily_microusd,report.monthly_microusd,expires],
+      [t.day,t.month,userId,quoteMicrousd,report.daily_microusd,report.monthly_microusd,quoteMicrousd,t.month]),
+    env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd+(SELECT included_microusd FROM ai_budget_reservations WHERE uid=?),updated_at=datetime('now')
+      WHERE user_id=? AND ((period_kind='day' AND period_key=?) OR (period_kind='month' AND period_key=?)) AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=?)`)
+      .bind(uid,userId,t.day,t.month,uid),
+    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd-(SELECT topup_microusd FROM ai_budget_reservations WHERE uid=?),updated_at=datetime('now')
+      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=?)`).bind(uid,userId,uid),
+  ]);
+  if (!results[0].meta.changes) {
+    // D844: a concurrent call with the same key took the hold first; this call is that hold.
+    if (key) {
+      const held=await heldUnder(env,userId,key);
+      if (held) return {ok:true as const,reservation:{uid:held.uid,userId},replayed:true as const,status:held.status};
+    }
+    const current=await loadAiBudget(env,userId,now);
+    if (current.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
+    // D788: the member's own limit refused it, whatever the allowance and tokens could cover.
+    const limited=await limitRefusal(env,userId,quoteMicrousd,now);
+    if (limited) return {ok:false as const,refusal:'spend_limit' as const,...limited};
+    const dayRemaining=Math.max(0,current.daily_microusd-current.day_spend_microusd-current.day_reserved_microusd);
+    const monthRemaining=Math.max(0,current.monthly_microusd-current.month_spend_microusd-current.month_reserved_microusd);
+    // D783: a member has no daily cap, so a member's refusal is always the month's.
+    return {ok:false as const,refusal:current.daily_capped && dayRemaining<=monthRemaining?'budget_user_day' as const:'budget_user_month' as const};
+  }
+  // D1278: what the hold is for, written once the hold is taken. A label never
+  // decides a hold: if it cannot be written, the hold stands and the holds read
+  // says "Not recorded". Counts only in the log, never a value.
+  if (context) {
+    try {
+      await env.DB.prepare('UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?')
+        .bind(context.operation,context.surface,context.api_key_uid,context.execution_id,uid,userId).run();
+    } catch { console.warn('[ai-budget] hold context not recorded'); }
+  }
+  return { ok:true as const,reservation:{uid,userId} };
+}

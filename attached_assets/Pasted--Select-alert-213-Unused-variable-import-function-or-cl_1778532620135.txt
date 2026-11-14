@@ -1,0 +1,151 @@
+
+Select alert #213
+Unused variable, import, function or class
+Note
+#213 opened yesterday • Detected by CodeQL in frontend/.../pages/AdminPage.jsx :5
+main
+
+Select alert #212
+Unused variable, import, function or class
+Note
+#212 opened yesterday • Detected by CodeQL in frontend/.../pages/WatchlistJournalPage.jsx :1
+main
+
+Select alert #211
+Unused variable, import, function or class
+Note
+#211 opened yesterday • Detected by CodeQL in frontend/.../pages/MarketplacePage.jsx :1
+main
+
+Select alert #207
+Unused variable, import, function or class
+Note
+#207 opened 2 days ago • Detected by CodeQL in frontend/.../components/PersonalAssistant.jsx :18
+main
+
+Select alert #206
+Unused variable, import, function or class
+Note
+#206 opened 2 days ago • Detected by CodeQL in cloudflare-worker/.../routes/settings.ts :27
+main
+
+Select alert #205
+Unused variable, import, function or class
+Note
+#205 opened 2 days ago • Detected by CodeQL in cloudflare-worker/.../routes/dd.ts :17
+main
+
+Select alert #202
+Unused variable, import, function or class
+Note
+#202 opened 2 days ago • Detected by CodeQL in cloudflare-worker/.../routes/monitoring_analytics.ts :189
+main
+
+Select alert #201
+Unused variable, import, function or class
+Note
+#201 opened 3 days ago • Detected by CodeQL in frontend/.../pages/AnalyticsTab.jsx :1
+main
+
+Select alert #198
+Unused variable, import, function or class
+Note
+#198 opened 3 days ago • Detected by CodeQL in frontend/src/sidebarConfig.js :18
+main
+
+Select alert #197
+Unused variable, import, function or class
+Note
+Test
+#197 opened 3 days ago • Detected by CodeQL in cloudflare-worker/test/spinout_lab.test.mjs :267
+main
+
+Select alert #196
+Unused variable, import, function or class
+Note
+#196 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/legal.ts :4
+main
+
+Select alert #195
+Unused variable, import, function or class
+Note
+#195 opened 5 days ago • Detected by CodeQL in frontend/.../pages/TicketsPage.jsx :4
+main
+
+Select alert #194
+Unused variable, import, function or class
+Note
+#194 opened 5 days ago • Detected by CodeQL in frontend/.../pages/VerifyEmailPage.jsx :20
+main
+
+Select alert #189
+Unused variable, import, function or class
+Note
+#189 opened 5 days ago • Detected by CodeQL in frontend/.../pages/WatchlistJournalPage.jsx :5
+main
+
+Select alert #187
+Unused variable, import, function or class
+Note
+#187 opened 5 days ago • Detected by CodeQL in frontend/.../pages/TicketsPage.jsx :153
+main
+
+Select alert #185
+Unused variable, import, function or class
+Note
+#185 opened 5 days ago • Detected by CodeQL in frontend/.../pages/StudioOpsPage.jsx :31
+main
+
+Select alert #184
+Unused variable, import, function or class
+Note
+#184 opened 5 days ago • Detected by CodeQL in frontend/.../pages/StudioOpsPage.jsx :2
+main
+
+Select alert #183
+Unused variable, import, function or class
+Note
+#183 opened 5 days ago • Detected by CodeQL in frontend/.../pages/SettingsPage.jsx :6
+main
+
+Select alert #182
+Unused variable, import, function or class
+Note
+#182 opened 5 days ago • Detected by CodeQL in frontend/.../pages/ServiceCatalogPage.jsx :2
+main
+
+Select alert #181
+Unused variable, import, function or class
+Note
+#181 opened 5 days ago • Detected by CodeQL in frontend/.../pages/ServiceCatalogPage.jsx :1
+main
+
+Select alert #180
+Unused variable, import, function or class
+Note
+#180 opened 5 days ago • Detected by CodeQL in frontend/.../pages/RelationshipsPage.jsx :2
+main
+
+Select alert #179
+Unused variable, import, function or class
+Note
+#179 opened 5 days ago • Detected by CodeQL in frontend/.../pages/ReferEarnPage.jsx :75
+main
+
+Select alert #178
+Unused variable, import, function or class
+Note
+#178 opened 5 days ago • Detected by CodeQL in frontend/.../pages/RegisterPage.jsx :13
+main
+
+Select alert #177
+Unused variable, import, function or class
+Note
+#177 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PipelinePage.jsx :70
+main
+
+Select alert #176
+Unused variable, import, function or class
+Note
+#176 opened 5 days ago • Detected by CodeQL in frontend/.../pages/PipelinePage.jsx :2
+main

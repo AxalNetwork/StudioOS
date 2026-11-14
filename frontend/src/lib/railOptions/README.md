@@ -1,0 +1,37 @@
+# lib/railOptions — every option a profile's boards offer the rail
+
+D720 §11 (#1874): a board's rail lists the options on that board that run a
+model, so each option can get the models that fit its work (D764 PR 3, #2089).
+Each file here is one profile's list. A row names the canvas board (`page`,
+from `design/incoming/airail-every-page-data/canvas.json`), its `key`
+(`<verb>:<object>`, unique on its page), the `label` the member sees, one of
+the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
+`transcribe` or `none`) and its `source` in the code.
+
+| File | Profile |
+| --- | --- |
+| `founder.js` | Founder (D771, #2097). Its parity test is `frontend/test/railOptions_founder_d771.test.mjs`. |
+| `investor.js` | Investor, the 27 boards I1–I27 (D772, #2098). Its parity test is `frontend/test/rail_options_investor_d772.test.mjs`. |
+| `advisor.js` | Advisor (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
+| `partner.js` | Operating partner (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
+| `superAdmin.js` | Super Admin, the 37 boards H1–H37 (D775, #2101), with `SUPER_ADMIN_BOARDS`: each board's route, files and rail file, and the page that hosts it when it is an `/admin` tab. Its parity test is `frontend/test/rail_options_super_admin_d775.test.mjs`. |
+| `admin.js` | Admin, the 39 boards S1–S39 with their routes and rails (D774, #2100); the three Spin-Out Lab boards have none (D317), and say so in `noRail`. No control on them runs a model, so it has no option row; `ADMIN_QUIET_CONTROLS` names the uploads and the report and why. Its parity test is `frontend/test/rail_options_admin_d774.test.mjs`. |
+| `index.js` | `railOptionFor(pageKey, { file, control })` (D772, #2098): the key and label a zone several profiles share names on the member's page, read from the four member inventories above. Its tests are in `frontend/test/rail_pages_investor_d772.test.mjs`. |
+
+**Ask chips** (D1596, D1420): `ADVISOR_ASK_CHIPS` in `advisor.js`, and `FOUNDER_ASK_CHIPS`, `INVESTOR_ASK_CHIPS` and `PARTNER_ASK_CHIPS` in `founder.js`, `investor.js` and `partner.js`, are chips in the Ask panel, not rail actions: the AIRail holds only model choice and consumption (the owner, 2026-10-31). So they stay out of each profile's option list and its parity test. `scripts/build-rail-matrix.mjs` lists them so `GET /api/ai/rail?page=` offers them: a no-model chip (`sessions:block`) with no models, a model chip (`studio:layout`, "Arrange my Studio for this stage", on each /studio rail key) with its kind's models and its own pick, and `derive:memo` ("Write a memo from this deck", D1583, kind `memo`, task `memo_write`) on the pitch deck page, whose pick the memo run reads. S1 draws them.
+
+## Rules
+
+- **The list follows the code.** Each profile's test reads the files its
+  boards render: every draft band and model-running call found there must be a
+  row, and every row's control must exist.
+- **An option that runs no model is not a row:** a CRUD write, a client-side
+  CSV export, a heuristic the Worker computes.
+- **Nothing here calls the rail.** Each row's control calls `useRailOption`
+  (D768, #2092) while the member has it open: a draft band through
+  `ZoneDraft`'s `railOption` prop, set to the row's key. Each profile's
+  rollout adds those calls one section at a time; its test is
+  `frontend/test/rail_pages_investor_d772.test.mjs` for the investor.
+- **A shared zone passes no literal key.** `AskZone`, `LibraryZone` and
+  `DiligenceRoom` pass their own path and control to `railOptionFor`, so
+  each profile keeps its own keys.

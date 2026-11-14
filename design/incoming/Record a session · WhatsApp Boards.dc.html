@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Founder › Validate › Customer research › Record a session</span><h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">{{ title }}</h1><p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">{{ intro }}</p></header>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="13"><section id="{{ r.id }}" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ r.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ r.t }}</h2></div><sc-if value="{{ r.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:13px;line-height:1.55;color:#3f3a47">{{ r.n }}</p></sc-if><div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap"><sc-for list="{{ r.f }}" as="f" hint-placeholder-count="1"><div style="display:flex;flex-direction:column;gap:8px"><sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if><div style="{{ f.st }}"><dc-import name="Session Channels Page" v="{{ f.v }}" hint-size="100%,900px"></dc-import></div></div></sc-for></div></section></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = 'width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)';
+    const M = 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)';
+    const f = (v, cap) => ({ v, cap: cap || '', st: /^(wa12|tgm|mcm)/.test(v) ? M : D });
+    const R = (id, t, n, fr) => ({ id, t, n: n || '', f: fr });
+    return { title: 'Record a session · WhatsApp', intro: 'WA1 to WA13. Customer chats on the founder’s WhatsApp business number, turned into sessions in Interviews once each person agrees. The same components serve Telegram and Calls, with the channel as a filter.', rows: [
+      R('WA1', 'Connect WhatsApp', 'Six steps with their status. The webhook step failed and resumes from where it stopped; finished steps are kept. Embedded Signup is offered as the other route.', [f('wa1')]),
+      R('WA2', 'Chats inbox', 'Contacts show as [Contact] with the number masked. The channel filter is the one Telegram uses. The row menu is open on the first chat.', [f('wa2')]),
+      R('WA3', 'Session transcript', 'The Original · Translation · Both switch works. Voice notes are audio rows with their transcript; the last messages wait for translation.', [f('wa3')]),
+      R('WA4', 'Conversation analytics · one session', 'Every figure carries the Source chip “Recorded”.', [f('wa4')]),
+      R('WA5', 'Venture analytics across chats', 'A date range with weekly trends. The week of 15 Sep has no record, so it is a dashed hairline labelled “Not recorded”, never a zero.', [f('wa5')]),
+      R('WA6', 'Data points and actions to accept', 'Grouped by module. Each item has its quote, segment link and confidence. The prototype ask carries “For Build”. Accept all takes at most 50.', [f('wa6')]),
+      R('WA7', 'Insufficient AI tokens', 'Translating and extracting stop when AI tokens run out. Nothing already kept is lost.', [f('wa7')]),
+      R('WA8', 'Empty · no WhatsApp connected yet', '', [f('wa8')]),
+      R('WA9', 'Loading', '', [f('wa9')]),
+      R('WA10', 'Error', '', [f('wa10')]),
+      R('WA11', 'No permission · a co-founder without access', '', [f('wa11')]),
+      R('WA12', 'Phone 390 · inbox and transcript', 'Every tap target at least 44 by 44 px.', [f('wa12a', 'Inbox'), f('wa12b', 'Transcript')]),
+      R('WA13', 'Dark · analytics', '', [f('wa13')]),
+    ] };
+  }
+}
+</script>
+</body></html>

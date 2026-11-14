@@ -1,0 +1,37 @@
+/*
+ * D1028 (#2865, CT23) — the Cap table tool on a phone. Below 1024px the tool's
+ * root carries `captable-phone` (`PHONE_ROOT` in `capTableModel.js`), and every
+ * control in it is a target of at least 44 × 44px: buttons, selects, fields,
+ * a link laid out as a box (a tab, a card, a button-styled link) and the label
+ * around a checkbox. A link inside a sentence is inline and keeps its line.
+ *
+ * The dialogs and drawers draw inside the root (`Lightbox` is not portalled),
+ * so their buttons, the × included, follow the same rule.
+ *
+ * Plain CSS outside Tailwind's layers, so a utility's smaller min-height on
+ * the same element never wins.
+ */
+.captable-phone button,
+.captable-phone select,
+.captable-phone textarea,
+.captable-phone a,
+.captable-phone input:not([type='checkbox']):not([type='radio']) {
+  min-height: 44px;
+}
+
+.captable-phone button,
+.captable-phone select {
+  min-width: 44px;
+}
+
+.captable-phone nav a {
+  display: inline-flex;
+  align-items: center;
+}
+
+.captable-phone label:has(> input[type='checkbox']),
+.captable-phone label:has(> input[type='radio']) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}

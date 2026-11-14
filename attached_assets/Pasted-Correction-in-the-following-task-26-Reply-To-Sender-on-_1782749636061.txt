@@ -1,0 +1,28 @@
+Correction in the following task: #26 - Reply-To Sender on Network Invites
+The From address stays noreply@axal.vc (on Axal's DKIM/SPF/DMARC-aligned domain). The From display name reflects the sender so the recipient recognizes who it's from (e.g. Jane Founder via Axal VC noreply@axal.vc)
+{senderName} via Axal VC noreply@axal.vc  #26 - Reply-To Sender on Network Invites
+What & Why
+When a user invites people from their network (the Refer & Earn flow), the email is sent from Axal VC <noreply@axal.vc> with no Reply-To, so if a recipient hits "Reply" it goes to an unmonitored noreply mailbox. The sender — not Axal — should own the conversation with their own contacts. Add a Reply-To header set to the inviting user's registered email so replies route straight to them, while keeping Axal's authenticated domain in the From address so deliverability and email security stay intact.
+Done looks like
+* A recipient of a network invitation who clicks "Reply" gets a draft addressed to the sender's registered email (e.g. Reply-To: Jane Founder <jane@hercompany.com>), not noreply@axal.vc.
+* This applies to both the initial bulk invite send and the per-invite reminder re-send.
+* The From address stays noreply@axal.vc (on Axal's DKIM/SPF/DMARC-aligned domain). The From display name reflects the sender so the recipient recognizes who it's from (e.g. Jane Founder via Axal StudioOS <noreply@axal.vc>), matching the reference screenshot where the sender's name shows in the From line.
+* Replies, reply-to value, and display names are header-injection-safe (no CR/LF smuggling), and the existing recipient list / dedupe / rate-limit behavior is unchanged.
+* Transport stays TLS-encrypted (already the case — Gmail API send is over HTTPS and Gmail delivers with TLS); no regression there.
+Out of scope
+* Putting the user's own email address in the From header. We deliberately keep From on noreply@axal.vc so DKIM/SPF/DMARC alignment holds — spoofing the user's domain in From would hurt deliverability and fail receiver authentication. Reply-To is the correct mechanism for routing replies to the sender.
+* DNS changes (SPF/DKIM/DMARC records). The sending domain is already configured; this task does not touch DNS.
+* Waitlist-outreach emails (a separate feature covered by other tasks). Only the network/referral invite emails are in scope.
+* Other transactional emails (verification, agreement, alerts, invoices) — they keep their existing department reply-to addresses.
+Steps
+1. Add Reply-To support to the raw-email builder — Extend the shared raw MIME email builder used by invites so callers can pass an optional Reply-To value, emitting a Reply-To: header when provided. Sanitize the value against header injection the same way From/To/Subject already are. Keep the parameter optional so all existing callers are unaffected.
+2. Plumb the sender's identity through the referral invite send function — Pass the inviting user's registered email (and display name) into the referral invite send path so it sets Reply-To to the sender and a From display name like {senderName} via Axal StudioOS <noreply@axal.vc> (From address unchanged).
+3. Wire both invite entry points — Supply the sender's email/name from the bulk send route and the per-invite reminder route, both of which already load the sender via getSenderInfo (sender.email, sender.name). No change to validation, dedupe, quota, or tracking writes.
+4. Test coverage — Add a unit test asserting the generated raw email for a network invite contains a Reply-To: header equal to the sender's registered email and that the From address remains noreply@axal.vc, plus a header-injection case (CR/LF in name/email is stripped). Follow the existing worker test pattern. Ensure npm run test:drift passes.
+Relevant files
+* cloudflare-worker/src/services/email.ts:44-72
+* cloudflare-worker/src/services/email.ts:406-442
+* cloudflare-worker/src/routes/email.ts:89-95
+* cloudflare-worker/src/routes/email.ts:97-245
+* cloudflare-worker/src/routes/email.ts:279-389
+* cloudflare-worker/test/events_ics_invite.test.ts

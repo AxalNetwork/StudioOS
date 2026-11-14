@@ -1,0 +1,62 @@
+You are the senior frontend + full-stack engineer for Axal StudioOS. The full backend platform is already built (users, referrals, referral_chains, commissions, payouts, job queue, RBAC, Replit Auth, etc.).
+
+Build the **complete Partner Dashboard** and the **exact Refer & Earn page** as shown in the attached screenshot, with working referral links, contact import, and social sharing.
+
+Exact requirements:
+
+1. **Partner Dashboard (/dashboard.html)**
+   - Modern sidebar navigation (use the optimized structure we previously defined).
+   - Main content area with 4 key sections (grid layout):
+     • Proprietary Deal Flow (cards with AI scores + traction)
+     • AI-Scored Opportunities (co-investment + referral recommendations)
+     • Syndication Tools (active syndicates + “Create Syndicate” button)
+     • Performance Analytics (charts using Chart.js: earnings, network growth, commissions)
+   - Top bar with role badge and quick stats (earnings, active projects, referral count).
+   - Make it the default logged-in page after Replit Auth.
+
+2. **Refer & Earn Page (/refer-earn.html) — match the screenshot exactly**
+   - Header: “Refer & Earn” + subtitle “Invite founders, partners, and LPs. Earn commissions when they reach milestones.”
+   - Three stats cards:
+     • Total Referred (0)
+     • Converted (0)
+     • Lifetime Earned ($0.00)
+   - “Your Referral Link” section:
+     • Dynamic link: https://axal.vc/register?ref=AXAL-XXXXXX (use real user’s referral_code)
+     • Copy button
+     • Referral code display box
+     • Explanatory text about milestones
+   - QR Code (generate dynamically from referral link using a CDN library or simple JS QR generator)
+   - Wallet section:
+     • Available Balance (green card)
+     • Lifetime Earned card
+     • “Manage payouts” link (goes to existing Payouts page)
+   - “Your Referrals” section:
+     • Empty state: “No referrals yet. Share your link to start earning.” (as in screenshot)
+     • Once referrals exist: table with referred user, date, status, commission earned
+   - New growth features:
+     • **Import Contacts** button → CSV upload (emails/names) → auto-generate personalized referral links
+     • **Quick Share** buttons: X/Twitter, LinkedIn, WhatsApp, Email (with pre-filled messages and link)
+     • Editable invite message templates
+
+3. **Integration**
+   - Connect both pages to existing backend endpoints (/api/referral/me, /api/referral/import-contacts, etc.).
+   - Referral links must work immediately (capture ?ref= on public register flow).
+   - Use fetch() for real-time data updates.
+   - Role-based: only KYC-approved Partner / Investor / Founder roles see these pages.
+   - Add “Refer & Earn” to the sidebar in Partner / Investor / Founder views.
+
+4. **Technical**
+   - Keep everything in existing frontend/ structure (static HTML/JS/CSS).
+   - Use Chart.js for any charts.
+   - Make pages fully responsive and match Axal dark/green branding.
+   - Add smooth loading states and error handling.
+
+Build this step-by-step:
+1. First create / update the main Partner Dashboard (/dashboard.html) with sidebar and 4 sections.
+2. Then build the exact Refer & Earn page (/refer-earn.html) matching the screenshot pixel-for-pixel (stats, link, QR, wallet, referrals).
+3. Then implement contact import + social sharing buttons and backend integration.
+4. Finally wire up the sidebar navigation and test end-to-end referral flow.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

@@ -1,0 +1,44 @@
+#:schema node_modules/wrangler/config-schema.json
+# ---------------------------------------------------------------------------
+# Pull-request preview Worker — one per PR, named `studioos-pr-<number>` by
+# .github/workflows/pr-preview.yml (`wrangler deploy --config
+# wrangler.pr-preview.toml --name studioos-pr-<n>`) and deleted when the PR
+# closes. This is NOT the production config: that is wrangler.toml, and the
+# apex guards (frontend/test/apex_route_coverage.test.mjs and
+# apex_truth_doc.test.mjs) read only that file.
+#
+# What a preview is: the PR's `docs/` build on workers.dev with the same
+# single-page-application fallback production uses, and `docs/_headers`
+# applied by Workers static assets. What it is not: an API. There are NO
+# bindings here — no D1, KV, R2, queue, Durable Object, AI or Vectorize — so
+# a pull request's code can never touch production data, and `/api/*` is a
+# 404 exactly as it was on the retired Cloudflare Pages mirror. A full-stack
+# preview needs the `[env.preview]` placeholders in wrangler.toml provisioned
+# first (documentation/architecture/DECISIONS.md D36).
+#
+# Why there is a script at all: an assets-only Worker serves the shell for
+# every unmatched path, navigation request or not, so a stale tab asking for
+# a hashed `/assets/*` file this build no longer carries would receive HTML
+# and execute it as a module — the `?__reboot=` blank-page class — and an
+# `/api/*` fetch would receive HTML instead of a clean 404. `main` below does
+# what cloudflare-worker/src/index.ts does on production for `/assets/*` (a
+# fallback HTML answer becomes a real 404) and answers `/api/*` with a JSON
+# 404 that says there is no API on a preview. Nothing else reaches the
+# script.
+#
+# Why not Workers preview URLs or Workers Builds: Cloudflare generates no
+# preview URL for a Worker that implements a Durable Object, and `studioos`
+# implements two (D36). `preview_urls` is off here too — the PR Worker's own
+# workers.dev URL is the preview.
+# ---------------------------------------------------------------------------
+name = "studioos-pr-preview"
+main = "scripts/pr-preview-worker.mjs"
+compatibility_date = "2026-04-01"
+workers_dev = true
+preview_urls = false
+
+[assets]
+directory = "./docs"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/assets/*"]

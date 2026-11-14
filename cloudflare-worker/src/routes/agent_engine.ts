@@ -1,0 +1,1066 @@
+/**
+ * D1529 (#3845, E1 of #3742) — the agent engine's goals, tasks and
+ * dependencies. Mounted at `/api/teams` in `index.ts`, before
+ * `team_agents.ts`, in its own module.
+ *
+ *   GET    /:scope/:id/goals                   read
+ *   POST   /:scope/:id/goals                   manage
+ *   PATCH  /goals/:uid                         manage
+ *   GET    /:scope/:id/tasks?goal=&assignee=&status=&module=   read
+ *   POST   /:scope/:id/tasks                   manage
+ *   PATCH  /tasks/:uid                         manage; a person assignee may change status only
+ *   PUT    /tasks/:uid/deps                    manage
+ *
+ * D1530 (#3848, E4) — the planner, the role templates and the wizard:
+ *   GET    /goals/:uid/plan/quote              manage: what a plan would hold (the CEO agent's sponsor, else the caller)
+ *   POST   /goals/:uid/plan                    manage: a plan, one proposal (`services/agents/planner.ts`)
+ *   POST   /goals/:uid/plan/accept             manage: { proposal, remove?, titles? } → every task in one batch
+ *   POST   /goals/:uid/plan/discard            manage: { proposal } → { ok }; 409 plan_decided (#4394)
+ * #4394: the quote and the draft name the planner `agent: { uid, persona: { key, name } } | null` (D4117: never a
+ * job title); the draft carries `cost: { held, charged }`. `/moves` adds `stopped_runs` on an `out` move, `/handoffs`
+ * each chain's `started_at`, and the Work board a `decision_expired` item's `proposal_uid`.
+ *   GET    /:scope/:id/suggested-team?goal=    manage: the wizard (rule-based, no model, nothing written)
+ *   GET    /templates                          signed in: the role templates
+ *   GET    /capabilities                       signed in: modules, reads, options, floor
+ * Custom roles (`/:scope/:id/roles/custom`) wait for migration 728 (#3847).
+ *
+ * `:scope` is `company` (by uid) or `project` (by numeric id). The gates are
+ * D1496's (`services/agents/teams.ts`), so the company branch #3697 part 2
+ * adds to `isProjectManager` reaches them unchanged.
+ *
+ * Every route answers 404 `agent_engine_off` unless `AGENT_ENGINE` is set and
+ * not "off" and `TEAM_AGENTS_ENABLED` is "true". The check is in each handler,
+ * not a `*` middleware, so this router never answers for team_agents' paths.
+ *
+ * D1528 (#3847, E3 of #3742) — the runtime's routes, behind the same flag and gates:
+ *
+ *   GET    /tasks/:uid/quote          manage or sponsor  { quote: { available, value_microusd } }
+ *   POST   /tasks/:uid/start          manage or sponsor  202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready;
+ *                                                        403 engine_paused | scope_paused
+ *   GET    /agents/:uid/runs          read               { runs: [Run] }
+ *   GET    /runs/:uid                 read               { run, steps: [{ name, status, at, summary }], cost, detail } (detail: W3 below)
+ *   POST   /runs/:uid/cancel          manage             { run }; 409 not_running
+ *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy }
+ *   PUT    /:scope/:id/engine         manage             body { paused?, max_parallel_runs? }; 400 invalid_engine
+ *
+ * D1614 W3 (#3971) — a run in full, its retry, and a project's activity feed (`services/agents/runActivity.ts`):
+ *
+ *   GET    /runs/:uid                 read               `detail`: agent (name, role, model), skill, work (task, instruction),
+ *                                                        sources and tools by name, proposals (decision, who), outcome
+ *                                                        (completed | failed { reason_text, retryable } | skipped { reason } |
+ *                                                        cancelled), times, cost { held, charged, model, tokens }
+ *   POST   /runs/:uid/retry           manage or sponsor  202 { run }; 409 not_retryable, and every start refusal
+ *   GET    /project/:id/activity?who=people|agents|both&person=&agent=&task=&before=
+ *                                     read               { items, next_cursor, lists? }; projects only (a company has no route)
+ *
+ * D1614 W4 (#3972) — a project's workload (`services/agents/workWorkload.ts`):
+ *
+ *   GET    /project/:id/work/workload?weeks=1..12   read   { weeks, people: [{ person, capacity, weeks, unscheduled }], agents: [...] }
+ *   PUT    /project/:id/work/capacity/:personUid    self or manage   { weekly_capacity_points: number | null } → { person, capacity }
+ *   A task's time block is W1's `PATCH /tasks/:uid` { scheduled_start, scheduled_end }; reassignment is the same PATCH's
+ *   `assignee`, under E1's agent checks (works_in, may_propose, live). Projects only: a company path has no route.
+ *
+ * #3851 (E7 of #3742) — the evaluation board (TM14), behind the same flag and gates:
+ *
+ *   GET    /:scope/:id/evaluation?days=30|90   read   { days, roles: [RoleEvaluation], skills }; 400 invalid_days
+ *     D1612 part D (#3954): `skills` is the golden-case board of the Axal skills this scope's agents use
+ *     (`skillEval.ts` `skillBoard`: pass / total on the current version, regressions); null when unreadable.
+ *
+ * Task and goal costs are now read (`services/agents/evaluation.ts` `runCostReader`):
+ * the sum of a task's runs' charges, `{ available: false }` when any is unrecorded.
+ *
+ * A start goes through the runtime's seam (`src/agents/runtime.ts`), never a
+ * binding. With the engine off or paused, #3727's own
+ * `POST /agents/:uid/run` (team_agents.ts) still runs an agent by hand.
+ *
+ * D1530 (#3849, E5 of #3742) — duties, handoffs and memory, behind the same flag and gates:
+ *
+ *   GET    /agents/:uid/duties        read     { duties: [Duty] }
+ *   POST   /agents/:uid/duties        manage   201 { duty }; 422 template_not_in_role; 409 duty_exists | too_many_duties
+ *   PATCH  /duties/:uid               manage   { duty } (cadence, weekday, day_of_month, hour_utc, title, status)
+ *   DELETE /duties/:uid               manage   { ok }
+ *   GET    /:scope/:id/handoffs       read     { chains: [{ uid, steps: [...], refused: [{ reason }] }] }
+ *   GET    /agents/:uid/memory        read     { notes, retention: { days_after_removal, run_summaries_days, text } }
+ *   POST   /agents/:uid/memory        manage   201 { note } (a fact); 422 note_too_long
+ *   DELETE /memory/:uid               manage   { ok } ("Forget this")
+ *   DELETE /agents/:uid/memory        manage   { ok, forgotten } ("Forget everything")
+ *
+ * NEVER AN EMAIL, NEVER A NUMERIC USER ID. A person is `{ uid, name }`; an
+ * agent `{ uid, role_key, first_name, last_name }`. `cost` is
+ * `{ available: false }` when a charge is unrecorded or unreadable, never 0.
+ */
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
+import { mapError } from './_t13t14t15_helpers';
+import { quoteRun, type TaskClass } from '../services/aiRouter';
+import { ALWAYS_ASKS_FLOOR, MODULES, READ_KEYS, optionsIn } from '../services/agents/catalogue';
+import { moduleSurface } from '../services/agents/agentRun';
+import { acceptPlan, discardPlan, draftPlan, planQuote } from '../services/agents/planner';
+import { TEMPLATES, monthEstimate, suggestRoles, templateOf, type DutyQuote } from '../services/agents/templates';
+import { canManage, canRead, loadScope, scopeOfAgent, type Scope } from '../services/agents/teams';
+import { goalByUid, goalDto, goalWrite, goalsOf, insertGoal, updateGoal, type Refusal } from '../services/agents/goals';
+import {
+  TASK_STATUSES, depsOf, insertTask, isReady, setDeps, statusWrite, taskByUid, taskCosts, taskWrite, tasksOf, updateTask, type TaskRow,
+} from '../services/agents/tasks';
+import { workBoardRoutes } from './work_board';
+import { assignable, myTasks } from '../services/agents/teamRoster';
+import { agentQuote } from '../services/agents/agentRun';
+import { agentByUid, type AgentRow } from '../services/agents/teams';
+import { agentRuntime, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from '../agents/runtime';
+import { moveTask, putScopeSettings, runByUid, runDto, scopeOfRow as runScopeOf, scopeSettings, stepsOf, type RunRow } from '../agents/engine';
+import { terminateRun, trackRun } from '../agents/doRuntime';
+import { workItemRoutes } from './work_items';
+import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
+import { WorkRefusal } from '../services/agents/workBoard';
+import { movesOf } from '../services/agents/transfer';
+import { addDuty, dutiesOf, dutyByUid, dutyDto, removeDuty, runsPerMonth, updateDuty, type DutyRow } from '../services/agents/duties';
+import { chainsOf } from '../services/agents/handoffs';
+import { addSession, placeOf, scheduleOf, schedulableAgents, sessionByUid, sessionDto, sessionEstimate, updateSession, visibleSession } from '../services/agents/sessions';
+import { daysOf, evaluateScope, runCostReader } from '../services/agents/evaluation';
+import { scopeSkillIds, skillBoard } from '../services/agents/skillEval';
+import { RETENTION, addFact, forgetAll, forgetNote, noteByUid, noteDto, notesOf, retentionText } from '../services/agents/memory';
+import { isLatestAttempt, outcomeOf, projectActivity, runDetail } from '../services/agents/runActivity';
+import { WEEKS_DEFAULT, WEEKS_MAX, projectWorkload, setCapacity } from '../services/agents/workWorkload';
+
+type C = Context<{ Bindings: Env }>;
+
+export const agentEngineEnabled = (env: Env) =>
+  typeof env.AGENT_ENGINE === 'string' && env.AGENT_ENGINE !== '' && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true';
+
+/** The runtime the routes reach; tests pass their own (the `railRunRoutes` pattern). */
+export type EngineRouteDeps = { runtime: (env: Env) => Promise<AgentRuntime>; now: () => Date };
+const DEFAULT_DEPS: EngineRouteDeps = { runtime: agentRuntime, now: () => new Date() };
+let deps: EngineRouteDeps = DEFAULT_DEPS;
+/** Tests only. */
+export function __setEngineRouteDeps(d: Partial<EngineRouteDeps> | null) { deps = d ? { ...DEFAULT_DEPS, ...d } : DEFAULT_DEPS; }
+
+const router = new Hono<{ Bindings: Env }>();
+// D1614 W8 (#3994): who may be given a project task (one `team` list, people and agents),
+// and every task given to you. Declared here, ahead of the factory mounts, so `/me/tasks`
+// never reaches a `/:scope/:id` handler and scripts/check-api-drift.mjs resolves both.
+router.get('/project/:id/assignable', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read who works on it.' });
+    return c.json(await assignable(c.env, s));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
+router.get('/me/tasks', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    return c.json(await myTasks(c.env, user, { state: c.req.query('state') ?? null, project: c.req.query('project') ?? null, due: c.req.query('due') ?? null }));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
+// D1614 W1 (#3969): a project's Work board, its moves and its task fields, ahead of E1's
+// handlers. Project scope only; a company task falls through to E1 unchanged.
+router.route('/', workBoardRoutes(agentEngineEnabled));
+// D1614 W7 (#3993): a project task's timeline, comments, review, drafts, labels and milestones.
+router.route('/', workItemRoutes(agentEngineEnabled));
+
+// D1614 W2 (#3970): a project's burn-up, derived from its events. Projects only: a company
+// has no Kanban and nothing rolls up to it (owner revision, 2026-11-01), so the path names
+// `project` and a company path has no route (404). Declared here, on the router index.ts
+// mounts, so scripts/check-api-drift.mjs resolves it.
+router.get('/project/:id/work/burnup', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const q = (k: string) => c.req.query(k) ?? null;
+    return c.json(await projectBurnup(c.env, s, { range: q('range'), from: q('from'), to: q('to'), filter: q('filter') }, await memberTimeZone(c.env, user.id)));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
+
+// D1614 W4 (#3972): a project's workload per person, agent and week, and a person's weekly
+// capacity on it. Projects only (owner revision, 2026-11-01): a company path has no route (404).
+router.get('/project/:id/work/workload', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const raw = c.req.query('weeks') ?? String(WEEKS_DEFAULT);
+    const weeks = /^[0-9]{1,2}$/.test(raw) ? Number(raw) : NaN;
+    if (!(weeks >= 1 && weeks <= WEEKS_MAX)) return refuse(c, 400, { code: 'invalid_weeks', message: `Show 1 to ${WEEKS_MAX} weeks.` });
+    return c.json(await projectWorkload(c.env, s.id, weeks, deps.now(), user));
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/project/:id/work/capacity/:person', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const target = /^[A-Za-z0-9_-]{1,64}$/.test(c.req.param('person') ?? '')
+      ? await c.env.DB.prepare('SELECT * FROM users WHERE uid = ?').bind(c.req.param('person')).first<User>() : null;
+    // A capacity belongs to someone on the project's team; a stranger has none to set.
+    if (!target || !(await canRead(c.env, s, target))) return refuse(c, 404, { code: 'not_found', message: 'That person is not on this project.' });
+    // One's own, or a project editor's for anyone on it.
+    if (target.id !== user.id && !(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Set your own capacity, or ask a project editor.' });
+    const b = await readBody(c);
+    const v = b?.weekly_capacity_points;
+    if (!b || !('weekly_capacity_points' in b) || !(v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1000))) {
+      return refuse(c, 400, { code: 'invalid_capacity', message: 'A weekly capacity is 0 to 1,000 points, or null to clear it.' });
+    }
+    return c.json({ person: { uid: target.uid, name: target.name }, capacity: await setCapacity(c.env, s.id, target.id, v, user.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
+const say = (c: C, r: Refusal) => refuse(c, r.status, { code: r.code, message: r.message });
+const off = (c: C) => c.json({ error: 'agent_engine_off' }, 404);
+const noScope = (c: C) => refuse(c, 404, { code: 'not_found', message: 'There is no such team.' });
+const notMember = (c: C) => refuse(c, 403, { code: 'not_member', message: 'Only the team can see its goals and tasks.' });
+const notManager = (c: C) => refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors can change its goals and tasks.' });
+
+async function readBody(c: C): Promise<Record<string, any> | null> {
+  try { const b = await c.req.json(); return b && typeof b === 'object' && !Array.isArray(b) ? b : null; } catch { return null; }
+}
+
+/** The scope a row belongs to. */
+const scopeOfRow = (env: Env, r: { scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null }) => scopeOfAgent(env, r);
+
+// ── Answers ─────────────────────────────────────────────────────────────────
+
+async function personOf(env: Env, id: number | null) {
+  if (!id) return null;
+  const u = await env.DB.prepare('SELECT uid, name FROM users WHERE id = ?').bind(id).first<{ uid: string; name: string }>();
+  return u ? { uid: u.uid, name: u.name } : null;
+}
+
+async function tasksDto(env: Env, rows: TaskRow[]) {
+  const ids = rows.map((t) => t.id);
+  const deps = await depsOf(env, ids);
+  const costs = await taskCosts(env, ids, runCostReader);
+  const out = [];
+  for (const t of rows) {
+    const goal = t.goal_id ? await env.DB.prepare('SELECT uid, title FROM scope_goals WHERE id = ?').bind(t.goal_id).first<{ uid: string; title: string }>() : null;
+    const agent = t.assignee_agent_id
+      ? await env.DB.prepare('SELECT uid, role_key, first_name, last_name FROM team_agents WHERE id = ?').bind(t.assignee_agent_id)
+        .first<{ uid: string; role_key: string; first_name: string | null; last_name: string | null }>()
+      : null;
+    const project = t.context_project_id ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(t.context_project_id).first<{ id: number; name: string }>() : null;
+    const d = deps.get(t.id) ?? [];
+    const person = t.assignee_kind === 'person' ? await personOf(env, t.assignee_user_id) : null;
+    out.push({
+      uid: t.uid, title: t.title, detail: t.detail, module: t.module, option: t.option, kind: t.kind,
+      goal: goal ? { uid: goal.uid, title: goal.title } : null,
+      assignee: {
+        kind: t.assignee_kind,
+        ...(person ? { person } : {}),
+        ...(agent ? { agent: { uid: agent.uid, role_key: agent.role_key, first_name: agent.first_name, last_name: agent.last_name } } : {}),
+      },
+      context_project: project ? { id: project.id, name: project.name } : null,
+      status: t.status, blocked_reason: t.blocked_reason, ready: isReady(t, d),
+      depends_on: d.map((x) => x.uid), priority: t.priority, due_at: t.due_at, attempts: t.attempts,
+      cost: costs.get(t.id) ?? { available: false },
+    });
+  }
+  return out;
+}
+
+async function oneTask(env: Env, t: TaskRow) {
+  return (await tasksDto(env, [t]))[0];
+}
+
+async function goalsDto(env: Env, s: Scope) {
+  const goals = await goalsOf(env, s);
+  const tasks = await tasksOf(env, s);
+  const costs = await taskCosts(env, tasks.map((t) => t.id), runCostReader);
+  const out = [];
+  for (const g of goals) {
+    const mine = tasks.filter((t) => t.goal_id === g.id).map((t) => ({ status: t.status, cost: costs.get(t.id)! }));
+    out.push(await goalDto(env, s, g, mine));
+  }
+  return out;
+}
+
+// ── Goals ───────────────────────────────────────────────────────────────────
+
+// #3850 (E6): the moves a team saw, newest first (TM18's banner). Read gate; at most 20.
+router.get('/:scope/:id/moves', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const asked = Number(c.req.query('limit') ?? 5);
+    const limit = Number.isSafeInteger(asked) && asked > 0 ? Math.min(asked, 20) : 5;
+    return c.json({ moves: await movesOf(c.env, { kind: s.kind, id: s.id }, limit) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/:scope/:id/goals', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    return c.json({ goals: await goalsDto(c.env, s) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/:scope/:id/goals', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    if (!(await canManage(c.env, s, user))) return notManager(c);
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_goal', message: 'Send the goal’s title.' });
+    const w = await goalWrite(c.env, s, b, true);
+    if (!w.ok) return say(c, w.refusal);
+    const g = await insertGoal(c.env, s, w.write, user.id);
+    return c.json({ goal: await goalDto(c.env, s, g, []) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.patch('/goals/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const g = await goalByUid(c.env, c.req.param('uid') ?? '');
+    const s = g && await scopeOfRow(c.env, g);
+    if (!g || !s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such goal.' });
+    if (!(await canManage(c.env, s, user))) return notManager(c);
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_goal', message: 'Send what to change.' });
+    const w = await goalWrite(c.env, s, b, false);
+    if (!w.ok) return say(c, w.refusal);
+    const fresh = await updateGoal(c.env, g, w.write);
+    const tasks = (await tasksOf(c.env, s, { goalId: g.id }));
+    const costs = await taskCosts(c.env, tasks.map((t) => t.id), runCostReader);
+    return c.json({ goal: await goalDto(c.env, s, fresh, tasks.map((t) => ({ status: t.status, cost: costs.get(t.id)! }))) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── Tasks ───────────────────────────────────────────────────────────────────
+
+router.get('/:scope/:id/tasks', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const q = (k: string) => c.req.query(k) || null;
+    let goalId: number | null = null;
+    if (q('goal')) {
+      const g = await goalByUid(c.env, q('goal')!);
+      // A goal of another scope matches nothing here.
+      goalId = g ? g.id : -1;
+    }
+    const assignee = q('assignee');
+    if (assignee && !['person', 'agent', 'none'].includes(assignee)) return say(c, { status: 400, code: 'invalid_filter', message: 'assignee is person, agent or none.' });
+    const status = q('status');
+    if (status && !(TASK_STATUSES as readonly string[]).includes(status)) return say(c, { status: 400, code: 'invalid_filter', message: 'That is not a task status.' });
+    const rows = await tasksOf(c.env, s, { goalId, assignee: assignee as any, status, module: q('module') });
+    return c.json({ tasks: await tasksDto(c.env, rows) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/:scope/:id/tasks', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    if (!(await canManage(c.env, s, user))) return notManager(c);
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_task', message: 'Send the task’s title.' });
+    const w = await taskWrite(c.env, s, b, null);
+    if (!w.ok) return say(c, w.refusal);
+    const t = await insertTask(c.env, s, w.write, user.id);
+    return c.json({ task: await oneTask(c.env, t) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The task and its scope, when the caller can see it. */
+async function visibleTask(c: C, user: User) {
+  const t = await taskByUid(c.env, c.req.param('uid') ?? '');
+  const s = t && await scopeOfRow(c.env, t);
+  if (!t || !s || !(await canRead(c.env, s, user))) return null;
+  return { t, s };
+}
+
+router.patch('/tasks/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleTask(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such task.' });
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_task', message: 'Send what to change.' });
+    if (!(await canManage(c.env, got.s, user))) {
+      // A person given the task moves its status, and nothing else.
+      const mine = got.t.assignee_kind === 'person' && got.t.assignee_user_id === user.id;
+      if (!mine || Object.keys(b).some((k) => k !== 'status' && k !== 'blocked_reason')) return notManager(c);
+      const w = statusWrite(b);
+      if (!w) return say(c, { status: 400, code: 'invalid_task', message: 'Send the new status.' });
+      if (!w.ok) return say(c, w.refusal);
+      return c.json({ task: await oneTask(c.env, await updateTask(c.env, got.t, w.write, user.id)) });
+    }
+    const w = await taskWrite(c.env, got.s, b, got.t);
+    if (!w.ok) return say(c, w.refusal);
+    return c.json({ task: await oneTask(c.env, await updateTask(c.env, got.t, w.write, user.id)) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/tasks/:uid/deps', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleTask(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such task.' });
+    if (!(await canManage(c.env, got.s, user))) return notManager(c);
+    const b = await readBody(c);
+    const r = await setDeps(c.env, got.t, b?.depends_on, user.id);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ task: await oneTask(c.env, (await taskByUid(c.env, got.t.uid))!) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1614 W3 (#3971): a project's activity feed. Projects only, as the burn-up (owner revision,
+// 2026-11-01): a company has no route here (404).
+const WHO = ['people', 'agents', 'both'] as const;
+router.get('/project/:id/activity', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its activity.' });
+    const who = (c.req.query('who') ?? 'both') as (typeof WHO)[number];
+    if (!WHO.includes(who)) return refuse(c, 400, { code: 'invalid_who', message: 'Show people, agents or both.' });
+    const before = c.req.query('before') ?? null;
+    if (before != null && !/^[0-9: -]{10,19}\|[erp][0-9]{12}$/.test(before)) return refuse(c, 400, { code: 'invalid_cursor', message: 'That page marker is not one this feed gave.' });
+    const ref = async (q: string, sql: string) => {
+      const v = c.req.query(q);
+      if (!v) return { ok: true as const, id: null };
+      const row = /^[A-Za-z0-9_-]{1,64}$/.test(v) ? await c.env.DB.prepare(sql).bind(v, s.id).first<{ id: number }>() : null;
+      return row ? { ok: true as const, id: Number(row.id) } : { ok: false as const };
+    };
+    // A person is named by uid; only a member of this project's feed resolves (no lookup of anyone else).
+    const person = await ref('person', 'SELECT id FROM users WHERE uid = ? AND ? > 0');
+    const agent = await ref('agent', "SELECT id FROM team_agents WHERE uid = ? AND scope_kind = 'project' AND project_id = ?");
+    const task = await ref('task', "SELECT id FROM scope_tasks WHERE uid = ? AND scope_kind = 'project' AND project_id = ?");
+    if (!person.ok || !agent.ok || !task.ok) return refuse(c, 404, { code: 'not_found', message: 'There is no such person, agent or task on this project.' });
+    return c.json(await projectActivity(c.env, s.id, { who, personId: person.id, agentId: agent.id, taskId: task.id, before }));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The runtime (D1528, E3) ─────────────────────────────────────────────────
+
+const refRef = (s: Scope): ScopeRef => ({ kind: s.kind, id: s.id });
+
+/** The task's agent, when the caller may start it: the scope's manager or the agent's sponsor. */
+async function startableTask(c: C, user: User) {
+  const got = await visibleTask(c, user);
+  if (!got) return { refusal: refuse(c, 404, { code: 'not_found', message: 'There is no such task.' }) };
+  const agent = got.t.assignee_kind === 'agent' && got.t.assignee_agent_id
+    ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(got.t.assignee_agent_id).first<AgentRow>()
+    : null;
+  const sponsor = !!agent && agent.sponsor_user_id === user.id;
+  if (!sponsor && !(await canManage(c.env, got.s, user))) {
+    return { refusal: refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors, or the person who added this agent, can start it.' }) };
+  }
+  if (!agent) return { refusal: refuse(c, 409, { code: 'not_ready', message: 'That task is not assigned to an agent.' }) };
+  return { ...got, agent };
+}
+
+router.get('/tasks/:uid/quote', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await startableTask(c, user);
+    if ('refusal' in got) return got.refusal;
+    if (!got.t.module || !got.t.option) return refuse(c, 409, { code: 'not_ready', message: 'That task has no module and option for the agent to work in.' });
+    const q = await agentQuote(c.env, { agent: got.agent, module: got.t.module, option: got.t.option, taskId: got.t.id });
+    if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+    return c.json({ quote: q.quote.available ? { available: true, value_microusd: q.quote.value_microusd } : { available: false } });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/tasks/:uid/start', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await startableTask(c, user);
+    if ('refusal' in got) return got.refusal;
+    const rt = await deps.runtime(c.env);
+    const a = await rt.admit(refRef(got.s), { agentId: got.agent.id, taskId: got.t.id, by: user.id, source: 'person' });
+    if (!a.ok) return refuse(c, a.status, { code: a.code, message: a.message });
+    const run = await runByUid(c.env, a.run.uid);
+    return c.json({ run: run ? await runDto(c.env, run) : { uid: a.run.uid } }, 202);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The run and its agent's scope, when the caller can read it. */
+async function visibleRun(c: C, user: User): Promise<{ run: RunRow; agent: AgentRow; s: Scope } | null> {
+  const run = await runByUid(c.env, c.req.param('uid') ?? '');
+  const agent = run && await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(run.agent_id).first<AgentRow>();
+  const s = agent && await scopeOfAgent(c.env, agent);
+  if (!run || !agent || !s || !(await canRead(c.env, s, user))) return null;
+  return { run, agent, s };
+}
+
+router.get('/agents/:uid/runs', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+    const s = a && await scopeOfAgent(c.env, a);
+    if (!a || !s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such agent.' });
+    const rows = (await c.env.DB.prepare('SELECT * FROM agent_task_runs WHERE agent_id = ? ORDER BY id DESC LIMIT 50').bind(a.id).all<RunRow>()).results ?? [];
+    const runs = [];
+    for (const r of rows) runs.push(await runDto(c.env, r));
+    return c.json({ runs });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/runs/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    const run = await runDto(c.env, got.run);
+    // D1614 W3 (#3971): the whole run, for its detail page (`services/agents/runActivity.ts`).
+    return c.json({
+      run, steps: stepsOf(got.run).map(({ name, status, at, summary }) => ({ name, status, at, summary })), cost: run.cost,
+      detail: await runDetail(c.env, got.run, got.agent),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1614 W3 (#3971): a retryable failure runs again, admitted as a fresh start is (the same hold,
+// cap, daily limit and single flight). The scope's editors or the agent's sponsor.
+router.post('/runs/:uid/retry', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    if (got.agent.sponsor_user_id !== user.id && !(await canManage(c.env, got.s, user))) {
+      return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors, or the person who added this agent, can retry its run.' });
+    }
+    const outcome = outcomeOf(got.run, stepsOf(got.run), await isLatestAttempt(c.env, got.run));
+    if (outcome.kind !== 'failed' || !outcome.retryable) {
+      return refuse(c, 409, { code: 'not_retryable', message: 'Only the latest run of a task that failed for a passing reason can be retried.' });
+    }
+    const rt = await deps.runtime(c.env);
+    const a = await rt.admit(refRef(got.s), { agentId: got.agent.id, taskId: got.run.task_id, by: user.id, source: 'person' });
+    if (!a.ok) return refuse(c, a.status, { code: a.code, message: a.message });
+    const run = await runByUid(c.env, a.run.uid);
+    return c.json({ run: run ? await runDto(c.env, run) : { uid: a.run.uid } }, 202);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/runs/:uid/cancel', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    if (!(await canManage(c.env, got.s, user))) return notManager(c);
+    if (!['admitted', 'running', 'waiting_decision'].includes(got.run.status)) {
+      return refuse(c, 409, { code: 'not_running', message: 'That run has already ended.' });
+    }
+    await terminateRun(c.env, got.run.uid, 'cancelled_by_person');
+    await moveTask(c.env, got.run.task_id, 'open', ['in_progress', 'waiting_decision']);
+    const fresh = (await runByUid(c.env, got.run.uid))!;
+    await trackRun(c.env, runScopeOf(got.agent), fresh);
+    return c.json({ run: await runDto(c.env, fresh) });
+  } catch (e) { return mapError(c, e); }
+});
+
+async function engineDto(env: Env, s: Scope) {
+  const settings = await scopeSettings(env, refRef(s));
+  return {
+    engine: await engineMode(env),
+    halted: await haltedAll(env),
+    scope_paused: settings.engine_paused,
+    max_parallel_runs: settings.max_parallel_runs,
+    autonomy: autonomy(env),
+  };
+}
+
+router.get('/:scope/:id/engine', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    return c.json(await engineDto(c.env, s));
+  } catch (e) { return mapError(c, e); }
+});
+
+// #3851 (E7): the evaluation board (TM14), per role, read-only. Rates are null under 10 decisions.
+router.get('/:scope/:id/evaluation', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const days = daysOf(c.req.query('days'));
+    if (!days) return say(c, { status: 400, code: 'invalid_days', message: 'Choose 30 or 90 days.' });
+    // D1612 part D (#3954): the golden-case results of the Axal skills this scope's agents use; null when unreadable, never [].
+    const skills = await scopeSkillIds(c.env, s).then((ids) => skillBoard(c.env, ids)).catch(() => null);
+    return c.json({ ...(await evaluateScope(c.env, s, days)), skills });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/:scope/:id/engine', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    if (!(await canManage(c.env, s, user))) return notManager(c);
+    const b = await readBody(c);
+    const bad = (message: string) => say(c, { status: 400, code: 'invalid_engine', message });
+    if (!b || Object.keys(b).some((k) => k !== 'paused' && k !== 'max_parallel_runs') || !Object.keys(b).length) {
+      return bad('Send paused (true or false) and/or max_parallel_runs (1 to 5).');
+    }
+    if ('paused' in b && typeof b.paused !== 'boolean') return bad('paused is true or false.');
+    if ('max_parallel_runs' in b && !(Number.isSafeInteger(b.max_parallel_runs) && b.max_parallel_runs >= 1 && b.max_parallel_runs <= 5)) {
+      return bad('max_parallel_runs is a whole number from 1 to 5.');
+    }
+    const ref = refRef(s);
+    await putScopeSettings(c.env, ref, { paused: b.paused, max_parallel_runs: b.max_parallel_runs }, user.id);
+    const rt = await deps.runtime(c.env);
+    // A pause stops admissions in the scope's object from the next request on; a resume rebuilds it from D1.
+    if (b.paused === true) await rt.halt(ref, 'scope_paused');
+    else if (b.paused === false) await rt.rebuild(ref);
+    return c.json(await engineDto(c.env, s));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530: the planner ──────────────────────────────────────────────────────
+
+/** A goal the caller may manage, with its scope; else the refusal. */
+async function managedGoal(c: C, user: User) {
+  const g = await goalByUid(c.env, c.req.param('uid') ?? '');
+  const s = g && await scopeOfRow(c.env, g);
+  if (!g || !s || !(await canRead(c.env, s, user))) return { refusal: refuse(c, 404, { code: 'not_found', message: 'There is no such goal.' }) };
+  if (!(await canManage(c.env, s, user))) return { refusal: notManager(c) };
+  return { g, s };
+}
+
+router.get('/goals/:uid/plan/quote', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const q = await planQuote(c.env, m.s!, m.g!, user);
+    if (!q.ok) return refuse(c, q.status as any, { code: q.code, message: q.message, ...(q.extra ? { extra: q.extra } : {}) });
+    return c.json({ quote: q.quote, by: q.by, agent: q.agent });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/goals/:uid/plan', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const r = await draftPlan(c.env, m.s!, m.g!, user);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message, ...(r.extra ? { extra: r.extra } : {}) });
+    return c.json({ proposal: r.proposal }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// #4394 (TM10d): discard a drafted plan; 409 plan_decided once it was accepted or discarded.
+router.post('/goals/:uid/plan/discard', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_plan', message: 'Name the plan to discard.' });
+    const r = await discardPlan(c.env, m.g!, b.proposal);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message });
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/goals/:uid/plan/accept', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_plan', message: 'Name the plan to accept.' });
+    const r = await acceptPlan(c.env, m.s!, m.g!, b.proposal, { remove: b.remove, titles: b.titles }, user);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message });
+    const tasks = [];
+    for (const uid of r.tasks) tasks.push((await taskByUid(c.env, uid))!);
+    return c.json({ tasks: await tasksDto(c.env, tasks) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530: templates, capabilities, the wizard ──────────────────────────────
+
+router.get('/templates', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    await requireAuth(c);
+    return c.json({ templates: TEMPLATES.map((t) => ({ key: t.key, role_key: t.role_key, name: t.name, model_tier: t.model_tier, suggested_cap_microusd: t.suggested_cap_microusd, duties: t.duties.map((d) => d.key) })) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/capabilities', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    await requireAuth(c);
+    return c.json({
+      modules: MODULES.map((m) => ({ key: m.key, label: m.label, cycle: m.cycle })),
+      reads: [...READ_KEYS],
+      options: Object.fromEntries(MODULES.map((m) => [m.key, optionsIn(m.key)])),
+      floor: [...ALWAYS_ASKS_FLOOR],
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** One duty run's hold for this member, or null when it cannot be read (never 0). */
+export const dutyQuoteFor = (env: Env, user: User): DutyQuote => async (d, row) => {
+  const m = MODULES.find((x) => x.key === d.module)!;
+  const q = await quoteRun(env, {
+    task: row.routeTask as TaskClass, userId: Number(user.id), role: user.role ?? null, messages: [{ role: 'user', content: ' ' }],
+    rail: { page: row.pageKey, option: row.optionKey, record: null }, surface: moduleSurface(m),
+  });
+  return q.ok ? q.hold_microusd : null;
+};
+
+router.get('/:scope/:id/suggested-team', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user)) || !(await canManage(c.env, s, user))) return notManager(c);
+    let stage: string | null = null;
+    const goalUid = c.req.query('goal');
+    if (goalUid) {
+      const g = await goalByUid(c.env, goalUid);
+      if (!g || g.scope_kind !== s.kind || g.company_id !== (s.kind === 'company' ? s.id : null) || g.project_id !== (s.kind === 'project' ? s.id : null)) {
+        return refuse(c, 404, { code: 'not_found', message: 'There is no such goal on this team.' });
+      }
+      stage = g.stage;
+    }
+    if (!stage && s.kind === 'project') {
+      stage = (await c.env.DB.prepare('SELECT lifecycle_stage FROM projects WHERE id = ?').bind(s.id).first<{ lifecycle_stage: string | null }>())?.lifecycle_stage ?? null;
+    }
+    const open = (await tasksOf(c.env, s)).filter((t) => !['done', 'cancelled'].includes(t.status) && t.module).map((t) => t.module!);
+    const onTeam = new Set(((await c.env.DB.prepare(
+      "SELECT role_key FROM team_agents WHERE scope_kind = ? AND company_id IS ? AND project_id IS ? AND status <> 'removed'",
+    ).bind(s.kind, s.kind === 'company' ? s.id : null, s.kind === 'project' ? s.id : null).all<{ role_key: string }>()).results || []).map((r) => r.role_key));
+    const quote = dutyQuoteFor(c.env, user);
+    const suggestions = [];
+    for (const r of suggestRoles({ scopeKind: s.kind, stage, openTaskModules: open })) {
+      const t = templateOf(r.role_key);
+      suggestions.push({
+        role_key: r.role_key, why: r.why, already_on_team: onTeam.has(r.role_key),
+        template: t ? { key: t.key, model_tier: t.model_tier, suggested_cap_microusd: t.suggested_cap_microusd, duties: t.duties.map((d) => d.key) } : null,
+        est_month_microusd: t ? await monthEstimate(t, quote) : { available: false },
+      });
+    }
+    return c.json({ stage, suggestions });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530 (#3849, E5): duties, handoffs and memory ─────────────────────────
+
+/** The agent by uid and its scope, when the caller may read it (and manage it, when asked). */
+async function agentFor(c: C, user: User, uid: string, manage: boolean): Promise<{ a: AgentRow; s: Scope } | Response> {
+  const a = await agentByUid(c.env, uid);
+  const s = a && a.status !== 'removed' ? await scopeOfAgent(c.env, a) : null;
+  if (!a || !s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such agent.' });
+  if (manage && !(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors can change its agents.' });
+  return { a, s };
+}
+
+/** A duty's month at its schedule: one run's quote × its runs. Unknown when the quote is. */
+async function dutyOut(env: Env, user: User, d: DutyRow) {
+  let est: { available: false } | { available: true; value: number } = { available: false };
+  try {
+    const m = d.module ? MODULES.find((x) => x.key === d.module) : null;
+    const { optionRowIn } = await import('../services/agents/agentRun');
+    const row = d.module && d.option ? optionRowIn(d.module, d.option) : null;
+    if (m && row) {
+      const q = await quoteRun(env, {
+        task: row.routeTask as TaskClass, userId: Number(user.id), role: user.role ?? null, messages: [{ role: 'user', content: ' ' }],
+        rail: { page: row.pageKey, option: row.optionKey, record: null }, surface: moduleSurface(m),
+      });
+      if (q.ok && Number.isFinite(q.hold_microusd)) est = { available: true, value: q.hold_microusd * runsPerMonth(d) };
+    }
+  } catch { est = { available: false }; }
+  return dutyDto(d, est);
+}
+
+router.get('/agents/:uid/duties', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', false);
+    if (got instanceof Response) return got;
+    const duties = [];
+    for (const d of await dutiesOf(c.env, got.a.id)) duties.push(await dutyOut(c.env, user, d));
+    return c.json({ duties });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/duties', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    if (!b) return refuse(c, 400, { code: 'invalid_duty', message: 'Send the duty as JSON.' });
+    // #3957: a body with a skill is a work session (a duty of `kind = 'session'`), with its own checks.
+    if (b.skill_id !== undefined) {
+      const r = await addSession(c.env, got.a, got.s, b, user.id);
+      if (!r.ok) return say(c, r.refusal);
+      return c.json({ session: await sessionDto(c.env, r.row, got.a, got.s, user) }, 201);
+    }
+    const r = await addDuty(c.env, got.a, b as any, user.id);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ duty: await dutyOut(c.env, user, r.duty) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The duty by uid and its agent's scope, for a manager. */
+async function dutyFor(c: C, user: User): Promise<{ d: DutyRow } | Response> {
+  const d = await dutyByUid(c.env, c.req.param('uid') ?? '');
+  const a = d && d.status !== 'removed' ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(d.agent_id).first<AgentRow>() : null;
+  if (!d || !a) return refuse(c, 404, { code: 'not_found', message: 'There is no such duty.' });
+  const got = await agentFor(c, user, a.uid, true);
+  return got instanceof Response ? got : { d };
+}
+
+router.patch('/duties/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await dutyFor(c, user);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    if (!b) return refuse(c, 400, { code: 'invalid_duty', message: 'Send the change as JSON.' });
+    const r = await updateDuty(c.env, got.d, b as any);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ duty: await dutyOut(c.env, user, r.duty) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/duties/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await dutyFor(c, user);
+    if (got instanceof Response) return got;
+    await removeDuty(c.env, got.d);
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── #3957: agent work sessions on the Calendar ─────────────────────────────
+// The agents a member may schedule (every live agent of a team they manage), the
+// estimate before Save, one session's read, its reschedule, pause, cancel and a
+// manual run. A session is a row of `agent_duties` (`kind = 'session'`); a manager
+// of its team, or the agent's sponsor, may change it; any reader of the team sees it.
+
+router.get('/sessions/agents', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const agents = await schedulableAgents(c.env, user);
+    return c.json({ agents, can_schedule: agents.length > 0 });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/sessions/estimate', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    const b = (await readBody(c)) ?? {};
+    const now = new Date();
+    const sched = scheduleOf(b, now);
+    if (!sched.ok) return say(c, sched.refusal);
+    const target = typeof b.target_kind === 'string' && typeof b.target_id === 'string' ? { kind: b.target_kind, id: b.target_id } : null;
+    const place = await placeOf(c.env, got.a, got.s, target);
+    if (!place) return refuse(c, 422, { code: 'skill_not_in_role', message: 'This agent’s rule book has nowhere for that work to land.' });
+    const est = await sessionEstimate(c.env, got.a, place, sched.s, now, null);
+    return c.json({ per_session_cents: est.per_session_cents, month_cents: est.month_cents, cap_used_cents: est.cap_used_cents, cap_cents: est.cap_cents });
+  } catch (e) { return mapError(c, e); }
+});
+
+async function sessionFor(c: C, user: User, manage: boolean) {
+  const got = await visibleSession(c.env, c.req.param('uid') ?? '', user);
+  if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such session.' });
+  if (manage && got.a.sponsor_user_id !== user.id && !(await canManage(c.env, got.s, user))) {
+    return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors schedule agents.' });
+  }
+  return got;
+}
+
+router.get('/sessions/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await sessionFor(c, user, false);
+    if (got instanceof Response) return got;
+    return c.json({ session: await sessionDto(c.env, got.r, got.a, got.s, user) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.patch('/sessions/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await sessionFor(c, user, true);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    if (!b) return refuse(c, 400, { code: 'invalid_session', message: 'Send the change as JSON.' });
+    const r = await updateSession(c.env, got.r, got.a, got.s, b);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ session: await sessionDto(c.env, r.row, got.a, got.s, user) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/sessions/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await sessionFor(c, user, true);
+    if (got instanceof Response) return got;
+    await c.env.DB.prepare("UPDATE agent_duties SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'removed'").bind(got.r.id).run();
+    const r = (await sessionByUid(c.env, got.r.uid))!;
+    return c.json({ session: await sessionDto(c.env, r, got.a, got.s, user) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Run now: one task from the session, admitted by the runtime like a person's Start, so its hold, cap and single flight apply. */
+router.post('/sessions/:uid/run', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await sessionFor(c, user, true);
+    if (got instanceof Response) return got;
+    if (got.r.status === 'removed') return refuse(c, 409, { code: 'session_cancelled', message: 'This session was cancelled.' });
+    if (got.a.status !== 'active') return refuse(c, 409, { code: 'agent_paused', message: 'This agent is paused. Resume it in Team › Agents first.' });
+    const skill = await c.env.DB.prepare('SELECT s.status FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ? AND l.skill_id = ?')
+      .bind(got.a.id, got.r.skill_id).first<{ status: string }>();
+    if (!skill || skill.status === 'retired') return refuse(c, 422, { code: 'skill_not_in_role', message: 'That skill is not assigned to this agent.' });
+    const task = await insertTask(c.env, got.s, {
+      title: got.r.title.slice(0, 200), module: got.r.module, option: got.r.option, kind: 'duty',
+      assignee_kind: 'agent', assignee_agent_id: got.a.id, status: 'open', source_kind: 'duty', source_ref: got.r.uid,
+    }, user.id);
+    const rt = await deps.runtime(c.env);
+    const a = await rt.admit(refRef(got.s), { agentId: got.a.id, taskId: task.id, by: user.id, source: 'person' });
+    if (!a.ok) {
+      // Nothing ran: the task waits on the board for a person, as a duty's does.
+      return refuse(c, a.status, { code: a.code === 'budget_user_month' || a.code === 'spend_limit' ? 'out_of_tokens' : a.code, message: a.message });
+    }
+    const run = await runByUid(c.env, a.run.uid);
+    return c.json({ run: run ? await runDto(c.env, run) : { uid: a.run.uid } }, 202);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/:scope/:id/handoffs', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    return c.json({ chains: await chainsOf(c.env, s) });
+  } catch (e) { return mapError(c, e); }
+});
+
+const retentionOut = () => ({ days_after_removal: RETENTION.notes_days_after_removal, run_summaries_days: RETENTION.run_summaries_days, text: retentionText() });
+
+router.get('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', false);
+    if (got instanceof Response) return got;
+    const notes = [];
+    for (const n of await notesOf(c.env, got.a)) notes.push(await noteDto(c.env, n));
+    return c.json({ notes, retention: retentionOut() });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    const r = await addFact(c.env, got.a, b?.body, user.id);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ note: await noteDto(c.env, r.note) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    return c.json({ ok: true, forgotten: await forgetAll(c.env, got.a) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/memory/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const n = await noteByUid(c.env, c.req.param('uid') ?? '');
+    const a = n ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(n.agent_id).first<AgentRow>() : null;
+    if (!n || !a) return refuse(c, 404, { code: 'not_found', message: 'There is no such note.' });
+    const s = await scopeOfAgent(c.env, a);
+    if (!s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such note.' });
+    if (!(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors can forget an agent’s notes.' });
+    await forgetNote(c.env, n);
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+export default router;

@@ -1,0 +1,39 @@
+{
+  "skill": "privacy-data-map",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "inventory": [
+          {
+            "data": "Patient phone number",
+            "store": "patients table",
+            "readers": [
+              "Front desk"
+            ],
+            "purpose": "Reminders"
+          }
+        ]
+      },
+      "github.repos": {
+        "schema": [
+          "patients.phone"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Patient phone number",
+      "patients table"
+    ],
+    "must_say_not_recorded": [
+      "retention period"
+    ],
+    "must_not_include": [
+      "fully compliant"
+    ]
+  }
+}

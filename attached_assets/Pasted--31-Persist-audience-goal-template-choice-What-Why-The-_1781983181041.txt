@@ -1,0 +1,28 @@
+#31 - Persist audience, goal & template choice
+What & Why
+The reworked Brand & Landing flow is audience-first: a founder picks an audience, then a recommended template, then tunes and shares. For the wizard to remember those choices and for the published page to render with the right visual style, the backend must store the page's primary audience, its goal, and the chosen catalog template id — and keep serving the public/preview page using the existing visual templates. This task does the schema + API plumbing on both the production Worker (D1) and the dev FastAPI/SQLite mirror.
+Shared contract (must match the catalog + wizard tasks)
+* Audience values (6): customer, investor, partner, advisor, mentor, cofounder.
+* Goal values: join_waitlist, request_intro, start_pilot, book_call, apply, offer_guidance.
+* New landing_pages columns: audience (TEXT, primary audience — one of the 6), goal (TEXT), template_kit (TEXT, catalog id). The existing template column stays and continues to hold the visual key (minimal/bold-hero/video-first/editorial/product-mock) used for rendering.
+* Do NOT reuse waitlist_signups.audience for the page audience — it has a CHECK constraint limited to customer/partner/investor (migration 081). The new landing_pages.audience must accept all 6 values (no narrow CHECK, or a 6-value CHECK).
+Done looks like
+* Saving a landing page persists its audience, goal, and template_kit alongside the existing fields; re-fetching returns them so the wizard can restore the founder's selections.
+* The public page (/landing/:slug) and private preview continue to render correctly using the existing visual templates — no visual change.
+* Dev (FastAPI/SQLite) and prod (Worker/D1) behave the same; the new migration applies cleanly and npm run test:drift passes.
+Out of scope
+* The catalog/matching logic (separate task) — this task only stores/returns the values.
+* Any wizard UI changes (separate task).
+* New visual templates or design recreation.
+* Expanding the per-audience copy columns or waitlist audience set beyond what already exists.
+Steps
+1. Migration — Add the next sequential migration (116_*.sql) adding audience, goal, template_kit columns to landing_pages, ensuring audience accepts all 6 values.
+2. Worker API — Update the landing upsert (PUT) and fetch (GET) handlers to read/write the three new fields; default template (visual key) sensibly when only a catalog id is provided. Keep public serving unchanged.
+3. Dev mirror — Apply the same column additions and read/write behavior to the dev FastAPI route and its SQLite schema so dev stays in parity.
+4. Drift + changelog — Ensure the frontend/Worker contract stays in sync for npm run test:drift, and add the required entries to both changelogs (technical + user-facing) for the user-visible "remembers your audience/template choice" behavior.
+Relevant files
+* cloudflare-worker/src/routes/brand.ts
+* cloudflare-worker/src/index.ts
+* cloudflare-worker/src/services/landingTemplates.ts
+* cloudflare-worker/sql/migrations/081_waitlist_audience.sql
+* backend/app/api/routes/brand.py

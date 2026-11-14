@@ -1,0 +1,528 @@
+/**
+ * `/calendar` — `design/canvases/integrated/Calendar.dc.html`, boards C1–C6, element by
+ * element, plus the two rules the canvas exists to enforce.
+ *
+ * WHAT THE CANVAS ASKED FOR THAT WAS NOT THERE:
+ *
+ *   a chip per kind       `partner_office_hour` had none, so office hours
+ *                         were reachable only under "All". The kinds were
+ *                         hardcoded in THREE places in the page and one of
+ *                         the three had drifted
+ *   counts on the chips   there were none at all
+ *   a range segment       Week / Month / Agenda; the page fetched one fixed
+ *                         window and never said which
+ *   the 328px rail        both provider cards were full-width blocks stacked
+ *                         above the agenda
+ *   the three promises    sync / push / .ics were never distinguished
+ *   a 74px time column    the time sat inline in the row's second line
+ *   empty vs degraded     one "Nothing on your calendar yet." covered an
+ *                         empty range, a broken source and a failed request
+ *
+ * THE TWO STRONG ASSERTIONS. Everything else here is a comparison against the
+ * canvas; these two are comparisons against the CODE, because they are the
+ * failures that already happened:
+ *
+ *   · the page's kinds equal the union the worker can emit — parsed from
+ *     `CalendarEvent` in `services/calendar.ts`, not from the canvas, which
+ *     draws only five. A seventh kind added without a chip fails here.
+ *   · the page's `PUSHABLE_KINDS` equals the route's. The canvas draws a push
+ *     control on a Calendly event and `routes/calendar.ts` refuses that with a
+ *     400 — so the page follows the route, and this keeps the two in step.
+ *
+ * SIX KINDS, NOT FIVE, and the deviation is asserted rather than glossed: the
+ * canvas leaves `expert_booking` out because it believed nothing produced it.
+ * Something does; the write was broken. Migration 235 fixed it, so the kind is
+ * drawn — and this file checks the canvas still says what it says, so the day
+ * someone re-exports the canvas with six kinds, the note stops being true and
+ * a maintainer is told.
+ */
+import { STATES as CONNECTED_STATES, connectionRow } from '../src/pages/calendarConnectedModel.js';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+import { escapeRe } from './_escapeRe.mjs';
+import { KINDS, PUSHABLE_KINDS } from '../src/pages/calendarViews.js';
+import { SOURCES } from '../../cloudflare-worker/src/services/calendar/registry.ts';
+
+const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+
+const CANVAS = raw('design/canvases/integrated/Calendar.dc.html');
+const pageRaw = raw('frontend/src/pages/CalendarPage.jsx');
+const page = codeOnly(pageRaw);
+const readController = raw('frontend/src/pages/calendarReadController.js');
+const css = raw('frontend/src/pages/calendarPage.css');
+const service = raw('cloudflare-worker/src/services/calendar.ts');
+const route = raw('cloudflare-worker/src/routes/calendar.ts');
+
+/**
+ * The canvas keeps its fixtures in the script block, not in the markup, and
+ * both halves are needed. Each slice below is bounded at BOTH ends: an
+ * unbounded `indexOf` has sliced the wrong block in this repo's canvas suites
+ * before, and a slice that runs to the end of the file will happily "find" a
+ * string that belongs to a different board.
+ */
+const TEMPLATE = CANVAS.slice(
+  CANVAS.indexOf('<sc-for list="{{ boards }}"'),
+  CANVAS.indexOf('type="text/x-dc" data-dc-script=""'),
+);
+const SCRIPT = CANVAS.slice(
+  CANVAS.lastIndexOf('class Component extends DCLogic'),
+  CANVAS.lastIndexOf('</body>'),
+);
+const KINDS_BLOCK = SCRIPT.slice(SCRIPT.indexOf('══ FIVE KINDS'), SCRIPT.indexOf('const dotFor'));
+const BOARDS = SCRIPT.slice(SCRIPT.indexOf('return { boards: ['), SCRIPT.length);
+
+for (const [name, slice] of [['TEMPLATE', TEMPLATE], ['SCRIPT', SCRIPT], ['KINDS_BLOCK', KINDS_BLOCK], ['BOARDS', BOARDS]]) {
+  assert.ok(slice.length > 200 && slice.length < CANVAS.length,
+    `the ${name} slice did not bound anything — the canvas markers have moved`);
+}
+
+/** The canvas's own kind table, parsed rather than retyped. */
+const canvasKinds = [...KINDS_BLOCK.matchAll(/\{\s*id:'(\w+)',\s*label:'([^']+)',\s*src:'([^']+)',\s*hue:'(#[0-9a-f]{6})',\s*dHue:'(#[0-9a-f]{6})',\s*shape:'([^']*)'\s*\}/g)]
+  .map((m) => ({ id: m[1], label: m[2], src: m[3], hue: m[4], dHue: m[5], shape: m[6] }));
+
+/** The page's kinds: D5205 (#5205) builds them from the Worker registry, so they are imported, not parsed. */
+const pageKinds = KINDS.map((k) => ({ id: k.id, label: k.label, from: k.from }));
+
+test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
+  assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
+  // D1384 (#3692): compliance_due, the Compliance layer, is the tenth.
+  // D1484 (#3977): D1208's three readers and "New event" make fourteen; #3959: Learning, fifteen;
+  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen; §d (#3983): four task stores, twenty-four;
+  // D1485 (#3979): Google and Outlook events, twenty-six.
+  assert.equal(pageKinds.length, 32, 'the page kind table no longer parses as thirty-two entries'); // D1614 W4 (#3972): work_item; #3957: agent_session; #5131 (D1486 §e): Grow's four
+});
+
+test('the page draws a chip for every kind the worker can emit, and no others', () => {
+  // Parsed from the union, NOT from the canvas: the canvas draws five and the
+  // worker emits six. This is the assertion that fails the day a seventh kind
+  // is added — which is exactly how partner_office_hour lost its chip.
+  const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
+  const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
+  assert.equal(emitted.length, 32, 'the CalendarEvent kind union did not parse'); // D1614 W4 (#3972): work_item; #3957: agent_session; #5131: Grow's four
+  assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
+    'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
+
+  // And the worker's own reader table agrees with the union — tsc enforces it
+  // through Record<CalendarEvent['kind'], …>, and this says so out loud so the
+  // day someone widens that type the guarantee is not lost quietly.
+  const readers = service.match(/const READERS: Readonly<Record<CalendarEvent\['kind'\], CalendarReader>> = \{([\s\S]*?)\n\};/)?.[1] || '';
+  assert.deepEqual([...readers.matchAll(/^ {2}(\w+):/gm)].map((m) => m[1]).sort(), emitted,
+    'a kind in the union has no reader, or a reader has no kind');
+});
+
+test('the five kinds the canvas draws keep its labels, hues and dot shapes', () => {
+  for (const k of canvasKinds) {
+    const mine = pageKinds.find((p) => p.id === k.id);
+    assert.ok(mine, `the canvas draws ${k.id} and the page does not`);
+    assert.equal(mine.label, k.label, `${k.id} is labelled differently from the canvas`);
+    // D1613 (#3723): the canvas's `src` is the D1 table; the page names the
+    // module in plain words instead, and never the table.
+    assert.notEqual(mine.from, k.src, `${k.id} shows its table name`);
+    assert.doesNotMatch(mine.from, /_/, `${k.id} shows a table-like name`);
+    // Hue and shape live in the stylesheet, one rule per kind, both themes.
+    assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.hue)};`), `${k.id} lost its light hue`);
+    assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.dHue)};`), `${k.id} lost its dark hue`);
+    const dot = css.match(new RegExp(`\\.cal-dot\\[data-kind='${escapeRe(k.id)}'\\] \\{([^}]*)\\}`))?.[1] || '';
+    assert.match(dot, new RegExp(`border-radius: ${escapeRe(k.shape)};`),
+      `${k.id}'s dot is no longer the shape the canvas draws`);
+    assert.match(dot, new RegExp(`background: var\\(--k-${escapeRe(k.id)}\\)`), `${k.id}'s dot stopped using its own hue`);
+  }
+});
+
+test('the sixth kind is derived in the canvas\'s idiom rather than borrowed from it', () => {
+  const drawnShapes = canvasKinds.map((k) => k.shape);
+  const drawnHues = canvasKinds.flatMap((k) => [k.hue, k.dHue]);
+  const dot = css.match(/\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/)?.[1] || '';
+  const shape = dot.match(/border-radius: ([^;]+);/)?.[1];
+  assert.ok(shape, 'expert_booking has no dot');
+  assert.ok(!drawnShapes.includes(shape), 'expert_booking reuses a shape the canvas already assigned');
+  const light = css.match(/--k-expert_booking: (#[0-9a-f]{6});/)?.[1];
+  const dark = css.match(/--k-expert_booking: (#[0-9a-f]{6});[\s\S]*?--k-expert_booking: (#[0-9a-f]{6});/)?.[2];
+  assert.ok(light && dark && light !== dark, 'expert_booking does not lift to a separate dark hue');
+  for (const h of [light, dark]) {
+    assert.ok(!drawnHues.includes(h), `expert_booking reuses ${h}, a hue the canvas already assigned`);
+  }
+  // And the accent itself, which no kind may take.
+  assert.ok(![light, dark].includes('#6d28d9'), 'expert_booking took the violet accent');
+
+  // The canvas's stated reason for omitting it is recorded, and the docblock
+  // says why it no longer holds. If the canvas is ever re-exported saying
+  // something else, this fails and the note gets revisited.
+  assert.match(KINDS_BLOCK, /expert_booking is\s*\n?\s*\/\/ in the type union and produced by nothing/,
+    'the canvas no longer gives the reason the page\'s docblock quotes');
+  assert.match(pageRaw, /SIX KINDS, NOT THE CANVAS'S FIVE/,
+    'the deviation from the canvas is no longer recorded in the page');
+});
+
+test('D1033: the two My events kinds are derived in the same idiom, apart from every other mark', () => {
+  const drawnShapes = canvasKinds.map((k) => k.shape);
+  const drawnHues = canvasKinds.flatMap((k) => [k.hue, k.dHue]);
+  // Literal patterns, one per kind this test reads, rather than a pattern built at run time.
+  const DOT = {
+    expert_booking: /\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/,
+    event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
+    event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
+    investor_meeting: /\.cal-dot\[data-kind='investor_meeting'\] \{([^}]*)\}/,
+    compliance_due: /\.cal-dot\[data-kind='compliance_due'\] \{([^}]*)\}/,
+    interview_call: /\.cal-dot\[data-kind='interview_call'\] \{([^}]*)\}/,
+    cohort_date: /\.cal-dot\[data-kind='cohort_date'\] \{([^}]*)\}/,
+    deal_closing: /\.cal-dot\[data-kind='deal_closing'\] \{([^}]*)\}/,
+    manual: /\.cal-dot\[data-kind='manual'\] \{([^}]*)\}/,
+  };
+  const HUE = {
+    expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
+    event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
+    event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
+    investor_meeting: /--k-investor_meeting: (#[0-9a-f]{6});/g,
+    compliance_due: /--k-compliance_due: (#[0-9a-f]{6});/g,
+    interview_call: /--k-interview_call: (#[0-9a-f]{6});/g,
+    cohort_date: /--k-cohort_date: (#[0-9a-f]{6});/g,
+    deal_closing: /--k-deal_closing: (#[0-9a-f]{6});/g,
+    manual: /--k-manual: (#[0-9a-f]{6});/g,
+  };
+  const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
+  const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
+  const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
+  const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
+  // D1190 (#3124): the investor meeting joins in the same idiom, after them.
+  // D1484 (#3977): compliance_due and the four new kinds take their own marks too.
+  for (const id of ['event_ticket', 'event_hosted', 'investor_meeting', 'compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual']) {
+    const shape = shapeOf(id);
+    assert.ok(shape, `${id} has no dot`);
+    assert.ok(!taken.has(shape), `${id} reuses a shape another kind has`);
+    taken.add(shape);
+    const hues = huesOf(id);
+    assert.equal(hues.length, 2, `${id} needs one light and one dark hue`);
+    assert.notEqual(hues[0], hues[1], `${id} does not lift to a separate dark hue`);
+    for (const h of hues) {
+      assert.ok(!takenHues.has(h), `${id} reuses ${h}`);
+      takenHues.add(h);
+    }
+  }
+  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.from]), [
+    ['event_ticket', 'Event ticket', 'My events › Tickets'],
+    ['event_hosted', 'Hosting', 'My events › Hosting'],
+  ]);
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.from]), [
+    ['investor_meeting', 'Investor meeting', 'Raise › Capital relationships'],
+  ]);
+});
+
+test('push is drawn for exactly the kinds the route accepts', () => {
+  const routeSet = route.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
+  const ids = (s) => [...s.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
+  assert.equal(ids(routeSet).length, 6, 'the route PUSHABLE_KINDS set did not parse');
+  // D5205 (#5205): the page's set is the registry's `pushable`, imported, not a list in the page.
+  assert.doesNotMatch(page, /const PUSHABLE_KINDS = new Set/, 'the page keeps its own push list again');
+  assert.deepEqual([...PUSHABLE_KINDS].sort(), ids(routeSet),
+    '/calendar draws a push control the route would refuse, or hides one it would accept');
+
+  // The canvas draws push on a Calendly event; the route refuses it. The page
+  // follows the route and states the reason where the control would have been.
+  assert.ok(!ids(routeSet).includes('calendly_event'), 'the route now accepts calendly_event — revisit this deviation');
+  assert.match(CANVAS, /kind:'calendly_event'[\s\S]{0,400}?actions:\['push'\]/,
+    'the canvas no longer draws push on a Calendly event — revisit the recorded deviation');
+  // D1384: a compliance deadline is never pushed, and is no "did not originate here" case either.
+  assert.match(page, /const unpushable = !cancelled && !deadline && !PUSHABLE_KINDS\.has\(ev\.kind\);/,
+    'a kind the route will not push no longer states its reason');
+});
+
+test('every count on the page comes from the one fetched list', () => {
+  // The canvas's headline rule. `inRange` is the only list; the All chip, each
+  // kind chip and each day group must all read from it, and nothing may count
+  // a second list. This is the failure this codebase shipped twice.
+  assert.match(page, /const inRange = items;/, 'the single list is gone');
+  // D1205: counted by chipCount (calendarViews.js), still over inRange, with a
+  // dash for a kind whose source did not answer.
+  // D1210: the viewer's kinds (an Explorer's are fewer), still counted over inRange.
+  assert.match(page, /for \(const k of shownKinds\) out\[k\.id\] = chipCount\(inRange, k\.id, failedKinds\);/,
+    'the kind counts no longer come from inRange');
+  // D1210: the Kinds filter and "Only what needs me" narrow inRange itself.
+  assert.match(page, /return inRange\.filter\(\(e\) => \(!chosen \|\| chosen\.has\(e\.kind\)\) && \(!needs \|\| needsMe\(e, myEmail\)\)\);/,
+    'the rendered pool no longer comes from inRange');
+  assert.match(page, /for \(const e of pool\)/, 'the day groups no longer come from the pool');
+  // D1210: the grids draw the pool, and the Kinds panel counts the one list (`counts`, `items={inRange}`).
+  assert.match(page, /<MonthGrid anchor=\{anchor\} items=\{pool\}/);
+  assert.match(page, /<WeekGrid anchor=\{anchor\} items=\{pool\}/);
+  assert.match(page, /<KindsPanel families=\{families\} kindLabel=\{\(k\) => KIND_LABEL\[k\] \|\| k\} counts=\{counts\} items=\{inRange\}/,
+    'the Kinds panel no longer counts the one list');
+  assert.match(page, /\{d\.events\.length\} \{d\.events\.length === 1 \? 'event' : 'events'\}/,
+    'a day group no longer counts its own rendered events');
+  // No other array may be counted into a chip or a group.
+  assert.doesNotMatch(page, /\.length\}<\/b>/g.source ? /<b>\{(?!inRange\.length|counts\[k\.id\])[^}]*\.length\}<\/b>/ : /$^/,
+    'a chip is counting something other than the one list');
+});
+
+test('the canvas layout is built: header, gate strip, controls, agenda beside a 328px rail', () => {
+  assert.match(css, /\.cal-rail \{ width: 328px;/, 'the rail is not the canvas\'s 328px');
+  assert.match(css, /\.cal-row \{ display: grid; grid-template-columns: 74px 1fr;/, 'the time column is not the canvas\'s 74px');
+  assert.match(css, /\.cal-body \{ display: flex;/, 'the agenda and rail no longer sit side by side');
+  // Order on the page: the gate strip and the controls are full-width rows
+  // above the split, exactly as the canvas draws them.
+  const order = ['className="cal-head"', 'className="cal-gate"', 'className="cal-controls"', 'className="cal-body"', 'className="cal-main"', 'className="cal-rail"'];
+  let at = -1;
+  for (const marker of order) {
+    const next = page.indexOf(marker);
+    assert.ok(next > at, `${marker} is out of the canvas's order`);
+    at = next;
+  }
+});
+
+// D1211 (#3177): the two New buttons are one New menu (CAL8 A); IC meeting is
+// in it only for the roles canScheduleIc allows (`newMenu`).
+test('the header carries New and Subscribe, and the IC gate matches canScheduleIc', () => {
+  assert.match(TEMPLATE, /New IC meeting/);
+  assert.match(TEMPLATE, /New check-in/);
+  assert.match(TEMPLATE, /Subscribe · \.ics/);
+  assert.match(page, /<NewMenu role=\{role\}/, 'the header lost New');
+  assert.ok(page.includes('Subscribe · .ics'), 'the header lost "Subscribe · .ics"');
+  assert.match(page, /const canIC = role === 'admin' \|\| role === 'investor';/,
+    'the IC gate no longer mirrors canScheduleIc');
+  assert.match(route, /return user\.role === 'admin' \|\| holdsLicence\(user, 'investor'\);/,
+    'the Worker must retain primary Admin/Investor admission and add the held Investor union (D4472; frontend union follows in part 2)');
+  // Absent, not disabled — and the reason where the control would have been.
+  const model = readFileSync(new URL('../src/pages/calendarItemModel.js', import.meta.url), 'utf8');
+  assert.match(model, /if \(r === 'admin' \|\| r === 'investor'\) out\.push\(\{ key: 'ic', label: 'IC meeting' \}\);/,
+    'the IC item is being disabled rather than withheld');
+  assert.match(pageRaw, /Creating an IC meeting is limited to admins and investors, so the control is not/,
+    'the gate strip lost the canvas\'s wording');
+});
+
+// D1205 (#2420): the Calendar canvas (CAL1–CAL21) replaced C1's range segment
+// with three views at their own addresses, Month first; calendar_views_d1205
+// holds the model.
+test('the views are links to their addresses, Month first, and the open one is announced', () => {
+  // D1212 (CAL21a): on a phone bare /calendar is Agenda; Month is ?view=month.
+  assert.match(page, /const range = phoneAgenda \? 'agenda' : viewOf\(pathname\);/, 'the view no longer comes from the address');
+  assert.match(page, /<nav className="cal-seg" aria-label="Calendar views">/, 'the views are not a labelled nav');
+  assert.match(page, /aria-current=\{range === v\.key \? 'page' : undefined\}/, 'the open view is not announced');
+  assert.doesNotMatch(page, /useState\('agenda'\)/, 'the view is component state again, not the address');
+});
+
+test('empty range, degraded source and failed request are three different states', () => {
+  // The canvas's distinction: an empty range means the sources ANSWERED.
+  assert.match(TEMPLATE, /All five sources answered and returned nothing for this range\./,
+    'the canvas empty-range copy changed');
+  assert.match(pageRaw, /sources answered and returned nothing for this range\. That means the calendar is working/,
+    'the empty range no longer says the sources answered');
+  // D5204 (#5204): it still names what loaded, now from the server's own count of the sources it attempted
+  // rather than from this page's `KINDS.length`, which counted hidden, role-less and unconnected sources.
+  assert.match(pageRaw, /did not respond\.\s*\n\s*The other \{Math\.max\(0, attempted - failedSources\.length\)\} sources loaded\./,
+    'the degraded banner no longer names what loaded');
+  assert.match(page, /className="cal-alert" role="alert"/, 'a failed request no longer renders its own state');
+  assert.match(readController, /status: 'unreadable', items: null/, 'a failed request is being stored as an empty list');
+  // And they cannot render as each other: the empty card requires a real list.
+  assert.match(page, /\{!loading && Array\.isArray\(inRange\) && inRange\.length === 0 && \(/,
+    'the empty-range card can render over a request that never answered');
+});
+
+test('the rail carries the three promises and the source legend', () => {
+  for (const s of ['Sync a calendar', 'Push one event', 'Subscribe · .ics']) {
+    assert.ok(TEMPLATE.includes(s), `the canvas no longer names "${s}"`);
+    assert.ok(pageRaw.includes(s), `the rail lost "${s}"`);
+  }
+  assert.match(pageRaw, /Ongoing, per provider\./);
+  assert.match(pageRaw, /One-time, per event\. A copy is written once; later changes here do not follow it\./);
+  assert.match(pageRaw, /Read-only feed for any client\. No account connection, no write access\./);
+  // The legend lists every kind with the module it comes from, in plain words (D1613):
+  // the Worker's words from the read first (D1484, #3977), then the page's own.
+  assert.match(page, /<span className="cal-mono">\{moduleOf\[k\.id\] \|\| k\.from\}<\/span>/, 'the legend no longer names each kind\'s source');
+  assert.match(page, /sources\.filter\(\(s\) => s\?\.kind && s\.module\)\.map\(\(s\) => \[s\.kind, s\.module\]\)/, 'the module comes from the read');
+  for (const k of pageKinds) {
+    // D5205: `from` is the registry's module, the same words the read sends.
+    assert.equal(k.from, SOURCES[k.id].module, `${k.id} lost its source`);
+    assert.doesNotMatch(k.from, /^[a-z]+(?:_[a-z]+)+$/, `${k.id}'s legend shows a table name`);
+  }
+  const tables = new Set([...service.matchAll(/FROM (\w+)/g)].map((m) => m[1]));
+  for (const t of ['ic_meetings', 'founder_checkins', 'advisor_bookings', 'event_registrations', 'raise_prospect_events', 'compliance_events', 'calendar_events']) tables.add(t);
+  for (const t of tables) if (t.includes('_')) assert.ok(!page.includes(`'${t}'`), `the page names the table ${t}`);
+});
+
+test('nothing absent renders as a dash or a plausible zero', () => {
+  // The canvas's rule, and the reason it is a rule: a zero and an unknown look
+  // identical, and only one of them is a fact about the reader.
+  assert.match(TEMPLATE, /Not recorded/);
+  assert.doesNotMatch(page, /[>{]\s*[—–-]\s*[<}]/, 'a bare dash is being rendered as a value');
+  // D1210: a kind with no readable list carries no number at all rather than a
+  // zero, and a dash only beside its reason (the Kinds panel, CalendarGrids.jsx).
+  const grids = readFileSync('frontend/src/pages/CalendarGrids.jsx', 'utf8');
+  assert.match(grids, /\{counts\?\.\[k\] === '—' \? '— · Could not be read' : counts\?\.\[k\] \?\? ''\}/,
+    'a kind prints a count when the list could not be read, or a dash with no reason');
+  // D1212 (CAL9): the rail's cards moved to /calendar/connected. Each of the
+  // six states draws its own sentence there, and its pill says the state.
+  // D332 — 'unreadable' (the status read never came back) stays apart from
+  // 'unconfigured' (the server answered that it has no sign-in for it).
+  // D1485 (#3979): 'reconnect', the events read found the saved connection expired, is the seventh.
+  assert.deepEqual(CONNECTED_STATES.map((x) => x.key), ['reading', 'unconfigured', 'off', 'connected', 'failed', 'reconnect', 'unreadable'],
+    'the provider states changed without this guard');
+  for (const x of CONNECTED_STATES) {
+    const row = connectionRow('google', x.key, {});
+    assert.ok(row.sub && row.sub.length > 8, `${x.key} has no sentence`);
+    assert.ok(row.pill.includes(x.label), `${x.key}'s pill does not say its state`);
+  }
+});
+
+test('with no provider connected the push control is withheld and the note names the right remedy', () => {
+  // The canvas derives this rather than flagging it, and is explicit that a
+  // token that EXPIRED needs reconnecting while one never connected needs
+  // connecting. C6 draws an expired Google as no provider at all.
+  assert.match(SCRIPT, /const noProvider = !gConn && !mConn;/);
+  assert.match(SCRIPT, /const gConn = \(o\.google \|\| 'connected'\) === 'connected';/,
+    'the canvas no longer treats a failed provider as unusable for push');
+  assert.match(page, /const anyConnected = gState === 'connected' \|\| mState === 'connected';/,
+    'a provider whose sync was refused is being treated as pushable');
+  assert.match(page, /const mayPush = !cancelled && PUSHABLE_KINDS\.has\(ev\.kind\) && canPush;/,
+    'the push control no longer depends on a connection');
+  assert.match(pageRaw, /reconnect it in the panel on the right/, 'the reconnect remedy is gone');
+  assert.match(pageRaw, /Connect Google or Outlook in the panel on the right/, 'the connect remedy is gone');
+  // D1485 (#3979): an expired connection found by the events read is a reconnect too.
+  assert.match(page, /\[gState, mState\]\.some\(\(s\) => s === 'failed' \|\| s === 'reconnect'\)/,
+    'the two remedies are no longer told apart');
+});
+
+test('every control on an event row is drawn only where the route would accept it', () => {
+  assert.match(page, /const mayRsvp = !cancelled && ev\.kind === 'ic_meeting' && isAttendee;/,
+    'RSVP is drawn for someone with no attendee row');
+  assert.match(page, /const mayCancel = !cancelled && \(/, 'cancel is drawn on a cancelled event');
+  assert.match(page, /\(ev\.kind === 'ic_meeting' && \(isAdmin \|\| isOrganiser\)\)/,
+    'cancel on an IC meeting no longer follows the route\'s organiser-or-admin rule');
+  assert.match(route, /if \(!\(isAdmin\(lc\(user\.role\)\) \|\| m\.organizer_user_id === user\.id\)\) \{/,
+    'the IC cancel rule changed — the page must follow it');
+  // Every RSVP value the page offers is one the route accepts.
+  const accepted = route.match(/if \(!\['accepted', 'declined', 'tentative'\]\.includes\(rsvp\)\)/);
+  assert.ok(accepted, 'the RSVP value check moved');
+  assert.deepEqual(
+    [...(page.match(/const RSVP_CHOICES = \[([\s\S]*?)\];/)?.[1] || '').matchAll(/'(\w+)'/g)]
+      .map((m) => m[1]).filter((v) => !['Yes', 'Maybe', 'No'].includes(v)).sort(),
+    ['accepted', 'declined', 'tentative'],
+    'the page offers an RSVP value the route would reject',
+  );
+});
+
+test('both themes are first class — every token has two values and no colour is light-only', () => {
+  const light = css.match(/\.cal \{([\s\S]*?)\n\}/)?.[1] || '';
+  const dark = css.match(/\.dark \.cal \{([\s\S]*?)\n\}/)?.[1] || '';
+  const names = (s) => [...s.matchAll(/(--[\w-]+):/g)].map((m) => m[1]).sort();
+  assert.ok(names(light).length >= 30, 'the light token block did not parse');
+  assert.deepEqual(names(dark), names(light), 'a token exists in one theme and not the other');
+  // Nothing outside the two token blocks may name a colour directly.
+  const rest = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(light, '').replace(dark, '');
+  const stray = [...rest.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0]);
+  assert.deepEqual(stray, [], `a rule hardcodes a colour instead of using a token: ${stray.join(', ')}`);
+  // Dark lifts the kind hues rather than reusing the light ones.
+  for (const k of pageKinds) {
+    const l = light.match(new RegExp(`--k-${escapeRe(k.id)}: (#[0-9a-f]{6})`))?.[1];
+    const d = dark.match(new RegExp(`--k-${escapeRe(k.id)}: (#[0-9a-f]{6})`))?.[1];
+    assert.ok(l && d && l !== d, `${k.id} does not lift to a dark hue`);
+  }
+});
+
+test('the explainer above the agenda names only sources that exist', () => {
+  // FOUND BY LOADING THE BUILT PAGE IN A BROWSER, not by reading it. The
+  // shared explainer for this page promised "office hours, board meetings,
+  // filings — alongside your personal events": there is no board-meeting
+  // source, no filing source, and the sync is ONE-WAY, so nothing the reader
+  // keeps on Google is ever read back in. Three false claims sitting on the
+  // one page whose whole rule is not making them.
+  const explainers = raw('frontend/src/lib/explainers.js');
+  const entry = explainers.match(/\n  calendar: \{([\s\S]*?)\n  \},/)?.[1] || '';
+  assert.ok(entry.includes('body:'), 'the calendar explainer entry did not parse');
+  for (const claim of ['board meeting', 'filing', 'alongside your personal events']) {
+    assert.ok(!entry.toLowerCase().includes(claim),
+      `the calendar explainer still promises "${claim}", which this page has no source for`);
+  }
+  // D5205 (#5205): it said "One agenda, six sources" while the page read thirty-two, and that Google events "are
+  // not read back in" after D1485 began reading them. It names no number of sources and no subset of them now.
+  assert.doesNotMatch(entry, /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+sources\b/i,
+    'the explainer counts the sources in prose again');
+  assert.ok(SOURCES.external_google, 'the registry no longer reads Google events — revisit this sentence');
+  assert.doesNotMatch(entry, /not read back in/i, 'the explainer says connected calendars are not read, and they are');
+});
+
+test('the explainer sits outside the header row, so the canvas actions stay beside the title', () => {
+  // Inside the header's left column it stretched the flex row and pushed the
+  // three actions onto a line of their own — visible only in a browser.
+  const head = page.slice(page.indexOf('className="cal-head"'), page.indexOf('className="cal-explainer"'));
+  assert.ok(head.length > 100, 'the header no longer precedes the explainer strip');
+  assert.ok(!head.includes('PageExplainer'), 'the explainer is back inside the header row');
+  assert.match(page, /<div className="cal-explainer"><PageExplainer pageKey="calendar" \/><\/div>/,
+    'the explainer strip is gone — the page would lose its explainer entirely');
+  assert.match(css, /\.cal-explainer \{ padding: 12px 24px 0; \}/, 'the strip lost its gutter');
+});
+
+test('no sentence splices a kind label in where a lower-case noun belongs', () => {
+  // "A Expert session event cannot be copied…" — wrong article and a label
+  // capitalised mid-sentence, because the copy interpolated KIND_LABEL into
+  // running prose. Labels are chips and eyebrows; prose says "this event".
+  assert.match(page, /This event cannot be copied one at a time/,
+    'the unpushable note no longer reads as a sentence');
+  assert.doesNotMatch(page, /\bA \{KIND_LABEL/, 'a kind label is being spliced in after an article again');
+});
+
+test('a meeting service is named only on its exact host or a real subdomain', () => {
+  // WAS `h.endsWith('meet.google.com')`, which is also true of
+  // `evilmeet.google.com`. CodeQL called it incomplete URL substring
+  // sanitization and was right: the word sits directly beside the link a
+  // reader is about to click, which is the worst place to be approximately
+  // correct. `us02web.zoom.us` is why the subdomain arm has to exist at all,
+  // and the leading dot is the whole fix.
+  const table = page.match(/const MEETING_HOSTS = \[([\s\S]*?)\n\];/)?.[1] || '';
+  const hosts = [...table.matchAll(/\['([^']+)', '([^']+)'\]/g)].map((m) => m[1]);
+  assert.deepEqual(hosts.sort(), ['meet.google.com', 'teams.microsoft.com', 'whereby.com', 'zoom.us'],
+    'the meeting-host table changed without this guard');
+  assert.match(page, /if \(h === host \|\| h\.endsWith\(`\.\$\{host\}`\)\) return word;/,
+    'a meeting host is matched without an exact-or-dot-boundary test');
+  // And no bare suffix test survives anywhere on the page: `.endsWith('x')`
+  // against a hostname is the shape of the bug, whatever it is comparing.
+  assert.doesNotMatch(page, /\bh\.endsWith\('/, 'a hostname is being matched by bare suffix again');
+});
+
+test('every value read out of the canvas is escaped before it becomes a pattern', () => {
+  // `_escapeRe.mjs` exists for these sites and says why. One of them had also
+  // grown `.replace(/[%]/g, '%')` — a replacement of a substring with itself,
+  // which CodeQL flagged: `%` is not a regex metacharacter and never needed
+  // escaping, while `{`, `(` and `$` do and a border-radius is one edit from
+  // carrying one.
+  const built = [...page.matchAll(/new RegExp\(`[^`]*`\)/g)].map((m) => m[0]);
+  assert.ok(built.length === 0, 'the page itself should build no RegExp from interpolated values');
+  const guard = raw('frontend/test/calendar_page_c1.test.mjs');
+  for (const site of guard.match(/new RegExp\(`[^`]*\$\{[^`]*`\)/g) || []) {
+    for (const interp of site.match(/\$\{([^}]*)\}/g) || []) {
+      // A `.replace(...)` standing in for escapeRe fails here too, which is
+      // what brings back the self-replacement CodeQL flagged. Asserting
+      // against that literal directly cannot work: this file reads its own
+      // source, so the assertion would match itself.
+      assert.match(interp, /escapeRe\(/,
+        `this pattern interpolates a raw value: ${site}`);
+    }
+  }
+});
+
+test('the page prints none of the canvas fixture', () => {
+  assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
+});
+
+// D1212 (CAL10): the Google panel at /calendar/connected/google carries the old grant's removal.
+const connectedRaw = raw('frontend/src/pages/CalendarConnected.jsx');
+const connectedModelRaw = raw('frontend/src/pages/calendarConnectedModel.js');
+test('members with a legacy Gmail grant can remove it and reconnect Google without Gmail', () => {
+  assert.match(connectedModelRaw, /gmailStillGranted = \(status\) => status\?\.connected === true && has\(status\?\.scope, GMAIL_SCOPE\)/,
+    'the removal action must be limited to a Google connection that still has the Gmail scope');
+  assert.match(connectedModelRaw, /GMAIL_SCOPE = 'https:\/\/www\.googleapis\.com\/auth\/gmail\.readonly'/);
+  assert.match(connectedRaw, /data-testid="calendar-remove-gmail-access">Remove Gmail access</,
+    'the removal action is missing from the Google panel');
+  assert.match(connectedRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
+    "removing Gmail access must continue into Google's fresh consent");
+});
+
+test('Google offers an explicit local-only disconnect after revocation fails', () => {
+  assert.match(connectedModelRaw, /code === 'google_revocation_failed'\) return \{ text: [^}]*local: true \}/,
+    'only a confirmed Google revocation failure must leave a local disconnect option');
+  assert.match(connectedRaw, /\{refusal\?\.local \? <button [^>]*data-testid="calendar-force-disconnect">Disconnect locally<\/button>/,
+    'the fallback action must be labeled so it does not imply Google revocation');
+  assert.match(connectedRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
+    'the fallback must warn the member about any remaining Google grant');
+});

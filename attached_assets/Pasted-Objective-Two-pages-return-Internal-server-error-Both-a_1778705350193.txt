@@ -1,0 +1,78 @@
+Objective
+  Two pages return "Internal server error". Both are because the
+  Worker routes don't exist (or are stubs that throw on a fresh DB
+  with no rows).
+
+Tasks
+  1. cloudflare-worker/src/routes/financials.ts (create if missing,
+     fix if exists)
+     Endpoints:
+       GET  /api/financials/:projectId
+       PUT  /api/financials/:projectId
+       GET  /api/financials/:projectId/export.xlsx
+     Schema:
+       CREATE TABLE IF NOT EXISTS financial_models (
+         project_id INTEGER PRIMARY KEY,
+         mrr_usd REAL, arr_usd REAL,
+         monthly_revenue_usd REAL,
+         gross_margin_pct REAL,
+         monthly_burn_usd REAL,
+         cash_in_bank_usd REAL,
+         runway_months REAL,
+         paying_customers INTEGER,
+         arpu_usd REAL,
+         cac_usd REAL,
+         ltv_usd REAL,
+         monthly_churn_pct REAL,
+         nrr_pct REAL,
+         top5_concentration_pct REAL,
+         dso_days INTEGER, dpo_days INTEGER,
+         capitalised_rd_usd REAL,
+         founder_salary_usd REAL,
+         source TEXT DEFAULT 'manual',     -- 'manual' | 'stripe' | 'plaid'
+         last_synced_at DATETIME,
+         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+       );
+     IDOR: founder can read/write own project's row; admin/partner
+     can read all.
+     500 root cause is almost certainly: handler does NOT handle
+     "row doesn't exist" — must return a hydrated default object,
+     never null.
+     Wrap every SQL call in try/catch; return 200 with empty default
+     on first-load, 4xx on validation, NEVER 5xx for missing rows.
+
+  2. cloudflare-worker/src/routes/metrics.ts (create if missing)
+     Endpoints:
+       GET  /api/metrics/:projectId            list snapshots
+       POST /api/metrics/:projectId            create snapshot
+       PUT  /api/metrics/snapshot/:id
+       DELETE /api/metrics/snapshot/:id
+       GET  /api/metrics/:projectId/series?metric=dau&granularity=daily
+     Schema:
+       CREATE TABLE IF NOT EXISTS metrics_snapshots (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         project_id INTEGER NOT NULL,
+         captured_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         dau INTEGER, wau INTEGER, mau INTEGER,
+         activation_pct REAL,
+         time_to_value_min REAL,
+         feature_adoption_json TEXT,
+         power_user_pct REAL,
+         support_tickets INTEGER,
+         response_time_median_h REAL,
+         source TEXT DEFAULT 'manual',     -- 'manual' | 'ga' | 'mixpanel'
+         created_by INTEGER
+       );
+     Same defensive empty-state handling.
+
+  3. Mount both in cloudflare-worker/src/index.ts.
+
+  4. Frontend pages render empty state when the API returns the
+     hydrated default, not a generic toast.
+
+Acceptance
+  - Both pages load with zero 500s on a fresh project.
+  - PUT round-trips, persists, survives reload.
+  - XLSX export downloads with the right column headers.
+  - Series endpoint returns a time-series array (or empty array,
+    not 500).

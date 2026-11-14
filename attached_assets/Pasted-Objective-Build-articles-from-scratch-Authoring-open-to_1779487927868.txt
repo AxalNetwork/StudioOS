@@ -1,0 +1,180 @@
+Objective
+  Build /articles from scratch. Authoring open to founders,
+  investors, mentors, coaches, and partners with sufficient trust
+  score. Submissions go through admin approval. Approved articles
+  publish to /articles, filterable by sector + author role.
+  Articles appear on the author's public profile under an
+  "Articles" tab.
+
+Schema (new)
+  cloudflare-worker/sql/migrations/00xx_articles.sql:
+
+    CREATE TABLE articles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT UNIQUE NOT NULL,
+      author_user_id INTEGER NOT NULL,
+      author_role TEXT NOT NULL,         -- 'founder','investor',
+                                         -- 'mentor','coach','partner','admin'
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      category TEXT NOT NULL,            -- sector taxonomy
+      sub_category TEXT,
+      tags_json TEXT,
+      body_markdown TEXT NOT NULL,
+      body_html_cached TEXT,
+      cover_image_r2_key TEXT,
+      excerpt TEXT,
+      reading_minutes INTEGER,
+      status TEXT NOT NULL,              -- 'draft','submitted',
+                                         -- 'in_review','changes_requested',
+                                         -- 'approved','published',
+                                         -- 'rejected','retracted','unpublished'
+      submitted_at DATETIME,
+      reviewed_at DATETIME,
+      reviewed_by_admin_id INTEGER,
+      published_at DATETIME,
+      rejection_reason TEXT,
+      view_count INTEGER DEFAULT 0,
+      version INTEGER DEFAULT 1
+    );
+    CREATE INDEX idx_articles_status_published ON articles(status, published_at DESC);
+    CREATE INDEX idx_articles_author ON articles(author_user_id, status);
+    CREATE INDEX idx_articles_category ON articles(category, status);
+
+    CREATE TABLE article_revisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_id INTEGER NOT NULL,
+      version INTEGER NOT NULL,
+      body_markdown TEXT NOT NULL,
+      title TEXT NOT NULL,
+      snapshot_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE article_review_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_id INTEGER NOT NULL,
+      admin_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      inline_anchor TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+Trust gate (server-side)
+  An author may create + submit if any of:
+    users.role = 'admin'
+    OR users.role IN ('founder','investor','mentor','coach','partner')
+       AND users.trust_score >= 60
+       AND users.email_verified = 1
+       AND users.account_age_days >= 14
+       AND NOT users.abuse_flagged
+  trust_score is computed by the existing trust service if present;
+  else derive at read time per the rules in earlier prompt LE.
+
+Category taxonomy
+  AI infra · AI app · Fintech · Insurtech · Climate · Energy ·
+  Biotech · Health · Medtech · Enterprise SaaS · DevTools · Security ·
+  Data · Commerce · Consumer · Creator · Gaming · EdTech · LegalTech ·
+  PropTech · Mobility · Logistics · AgTech · FoodTech · Industrial ·
+  Robotics · Space · Defense · Web3 · Hardware · Marketplace · Other.
+  Stored in cloudflare-worker/src/data/sectors.ts as the single
+  source.
+
+Worker routes (cloudflare-worker/src/routes/articles.ts — new)
+  GET    /api/articles                       public, published only
+                                              ?category=&author_role=
+                                              &q=&limit=&offset=
+  GET    /api/articles/:slug                  public
+  GET    /api/articles/by-author/:user_id     public, published only
+  POST   /api/articles/draft                  trust-gated
+  GET    /api/articles/mine                   author own
+  PUT    /api/articles/:id                    author edits own draft
+  POST   /api/articles/:id/submit             author submits
+  POST   /api/articles/:id/retract             author retracts before publish
+  GET    /api/admin/articles/queue            admin only
+  POST   /api/admin/articles/:id/start-review admin
+  POST   /api/admin/articles/:id/comments     admin
+  POST   /api/admin/articles/:id/request-changes { notes }
+  POST   /api/admin/articles/:id/approve      admin
+  POST   /api/admin/articles/:id/publish      admin
+  POST   /api/admin/articles/:id/reject       { reason }
+  POST   /api/admin/articles/:id/unpublish    admin
+
+  Mount in cloudflare-worker/src/index.ts:
+    app.route('/api/articles', articles);
+
+Notifications
+  Each state transition fires a notification (email + in-app) via
+  cloudflare-worker/src/services/notifications/send.ts:
+    submitted              → author + all admins
+    in_review              → author
+    changes_requested      → author, with admin's notes
+    approved               → author
+    published              → author
+    rejected               → author, with reason
+    unpublished            → author
+  Iteration loop: when status='changes_requested', the author can
+  edit + re-submit, which transitions back to 'submitted'.
+  article_revisions row inserted on every submit.
+
+Frontend
+  frontend/src/pages/ArticlesPage.jsx              public list
+  frontend/src/pages/ArticleReaderPage.jsx          public reader
+  frontend/src/pages/ArticleAuthorPage.jsx          author editor
+  frontend/src/pages/admin/ArticlesQueuePage.jsx    admin queue
+
+  Routes (mount in App.jsx):
+    /articles                      → ArticlesPage
+    /articles/:slug                → ArticleReaderPage
+    /articles/draft                → ArticleAuthorPage (new)
+    /articles/edit/:id             → ArticleAuthorPage (edit)
+    /admin/articles                → ArticlesQueuePage
+
+  Public surface
+    /articles renders the masonry grid with category filter chips,
+    role filter, search, paginated. Featured strip at top shows the
+    3 most recent or admin-pinned.
+    Front page (LandingPage.jsx) gets a small "Latest from the
+    network" block showing the 3 latest published articles —
+    fetched server-side / hydrated client-side from
+    /api/articles?limit=3. Same data, smaller card.
+
+  Author editor
+    Markdown editor with live preview, cover-image upload (R2),
+    sector category selector, sub-category text, tags input,
+    "Save draft" + "Submit for review" buttons. Read-only banner
+    when status is in_review / changes_requested / approved /
+    published. Inline review comments thread visible after admin
+    starts the review.
+
+  Admin queue
+    List of submitted + in_review articles. Side-by-side editor
+    preview + review-comments thread. Approve / Request Changes /
+    Reject buttons.
+
+  Author profile tab
+    Public profile pages (founder / investor / mentor / coach /
+    partner) gain an "Articles" tab that fetches
+    /api/articles/by-author/:user_id. Empty state honest:
+    "No published articles yet."
+
+Anti-abuse
+  - Trust gate enforced server-side; never trust the client.
+  - Rate limit: 3 submissions / week / author.
+  - Submissions auto-scanned by the existing PII redact checker;
+    block submit if private data of OTHER users is detected.
+  - On publish, cache the rendered article through Cloudflare
+    Cache API for 60-day TTL.
+  - Markdown rendered through the existing sanitiser (no inline
+    HTML, no scripts, no data: URLs).
+
+Acceptance
+  - Authorised user creates draft + submits.
+  - Admin sees it in the queue, can leave inline comments, request
+    changes, or approve + publish.
+  - Author gets notification at every state transition.
+  - Published article visible at /articles and on the author's
+    profile Articles tab.
+  - Front page surfaces the latest 3.
+  - Category filters work.
+  - Rejection lets the author iterate without losing prior content.
+  - Drift smoke test (api.js ↔ worker) still passes.

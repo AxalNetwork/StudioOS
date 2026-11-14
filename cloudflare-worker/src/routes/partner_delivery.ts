@@ -1,0 +1,2446 @@
+/**
+ * /api/partner/delivery — Health, Deliverables, Capacity and Status reports.
+ *
+ * The last four of the nine zones, and the ones with the hardest editorial
+ * calls in them. Three things this file refuses to do, each for a different
+ * reason, and each stated in the response rather than left to the page:
+ *
+ *   1. HEALTH IS NULL WHEN NOTHING IS RECORDED — never `'on_track'`.
+ *      Green-because-empty is the exact failure the zone's old no-store card
+ *      warned about: "a pill computed from status alone would rate every live
+ *      engagement identically and call it a judgement". Silence is not good
+ *      news. `healthFor` in `_partner_workspace_helpers.ts` enforces it and
+ *      returns the reasons it did use, so the pill can be explained.
+ *
+ *   2. THERE IS NO CAPACITY CAP ANYWHERE, so nothing here is "over" anything.
+ *      `engagement_hours` records hours; NOTHING records the firm's cap. The
+ *      capacity canvas uses a hardcoded `CAP_H = 40`, and adopting that number
+ *      would be inventing the firm's cap and then presenting it as a finding.
+ *      `cap_hours` comes back null with a reason, and the zone must not colour
+ *      a row red against a threshold nobody set. Adding a cap column is a
+ *      migration 210 and a separate decision.
+ *
+ *   3. `opened_at` AND `signed_off_at` ARE THE CLIENT'S TO SET — migration
+ *      208:160 is explicit that a partner-side write to either would be the
+ *      firm reporting a metric about itself. No route here accepts them, on
+ *      create or on patch, and a test sends both and asserts the row is
+ *      unchanged. The client sets `opened_at` through its own route,
+ *      `POST /api/client/deliverables/:uid/open` (#5314 part 1,
+ *      `client_deliverables.ts`), once, when it opens the shared link; a
+ *      deliverable whose open could not have been recorded reads
+ *      "Not recorded", and the read says why.
+ *
+ * UTILISATION IS READ, NOT RECOMPUTED. `/health` imports the same
+ * `utilisationFor` that `/api/partner/pipeline/retainers` uses. The Health
+ * canvas seam-marks the figure as a read for this reason: two pages disagreeing
+ * about one client's utilisation is worse than either number.
+ *
+ * ONE AUTHZ HOLE IN 208 CLOSED HERE. `engagement_seats.holder_user_id`
+ * references `users(id)` with no partner constraint, so the schema alone would
+ * let a firm name ANY user in its seat register — including a founder or
+ * another firm's staff. `requireOwnHolder` below requires the holder to belong
+ * to this firm.
+ */
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import {
+  mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
+} from './_t13t14t15_helpers';
+import type { ReadTracking } from './_partner_workspace_helpers';
+import {
+  daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
+  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, weeklyFromMonthly, WEEKS_PER_MONTH,
+} from './_partner_workspace_helpers';
+import { logActorAct } from '../services/actorLog';
+import { statusReportAccess } from '../services/statusReportAccess';
+
+const partnerDelivery = new Hono<{ Bindings: Env }>();
+
+async function actingPartner(c: any): Promise<{ user: User; partnerId: number }> {
+  const user = (await requireAuth(c)) as User;
+  requirePartnerRole(user);
+  const partner = await requirePartnerProfile(c.env, user);
+  return { user, partnerId: Number(partner.id) };
+}
+
+async function body<T>(c: any): Promise<T> {
+  return (await c.req.json().catch(() => ({}))) as T;
+}
+
+function notFound(what: string): Response {
+  return new Response(JSON.stringify({ detail: `${what} not found` }), {
+    status: 404, headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+/**
+ * D4682 — a stale write loses, and says so.
+ *
+ * Every edit states the revision it read (`WHERE id = ? AND revision = ?`) and
+ * bumps it, and the route checks the affected-row count: a request that read an
+ * older row changes nothing and answers 409 `delivery_changed`.
+ */
+function changedOne(res: any): boolean {
+  return Number(res?.meta?.changes ?? 0) === 1;
+}
+
+function deliveryChanged(c: any, what: string, current?: { revision?: unknown } | null): Response {
+  return c.json({
+    detail: `That ${what} changed while you were editing it. Reload it and try again.`,
+    code: 'delivery_changed',
+    revision: current?.revision == null ? null : Number(current.revision),
+    // #5314 part 3: the same number under the name the conflict state reads.
+    current_version: current?.revision == null ? null : Number(current.revision),
+  }, 409);
+}
+
+/**
+ * #5314 part 3 (D4822) — the revision a caller STATED, keyed on whether it
+ * stated one at all.
+ *
+ * `undefined`: it said nothing (a page opened before this build); the write
+ * keeps D4682's guard on the row it read itself. `null`: it read NO row (an
+ * upsert's first write), so the write inserts only while there still is none.
+ * A number: the revision it read; any other revision is a conflict and the
+ * write changes nothing. Anything else is refused, rather than read as silence.
+ */
+function statedRevision(src: any): number | null | undefined {
+  if (!src || !Object.prototype.hasOwnProperty.call(src, 'expected_revision')) return undefined;
+  const v = src.expected_revision;
+  if (v === null || v === 'none') return null;
+  const n = Number(v);
+  if (v === '' || typeof v === 'boolean' || !Number.isInteger(n) || n < 0) {
+    throw new Response(JSON.stringify({
+      detail: 'expected_revision is the revision you read: a whole number, or null when you read no record',
+      code: 'bad_expected_revision',
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  return n;
+}
+
+/** A DELETE states its revision in the query: `?expected_revision=3` (or `none`). */
+function queryRevision(c: any): number | null | undefined {
+  const q = c.req.query('expected_revision');
+  return q === undefined ? undefined : statedRevision({ expected_revision: q });
+}
+
+/** Whether a stated revision disagrees with the row as it is (`cur` null: no row). */
+function staleAgainst(stated: number | null | undefined, cur: { revision?: unknown } | null | undefined): boolean {
+  if (stated === undefined) return false;
+  if (!cur) return stated !== null;
+  return stated !== Number(cur.revision);
+}
+
+/**
+ * Apply a PATCH against the CURRENT persisted row.
+ *
+ * Omitted fields come from the row as it is now, not from a pre-read that
+ * another request may have outdated: if the write loses the revision check,
+ * the row is read again and merged again. It is retried once, and only when
+ * the concurrent change did not touch a field this request sets; otherwise it
+ * is a conflict, because the caller was about to overwrite something it never
+ * saw. A caller that sends `expected_revision` gets no retry at all.
+ */
+async function patchCurrent(opts: {
+  read: () => Promise<any>;
+  body: any;
+  fields: string[];
+  write: (merged: any, row: any) => Promise<any>;
+}): Promise<{ ok: true; merged: any; before: any } | { ok: false; current: any }> {
+  const first = await opts.read();
+  const want = statedRevision(opts.body);
+  if (staleAgainst(want, first)) return { ok: false, current: first };
+  const merged0 = mergePatch(first, opts.body, opts.fields);
+  if (changedOne(await opts.write(merged0, first))) return { ok: true, merged: merged0, before: first };
+  if (want !== undefined) return { ok: false, current: await opts.read().catch(() => first) };
+  const fresh = await opts.read().catch(() => null);
+  if (!fresh) return { ok: false, current: null };
+  for (const f of opts.fields) {
+    if (Object.prototype.hasOwnProperty.call(opts.body, f) && fresh[f] !== first[f]) {
+      return { ok: false, current: fresh };
+    }
+  }
+  const merged1 = mergePatch(fresh, opts.body, opts.fields);
+  if (changedOne(await opts.write(merged1, fresh))) return { ok: true, merged: merged1, before: fresh };
+  return { ok: false, current: await opts.read().catch(() => fresh) };
+}
+
+/** A child row, if its engagement belongs to this partner. 404 otherwise. */
+async function ownChild(
+  env: Env, partnerId: number, table: 'engagement_milestones' | 'engagement_deliverables'
+    | 'engagement_seats' | 'engagement_blockers' | 'engagement_status_reports',
+  id: number, what: string,
+) {
+  // One literal query per table rather than an interpolated name: a `${}` in
+  // `DB.prepare` is what `check-sql-prepare.mjs` fails, and the alternative
+  // would be a table name assembled at runtime for no gain.
+  const sql = {
+    engagement_milestones:
+      `SELECT m.*, e.partner_id FROM engagement_milestones m
+         JOIN engagements e ON e.id = m.engagement_id WHERE m.id = ?`,
+    engagement_deliverables:
+      `SELECT d.*, e.partner_id FROM engagement_deliverables d
+         JOIN engagements e ON e.id = d.engagement_id WHERE d.id = ?`,
+    engagement_seats:
+      `SELECT s.*, e.partner_id FROM engagement_seats s
+         JOIN engagements e ON e.id = s.engagement_id WHERE s.id = ?`,
+    engagement_blockers:
+      `SELECT b.*, e.partner_id FROM engagement_blockers b
+         JOIN engagements e ON e.id = b.engagement_id WHERE b.id = ?`,
+    engagement_status_reports:
+      `SELECT r.*, e.partner_id FROM engagement_status_reports r
+         JOIN engagements e ON e.id = r.engagement_id WHERE r.id = ?`,
+  }[table];
+  const row = await env.DB.prepare(sql).bind(id).first<any>();
+  if (!row || Number(row.partner_id) !== Number(partnerId)) throw notFound(what);
+  return row;
+}
+
+/** The current period label, from the server clock. */
+function currentPeriod(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+/**
+ * The `pd1` board: one row per engagement, in whichever of the two modes it is.
+ *
+ * MODE IS STRUCTURAL, NOT A STATUS — the artboard's own instMeta, and the
+ * reason there is no `mode` column anywhere. An engagement that granted a seat
+ * IS embedded; one that did not IS a project. That is a fact about what exists,
+ * derived here from `engagement_seats`, and a column would be a second place to
+ * say it that could disagree with the seat the first time one was revoked.
+ *
+ * A REVOKED SEAT STAYS EMBEDDED AND STAYS ON THE BOARD. The artboard is explicit:
+ * "a founder closing a seat is a normal event in this bucket, not an error
+ * state", and its own row is kept visible and struck through. Filtering it out
+ * would make the board quietly disagree with the ledger about how many
+ * engagements the firm has had.
+ *
+ * PROGRESS IS TWO DIFFERENT MEASURES AND IS NEVER AVERAGED. A project counts
+ * milestones; an embedded seat counts hours this period against the retainer's
+ * retained hours. One number over both would compare a fraction of a scope with
+ * a fraction of a week.
+ *
+ * HEALTH IS THE SAME `healthFor` `/health` CALLS, not a second rating. `null`
+ * is a real answer — nothing recorded — and the board draws it as absent rather
+ * than green, which is the failure that helper's docblock exists against.
+ */
+partnerDelivery.get('/board', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const now = new Date();
+    const period = currentPeriod(now);
+    // Hours are logged by month and a retainer's hours are sold by ITS period
+    // (a month or a quarter), so the read covers the months of this quarter and
+    // each row sums the ones inside its own retainer period (#4690).
+    const quarterMonths = periodMonths(retainerPeriodFor('quarterly', now));
+
+    const engagements = await c.env.DB.prepare(
+      `SELECT e.id, e.uid, e.status, e.price, e.delivered_at, e.cancelled_at,
+              e.invoiced_at, e.invoice_id,
+              n.title AS need_title, f.name AS founder_name,
+              r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+              r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
+         FROM engagements e
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+         LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+        WHERE e.partner_id = ?
+        ORDER BY e.created_at DESC
+        LIMIT 200`,
+    ).bind(partnerId).all<any>();
+
+    // The same join-back-to-owner shape every read in this file uses: nothing
+    // is interpolated, and no row can come back for another firm's engagement.
+    const [seats, milestones, blockers, deliverables, hours, usage, stated, reports] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT s.id, s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
+           FROM engagement_seats s
+           JOIN engagements e ON e.id = s.engagement_id
+           LEFT JOIN users u ON u.id = s.holder_user_id
+          WHERE e.partner_id = ? ORDER BY s.granted_at DESC`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT m.engagement_id, m.due_at, m.completed_at
+           FROM engagement_milestones m
+           JOIN engagements e ON e.id = m.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT b.engagement_id, b.side, b.cleared_at
+           FROM engagement_blockers b
+           JOIN engagements e ON e.id = b.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at, d.link_url
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT h.engagement_id, h.period, h.hours
+           FROM engagement_hours h
+           JOIN engagements e ON e.id = h.engagement_id
+          WHERE e.partner_id = ? AND h.period IN (?, ?, ?)`,
+      ).bind(partnerId, ...quarterMonths).all<any>(),
+      c.env.DB.prepare(
+        `SELECT u.retainer_id, u.period, u.hours_used
+           FROM retainer_usage u
+           JOIN partner_retainers r ON r.id = u.retainer_id
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      // D4822 (#4822) — what Board v2 names on each row beside the work: the owner and the scope assessment
+      // the firm stated (migration 232, the same rows Health reads), and this period's status report. Each is
+      // absent until somebody records it, and the row says so rather than inventing one.
+      c.env.DB.prepare(
+        `SELECT h.engagement_id, h.owner_user_id, h.scope_state, o.name AS owner_name
+           FROM partner_engagement_health h
+           JOIN engagements e ON e.id = h.engagement_id
+           LEFT JOIN users o ON o.id = h.owner_user_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT r.engagement_id, r.sent_at
+           FROM engagement_status_reports r
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ? AND r.period = ?`,
+      ).bind(partnerId, period).all<any>(),
+    ]);
+    const statedByEng = new Map<number, any>((stated.results || []).map((s: any) => [Number(s.engagement_id), s]));
+    const reportByEng = new Map<number, any>((reports.results || []).map((r: any) => [Number(r.engagement_id), r]));
+
+    const group = groupByEngagement;
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
+    const seatByEng = group(seats.results || []);
+    const msByEng = group(milestones.results || []);
+    const blByEng = group(blockers.results || []);
+    const dlByEng = group(deliverables.results || []);
+    const hrByEng = group(hours.results || []);
+    const usageByRetainer = new Map<number, any[]>();
+    for (const u of usage.results || []) {
+      const k = Number(u.retainer_id);
+      if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+      usageByRetainer.get(k)!.push(u);
+    }
+
+    // D394 — THE HOME'S "DUE THIS WEEK", counted from the milestones this
+    // handler already reads: open ones whose due date falls today or in the
+    // next six days. Compared as calendar dates (the column is a date the firm
+    // typed), in JS, so no SQL timestamp comparison is involved. A milestone
+    // with no due date is not due this week; it is undated, and not counted.
+    const today = new Date();
+    const dayIso = (d: Date) => d.toISOString().slice(0, 10);
+    const weekStart = dayIso(today);
+    const weekEnd = dayIso(new Date(today.getTime() + 6 * 86400000));
+    const dueThisWeek = (m: any) => {
+      if (m.completed_at || !m.due_at) return false;
+      const d = String(m.due_at).slice(0, 10);
+      return d >= weekStart && d <= weekEnd;
+    };
+
+    const items = (engagements.results || []).map((e: any) => {
+      const id = Number(e.id);
+      // SEAT STATE IS DERIVED FROM THE WHOLE COLLECTION (#4690), by the one
+      // helper Health and Capacity call. The newest row is not the engagement's
+      // state: a seat revoked while an older one is still open leaves it live.
+      const seats = seatStateFor(seatByEng.get(id) || []);
+      const seat = seats.lead;
+      const ms = msByEng.get(id) || [];
+      const allBl = blByEng.get(id) || [];
+      const bl = allBl.filter((b: any) => !b.cleared_at);
+      const dl = dlByEng.get(id) || [];
+      const proj = retainerProjection(
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
+        e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
+        now,
+      );
+      const u = proj;
+      // Logged hours in the SAME period the retained hours were sold for.
+      const hoursPeriod = proj.retainer ? proj.current_period! : period;
+      const inPeriod = periodMonths(hoursPeriod);
+      const hrs = (hrByEng.get(id) || [])
+        .filter((h: any) => inPeriod.includes(String(h.period)))
+        .reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
+      const recurring = proj.retainer?.current_monthly_cents ?? null;
+      const h = healthFor({
+        milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
+        openBlockers: bl.map((b: any) => ({ side: b.side })),
+        clearedBlockers: allBl.length - bl.length,
+        unopenedDeliverables: unopenedCountFor(dl, readTracking),
+        sentDeliverables: dl.filter((d: any) => d.sent_at).length,
+        readTracking,
+        utilisation: u,
+      });
+      return {
+        engagement_id: id,
+        engagement_uid: e.uid,
+        status: e.status,
+        client: e.founder_name ?? null,
+        scope: e.need_title ?? null,
+        price: e.price === null || e.price === undefined ? null : Number(e.price),
+        // D395 — THE LIFECYCLE THE BOARD NOW DRIVES. `/partner/operations/
+        // engagements` was the one canvas-less page that started, delivered,
+        // invoiced and cancelled an engagement; its successor is this board,
+        // so the row carries the dates the ledger under it prints. Each is the
+        // engagement's own column, null until that step happened.
+        delivered_at: e.delivered_at ?? null,
+        invoiced_at: e.invoiced_at ?? null,
+        invoice_id: e.invoice_id ?? null,
+        cancelled_at: e.cancelled_at ?? null,
+        mode: seats.mode,
+        // The collection's state, for Health and Capacity to agree with.
+        seat_state: seats.state,
+        active_seat_count: seats.active_count,
+        revoked_seat_count: seats.revoked_count,
+        // What the founder granted, in their own words — `engagement_seats
+        // .scope` is free text for exactly that reason.
+        grant: seat?.scope ?? null,
+        grant_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seats.revoked_at,
+        milestone_count: ms.length,
+        milestones_done: ms.filter((m: any) => m.completed_at).length,
+        milestones_due_7d: ms.filter(dueThisWeek).length,
+        // D4822 — the facts Board v2 derives its attention reasons and next action from. Each is counted from the
+        // rows this read already has; none is a score. Overdue is an open milestone whose date is before today.
+        milestones_overdue: ms.filter((m: any) => !m.completed_at && m.due_at && String(m.due_at).slice(0, 10) < weekStart).length,
+        open_blockers: bl.length,
+        open_blockers_client_side: bl.filter((b: any) => b.side === 'client').length,
+        deliverables_sent: dl.filter((d: any) => d.sent_at).length,
+        deliverables_signed_off: dl.filter((d: any) => d.signed_off_at).length,
+        owner_user_id: statedByEng.get(id)?.owner_user_id ? Number(statedByEng.get(id).owner_user_id) : null,
+        owner_name: statedByEng.get(id)?.owner_name ?? null,
+        scope_state: statedByEng.get(id)?.scope_state ?? null,
+        // This period's report: 'sent' (a person marked it sent), 'draft' (saved, not sent) or null (none).
+        report_period: period,
+        report_state: reportByEng.has(id) ? (reportByEng.get(id).sent_at ? 'sent' : 'draft') : null,
+        hours_this_period: seats.mode === 'embedded' ? hrs : null,
+        // THE PERIOD THE HOURS AND THE CAP BOTH COVER: `2026-11` or `2026-Q4`.
+        hours_period: seats.mode === 'embedded' ? hoursPeriod : null,
+        // The cap an embedded row measures against is the retainer's retained
+        // hours. No retainer means no cap, which the page states rather than
+        // filling in a number nobody agreed to.
+        hours_cap: proj.retainer?.active && e.retained_hours !== null ? Number(e.retained_hours) : null,
+        // THE RECORDED RECURRING CONTRACT, not the one-off quote: `price` above
+        // is what the accepted quote was worth; this is the retainer's own
+        // amount, normalised to a month by the shared rule, null when none is
+        // recorded or the retainer has ended.
+        recurring_monthly_cents: recurring,
+        retainer_cadence: proj.retainer?.cadence ?? null,
+        retainer_active: proj.retainer ? proj.retainer.active : null,
+        ...h,
+      };
+    });
+
+    const live = items.filter((i: any) => i.seat_state !== 'revoked');
+    const money = (rows: any[]) => rows.reduce((a: number, r: any) => a + (Number(r.price) || 0), 0);
+    // EMBEDDED / MONTH IS RECURRING REVENUE: the recorded retainer amount,
+    // normalised to a month, over embedded engagements whose seats are live and
+    // whose retainer has not ended. An embedded engagement with no recorded
+    // recurring amount is NOT in it (and is counted, not zeroed).
+    const embeddedLive = live.filter((i: any) => i.mode === 'embedded' && !i.cancelled_at);
+    const embeddedPriced = embeddedLive.filter((i: any) => i.recurring_monthly_cents !== null);
+    const embeddedCents = embeddedPriced.reduce((a: number, i: any) => a + i.recurring_monthly_cents, 0);
+    return c.json({
+      items,
+      period,
+      // The artboard's four tiles, each summed over the whole board rather than
+      // any narrowed view, and each named for what it counts.
+      project_value: money(live.filter((i: any) => i.mode === 'project')),
+      embedded_monthly: embeddedPriced.length ? embeddedCents / 100 : null,
+      embedded_monthly_cents: embeddedPriced.length ? embeddedCents : null,
+      embedded_unpriced_count: embeddedLive.length - embeddedPriced.length,
+      embedded_monthly_note: embeddedPriced.length
+        ? (embeddedLive.length > embeddedPriced.length
+          ? `${embeddedLive.length - embeddedPriced.length} embedded engagement${embeddedLive.length - embeddedPriced.length === 1 ? ' has' : 's have'} no active recurring amount recorded and ${embeddedLive.length - embeddedPriced.length === 1 ? 'is' : 'are'} not in this total.`
+          : null)
+        : 'Not recorded: no embedded engagement has an active retainer with a recorded amount. Accepted quote values are one-off and are not counted as recurring.',
+      needs_attention: live.filter((i: any) => i.health === 'at_risk' || i.health === 'blocked').length,
+      due_next_7_days: live.reduce((a: number, i: any) => a + i.milestones_due_7d, 0),
+      // SEAT ROWS revoked, the same unit Capacity counts per person — a partly
+      // revoked engagement is still live and still contributes here.
+      revoked_seats: items.reduce((a: number, i: any) => a + i.revoked_seat_count, 0),
+      fully_revoked_engagements: items.filter((i: any) => i.seat_state === 'revoked').length,
+      read_tracking: readTracking,
+      // Same honesty the health read reports: an unrated row is not a healthy
+      // one, and the strip must not read as a clean board when it is an empty
+      // one.
+      unrated_count: items.filter((i: any) => i.health === null).length,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Every engagement with its health, its reasons, and the seam-marked read.
+ *
+ * Five tables feed one judgement, which is why it is computed here rather than
+ * in the page — and why nothing stores it. A stored score would be a second
+ * source of truth for something five tables already say, and the first time one
+ * of them moved the two would disagree.
+ */
+partnerDelivery.get('/health', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const now = new Date();
+    const period = currentPeriod(now);
+
+    const engagements = await c.env.DB.prepare(
+      `SELECT e.id, e.uid, e.status, e.price, e.founder_id, e.delivered_at, e.cancelled_at,
+              n.title AS need_title, f.name AS founder_name,
+              r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+              r.amount_cents, r.retained_hours, r.renews_at, r.ended_at
+         FROM engagements e
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+         LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+        WHERE e.partner_id = ?
+        ORDER BY e.created_at DESC
+        LIMIT 200`,
+    ).bind(partnerId).all<any>();
+
+    // Four scoped reads rather than one per engagement — the same join-back-to
+    // -owner shape the pipeline reads use, so nothing is interpolated and no
+    // row can come back for another firm's engagement.
+    const [milestones, blockers, deliverables, usage] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT m.engagement_id, m.due_at, m.completed_at
+           FROM engagement_milestones m
+           JOIN engagements e ON e.id = m.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      // ALL blockers, cleared included. The rating uses only the open ones;
+      // the cleared ones count toward "something has been recorded here",
+      // which is a different question — see `HealthInputs.clearedBlockers`.
+      c.env.DB.prepare(
+        `SELECT b.engagement_id, b.side, b.summary, b.raised_at, b.cleared_at
+           FROM engagement_blockers b
+           JOIN engagements e ON e.id = b.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.link_url
+           FROM engagement_deliverables d
+           JOIN engagements e ON e.id = d.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT u.retainer_id, u.period, u.hours_used
+           FROM retainer_usage u
+           JOIN partner_retainers r ON r.id = u.retainer_id
+           JOIN engagements e ON e.id = r.engagement_id
+          WHERE e.partner_id = ?`,
+      ).bind(partnerId).all<any>(),
+    ]);
+
+    // WHAT THE FIRM WROTE DOWN ABOUT THE ENGAGEMENT, beside the work (232).
+    // Owner, scope assessment and the client's score are none of them facts
+    // about milestones, blockers or deliverables — each is a sentence somebody
+    // stated — and all three are absent until they do.
+    const stated = await c.env.DB.prepare(
+      `SELECT h.engagement_id, h.owner_user_id, h.scope_state, h.scope_note,
+              h.satisfaction, h.satisfaction_source, h.satisfaction_at, h.revision,
+              o.name AS owner_name
+         FROM partner_engagement_health h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users o ON o.id = h.owner_user_id
+        WHERE e.partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    const statedByEng = new Map<number, any>();
+    for (const s of stated.results || []) statedByEng.set(Number(s.engagement_id), s);
+
+    // MODE IS DERIVED FROM THE SEAT, never stored — the same rule `/board`
+    // follows. An engagement that granted a seat IS embedded; a `mode` column
+    // would be a second place to say it that could disagree with the seat the
+    // first time one was revoked.
+    const seats = await c.env.DB.prepare(
+      `SELECT s.id, s.engagement_id, s.scope, s.granted_at, s.revoked_at, u.name AS holder_name
+         FROM engagement_seats s
+         JOIN engagements e ON e.id = s.engagement_id
+         LEFT JOIN users u ON u.id = s.holder_user_id
+        WHERE e.partner_id = ?
+        ORDER BY s.granted_at DESC`,
+    ).bind(partnerId).all<any>();
+    // THE WHOLE COLLECTION, not the first row (#4690): `seatStateFor` is the one
+    // definition the Board and Capacity use too.
+    const seatsByEng = groupByEngagement(seats.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
+
+    const by = groupByEngagement;
+    const msByEng = by(milestones.results || []);
+    const blByEng = by(blockers.results || []);
+    const dlByEng = by(deliverables.results || []);
+    const usageByRetainer = new Map<number, any[]>();
+    for (const u of usage.results || []) {
+      const k = Number(u.retainer_id);
+      if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+      usageByRetainer.get(k)!.push(u);
+    }
+
+    let rated = 0;
+    const items = (engagements.results || []).map((e: any) => {
+      const st = statedByEng.get(Number(e.id));
+      const seatState = seatStateFor(seatsByEng.get(Number(e.id)) || []);
+      const seat = seatState.lead;
+      const ms = msByEng.get(Number(e.id)) || [];
+      const allBl = blByEng.get(Number(e.id)) || [];
+      const bl = allBl.filter((b: any) => !b.cleared_at);
+      const dl = dlByEng.get(Number(e.id)) || [];
+      // Sent and not opened — NULL where opens cannot be observed (#4690),
+      // because then it is not a finding about the client at all.
+      const unopened = unopenedCountFor(dl, readTracking);
+
+      // The same projection Pipeline · Retainers returns: cadence-aware period,
+      // ended retainers excluded.
+      const proj = retainerProjection(
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
+        e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
+        now,
+      );
+      const u = proj;
+      const h = healthFor({
+        milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
+        openBlockers: bl.map((b: any) => ({ side: b.side })),
+        clearedBlockers: allBl.length - bl.length,
+        unopenedDeliverables: unopened,
+        sentDeliverables: dl.filter((d: any) => d.sent_at).length,
+        readTracking,
+        utilisation: u,
+      });
+      if (h.health) rated += 1;
+
+      return {
+        engagement_id: Number(e.id),
+        engagement_uid: e.uid,
+        status: e.status,
+        // RETURNED SO "LIVE" MEANS SOMETHING. The strip's satisfaction rule
+        // holds the firm-wide average back while any LIVE engagement is
+        // unscored; without this column every cancelled engagement in the book
+        // would keep it refused forever, which is a different claim from the
+        // one the artboard makes.
+        cancelled_at: e.cancelled_at ?? null,
+        founder_id: e.founder_id ? Number(e.founder_id) : null,
+        founder_name: e.founder_name ?? null,
+        need_title: e.need_title ?? null,
+        shape: e.shape ?? null,
+        // Migration 208 stored and indexed `renews_at`; the response withheld
+        // it, so `Renewing soon` had a column behind it and no way to reach it.
+        renews_at: e.renews_at ?? null,
+        milestone_count: ms.length,
+        overdue_count: ms.filter(
+          (m: any) => !m.completed_at && m.due_at && (daysBetween(m.due_at) ?? -1) > 0,
+        ).length,
+        open_blockers: bl.map((b: any) => ({
+          side: b.side, summary: b.summary, days_open: daysBetween(b.raised_at),
+        })),
+        deliverables_sent: dl.filter((d: any) => d.sent_at).length,
+        deliverables_unopened: unopened,
+        // ── What somebody at the firm stated (232) ──────────────────────────
+        // NULL THROUGHOUT UNTIL THEY DO. `scope_state` is not defaulted to
+        // 'within': an engagement nobody has assessed is not an engagement in
+        // scope, and a page that said otherwise would clear a client of drift
+        // by never having looked.
+        owner_user_id: st?.owner_user_id ? Number(st.owner_user_id) : null,
+        owner_name: st?.owner_name ?? null,
+        // The `Mode` column: a seat makes it embedded, and the grant's scope
+        // is what the founder actually handed over.
+        seat_scope: seat?.scope ?? null,
+        seat_holder: seat?.holder_name ?? null,
+        seat_revoked_at: seatState.revoked_at,
+        // MODE AND STATE FROM THE COLLECTION (#4690): the same fields the Board
+        // returns, so the pages cannot disagree about one engagement. An
+        // empty-scope seat is still a seat, so the mode no longer hangs on
+        // `seat_scope` being set.
+        mode: seatState.mode,
+        seat_state: seatState.state,
+        active_seat_count: seatState.active_count,
+        revoked_seat_count: seatState.revoked_count,
+        scope_state: st?.scope_state ?? null,
+        scope_note: st?.scope_note ?? null,
+        // A SCORE ALWAYS TRAVELS WITH ITS SOURCE. Migration 232's CHECK makes
+        // one impossible without the other, and the page prints the source
+        // beside every number: this is a remark somebody heard, not a metric
+        // this product measured.
+        satisfaction: st?.satisfaction == null ? null : Number(st.satisfaction),
+        satisfaction_source: st?.satisfaction_source ?? null,
+        satisfaction_at: st?.satisfaction_at ?? null,
+        // #5314 part 3: the stated row's revision, or null while nothing is
+        // stated. A save sends it back as `expected_revision`.
+        health_revision: st ? Number(st.revision ?? 0) : null,
+        // Marked as a READ on the page, and it is one: the same helper the
+        // Retainers zone calls, not a second computation of the same ratio.
+        utilisation_source: 'pipeline_retainers',
+        utilisation_pct: u.utilisation_pct,
+        utilisation_note: u.utilisation_note,
+        hours_used: u.hours_used,
+        retained_hours: u.retained_hours,
+        retainer_cadence: proj.retainer?.cadence ?? null,
+        retainer_active: proj.retainer ? proj.retainer.active : null,
+        retainer_period: proj.current_period,
+        monthly_amount_cents: proj.retainer?.monthly_amount_cents ?? null,
+        current_monthly_cents: proj.retainer?.current_monthly_cents ?? null,
+        ...h,
+      };
+    });
+
+    // ── The `pd5` strip's four figures ────────────────────────────────────
+    const live = items.filter((r: any) => !r.cancelled_at);
+    const scored = live.filter((r: any) => r.satisfaction != null);
+    const withUtil = live.filter((r: any) => r.utilisation_pct != null);
+    // LOWEST, NOT AVERAGE. A renewal-risk page cares about the one client not
+    // using what they pay for, and an average would hide them behind four who
+    // are. The figure is the retainer record's, seam-marked on the row.
+    const lowest = withUtil.length
+      ? withUtil.reduce((a: any, b: any) => (b.utilisation_pct < a.utilisation_pct ? b : a))
+      : null;
+
+    return c.json({
+      items,
+      period,
+      read_tracking: readTracking,
+      rated_count: rated,
+      // Says how much of the book could be rated at all, so a mostly-green
+      // strip cannot be read as a mostly-healthy book when it is really a
+      // mostly-empty one.
+      unrated_count: items.length - rated,
+      unrated_note: items.length - rated
+        ? `${items.length - rated} engagement${items.length - rated === 1 ? ' has' : 's have'} nothing recorded — no milestone, blocker, deliverable or retainer — so ${items.length - rated === 1 ? 'it is' : 'they are'} not rated. Silence is not good news.`
+        : null,
+      at_risk_count: items.filter((r: any) => r.health === 'at_risk' || r.health === 'blocked').length,
+      // ONLY WHAT SOMEBODY ASSESSED AS DRIFT. An engagement nobody has looked
+      // at is neither in scope nor drifting, and it is counted as neither.
+      drift_count: items.filter((r: any) => r.scope_state === 'drift').length,
+      scope_unassessed_count: live.filter((r: any) => r.scope_state == null).length,
+      lowest_utilisation_pct: lowest ? lowest.utilisation_pct : null,
+      lowest_utilisation_client: lowest ? (lowest.founder_name ?? lowest.need_title ?? null) : null,
+      // A FIRM-WIDE AVERAGE NEEDS THE FIRM. While any live engagement has no
+      // score, averaging the rest would present a few opinions as a fact about
+      // all of them — which is the artboard's own reason for refusing it.
+      satisfaction_avg: live.length && scored.length === live.length
+        ? Math.round((scored.reduce((a: number, r: any) => a + r.satisfaction, 0) / scored.length) * 10) / 10
+        : null,
+      satisfaction_scored_count: scored.length,
+      satisfaction_unscored_count: live.length - scored.length,
+      // D4822: no live engagement, no sentence — "0 of 0 have no score" is commentary on nothing.
+      satisfaction_note: !live.length || scored.length === live.length
+        ? null
+        : `${live.length - scored.length} of ${live.length} engagement${live.length === 1 ? '' : 's'} ${live.length - scored.length === 1 ? 'has' : 'have'} no score, and averaging the rest would present ${scored.length} opinion${scored.length === 1 ? '' : 's'} as a firm-wide fact.`,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * What the firm states about an engagement: who owns it, whether it has
+ * drifted, and what the client said.
+ *
+ * NONE OF THE THREE IS DERIVABLE. Health is read from five stores and the
+ * artboard asks for three things none of them holds — an owner, a scope
+ * assessment, a satisfaction score. Migration 232's header has the argument;
+ * this route is the only way any of them gets written.
+ *
+ * A SCORE CANNOT BE SAVED WITHOUT ITS SOURCE. The CHECK enforces it in the
+ * schema and this refuses it with a sentence, because the failure it prevents
+ * is specific: a number typed by the person who wants the renewal, shown on the
+ * renewal-risk page as the client's opinion.
+ *
+ * AN OMITTED KEY IS UNTOUCHED; AN EXPLICIT NULL CLEARS. This is a PATCH in
+ * everything but name — a page saving the owner must not wipe a score it never
+ * loaded.
+ */
+partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(b, k);
+
+    const current = await c.env.DB.prepare(
+      'SELECT * FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+
+    let ownerId = current?.owner_user_id ?? null;
+    if (has('owner_user_id')) {
+      if (b.owner_user_id === null) ownerId = null;
+      else {
+        // The firm's own people only — the same hole `requireOwnHolder` closes
+        // on the seat register. An owner is who to ask about this client.
+        const own = await requireOwnHolder(c.env, partnerId, Number(b.owner_user_id));
+        ownerId = Number(own.id);
+      }
+    }
+
+    let scopeState = current?.scope_state ?? null;
+    if (has('scope_state')) {
+      const v = b.scope_state === null ? null : String(b.scope_state);
+      if (v !== null && v !== 'within' && v !== 'drift') {
+        return c.json({ detail: 'Scope state is either within or drift' }, 400);
+      }
+      scopeState = v;
+    }
+    const scopeNote = has('scope_note')
+      ? trimOrNull(b.scope_note, 600) : (current?.scope_note ?? null);
+
+    let satisfaction = current?.satisfaction ?? null;
+    if (has('satisfaction')) {
+      if (b.satisfaction === null) satisfaction = null;
+      else {
+        const n = Number(b.satisfaction);
+        if (!Number.isFinite(n) || n < 1 || n > 5) {
+          return c.json({ detail: 'A satisfaction score is between 1 and 5' }, 400);
+        }
+        satisfaction = n;
+      }
+    }
+    const source = has('satisfaction_source')
+      ? trimOrNull(b.satisfaction_source, 300) : (current?.satisfaction_source ?? null);
+    if (satisfaction !== null && !source) {
+      return c.json({
+        detail: 'A satisfaction score needs a source — where it was said, and when. A number with none is the firm scoring itself.',
+      }, 400);
+    }
+    const at = has('satisfaction_at')
+      ? trimOrNull(b.satisfaction_at, 40) : (current?.satisfaction_at ?? null);
+
+    // #5314 part 3 (D4822): the row the person was shown, or none. Omitted
+    // keys above are merged from `current`, so the write is guarded on that
+    // read's revision whether or not the caller stated one: a request that
+    // merged over an older row changes nothing.
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'engagement health', current);
+    const write = current
+      ? c.env.DB.prepare(
+        `UPDATE partner_engagement_health
+            SET owner_user_id = ?, scope_state = ?, scope_note = ?,
+                satisfaction = ?, satisfaction_source = ?, satisfaction_at = ?,
+                updated_at = ?, revision = revision + 1
+          WHERE engagement_id = ? AND revision = ?`,
+      ).bind(
+        ownerId, scopeState, scopeNote, satisfaction, source, at, nowIso(),
+        engagementId, Number(current.revision),
+      )
+      : c.env.DB.prepare(
+        `INSERT INTO partner_engagement_health
+           (engagement_id, owner_user_id, scope_state, scope_note,
+            satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (engagement_id) DO NOTHING`,
+      ).bind(
+        engagementId, ownerId, scopeState, scopeNote,
+        satisfaction, source, at, nowIso(), nowIso(),
+      );
+
+    // #5314 part 2 — A CHANGED REVIEW IS APPENDED, IN THE SAME BATCH. The
+    // health row keeps only the latest score; the history keeps each one as
+    // it was recorded, so a later edit no longer erases what the client said
+    // before. A save that leaves the review as it was appends nothing, and
+    // `changes() = 1` ties the append to the guarded write above: a stale
+    // write (part 3) changes no row, so it appends no review either.
+    let wrote: any;
+    if (!sameReview(current, { satisfaction, source, at })) {
+      const [w] = await c.env.DB.batch([
+        write,
+        c.env.DB.prepare(
+          `INSERT INTO engagement_client_reviews
+             (engagement_id, satisfaction, source, said_at, recorded_at, recorded_by)
+           SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1`,
+        ).bind(engagementId, satisfaction, source, at, nowIso(), user.id),
+      ]);
+      wrote = w;
+    } else {
+      wrote = await write.run();
+    }
+    const saved = await c.env.DB.prepare(
+      'SELECT revision FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'engagement health', saved);
+
+    return c.json({
+      ok: true,
+      engagement_id: engagementId,
+      revision: Number(saved?.revision ?? 0),
+      owner_user_id: ownerId,
+      scope_state: scopeState,
+      scope_note: scopeNote,
+      satisfaction,
+      satisfaction_source: source,
+      satisfaction_at: at,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Whether a health save leaves the client's review (score, source, when) as it was. */
+function sameReview(current: any, next: { satisfaction: any; source: any; at: any }) {
+  const s = (v: any) => (v == null ? null : Number(v));
+  const t = (v: any) => (v == null ? null : String(v));
+  return s(current?.satisfaction) === s(next.satisfaction)
+    && t(current?.satisfaction_source) === t(next.source)
+    && t(current?.satisfaction_at) === t(next.at);
+}
+
+/**
+ * #5314 part 2 — the client's reviews of one engagement, oldest first.
+ *
+ * Before this history began only the latest score was kept, so an engagement
+ * whose current score is on no history row says so (`earlier_not_recorded`).
+ * An unreadable history is `available: false` with the reason — never an
+ * empty list standing for "no reviews".
+ */
+partnerDelivery.get('/engagements/:engagementId/reviews', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    let rows: any[];
+    try {
+      const r = await c.env.DB.prepare(
+        `SELECT r.id, r.satisfaction, r.source, r.said_at, r.recorded_at, u.name AS recorded_by_name
+           FROM engagement_client_reviews r
+           LEFT JOIN users u ON u.id = r.recorded_by
+          WHERE r.engagement_id = ?
+          ORDER BY r.id`,
+      ).bind(engagementId).all<any>();
+      rows = r.results || [];
+    } catch (e) {
+      console.error('[delivery] client review history unreadable', e);
+      return c.json({
+        engagement_id: engagementId, available: false, items: null,
+        reason: 'Unreadable: the review history could not be read.',
+      });
+    }
+    const current = await c.env.DB.prepare(
+      'SELECT satisfaction FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    const earlierNotRecorded = current?.satisfaction != null && rows.length === 0;
+    return c.json({
+      engagement_id: engagementId,
+      available: true,
+      items: rows.map((r) => ({
+        id: Number(r.id),
+        satisfaction: r.satisfaction == null ? null : Number(r.satisfaction),
+        cleared: r.satisfaction == null,
+        source: r.source ?? null,
+        said_at: r.said_at ?? null,
+        recorded_at: r.recorded_at,
+        recorded_by_name: r.recorded_by_name ?? null,
+      })),
+      earlier_not_recorded: earlierNotRecorded,
+      earlier_note: earlierNotRecorded
+        ? 'Not recorded: the current score was saved before review history was kept, so earlier reviews are not on record.'
+        : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Milestones and blockers — health's inputs, editable
+// ---------------------------------------------------------------------------
+
+partnerDelivery.get('/engagements/:engagementId/milestones', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const rows = await c.env.DB.prepare(
+      'SELECT * FROM engagement_milestones WHERE engagement_id = ? ORDER BY due_at IS NULL, due_at',
+    ).bind(engagementId).all<any>();
+    return c.json({
+      items: (rows.results || []).map((r: any) => ({
+        id: Number(r.id), uid: r.uid, title: r.title,
+        due_at: r.due_at ?? null, completed_at: r.completed_at ?? null,
+        days_overdue: !r.completed_at && r.due_at ? daysBetween(r.due_at) : null,
+        revision: Number(r.revision ?? 0),
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.post('/engagements/:engagementId/milestones', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const title = trimOrNull(b.title, 200);
+    if (!title) return c.json({ detail: 'A milestone needs a title' }, 400);
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO engagement_milestones (uid, engagement_id, title, due_at, completed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), engagementId, title, trimOrNull(b.due_at, 40),
+      trimOrNull(b.completed_at, 40), nowIso(), nowIso(),
+    ).run();
+    const row = await c.env.DB.prepare('SELECT * FROM engagement_milestones WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_milestone_added', { milestone_id: Number(row.id), engagement_id: engagementId });
+    return c.json({
+      id: Number(row.id), uid: row.uid, title: row.title,
+      due_at: row.due_at ?? null, completed_at: row.completed_at ?? null,
+      revision: Number(row.revision),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.patch('/milestones/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const b = await body<any>(c);
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone'),
+      body: b, fields: ['title', 'due_at', 'completed_at'],
+      write: (merged, row) => {
+        const title = trimOrNull(merged.title, 200);
+        if (!title) { bad = 'A milestone needs a title'; return Promise.resolve({ meta: { changes: 1 } }); }
+        return c.env.DB.prepare(
+          `UPDATE engagement_milestones
+              SET title = ?, due_at = ?, completed_at = ?, updated_at = ?, revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(
+          title, trimOrNull(merged.due_at, 40), trimOrNull(merged.completed_at, 40), nowIso(),
+          id, Number(row.revision),
+        ).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'milestone', res.current);
+    const out = await c.env.DB.prepare('SELECT * FROM engagement_milestones WHERE id = ?')
+      .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_milestone_edited', { milestone_id: id, engagement_id: Number(out.engagement_id) });
+    return c.json({
+      id: Number(out.id), uid: out.uid, title: out.title,
+      due_at: out.due_at ?? null, completed_at: out.completed_at ?? null,
+      revision: Number(out.revision),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.delete('/milestones/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_milestones', id, 'Milestone');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'milestone', row);
+    const del = await c.env.DB.prepare('DELETE FROM engagement_milestones WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'milestone');
+    await logActorAct(c.env, user, 'delivery_milestone_deleted', { milestone_id: id, engagement_id: Number(row.engagement_id) });
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+const SIDES = ['ours', 'client'];
+
+partnerDelivery.get('/engagements/:engagementId/blockers', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM engagement_blockers WHERE engagement_id = ?
+        ORDER BY cleared_at IS NOT NULL, raised_at DESC`,
+    ).bind(engagementId).all<any>();
+    return c.json({
+      items: (rows.results || []).map((r: any) => ({
+        id: Number(r.id), uid: r.uid, side: r.side, summary: r.summary,
+        raised_at: r.raised_at, cleared_at: r.cleared_at ?? null,
+        days_open: r.cleared_at ? null : daysBetween(r.raised_at),
+        revision: Number(r.revision ?? 0),
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.post('/engagements/:engagementId/blockers', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const summary = trimOrNull(b.summary, 600);
+    if (!summary) return c.json({ detail: 'Say what the blocker is' }, 400);
+    // `side` is the column the zone's editorial point rests on. A blockers
+    // table with no side would make every delay the firm's.
+    const side = b.side === undefined ? 'ours' : String(b.side);
+    if (!SIDES.includes(side)) return c.json({ detail: "Side must be 'ours' or 'client'" }, 400);
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO engagement_blockers (uid, engagement_id, side, summary, raised_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(newUid(), engagementId, side, summary, nowIso(), nowIso(), nowIso()).run();
+    const row = await c.env.DB.prepare('SELECT * FROM engagement_blockers WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_blocker_raised', { blocker_id: Number(row.id), engagement_id: engagementId, side });
+    return c.json({
+      id: Number(row.id), uid: row.uid, side: row.side, summary: row.summary,
+      raised_at: row.raised_at, cleared_at: null, revision: Number(row.revision ?? 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.patch('/blockers/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const b = await body<any>(c);
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker'),
+      body: b, fields: ['side', 'summary', 'cleared_at'],
+      write: (merged, cur) => {
+        const summary = trimOrNull(merged.summary, 600);
+        if (!summary) { bad = 'Say what the blocker is'; return Promise.resolve({ meta: { changes: 1 } }); }
+        if (!SIDES.includes(String(merged.side))) {
+          bad = "Side must be 'ours' or 'client'"; return Promise.resolve({ meta: { changes: 1 } });
+        }
+        return c.env.DB.prepare(
+          `UPDATE engagement_blockers
+              SET side = ?, summary = ?, cleared_at = ?, updated_at = ?, revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(String(merged.side), summary, trimOrNull(merged.cleared_at, 40), nowIso(), id, Number(cur.revision)).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'blocker', res.current);
+    const out = await c.env.DB.prepare('SELECT * FROM engagement_blockers WHERE id = ?')
+      .bind(id).first<any>();
+    // D637 — Clear keeps the blocker on record with its cleared date; the log
+    // line says which of clear, reopen or edit this was.
+    const row = res.before;
+    const action = !row.cleared_at && out.cleared_at ? 'delivery_blocker_cleared'
+      : row.cleared_at && !out.cleared_at ? 'delivery_blocker_reopened'
+      : 'delivery_blocker_edited';
+    await logActorAct(c.env, user, action, { blocker_id: id, engagement_id: Number(out.engagement_id) });
+    return c.json({
+      id: Number(out.id), uid: out.uid, side: out.side, summary: out.summary,
+      raised_at: out.raised_at, cleared_at: out.cleared_at ?? null,
+      revision: Number(out.revision),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D637 — Delete is not Clear. Clear keeps the blocker on record with the date
+ * it cleared (the PATCH above); Delete removes a blocker raised by mistake, and
+ * the log line is what remains of it.
+ */
+partnerDelivery.delete('/blockers/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_blockers', id, 'Blocker');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'blocker', row);
+    const del = await c.env.DB.prepare('DELETE FROM engagement_blockers WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'blocker');
+    await logActorAct(c.env, user, 'delivery_blocker_deleted', {
+      blocker_id: id, engagement_id: Number(row.engagement_id), was_cleared: !!row.cleared_at,
+    });
+    return c.json({ ok: true, deleted: id });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Deliverables
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether opens can be observed for THIS firm's book (#4690): one cheap probe
+ * for any recorded open, so a 300-row page limit or a single-row write cannot
+ * change the answer. See `readTrackingFor`.
+ */
+async function bookReadTracking(env: Env, partnerId: number): Promise<ReadTracking> {
+  const probe = await env.DB.prepare(
+    `SELECT d.opened_at
+       FROM engagement_deliverables d
+       JOIN engagements e ON e.id = d.engagement_id
+      WHERE e.partner_id = ? AND d.opened_at IS NOT NULL
+      LIMIT 1`,
+  ).bind(partnerId).first<any>();
+  // #5314 part 1: once the client-open route records, the answer is "yes, from then".
+  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : [], undefined, await deliverableReadsSince(env));
+}
+
+/**
+ * #5314 part 1: the median days from send to the client's first open, over the
+ * opens actually recorded. Fewer than MIN_OPENS_FOR_MEDIAN opens is not a
+ * median anybody should plan by, so it stays null and says how many there are.
+ */
+const MIN_OPENS_FOR_MEDIAN = 3;
+function medianDaysToOpen(items: any[]): { value: number | null; opens: number } {
+  const days = items
+    .filter((d) => d.sent_at && d.opened_at)
+    .map((d) => daysBetween(d.sent_at, String(d.opened_at)))
+    .filter((n): n is number => n != null && n >= 0)
+    .sort((a, b) => a - b);
+  if (days.length < MIN_OPENS_FOR_MEDIAN) return { value: null, opens: days.length };
+  const mid = Math.floor(days.length / 2);
+  return { value: days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2, opens: days.length };
+}
+
+function deliverableDto(r: any, tracking: ReadTracking) {
+  return {
+    id: Number(r.id),
+    uid: r.uid,
+    engagement_id: Number(r.engagement_id),
+    engagement_uid: r.engagement_uid ?? null,
+    need_title: r.need_title ?? null,
+    founder_name: r.founder_name ?? null,
+    title: r.title,
+    version: r.version ?? null,
+    link_url: r.link_url ?? null,
+    sent_at: r.sent_at ?? null,
+    opened_at: r.opened_at ?? null,
+    signed_off_at: r.signed_off_at ?? null,
+    days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
+    // #5314 part 1: which version the client opened. `opened_current` is false
+    // when the firm edited the deliverable after the open, so the open is not
+    // passed off as a read of what the row says now.
+    opened_version: r.opened_at ? (r.opened_version ?? null) : null,
+    opened_current: r.opened_at && r.opened_revision != null
+      ? Number(r.opened_revision) === Number(r.revision ?? 0)
+      : null,
+    // Derived, not stored: sent and not opened — and NULL, not true, where
+    // this row's open cannot be observed (#4690, #5314): "not recorded" is not
+    // "unopened".
+    is_unopened: unopenedFlag(r, tracking),
+    read_state: readStateFor(r, tracking),
+    // #5314 part 3: what an edit or delete sends back as `expected_revision`.
+    revision: Number(r.revision ?? 0),
+  };
+}
+
+function unopenedFlag(r: any, tracking: ReadTracking): boolean | null {
+  const state = readStateFor(r, tracking);
+  if (state === 'unopened') return true;
+  if (state === 'not_recorded') return null;
+  return false;
+}
+
+partnerDelivery.get('/deliverables', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const rows = await c.env.DB.prepare(
+      `SELECT d.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
+         FROM engagement_deliverables d
+         JOIN engagements e ON e.id = d.engagement_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE e.partner_id = ?
+        ORDER BY d.sent_at IS NULL, d.sent_at DESC
+        LIMIT 300`,
+    ).bind(partnerId).all<any>();
+    const readTracking = await bookReadTracking(c.env, partnerId);
+    const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
+    const sent = items.filter((d: any) => d.sent_at);
+    const unopened = items.filter((d: any) => d.is_unopened === true);
+    const unobserved = sent.filter((d: any) => d.read_state === 'not_recorded');
+    const median = medianDaysToOpen(items);
+    return c.json({
+      items,
+      sent_count: sent.length,
+      // NULL, NOT 0, while opens cannot be observed: zero would claim every
+      // client opened everything, and the true count would claim they ignored it.
+      unopened_count: readTracking.available ? unopened.length : null,
+      // #5314 part 1: sent rows whose open cannot be observed — sent before
+      // opens were recorded, or with no link for the client to open.
+      not_recorded_count: readTracking.available ? unobserved.length : null,
+      read_tracking: readTracking,
+      // Over the opens actually recorded, and null below a sample worth a
+      // median: an open is the client's act, and a median of one or two would
+      // look like a metric it is not.
+      median_days_to_open: readTracking.available ? median.value : null,
+      median_days_to_open_note: !readTracking.available
+        // D4822: product copy, so no column names.
+        ? 'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.'
+        : (median.value == null
+          ? `Not recorded yet: ${median.opens} client open${median.opens === 1 ? '' : 's'} recorded, and a median needs ${MIN_OPENS_FOR_MEDIAN}.`
+          : `Across ${median.opens} recorded client opens.`),
+      unopened_note: !readTracking.available
+        ? (sent.length
+          ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
+          : null)
+        : ([
+          unopened.length ? `${unopened.length} sent and not yet opened by the client.` : null,
+          unobserved.length
+            ? `${unobserved.length} sent ${unobserved.length === 1 ? 'reads' : 'read'} "Not recorded": sent before client opens were recorded, or with no link for the client to open.`
+            : null,
+        ].filter(Boolean).join(' ') || null),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * `opened_at` and `signed_off_at` ARE NOT IN THIS LIST, on create or on patch.
+ *
+ * Migration 208:160 is explicit: only the founder side can truthfully say a
+ * thing was read, so a partner-side write to either would be the firm reporting
+ * a metric about itself. A body carrying them is not rejected — that would be
+ * a confusing 400 for a caller sending a whole DTO back — it is IGNORED, and a
+ * test sends both and asserts the row is unchanged.
+ */
+const DELIVERABLE_FIELDS = ['title', 'version', 'link_url', 'sent_at'];
+
+partnerDelivery.post('/engagements/:engagementId/deliverables', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const title = trimOrNull(b.title, 200);
+    if (!title) return c.json({ detail: 'A deliverable needs a title' }, 400);
+    const sentAt = trimOrNull(b.sent_at, 40);
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO engagement_deliverables
+         (uid, engagement_id, title, version, link_url, sent_at, sent_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), engagementId, title, trimOrNull(b.version, 60),
+      trimOrNull(b.link_url, 600), sentAt, sentAt ? user.id : null, nowIso(), nowIso(),
+    ).run();
+    const row = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<any>();
+    return c.json(deliverableDto(row, await bookReadTracking(c.env, partnerId)));
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.patch('/deliverables/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const b = await body<any>(c);
+    let bad: string | null = null;
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable'),
+      body: b, fields: DELIVERABLE_FIELDS as unknown as string[],
+      write: (merged, cur) => {
+        const title = trimOrNull(merged.title, 200);
+        if (!title) { bad = 'A deliverable needs a title'; return Promise.resolve({ meta: { changes: 1 } }); }
+        const sentAt = trimOrNull(merged.sent_at, 40);
+        return c.env.DB.prepare(
+          `UPDATE engagement_deliverables
+              SET title = ?, version = ?, link_url = ?, sent_at = ?, sent_by = ?, updated_at = ?,
+                  revision = revision + 1
+            WHERE id = ? AND revision = ?`,
+        ).bind(
+          title, trimOrNull(merged.version, 60), trimOrNull(merged.link_url, 600),
+          sentAt, sentAt ? (cur.sent_by ?? user.id) : null, nowIso(), id, Number(cur.revision),
+        ).run();
+      },
+    });
+    if (bad) return c.json({ detail: bad }, 400);
+    if (!res.ok) return deliveryChanged(c, 'deliverable', res.current);
+    const out = await c.env.DB.prepare('SELECT * FROM engagement_deliverables WHERE id = ?')
+      .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_deliverable_edited', { deliverable_id: id, engagement_id: Number(out.engagement_id) });
+    return c.json(deliverableDto(out, await bookReadTracking(c.env, partnerId)));
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.delete('/deliverables/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_deliverables', id, 'Deliverable');
+    // #5314 part 3: a delete states the revision the person was shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'deliverable', row);
+    const del = await c.env.DB.prepare('DELETE FROM engagement_deliverables WHERE id = ? AND revision = ?')
+      .bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) return deliveryChanged(c, 'deliverable');
+    await logActorAct(c.env, user, 'delivery_deliverable_deleted', { deliverable_id: id, engagement_id: Number(row.engagement_id) });
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Capacity
+// ---------------------------------------------------------------------------
+
+/**
+ * The holder must belong to THIS FIRM.
+ *
+ * 208's `engagement_seats.holder_user_id` references `users(id)` with no
+ * partner constraint — the schema alone would let a firm enter any user in the
+ * product into its seat register, including a founder or another firm's staff.
+ * That is a register of who has access inside a client's systems, so a wrong
+ * name in it is not a cosmetic error.
+ */
+async function requireOwnHolder(env: Env, partnerId: number, userId: number) {
+  const row = await env.DB.prepare(
+    'SELECT id, name, email, partner_id, role FROM users WHERE id = ?',
+  ).bind(userId).first<any>();
+  if (!row || Number(row.partner_id) !== Number(partnerId)) {
+    throw new Response(JSON.stringify({
+      detail: 'A seat can only be held by someone attached to this firm',
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+  return row;
+}
+
+/**
+ * People rather than projects: who holds what, and how many hours were logged.
+ *
+ * `cap_hours` IS NULL AND SAYS WHY. Nothing anywhere records the firm's cap —
+ * `engagement_hours` records hours and stops there. The canvas uses a hardcoded
+ * 40; adopting it would invent the firm's cap and then present the result as a
+ * finding. What survives is the zone's actual editorial point, and it is real:
+ * this person holds N live seats inside client systems and logged H hours this
+ * period.
+ */
+partnerDelivery.get('/capacity', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    // ONE BASIS: HOURS A WEEK (#5314 part 4). Hours are logged per MONTH
+    // (`YYYY-MM`); a cap is stated per WEEK. Every hour figure is converted to
+    // hours a week (`weeklyFromMonthly`, × 12 ÷ 52) and compared with the cap
+    // as stated. The monthly figures stay in the response, labelled. A period
+    // that is not a month is refused, not converted with the wrong factor.
+    const periodArg = c.req.query('period');
+    const parsedPeriod = parsePeriod(periodArg || currentPeriod(), 'monthly');
+    if ('error' in parsedPeriod) return c.json({ detail: parsedPeriod.error }, 400);
+    const period = parsedPeriod.period;
+
+    const seats = await c.env.DB.prepare(
+      `SELECT s.id, s.uid, s.engagement_id, s.holder_user_id, s.scope,
+              s.granted_at, s.revoked_at, s.revision,
+              u.name AS holder_name, u.email AS holder_email,
+              e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
+         FROM engagement_seats s
+         JOIN engagements e ON e.id = s.engagement_id
+         LEFT JOIN users u ON u.id = s.holder_user_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE e.partner_id = ?
+        ORDER BY s.revoked_at IS NOT NULL, s.granted_at DESC`,
+    ).bind(partnerId).all<any>();
+
+    const hours = await c.env.DB.prepare(
+      `SELECT h.person_user_id, h.engagement_id, h.period, h.hours,
+              u.name AS person_name,
+              e.uid AS engagement_uid, n.title AS need_title
+         FROM engagement_hours h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users u ON u.id = h.person_user_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+        WHERE e.partner_id = ? AND h.period = ?`,
+    ).bind(partnerId, period).all<any>();
+
+    // HOURS THE FIRM OWES NOBODY (migration 231). Admin, recruiting, the
+    // proposal that lost — real hours of a real week with no client to bill.
+    // They are read here and NOT summed into the client totals: the artboard
+    // draws three columns because they answer three different questions, and
+    // only their sum is the week.
+    const internal = await c.env.DB.prepare(
+      `SELECT i.person_user_id, i.hours, i.note, i.revision, u.name AS person_name
+         FROM partner_internal_hours i
+         LEFT JOIN users u ON u.id = i.person_user_id
+        WHERE i.partner_id = ? AND i.period = ?`,
+    ).bind(partnerId, period).all<any>();
+
+    // THE CAP THE FIRM SET FOR ITSELF (migration 230). A row with a NULL
+    // `person_user_id` is the firm's default; one naming somebody is theirs,
+    // and the read below prefers the specific. No rows at all is the commonest
+    // answer and stays a real one: `cap_hours` comes back null and nothing is
+    // marked over anything.
+    const caps = await c.env.DB.prepare(
+      `SELECT person_user_id, weekly_hours, note, revision FROM partner_capacity WHERE partner_id = ?`,
+    ).bind(partnerId).all<any>();
+    let firmCap: number | null = null;
+    let firmCapNote: string | null = null;
+    let firmCapRevision: number | null = null;
+    const personCap = new Map<number, { hours: number; note: string | null; revision: number }>();
+    for (const row of caps.results || []) {
+      if (row.person_user_id === null || row.person_user_id === undefined) {
+        firmCap = Number(row.weekly_hours);
+        firmCapNote = row.note ?? null;
+        firmCapRevision = Number(row.revision ?? 0);
+      } else {
+        personCap.set(Number(row.person_user_id), {
+          hours: Number(row.weekly_hours), note: row.note ?? null, revision: Number(row.revision ?? 0),
+        });
+      }
+    }
+
+    // One row per person, assembled from all three tables. A person appears if
+    // they hold a seat OR logged hours — no one table alone is the roster.
+    const people = new Map<number, any>();
+    const ensure = (id: number, name: string | null) => {
+      if (!people.has(id)) {
+        people.set(id, {
+          user_id: id,
+          name: name ?? null,
+          hours: 0,
+          hours_recorded: false,
+          project_hours: 0,
+          seat_hours: 0,
+          internal_hours: null as number | null,
+          internal_note: null as string | null,
+          internal_revision: null as number | null,
+          live_seats: 0,
+          revoked_seats: 0,
+          seat_places: [] as any[],
+          engagements: new Set<number>(),
+        });
+      }
+      const p = people.get(id);
+      if (!p.name && name) p.name = name;
+      return p;
+    };
+
+    // WHOSE SEAT, ON WHICH ENGAGEMENT. An hour is a seat hour when the person
+    // who logged it holds a seat on the engagement they logged it against —
+    // their own grant, not the engagement's mode. Two people can work the same
+    // embedded engagement while only one of them is inside the client's
+    // systems, and the one who is not did project work.
+    const seatOf = new Set<string>();
+    for (const s of seats.results || []) {
+      const p = ensure(Number(s.holder_user_id), s.holder_name);
+      if (s.revoked_at) p.revoked_seats += 1; else p.live_seats += 1;
+      p.engagements.add(Number(s.engagement_id));
+      p.seat_places.push({
+        engagement_id: Number(s.engagement_id),
+        client: s.founder_name ?? s.need_title ?? s.engagement_uid,
+        scope: s.scope ?? null,
+        revoked: Boolean(s.revoked_at),
+      });
+      // A REVOKED SEAT STILL CLAIMS ITS HOURS. The access ended; the work done
+      // while it was open was still done inside the client's systems, and
+      // moving it into the project column afterwards would rewrite the past.
+      seatOf.add(`${s.holder_user_id}:${s.engagement_id}`);
+    }
+    for (const h of hours.results || []) {
+      const p = ensure(Number(h.person_user_id), h.person_name);
+      const n = Number(h.hours || 0);
+      p.hours += n;
+      if (seatOf.has(`${h.person_user_id}:${h.engagement_id}`)) p.seat_hours += n;
+      else p.project_hours += n;
+      p.hours_recorded = true;
+      p.engagements.add(Number(h.engagement_id));
+    }
+    for (const row of internal.results || []) {
+      const p = ensure(Number(row.person_user_id), row.person_name);
+      p.internal_hours = Number(row.hours || 0);
+      p.internal_note = row.note ?? null;
+      p.internal_revision = Number(row.revision ?? 0);
+    }
+
+    // THE WEEK IS THE SUM OF THREE COLUMNS, and it exists only if at least one
+    // of them was stated. A total assembled from nothing at all is not zero
+    // hours; it is no answer, and the cap comparison below skips it.
+    const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
+    const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
+    const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
+    // The month's total as hours a week — the figure compared with the cap.
+    const weeklyTotalOf = (p: any) => (measured(p) ? weeklyFromMonthly(totalOf(p)) : null);
+    const overOf = (p: any) => {
+      const cap = capOf(p);
+      // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
+      // so a person nobody logged against is not under cap either — they are
+      // unmeasured, and this stays null for them.
+      if (cap === null || !measured(p)) return null;
+      return (weeklyTotalOf(p) as number) > cap;
+    };
+    const everyone = [...people.values()];
+    const internalStated = (internal.results || []).length > 0;
+    const projectTotal = everyone.reduce((a, p) => a + p.project_hours, 0);
+    const seatTotal = everyone.reduce((a, p) => a + p.seat_hours, 0);
+    const internalTotal = internalStated ? everyone.reduce((a, p) => a + (p.internal_hours ?? 0), 0) : null;
+
+    return c.json({
+      period,
+      people: [...people.values()]
+        .map((p) => ({
+          user_id: p.user_id,
+          name: p.name,
+          // NULL when nobody logged anything for this person this period. Zero
+          // would say they did no work, which is a different claim.
+          hours: p.hours_recorded ? p.hours : null,
+          hours_note: p.hours_recorded ? null : 'No hours logged for this period.',
+          // THE THREE COLUMNS THE ARTBOARD DRAWS, split rather than averaged.
+          // Project and seat hours are both zero-able because their absence is
+          // read off a book that exists; internal hours are null until somebody
+          // states them, because no book records unbilled time by default.
+          project_hours: p.hours_recorded ? p.project_hours : null,
+          seat_hours: p.hours_recorded ? p.seat_hours : null,
+          internal_hours: p.internal_hours,
+          internal_note: p.internal_note,
+          // #5314 part 3: the revision each stated row was read at, or null
+          // where nothing is stated (a save then sends `expected_revision: null`).
+          internal_revision: p.internal_revision,
+          cap_revision: personCap.get(p.user_id)?.revision ?? null,
+          total_hours: measured(p) ? totalOf(p) : null,
+          // THE SAME COLUMNS AS HOURS A WEEK (#5314 part 4), null where the
+          // monthly figure is null. These are what the page draws and what
+          // `over_committed` compares with the cap.
+          project_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.project_hours) : null,
+          seat_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.seat_hours) : null,
+          internal_hours_per_week: weeklyFromMonthly(p.internal_hours),
+          total_hours_per_week: weeklyTotalOf(p),
+          live_seats: p.live_seats,
+          revoked_seats: p.revoked_seats,
+          // WHERE THE SEAT IS, not just how many. A seat register that counted
+          // without naming would make the trust exposure unreadable: "two
+          // seats" is a number, "Halverton · Board, KPIs" is the exposure.
+          seat_places: p.seat_places,
+          engagement_count: p.engagements.size,
+          // THEIR OWN CAP IF THEY HAVE ONE, otherwise the firm's, otherwise
+          // none — and none is not zero. A person with no cap is not over any
+          // threshold, because there is no threshold.
+          cap_hours: capOf(p),
+          // `cap_hours` is PER WEEK, as stated, and is compared as stated with
+          // `total_hours_per_week`.
+          cap_unit: 'hours_per_week',
+          cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
+          cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
+          over_committed: overOf(p),
+        }))
+        .sort((a, b) => b.live_seats - a.live_seats || (b.hours ?? -1) - (a.hours ?? -1)),
+      seats: (seats.results || []).map((s: any) => ({
+        id: Number(s.id),
+        uid: s.uid,
+        engagement_id: Number(s.engagement_id),
+        engagement_uid: s.engagement_uid,
+        need_title: s.need_title ?? null,
+        founder_name: s.founder_name ?? null,
+        holder_user_id: Number(s.holder_user_id),
+        holder_name: s.holder_name ?? null,
+        scope: s.scope ?? null,
+        granted_at: s.granted_at,
+        // A revoked seat is STILL RETURNED. The record that access once existed
+        // is the point of `revoked_at` being a column rather than a delete.
+        revoked_at: s.revoked_at ?? null,
+        days_held: daysBetween(s.granted_at, s.revoked_at || undefined),
+        revision: Number(s.revision ?? 0),
+      })),
+      // WHAT THE FIRM SET, OR NULL — and null keeps the refusal that stood
+      // here, verbatim, because it is still what an unconfigured firm must be
+      // told. The canvas's hardcoded 40 is still refused: this number is
+      // whatever THIS firm wrote down, and until they write one there is no
+      // threshold to be over.
+      cap_hours: firmCap,
+      // #5314 part 3: the firm cap row's revision, null while none is set.
+      cap_revision: firmCapRevision,
+      // THE UNITS, stated so no reader has to guess (#5314 part 4): capacity is
+      // read in hours a week. The cap is per week as stated; every `*_per_week`
+      // figure is the month's hours × 12 ÷ 52; the unsuffixed hour fields are
+      // the monthly totals as logged (`hours_unit`).
+      basis: 'hours_per_week',
+      weeks_per_month: Math.round(WEEKS_PER_MONTH * 100) / 100,
+      cap_unit: 'hours_per_week',
+      hours_unit: 'hours_per_month',
+      cap_source: firmCap === null ? null : 'firm',
+      cap_note: firmCap === null
+        // D4822: the canvas's state for an unconfigured firm, in product words, with what setting one unlocks.
+        ? 'Capacity limits not set. Set available hours to identify over-allocation; until then nobody is marked over-committed.'
+        : firmCapNote,
+      over_committed_count: firmCap === null && personCap.size === 0
+        ? null
+        : [...people.values()].filter((p) => overOf(p) === true).length,
+      // THE STRIP'S THREE HOUR TILES, summed over the whole roster rather than
+      // over whatever the chips left visible — a firm's project hours do not
+      // change because the reader narrowed to seat-holders.
+      project_hours_total: projectTotal,
+      seat_hours_total: seatTotal,
+      project_hours_total_per_week: weeklyFromMonthly(projectTotal),
+      seat_hours_total_per_week: weeklyFromMonthly(seatTotal),
+      // NULL, NOT ZERO, when nobody has stated any internal time. Summing
+      // absent rows to zero would tell a firm its people spend no time on the
+      // firm, which is the one thing that is certainly false.
+      internal_hours_total: internalTotal,
+      internal_hours_total_per_week: weeklyFromMonthly(internalTotal),
+      live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
+      // THE SAME SEAT STATE the Board and Health return per engagement (#4690),
+      // from the same helper over the whole collection of that engagement's
+      // seats. A person's `live_seats` is a count of THEIR rows; this is the
+      // engagement's verdict.
+      engagements: [...groupByEngagement(seats.results || []).entries()].map(([id, rows]) => {
+        const st = seatStateFor(rows);
+        return {
+          engagement_id: id,
+          mode: st.mode,
+          seat_state: st.state,
+          has_active_seats: st.has_active_seats,
+          active_seat_count: st.active_count,
+          revoked_seat_count: st.revoked_count,
+          revoked_at: st.revoked_at,
+        };
+      }),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Set or clear a capacity cap — the firm's default, or one person's.
+ *
+ * THE FIRM STATES ITS OWN NUMBER. Nothing here computes, infers or defaults a
+ * cap: `PUT` with `weekly_hours` writes what they typed, and `weekly_hours:
+ * null` removes the row so the answer goes back to "no cap recorded". That
+ * round trip matters — a cap that could be set and not unset would make the
+ * first typed number permanent.
+ *
+ * `person_user_id` OMITTED IS THE FIRM'S DEFAULT, which is the same convention
+ * migration 230's partial indexes enforce. A person named here must belong to
+ * this firm, for the reason `requireOwnHolder` exists on the seat register: a
+ * table referencing `users(id)` with no partner constraint would otherwise let
+ * a firm write a cap against anybody's account.
+ */
+partnerDelivery.put('/capacity/cap', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = b.person_user_id === undefined || b.person_user_id === null
+      ? null : Number(b.person_user_id);
+    if (personId !== null) {
+      if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+      const own = await c.env.DB.prepare(
+        'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+      ).bind(personId, partnerId).first<{ ok: number }>();
+      // 404 rather than 403: whether an account exists elsewhere is not this
+      // firm's business to learn from an error code.
+      if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+    }
+
+    // #5314 part 3 (D4822): the cap the person was shown, or none. Two literal
+    // reads for the reason the inserts below are two literals.
+    const readCap = () => (personId === null
+      ? c.env.DB.prepare(
+        'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL',
+      ).bind(partnerId).first<any>()
+      : c.env.DB.prepare(
+        'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?',
+      ).bind(partnerId, personId).first<any>());
+    const current = await readCap();
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'capacity limit', current);
+
+    if (b.weekly_hours === null) {
+      // CLEARING IS A DELETE, not a zero. Zero hours would say this person
+      // works no hours, which is a claim; no row says nobody has stated a cap.
+      // The delete names the row and revision read, so an edit that landed
+      // since keeps the cap. Clearing a cap nobody set changes nothing.
+      if (current) {
+        const del = await c.env.DB.prepare(
+          'DELETE FROM partner_capacity WHERE id = ? AND revision = ?',
+        ).bind(current.id, Number(current.revision)).run();
+        if (!changedOne(del)) {
+          const now = await readCap();
+          if (now) return deliveryChanged(c, 'capacity limit', now);
+        }
+      }
+      return c.json({ ok: true, weekly_hours: null, revision: null });
+    }
+
+    const hours = Number(b.weekly_hours);
+    if (!Number.isFinite(hours) || hours <= 0 || hours >= 168) {
+      return c.json({ detail: 'A weekly cap is a number of hours between 0 and 168' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    // An existing cap is updated at the revision read; a first one is inserted
+    // only while there is still none. Two literal inserts rather than one with
+    // an interpolated predicate: `check-sql-prepare` refuses a `${}` inside
+    // `DB.prepare`, and the partial unique indexes migration 230 declares need
+    // the NULL case spelled out.
+    let wrote: any;
+    if (current) {
+      wrote = await c.env.DB.prepare(
+        `UPDATE partner_capacity SET weekly_hours = ?, note = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ?`,
+      ).bind(hours, note, nowIso(), current.id, Number(current.revision)).run();
+    } else if (personId === null) {
+      wrote = await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, NULL, ?, ?, ?, ?)
+         ON CONFLICT (partner_id) WHERE person_user_id IS NULL DO NOTHING`,
+      ).bind(partnerId, hours, note, nowIso(), nowIso()).run();
+    } else {
+      wrote = await c.env.DB.prepare(
+        `INSERT INTO partner_capacity (partner_id, person_user_id, weekly_hours, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (partner_id, person_user_id) WHERE person_user_id IS NOT NULL DO NOTHING`,
+      ).bind(partnerId, personId, hours, note, nowIso(), nowIso()).run();
+    }
+    const saved = await readCap();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'capacity limit', saved);
+    return c.json({
+      ok: true, weekly_hours: hours, person_user_id: personId, note,
+      revision: Number(saved?.revision ?? 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * State a person's internal hours for a period — or clear the statement.
+ *
+ * THE HOURS NO CLIENT PAYS FOR ARE STILL HOURS. `engagement_hours` cannot hold
+ * them: its `engagement_id` is NOT NULL, so admin, recruiting and the losing
+ * proposal have nowhere to go, and a week assembled from client rows alone
+ * under-reports every person by exactly the part of it nobody is billed for.
+ * Migration 231's header has the rest of that argument.
+ *
+ * `hours: null` REMOVES THE ROW rather than writing a zero. Zero is a real
+ * answer — "none this period" — and it must stay distinguishable from nobody
+ * having said, which is what an absent row means and what the read returns.
+ */
+partnerDelivery.put('/capacity/internal-hours', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const b = await body<any>(c);
+    const personId = Number(b.person_user_id);
+    if (!Number.isFinite(personId)) return c.json({ detail: 'person_user_id must be a user id' }, 400);
+    const own = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM users WHERE id = ? AND partner_id = ?',
+    ).bind(personId, partnerId).first<{ ok: number }>();
+    // 404 rather than 403, for the reason the cap route gives: whether an
+    // account exists elsewhere is not this firm's business to learn.
+    if (!own) return c.json({ detail: 'Person not found in this firm' }, 404);
+
+    const parsed = parsePeriod(b.period, 'monthly');
+    if ('error' in parsed) return c.json({ detail: parsed.error }, 400);
+
+    // #5314 part 3 (D4822): the statement the person was shown, or none.
+    const readInternal = () => c.env.DB.prepare(
+      'SELECT * FROM partner_internal_hours WHERE partner_id = ? AND person_user_id = ? AND period = ?',
+    ).bind(partnerId, personId, parsed.period).first<any>();
+    const current = await readInternal();
+    if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'internal hours entry', current);
+
+    if (b.hours === null) {
+      if (current) {
+        const del = await c.env.DB.prepare(
+          'DELETE FROM partner_internal_hours WHERE id = ? AND revision = ?',
+        ).bind(current.id, Number(current.revision)).run();
+        if (!changedOne(del)) {
+          const now = await readInternal();
+          if (now) return deliveryChanged(c, 'internal hours entry', now);
+        }
+      }
+      return c.json({ ok: true, hours: null, period: parsed.period, revision: null });
+    }
+
+    const hours = Number(b.hours);
+    if (!Number.isFinite(hours) || hours < 0 || hours >= 744) {
+      return c.json({ detail: 'Internal hours are a number of hours in a month' }, 400);
+    }
+    const note = trimOrNull(b.note, 300);
+    const wrote = current
+      ? await c.env.DB.prepare(
+        `UPDATE partner_internal_hours SET hours = ?, note = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ?`,
+      ).bind(hours, note, nowIso(), current.id, Number(current.revision)).run()
+      : await c.env.DB.prepare(
+        `INSERT INTO partner_internal_hours (partner_id, person_user_id, period, hours, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (partner_id, person_user_id, period) DO NOTHING`,
+      ).bind(partnerId, personId, parsed.period, hours, note, nowIso(), nowIso()).run();
+    const saved = await readInternal();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'internal hours entry', saved);
+    return c.json({
+      ok: true, hours, note, period: parsed.period, person_user_id: personId,
+      revision: Number(saved?.revision ?? 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.post('/engagements/:engagementId/seats', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const b = await body<any>(c);
+    const holder = await requireOwnHolder(c.env, partnerId, Number(b.holder_user_id));
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO engagement_seats (uid, engagement_id, holder_user_id, scope, granted_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), engagementId, holder.id,
+      // Free text on purpose: what a client granted is their vocabulary.
+      trimOrNull(b.scope, 400),
+      trimOrNull(b.granted_at, 40) || nowIso(), nowIso(), nowIso(),
+    ).run();
+    const row = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<any>();
+    await logActorAct(c.env, user, 'delivery_seat_granted', { seat_id: Number(row.id), engagement_id: engagementId, holder_user_id: Number(holder.id) });
+    return c.json({
+      id: Number(row.id), uid: row.uid, engagement_id: engagementId,
+      holder_user_id: Number(row.holder_user_id), holder_name: holder.name ?? null,
+      scope: row.scope ?? null, granted_at: row.granted_at, revoked_at: null,
+      revision: Number(row.revision ?? 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Revoking is a state, not a delete — 208:187. A struck-through seat stays on
+ * the page rather than the fact that access once existed silently disappearing.
+ */
+partnerDelivery.post('/seats/:id/revoke', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat');
+    if (row.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
+    // #5314 part 3: revoking the seat the person was shown, at that revision.
+    const want = statedRevision(await body<any>(c));
+    if (staleAgainst(want, row)) return deliveryChanged(c, 'seat', row);
+    const now = nowIso();
+    // Revoking states that the seat is still live: a second revoke, or one
+    // racing a scope edit, changes nothing and does not move `revoked_at`.
+    const rev = await c.env.DB.prepare(
+      `UPDATE engagement_seats SET revoked_at = ?, updated_at = ?, revision = revision + 1
+        WHERE id = ? AND revoked_at IS NULL AND revision = ?`,
+    ).bind(now, now, id, Number(row.revision)).run();
+    if (!changedOne(rev)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?').bind(id).first<any>();
+      if (cur?.revoked_at) return c.json({ detail: 'That seat is already revoked' }, 400);
+      return deliveryChanged(c, 'seat', cur);
+    }
+    await logActorAct(c.env, user, 'delivery_seat_revoked', { seat_id: id, engagement_id: Number(row.engagement_id) });
+    return c.json({ ok: true, id, revoked_at: now });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.patch('/seats/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    // D637 — a revoked seat's scope is history: what it held when it ended.
+    const REVOKED = { detail: 'This seat is revoked, so its scope can no longer change' };
+    const b = await body<any>(c);
+    // The UPDATE repeats `revoked_at IS NULL`: a revoke that lands after the
+    // read above wins, and the stale edit changes nothing.
+    const res = await patchCurrent({
+      read: () => ownChild(c.env, partnerId, 'engagement_seats', id, 'Seat'),
+      body: b, fields: ['scope'],
+      write: (merged, cur) => c.env.DB.prepare(
+        `UPDATE engagement_seats SET scope = ?, updated_at = ?, revision = revision + 1
+          WHERE id = ? AND revision = ? AND revoked_at IS NULL`,
+      ).bind(trimOrNull(merged.scope, 400), nowIso(), id, Number(cur.revision)).run(),
+    });
+    if (!res.ok) {
+      return res.current?.revoked_at ? c.json(REVOKED, 409) : deliveryChanged(c, 'seat', res.current);
+    }
+
+    const out = await c.env.DB.prepare('SELECT * FROM engagement_seats WHERE id = ?')
+      .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_seat_scope_edited', { seat_id: id, engagement_id: Number(out.engagement_id) });
+    return c.json({
+      id: Number(out.id), uid: out.uid, engagement_id: Number(out.engagement_id),
+      holder_user_id: Number(out.holder_user_id), scope: out.scope ?? null,
+      granted_at: out.granted_at, revoked_at: out.revoked_at ?? null,
+      revision: Number(out.revision),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** `YYYY-MM` minus `n` months. */
+export function periodMinus(period: string, n: number): string {
+  const [y, m] = period.split('-').map(Number);
+  const idx = y * 12 + (m - 1) - n;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
+/**
+ * D637 — client hours by entry, for the month asked and the two before it.
+ *
+ * `/capacity` sums hours per person, so a single entry cannot be found there
+ * to delete. This lists each client × person pair that has an entry in any of
+ * the three months, with that month's hours or `null`. A `null` is "Not
+ * recorded": no entry, which is not the same as an entry of 0.
+ */
+partnerDelivery.get('/capacity/hours', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const p = parsePeriod(c.req.query('period') || currentPeriod(), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+    const periods = [p.period, periodMinus(p.period, 1), periodMinus(p.period, 2)];
+    const rows = await c.env.DB.prepare(
+      `SELECT h.engagement_id, h.person_user_id, h.period, h.hours, h.revision,
+              u.name AS person_name, n.title AS need_title, f.name AS founder_name
+         FROM engagement_hours h
+         JOIN engagements e ON e.id = h.engagement_id
+         LEFT JOIN users u ON u.id = h.person_user_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE e.partner_id = ? AND h.period IN (?, ?, ?)
+        ORDER BY f.name, n.title, u.name`,
+    ).bind(partnerId, periods[0], periods[1], periods[2]).all<any>();
+    const byPair = new Map<string, any>();
+    for (const r of (rows.results || []) as any[]) {
+      const key = `${r.engagement_id}:${r.person_user_id}`;
+      if (!byPair.has(key)) {
+        byPair.set(key, {
+          engagement_id: Number(r.engagement_id), person_user_id: Number(r.person_user_id),
+          person_name: r.person_name ?? null, client: r.founder_name ?? null, need_title: r.need_title ?? null,
+          hours: Object.fromEntries(periods.map((x) => [x, null])),
+          // #5314 part 3: per month, the entry's revision, or null with no entry.
+          revisions: Object.fromEntries(periods.map((x) => [x, null])),
+        });
+      }
+      byPair.get(key).hours[r.period] = Number(r.hours);
+      byPair.get(key).revisions[r.period] = Number(r.revision ?? 0);
+    }
+    return c.json({ periods, entries: [...byPair.values()] });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Hours for one person on one engagement in one period. Upserted, not appended. */
+partnerDelivery.put('/engagements/:engagementId/hours/:personId/:period', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const holder = await requireOwnHolder(c.env, partnerId, Number(c.req.param('personId')));
+    const p = parsePeriod(c.req.param('period'), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+    const b = await body<any>(c);
+    const h = parseHours(b.hours, 'Hours');
+    if ('error' in h) return c.json({ detail: h.error }, 400);
+    if (h.hours === null) return c.json({ detail: 'Hours is required' }, 400);
+
+    // #5314 part 3 (D4822): the entry the person was shown, or none.
+    const readEntry = () => c.env.DB.prepare(
+      'SELECT id, revision FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
+    ).bind(engagementId, holder.id, p.period).first<any>();
+    const existing = await readEntry();
+    if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'hours entry', existing);
+    const wrote = existing
+      ? await c.env.DB.prepare(
+        'UPDATE engagement_hours SET hours = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND revision = ?',
+      ).bind(h.hours, nowIso(), existing.id, Number(existing.revision)).run()
+      : await c.env.DB.prepare(
+        `INSERT INTO engagement_hours (engagement_id, person_user_id, period, hours, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (engagement_id, person_user_id, period) DO NOTHING`,
+      ).bind(engagementId, holder.id, p.period, h.hours, nowIso(), nowIso()).run();
+    const saved = await readEntry();
+    if (!changedOne(wrote)) return deliveryChanged(c, 'hours entry', saved);
+    await logActorAct(c.env, user, 'delivery_hours_logged', { engagement_id: engagementId, person_user_id: Number(holder.id), period: p.period });
+    return c.json({
+      ok: true, engagement_id: engagementId, person_user_id: Number(holder.id),
+      period: p.period, hours: h.hours, revision: Number(saved?.revision ?? 0),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.delete('/engagements/:engagementId/hours/:personId/:period', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    // D637 — the period is checked like the save's. The person is not required
+    // to still be in the firm: the engagement is this firm's, and an entry
+    // logged for someone who has since left can still be a mistake to remove.
+    const personId = Number(c.req.param('personId'));
+    if (!Number.isInteger(personId) || personId <= 0) return c.json({ detail: 'That person id is not valid' }, 400);
+    const p = parsePeriod(c.req.param('period'), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+    // A real delete rather than writing zero: zero hours is the claim that they
+    // did none, which is not the same as nobody having logged any.
+    const entry = await c.env.DB.prepare(
+      'SELECT id, revision FROM engagement_hours WHERE engagement_id = ? AND person_user_id = ? AND period = ?',
+    ).bind(engagementId, personId, p.period).first<any>();
+    if (!entry) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+    // #5314 part 3: the entry the person was shown, at that revision.
+    if (staleAgainst(queryRevision(c), entry)) return deliveryChanged(c, 'hours entry', entry);
+    const res = await c.env.DB.prepare(
+      'DELETE FROM engagement_hours WHERE id = ? AND revision = ?',
+    ).bind(entry.id, Number(entry.revision)).run();
+    if (!changedOne(res)) {
+      const now = await c.env.DB.prepare('SELECT id, revision FROM engagement_hours WHERE id = ?')
+        .bind(entry.id).first<any>();
+      if (!now) return c.json({ detail: 'No hours are logged for that person, client and month' }, 404);
+      return deliveryChanged(c, 'hours entry', now);
+    }
+    await logActorAct(c.env, user, 'delivery_hours_deleted', { engagement_id: engagementId, person_user_id: personId, period: p.period });
+    return c.json({ ok: true, deleted: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Who this firm can put in a seat — its own people, and nobody else. */
+partnerDelivery.get('/people', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const rows = await c.env.DB.prepare(
+      'SELECT id, name, email FROM users WHERE partner_id = ? AND is_active = 1 ORDER BY name',
+    ).bind(partnerId).all<any>();
+    return c.json({
+      items: (rows.results || []).map((r: any) => ({
+        user_id: Number(r.id), name: r.name ?? null, email: r.email ?? null,
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Status reports
+// ---------------------------------------------------------------------------
+
+function reportDto(r: any) {
+  return {
+    id: Number(r.id),
+    uid: r.uid,
+    engagement_id: Number(r.engagement_id),
+    engagement_uid: r.engagement_uid ?? null,
+    need_title: r.need_title ?? null,
+    founder_name: r.founder_name ?? null,
+    period: r.period,
+    state: r.state,
+    shipped: r.shipped ?? null,
+    next_up: r.next_up ?? null,
+    sent_at: r.sent_at ?? null,
+    revision: Number(r.revision ?? 0),
+    sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
+    ...blockedSection(r),
+  };
+}
+
+/**
+ * #5314 part 2 — THE REPORT'S BLOCKED SECTION, AS WRITTEN. Words the firm
+ * wrote, like Shipped and Next; the live blockers stay evidence beside it.
+ * A report saved before the section existed (or saved without stating it)
+ * has no `blocked_recorded_at` and reads "Not recorded" — never "nothing
+ * blocked", which would be a claim nobody made. A recorded section with no
+ * words is the firm stating that nothing is blocked.
+ */
+export function blockedSection(r: any) {
+  const recordedAt = r?.blocked_recorded_at ?? null;
+  if (!recordedAt) {
+    return {
+      blocked: null,
+      blocked_recorded: false,
+      blocked_recorded_at: null,
+      blocked_state_note: 'Not recorded: this report was saved without a Blocked section.',
+    };
+  }
+  return {
+    blocked: r.blocked ?? null,
+    blocked_recorded: true,
+    blocked_recorded_at: recordedAt,
+    blocked_state_note: null,
+  };
+}
+
+partnerDelivery.get('/status-reports', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const rows = await c.env.DB.prepare(
+      `SELECT r.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
+         FROM engagement_status_reports r
+         JOIN engagements e ON e.id = r.engagement_id
+         LEFT JOIN founder_needs n ON n.id = e.need_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE e.partner_id = ?
+        ORDER BY r.period DESC, r.id DESC
+        LIMIT 200`,
+    ).bind(partnerId).all<any>();
+
+    // BLOCKERS ARE READ LIVE AND ATTACHED, NEVER STORED ON THE REPORT. The
+    // compose endpoint has said so since it was written — "a prose copy would
+    // go stale the moment one cleared, and the side is what a stale copy
+    // loses" — and the listing had simply never carried them at all, which left
+    // the `With blockers` chip selecting nothing on every build.
+    //
+    // OPEN ONLY. A cleared blocker is not what a report is blocked on; it is
+    // what a report used to be blocked on, and a chip that swept those in would
+    // report resolved problems as live ones.
+    const blockers = await c.env.DB.prepare(
+      `SELECT b.engagement_id, b.side, b.summary, b.raised_at
+         FROM engagement_blockers b
+         JOIN engagements e ON e.id = b.engagement_id
+        WHERE e.partner_id = ? AND b.cleared_at IS NULL
+        ORDER BY b.raised_at`,
+    ).bind(partnerId).all<any>();
+    const byEngagement = new Map<number, any[]>();
+    for (const b of blockers.results || []) {
+      const key = Number(b.engagement_id);
+      if (!byEngagement.has(key)) byEngagement.set(key, []);
+      byEngagement.get(key)!.push({
+        side: b.side, summary: b.summary, days_open: daysBetween(b.raised_at),
+      });
+    }
+
+    const period = currentPeriod();
+    const items = (rows.results || []).map((r: any) => ({
+      ...reportDto(r),
+      blockers: byEngagement.get(Number(r.engagement_id)) || [],
+    }));
+    return c.json({
+      items,
+      // THE CYCLE THE PAGE IS OPEN ON, so `This cycle` and `Archive` are two
+      // ends of one comparison rather than two chips over a field the response
+      // never sent. Without it both selected the whole list or none of it.
+      period,
+      draft_count: items.filter((r: any) => r.state === 'draft').length,
+      sent_count: items.filter((r: any) => r.state === 'sent').length,
+      sent_this_cycle: items.filter((r: any) => r.state === 'sent' && r.period === period).length,
+      blocked_count: items.filter((r: any) => r.blockers.length > 0).length,
+      client_blocked_count: items.filter(
+        (r: any) => r.blockers.some((b: any) => b.side === 'client'),
+      ).length,
+      // WHAT A REPORT CANNOT REPORT ABOUT ITSELF. A read time needs an open,
+      // an open is the client's act, and no client-side surface exists to
+      // record one — the same absence `engagement_deliverables.opened_at`
+      // has and for the same reason. Refused with the reason rather than
+      // timed from the send, which would measure our own silence.
+      read_tracking: { available: false, reason: 'Not recorded: nothing records that a client read a report.' },
+      read_time_median_days: null,
+      read_time_note: 'Nothing records that a client read a report. There is no client-side surface to record it on, so a read time here would be a number about our own send, not about them.',
+      // The report is composed here and delivered by a person. Nothing in this
+      // product emails a client on a firm's behalf, and "sent" records that a
+      // person sent it rather than that this product did.
+      delivery: 'manual',
+      delivery_note: 'Marking a report sent records that you sent it. Nothing here delivers it — no email, no notification, no client-side surface.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * A report is composed from the engagement's own rows, and the two halves it
+ * cannot compose are the two the firm must write.
+ *
+ * `blocked` is NOT a stored column: it is the open blockers, read at compose
+ * time and returned with their side. Storing a prose copy of them would go
+ * stale the moment one cleared, and the side is what lets the report say a
+ * client-side blocker plainly without treating it as an excuse.
+ */
+partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const p = parsePeriod(c.req.param('period'), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+
+    const readTracking = await bookReadTracking(c.env, partnerId);
+    const [deliverables, blockers, milestones, existing] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT title, version, sent_at, opened_at, link_url FROM engagement_deliverables
+          WHERE engagement_id = ? AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50`,
+      ).bind(engagementId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT side, summary, raised_at FROM engagement_blockers
+          WHERE engagement_id = ? AND cleared_at IS NULL ORDER BY raised_at`,
+      ).bind(engagementId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT title, due_at, completed_at FROM engagement_milestones
+          WHERE engagement_id = ? AND completed_at IS NULL ORDER BY due_at IS NULL, due_at LIMIT 20`,
+      ).bind(engagementId).all<any>(),
+      c.env.DB.prepare(
+        'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
+      ).bind(engagementId, p.period).first<any>(),
+    ]);
+
+    return c.json({
+      // #4673: the composition names what it was composed for, so the page can
+      // drop a response that arrives after the selection moved, and save it
+      // only against this engagement and period.
+      engagement_id: engagementId,
+      period: p.period,
+      existing: existing ? reportDto(existing) : null,
+      read_tracking: readTracking,
+      shipped_from_log: (deliverables.results || [])
+        .filter((d: any) => String(d.sent_at).startsWith(p.period))
+        .map((d: any) => ({
+          title: d.title, version: d.version ?? null, sent_at: d.sent_at,
+          // NULL where opens cannot be observed: false would read as "the
+          // client did not open it" in a report going to that client.
+          // #5314: false only where this row's open could have been recorded.
+          opened: d.opened_at ? true : (readStateFor(d, readTracking) === 'unopened' ? false : null),
+        })),
+      next_from_milestones: (milestones.results || []).map((m: any) => ({
+        title: m.title, due_at: m.due_at ?? null,
+      })),
+      // Read at compose time, never copied into the report row.
+      blocked: (blockers.results || []).map((b: any) => ({
+        side: b.side, summary: b.summary, days_open: daysBetween(b.raised_at),
+      })),
+      blocked_note: (blockers.results || []).some((b: any) => b.side === 'client')
+        ? 'One or more of these is on the client\'s side. Say so plainly — a report that hides it makes the delay look like yours, and a report that leans on it reads as an excuse.'
+        : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    const p = parsePeriod(c.req.param('period'), 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+    const b = await body<any>(c);
+
+    // #4673: THE DRAFT NAMES ITS TARGET. The page sends the engagement and
+    // period its displayed draft was composed for; a save whose draft belongs
+    // to another engagement or period (a stale composition, a selection that
+    // moved) is refused rather than written into this one.
+    if (Number(b?.engagement_id) !== engagementId || String(b?.period ?? '') !== p.period) {
+      return c.json({
+        detail: 'This draft was composed for another engagement or period. Compose it again for this one; nothing was saved.',
+        code: 'draft_mismatch',
+      }, 409);
+    }
+
+    const existing = await c.env.DB.prepare(
+      'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
+    ).bind(engagementId, p.period).first<any>();
+    const hasBlocked = b != null && Object.prototype.hasOwnProperty.call(b, 'blocked');
+
+    // A SENT REPORT IS FROZEN. It is a thing a client has already read; editing
+    // it in place would make the record disagree with what they received, and
+    // there would be no trace of the difference. The rule is the shared one
+    // (services/statusReportAccess.ts), as Fill with Eadwyn reads it.
+    if (existing && !statusReportAccess(existing, { partner_id: partnerId, founder_id: null }, { partnerId, founderId: null }).write) {
+      return c.json({
+        detail: 'That report was sent. A sent report is a record of what the client received and is not editable.',
+      }, 409);
+    }
+
+    const SENT_NOW = {
+      detail: 'That report was sent. A sent report is a record of what the client received and is not editable.',
+      code: 'report_sent',
+    };
+    if (existing) {
+      // D4682 — THE DRAFT IS EDITED ONLY WHILE IT IS A DRAFT, AND ONLY AT THE
+      // REVISION READ. A send that lands between the read above and this write
+      // wins: the report the client received is not edited afterwards, and a
+      // second edit that read an older draft does not overwrite a newer one.
+      if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'report', existing);
+      // #5314 part 2: an omitted `blocked` leaves the section as it was; a
+      // present one (null included) records it now.
+      const blockedNow = hasBlocked
+        ? [trimOrNull(b.blocked, 4000), nowIso()]
+        : [existing.blocked ?? null, existing.blocked_recorded_at ?? null];
+      const upd = await c.env.DB.prepare(
+        `UPDATE engagement_status_reports
+            SET shipped = ?, next_up = ?, blocked = ?, blocked_recorded_at = ?,
+                updated_at = ?, revision = revision + 1
+          WHERE id = ? AND state = 'draft' AND revision = ?`,
+      ).bind(
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), ...blockedNow,
+        nowIso(), existing.id, Number(existing.revision),
+      ).run();
+      if (!changedOne(upd)) {
+        const now = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
+          .bind(existing.id).first<any>();
+        return now?.state === 'sent' ? c.json(SENT_NOW, 409) : deliveryChanged(c, 'report', now);
+      }
+    } else {
+      // #5314 part 3: a save that read a draft which has since been deleted.
+      if (staleAgainst(statedRevision(b), null)) return deliveryChanged(c, 'report', null);
+      // The unique (engagement, period) index makes a concurrent first save
+      // lose cleanly instead of making a second row.
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO engagement_status_reports
+           (uid, engagement_id, period, state, shipped, next_up, blocked, blocked_recorded_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (engagement_id, period) DO NOTHING`,
+      ).bind(
+        newUid(), engagementId, p.period,
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000),
+        hasBlocked ? trimOrNull(b.blocked, 4000) : null, hasBlocked ? nowIso() : null,
+        nowIso(), nowIso(),
+      ).run();
+      if (!changedOne(ins)) {
+        const now = await c.env.DB.prepare(
+          'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
+        ).bind(engagementId, p.period).first<any>();
+        return now?.state === 'sent' ? c.json(SENT_NOW, 409) : deliveryChanged(c, 'report', now);
+      }
+    }
+    await logActorAct(c.env, user, 'delivery_report_saved', { engagement_id: engagementId, period: p.period });
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
+    ).bind(engagementId, p.period).first<any>();
+    return c.json(reportDto(row));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Marking a report sent. Once, and by a person.
+ *
+ * This does NOT deliver anything — no email, no notification, no client-side
+ * surface exists. It records that a person sent it, which is the only thing
+ * this product can truthfully say. Re-sending is refused rather than being a
+ * silent no-op, because a second "sent" would overwrite the timestamp of the
+ * one the client actually received.
+ */
+partnerDelivery.post('/status-reports/:id/send', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_status_reports', id, 'Status report');
+    const b = await body<any>(c);
+    // D4682 — ONE DEFINED OUTCOME FOR A DUPLICATE SEND. The same person
+    // retrying gets the record that already exists, unchanged (200,
+    // `already_sent`); anyone else is refused (409). Either way the recorded
+    // sender and time are never replaced.
+    const alreadySent = (r: any) => {
+      if (Number(r.sent_by) === Number(user.id)) {
+        return c.json({ ...reportDto(r), already_sent: true });
+      }
+      return c.json({ detail: 'That report is already marked sent', code: 'already_sent' }, 409);
+    };
+    if (row.state === 'sent') return alreadySent(row);
+    // The caller may name the revision it showed the person who pressed Send.
+    if (staleAgainst(statedRevision(b), row)) return deliveryChanged(c, 'report', row);
+    if (!trimOrNull(row.shipped, 4000) && !trimOrNull(row.next_up, 4000)) {
+      return c.json({ detail: 'An empty report has nothing to send' }, 400);
+    }
+    const now = nowIso();
+    // THE REVISION THAT IS SENT IS THE REVISION THAT WAS CHECKED. The UPDATE
+    // names the draft revision read above and records it as `sent_revision`;
+    // an edit that landed since makes this write change nothing, so the text
+    // checked for emptiness is the text the client receives.
+    const upd = await c.env.DB.prepare(
+      `UPDATE engagement_status_reports
+          SET state = 'sent', sent_at = ?, sent_by = ?, sent_revision = revision + 1,
+              updated_at = ?, revision = revision + 1
+        WHERE id = ? AND state = 'draft' AND revision = ?`,
+    ).bind(now, user.id, now, id, Number(row.revision)).run();
+    if (!changedOne(upd)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
+        .bind(id).first<any>();
+      return cur?.state === 'sent' ? alreadySent(cur) : deliveryChanged(c, 'report', cur);
+    }
+    const out = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
+      .bind(id).first<any>();
+    await logActorAct(c.env, user, 'delivery_report_sent', { report_id: id, engagement_id: Number(out.engagement_id), revision: Number(out.sent_revision) });
+    return c.json(reportDto(out));
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerDelivery.delete('/status-reports/:id', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownChild(c.env, partnerId, 'engagement_status_reports', id, 'Status report');
+    const SENT = {
+      detail: 'That report was sent. Deleting it would erase a record of what the client received.',
+    };
+    if (row.state === 'sent') return c.json(SENT, 409);
+    // #5314 part 3: the draft the person chose to delete, at the revision shown.
+    if (staleAgainst(queryRevision(c), row)) return deliveryChanged(c, 'report', row);
+    // The delete repeats the draft state and the revision, so a send or an
+    // edit that landed since the read keeps the report.
+    const del = await c.env.DB.prepare(
+      "DELETE FROM engagement_status_reports WHERE id = ? AND state = 'draft' AND revision = ?",
+    ).bind(id, Number(row.revision)).run();
+    if (!changedOne(del)) {
+      const cur = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?').bind(id).first<any>();
+      return cur?.state === 'sent' || !cur ? c.json(SENT, 409) : deliveryChanged(c, 'report', cur);
+    }
+    await logActorAct(c.env, user, 'delivery_report_deleted', { report_id: id, engagement_id: Number(row.engagement_id) });
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+export { partnerDelivery };
+export default partnerDelivery;

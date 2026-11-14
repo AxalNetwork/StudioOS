@@ -1,0 +1,91 @@
+# documentation/
+
+Everything here is **written by a person**. Nothing here is generated, and
+nothing here is served.
+
+> **`documentation/` is not `docs/`.**
+>
+> `docs/` at the repo root is the **built frontend bundle** — the Worker's
+> `[assets]` directory. It is written by `npm run build` and must never be
+> hand-edited. If you are looking for a document to read or edit, it is in
+> here.
+
+## Layout
+
+| Folder | What lives there |
+| --- | --- |
+| `architecture/` | How the system is actually put together, and the decisions behind it. Start with `architecture/CODEBASE_MAP.md`. |
+| `audits/` | Point-in-time findings. Each one is true *as of its date* and is not maintained afterwards. |
+| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`D1_RECOVERY.md`](operations/D1_RECOVERY.md) when the data is wrong and a rollback will not help; [`DATA_RETENTION.md`](operations/DATA_RETENTION.md) for how long each deck store keeps its rows and R2 objects; [`PROCESSING_AND_RETENTION_5510.md`](operations/PROCESSING_AND_RETENTION_5510.md) for the source-backed draft personal-data/processor/hold inventory and outstanding legal verification; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire; [`CLAUDE_REVIEW.md`](operations/CLAUDE_REVIEW.md) for the advisory pull-request review on the Anthropic API, its settings and its cost; [`TELEGRAM.md`](operations/TELEGRAM.md) to set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off; [`WHATSAPP.md`](operations/WHATSAPP.md) to switch WhatsApp Business on, check it on a real phone and roll it back; [`ZOOM_AND_MEET_TRANSCRIPTS.md`](operations/ZOOM_AND_MEET_TRANSCRIPTS.md) to create and share the Zoom app, switch on Meet transcript import, run the live check and read each refusal; [`AIRAIL.md`](operations/AIRAIL.md) for the Eadwyn AI rail: models per page, adding a model, billing and consumption; [`AI_TOKEN_PACKS.md`](operations/AI_TOKEN_PACKS.md) for AI token packs: creating them, refunds and disputes, an overdue credit, adjustments and the live check; [`GITHUB_CONNECTOR_APP.md`](operations/GITHUB_CONNECTOR_APP.md) to register the StudioOS GitHub App for the GitHub connector, put its keys in production, rotate them and troubleshoot; [`TICKET_GITHUB_SYNC.md`](operations/TICKET_GITHUB_SYNC.md) to recover support tickets that never reached GitHub; [`CLOSING.md`](operations/CLOSING.md) to run a closing from Open to Mark Closed; [`MERCURY_MEMBER_CHECKS.md`](operations/MERCURY_MEMBER_CHECKS.md) for D752's read-only live checks; [`MCP_API_RUNBOOK.md`](operations/MCP_API_RUNBOOK.md) to switch member API keys for `/mcp` on, check them, roll back, revoke and read usage; [`PITCH_ACCEPTANCE.md`](operations/PITCH_ACCEPTANCE.md) for the Pitch deck studio's acceptance gate and its matrix; [`AGENT_EXECUTION_VALIDATION.md`](operations/AGENT_EXECUTION_VALIDATION.md) to test agent execution in an isolated preview, behind a fail-closed preflight; [`PLATFORM_OBSERVABILITY.md`](operations/PLATFORM_OBSERVABILITY.md) for the platform's bindings, metric dictionary and capacity thresholds; [`D1_BENCHMARK.md`](operations/D1_BENCHMARK.md) to measure the D1 database's limits under mixed agent and financial load without touching production; [`USAGE_RETENTION.md`](operations/USAGE_RETENTION.md) for how long the AI usage tables keep their rows and what must be decided before any moves.; [`DECK_GRID.md`](operations/DECK_GRID.md) to switch off a deck model, refund or unstick a generation run, and purge an image (DMCA). |
+| `product/` | Positioning and feature notes. |
+| `skill-drafts/` | Staged newly authored skill definitions and cases, outside the deployable catalogue. |
+
+## The five that answer most questions
+
+| Question | File |
+| --- | --- |
+| Where does anything live? | [architecture/CODEBASE_MAP.md](architecture/CODEBASE_MAP.md) |
+| Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md), which points to [architecture/route-map/](architecture/route-map/README.md) (one file per canvas; D4102) |
+| Which AI model runs, or can be picked, in which module? | [architecture/AI_MODEL_COVERAGE.md](architecture/AI_MODEL_COVERAGE.md) (generated) |
+| May this model run, and what do its provider's terms allow? | [architecture/MODEL_TERMS.md](architecture/MODEL_TERMS.md) |
+| Who sees a surface, where in their nav, and how do they reach it? | The profile routing map, generated (D4103): `npm run docs:routing` writes PROFILE_ROUTING.md into `architecture/`, and every CI run keeps it in the `routing-docs` artifact of its `routing docs (artifact)` job. It is not committed. |
+| What can each role actually navigate to? | The page inventory, generated beside it the same way (PAGE_INVENTORY.md, not committed). |
+| What is blocked, and on what? | [architecture/UNRESOLVED_ITEMS.md](architecture/UNRESOLVED_ITEMS.md) |
+| Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
+| Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |
+| Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) for D1–D525, and one file per decision from D526 on in [architecture/decisions/](architecture/decisions/) |
+| How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 7–15 build against. |
+| What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
+| How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
+| May I add to `api.js`, `App.jsx`, `CycleRoute.jsx`, `index.ts` or `advisors.ts`? | No: [architecture/HUBS.md](architecture/HUBS.md) says where each new entry goes instead (D5615) |
+
+The visible meeting bot’s owner steps and rollout checks are in [`MEETING_BOT.md`](operations/MEETING_BOT.md) (D886, #2587).
+
+## Every folder also explains itself
+
+Beyond this tree, each significant source folder carries its own `README.md`
+saying what lives there and the rule for adding to it — `frontend/src/pages/`,
+`cloudflare-worker/src/routes/`, `scripts/`, and 30-odd more.
+`scripts/check-folder-docs.mjs` fails the build if one is missing, if it does
+not name its own subfolders, or if it cites a file that does not exist. So the
+fastest way to understand any part of this repo is to open the README of the
+folder you are already in.
+
+`design/incoming/README.md` is the one to read before integrating a new Claude
+Design export.
+
+`CLAUDE.md` stays at the repo root and outranks everything here: where a
+document disagrees with it, `CLAUDE.md` wins and the document is the thing to
+fix.
+
+## Reading an audit
+
+An audit is a **snapshot, not a spec**. `audits/BETA_READINESS_AUDIT_2026-05-20.md`
+describes the platform on 20 May 2026 and was correct then. Do not treat a
+finding in an audit as a live bug without re-checking it against the code —
+several have been fixed since, and the audit files are not updated when they
+are. `audits/PLATFORM-DELIVERY-AUDIT.md` is the most recent canvas-by-canvas
+sweep. `audits/SCALE_1000_DAU_AUDIT_2026-09-18.md` is the load plan for the
+first 1,000 daily users.
+
+## Files deliberately left at the repo root
+
+Seven, each because a tool or a convention expects to find it there:
+
+- `CLAUDE.md` — read by Claude Code from the root
+- `AGENTS.md` — read by Codex, Cursor and other agents from the root; the task
+  protocol every agent follows (D503)
+- `replit.md` — read by Replit from the root
+- `README.md`, `CONTRIBUTING.md`, `SECURITY.md` — GitHub surfaces these from the
+  root (or `.github/`) and nowhere else
+- `CHANGELOG.md` — conventional root location
+
+Cloudflare delivery configuration, canary and rollback:
+[`CLOUDFLARE_DELIVERY_5671.md`](operations/CLOUDFLARE_DELIVERY_5671.md).
+
+`frontend/test/repo_layout.test.mjs` fails the build if an eighth appears, so
+the root cannot quietly refill with the 38 files this folder was created to
+hold.
+| `operations/AGENT_COMPUTE_4557.md` | General compute local verification and owner-gated hosted acceptance. |
+| [Workflow Slack delivery](operations/WORKFLOW_SLACK_6370.md) | Configure private workflow channels and verify a completed run in Slack. |
+| [GitHub Actions repair issues](operations/WORKFLOW_FAILURE_ISSUES_6387.md) | Configure signed completion events and verify automatic issue filing. |

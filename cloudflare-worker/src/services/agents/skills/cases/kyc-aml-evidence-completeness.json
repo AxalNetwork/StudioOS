@@ -1,0 +1,34 @@
+{
+  "skill": "kyc-aml-evidence-completeness",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "skill_name": "KYC and AML Evidence Completeness Check",
+        "task_scope": "Checks KYC/AML evidence coverage and exception status against a defined onboarding policy without final compliance determination.",
+        "evidence": [
+          "beneficial ownership evidence"
+        ],
+        "omitted_field": "screening timestamp"
+      },
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for beneficial ownership evidence."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "beneficial ownership evidence"
+    ],
+    "must_say_not_recorded": [
+      "screening timestamp"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

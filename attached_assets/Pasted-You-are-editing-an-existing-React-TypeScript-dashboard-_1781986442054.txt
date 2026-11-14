@@ -1,0 +1,78 @@
+You are editing an existing React/TypeScript dashboard (Axal StudioOS). The “informational space” at the top of many pages is causing layout problems: wide purple info banners and explanatory copy push the real content down and are inconsistent from page to page.
+
+Goal
+Refactor the app so informational content is presented in a consistent, compact way that doesn’t dominate the page but is still discoverable when needed.
+
+Use these screenshots as mental reference (not literal assets):
+- Metrics page currently has a full-width purple info banner at the very top (“Portfolio metrics… Learn more”) followed by the KPI cards and tables.
+- In many other screens, similar banners or one-off help text blocks exist in slightly different styles and spacings.
+
+UX & design guidelines (follow these)
+- Banners at the very top of the page should be reserved for rare, critical system messages only (outages, hard errors, major announcements).[web:145][web:144]
+- Routine “what this page does” or “how to use this section” content should appear as inline help near the section it describes (for example, above “Snapshot history” or next to “Traction signals”).[web:138][web:148]
+- Informational help should be concise (1–2 sentences) and collapsible/dismissible so it doesn’t permanently steal vertical space.[web:146][web:149]
+
+What to implement
+
+1. Create a reusable InfoStrip / Help component
+- Location: `components/ui/InfoStrip.tsx` (adjust path to match the project’s conventions).
+- Props:
+  - `title?: string`
+  - `body: string`
+  - `variant?: 'info' | 'tip' | 'warning'` (default 'info')
+  - `icon?: ReactNode` (optional, default to an info icon from the existing icon set)
+  - `dismissible?: boolean` (default true)
+  - `storageKey?: string` (optional key to persist dismissal in localStorage or similar)
+  - `inline?: boolean` (if true, renders as a compact inline help block rather than a full-width banner)
+- Behaviour:
+  - If `dismissible` is true and `storageKey` is provided, once the user closes it, persist that choice and do not show the strip again on subsequent visits.
+  - For inline mode, keep padding small and use a subtle background that matches the design system’s surface tokens (no huge purple block).
+  - Use existing design tokens for colors, radius, and typography; do NOT introduce new colors outside the design system.
+
+2. Replace the Metrics page top banner with inline help
+- Find the Metrics page (likely `pages/Metrics.tsx` or similar).
+- Remove the big purple full-width info banner at the very top.
+- Instead, place an `<InfoStrip>` directly above the Snapshot cards area, with:
+  - `title="Portfolio metrics"`
+  - `body="Standardised KPIs (MRR, ARR, CAC, LTV, churn) across the portfolio, fed by founder-submitted updates and automated nudges."`
+  - `variant="info"`
+  - `dismissible=true`
+  - `storageKey="metrics-info-v1"`
+  - `inline=true`
+- Ensure that when the strip is dismissed, the KPI cards slide up cleanly and no awkward empty space remains.
+
+3. Introduce a page-level optional `pageHelp` slot
+- Identify the shared layout shell for pages (for example `PageLayout`, `AppShell`, or `DashboardPage`).
+- Add an optional `pageHelp?: ReactNode` prop that renders just below the page title but above the main content.
+- On pages where the help applies to the entire page (not a single section), pass an `<InfoStrip inline>` in via `pageHelp` instead of hardcoding banners inside each page.
+- On pages where the help is specific to a section (e.g., “Traction signals → scoring engine”), render `<InfoStrip inline>` directly above that section component, not at the very top of the page.
+
+4. Normalize spacing around help content
+- Use the same spacing tokens (e.g., `gap`, `marginBottom`) around InfoStrip on all pages:
+  - Small vertical margin between title and InfoStrip.
+  - Small margin between InfoStrip and the first content block.
+- Remove manual `margin-top` / `margin-bottom` CSS hacks that were introduced for previous banners; rely on the shared component’s spacing.
+
+5. Sweep other pages to replace ad-hoc info banners
+- Grep the codebase for things like:
+  - “Learn more →”
+  - `className` or components used for old purple banners.
+- For each one:
+  - Decide whether it is:
+    - A) system-wide critical message ⇒ keep as a real top-of-page banner (can reuse InfoStrip without `inline`), OR
+    - B) ordinary page or section help ⇒ convert to `<InfoStrip inline>` placed near the relevant section.
+  - Ensure text is concise (1–2 sentences), no multiple heading levels inside the banner.
+
+6. Accessibility details
+- The InfoStrip component should:
+  - Use appropriate roles (`role="status"` or `role="region"` with `aria-label`) for informational content.[web:149]
+  - Ensure that dismiss buttons are keyboard-accessible and have visible focus styles.
+  - Not steal focus or auto-scroll the page when shown, since these are low-severity messages.
+
+7. Deliverables
+- `components/ui/InfoStrip.tsx` (or equivalent path) with tests or stories if the project uses Storybook.
+- Updated Metrics page using inline InfoStrip rather than a big top banner.
+- At least 2–3 other representative pages refactored to use InfoStrip instead of ad-hoc informational strips.
+- A short comment at the top of `InfoStrip.tsx` summarizing when to use it and when *not* to (e.g., not for errors; use existing Alert/Toast components instead).
+
+Do not change any business logic or metrics calculations. Focus purely on layout, information hierarchy, and reusability of informational messaging.

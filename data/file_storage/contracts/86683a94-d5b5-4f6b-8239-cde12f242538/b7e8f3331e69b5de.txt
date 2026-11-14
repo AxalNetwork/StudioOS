@@ -1,0 +1,34 @@
+BYLAWS OF Test Wizard Inc.
+A Delaware Corporation
+
+ARTICLE I — OFFICES
+1.1 Registered Office: State of Delaware
+1.2 Principal Office: ____________________
+
+ARTICLE II — STOCKHOLDERS
+2.1 Annual Meeting: Within 13 months of last annual meeting.
+2.2 Special Meetings: May be called by the Board or holders of 25% of outstanding shares.
+2.3 Quorum: A majority of outstanding shares entitled to vote.
+2.4 Voting: Each share entitled to one vote. Cumulative voting is not permitted.
+
+ARTICLE III — DIRECTORS
+3.1 Number: The Board shall consist of ___ directors.
+3.2 Election: Directors elected at each annual meeting for one-year terms.
+3.3 Vacancies: May be filled by majority vote of remaining directors.
+3.4 Quorum: A majority of the total number of directors.
+
+ARTICLE IV — OFFICERS
+4.1 Required Officers: Chief Executive Officer, Secretary, Treasurer.
+4.2 Officers serve at the pleasure of the Board and may be removed at any time.
+
+ARTICLE V — STOCK
+5.1 Certificates may be issued in uncertificated form.
+5.2 Transfers subject to applicable securities law restrictions.
+
+ARTICLE VI — INDEMNIFICATION
+6.1 The Corporation shall indemnify directors and officers to the fullest extent permitted by Delaware law.
+
+ARTICLE VII — AMENDMENTS
+7.1 These Bylaws may be amended by the Board or by a majority vote of stockholders.
+
+Adopted: ____________________

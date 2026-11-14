@@ -1,0 +1,209 @@
+I'm integrating a redesigned "Products" page UI into the existing Meridian 
+platform. I'm uploading the HTML/JS files exported from Claude Design. 
+Here is exactly what I need you to do:
+
+---
+
+## 1. INTEGRATE THE NEW UI — KEEP EXISTING SHELL INTACT
+
+- Mount the new Products UI at the existing route /products (do not 
+  create a new route, do not redirect)
+- Retitle the page to "Products" everywhere it appears — browser tab, 
+  page H1, and sidebar nav label
+- Wrap the new UI inside the existing platform shell:
+  - Preserve the existing left sidebar navigation exactly as-is — 
+    all nav items, icons, active states, and collapse behavior 
+    remain untouched
+  - Preserve the existing top header bar — logo, user avatar, 
+    notifications bell, and any global search remain untouched
+  - The new Products content renders only inside the main content 
+    area, replacing only the old /products page component
+- Do NOT touch global CSS, layout files, or the sidebar component 
+  files — scope all changes to the products page component and any 
+  new components it introduces (cart drawer, product detail modal, 
+  checkout)
+- If the existing platform uses a CSS framework (Tailwind, Bootstrap, 
+  etc.) or component library (shadcn, MUI, etc.), convert the Claude 
+  Design HTML/CSS to use those existing conventions rather than 
+  introducing new class names that conflict
+
+---
+
+## 2. BILLING TOGGLE — LIVE PRICE RECALCULATION
+
+- The billing cycle toggle (Monthly / Yearly / One-time) must update 
+  all displayed prices on the page in real time when switched
+- Yearly prices = monthly × 12 × 0.80 (20% discount) unless a 
+  specific yearly price is already defined in the product data
+- Store the selected billing cycle in local component state — it 
+  should persist while the user browses the page but reset on 
+  navigation away
+- The toggle selection should also be passed into the cart so line 
+  items reflect the correct billing cycle at checkout
+
+---
+
+## 3. CART — ADD TO ORDER, DRAWER, LIVE TOTALS
+
+Cart state management:
+- Use existing state management pattern in the codebase (Redux, 
+  Zustand, Context API, or whatever is already in use) — do NOT 
+  introduce a new state library
+- Cart persists across page navigation within the session 
+  (store in session storage, not localStorage, so it clears on 
+  browser close)
+- Cart is user-specific — if the user is logged in, associate the 
+  cart with their session
+
+Cart drawer behavior:
+- Slides in from the right when "Review & Checkout" is clicked or 
+  any "Add to Order" button is pressed
+- Shows live line items: product name, billing cycle, quantity 
+  selector [− 1 +], line total, remove (×) link
+- Live subtotal, discount row (if promo applied), VAT/tax row, 
+  grand total — all recalculate instantly on quantity change
+- Promo code input: validate against a promo_codes table in the 
+  database (fields: code, discount_type, discount_value, 
+  expires_at, max_uses, uses_count) — apply discount if valid, 
+  show error if invalid or expired
+- "Confirm Purchase" button at the bottom navigates to /checkout
+
+Quantity for team licenses:
+- Products that support team licenses (profile bundles) show a 
+  quantity selector in the cart and on the product card
+- Multiply unit price × quantity for the line total
+- Store quantity per line item in cart state
+
+---
+
+## 4. PRODUCT DETAIL MODAL
+
+- Triggered when a product card name or "Preview Features" is clicked
+- Opens as a slide-over panel from the right (not a full page 
+  navigation) — the Products page remains visible behind it
+- Modal fetches product details from the products table by product_id
+- "Add to Order" button inside the modal adds to the same cart state
+- Billing toggle inside the modal syncs with the page-level toggle 
+  (changing it here changes it globally on the page)
+- Close button (×) and clicking the backdrop both dismiss the modal
+- URL updates to /products/:productId when modal is open so it's 
+  shareable/bookmarkable — navigating directly to that URL opens 
+  the Products page with that modal pre-opened
+
+---
+
+## 5. CHECKOUT PAGE (/checkout)
+
+- Route: /checkout (new page, protected — redirect to login if 
+  not authenticated)
+- Left column: editable order summary pulled from cart state
+  - Line items with quantity controls
+  - Promo code field (same validation as cart drawer)
+  - Subtotal, discount, VAT, total
+- Right column: Stripe Elements payment form
+  - Use the existing STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY 
+    from environment variables — do NOT hardcode or create new keys
+  - Implement using Stripe Payment Intents API:
+    1. On page load, create a PaymentIntent server-side for the 
+       cart total and return client_secret to the frontend
+    2. Recalculate and update the PaymentIntent if cart changes 
+       (quantity, promo code)
+    3. Mount Stripe Elements card field using the client_secret
+  - Fields: email (pre-filled from logged-in user), card element 
+    (Stripe), name on card, billing address
+  - Invoice details section: company name + VAT number 
+    (optional fields, stored on the order record)
+  - "Save payment method" toggle — if checked, save the Stripe 
+    paymentMethodId to the user's profile for future use
+  - CTA button: "Confirm Purchase" — triggers 
+    stripe.confirmPayment()
+
+- On successful payment:
+  - Write order to orders table: user_id, items (JSONB), total, 
+    currency, stripe_payment_intent_id, billing_cycle, status, 
+    invoice_number (auto-generated: MRD-YYYY-XXXXX), created_at
+  - Activate purchased licenses/products on the user's profile 
+    (update user_products or subscriptions table)
+  - Trigger invoice email via existing email service (use whatever 
+    email provider is already configured — Resend, SendGrid, etc.)
+  - Redirect to /checkout/confirmation?order=MRD-YYYY-XXXXX
+  - Clear cart state
+
+- Stripe Webhook handler at /api/webhooks/stripe:
+  - Handle payment_intent.succeeded → confirm order + activate license
+  - Handle payment_intent.payment_failed → update order status to failed
+  - Handle customer.subscription.deleted → deactivate subscription license
+  - Verify webhook signature using STRIPE_WEBHOOK_SECRET env variable
+
+---
+
+## 6. CONFIRMATION PAGE (/checkout/confirmation)
+
+- Show order confirmed state: checkmark, "Order confirmed." heading, 
+  order number, itemized summary
+- "Download Invoice PDF" button — generate PDF server-side using 
+  order data (use an existing PDF library if available, otherwise 
+  add one lightweight option)
+- "Go to Dashboard" button → navigates to /dashboard
+- If accessed without a valid order query param, redirect to /products
+
+---
+
+## 7. PROMO CODE SYSTEM
+
+Create a promo_codes table if it doesn't exist:
+  - id, code (unique), discount_type (percentage | fixed), 
+    discount_value, applies_to (all | product_id | category), 
+    expires_at, max_uses, uses_count, created_at
+
+Admin can manage promo codes from the existing admin panel 
+(add a simple CRUD table there — do not build a separate UI for this).
+
+---
+
+## 8. PERMISSIONS
+
+- Any logged-in user can view the Products page and add to cart
+- Checkout requires authentication — redirect to login if not 
+  logged in when attempting to proceed
+- Admin can see an "Add Product" button on the Products page to 
+  create new catalog items (simple modal form: name, description, 
+  price, billing type, category, feature list)
+- Product management (edit/archive) lives in the existing admin 
+  panel, not inline on the Products page
+
+---
+
+## 9. DATABASE
+
+Add only what's needed — do not restructure existing tables:
+
+New tables (create if not already present):
+  - orders (id, user_id, items JSONB, subtotal, discount, tax, 
+    total, currency, stripe_payment_intent_id, billing_cycle, 
+    status, invoice_number, company_name, vat_number, created_at)
+  - promo_codes (as described above)
+  - user_products (user_id, product_id, billing_cycle, status, 
+    activated_at, expires_at, stripe_subscription_id)
+
+Use existing products table if it exists; if not, create:
+  - products (id, name, description, category, price_monthly, 
+    price_yearly, price_onetime, features JSONB, supports_quantity, 
+    is_active, created_at)
+
+---
+
+## 10. TECH NOTES
+
+- Do NOT touch the sidebar component, header component, auth 
+  middleware, or any existing route outside of /products and /checkout
+- Follow existing API route patterns (REST or tRPC — use whatever 
+  is already in the codebase)
+- All Stripe keys must come from environment variables only
+- VAT/tax calculation: apply 5% VAT for UAE (Dubai) billing address 
+  as default; use 0% for all other regions unless a tax library is 
+  already integrated
+- Mobile responsive: the cart drawer, product detail modal, and 
+  checkout page must all work on mobile screen sizes
+- Stripe Elements should use the existing platform's purple brand 
+  color (#6B46C1) as the Stripe Elements theme accent color

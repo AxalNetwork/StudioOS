@@ -1,0 +1,106 @@
+You are building the Global Network Partner platform for Axal StudioOS (a venture studio / high-throughput VC platform). We already have Replit Auth, full RBAC middleware, Replit AI integration, D1 tables for users, deals, project_stages, decision_gates, workflows, syndicates, marketplace_profiles, activity_logs, and all other tables from previous builds. We also have the Partner Dashboard and Pipeline Board.
+
+Current structure:
+- backend/ and main.py (Python/FastAPI-style)
+- cloudflare-worker/ (Workers + D1 bindings)
+- frontend/ (static HTML/JS)
+
+Add complete **Legal Engine + Capital Engine automation** (SAFE docs, diligence checks, compliance for Delaware C-Corps and global subsidiaries) with these exact requirements:
+
+1. **Database Models (new D1 tables)**  
+   Create these tables with proper indexes, foreign keys, and timestamps:
+   - `legal_documents`
+     • id (PK)
+     • deal_id (FK to deals.id)
+     • type (text: 'SAFE', 'IP_license', 'equity_allocation', 'bylaws', '83b_election')
+     • status (text: 'draft', 'generated', 'signed', 'filed')
+     • content (text or json for template + filled data)
+     • file_url (text, optional)
+     • generated_by (FK to users.id)
+     • signed_by (FK, optional)
+   - `subsidiaries`
+     • id (PK)
+     • deal_id (FK)
+     • holding_company_id (text, default 'Axal_Holding_Delaware_CCorp')
+     • subsidiary_name (text)
+     • jurisdiction (text: 'Delaware_CCorp', 'global')
+     • stripe_atlas_status (text: 'pending', 'incorporated', 'failed')
+     • ein (text, optional)
+     • incorporation_date (timestamp)
+     • ip_transfer_complete (boolean)
+     • equity_allocated (json)
+   - `capital_calls`
+     • id (PK)
+     • syndicate_id or deal_id (FK)
+     • amount (decimal)
+     • currency (text, default 'USD')
+     • due_date (timestamp)
+     • status (text: 'draft', 'sent', 'paid', 'overdue')
+     • lp_responses (json)
+   - `diligence_checklists`
+     • id (PK)
+     • deal_id (FK)
+     • checklist_type (text: 'legal', 'financial', 'tech', 'compliance')
+     • items (json array of {item, status, notes})
+     • ai_score (float)
+     • completed_by (FK)
+   - `compliance_records`
+     • id (PK)
+     • subsidiary_id or deal_id (FK)
+     • type (text: 'kyc', 'aml', 'delaware_filing', 'global_subsidiary')
+     • status (text)
+     • metadata (json)
+
+2. **Automation Logic**  
+   - When a decision_gate reaches 'spinout_ready', automatically:
+     • Trigger Legal Engine: generate SAFE + IP License + Equity Allocation docs using Replit AI + templates
+     • Trigger Capital Engine: create capital call for the syndicate/fund
+     • Create subsidiary record and start Stripe Atlas flow (placeholder + env var STRIPE_ATLAS_API_KEY)
+   - **Legal Engine**:
+     • Store standard templates (YC SAFE, Cooley-style equity docs) in D1 or code
+     • Replit AI fills placeholders (founder names, valuation, etc.)
+     • Mock PDF generation (return HTML/markdown first; ready for reportlab later)
+   - **Capital Engine**:
+     • Automated capital call notices + LP portal view
+     • Track payments (mock for now)
+     • Returns distribution placeholder
+   - **Diligence & Compliance**:
+     • AI-powered checklist scoring
+     • Auto-link to Studio Ops workflows
+     • Delaware C-Corp + global subsidiary compliance flags
+
+3. **Backend Endpoints (add to main.py)**  
+   - POST /api/legal/generate (e.g. /SAFE?deal_id=xxx) — protected for operators/admins
+   - GET /api/legal/docs/{deal_id}
+   - POST /api/capital/call (create + send capital call)
+   - GET /api/capital/lp-portal (LP view of open calls)
+   - POST /api/diligence/review (triggers Replit AI diligence)
+   - POST /api/subsidiary/spinout (triggers Stripe Atlas placeholder + legal docs)
+   - All endpoints protected by RBAC; investors/LPs see read-only views.
+
+4. **Frontend**  
+   - New page /legal-capital.html (or integrate as tabs in Partner Dashboard and Pipeline Board)
+   - Legal Engine tab: “Generate SAFE” / “IP Transfer” buttons, document list with status badges and view/download
+   - Capital Engine tab: Capital Call dashboard (create/send, LP response tracker, returns preview)
+   - Subsidiary Spin-Out wizard (one-click from spinout_ready deals)
+   - Diligence checklist view with AI score and progress bar
+   - Use fetch() for dynamic updates; reuse existing dashboard styling and charts.
+
+5. **Security & Best Practices**  
+   - RBAC: Operators/admins generate docs/calls; LPs/investors view only their capital calls.
+   - Store sensitive docs as JSON (never plain text in logs).
+   - Use Replit Secrets for STRIPE_ATLAS_API_KEY and any legal API keys.
+   - Full audit trail via activity_logs and compliance_records.
+   - Rate limit AI doc generation and diligence checks.
+   - Start with mock Stripe Atlas flow (log the steps; ready for real API later).
+
+Build this step-by-step:  
+1. First create the new D1 tables + migration script + seed standard SAFE template.  
+2. Then implement Legal Engine (doc generation with Replit AI).  
+3. Then implement Capital Engine + subsidiary spin-out automation.  
+4. Then add diligence/compliance automation and all backend endpoints.  
+5. Finally build the frontend Legal/Capital pages and integrate with the Pipeline Board + Dashboard.  
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

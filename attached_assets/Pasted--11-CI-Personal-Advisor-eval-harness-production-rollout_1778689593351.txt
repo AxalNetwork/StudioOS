@@ -1,0 +1,54 @@
+#11 - CI — Personal Advisor eval harness + production rollout gate
+
+What & Why
+
+Final gate before the new advisor reaches all users. Prove (a) it doesn't loop, (b) it picks reasonable next questions, (c) the write-router actually lands writes, (d) MI signals materialise, and (e) the daily budget cap works. Depends on every other CG/CH/CB/CD/CC/CE/CF prompt being merged first.
+
+Done looks like
+
+10 scenario tests green in CI, one per persona (new founder week 1, new founder week 3, existing founder growth tier, existing founder studio tier, investor pro, investor institutional, op partner services / capital / sourcing, mentor)
+Each scenario asserts: zero repeats, zero blocked-by-tier surfaces, zero unlock-violation surfaces, all writes land in the correct tables, progress widget shows expected buckets
+Eval script (scripts/eval/advisor.mjs) runs a 50-prompt bank against staging and dumps scripts/eval/results/<date>.json with turn count, repetition rate, write success rate, p95 latency, cost per conversation, MI signal coverage delta
+Phased rollout reaches 100%: Phase 1 (admin-impersonated allowlist via ADVISOR_V2_ALLOWLIST, 3 days) → Phase 2 (10% of new signups via deterministic user_id hash, 1 week) → Phase 3 (all users)
+Kill switch ADVISOR_V2_DISABLED=1 instantly routes back to the old advisor or surfaces a polite "temporarily unavailable" message
+Old advisor code removed in a follow-up PR after Phase 3 sticks
+Eval shows 0% repetition rate across 50 prompts × 10 personas
+Out of scope
+
+Adding new advisor functionality (CB-CH already shipped)
+Designing new MI sections (CF already shipped)
+Steps
+
+Scenario tests — Add cloudflare-worker/test/advisor/scenarios/*.json for the 10 personas listed and a runner that seeds advisor_answers + platform side-state, runs N turns through the state machine + write-router, and verifies the assertions in the spec.
+Eval harness — Build scripts/eval/advisor.mjs with a curated 50-prompt bank that hits a staging account; persist results under scripts/eval/results/<date>.json.
+Rollout flags — Add ADVISOR_V2_ALLOWLIST (CSV of user IDs) and a deterministic-hash gate for Phase 2; expose both as env vars.
+Kill switch — Honor ADVISOR_V2_DISABLED=1 at the top of routes/advisor.ts to short-circuit to the legacy path or graceful unavailability message.
+Run the phases — Execute Phase 1 for 3 days, read eval results, then Phase 2 for 1 week, then Phase 3.
+Decommission — Once Phase 3 sticks, remove the legacy advisor code in a follow-up PR.
+Relevant files
+
+cloudflare-worker/test/advisor/ (new directory)
+scripts/eval/advisor.mjs (new)
+cloudflare-worker/src/routes/advisor.ts (kill switch + allowlist)
+Dependencies
+
+CG — Workers AI binding + AI Gateway for Personal Advisor
+Open task
+
+CH — Personal Advisor question-bank expansion
+Open task
+
+CB — Personal Advisor conversation state machine
+Open task
+
+CD — Personal Advisor write-router (answer → platform injection)
+Main
+
+CC — Personal Advisor progress widget (right rail)
+Main
+
+CE — Market Intelligence extractor (advisor → MI signals)
+Main
+
+CF — Market Intelligence "Platform Personas" tab
+Main

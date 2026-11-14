@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:40px 46px 32px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eye{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nm{font-size:13px;font-weight:800;letter-spacing:-.01em}
+    .body{font-size:12px;line-height:1.55}
+    .pill{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap;line-height:1.5}
+    .nr{display:inline-flex;font-size:10px;font-weight:700;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .card{border-radius:14px;padding:16px 18px;box-sizing:border-box}
+    .btn{font-size:11.5px;font-weight:700;padding:8px 15px;border-radius:8px;cursor:pointer;white-space:nowrap}
+    .nav{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px}
+    .zp{font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;white-space:nowrap}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden}
+  </style>
+</helmet>
+
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="5">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ b.id }}">{{ b.badge }}</a><span class="ab-nm">{{ b.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">{{ b.route }}</span></div>
+    <div class="ab-sub">{{ b.blurb }}</div>
+
+    <!-- ══ DESKTOP 1280 ══ -->
+    <sc-if value="{{ b.desktop }}">
+      <div style="width:1280px;min-width:1280px;display:flex;border-radius:14px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08);background:{{ b.t.ground }}">
+        <div style="width:200px;flex:none;background:{{ b.t.card }};border-right:1px solid {{ b.t.hair }};padding:16px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 14px 16px"><img src="../assets/axal-dossier-mark.png" alt="Axal VC" width="16" height="16" style="display:block;object-fit:contain"><span style="font-size:12px;font-weight:800;letter-spacing:-.01em;color:{{ b.t.ink }}">StudioOS</span></div>
+          <sc-for list="{{ b.nav }}" as="n" hint-placeholder-count="7"><div class="nav" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+        </div>
+        <div style="flex:1;min-width:0;padding:22px 30px 30px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:{{ b.t.muted }};flex-wrap:wrap">
+              <span>Research</span><span>‹</span><span>Diligence</span><span>‹</span><a href="#" style="color:{{ b.deep }}">{{ b.f.project_name }}</a>
+              <sc-if value="{{ b.open }}"><span>‹</span><span style="color:{{ b.t.ink }};font-weight:700">{{ b.f.name }}</span></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="pill" style="background:#f0fdf6;color:#065f46;border:1px solid #a7f3d0;letter-spacing:.05em">COLLECTION</span>
+              <span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">{{ b.scope }}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:12px"><sc-for list="{{ b.zones }}" as="z" hint-placeholder-count="5"><span class="zp" style="{{ z.style }}">{{ z.t }}</span></sc-for></div>
+
+          <!-- NDA-gated: no filename anywhere, no preview, no download -->
+          <sc-if value="{{ b.gated }}">
+            <div class="card" style="background:{{ b.t.warnFill }};border:1px solid {{ b.t.warnHair }};margin-top:16px;padding:32px 34px">
+              <div class="eye" style="color:{{ b.t.warn }}">Behind an NDA</div>
+              <h1 style="margin:10px 0 0;font-size:22px;font-weight:800;letter-spacing:-.022em;color:{{ b.t.ink }};max-width:720px">This document is behind an NDA. It is counted on the room page and not named here.</h1>
+              <div class="body" style="color:{{ b.t.body }};margin-top:10px;max-width:720px">Sign an NDA with {{ b.f.project_name }} and it appears in the room with the rest. Until then there is no name, no size, and no preview to show — the count on the room page is the whole of what this grant permits you to know.</div>
+              <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap"><a href="#" class="btn" style="border:1px solid {{ b.hair }};color:{{ b.deep }};background:{{ b.tint }}">‹ Back to the room</a></div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ b.open }}">
+            <!-- header -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:16px">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+                <div style="min-width:0">
+                  <div class="eye" style="color:{{ b.t.muted }}">Document</div>
+                  <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em;color:{{ b.t.ink }}">{{ b.f.name }}</h1>
+                  <div style="display:flex;align-items:center;gap:9px;margin-top:8px;flex-wrap:wrap">
+                    <span class="mono" style="font-size:11.5px;color:{{ b.t.muted }}">{{ b.size }}</span>
+                    <span class="body" style="color:{{ b.t.muted }}">·</span>
+                    <span class="mono" style="font-size:11.5px;color:{{ b.t.muted }}">{{ b.f.content_type }}</span>
+                    <span class="pill" style="{{ b.okStyle }}">Open to invited</span>
+                  </div>
+                </div>
+                <div style="text-align:right">
+                  <span class="btn" style="background:{{ b.accent }};color:#fff">Download</span>
+                  <div class="body" style="color:{{ b.t.muted }};margin-top:8px;max-width:300px">Single-use link, expires after two minutes. Not watermarked. The founder sees that you opened it.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- tiles -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">Size</div>
+                <div class="mono" style="font-size:20px;font-weight:700;letter-spacing:-.025em;margin-top:5px;color:{{ b.t.ink }}">{{ b.size }}</div>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ b.f.content_type }}</div>
+              </div>
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">Last downloaded by you</div>
+                <sc-if value="{{ b.f.last_download_at }}"><div class="mono" style="font-size:15px;font-weight:700;letter-spacing:-.02em;margin-top:6px;color:{{ b.t.ink }}">{{ b.f.last_download_at }}</div></sc-if>
+                <sc-if value="{{ b.neverDl }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ b.dlSub }}</div>
+              </div>
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }}">
+                <div class="eye" style="color:{{ b.t.muted }}">Room</div>
+                <a href="#" style="display:block;font-size:15px;font-weight:700;letter-spacing:-.02em;margin-top:6px;color:{{ b.deep }}">{{ b.f.project_name }}</a>
+                <div class="body" style="color:{{ b.t.muted }};margin-top:4px">{{ b.roomSub }}</div>
+              </div>
+            </div>
+
+            <!-- activity -->
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};margin-top:12px">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span class="eye" style="color:{{ b.t.muted }}">Your downloads of this file</span><span class="body" style="color:{{ b.t.muted }}">this document only, not the room</span></div>
+              <sc-if value="{{ b.hasActivity }}">
+                <div style="display:grid;gap:9px;margin-top:11px">
+                  <sc-for list="{{ b.f.activity }}" as="e" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:baseline;gap:11px;padding-top:9px;border-top:1px solid {{ b.t.hair }}"><span class="mono" style="font-size:11px;color:{{ b.t.muted }};width:150px;flex:none">{{ e.when }}</span><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">download</span><span class="body" style="color:{{ b.t.muted }}">{{ e.note }}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ b.noActivity }}">
+                <div style="margin-top:10px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px">You have not downloaded this file</span></div>
+              </sc-if>
+            </div>
+
+            <!-- stated limit -->
+            <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:16px 18px;margin-top:12px">
+              <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:6px;max-width:840px">This page does not OCR, summarise, or attach the file to a deal. There is no preview here because the product has none — a download is a single-use link, and what the document says is between you and the file.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ══ MOBILE 390 ══ -->
+    <sc-if value="{{ b.mobile }}">
+      <div class="ph" style="background:{{ b.t.ground }}">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700;background:{{ b.t.card }};color:{{ b.t.ink }}"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <sc-if value="{{ b.open }}">
+          <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.deep }}">‹ {{ b.f.project_name }}</span></div>
+            <div class="eye" style="color:{{ b.t.muted }};margin-top:8px">Document</div>
+            <h1 style="margin:5px 0 0;font-size:19px;font-weight:800;letter-spacing:-.022em;color:{{ b.t.ink }};line-height:1.25">{{ b.f.name }}</h1>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap"><span class="mono" style="font-size:11px;color:{{ b.t.muted }}">{{ b.size }} · {{ b.f.content_type }}</span><span class="pill" style="{{ b.okStyle }}">Open to invited</span></div>
+            <span class="btn" style="background:{{ b.accent }};color:#fff;display:block;text-align:center;margin-top:11px">Download</span>
+            <div class="body" style="color:{{ b.t.muted }};margin-top:7px;font-size:11px">Single-use link, expires after two minutes. Not watermarked. The founder sees that you opened it.</div>
+          </div>
+          <div style="padding:12px 14px 22px;display:grid;gap:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">Size</div>
+                <div class="mono" style="font-size:16px;font-weight:700;letter-spacing:-.025em;margin-top:4px;color:{{ b.t.ink }}">{{ b.size }}</div>
+              </div>
+              <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:11px 12px">
+                <div class="eye" style="color:{{ b.t.muted }};font-size:9px">Last downloaded</div>
+                <sc-if value="{{ b.f.last_download_at }}"><div class="mono" style="font-size:13px;font-weight:700;margin-top:5px;color:{{ b.t.ink }}">{{ b.f.last_download_at }}</div></sc-if>
+                <sc-if value="{{ b.neverDl }}"><div style="margin-top:6px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span></div></sc-if>
+              </div>
+            </div>
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div><div class="eye" style="color:{{ b.t.muted }}">Room</div><div class="body" style="color:{{ b.t.muted }};margin-top:3px;font-size:11px">{{ b.roomSub }}</div></div>
+              <a href="#" style="font-size:13px;font-weight:700;color:{{ b.deep }};white-space:nowrap">{{ b.f.project_name }} ›</a>
+            </div>
+            <div class="card" style="background:{{ b.t.card }};border:1px solid {{ b.t.hair }};padding:13px 15px">
+              <div class="eye" style="color:{{ b.t.muted }}">Your downloads of this file</div>
+              <sc-if value="{{ b.hasActivity }}"><div style="display:grid;gap:8px;margin-top:9px"><sc-for list="{{ b.f.activity }}" as="e" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:8px"><span class="pill" style="background:{{ b.t.chipBg }};color:{{ b.t.ink }};border:1px solid {{ b.t.hair }}">download</span><span class="mono" style="font-size:10.5px;color:{{ b.t.muted }}">{{ e.when }}</span></div></sc-for></div></sc-if>
+              <sc-if value="{{ b.noActivity }}"><div style="margin-top:8px"><span class="nr" style="{{ b.t.nr }}">Not recorded</span><span class="body" style="color:{{ b.t.muted }};margin-left:8px;font-size:11px">You have not downloaded this file</span></div></sc-if>
+            </div>
+            <div style="background:{{ b.t.sunk }};border:1px solid {{ b.t.hair }};border-radius:14px;padding:13px 15px">
+              <div class="eye" style="color:{{ b.t.muted }}">What this page will not do</div>
+              <div class="body" style="color:{{ b.t.body }};margin-top:5px;font-size:11.5px">This page does not OCR, summarise, or attach the file to a deal. There is no preview here because the product has none.</div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ b.gated }}">
+          <div style="background:{{ b.t.card }};padding:4px 16px 12px;border-bottom:1px solid {{ b.t.hair }}">
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:{{ b.t.muted }}"><span style="font-weight:700;color:{{ b.deep }}">‹ {{ b.f.project_name }}</span></div>
+          </div>
+          <div style="padding:14px;display:grid;gap:10px">
+            <div class="card" style="background:{{ b.t.warnFill }};border:1px solid {{ b.t.warnHair }};padding:18px 17px">
+              <div class="eye" style="color:{{ b.t.warn }}">Behind an NDA</div>
+              <h1 style="margin:9px 0 0;font-size:17px;font-weight:800;letter-spacing:-.02em;color:{{ b.t.ink }};line-height:1.3">This document is behind an NDA. It is counted on the room page and not named here.</h1>
+              <div class="body" style="color:{{ b.t.body }};margin-top:9px;font-size:11.5px">Sign an NDA with {{ b.f.project_name }} and it appears in the room with the rest. Until then there is no name, no size, and no preview to show.</div>
+              <a href="#" class="btn" style="border:1px solid {{ b.hair }};color:{{ b.deep }};background:{{ b.tint }};display:inline-block;margin-top:13px">‹ Back to the room</a>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <div class="cap" style="width:{{ b.capW }}">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const IND = { a:'#4f46e5', deep:'#4338ca', tint:'#eef2ff', hair:'#c7d2fe', deepDark:'#818cf8', tintDark:'#211f3d' };
+
+    const LIGHT = { ground:'#f4f3f7', card:'#fff', hair:'#ececf1', ink:'#18181b', body:'#3f3f46', muted:'#52525b',
+      ok:'#047857', okFill:'#ecfdf5', okHair:'#a7f3d0', warn:'#92400e', warnFill:'#fffbeb', warnHair:'#fde68a',
+      chipBg:'#fafafa', sunk:'#f4f3f7', nr:'background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8' };
+    const DARK = { ground:'#140c26', card:'#111827', hair:'#374151', ink:'#f4f4f5', body:'#d1d5db', muted:'#9ca3af',
+      // Every tone is a fill, an ink and a border together. Theming the ink alone is what put a
+      // lifted green on a light fill last time — the two must come from the same theme.
+      ok:'#4ade80', okFill:'#052e1a', okHair:'#065f46', warn:'#fbbf24', warnFill:'#422006', warnHair:'#78350f',
+      chipBg:'#0b1220', sunk:'#0f0a1e', nr:'background:#1f2937;color:#9ca3af;border:1px solid #374151' };
+    const toneStyle = (kind, t) => kind === 'warn'
+      ? 'background:' + t.warnFill + ';color:' + t.warn + ';border:1px solid ' + t.warnHair
+      : 'background:' + t.okFill + ';color:' + t.ok + ';border:1px solid ' + t.okHair;
+
+    const NAV = ['Studio','Deals','Portfolio','Fund','Network','Research','Trust'];
+    const nav = (t) => NAV.map(l => ({ label:l, style: l === 'Research'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';font-weight:700;box-shadow:inset 2px 0 0 ' + IND.a
+      : 'color:' + t.muted }));
+    const ZONES = ['Ask','Diligence','Benchmarking','Markets','Library'];
+    const zones = (t) => ZONES.map(z => ({ t:z, style: z === 'Diligence'
+      ? 'background:' + (t === DARK ? IND.tintDark : IND.tint) + ';color:' + (t === DARK ? IND.deepDark : IND.deep) + ';border:1px solid ' + (t === DARK ? '#3730a3' : IND.hair)
+      : 'color:' + t.muted + ';border:1px solid transparent' }));
+
+    // Size is formatted from bytes at the edge, so nothing on the page carries a typed "1.2 MB"
+    // that could disagree with the record behind it.
+    const size = (bytes) => bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+
+    // ══ Files. Only visibility=open reaches a detail page; the gated row is the refusal state,
+    // and it carries no name — not in the H1, not in the crumb, not in the tab. ══
+    const DECK = { file_uid:'fl_2a', grant_uid:'gr_9k2', project_name:'Kelp Bio', name:'Pitch deck.pdf',
+      size_bytes:1258291, content_type:'application/pdf', visibility:'open', last_download_at:null, activity:[] };
+    const CAPTABLE = { file_uid:'fl_7c', grant_uid:'gr_9k2', project_name:'Kelp Bio', name:'Cap table — Jun 2026.xlsx',
+      size_bytes:86016, content_type:'application/vnd.ms-excel', visibility:'open', last_download_at:'12 Aug 2026',
+      activity:[ { when:'12 Aug 2026, 14:20', note:'link used once, then expired' },
+        { when:'02 Jul 2026, 09:05', note:'link used once, then expired' } ] };
+    const GATED = { file_uid:'fl_5n', grant_uid:'gr_9k2', project_name:'Kelp Bio', name:null,
+      size_bytes:null, content_type:null, visibility:'nda', last_download_at:null, activity:[] };
+
+    const board = (id, badge, f, t, kind, extra) => {
+      const dark = t === DARK, gated = f.visibility !== 'open';
+      const never = !f.last_download_at;
+      return Object.assign({
+        id, badge, f, t, desktop: kind === 'desktop', mobile: kind === 'mobile',
+        gated, open: !gated,
+        capW: kind === 'desktop' ? '1280px' : '390px',
+        // A gated file has no name to put in a title, so the artboard label does not invent one.
+        title: (gated ? f.project_name + ' · behind an NDA' : f.name) + ' · ' + (kind === 'desktop' ? '1280' : '390') + (dark ? ' · dark' : ''),
+        route: '/research/diligence/' + f.grant_uid + '/files/' + f.file_uid,
+        nav: nav(t), zones: zones(t), scope:'Thornbury Capital',
+        accent: IND.a, deep: dark ? IND.deepDark : IND.deep, tint: dark ? IND.tintDark : IND.tint, hair: dark ? '#3730a3' : IND.hair,
+        size: gated ? null : size(f.size_bytes),
+        okStyle: toneStyle('ok', t),
+        neverDl: never,
+        dlSub: never ? 'you have not downloaded it' : f.activity.length + (f.activity.length === 1 ? ' download recorded' : ' downloads recorded'),
+        roomSub: 'back to the grant and its counts',
+        hasActivity: f.activity.length > 0, noActivity: f.activity.length === 0
+      }, extra || {});
+    };
+
+    const boards = [
+      board('d1','D1',DECK,LIGHT,'desktop',{
+        blurb:'Sparse: Pitch deck.pdf, 1.2 MB, never downloaded. No preview pane, because the product has none and an empty viewer frame would promise one. The page is the file\u2019s facts plus the download, and nothing about what the deck says.',
+        cap:'Size is formatted from bytes at the edge rather than typed, so the header and the tile cannot disagree. Last downloaded reads Not recorded and the activity list says so in words underneath.' }),
+      board('d2','D2',CAPTABLE,LIGHT,'desktop',{
+        blurb:'Downloaded twice. The activity list is your downloads of this file only — not the room\u2019s, not the founder\u2019s — and each line states that the link was used once and then expired, which is the whole of what the access log knows.',
+        cap:'The Room tile links back to the grant. Nothing here attaches the file to a deal, because the two records have no key between them.' }),
+      board('d3','D3',GATED,LIGHT,'desktop',{
+        blurb:'NDA-gated. Full-page amber, no preview, no download, and no filename anywhere — not in the H1, not in the crumb, not in the artboard title. The crumb stops at the project, because the next segment would be the name the grant withholds.',
+        cap:'The remedy is stated once and is not a button that writes nowhere: sign an NDA with the company and the document appears in the room with the rest.' }),
+      board('d4','D4',CAPTABLE,DARK,'desktop',{
+        blurb:'Dark mode. Indigo lifts to #818cf8, the tint drops to #211f3d, and the amber surfaces would take a dark fill with a lifted ink so the two move together.',
+        cap:'The COLLECTION badge and the "Open to invited" chip keep their green — visibility is data, not theme.' }),
+      board('d5','D5',GATED,DARK,'desktop',{
+        blurb:'The gated refusal on dark — the frame that proves the amber tokens rather than only claiming them. Fill, ink and border all come from DARK, so the panel reads as a warning on a dark card instead of a light panel with lifted text.',
+        cap:'Still no filename, on either theme. The absence is the same fact whichever way the room is lit.' }),
+      board('m1','M1',DECK,LIGHT,'mobile',{
+        blurb:'Mobile 390, sparse. The download is full-width under the header with its terms beneath it, then size and last-download as a pair, the room link, your downloads, and the stated limit.',
+        cap:'The single-use terms sit directly under the button rather than in a footnote — on a phone that is the only place they are certain to be read before the tap.' }),
+      board('m2','M2',GATED,LIGHT,'mobile',{
+        blurb:'Mobile 390, NDA-gated. The same refusal, the same absence of a name, and a back link to the room where the count lives.',
+        cap:'No tiles, no activity block, no stated limit — there is nothing to state a limit about on a document this page will not name.' })
+    ];
+
+    return { boards };
+  }
+}
+</script>
+</body></html>

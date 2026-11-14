@@ -1,0 +1,237 @@
+/**
+ * D786 (#2211) part 2 — the copy of /pricing, from the owner's "Pricing"
+ * canvas (`design/incoming/StudioOS Pricing.dc.html` and its 2026-10-20
+ * revision): the plan cards' names, taglines and feature lists, the
+ * comparison tables, the LP band, the no-plan cards and the FAQ.
+ *
+ * NO FIGURE LIVES HERE that the catalogue owns. A card's price, its yearly
+ * price and the AI it includes come from `GET /api/public/plans-and-packs`
+ * (`pricingModel.js`); a plan the catalogue does not sell reads "Not offered
+ * yet". The counts that are here are the Worker's own limits:
+ *   - 1 startup, 5 interviews, 3 OKRs: `FREE_TIER_LIMITS` (middleware/requireTier.ts);
+ *   - 3 / 10 / 25 introductions a month: `monthlyAllowanceFor` (services/introductions.ts).
+ * A canvas figure the code does not hold was dropped with its number.
+ *
+ * AI tokens are never "credits" (D785 D-c): "credits" only ever means Perks.
+ */
+import { SITE_ACTIONS } from './siteLinks';
+
+/** The Models tab's groups in the canvas's order: the Worker's `MODEL_GROUPS` (services/ai/publicModels.ts), which a test holds equal. */
+export const MODEL_GROUPS = Object.freeze([
+  'Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking',
+  'Languages', 'Speech to text', 'Voice', 'Images', 'Safety',
+]);
+
+/**
+ * Each tab's cards, in the canvas's order. `match` is the catalogue plan's
+ * `licence_key` (`aiCredits.planOf`); `free` is the tab's free plan; `custom`
+ * is priced by our sales team and never shows a figure. `lane` is the
+ * register page's `?lane=` for a visitor. `storage` is the card's storage
+ * plan key (D1172, #3085): its allowance and "Best suited for" are the public
+ * read's (`storage_bytes`, `best_suited`), never written here. The two firms
+ * have no catalogue plan, so they read "Negotiated" (#2449 owner question 2).
+ */
+export const PLAN_CARDS = Object.freeze({
+  founder: [
+    {
+      id: 'free', name: 'Free', match: 'founder:free', storage: 'founder:free', free: true, lane: 'founder',
+      tag: 'Start validating one idea.',
+      feats: ['1 active startup', 'Validate: 5 customer interviews and 3 OKRs', 'Apply to the Spin-Out Lab', 'Public profile and referral link', 'Accept up to 3 introductions a month', 'AI runs from AI tokens you top up'],
+    },
+    {
+      id: 'growth', name: 'Validate + Build', match: 'founder:growth', storage: 'founder:growth', lane: 'founder', highlight: true,
+      tag: 'Prove the idea, then build the company.',
+      feats: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Company data for market research', 'Your full archetype card', 'Accept up to 10 introductions a month'],
+    },
+    {
+      id: 'studio', name: 'Raise + Grow', match: 'founder:studio', storage: 'founder:studio', lane: 'founder',
+      tag: 'Raise the money, then grow the company.',
+      feats: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
+    },
+  ],
+  investor: [
+    {
+      id: 'free', name: 'Investor Basic', kick: 'Free plan', match: 'investor:free', storage: 'investor:free', free: true, lane: 'investor', cta: 'Start free',
+      tag: 'Browse the network.',
+      feats: ['Public deal index', 'Watchlists', 'Read-only market pulses', 'AI runs from AI tokens you top up'],
+    },
+    {
+      id: 'plus', name: 'Investor Plus', kick: 'Research subscription', match: 'investor:plus', storage: 'investor:plus', lane: 'investor', cta: 'Get Investor Plus',
+      tag: 'For angel investors, independent investors and investment professionals.',
+      feats: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+    },
+    {
+      id: 'professional', name: 'Investor Pro', kick: 'Research subscription', match: 'investor:professional', storage: 'investor:professional', lane: 'investor', cta: 'Get Investor Pro', highlight: true,
+      tag: 'For professional angels, investment analysts and smaller firms.',
+      feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+    },
+    {
+      id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, storage: 'investor:institutional', cta: 'Contact Axal VC',
+      tag: 'For institutional investors, family offices and investment teams.',
+      feats: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
+    },
+  ],
+  advisor: [
+    {
+      id: 'free', name: 'Advisor Basic', kick: 'Free plan', free: true, storage: 'advisor:free', lane: 'advisor', cta: 'Start free',
+      tag: 'Publish a profile.',
+      feats: ['Public advisor profile', 'Listed in the advisor directory', 'Office hours and session types', 'Booking links', 'AI runs from AI tokens you top up'],
+    },
+    {
+      id: 'pro', name: 'Advisor Pro', kick: 'Practice subscription', match: 'advisor', storage: 'advisor:pro', lane: 'advisor', cta: 'Get Advisor Pro', highlight: true,
+      tag: 'More reach, better matches.',
+      feats: ['More reach in matching', 'Paid sessions through your booking links', 'Deliverables and the client access log', 'Earnings and payouts'],
+    },
+  ],
+  'operating-partner': [
+    {
+      id: 'free', name: 'Partner Basic', kick: 'Free plan', free: true, storage: 'partner:free', lane: 'partner', cta: 'Start free',
+      tag: 'Get listed.',
+      feats: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', 'AI runs from AI tokens you top up'],
+    },
+    {
+      // The owner's ruling (2026-10-20): the plan is "Operating Partner Pro".
+      id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', storage: 'partner:pro', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
+      tag: 'Inbound demand on tap.',
+      feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
+    },
+  ],
+});
+
+/** The Investor tab's LP band: not a subscription, free with an investment in an Axal VC fund. */
+export const LP_ACCESS = Object.freeze({
+  kick: 'For investors in Axal VC funds',
+  name: 'LP Access',
+  text: 'Not a subscription. Your fund investments, documents and updates, free with your investment.',
+  note: 'Free access for eligible investors in Axal VC funds. Access is subject to investor verification and fund-specific permissions.',
+  link: { label: SITE_ACTIONS.lpLabel, to: SITE_ACTIONS.lpLogin },
+  feats: ['Access to relevant fund documents and reports', 'Fund updates and announcements', 'Available capital account and investment information', 'Secure document access', 'Fund-related communications', 'Information for your authorized fund investments'],
+});
+
+/**
+ * D1172 (#3085, STG18–STG19): the Storage group at the end of every Compare
+ * plans table, and the LP band's storage line. The figures are the public
+ * read's; only the words are here. "Best suited for" is on Founder and
+ * Investor only (#2449 owner question 11).
+ */
+export const STORAGE_COMPARE = Object.freeze({
+  group: 'Storage',
+  row: 'Storage',
+  best: 'Best suited for',
+  bestTabs: ['founder', 'investor'],
+  negotiated: 'Negotiated',
+  lpLine: (size) => `${size} personal storage.`,
+  lpExcluded: 'Fund documents are excluded.',
+  lpMissing: 'Storage with LP Access is not recorded yet.',
+});
+
+/**
+ * "Compare plans": each group's rows, one cell per card in PLAN_CARDS order.
+ * 1 is a tick, 0 a dash, a string is the cell's words.
+ */
+export const COMPARE = Object.freeze({
+  founder: [
+    ['Validate', [['Customer interviews', '5', 'Unlimited', 'Unlimited'], ['Pain map and themes', 1, 1, 1], ['Hypotheses and the verdict', 1, 1, 1], ['Market intelligence', 0, 1, 1], ['Venture-readiness scoring', 0, 1, 1]]],
+    ['Build', [['OKRs', '3', 'Unlimited', 'Unlimited'], ['Roadmap and This week', 1, 1, 1], ['Founding team', 1, 1, 1], ['Company creation and filings', 0, 1, 1]]],
+    ['Raise', [['Pitch deck: every template and share links', 0, 0, 1], ['Cap table scenarios and dilution', 0, 0, 1], ['Data room', 0, 0, 1], ['Legal, compliance and the 83(b)', 0, 0, 1], ['Introductions a month', '3', '10', '25']]],
+    ['Grow', [['Revenue and traction', 0, 0, 1], ['Distribution and co-marketing', 0, 0, 1], ['Team expansion', 0, 0, 1], ['Partner network', 0, 0, 1]]],
+  ],
+  investor: [
+    ['Browse', [['Public deal index', 1, 1, 1, 1], ['Market pulses', 'Read-only', 1, 1, 1]]],
+    ['Research', [['Research workspace', 0, 1, 1, 1], ['Watchlists and opportunity tracking', 1, 1, 1, 1], ['AI-assisted research', 0, 'Standard limits', 'Higher limits', 'Negotiated'], ['Personal notes and deal comparisons', 0, 1, 1, 1], ['Advanced research and screening', 0, 0, 1, 1], ['Portfolio tracking and analytics', 0, 0, 1, 1], ['Investment memo generation', 0, 0, 1, 1], ['Data exports and integrations', 0, 0, 1, 1]]],
+    ['Teams', [['Shared research workspaces', 0, 0, 0, 1], ['Team access controls and permissions', 0, 0, 0, 1], ['Advanced reporting and analytics', 0, 0, 0, 1], ['Custom integrations and workflows', 0, 0, 0, 1], ['Organization-wide administration', 0, 0, 0, 1]]],
+  ],
+  advisor: [
+    ['Profile and reach', [['Public advisor profile', 1, 1], ['Advisor directory listing', 1, 1], ['Reach in matching', 'Standard', 'More']]],
+    ['Practice', [['Office hours and session types', 1, 1], ['Booking links', 1, 1], ['Paid sessions', 0, 1], ['Deliverables and the client access log', 0, 1], ['Earnings and payouts', 0, 1]]],
+  ],
+  'operating-partner': [
+    ['Listing', [['Provider profile and directory listing', 1, 1], ['Verification badges', 1, 1], ['Live founder requests', 1, 1]]],
+    ['Delivery', [['Proposals, pipeline and delivery', 0, 1], ['Partner insights', 0, 1], ['Client status reports', 0, 1], ['Payouts through Stripe Connect', 0, 1]]],
+  ],
+});
+
+export const HERO = Object.freeze({
+  title: 'Pricing',
+  line: 'Pay for the cycles you are in. Eligible paid plans include an AI allowance; Free users can add AI tokens to use supported models.',
+});
+
+export const AI_BAND = Object.freeze({
+  kick: 'AI access and usage are separate',
+  text: "Paid plans include a monthly AI allowance calculated from the billed subscription amount. Free plans include no funded AI allowance: AI runs require purchased AI tokens. Purchased tokens remain separate from your plan allowance.",
+  link: 'See model prices',
+});
+
+export const MODELS_LINE = "Prices are Cloudflare's published Workers AI rates plus 25%. Runs are paid from your plan's monthly AI allowance first, then from your AI tokens.";
+
+// D1285 (#2452): the Models tab's Token packs, in the "Add tokens" canvas's words (CRP1, CRP11).
+export const PACKS = Object.freeze({
+  kick: 'AI tokens',
+  title: 'Token packs',
+  text: "Buy AI tokens as you need them. Runs use your plan's AI allowance first, then your tokens.",
+  foot: 'Sold by Axal VC Management LLC. Paid securely through Stripe. VAT, where it applies, is added at checkout and is not part of the tokens.',
+  unreadable: "Token packs couldn't be read just now.",
+});
+
+/** D1285 (#2452): the "Your AI tokens" band over the Models tab, for a signed-in member (CRP1, CRP11, CRP14). */
+export const TOKENS_BAND = Object.freeze({
+  kick: 'Token balance',
+  never: 'Tokens never expire.',
+  unreadable: "Your token balance couldn't be read. That's not the same as having none.",
+  paused: 'AI is paused on this account. Contact support. You can still add tokens: runs are paused, not purchases.',
+  add: 'Add tokens',
+  // D1286 (#3369): the band's middle block, bar, storage and auto-reload lines (CRP1, CRP10, CRP13, CRP18).
+  included: 'Included with your plan',
+  yourPlan: 'Your plan',
+  noAllowance: (plan) => `${plan} includes no AI allowance. Runs use your tokens.`,
+  planNoAllowance: 'Your plan includes no AI allowance. Runs use your tokens.',
+  noPlan: 'No plan. Runs use your tokens.',
+  staff: 'Staff account. Runs use your tokens.',
+  staffName: 'Staff account',
+  noPlanName: 'No plan',
+  planUnreadable: "Your plan's allowance couldn't be read. That's not the same as having none.",
+  left: (left, of) => `${left} of ${of} left this month`,
+  resets: (day) => `Resets on ${day}`,
+  barAllowance: (x) => `Plan allowance left ${x}`,
+  barTokens: (x) => `AI tokens ${x}`,
+  storage: (gb) => `Your plan also includes ${gb} storage.`,
+  storageNone: (why) => `Storage: ${why}.`,
+  storageUnreadable: "Your plan's storage couldn't be read.",
+  storageLink: 'See storage ›',
+  autoOff: 'Auto-reload: off',
+  autoOn: (below) => (below ? `Auto-reload: on, below ${below}` : 'Auto-reload: on'),
+  autoPaused: 'Auto-reload: paused',
+  autoUnreadable: "Auto-reload couldn't be read",
+  autoSetUp: 'Set up ›',
+  autoManage: 'Manage ›',
+  hq: 'Super Admin: token packs are set on',
+  hqLink: 'HQ › AI allowances ›',
+  reading: 'Reading…',
+});
+
+/** The FAQ. "Can I set a spending limit?" names D788's monthly spend limit (Account › Usage › Limits). */
+export const FAQ = Object.freeze([
+  ['What are AI tokens?', 'Purchased AI tokens pay for supported AI runs. An eligible paid subscription separately includes a monthly AI allowance; a Free plan has no included funded AI allowance. Each run draws from applicable allowance first and then your token balance.'],
+  ['Are AI tokens the same as Perks credits?', 'No. Perks credits are claimed for perks from partners. AI tokens pay for AI runs. Neither can be spent as the other.'],
+  ['What happens when my allowance runs out?', 'Runs draw on the AI tokens you have bought. If you have none, AI runs wait until you top up or your allowance resets on the 1st. Everything else keeps working.'],
+  ['Can I set a spending limit?', 'Yes. Set a monthly spend limit in Account › Usage › Limits. AI never spends more than your monthly allowance and the tokens you have bought, and Account › Usage shows your allowance, your use and your balance, run by run.'],
+  ['Do unused tokens expire?', 'Tokens you buy never expire. Your plan’s monthly allowance resets on the 1st and does not carry over.'],
+  ['How do refunds work?', 'Refunds are not automatic: the effective Terms and applicable law govern each purchase, and the checkout terms may differ for subscriptions and one-time token packs. If you believe a payment was wrong or a required legal right applies, contact Axal VC with the transaction reference before retrying the payment.'],
+  ['How does annual billing affect my AI allowance?', 'The plan card displays the full amount billed for the year, not just its monthly equivalent. The included AI allowance is a monthly amount and can be lower under yearly billing than monthly billing; compare the two catalogue-backed figures shown with each available plan before checkout.'],
+  ['When does my subscription renew or stop?', 'Check the renewal date, amount and interval in the checkout quote and Account → Billing. Where available, you can schedule cancellation for the end of the paid period in Account → Billing. The effective Terms also describe written cancellation before renewal; if the account control is unavailable, contact Axal VC in writing in time. Confirm the recorded cancellation outcome.'],
+  ['What if I downgrade, cancel or a payment fails?', 'Check the effective licence status in Account → Billing. Paid-only features may stop at the applicable period end or after a payment failure; existing documents, invitations and shared links remain subject to their own access rules. Do not assume continued access or deletion until the relevant records and terms are verified.'],
+  ['What currency and taxes will I pay?', 'The current checkout quote displays the billing currency, charge and any applicable taxes for the selected product and location. A plan card is not a tax assessment. Platform fees are separate from separately contracted investment or fund fees.'],
+  ['What about AI allowance resets and tokens?', 'Included monthly allowance is not a purchased token balance: it resets on the 1st of the calendar month and does not roll over. Purchased AI tokens do not expire. If an AI run or top-up has an unknown outcome, review Account → Usage and transaction history before repeating it.'],
+]);
+
+/** The Investor tab's three questions, asked first. */
+export const FAQ_INVESTOR = Object.freeze([
+  ['Who qualifies for free LP access?', 'Eligible investors in Axal VC funds receive access to their relevant fund information without a separate platform subscription.'],
+  ['Do I need to subscribe to access my fund documents?', 'No. Eligible LPs can access their authorized fund information for free.'],
+  ['Can I use Axal VC without investing in an Axal VC fund?', 'Yes. Independent investors can choose a paid research plan based on their needs. A research plan does not make you eligible to invest in a fund, and does not open restricted fund information.'],
+]);
+
+export const CLOSING = Object.freeze({
+  title: 'Start free. Pay for the cycles you are in.',
+  line: 'Every plan includes AI. Top up only when you need more.',
+});

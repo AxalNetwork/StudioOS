@@ -1,0 +1,136 @@
+Objective
+  Admin-only system to manage Telegram channels and post platform-
+  derived content to:
+    - one public channel (broad audience)
+    - invite-only channels per cohort (founders, investors, mentors,
+       operating partners, alumni)
+  Drafts are aggregated from platform activity; admin reviews, edits,
+  and sends. No automatic posting without admin approval.
+
+Architecture
+
+  Bot setup (one Telegram bot owned by Axal):
+    BotFather → create AxalNewsBot → store token as
+      TELEGRAM_BOT_TOKEN (Wrangler secret).
+    Bot must be added as ADMIN to every Axal channel with permission
+    "Post Messages". Channels include:
+      @axalvc                                  (public)
+      private channel: Axal Founders           (invite-only)
+      private channel: Axal Investors          (invite-only)
+      private channel: Axal Mentors            (invite-only)
+      private channel: Axal Operating Partners (invite-only)
+      private channel: Axal Alumni             (invite-only)
+
+  Schema
+    CREATE TABLE telegram_channels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT UNIQUE NOT NULL,       -- 'public','founders',...
+      label TEXT NOT NULL,
+      chat_id TEXT NOT NULL,            -- Telegram chat_id, e.g. -1001234567
+      audience TEXT NOT NULL,           -- 'public' | 'founders' | ...
+      is_invite_only INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE telegram_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id INTEGER NOT NULL,
+      draft_source TEXT,                -- 'manual' | 'aggregator'
+      source_event_ids_json TEXT,       -- references to platform rows
+      body_markdown TEXT NOT NULL,
+      media_r2_keys_json TEXT,
+      status TEXT NOT NULL,             -- 'draft','queued','sent','failed'
+      created_by_admin_id INTEGER NOT NULL,
+      reviewed_by_admin_id INTEGER,
+      scheduled_at DATETIME,
+      sent_at DATETIME,
+      tg_message_id TEXT,
+      error TEXT
+    );
+    CREATE TABLE telegram_aggregations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,               -- 'platform_weekly','new_founder',
+                                        -- 'fund_closed','milestone',
+                                        -- 'mi_signal','market_report'
+      period_start DATETIME, period_end DATETIME,
+      payload_json TEXT,
+      generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+  Worker routes (admin-only + Cf-Access)
+    GET    /api/admin/telegram/channels
+    POST   /api/admin/telegram/channels         add / connect channel
+    DELETE /api/admin/telegram/channels/:id
+    GET    /api/admin/telegram/posts?status=&channel_id=
+    POST   /api/admin/telegram/posts            create draft
+    PUT    /api/admin/telegram/posts/:id        edit draft
+    POST   /api/admin/telegram/posts/:id/send   send to Telegram now
+    POST   /api/admin/telegram/posts/:id/schedule { scheduled_at }
+    DELETE /api/admin/telegram/posts/:id
+    POST   /api/admin/telegram/aggregator/run   generate draft(s) from
+                                                 recent platform events
+    GET    /api/admin/telegram/aggregator/preview?kind=&period_days=
+
+  Aggregator (cloudflare-worker/src/services/telegram/aggregator.ts)
+    Pulls signals per audience:
+      founders   → new mentor sessions booked, deal-room intros,
+                    Spin-Out graduates this week, top market-intel
+                    signals for their sectors
+      investors  → new founders matching their thesis, MI signal
+                    deltas, Stripe-verified MRR milestones across
+                    portfolio
+      mentors    → new mentor requests, booked sessions, completed
+                    sessions
+      partners   → new partner deals signed, sourcing rewards paid,
+                    co-marketing opportunities
+      public     → curated weekly recap — counts only, never PII;
+                    sector heat, fund-raise milestones (only with
+                    founder's opt-in)
+    Each aggregation produces a markdown draft with sane copy +
+    media suggestions (logos, charts produced by Browser Rendering
+    against existing MI templates).
+
+  Telegram client (cloudflare-worker/src/services/telegram/client.ts)
+    sendMessage(chat_id, text, opts) → POST
+      https://api.telegram.org/bot{token}/sendMessage
+      parse_mode=MarkdownV2, disable_web_page_preview optional
+    sendPhoto / sendDocument for media.
+    All calls go through circuit breaker + retry wrapper.
+
+  PII safety
+    A pre-send linter (telegram/redactCheck.ts) blocks send if:
+      - any draft contains user email, phone, tax id, bank acct,
+        full legal name unless the user explicitly opted in
+        (consent_for_promotion column on users)
+      - any private founder data leaks into the public channel
+    Admin must override with a typed reason; override logged.
+
+  Audit
+    Every send / edit / delete writes admin_audit_log with
+    admin_id, post_id, action, body_hash, timestamp.
+
+Frontend
+  /admin/telegram in the Admin Console:
+    - Channels tab: list, add, remove, test-connect (sends a
+      "hello" message to confirm the bot has post rights).
+    - Drafts tab: aggregator queue + manual compose.
+    - Post composer: rich markdown editor, media uploads (stored in
+      R2 with gated retrieval), audience picker, schedule picker.
+    - Send button: shows the PII linter result + requires admin to
+      confirm.
+    - History tab: paginated list of sent posts with Telegram link,
+      engagement counts (when channel is public; private channels
+      have no stats via Bot API).
+
+Tier / role gating
+  Admins only. requireCfAccess on /api/admin/telegram/*.
+
+Acceptance
+  - Admin can add a channel (the bot must already be in it).
+  - Aggregator run produces ≥ 1 draft per active audience.
+  - Admin can edit a draft + send to the chosen channel.
+  - Public channel sends a real Telegram message; private channels
+    same.
+  - PII linter blocks a deliberately-leaky draft until override.
+  - All sends audited; admin_audit_log shows the row.
+  - Failure path: invalid token → returns typed error with
+    `code: 'telegram_token_missing'`, never silent 500.

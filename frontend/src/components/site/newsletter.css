@@ -1,0 +1,76 @@
+/*
+ * D813 (#2259) — the newsletter signup (board W1) and its three pages
+ * (`/newsletter`, `/newsletter/confirm`, `/newsletter/preferences`). Light
+ * only, like the rest of the public site; sizes from `site.css`'s tokens.
+ */
+.ax-nl-block { padding: 44px 0; }
+.ax-nl-block-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 32px; align-items: center; }
+.ax-nl-block-h { font-size: 24px; letter-spacing: -0.01em; color: var(--ax-ink); }
+.ax-nl-block-d { margin: 8px 0 10px; font-size: 14px; line-height: 1.55; color: var(--ax-body); }
+.ax-nl-more { font-size: 13px; }
+
+.ax-nl-form { display: flex; flex-direction: column; gap: 10px; }
+.ax-nl-row { display: flex; gap: 8px; }
+.ax-nl-input {
+  flex: 1 1 auto; min-width: 0; padding: 11px 14px; border-radius: 10px; border: 1px solid #e4e2ea;
+  background: #fff; color: var(--ax-ink); font-size: 13.5px; font-family: inherit;
+}
+.ax-nl-input::placeholder { color: var(--ax-faint); }
+.ax-nl-input:focus { outline: none; border-color: var(--ax-violet); box-shadow: 0 0 0 3px rgba(109,40,217,.12); }
+.ax-site .ax-nl-send { flex: 0 0 auto; }
+.ax-site .ax-nl-send:disabled, .ax-site .ax-nl-action:disabled { opacity: .6; cursor: not-allowed; }
+.ax-nl-fine { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--ax-muted); }
+.ax-nl-fine-link { color: var(--ax-violet) !important; font-weight: 700; }
+.ax-nl-error {
+  margin: 0; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+  color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+}
+.ax-nl-ok { margin: 0; font-size: 13px; color: #047857; }
+.ax-nl-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ax-nl-hp { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; }
+
+.ax-nl-sent { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--ax-line-3); background: #fff; }
+.ax-nl-sent-t { font-weight: 800; font-size: 15px; color: var(--ax-ink); }
+.ax-nl-sent-d { margin: 4px 0 0; font-size: 13px; line-height: 1.55; color: var(--ax-body); }
+.ax-nl-again { margin-top: 8px; font-size: 12.5px; background: none; border: 0; padding: 0; cursor: pointer; }
+
+.ax-nl-topics { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--ax-line-2); border-radius: 12px; }
+.ax-nl-topic { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; }
+.ax-nl-topic + .ax-nl-topic { border-top: 1px solid var(--ax-line-2); }
+.ax-nl-topic-t { font-size: 14px; font-weight: 700; color: var(--ax-ink); }
+.ax-nl-topic-n { font-weight: 500; color: var(--ax-muted); }
+.ax-nl-switch {
+  position: relative; flex: 0 0 auto; width: 40px; height: 22px; border-radius: 999px; border: 0; padding: 0;
+  background: var(--ax-line-3); cursor: pointer; transition: background .14s;
+}
+.ax-nl-switch span {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 999px; background: #fff;
+  box-shadow: 0 1px 2px rgba(20,17,24,.25); transition: transform .14s;
+}
+.ax-nl-switch.is-on { background: var(--ax-violet); }
+.ax-nl-switch.is-on span { transform: translateX(18px); }
+.ax-nl-switch:disabled { opacity: .5; cursor: not-allowed; }
+
+/* The three pages. */
+.ax-nl-page { padding: 64px 0 80px; }
+.ax-nl-page-in { max-width: 620px; }
+.ax-nl-h1 { font-size: 40px; letter-spacing: -0.02em; color: var(--ax-ink); }
+.ax-nl-lede { margin: 12px 0 24px; font-size: 16px; line-height: 1.6; color: var(--ax-body); }
+.ax-nl-card { padding: 20px; border-radius: 14px; border: 1px solid var(--ax-line-2); background: #fff; }
+.ax-nl-list { margin: 0 0 18px; padding-left: 18px; font-size: 14px; line-height: 1.7; color: var(--ax-ink-2); }
+.ax-nl-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.ax-nl-actions-top { margin: 0 0 14px; }
+.ax-nl-danger { background: none; border: 0; padding: 0; font-size: 13px; font-weight: 700; color: #b91c1c; cursor: pointer; }
+.ax-nl-email { margin: 0 0 12px; font-size: 13px; color: var(--ax-muted); }
+
+@media (max-width: 760px) {
+  .ax-nl-block { padding: 32px 0; }
+  .ax-nl-block-in { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .ax-nl-row { flex-direction: column; }
+  .ax-site .ax-nl-send, .ax-site .ax-nl-action { width: 100%; min-height: 44px; }
+  .ax-nl-input { min-height: 44px; }
+  .ax-nl-page { padding: 40px 0 56px; }
+  .ax-nl-h1 { font-size: 30px; }
+  .ax-nl-topic { min-height: 44px; }
+  .ax-nl-actions { flex-direction: column; align-items: stretch; }
+}

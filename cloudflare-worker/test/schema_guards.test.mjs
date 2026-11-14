@@ -1,0 +1,779 @@
+/**
+ * The parsers behind the schema guards, tested on the shapes that fooled them.
+ *
+ * `check-sqlite-tables` and `check-sqlite-columns` are only as good as their
+ * reading of the source. Eleven distinct parser faults were found while building
+ * them, and every one made the guard REPORT A COLUMN OR TABLE THAT EXISTS —
+ * or, worse in one case, silently stop reading a query at all. A guard that
+ * cries wolf gets ignored; a guard with a blind spot is decoration.
+ *
+ * Each case below is one of those faults, written from the real source shape
+ * that produced it. They are cheap to run and they are the only thing standing
+ * between these checks and a slow slide back into noise.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
+import { stripSqlLiterals, knownTables, unknownReferences } from '../../scripts/check-sqlite-tables.mjs';
+import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
+import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
+import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
+import { selectKeys, typeFields, phantomFields, coverage as genericCoverage } from '../../scripts/check-row-generics.mjs';
+import { parseSections, bindings, missingFromProduction, unknownTables } from '../../scripts/check-wrangler-binding-parity.mjs';
+import { codeqlIgnores, semgrepIgnores, generatedTrees, gaps } from '../../scripts/check-scanner-ignore-parity.mjs';
+
+test('a query introduced by a line comment is still seen', () => {
+  const src = `
+    await env.DB.prepare(
+      // why this query is shaped this way
+      \`SELECT id FROM widgets\`,
+    ).run();`;
+  const found = sqlStrings(src);
+  assert.equal(found.length, 1, 'only whitespace used to be skipped before the quote');
+  assert.match(found[0].body, /FROM widgets/);
+});
+
+test('a query introduced by a block comment is still seen', () => {
+  const src = `await env.DB.prepare(/* note */ \`SELECT id FROM widgets\`).run();`;
+  assert.equal(sqlStrings(src).length, 1);
+});
+
+test('prose inside a SQL string literal cannot look like a table', () => {
+  // 'requests from the operator marketplace.' otherwise contributes `the`.
+  const sql = `INSERT INTO t (a) VALUES ('requests from the operator marketplace.')`;
+  assert.doesNotMatch(stripSqlLiterals(sql), /from the operator/);
+  assert.match(stripSqlLiterals(sql), /INSERT INTO t/);
+});
+
+test('DDL assembled by string concatenation is harvested', () => {
+  const src = `env.DB.exec('CREATE TABLE IF NOT EXISTS t (' + 'a TEXT, ' + 'b TEXT)')`;
+  assert.match(collapseStringConcat(src), /CREATE TABLE IF NOT EXISTS t \(a TEXT, b TEXT\)/);
+});
+
+test('the real schema is harvested, and it is not empty', () => {
+  const schema = knownColumns();
+  assert.ok(schema.size > 300, `expected a few hundred tables, got ${schema.size}`);
+
+  // A comment containing commas used to corrupt the top-level split and
+  // swallow every column defined below it — partner_deals lost five.
+  const deals = schema.get('partner_deals');
+  for (const c of ['deal_type', 'granted_tier_founder', 'granted_tier_investor', 'term_months', 'status']) {
+    assert.ok(deals?.has(c), `partner_deals.${c} should be known`);
+  }
+
+  // `KEY` is not a SQLite table constraint, so a definition starting with it
+  // is a column literally named `key`. Treating it as a constraint reported
+  // both of these as missing.
+  assert.ok(schema.get('cohort_settings')?.has('key'), 'cohort_settings.key should be known');
+  assert.ok(schema.get('signal_sources')?.has('key'), 'signal_sources.key should be known');
+
+  // Concatenated DDL — integrations/oauth.ts builds this one with `+`.
+  const oauth = schema.get('oauth_state_tokens');
+  assert.ok(oauth?.has('pkce_verifier'), 'oauth_state_tokens.pkce_verifier should be known');
+  assert.ok(oauth?.has('extra_json'), 'oauth_state_tokens.extra_json should be known');
+
+  // Added by migration 178 after seven admin routers probed for it in vain.
+  assert.ok(schema.get('admin_audit_log')?.has('actor'), 'admin_audit_log.actor should be known');
+  for (const c of ['level', 'source', 'details']) {
+    assert.ok(schema.get('error_logs')?.has(c), `error_logs.${c} should be known`);
+  }
+});
+
+test('the async scorer writes to its own table, never score_snapshots', () => {
+  const schema = knownColumns();
+  const drafts = schema.get('ai_score_drafts');
+  assert.ok(drafts, 'migration 179 should define ai_score_drafts');
+  // No tier: a tier is a decision, and a 0-75 scorer is not equipped to make
+  // one against thresholds of 85 and 70. This is the whole reason the table
+  // exists rather than the column names being corrected.
+  assert.ok(!drafts.has('tier'), 'ai_score_drafts must not carry a tier');
+  assert.ok(drafts.has('total_0_75'), 'the scale belongs in the column name');
+});
+
+test('a SET clause ends at WHERE, and not at a WHERE inside a string', () => {
+  const at = (sql) => sql.indexOf('SET ') + 4;
+  const a = `UPDATE t SET a = 1, b = 2 WHERE id = ?`;
+  assert.equal(setClause(a, at(a)).trim(), 'a = 1, b = 2');
+
+  // A column named in the WHERE is not the SET clause's to vouch for; the
+  // guard deliberately attributes only SET columns, where the table is certain.
+  const b = `UPDATE t SET a = 1 WHERE weird_col = ?`;
+  assert.doesNotMatch(setClause(b, at(b)), /weird_col/);
+
+  // 'WHERE' as prose inside a value must not end the clause early.
+  const c = `UPDATE t SET note = 'ask them WHERE they are', b = 2 WHERE id = ?`;
+  assert.match(setClause(c, at(c)), /b = 2/);
+
+  // RETURNING and FROM terminate it too.
+  const d = `UPDATE t SET a = 1 RETURNING id`;
+  assert.equal(setClause(d, at(d)).trim(), 'a = 1');
+});
+
+test('the columns the UPDATE pass found are now present', () => {
+  const schema = knownColumns();
+  // Migration 180. `users` is at D1's 100-column limit, so the advisor's
+  // organization answer belongs in the existing one-to-one profile sidecar.
+  assert.ok(schema.get('user_profile_ext')?.has('organization'), 'user_profile_ext.organization should be known');
+  assert.ok(!schema.get('users')?.has('organization'), 'users.organization must not consume another users column');
+  // `pipeline_stage` exists on no table; both writers now use `stage`.
+  const owners = [...schema].filter(([, c]) => c && c.has('pipeline_stage')).map(([t]) => t);
+  assert.deepEqual(owners, [], 'nothing should define pipeline_stage');
+  assert.ok(schema.get('projects')?.has('stage'), 'projects.stage is the real column');
+});
+
+test('a SELECT is only attributed when exactly one table can own the columns', () => {
+  const one = singleTableSelect('SELECT a, b FROM widgets WHERE id = ?');
+  assert.equal(one?.table, 'widgets');
+  assert.equal(one.list.trim(), 'a, b');
+
+  const aliased = singleTableSelect('SELECT w.a FROM widgets w WHERE id = ?');
+  assert.equal(aliased?.alias, 'w');
+
+  // Each of these makes attribution a guess, so the check declines.
+  for (const sql of [
+    'SELECT a FROM widgets JOIN gadgets g ON g.id = widget_id',
+    'SELECT * FROM widgets',
+    'SELECT a FROM widgets UNION SELECT a FROM gadgets',
+    'WITH x AS (SELECT 1) SELECT a FROM x',
+    'SELECT a FROM (SELECT a FROM widgets)',
+  ]) {
+    assert.equal(singleTableSelect(sql), null, `should decline: ${sql}`);
+  }
+});
+
+test('both dynamic-ALTER loop shapes are read', () => {
+  const flat = runtimeColumns(
+    "for (const col of ['notes TEXT', 'follow_up_at TEXT']) {\n"
+    + '  await env.DB.prepare(`ALTER TABLE advisor_profiles ADD COLUMN ${col}`).run();\n}',
+  );
+  assert.deepEqual(flat, [{ table: 'advisor_profiles', cols: ['notes', 'follow_up_at'] }]);
+
+  const tuple = runtimeColumns(
+    "for (const [col, decl] of [['utm_json', 'TEXT'], ['referrer', 'TEXT']]) {\n"
+    + '  await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run();\n}',
+  );
+  assert.deepEqual(tuple, [{ table: 'contacts', cols: ['utm_json', 'referrer'] }]);
+});
+
+test("an apostrophe in a comment does not swallow the array", () => {
+  // `// at D1's 100-column limit` opened a string scan that ate the rest of
+  // the file, which is how SETTINGS_USER_COLUMNS came back unresolved.
+  const src = "const COLS = [\n"
+    + "  ['bio', 'TEXT'],\n"
+    + "  // near D1's 100-column limit; see ensureProfileExpansionSchema\n"
+    + "  ['headline', 'TEXT'],\n"
+    + '];\n'
+    + 'for (const [col, type] of COLS) {\n'
+    + '  await db.prepare(`ALTER TABLE users ADD COLUMN ${col} ${type}`).run();\n}';
+  assert.deepEqual(runtimeColumns(src), [{ table: 'users', cols: ['bio', 'headline'] }]);
+});
+
+test('nothing is left unreadable, and no column is invented', () => {
+  const s = knownColumns();   // populates incompleteTables as a side effect
+  assert.equal(incompleteTables.size, 0,
+    `every dynamic-ALTER loop should resolve; unread: ${[...incompleteTables].join(', ')}`);
+
+  // The columns those loops add are now known — this is what the skip rule cost.
+  assert.ok(s.get('users')?.has('kyc_provider'), 'users.kyc_provider comes from KYC_COLUMNS');
+  assert.ok(s.get('users')?.has('jwt_min_iat'), 'users.jwt_min_iat comes from SETTINGS_USER_COLUMNS');
+  assert.ok(s.get('partners')?.has('oh_when_to_book'), 'partners gains its office-hours guidance columns');
+
+  // `ADD COLUMN ${col}` backtracks and hands back the word COLUMN as the name;
+  // `ALTER TABLE ... ADD COLUMN` in prose is not a table called `...`.
+  assert.equal([...s].filter(([, c]) => c && c.has('column')).length, 0, 'no phantom `column`');
+  assert.ok(!s.has('...'), 'no phantom `...` table');
+});
+
+test('the columns the runtime-harvest pass found are now right', () => {
+  const s = knownColumns();
+  // partners has email/company and no user link; the link is users.partner_id.
+  assert.ok(s.get('partners')?.has('email') && !s.get('partners')?.has('contact_email'));
+  assert.ok(s.get('partners')?.has('company') && !s.get('partners')?.has('organization'));
+  assert.ok(!s.get('partners')?.has('user_id') && s.get('users')?.has('partner_id'));
+  // kyb_status is on no table at all — the KYB flow does not write one.
+  assert.equal([...s].filter(([, c]) => c && c.has('kyb_status')).length, 0);
+  // projects carries neither; the composite lives in score_snapshots.
+  assert.ok(!s.get('projects')?.has('score') && !s.get('projects')?.has('ai_decision'));
+});
+
+test('the columns the SELECT pass found are now right', () => {
+  const s = knownColumns();
+  // Each pair is a real fix: the name on the left was queried, the one on the
+  // right is what the table actually has.
+  assert.ok(!s.get('activity_logs')?.has('target_type') && s.get('activity_logs')?.has('entity_type'));
+  assert.ok(!s.get('calendar_events')?.has('location') && s.get('calendar_events')?.has('location_uri'));
+  assert.ok(!s.get('founders')?.has('user_id') && s.get('users')?.has('founder_id'));
+  assert.ok(!s.get('integrations')?.has('provider_name') && s.get('integrations')?.has('provider_key'));
+  assert.ok(!s.get('queue_jobs')?.has('fund_id'), 'the fund id lives in the payload JSON');
+  assert.ok(!s.get('score_snapshots')?.has('score') && s.get('score_snapshots')?.has('total_score'));
+});
+
+test('an alias is only trusted when it binds to exactly one table', () => {
+  const one = aliasMap('SELECT p.id FROM partners p LEFT JOIN users u ON u.partner_id = p.id');
+  assert.equal(one.get('p'), 'partners');
+  assert.equal(one.get('u'), 'users');
+
+  // `JOIN t ON …` must not bind an alias called `on`.
+  assert.equal(aliasMap('SELECT a FROM widgets JOIN gadgets ON gadgets.id = 1').get('on'), undefined);
+
+  // The same alias on two tables is ambiguous; null means "do not judge".
+  const ambiguous = aliasMap('SELECT x.a FROM partners x JOIN projects x ON 1=1');
+  assert.equal(ambiguous.get('x'), null);
+});
+
+test('the columns the qualified-reference pass found are now right', () => {
+  const s = knownColumns();
+  assert.ok(s.get('esign_envelopes')?.has('document_type') && !s.get('esign_envelopes')?.has('agreement_type'));
+  assert.ok(s.get('users')?.has('full_legal_name') && !s.get('users')?.has('full_name'));
+  assert.ok(s.get('users')?.has('headshot_r2_key') && !s.get('users')?.has('avatar_url'));
+  // The directory opt-out is real, just on another table — it was preserved,
+  // not dropped, because widening a people directory is not a repair.
+  assert.ok(s.get('user_settings')?.has('show_in_directory'));
+  assert.ok(!s.get('users')?.has('show_in_directory'));
+  assert.ok(!s.get('projects')?.has('owner_user_id') && s.get('projects')?.has('founder_id'));
+  // The second copy of the partner_deals query, matching the first.
+  assert.ok(s.get('partner_deals')?.has('user_id') && !s.get('partner_deals')?.has('partner_user_id'));
+  assert.ok(!s.get('partner_deals')?.has('granted_tiers') && s.get('partner_deals')?.has('granted_tier_founder'));
+});
+
+test('a subquery puts a second table in scope, so the predicate is declined', () => {
+  // Parser fault #10. Counting SELECTs is not enough: an UPDATE has none of
+  // its own, so `UPDATE users … (SELECT … FROM users)` counts exactly one and
+  // the inner FROM was read as a column of the outer table.
+  assert.equal(
+    singleTablePredicate(
+      'UPDATE users SET tier = ? WHERE seat_primary_user_id IN (SELECT id FROM users WHERE customer_id = ?)',
+    ),
+    null,
+  );
+  assert.equal(
+    singleTablePredicate(
+      "UPDATE limited_partners SET returns = returns + ? WHERE id = ? AND EXISTS (SELECT 1 FROM fund_distributions WHERE id = ?)",
+    ),
+    null,
+  );
+  // Without a subquery the same statement shape is read normally.
+  const ok = singleTablePredicate('UPDATE users SET tier = ? WHERE stripe_customer_id = ?');
+  assert.equal(ok.table, 'users');
+});
+
+test('a SELECT-list alias is a result name, not a column', () => {
+  // Parser fault #11 — twenty-one of the first twenty-nine findings.
+  const p = singleTablePredicate(
+    "SELECT substr(created_at, 1, 10) AS day, SUM(est_cost_usd) AS total_cost FROM ai_usage_logs WHERE created_at >= ? GROUP BY day ORDER BY total_cost DESC",
+  );
+  assert.equal(p.table, 'ai_usage_logs');
+  assert.ok(p.aliases.has('day') && p.aliases.has('total_cost'));
+
+  const named = predicateIdents(p.region).map((x) => x.col);
+  assert.ok(named.includes('created_at'), 'a real column is still named');
+  // …and the function wrapping it is not.
+  assert.ok(!named.includes('substr') && !named.includes('sum'));
+});
+
+test('a predicate reads columns, never comments or literals', () => {
+  const blanked = blankLiterals("SELECT id FROM t -- the filter never ran\n WHERE kind = 'archived'");
+  assert.ok(!blanked.includes('never') && !blanked.includes('archived'));
+  assert.ok(blanked.includes('kind'), 'the column survives');
+
+  const p = singleTablePredicate("SELECT id FROM widgets WHERE kind = 'archived' -- was: status\n");
+  assert.deepEqual(predicateIdents(p.region).map((x) => x.col), ['where', 'kind']);
+});
+
+test('a join or a comma join is declined, a lone table is not', () => {
+  assert.equal(singleTablePredicate('SELECT a FROM x JOIN y ON y.id = x.id WHERE x.a = 1'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM x, y WHERE x.id = y.id'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM x WHERE a = 1 UNION SELECT b FROM y'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM widgets w WHERE w.kind = ?').alias, 'w');
+});
+
+test('the two predicate defects are corrected at the source', () => {
+  const s = knownColumns();
+  // dd_external_sources names the connector `connector`; `source_kind` is the
+  // sibling column on dd_findings, which is how the mistake was made.
+  assert.ok(s.get('dd_external_sources')?.has('connector'));
+  assert.ok(!s.get('dd_external_sources')?.has('source_kind'));
+  assert.ok(s.get('dd_findings')?.has('source_kind'));
+  // `documents` has no signer email at all — only signed_by, set once signed.
+  assert.ok(!s.get('documents')?.has('signer_email') && s.get('documents')?.has('signed_by'));
+  // The canonical per-recipient link, and the audit table the name came from.
+  assert.ok(s.get('esign_recipients')?.has('recipient_email'));
+  assert.ok(s.get('esign_audit_events')?.has('signer_email'));
+});
+
+test('a tagged-template interpolation is the bound ? it becomes', () => {
+  assert.equal(
+    substituteBindings('SELECT id FROM t WHERE a = ${x} AND b = ${y}'),
+    'SELECT id FROM t WHERE a = ? AND b = ?',
+  );
+  // Braces are matched, not scanned to the first `}` — an interpolation can
+  // carry an object literal or a nested template.
+  assert.equal(
+    substituteBindings('SELECT id FROM t WHERE a = ${JSON.stringify({ b: 1 })}'),
+    'SELECT id FROM t WHERE a = ?',
+  );
+  assert.equal(substituteBindings('SELECT ${oops FROM t'), null, 'unbalanced declines');
+  assert.equal(substituteBindings('SELECT id FROM t'), 'SELECT id FROM t', 'no-op when literal');
+});
+
+test('the guard reports how much of the SQL it actually read', () => {
+  unknownColumns();
+  // Raw `.prepare(`/`.exec(` interpolation can splice an identifier, so those
+  // stay skipped and the count is printed rather than hidden. D5022 (#5022)
+  // added five reviewed, ledgered sites (`sql-prepare-baseline.json`) for
+  // `licencePackagesStore.ts`'s column allow-list and `?`-placeholder
+  // builder, pushing the count past the old 500 ceiling — raised with
+  // headroom rather than just past the new total, since this is a loose
+  // growth alarm, not an exact ratchet.
+  assert.ok(coverage.read > 3500, `expected most strings read, got ${coverage.read}`);
+  assert.ok(coverage.skipped > 0 && coverage.skipped < 600, `unexpected skip count ${coverage.skipped}`);
+});
+
+test('the ten tagged-template defects are corrected at the source', () => {
+  const s = knownColumns();
+  // A booking carries no time of its own; the slot does.
+  assert.ok(!s.get('advisor_bookings')?.has('scheduled_start'));
+  assert.ok(s.get('advisor_bookings')?.has('slot_id') && s.get('advisor_bookings')?.has('founder_user_id'));
+  assert.ok(s.get('advisor_office_hour_slots')?.has('starts_at') && s.get('advisor_office_hour_slots')?.has('meeting_url'));
+  assert.ok(s.get('partner_office_hour_slots')?.has('starts_at'));
+  assert.ok(s.get('advisors')?.has('display_name') && !s.get('advisors')?.has('name'));
+  // founders is reached through users.founder_id, never the other way.
+  assert.ok(!s.get('founders')?.has('user_id') && s.get('users')?.has('founder_id'));
+  // projects owns founder_id; submitted_by is a tickets column, score a snapshot one.
+  assert.ok(!s.get('projects')?.has('submitted_by') && !s.get('projects')?.has('user_id'));
+  assert.ok(!s.get('projects')?.has('score') && s.get('score_snapshots')?.has('total_score'));
+  assert.ok(s.get('tickets')?.has('submitted_by') && s.get('tickets')?.has('title') && !s.get('tickets')?.has('subject'));
+  // The third copy of the partner_deals join.
+  assert.ok(!s.get('partner_deals')?.has('partner_user_id'));
+  // Migration 181 — the write existed, the column did not.
+  assert.ok(s.get('calendar_sync_records')?.has('last_error'));
+});
+
+test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', () => {
+  // The runnable form of the whole exercise. `check-sqlite-columns` is the
+  // gate; this keeps the property visible in the test suite too. Covers both
+  // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
+  // join references and single-table predicates.
+  // D1231 closed KYB with a real case store; the two newsTrust gaps remain.
+  //
+  // SIX `metrics_snapshots.*` ENTRIES WERE HERE AND ARE GONE, which is what
+  // closing a gap looks like in this file. That name covered two different
+  // tables: production's is a DEAL metrics table (created at runtime by
+  // `routes/pipeline.ts`), while `services/queueWorker.ts` read and wrote a
+  // generic metric series — the retired `sql/historical/infrastructure.sql`
+  // shape. Three jobs threw `no such column` as a result, and the sharpest was
+  // `liquidity_valuation`, which died before `Listings.updateValuation` and left
+  // a secondary listing showing "— pending" forever.
+  //
+  // Task #183 repointed all three at stores that already existed — the per-deal
+  // review to `metrics_snapshots.ai_review`, the global counter to
+  // `system_metrics` — so the six names are no longer written anywhere and their
+  // baseline lines are deleted. No new table and no migration.
+  //
+  // They were invisible until `knownColumns()` stopped unioning `sql/historical/`
+  // into its harvest — that folder's own README says nothing builds from it, but
+  // `walk()` recursed into it anyway, so retired shapes merged with live ones and
+  // the union satisfied every query. That masked a live outage:
+  // `partner_pipeline.ts` read `service_offerings.partner_id`, a column that
+  // table has never had, and answered `D1_ERROR: no such column` to every
+  // partner while this assertion was green.
+  //
+  // TWENTY-THREE ENTRIES ARRIVED AT ONCE IN D184 AND D186 REPAIRED THEM, so
+  // what is left is the three that are genuinely gaps rather than misdirected
+  // reads. They were never a regression — they are what this assertion could
+  // not see. `sqlStrings()` harvested only a literal sitting next to
+  // `.prepare(`, `.exec(` or the `sql` tag, so a query handed to a helper was
+  // invisible to it. Every detect query in `services/onboardingChecklist.ts`
+  // is `num(env, \`SELECT …\`, userId)`: 9 of that file's 54 literals were
+  // harvested and the 44 that were not are the whole feature. Widening the
+  // harvest to every literal in the file made them visible for the first time.
+  //
+  // Each one was a checklist item that read "not done" for every account,
+  // forever — `num()` is `catch { return 0 }`, so `0 > 0` is false, no row
+  // upserts, the route answers 200 and nothing is logged. The advisor
+  // catalogue could never register more than three of its ten items. That
+  // file's own header had already written the lesson after `op.service` paid
+  // for it once: "a swallowed query is indistinguishable from an honest zero."
+  //
+  // D186 repointed twenty of them at the store that actually holds the fact,
+  // deleted `ef.captable`'s dead `captable_holders` arm — the `cap_table_
+  // holders` arm beside it already worked — and turned the four whose fact
+  // nothing stores anywhere (`ef.ip`, `op.conflicts`, `op.refs`, `mt.refs`)
+  // into `autoDetect: false` items the user ticks by hand, with their `case`
+  // arms deleted. DELETING THE ARM IS WHAT EMPTIES THE LEDGER: a dead `case`
+  // keeps its literal harvestable, so its baseline entry stays live, and both
+  // check-sqlite-* guards refuse a STALE entry as loudly as a new one.
+  //
+  // The two remaining gaps are not the checklist's. They
+  // belong to `services/newsTrust.ts`: `partners.owner_user_id` and
+  // `partner_deals.founder_user_id` are trust-score signals that can never
+  // fire, 25 of the 35 dead points there. Their repair is its own concern.
+  //
+  // THE LIST STAYS TYPED OUT rather than read from the baseline, on purpose.
+  // Reading the ledger would make this assertion agree with the gate by
+  // construction; typing it keeps a second lock, so adding a baseline entry is
+  // not enough on its own to make a new gap pass. `scripts/sqlite-columns-
+  // baseline.json` carries the per-entry diagnosis for each of the three that
+  // remain; D186 deleted the other twenty-one from both places in one commit,
+  // which is what proves each repair landed.
+  const unknown = [...unknownColumns().keys()].sort();
+  assert.deepEqual(unknown, [
+    'partner_deals.founder_user_id',
+    'partners.owner_user_id',
+  ], `unexpected: ${unknown.join(', ')}`);
+});
+
+test('a map is resolved by name, never by proximity', () => {
+  // Parser fault #12. Binding each UPDATE to the nearest preceding map
+  // attributed partnerMap's six columns to explorer_needs and invented six
+  // defects. Names are unique enough; distance is not.
+  const src = [
+    "const partnerMap = { 'a.b': 'organization', 'c.d': 'role_title' };",
+    "const pcol = partnerMap[questionId];",
+    "await db.prepare(`UPDATE partner_profiles SET ${pcol} = ?`);",
+    "const sharedLeaf = EXPLORER_SHARED_LEAF_MAP[leaf];",
+    "await db.prepare(`UPDATE explorer_needs SET ${sharedLeaf.col} = ?`);",
+  ].join('\n');
+  const w = routedWrites(src);
+  assert.equal(w.length, 2);
+  assert.deepEqual(w[0], { table: 'partner_profiles', expr: 'pcol', line: 3, map: 'partnerMap', columns: ['organization', 'role_title'] });
+  // The explorer map is declared elsewhere, so it resolves to no columns —
+  // reported as unresolved rather than borrowing partnerMap's.
+  assert.deepEqual(w[1].columns, []);
+});
+
+test('an arrow type in a declaration is not the assignment', () => {
+  // The guard's own near-miss: `Record<string, { coerce?: (v: string) => n }>`
+  // made the first version resolve 2 maps of 6 and report success on the rest.
+  const decl = "const map: Record<string, { col: string; coerce?: (v: string) => number }> = { 'q': { col: 'bio' } };";
+  const brace = assignmentBrace(decl, decl.indexOf('map') + 3);
+  assert.equal(decl[brace], '{');
+  assert.deepEqual(mapColumns(decl.slice(brace + 1)), ['bio']);
+});
+
+test('a two-literal ternary is a column choice, not a map', () => {
+  const src = [
+    "const col = questionId === 'founder.brand.tagline' ? 'tagline' : 'theme_color';",
+    "await db.prepare(`UPDATE landing_pages SET ${col} = ?`);",
+  ].join('\n');
+  assert.deepEqual(routedWrites(src)[0].columns, ['tagline', 'theme_color']);
+});
+
+test('every column the advisor writeRouter routes to actually exists', () => {
+  assert.deepEqual(unroutableColumns(), []);
+  assert.deepEqual(unroutableSavedTo(), []);
+  // Migration 182 — 042 added these three to `mentors`, a table nothing creates.
+  const a = knownColumns().get('advisors');
+  assert.ok(a?.has('topics_willing_json') && a?.has('topics_unwilling_json') && a?.has('weekly_hours_band'));
+});
+
+test('only a NOT NULL column with no default makes an omission fatal', () => {
+  const cols = tableColumns([
+    'id INTEGER PRIMARY KEY AUTOINCREMENT',
+    "uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16))))",
+    'amount REAL NOT NULL',
+    'notes TEXT',
+    "status TEXT NOT NULL DEFAULT 'pending'",
+    '-- commented_out TEXT NOT NULL',
+  ].join(',\n'));
+  assert.equal(cols.get('amount'), true, 'NOT NULL with no default is required');
+  assert.equal(cols.get('uid'), false, 'a default satisfies the constraint');
+  assert.equal(cols.get('id'), false, 'a rowid alias is filled in');
+  assert.equal(cols.get('status'), false);
+  assert.equal(cols.get('notes'), false);
+  assert.ok(!cols.has('commented_out'), 'a commented-out column is not a column');
+});
+
+test('a collision counts only when neither definition can host the other', () => {
+  const all = fatalCollisions();
+  // Both directions must be fatal: a strict subset is an older shape a later
+  // ALTER filled in, which is ordinary rather than a conflict.
+  for (const [, pairs] of all) {
+    for (const p of pairs) {
+      assert.ok(p.aNeeds.length && p.bNeeds.length, 'one-directional pairs must not be reported');
+    }
+  }
+  // `calendar_events` LEFT THIS LIST on 2026-09-10, and that is the point of
+  // pinning it: the collision was `services/wellbeing/bookings.ts` declaring
+  // its own version of the table — `kind`/`source_id`/`source_uid`/
+  // `attendees_json`, no `user_id` — against migration 018's Calendly
+  // projection, which has `user_id`/`source`/`external_uri` NOT NULL. Neither
+  // could host the other, so whichever ran first won and the loser's writer
+  // threw on every call. Migration 235 adds the four columns to the real
+  // table and the phantom declaration is gone, so there is one shape again.
+  //
+  // `advisor_bookings` AND `service_offerings` LEFT ON 2026-09-13, and they left
+  // a different way: not fixed, never real. `definitions()` walked
+  // `cloudflare-worker/sql` recursively and so harvested `sql/historical/`, whose
+  // own README says "Nothing builds from them." A definition that has never been
+  // a build input cannot be one of two definitions competing to be the table.
+  //
+  // What that produced was not a false pass but a false FINDING, and the shape of
+  // it is worth keeping: the `advisor_bookings` collision was reported between
+  // `historical/schema.sql:1024` and `historical/t13_t14_t15.sql:52` — two
+  // archived files disagreeing with EACH OTHER — while its single live definition
+  // in the baseline conflicts with nothing. `service_offerings` was worse: its
+  // archived shape is the one that took `/pipeline/leads` down in #182, so the
+  // ledger was asking someone to adjudicate between the live table and a file
+  // already established as wrong. Both entries are deleted from the baseline, and
+  // this list shrinks with them.
+  //
+  // The exclusion does not blind the gate: a fresh conflicting definition in a
+  // real build input still fails it, mutation-checked.
+  assert.deepEqual([...all.keys()].sort(), [
+    'founder_checkins',
+    'ic_meetings', 'metrics_snapshots', 'wellbeing_resources',
+  ]);
+});
+
+test('the column guard unions competing definitions, which is why it cannot see them', () => {
+  // Not a defect — a stated limitation, pinned so it stays true. metrics_snapshots
+  // still has irreconcilable definitions; knownColumns reports their union, which
+  // is wider than either.
+  const defs = definitions().get('metrics_snapshots');
+  assert.ok(defs.length >= 2);
+  const union = knownColumns().get('metrics_snapshots');
+  for (const d of defs) assert.ok(union.size > d.cols.size, 'the union exceeds every single definition');
+  assert.ok(union.has('mrr') && union.has('key_metrics'), 'both snapshot shapes appear at once');
+});
+
+test('a money word is not the same as an amount of money', () => {
+  // The classifier over-matched in both directions before these exclusions.
+  for (const yes of ['amount', 'amount_cents', 'price_usd', 'mrr', 'monthly_burn_usd',
+                     'called_capital', 'nav', 'cash_balance', 'market_cap', 'hourly_rate',
+                     'gross_profit', 'ebitda', 'net_income', 'cash', 'debt',
+                     // D531: research_company_directory's total raised, a REAL
+                     // amount production holds, which no other word matched.
+                     'funding_total']) {
+    assert.ok(isMoney(yes), `${yes} should read as money`);
+  }
+  for (const no of [
+    'management_fee_pct',   // a percentage
+    'carried_interest',     // a fraction — vc_funds defaults it to 0.20
+    'usd_rate',             // an exchange rate
+    'total_shares',         // a count
+    'capital_total',        // a score component
+    'total_score',          // a score
+    'distributed_at',       // a timestamp
+    'principal_key',        // a security principal
+    'revenue_range',        // a band label
+    'revenue_notes',        // prose
+    'revenue_growth',       // a growth rate (company_financials, migration 370)
+    'ebitda_margin',        // a margin beside the ebitda amount (migration 370)
+  ]) {
+    assert.ok(!isMoney(no), `${no} should not read as money`);
+  }
+});
+
+test('every *_cents column is an integer, and the legacy dollar list is closed', () => {
+  assert.deepEqual(nonIntegerCents(), [], 'a REAL cents column promises what it cannot deliver');
+  // 50 legacy REAL dollar columns are on record. The gate fails on a 51st, and
+  // equally on one of the 50 that has since been converted.
+  //
+  // It was 52 until `capital_calls_new.amount` and `deals_new.amount` came off.
+  // Those are the SCRATCH tables of two rebuilds (039 and the capital
+  // consolidation): created, copied into, then renamed over the real table in
+  // the same file. They named the same columns as `capital_calls.amount` and
+  // `deals.amount`, which are on the list in their own right, under table names
+  // that stopped existing the moment the migration finished — so they could
+  // never be converted and would never have come off. `check-money-cents` skips
+  // rebuild scratch tables now, which is what took them off.
+  const baseline = JSON.parse(
+    fs.readFileSync(new URL('../../scripts/money-cents-baseline.json', import.meta.url), 'utf8'),
+  ).columns;
+  const found = [...floatMoney().keys()].sort();
+  assert.deepEqual(found, Object.keys(baseline).sort());
+  assert.ok(found.includes('limited_partners.commitment_amount'), 'fiduciary amounts are in the ledger');
+});
+
+test('an alias names the result whatever the expression is', () => {
+  assert.deepEqual(selectKeys('SELECT p.id, u.name AS owner, COUNT(*) AS n FROM projects p'),
+    ['id', 'owner', 'n']);
+  // Testing the whole list for `*` up front declined every aggregate query and
+  // cost about a third of the coverage.
+  assert.deepEqual(selectKeys('SELECT COUNT(*) AS c FROM t'), ['c']);
+  // A bare star, qualified or not, makes the shape the table's, not the query's.
+  assert.equal(selectKeys('SELECT * FROM projects'), null);
+  assert.equal(selectKeys('SELECT p.*, u.name AS owner FROM projects p'), null);
+  // An expression with no alias is named after its own text; nobody reads it
+  // that way, so the query is declined rather than guessed at.
+  assert.equal(selectKeys('SELECT COALESCE(a,b), id FROM t'), null);
+});
+
+test('angle brackets are not brackets in a TypeScript row type', () => {
+  // The `>` in an arrow type drove the depth negative and every field after it
+  // was skipped — an under-report, which looks exactly like a clean pass.
+  assert.deepEqual(
+    typeFields('{ id: number; nested: { a: 1 }; fn: (x: number) => void; last: string }'),
+    ['id', 'nested', 'fn', 'last'],
+  );
+  // And the outer braces must come off first, or every field sits at depth 1
+  // and none of them is read at all.
+  assert.deepEqual(typeFields('{ only: string }'), ['only']);
+});
+
+test('no row generic declares a field its SELECT does not return', () => {
+  assert.deepEqual(phantomFields(), []);
+  const { pairs, checked } = genericCoverage();
+  assert.ok(checked > 150, `expected most pairs checkable, got ${checked} of ${pairs}`);
+  assert.ok(pairs > checked, 'some are declined, and the count is printed rather than hidden');
+});
+
+test('a value may contain a hash, and a comment may not be read as one', () => {
+  const secs = parseSections([
+    '[[kv_namespaces]]',
+    'binding = "TOKENS"   # the session token store',
+    'id = "abc#123"',
+    '[env.production]',
+    'name = "studioos"',
+  ].join('\n'));
+  assert.equal(secs.length, 2);
+  assert.equal(secs[0].kv.get('binding'), '"TOKENS"', 'a trailing comment is stripped');
+  assert.equal(secs[0].kv.get('id'), '"abc#123"', 'a hash inside quotes is part of the value');
+});
+
+test('parity is by binding identity, not by section presence', () => {
+  // The subtle case: the table exists in both, and a binding added to only one
+  // of them would pass a name-only comparison.
+  const secs = parseSections([
+    '[[kv_namespaces]]', 'binding = "TOKENS"',
+    '[[kv_namespaces]]', 'binding = "SESSION_CACHE"',
+    '[[env.production.kv_namespaces]]', 'binding = "TOKENS"',
+  ].join('\n'));
+  const top = bindings(secs, '');
+  const prod = bindings(secs, 'env.production.');
+  assert.deepEqual([...top.get('kv_namespaces')].sort(), ['"SESSION_CACHE"', '"TOKENS"']);
+  assert.deepEqual([...prod.get('kv_namespaces')], ['"TOKENS"']);
+});
+
+test('observability inherits and is excluded; routes are per-environment', () => {
+  const secs = parseSections(['[observability]', 'enabled = true', '[[routes]]', 'pattern = "x"'].join('\n'));
+  const top = bindings(secs, '');
+  assert.ok(!top.has('observability'), 'the root config documents observability as inheriting');
+  assert.ok(!top.has('routes'), 'routes are environment-specific by design');
+});
+
+test('every wrangler binding is re-declared under [env.production]', () => {
+  // The 2026-05-05 login outage was a binding declared only at the top level.
+  assert.deepEqual(unknownTables(), [], 'an unrecognised table cannot be compared, so it fails');
+  assert.deepEqual(missingFromProduction(), []);
+});
+
+test('every table the worker queries is created somewhere', () => {
+  const known = knownTables();
+  assert.ok(known.size > 300, `expected a few hundred tables, got ${known.size}`);
+  assert.ok(known.has('workflows') && known.has('workflow_tasks') && known.has('shared_services_log'),
+    'migration 177 should have defined all three');
+});
+
+/* ------------------------------------------------------------------ *
+ * check-scanner-ignore-parity — the two static-analysis ignore lists  *
+ * ------------------------------------------------------------------ */
+
+test('paths-ignore is read without a YAML dependency, quotes and all', () => {
+  const src = [
+    'name: "x"',
+    '# a comment',
+    'paths-ignore:',
+    '  - docs',
+    '  # why the next one is ignored',
+    '  - "design/canvases"',
+    "  - 'quoted too'",
+    'queries: security-extended',
+  ].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs', 'design/canvases', 'quoted too']);
+});
+
+test('a key after the list ends the block rather than being read as an entry', () => {
+  const src = ['paths-ignore:', '  - docs', 'paths:', '  - frontend'].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs'], 'the `paths:` block is not an exclusion');
+});
+
+test('semgrep patterns are normalised, and an unanchored one is reported', () => {
+  const { entries, unanchored } = semgrepIgnores([
+    '# comment',
+    '/docs/',
+    '/design/canvases/',
+    'docs',
+  ].join('\n'));
+  assert.deepEqual(entries, ['docs', 'design/canvases']);
+  assert.deepEqual(unanchored, ['docs'],
+    'a bare name would also strip frontend/src/lib/docs from the scan');
+});
+
+test('the generated trees on disk are found by their generator header', () => {
+  // These are repo-relative PATHS, not top-level directory names. The canvases
+  // moved from `Axal VC platform/` to `design/canvases/`, and `design/` also
+  // holds hand-written token and pattern censuses — reporting the tree as
+  // `design` would mean ignoring those too, so the scan reports the directory
+  // the bundle is actually in and the ignore check accepts any ancestor.
+  const trees = generatedTrees();
+  assert.ok(trees.includes('design/canvases/shared'),
+    'the canvases ship a dc-runtime bundle and must be discoverable');
+  assert.ok(trees.includes('spin-out-lab-pipeline/project'),
+    'the tree this rule was originally written for');
+  assert.ok(!trees.some((t) => t === 'design'),
+    'reporting the whole of design/ would sweep the hand-written censuses into the ignore list');
+  assert.ok(!trees.some((t) => t.startsWith('frontend') || t.startsWith('cloudflare-worker')),
+    'real source must never be picked up as generated');
+});
+
+test('every generated tree is ignored by BOTH scanners', () => {
+  // `design/canvases/` was in neither list: ~60 security alerts and 1345 of
+  // 1384 quality findings came from a 49M tree that nothing builds or serves.
+  assert.deepEqual(gaps(), []);
+});
+
+/* ------------------------------------------------------------------ *
+ * workflow_tasks.assignee_user_id — pinning an inert path (Task #185) *
+ * ------------------------------------------------------------------ */
+
+test('nothing writes workflow_tasks.assignee_user_id', () => {
+  // The GOTCHAS entry for Task #185 rests on this: the column is read by one
+  // query (dashboard.ts myTasks) and written by no INSERT or UPDATE, so that
+  // query matches no row on any database — correctly migrated or not.
+  //
+  // If this fails because you wired assignment, good: that is the feature
+  // being finished. Update the "workflow_tasks" bullet under
+  // "### Migrations & schema" in documentation/architecture/GOTCHAS.md and delete this test, so the note
+  // does not outlive the fact it describes.
+  const src = fs.readdirSync(new URL('../src/routes/', import.meta.url), { recursive: true })
+    .filter((f) => String(f).endsWith('.ts'))
+    .map((f) => fs.readFileSync(new URL(`../src/routes/${f}`, import.meta.url), 'utf8'))
+    .join('\n');
+
+  const writes = [];
+  for (const m of src.matchAll(/INSERT\s+(?:OR\s+\w+\s+)?INTO\s+workflow_tasks\s*\(([^)]*)\)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`INSERT: ${m[1].trim()}`);
+  }
+  for (const m of src.matchAll(/UPDATE\s+workflow_tasks\s+SET\b([\s\S]{0,400}?)(?:WHERE|`)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`UPDATE: ${m[1].trim()}`);
+  }
+  assert.deepEqual(writes, []);
+});
+
+test('exactly one query reads workflow_tasks.assignee_user_id', () => {
+  // The other half of the same claim. A second reader would mean the column
+  // matters somewhere this note has not looked.
+  const dash = fs.readFileSync(new URL('../src/routes/dashboard.ts', import.meta.url), 'utf8');
+  const inDash = (dash.match(/workflow_tasks[\s\S]{0,200}?assignee_user_id/gi) || []).length;
+  assert.equal(inDash, 1, 'dashboard.ts myTasks is the one reader');
+});
+
+test('json_each and json_tree are SQLite functions, never reported as missing tables (D593)', () => {
+  // A bound JSON array read as rows (`SELECT value FROM json_each(?)`) is how
+  // the worker binds a list; the guard exempts these as it does `pragma_*`.
+  const found = unknownReferences();
+  assert.equal(found.has('json_each'), false);
+  assert.equal(found.has('json_tree'), false);
+});
+
+
+test('D1214: the capital-call schema has one definition and no retired syndicate columns', () => {
+  assert.equal(definitions().get('capital_calls').length,1);
+  const columns=knownColumns().get('capital_calls');
+  for(const column of ['deal_id','syndicate_id','lp_responses','idempotency_key','created_by']) assert.equal(columns.has(column),false,column);
+  for(const column of ['limited_partner_id','amount','amount_cents','fund_call_id']) assert.equal(columns.has(column),true,column);
+});

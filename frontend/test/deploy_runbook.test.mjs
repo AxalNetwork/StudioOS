@@ -1,0 +1,193 @@
+/**
+ * The deploy runbook stays true to the scripts it quotes.
+ *
+ * `documentation/operations/DEPLOY.md` exists because the previous version of
+ * that procedure — pasted into a Replit session as an attached asset — named
+ * the pending migrations as a fixed range and told the operator to STOP if
+ * anything else appeared. Two migrations landed days later. Followed to the
+ * letter it aborts a correct deploy; followed loosely it teaches the operator
+ * to ignore the stop condition, which is worse.
+ *
+ * The runbook's answer is that every number is a command's output rather than
+ * a written-down fact. But it still quotes `package.json` verbatim in its
+ * command table, and that table is itself a staleness surface: rename a script
+ * or change a hook and the runbook silently starts lying about how production
+ * ships. These tests hold the quoted half to the real half.
+ *
+ * Test 5 enforces the runbook's own rule on itself. Section 7 is the
+ * postmortem and is allowed to name the stale numbers as the cautionary tale;
+ * everything ABOVE it is the operative procedure and may not name a migration
+ * file, a migration range, or a route-pattern count.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const at = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+
+const DOC_PATH = 'documentation/operations/DEPLOY.md';
+const doc = at(DOC_PATH);
+const rootPkg = JSON.parse(at('package.json'));
+const workerPkg = JSON.parse(at('cloudflare-worker/package.json'));
+
+/** The operative procedure: everything before the section that explains itself. */
+// ANCHORED ON THE TITLE, NOT THE NUMBER. This read `## 7. …` until D109
+// inserted a provisioning section ahead of it and every later heading shifted
+// by one — at which point the guard failed for a reason that had nothing to do
+// with what it guards. The section's identity is its name; its number is a
+// position that moves whenever the runbook grows.
+const POSTMORTEM_TITLE = 'Why nothing here is hardcoded';
+const POSTMORTEM_RE = /^## \d+\. Why nothing here is hardcoded$/m;
+const postmortemAt = doc.search(POSTMORTEM_RE);
+const operative = postmortemAt >= 0 ? doc.slice(0, postmortemAt) : doc;
+
+test('every `npm run <script>` the runbook names exists in package.json', () => {
+  // Script names carry hyphens (`lfs:check-all`, `d1:verify-marked`). The
+  // earlier class stopped at the first one, so `npm run d1:verify-marked`
+  // was checked as `d1:verify` — a name that does not exist, reported as if
+  // the runbook had invented it.
+  const named = [...doc.matchAll(/\bnpm run ([a-z][a-z0-9:-]*)/g)].map((m) => m[1]);
+  assert.ok(named.length >= 5, `expected the runbook to name several scripts, found ${named.length}`);
+
+  const missing = [...new Set(named)].filter((s) => !(s in rootPkg.scripts));
+  assert.deepEqual(missing, [], `runbook names scripts that do not exist: ${missing.join(', ')}`);
+});
+
+test('the documented operator deploy command dispatches the protected main workflow', () => {
+  const command = 'gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main';
+  assert.deepEqual({ deploy: rootPkg.scripts.deploy, pre: rootPkg.scripts.predeploy, post: rootPkg.scripts.postdeploy },
+    { deploy: command, pre: undefined, post: undefined });
+  assert.ok(operative.includes('| `deploy` | `' + command + '` |'));
+  assert.equal(workerPkg.scripts.deploy, 'cd .. && npm run deploy');
+});
+
+test('§1.1 is still right that the un-suffixed deploy hits the live worker', () => {
+  // Both `name` fields resolving to the same worker is WHY the footgun is
+  // dangerous rather than merely wrong. Comment lines are stripped so a
+  // commented-out name cannot satisfy this.
+  const toml = at('wrangler.toml')
+    .split('\n')
+    .filter((l) => !/^\s*#/.test(l))
+    .join('\n');
+
+  const topLevel = toml.match(/^name\s*=\s*"([^"]+)"/m);
+  assert.ok(topLevel, 'wrangler.toml has no top-level name');
+
+  const prodBlock = toml.slice(toml.indexOf('[env.production]'));
+  const prodName = prodBlock.match(/^name\s*=\s*"([^"]+)"/m);
+  assert.ok(prodName, '[env.production] has no name');
+
+  assert.equal(
+    topLevel[1],
+    prodName[1],
+    'the top-level and [env.production] worker names have diverged; ' +
+      'DEPLOY.md §1.1 claims a deploy without --env production still hits the live worker',
+  );
+});
+
+test('the operative sections name no migration file, range, or pattern count', () => {
+  assert.ok(
+    postmortemAt >= 0,
+    `${DOC_PATH} lost its "${POSTMORTEM_TITLE}" section, which anchors this rule`,
+  );
+  assert.ok(operative.length > 1000, 'the operative half of the runbook is implausibly short');
+
+  const banned = [
+    [/\b\d{3}_[a-z0-9_]+\.sql\b/, 'a specific migration filename'],
+    [/\b1\d{2}\s*[–—-]\s*1\d{2}\b/, 'a migration number range'],
+    [/\b\d+\s+(?:route\s+)?patterns\b/, 'a route-pattern count'],
+  ];
+
+  for (const [re, what] of banned) {
+    const hit = operative.match(re);
+    assert.equal(
+      hit,
+      null,
+      `${DOC_PATH} names ${what} ("${hit?.[0]}") in its operative sections. ` +
+        'That is the exact failure the runbook exists to prevent — derive it ' +
+        'from `migrate-d1.mjs --remote --dry-run` instead.',
+    );
+  }
+});
+
+test('the runbook points at the dry-run as the authority on what is pending', () => {
+  assert.ok(
+    /migrate-d1\.mjs --remote --dry-run/.test(operative),
+    'the runbook no longer tells the operator to derive the pending set from --dry-run',
+  );
+});
+
+/**
+ * The cutover doc is operator-facing too, and drifted the same way.
+ *
+ * `CLOUDFLARE-CUTOVER.md` is what someone follows to move the apex off GitHub
+ * Pages. It described the Worker's route table as "84-entry" in its status
+ * line, told an aborting operator to "restore the saved version/67-route
+ * table", and made the rollback "Restoring Pages plus the 84-route table" —
+ * while the real table carries 166 patterns. Someone rolling back a failed
+ * cutover would have been hunting for a table that does not exist, at the
+ * worst possible moment.
+ *
+ * A count of routes is never load-bearing: what matters is the table the
+ * operator CAPTURED before flipping. So the doc names no count, and this
+ * holds it to that.
+ */
+test('the cutover doc claims no route-table entry count', () => {
+  const doc = at('documentation/architecture/CLOUDFLARE-CUTOVER.md');
+
+  const hit = doc.match(/\b\d+[- ](?:entry|route)\s+(?:route\s+)?table\b/i);
+  assert.equal(
+    hit,
+    null,
+    `CLOUDFLARE-CUTOVER.md states a route-table size ("${hit?.[0]}"). ` +
+      'That number goes stale every time a route is added, and the rollback ' +
+      'instruction that cites it then points at a table that does not exist. ' +
+      'Name the table the operator captured, not a count.',
+  );
+});
+
+test('wrangler.toml keeps its two route tables the same size', () => {
+  // The cutover restores "both route tables"; a binding or route added to only
+  // one of them is missing in whichever environment was not edited.
+  const toml = at('wrangler.toml').split('\n').filter((l) => !/^\s*#/.test(l));
+
+  let table = null;
+  const counts = { top: 0, prod: 0 };
+  for (const line of toml) {
+    if (/^\[\[routes\]\]/.test(line)) table = 'top';
+    else if (/^\[\[env\.production\.routes\]\]/.test(line)) table = 'prod';
+    else if (/^\[\[/.test(line) || /^\[[^[]/.test(line)) table = null;
+    if (table && /^\s*pattern\s*=/.test(line)) counts[table] += 1;
+  }
+
+  assert.ok(counts.top > 0 && counts.prod > 0, `expected both route tables to be populated, got ${JSON.stringify(counts)}`);
+  assert.equal(
+    counts.top,
+    counts.prod,
+    `the two route tables have diverged (top-level ${counts.top}, [env.production] ${counts.prod}); ` +
+      'a route in only one table is missing in the other environment',
+  );
+});
+
+test('D1364: CI stamps successful deployment before caching its assets, then runs smoke separately', () => {
+  const workflow = at('.github/workflows/cloudflare-worker-deploy.yml')
+    .split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+  const deployAt = workflow.indexOf('\n  deploy:\n');
+  const smokeAt = workflow.indexOf('\n  spa-smoke:\n');
+  assert.ok(deployAt >= 0 && smokeAt > deployAt, 'publication and its later smoke job must exist');
+  const deploy = workflow.slice(deployAt, smokeAt);
+  const steps = deploy.split(/(?=^      - )/m).slice(1);
+  const publish = steps.findIndex(step => /^      - name: Deploy to Cloudflare Worker$/m.test(step));
+  const stamp = steps.findIndex(step => /^      - name: Record successful asset deployment$/m.test(step));
+  const save = steps.findIndex(step => /uses: actions\/cache\/save@/.test(step));
+  assert.ok(publish >= 0 && stamp >= 0 && save >= 0, 'deploy, successful-deploy stamp and cache save must all exist');
+  assert.equal(stamp, publish + 1, 'the stamp must run immediately after successful publication');
+  assert.ok(save > stamp, 'the saved ledger must already contain the successful deployment time');
+  assert.match(steps[stamp], /^        run: node scripts\/record-asset-deploy\.mjs$/m);
+  assert.doesNotMatch(steps[stamp], /^\s*(?:if|continue-on-error|working-directory):/m, 'use the default success gate, fail on stamping errors, and run from the repository root');
+  assert.doesNotMatch(deploy, /^\s*run: node scripts\/check-spa-live\.mjs$/m, 'a probe failure must not prevent saving what shipped');
+  const smoke = workflow.slice(smokeAt).split('\n  schema-drift:')[0];
+  assert.match(smoke, /^    needs: deploy$/m, 'smoke waits for the deploy job, including its cache save');
+  assert.match(smoke, /^\s*run: node scripts\/check-spa-live\.mjs$/m, 'the existing live smoke must remain');
+});

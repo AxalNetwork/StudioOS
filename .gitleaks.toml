@@ -1,0 +1,207 @@
+# Gitleaks config for AxalNetwork/StudioOS.
+# Inherits the upstream default ruleset (covers AWS, GCP, Stripe, JWT,
+# private keys, generic high-entropy, etc.) and layers project-specific
+# allowlists on top.
+#
+# Only ALLOWLIST things that are demonstrably non-secret:
+#   - example values in .env.example / .env.sample
+#   - test fixtures with obviously synthetic IDs
+#   - documentation that names a secret variable but does not contain its value
+#
+# NEVER allowlist:
+#   - real API keys, even revoked ones
+#   - production-shaped UUIDs that could be valid resource IDs
+#   - JWT_SECRET / database URL contents
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-wide allowlist for known false positives"
+paths = [
+  '''(?i).*\.env\.example$''',
+  '''(?i).*\.env\.sample$''',
+  '''(?i)attached_assets/.*''',         # Vendor PDFs / static design specs
+  '''(?i)docs/.*''',                    # Built frontend bundle (already public)
+  '''(?i)package-lock\.json$''',
+  '''(?i).*\.lock$''',
+  # Wrangler build cache — output of `wrangler dev`, contains bundled
+  # third-party JS that often trips heuristic regex (e.g. `Symbol2.keyFor`).
+  # This directory should ideally be gitignored entirely.
+  '''(?i)cloudflare-worker/\.wrangler/.*''',
+  # Test fixtures use `obligation_key`, `entity_key`, etc. as object keys
+  # for the trust/scoring contract; values are non-secret enum strings
+  # (e.g. 'kyc_v1', 'doc_signed_v2'). Whole file allowlisted.
+  '''(?i)frontend/test/trust_score\.test\.mjs$''',
+  # OAuth calendar test fixtures use literal `'g-client-id'`,
+  # `'g-client-secret'`, `'m-client-id'`, `'m-client-secret'` strings as
+  # placeholders. They are not real credentials (real Google/Microsoft
+  # client secrets are 24+ char base64). Allowlisted at the path level
+  # so gitleaks' generic-api-key heuristic doesn't keep tripping.
+  '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
+]
+regexes = [
+  # D4559 (#4559): platform capacity metric ids such as `key: 'd1.size_ratio'`
+  # in services/platformCapacity.ts are metric dictionary names, not secrets.
+  '''\bd1\.size_(bytes|ratio)\b''',
+  # D1135: this exact synthetic signing seed belongs only to the SQLite test's
+  # locally minted JWTs. It is no deployed credential. Pin the literal rather
+  # than exempting the test file or rewriting published branch history.
+  '''\bsynthetic-d1135-secret\b''',
+  # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
+  # every Stripe call in that suite goes to an in-test fake. Pinned as the
+  # literal, as D1135 is, rather than rewriting the PR branch's history.
+  '''\bsk_test_d4570_fixture\b''',
+
+  # Tailwind / Vite generated content hashes that look like secrets but aren't.
+  '''[a-f0-9]{8}\.(js|css|woff2?)''',
+  # Known synthetic test JWTs (signed with the literal "test" key).
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+''',
+  # Bundler-emitted Symbol.keyFor reference — false positive on generic-api-key.
+  '''(?i)Symbol2?\.keyFor''',
+  # Application-level identifier names that gitleaks' generic-api-key
+  # regex flags as `<word>_key = "..."` patterns. None of these are
+  # secrets — they are DB column names, JS variable names, or contract
+  # field labels:
+  #   - obligation_key  → `legal_obligations.obligation_key` D1 column
+  #   - REPROMPT_KEY    → localStorage key constant in MarketIntelPage
+  #   - fileKey         → R2 object key local variable in admin_contracts
+  #   - file_key        → contracts/documents.file_key D1 column
+  #   - entity_key      → cap-table entity identifier
+  '''\b(obligation_key|REPROMPT_KEY|fileKey|file_key|entity_key)\b''',
+  # Snake-case versioned enum values used throughout the trust-score and
+  # contract-template subsystems (`investor_nda_v1`, `mentor_disclaimer_v1`,
+  # `kyc_v1`, `investor_signals_reprompt_dismissed_v1`, …). The `_vN`
+  # suffix is the project-wide enum-version convention and is NOT used
+  # for any real credential. NB: real secrets are random hex/base64 with
+  # high entropy and never end in `_v\d+`.
+  '''\b[a-z][a-z0-9_]*_v\d+\b''',
+  # Literal property assignment from a row reference — `ref.row.<col>` is
+  # a TypeScript object-property access, not a value. Gitleaks' generic
+  # heuristic treats the right-hand side of `let foo = ref.row.bar` as a
+  # candidate secret because of the `=` boundary; this regex pins it as
+  # code, not a secret value.
+  '''ref\.row\.\w+''',
+  # Public sanctions/OFAC data-feed URL with a literal `?token=` query
+  # param. The "token" is the EU's published export-version marker
+  # (base64 of "token-2017"), not a credential — we pin both the literal
+  # value and the URL so the rule doesn't re-trigger on URL edits.
+  # Spin-Out Lab graduation credential references (`AXL-SOL-C4-260731-0117`):
+  # derived from cohort, date and account by `credentialRefFor`
+  # (routes/spinout_certificates.ts), printed on every certificate and on its
+  # public verification page. A reference, not a secret — the public page is
+  # keyed on the separate 128-bit `public_token`, which this does not match.
+  # Pinned to the exact shape so nothing looser rides on it (D382).
+  '''\bAXL-SOL-(C\d+|X)-\d{6}-\d{4}\b''',
+  # D751 T9 (#1921): the synthetic client secret in
+  # cloudflare-worker/test/health_connectors_d751.test.ts, which the test
+  # sets as an env value and then proves never appears in /api/health. Not
+  # a credential; pinned to the exact literal so nothing looser rides on it.
+  '''\bd751-health-fixture-secret\b''',
+  # D850 (#2473): the placeholder bearer in MCP_API_RUNBOOK.md's read-only
+  # `curl` check, which shows the owner that a malformed key is refused. A
+  # real key's id is 12 random [a-z0-9] and its secret 43 base64url
+  # characters; this is twelve zeros and a word, and verifyKey refuses its
+  # shape. Pinned to the exact literal so nothing looser rides on it.
+  '''\baxk_000000000000_placeholder\b''',
+  # D1317 (#2480): the four invented key ids in
+  # frontend/test/api_keys_d1317.test.mjs. Each is 12 [a-z0-9] characters, the
+  # real id shape, and gitleaks' generic-api-key rule reads `key_id: '…'` as a
+  # secret. They are fixtures, not credentials. The commit that added them
+  # stays in this pull request's scan range, so the literals are pinned here
+  # rather than rewritten. Nothing looser rides on the alternation.
+  '''^(?:k7f3m2q9x4p1|r2d8w5n1c6v3|h9j4t7b2m5x8|p3s6v9y2b5e8)$''',
+  # D1000 (#2815): the synthetic JWT signing key in
+  # cloudflare-worker/test/segment_profiles_d1000.test.ts, which signs the
+  # test's own tokens against an in-memory database. Not a credential and
+  # not the Worker's JWT_SECRET; pinned to the exact literal so nothing
+  # looser rides on it.
+  '''\bsegment-test-secret-0123456789-abcdef\b''',
+  # D1082 (#2947): the synthetic JWT signing key in
+  # cloudflare-worker/test/lovable_launch.test.ts, which signs the test's own
+  # tokens against an in-memory database. Not a credential and not the
+  # Worker's JWT_SECRET; pinned to the exact literal so nothing looser rides on it.
+  '''\blovable-launch-test-secret-0123456789-abcdef\b''',
+  # D1343 (#3551): the synthetic signing seed in
+  # cloudflare-worker/test/mail_mcp_tools_d1343.test.ts, repeated to length
+  # for that test's own in-memory JWTs. Not a credential and not the
+  # Worker's JWT_SECRET. The commit that added it stays in this pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\bsynthetic-d1343\b''',
+  # D1439 Part D (#3916): the synthetic bearer token the social-cards test
+  # puts in each token-link path, to prove the token never reaches a tag.
+  # No link is issued with it. The commit that added it stays in the pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\btok_Synth3t1cBearerT0ken\b''',
+  # #4046 B4: the synthetic JWT signing seed in
+  # cloudflare-worker/test/fill_admin_partner_invitation_4046.test.ts, repeated to
+  # length for that test's own in-memory JWTs. Not a credential and not the
+  # Worker's JWT_SECRET. The test now uses a low-entropy seed, but the commit
+  # that added this one stays in the pull request's scan range, so it is pinned.
+  '''\bsynthetic-fill-partner-invitation-4046-''',
+  # D1588 (#3835): the synthetic JWT signing seed in
+  # cloudflare-worker/test/eadwyn_deck_tools_d1588.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The commit that added it stays in this pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\bsynthetic-d1588-secret-0123456789abcdef\b''',
+  # D4834 (#4834): the synthetic JWT signing seed first committed in
+  # cloudflare-worker/test/practice_earnings_4834.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The test now uses the shared unit-test seed, but
+  # the commit that added this one stays in the pull request's scan range, so
+  # it is pinned here rather than rewritten.
+  '''\btest-secret-for-practice-earnings-4834\b''',
+  '''dG9rZW4tMjAxNw''',
+  '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
+]
+# Historical leak commits already exposed in public git history. Listed here
+# so CI doesn't fail forever on findings nobody can change without rewriting
+# history. ACTIONS REQUIRED OUTSIDE THIS FILE:
+#   - the GitHub OAuth token (`gho_…`, commit c45afb1; secret-scanning alert 1)
+#     → REVOKE it. A `gho_` token is issued to an OAuth app, so it is revoked
+#     under github.com → Settings → Applications → Authorized OAuth Apps, not
+#     Personal access tokens. Its value is deliberately NOT written here: this
+#     comment used to carry it in full, which kept it in the current tree.
+#   - JWT_SECRET values in commits 64fed2c / 885de6e / af864bf → ROTATE the
+#     current secret and move it from `.replit` into Replit Secrets so it
+#     stops being committed going forward.
+commits = [
+  "c45afb10f2e4f67b02fe3100537dff7a7a588f17",  # historical: github oauth token in .replit
+  "64fed2c558712e208050a118677206e7439ccfbf",  # historical: older JWT_SECRET in .replit
+  "885de6ec5c9df186596d6a268a4fde25e7f0a606",  # historical: JWT_SECRET in .replit
+  "af864bff081f71db498680fac75eb667f4f5a73f",  # historical: JWT_SECRET in .replit
+  # 2026-05-11 — JWT_SECRET re-introduced in .replit by Task #51 commit;
+  # value removed in this PR and rotation note added to replit.md. The
+  # commit itself stays in history (cannot be rewritten without breaking
+  # every open Dependabot PR + the gitsafe-backup mirror), so it's
+  # allowlisted here so CI doesn't loop forever on a finding nobody can
+  # change. ACTION REQUIRED OUTSIDE THIS FILE: rotate the JWT_SECRET via
+  # Replit Secrets → set the new value in Cloudflare Worker secrets via
+  # `wrangler secret put JWT_SECRET --env production`.
+  "e5ba56538b542a3f0ae4784f7c6f776c879aa2f7",  # historical: JWT_SECRET re-leaked in .replit (Task #51)
+  # 2026-05-12 — JWT_SECRET re-introduced AGAIN in .replit by Task #2 (AU)
+  # Admin Publication Exports merge. Value (different from the 2026-05-11
+  # leak) was removed from .replit via deleteEnvVars on 2026-05-12 and the
+  # commit allowlisted here so gitleaks CI doesn't fail forever on a
+  # finding nobody can change without rewriting public history. ACTION
+  # REQUIRED OUTSIDE THIS FILE: rotate JWT_SECRET via Replit Secrets, then
+  # push the new value to the production worker via
+  # `wrangler secret put JWT_SECRET --env production`.
+  "d9da1be1a41c216028cc8edb17ae6f02e1b0248d",  # historical: JWT_SECRET re-leaked in .replit (Task #2 AU)
+  # 2026-05-12 — JWT_SECRET re-introduced AGAIN in .replit by the
+  # "Add functionality for market intelligence analysis and reporting"
+  # task-agent merge (Task #2 AT-1/AT-2 + AU bundle). This is the THIRD
+  # re-leak in 24h via the same root cause: task agents writing the
+  # secret into `.replit`'s `[env]` block instead of using Replit Secrets.
+  # Value removed from current `.replit` (`grep JWT_SECRET .replit` is
+  # empty as of 2026-05-13). Allowlisted here so gitleaks CI doesn't
+  # fail forever on a finding nobody can change without rewriting
+  # public history. ACTION REQUIRED OUTSIDE THIS FILE: rotate the
+  # JWT_SECRET via Replit Secrets, then push the new value to the
+  # production worker via `wrangler secret put JWT_SECRET --env production`.
+  # FOLLOW-UP: add a pre-commit hook (or task-agent guardrail) that
+  # rejects any `JWT_SECRET = "..."` line in `.replit` so this stops
+  # recurring.
+  "11e262ebc153a3540e80fd5c39a56ae479fccbad",  # historical: JWT_SECRET re-leaked in .replit (MI analysis task)
+]

@@ -1,0 +1,203 @@
+You are building the shell of an Advisor profile app in Replit.
+
+Scope
+Add a new top-level section called Growth to BOTH Advisor profiles and Partner profiles.
+Do not build the full data model yet.
+Do not wire real backend APIs.
+Use mock/placeholder data only.
+Keep the work modular so other sections can be added later.
+
+Primary goal
+Create a Growth section that is separate from:
+- Advisory for Advisors
+- Operations for Partners
+
+Growth should focus on helping Founders grow by matching them with the right resources for a target.
+This is not a user-controlled/internal execution section.
+It is a market-matching and resource-discovery section.
+
+Growth section intent
+- Advisory and Operations are things the user controls.
+- Growth depends on external market demand and matching the right resources.
+- Growth is about finding the right people, companies, capital, and expertise.
+- Growth may include resources already on the platform or external/unmatched resources.
+
+Top-level sections for this build
+- Network.
+- Advisory.
+- Growth.
+- Research.
+
+Do not add extra top-level sections beyond these four.
+Do not build Founder profile UI in this task.
+Do not build admin settings or ticketing workflows.
+
+Architecture rules
+- Build the sidebar and routes first.
+- Create shared layout components first.
+- Make each feature page a separate route.
+- Inside each page, organize content into tabs, cards, tables, and detail panels.
+- Merge only internal options inside a page; do not create extra sidebar pages for every bullet item.
+- Keep the UI clean, modern, and easy to extend.
+
+Growth section structure
+
+3. Growth
+Helping founders and teams find the right resources to grow.
+Growth is not operational control.
+It is resource discovery, matching, and market demand fulfillment.
+
+A. Talent
+Everything related to hiring and team-building.
+Internal modules:
+- Executive Search.
+- Hiring Support.
+- Candidate Network.
+- Recruiters.
+
+Within Talent, include these data points and fields in the UI:
+- Hiring need.
+- Role definition.
+- Seniority.
+- Function.
+- Location.
+- Compensation range.
+- Timeline.
+- Candidate pipeline.
+- Shortlist.
+- Introductions.
+- Interviews.
+- Feedback.
+- Outcome.
+- Placement status.
+- Recruiter.
+- Hiring manager.
+- Market availability.
+
+B. Customers
+Everything related to customer growth and sales opportunities.
+Internal modules:
+- Customer Introductions.
+- Sales Opportunities.
+- Enterprise Introductions.
+- Channel Partners.
+
+Within Customers, include these data points and fields in the UI:
+- Customer target.
+- ICP.
+- Industry.
+- Geography.
+- Account tier.
+- Warm introductions.
+- Sales pipeline.
+- Opportunity stage.
+- Decision makers.
+- Mutual connections.
+- Meeting history.
+- Next steps.
+- Conversion probability.
+- Partner source.
+- Channel motion.
+- Revenue potential.
+
+C. Capital
+Everything related to fundraising and financial resources.
+Internal modules:
+- Investor Introductions.
+- VC Firms.
+- Angel Investors.
+- Family Offices.
+- Grants.
+
+Within Capital, include these data points and fields in the UI:
+- Raise type.
+- Round.
+- Target amount.
+- Stage.
+- Ticket size.
+- Geography.
+- Sector focus.
+- Investor fit.
+- Warm intro paths.
+- Meetings.
+- Follow-ups.
+- Interest level.
+- Diligence status.
+- Term discussions.
+- Grant deadline.
+- Funding probability.
+- Close likelihood.
+
+D. Experts
+Everything related to subject matter expertise and mentorship.
+Internal modules:
+- Subject Matter Experts.
+- Advisors.
+- Mentors.
+- Coaches.
+
+Within Experts, include these data points and fields in the UI:
+- Expertise area.
+- Background.
+- Industry focus.
+- Experience level.
+- Availability.
+- Intro path.
+- Session history.
+- Match strength.
+- Engagement type.
+- Outcome.
+- Notes.
+- References.
+- Fit score.
+- Rate.
+- Language.
+- Geography.
+
+Product requirements
+- Sidebar should show Growth as its own top-level section.
+- Growth should feel distinct from Advisory and Operations.
+- Each Growth feature page should have a clear header, summary card, and empty/mock data areas.
+- Talent page should look like a hiring and resource-matching workspace.
+- Customers page should look like a sales-introduction and market-access workspace.
+- Capital page should look like a fundraising and investor-matching workspace.
+- Experts page should look like a mentor/advisor discovery workspace.
+
+UI requirements
+- Responsive shell.
+- Left sidebar navigation.
+- Route-based page loading.
+- Consistent page headers.
+- Shared cards, lists, filters, and tabs.
+- Basic loading and empty states.
+- Clean modern internal-tool styling.
+
+Implementation tasks
+
+Task 1: App shell
+- Create the overall app shell.
+- Add sidebar navigation.
+- Add routing for Network, Advisory, Growth, and Research feature pages.
+- Add a shared header and page container.
+
+Task 2: Shared components
+- Create reusable components for sidebar, page header, tabs, cards, tables, empty states, and side panels.
+
+Task 3: Growth pages
+- Build placeholder versions of Talent, Customers, Capital, and Experts.
+- Each page should show the right internal modules and example fields.
+
+Task 4: Mock data
+- Seed each page with realistic placeholder records.
+- Make the data structure easy to replace later.
+
+Task 5: Polish
+- Verify the shell works across desktop and mobile.
+- Ensure routes render correctly.
+- Keep everything modular and ready for future sections.
+
+Before coding
+- Inspect the current repo structure.
+- Reuse any existing layout or nav components if they already exist.
+- Summarize the smallest viable implementation plan.
+- Then build the shell and placeholder pages for Advisor and Partner profiles only.

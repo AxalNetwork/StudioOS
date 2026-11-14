@@ -1,0 +1,55 @@
+# cloudflare-worker/src — the production API
+
+This is what runs at `https://axal.vc/api/*`. Hono on Cloudflare Workers,
+against D1 (`env.DB`), KV, R2, Vectorize, Workers AI, Queues and Durable
+Objects.
+
+**This — not `backend/` — is production.** The FastAPI app in `backend/` exists
+for local Replit iteration and is never deployed; Workers do not run Python.
+New features are implemented here first.
+
+`npm run deploy` from the repo root dispatches the verified production release
+workflow, including queue and startup checks before migrations and publication.
+
+| File | What it is |
+| --- | --- |
+| `index.ts` | Every hand-written mount, and the hook for the rest: the route table for the whole API is `index.ts` plus `routes/_registry.ts`, the generated list of routers that mount themselves (#4105, `util/routeRegistry.ts`). A new router does not add a line here; see `routes/README.md`. |
+| `auth.ts` | `requireAuth` and session resolution. |
+| `db.ts` | `getSQL(c.env)` — the tagged-template shim. Every `${}` becomes a bound `?`. |
+| `kv.ts` | KV helpers. |
+| `types.ts` | The `Env` binding shape. |
+| `personas.ts` | Role and persona constants. |
+| `queue-consumer.ts` | The queue handler. |
+
+## Subtrees
+
+| Folder | What lives there |
+| --- | --- |
+| `routes/` | The HTTP surface — one router per `/api/<prefix>`. |
+| `services/` | Logic the routes call. No HTTP in here. |
+| `middleware/` | Tier gates, rate limits, tenancy. |
+| `integrations/` | Third-party providers (Carta, Stripe, calendars, …). |
+| `models/` | Row types. |
+| `contracts/` | D1511 (#3762): the JSON Schema of every deck v2 adapter method's reply, checked against its route by `test:drift`. |
+| `templates/` | Legal document and email templates. |
+| `durable-objects/` | Realtime coordination, and a meeting bot's run. D1577 (#3824) adds `deck-presence.ts` (`DeckPresence`), bound as `DECK_PRESENCE` in all three `wrangler.toml` tables (the owner approved its cost, decision L). D1502 (#3753) adds a deck's generation runs (`deck-gen-room.ts`) and their per-account throttles (`ai-governor.ts`); D5338 (#5338) gives `ai-governor.ts` a second, durable job, the shared upstream lease of one AI Gateway (`services/upstreamLease.ts`). D1581 (#3828) adds the phone remote for Present (`deck-remote.ts`), paired by code. |
+| `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Controlled by `MCP_SERVER_ENABLED` and `OAUTH_KV` (D681). |
+| `agents/` | D1528 (#3847, E3 of #3742): the agent engine's runtime behind one seam (`runtime.ts`): the `AgentScope` Durable Object per scope, the `AgentTaskWorkflow` per run, the agent queue and the sweep. Off unless `AGENT_ENGINE` is on. |
+| `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
+| `data/` | Seed and reference data. |
+| `util/` | Small shared helpers. |
+
+## Rules that have bitten people
+
+- **D1 is SQLite.** It rejects a whole statement on an unknown column. A typo in
+  one column name takes the entire query down — and if the handler swallows it,
+  the surface just renders empty. `check-sqlite-columns` exists because of this.
+- **Tenancy goes through `services/tenancyScope.ts`**, not an ad-hoc
+  `WHERE user_id = ?` written inline for the fifth time.
+- **Money is integer cents**, everywhere, and CI greps for float parsing on
+  money fields.
+- **Signed and issued documents are immutable** — R2 object-lock, hash in D1.
+- **A new binding goes in BOTH tables in `wrangler.toml`** — the top level and
+  `[env.production]`. `check-wrangler-binding-parity` fails otherwise.
+
+D642 (#1435): `routes/usage.ts` mounts caller-only `GET /api/usage/storage`; `services/storageUsage.ts` reads five file-metadata areas across all companies. NULL sizes and unreadable areas keep unknown totals distinct from recorded zero. See `documentation/architecture/decisions/D642.md` for ownership and the response contract.

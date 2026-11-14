@@ -1,0 +1,38 @@
+-- 161_discovery_icp_fit.sql — Customer Discovery, ICP fit.
+--
+-- Adds the founder's ICP-fit judgement to each discovery interview. The
+-- Claude Design Customer Discovery page shows this in three places — a
+-- column in the interview log, an "ICP fit summary" card (strong /
+-- partial / not-ICP split with a confidence band), and the ICP working
+-- definition — but there was no column to store it, so the page could
+-- not render any of them against real data.
+--
+-- Deliberately NOT derived from `validation_rating`. That column answers
+-- "how well does this solution address the problem?", which is a
+-- different question from "is this person in our ICP?" — a well-fitting
+-- prospect can rate the solution badly, and vice versa. Reusing it would
+-- have produced a plausible-looking number that means something else.
+--
+-- Additive and nullable, so every existing row keeps rendering: a null
+-- icp_fit is "not yet assessed" in the UI, never silently counted as
+-- "not ICP". Allowed values are enforced in the route layer
+-- (asIcpFit(): 'strong' | 'partial' | 'none'), not by a CHECK
+-- constraint, so a future vocabulary change does not require a table
+-- rebuild on D1.
+--
+-- NON-IDEMPOTENT: D1's ALTER TABLE has no IF NOT EXISTS. Apply through
+-- the ledger-driven runner, which records the schema_migrations row and
+-- runs it exactly once:
+--
+--   npm run d1:migrate:remote
+--
+-- A hand-applied `wrangler d1 execute` leaves no ledger row, so the next
+-- deploy re-runs this file, D1 returns "duplicate column name: icp_fit",
+-- and the plan aborts on that failure — blocking this migration and
+-- every later one.
+--
+-- The worker also self-heals on cold isolates via
+-- ensureDiscoveryIcpFitColumn() (services/discoveryInterviewSchema.ts),
+-- matching the pattern used by 072 (featured) and 074 (validation_*).
+
+ALTER TABLE discovery_interviews ADD COLUMN icp_fit TEXT;

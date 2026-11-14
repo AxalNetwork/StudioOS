@@ -1,0 +1,48 @@
+#17 - Scoring engine anti-cheat
+What & Why
+Founders self-report TAM, SAM, MRR, ARR, user counts, runway, etc., and these values feed scoreMarket / scoreTraction / scoreFinancials. Today nothing stops a founder from typing $5B TAM and $1M MRR to game the score. Layer evidence requirements, cross-source reconciliation, plausibility rules, behavioural signals, and an attestation step — score numbers without evidence; flag, deweight, or refuse anything that smells fake. Depends on Task U (profile expansion) for tax/identity attestation.
+
+Done looks like
+Founder typing $5B TAM with no source URL gets a no_evidence flag and the TAM band scores 0.
+Stripe-connected founder cannot inflate MRR — UI shows the Stripe value with a "We're using your Stripe MRR ($X) instead of your typed value ($Y)" banner.
+Typed numbers that fail plausibility rules block score finalisation until corrected.
+Attestation checkbox required; POST /scoring/score returns 428 Precondition Required without it.
+Med+ severity flags appear in the corresponding DD case under FINANCIAL or MARKET section automatically.
+Existing snapshots remain valid (integrity_hash unchanged).
+Scoring page shows per-input "Verified via Stripe" / "Founder upload pending" / "No evidence" badges and an Evidence confidence: 73% ring next to the score.
+Out of scope
+Building new integration connectors (reuse existing Stripe / Plaid / GA / GitHub / Crunchbase / SEC EDGAR clients; stub anything not yet built and feature-flag).
+AI-based document parsing of uploaded artefacts (just hash + store in R2; OCR/extraction is future work).
+Founder-facing flag visibility — flags are for admin/partner/investor eyes only.
+Backfilling evidence for snapshots that already exist.
+Steps
+Schema — New tables: score_evidence, score_flags, score_attestations (full DDL in the source prompt). Ship as migration 016_scoring_anticheat.sql.
+Layer 1 (evidence-required inputs) — For each high-leverage field (mrr_usd, arr_usd, monthly_revenue_usd, cash_in_bank_usd, monthly_burn_usd, total_users, paying_customers, tam_usd, sam_usd, traction_growth) accept input but score 0 for that band when no evidence row exists.
+Layer 2 (cross-source reconciliation) — When an integration is connected, the platform value beats the typed value (Stripe→MRR/ARR, Plaid→cash/burn, GA→DAU/WAU/MAU, GitHub→eng activity, Crunchbase→funding). Discrepancy >20% inserts a discrepancy flag and surfaces a banner.
+Layer 3 (plausibility rules) — Server-side: tam ≤ 100×sam; mrr×12 ≈ arr (±5%); monthly_revenue ≥ mrr; paying_customers × min_acv ≤ arr; growth_mom_pct ≤ 100; cash_in_bank ≥ 0; all percentages in [0,100]; monthly_burn ≥ founder_salary/12 when set. Each fail → score_flags(kind='rule', severity).
+Layer 4 (behavioural signals) — Track edit volatility per field: >5 edits in 7 days OR same field flipped up/down repeatedly → score_flags(kind='volatility').
+Layer 5 (attestation) — Before scoring, founder checks an attestation box; row signed (TOTP step-up if available) and snapshot HMAC'd. POST /scoring/score returns 428 if no attestation row for the snapshot.
+Layer 6 (confidence multiplier) — evidence_confidence = 0.4 + 0.6 × (verified_inputs / total_high_leverage_inputs). Final score = base × confidence. Display the confidence ring + breakdown next to the score.
+Layer 7 (DD overlap) — Every score_flag with severity ≥ 'med' creates a dd_findings row under the relevant DD section automatically.
+Frontend — Per-input verification badges + "Upload evidence" buttons. Top-of-page "Connect Stripe to verify MRR automatically" CTAs. "Run Score" disabled until attestation checked. New /admin/score-flags page lists flags grouped by project with deep links into the matching DD case.
+Critical constraints
+services/scoring.ts already has an integrity_hash snapshot mechanism — do NOT change its serialization shape (would invalidate every prior snapshot).
+Reuse services/columnCipher.ts and services/cryptoBox.encryptBytes for any PII / sensitive evidence storage; do NOT roll a new cipher.
+DD findings table is dd_findings from Task #3 (2026-05-09); reuse it — column names + severity enum already exist.
+Evidence file uploads use the existing R2 FILES binding under a new prefix score-evidence/<projectId>/... (encrypted via cryptoBox).
+Hashed-actor pattern (T22.1) applies to every activity log row.
+Profile expansion (Task U) ships first because attestation can use the verified personal/corporate identity for the signed-by record.
+Relevant files
+cloudflare-worker/src/routes/scoring.ts
+cloudflare-worker/src/services/scoring.ts
+cloudflare-worker/src/services/dueDiligence.ts
+cloudflare-worker/src/services/cryptoBox.ts
+cloudflare-worker/src/services/columnCipher.ts
+cloudflare-worker/src/util/hashEmail.ts
+cloudflare-worker/sql/migrations/008_due_diligence.sql
+frontend/src/pages/ScoringPage.jsx
+frontend/src/lib/api.js
+Dependencies
+
+Profile expansion (corporate + identity)
+Main

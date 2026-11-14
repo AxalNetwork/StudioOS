@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .sg-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .sg-page{background:#f8f8fa;color:#18181b}
+    .sg-surface{background:#ffffff}
+    .sg-sunken{background:#faf9fc}
+    .sg-paper{background:#ffffff}
+    .sg-border{border-color:#e8e6ee}
+    .sg-bd-b{border-bottom-color:#e8e6ee}
+    .sg-bd-t{border-top-color:#e8e6ee}
+    .sg-text{color:#18181b}
+    .sg-muted{color:#71717a}
+    .sg-strong{color:#3f3f46}
+    .sg-field{background:#faf9fc;border-color:#e8e6ee;color:#18181b}
+
+    .sg-page.sg-dark{background:#0f0e13;color:#ececf1}
+    .sg-dark .sg-surface{background:#17161d}
+    .sg-dark .sg-sunken{background:#1d1b25}
+    .sg-dark .sg-paper{background:#1a1922}
+    .sg-dark .sg-border{border-color:#2a2833}
+    .sg-dark .sg-bd-b{border-bottom-color:#2a2833}
+    .sg-dark .sg-bd-t{border-top-color:#2a2833}
+    .sg-dark .sg-text{color:#ececf1}
+    .sg-dark .sg-muted{color:#9b96a8}
+    .sg-dark .sg-strong{color:#dcd9e4}
+    .sg-dark .sg-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+
+    .sg-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .sg-btn:hover{filter:brightness(1.06)}
+    .sg-seg{cursor:pointer;transition:background .13s,color .13s,border-color .13s}
+    .sg-card{cursor:pointer;transition:border-color .13s,box-shadow .13s,transform .13s}
+    .sg-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(24,24,27,.07)}
+    .sg-tok{padding:1px 5px;border-radius:4px;background:rgba(124,58,237,.11);color:#6d28d9;font-weight:600}
+    .sg-dark .sg-tok{background:rgba(124,58,237,.2);color:#c4b5fd}
+    .sg-fade{animation:sgFade .22s ease}
+    @keyframes sgFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    input,select,textarea{font-family:inherit;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7c3aed}
+    ::placeholder{color:#a8a4b4}
+    @media (max-width:940px){.sg-2{grid-template-columns:1fr!important}.sg-3{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="sg-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="sg-surface sg-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:20">
+    <div style="max-width:1200px;margin:0 auto;padding:15px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ penIcon }}"></span>
+        </div>
+        <div style="min-width:0">
+          <div class="sg-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Send for signature</div>
+          <div class="sg-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <div class="sg-sunken sg-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+          <sc-for list="{{ roleTabs }}" as="r" hint-placeholder-count="3">
+            <div class="sg-seg" onClick="{{ r.go }}" style="{{ r.style }}">{{ r.label }}</div>
+          </sc-for>
+        </div>
+        <div class="sg-btn sg-border sg-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+          {{ themeLabel }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP RAIL -->
+  <div class="sg-surface sg-bd-b" style="border-bottom-width:1px;border-bottom-style:solid">
+    <div style="max-width:1200px;margin:0 auto;padding:13px 26px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <sc-for list="{{ stepRail }}" as="s" hint-placeholder-count="3">
+        <div class="sg-seg" onClick="{{ s.go }}" style="display:flex;align-items:center;gap:9px;flex:none">
+          <span style="{{ s.dotStyle }}">
+            <sc-if value="{{ s.done }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span></sc-if>
+            <sc-if value="{{ s.showNum }}">{{ s.n }}</sc-if>
+          </span>
+          <div style="min-width:0">
+            <div style="font-size:12.5px;font-weight:{{ s.weight }};color:{{ s.ink }}">{{ s.label }}</div>
+            <div class="sg-muted" style="font-size:10.5px;margin-top:1px">{{ s.note }}</div>
+          </div>
+        </div>
+        <sc-if value="{{ s.line }}">
+          <div class="sg-border" style="flex:1;min-width:20px;height:1px;border-top-width:1px;border-top-style:solid"></div>
+        </sc-if>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="max-width:1200px;margin:0 auto;padding:28px 26px 90px">
+
+  <!-- ================= STEP 1 · PICK A TEMPLATE ================= -->
+  <sc-if value="{{ isStep1 }}">
+  <div class="sg-fade">
+    <div class="sg-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">{{ s1Heading }}</div>
+    <div class="sg-muted" style="font-size:13.5px;margin-top:5px;max-width:560px;line-height:1.6">{{ s1Sub }}</div>
+
+    <div class="sg-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px">
+      <sc-for list="{{ templates }}" as="t" hint-placeholder-count="3">
+        <div class="sg-card sg-surface" onClick="{{ t.go }}" style="border-width:1px;border-style:solid;border-color:{{ t.borderColor }};border-radius:16px;padding:22px 24px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+            <div style="{{ t.iconWrap }}">
+              <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            </div>
+            <span style="{{ t.chip }}">{{ t.tag }}</span>
+          </div>
+          <div class="sg-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.018em;margin-top:15px">{{ t.name }}</div>
+          <div class="sg-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px;flex:1">{{ t.when }}</div>
+          <div class="sg-bd-t" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:13px;border-top-width:1px;border-top-style:solid">
+            <div class="sg-muted" style="font-size:11.5px">{{ t.meta }}</div>
+            <div style="font-size:12px;font-weight:700;color:#7c3aed;display:flex;align-items:center;gap:5px">
+              Use
+              <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ arrowIcon }}"></span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="sg-sunken sg-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:18px 22px;margin-top:18px;display:flex;align-items:flex-start;gap:12px">
+      <span class="sg-muted" style="width:16px;height:16px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+      <div class="sg-muted" style="font-size:12.5px;line-height:1.65">Every envelope is token-gated per signer, timestamped, and produces a tamper-evident audit trail with the executed PDF. Templates are counsel-reviewed but are not legal advice — have your own counsel review terms before sending.</div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ================= STEP 2 · REVIEW & FILL ================= -->
+  <sc-if value="{{ isStep2 }}">
+  <div class="sg-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+      <div style="min-width:0">
+        <div class="sg-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">{{ doc.name }}</div>
+        <div class="sg-muted" style="font-size:13.5px;margin-top:5px;max-width:560px;line-height:1.6">{{ doc.reviewSub }}</div>
+      </div>
+      <div class="sg-btn sg-border sg-muted" onClick="{{ backToStep1 }}" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none">Change template</div>
+    </div>
+
+    <sc-if value="{{ prefillShown }}">
+      <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="width:17px;height:17px;display:flex;flex:none;color:#7c3aed" dangerouslySetInnerHTML="{{ linkIcon }}"></span>
+        <div class="sg-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1;line-height:1.5">{{ doc.prefillNote }}</div>
+        <div class="sg-btn sg-muted" onClick="{{ dismissPrefill }}" style="font-size:11.5px;font-weight:600;flex:none">Dismiss</div>
+      </div>
+    </sc-if>
+
+    <div class="sg-2" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start">
+
+      <!-- DOCUMENT PREVIEW -->
+      <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="sg-sunken sg-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Document preview</div>
+          <div class="sg-muted" style="font-size:11px">{{ filledCount }} of {{ fieldCount }} fields filled</div>
+        </div>
+        <div class="sg-paper" style="padding:34px 40px">
+          <div style="text-align:center">
+            <div class="sg-text" style="font-size:15px;font-weight:800;letter-spacing:.02em;text-transform:uppercase">{{ doc.legalTitle }}</div>
+            <div class="sg-muted" style="font-size:11.5px;margin-top:6px">{{ doc.legalSub }}</div>
+          </div>
+          <div class="sg-bd-t" style="margin-top:24px;padding-top:20px;border-top-width:1px;border-top-style:solid;display:flex;flex-direction:column;gap:16px">
+            <sc-for list="{{ doc.clauses }}" as="c" hint-placeholder-count="5">
+              <div>
+                <div class="sg-strong" style="font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase">{{ c.h }}</div>
+                <div class="sg-strong" style="font-size:13px;line-height:1.78;margin-top:6px">
+                  <sc-for list="{{ c.parts }}" as="p" hint-placeholder-count="3">
+                    <sc-if value="{{ p.plain }}"><span>{{ p.text }}</span></sc-if>
+                    <sc-if value="{{ p.token }}"><span class="sg-tok">{{ p.text }}</span></sc-if>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="sg-bd-t" style="margin-top:26px;padding-top:20px;border-top-width:1px;border-top-style:solid;display:grid;grid-template-columns:1fr 1fr;gap:22px">
+            <sc-for list="{{ doc.signers }}" as="sg" hint-placeholder-count="2">
+              <div>
+                <div class="sg-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">{{ sg.role }}</div>
+                <div class="sg-border" style="height:34px;border-bottom-width:1px;border-bottom-style:dashed;margin-top:10px"></div>
+                <div class="sg-strong" style="font-size:12.5px;font-weight:600;margin-top:7px">{{ sg.name }}</div>
+                <div class="sg-muted" style="font-size:11px;margin-top:1px">{{ sg.entity }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- FIELD FORM -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+          <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Recipient</div>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-top:13px">
+            <sc-for list="{{ recipientFields }}" as="f" hint-placeholder-count="3">
+              <div>
+                <div class="sg-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:6px">
+                  {{ f.label }}
+                  <sc-if value="{{ f.prefilled }}"><span style="{{ chipViolet }}">from {{ f.source }}</span></sc-if>
+                </div>
+                <input class="sg-field" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+          <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">{{ doc.termsLabel }}</div>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-top:13px">
+            <sc-for list="{{ termFields }}" as="f" hint-placeholder-count="4">
+              <div>
+                <div class="sg-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  {{ f.label }}
+                  <sc-if value="{{ f.prefilled }}"><span style="{{ chipViolet }}">from {{ f.source }}</span></sc-if>
+                </div>
+                <sc-if value="{{ f.isSelect }}">
+                  <select class="sg-field" onChange="{{ f.set }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                    <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                      <option selected="{{ o.selected }}">{{ o.label }}</option>
+                    </sc-for>
+                  </select>
+                </sc-if>
+                <sc-if value="{{ f.isText }}">
+                  <input class="sg-field {{ f.monoClass }}" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                </sc-if>
+                <sc-if value="{{ f.isArea }}">
+                  <textarea class="sg-field" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px;resize:vertical;line-height:1.6"></textarea>
+                </sc-if>
+                <sc-if value="{{ f.hint }}">
+                  <div class="sg-muted" style="font-size:11px;margin-top:5px;line-height:1.5">{{ f.hint }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div class="sg-btn" onClick="{{ toStep3 }}" style="{{ continueStyle }}">{{ continueLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ================= STEP 3 · SEND / STATUS ================= -->
+  <sc-if value="{{ isStep3 }}">
+  <div class="sg-fade">
+
+    <!-- PRE-SEND REVIEW -->
+    <sc-if value="{{ !sent }}">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sg-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">Review and send</div>
+          <div class="sg-muted" style="font-size:13.5px;margin-top:5px;max-width:560px;line-height:1.6">Once sent, each signer receives a private link. You can void the envelope until the first signature lands.</div>
+        </div>
+        <div class="sg-btn sg-border sg-muted" onClick="{{ backToStep2 }}" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none">Back to fields</div>
+      </div>
+
+      <div class="sg-2" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start">
+        <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="sg-sunken sg-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 22px">
+            <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Final terms</div>
+          </div>
+          <div style="padding:8px 24px 18px">
+            <sc-for list="{{ summaryRows }}" as="r" hint-placeholder-count="6">
+              <div class="sg-bd-t" style="display:flex;justify-content:space-between;gap:16px;align-items:baseline;padding:12px 0;border-top-width:1px;border-top-style:solid">
+                <div class="sg-muted" style="font-size:12.5px;flex:none;min-width:150px">{{ r.k }}</div>
+                <div class="sg-strong {{ r.monoClass }}" style="font-size:13px;font-weight:600;text-align:right;min-width:0">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Signers · in order</div>
+            <div style="display:flex;flex-direction:column;gap:0;margin-top:13px">
+              <sc-for list="{{ signerList }}" as="s" hint-placeholder-count="2">
+                <div class="sg-bd-t" style="display:flex;align-items:center;gap:11px;padding:12px 0;border-top-width:1px;border-top-style:solid">
+                  <div style="{{ s.avStyle }}">{{ s.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div class="sg-strong" style="font-size:13px;font-weight:700">{{ s.name }}</div>
+                    <div class="sg-muted" style="font-size:11.5px;margin-top:1px">{{ s.email }}</div>
+                  </div>
+                  <div class="sg-muted" style="font-size:11px;flex:none">{{ s.role }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ sendChecks }}" as="c" hint-placeholder-count="3">
+                <div class="sg-bd-t" style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+                  <span style="width:14px;height:14px;display:flex;flex:none;color:#15803d;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                  <div class="sg-strong" style="font-size:12.5px;font-weight:600;line-height:1.5">{{ c }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="sg-btn" onClick="{{ sendEnvelope }}" style="margin-top:16px;padding:13px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ sendIcon }}"></span>
+              Send for signature
+            </div>
+            <div class="sg-muted" style="font-size:11.5px;margin-top:11px;display:flex;align-items:flex-start;gap:7px;line-height:1.55">
+              <span style="width:13px;height:13px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+              Signers verify by email token. Executed PDF and audit trail are filed to your data room automatically.
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- POST-SEND STATUS -->
+    <sc-if value="{{ sent }}">
+      <div class="sg-fade">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+          <div style="min-width:0">
+            <div class="sg-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">{{ envHeading }}</div>
+            <div class="sg-muted" style="font-size:13.5px;margin-top:5px">{{ doc.name }} · {{ envId }} · sent {{ sentWhen }}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+            <sc-if value="{{ !allSigned }}">
+              <div class="sg-btn sg-border sg-muted" onClick="{{ advanceEnvelope }}" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Simulate next event</div>
+            </sc-if>
+            <div class="sg-btn sg-border sg-muted" onClick="{{ resetFlow }}" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Start over</div>
+          </div>
+        </div>
+
+        <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <sc-for list="{{ lifecycle }}" as="l" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px;flex:none">
+              <span style="{{ l.dotStyle }}">
+                <sc-if value="{{ l.glyph }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ l.icon }}"></span></sc-if>
+              </span>
+              <div style="min-width:0">
+                <div style="font-size:12.5px;font-weight:700;color:{{ l.ink }}">{{ l.label }}</div>
+                <div class="sg-muted" style="font-size:10.5px;margin-top:1px">{{ l.when }}</div>
+              </div>
+            </div>
+            <sc-if value="{{ l.line }}">
+              <div class="sg-border" style="flex:1;min-width:20px;height:1px;border-top-width:1px;border-top-style:solid"></div>
+            </sc-if>
+          </sc-for>
+        </div>
+
+        <div class="sg-2" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start;margin-top:16px">
+          <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="sg-sunken sg-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Signers</div>
+              <div class="sg-muted" style="font-size:11px">{{ outstandingNote }}</div>
+            </div>
+            <sc-for list="{{ signerStatus }}" as="s" hint-placeholder-count="2">
+              <div class="sg-bd-b" style="display:flex;align-items:center;gap:13px;padding:15px 22px;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="{{ s.avStyle }}">{{ s.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div class="sg-strong" style="font-size:13.5px;font-weight:700">{{ s.name }}</div>
+                  <div class="sg-muted" style="font-size:11.5px;margin-top:1px">{{ s.email }} · {{ s.role }}</div>
+                </div>
+                <div class="sg-muted sg-num" style="font-size:11px;flex:none;text-align:right">{{ s.when }}</div>
+                <span style="{{ s.chip }}">{{ s.state }}</span>
+                <sc-if value="{{ s.canRemind }}">
+                  <div class="sg-btn sg-border sg-strong" style="flex:none;padding:6px 12px;border-radius:8px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">Remind</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-if value="{{ allSigned }}">
+              <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+                <div style="width:38px;height:38px;border-radius:12px;background:rgba(21,128,61,.11);color:#15803d;display:flex;align-items:center;justify-content:center">
+                  <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                </div>
+                <div class="sg-text" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:14px">Fully executed</div>
+                <div class="sg-muted" style="font-size:12.5px;line-height:1.62;margin-top:6px">All signatures collected. The executed PDF and audit trail have been filed to your data room and emailed to both parties.</div>
+                <div class="sg-btn" style="margin-top:16px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+                  <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+                  Download executed PDF
+                </div>
+                <div class="sg-btn sg-border sg-strong" style="margin-top:8px;padding:11px 0;border-radius:11px;border-width:1px;border-style:solid;font-size:13px;font-weight:600;background:transparent;text-align:center">View audit trail</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ !allSigned }}">
+              <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+                <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Outstanding</div>
+                <div class="sg-text" style="font-size:15px;font-weight:800;letter-spacing:-.015em;margin-top:9px">{{ outstandingHeadline }}</div>
+                <div class="sg-muted" style="font-size:12.5px;line-height:1.62;margin-top:6px">{{ outstandingBody }}</div>
+                <div class="sg-btn sg-border sg-strong" style="margin-top:16px;padding:11px 0;border-radius:11px;border-width:1px;border-style:solid;font-size:13px;font-weight:600;background:transparent;text-align:center">Copy signing link</div>
+                <div class="sg-btn sg-muted" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Void envelope</div>
+              </div>
+            </sc-if>
+
+            <div class="sg-surface sg-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+              <div class="sg-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Audit trail</div>
+              <div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+                <sc-for list="{{ auditTrail }}" as="a" hint-placeholder-count="3">
+                  <div style="display:flex;gap:11px">
+                    <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                      <div style="width:7px;height:7px;border-radius:50%;background:#7c3aed;margin-top:5px"></div>
+                      <sc-if value="{{ a.line }}"><div class="sg-border" style="width:1px;flex:1;min-height:16px;border-left-width:1px;border-left-style:solid"></div></sc-if>
+                    </div>
+                    <div style="padding-bottom:13px;min-width:0">
+                      <div class="sg-strong" style="font-size:12.5px;font-weight:600;line-height:1.45">{{ a.what }}</div>
+                      <div class="sg-muted sg-num" style="font-size:10.5px;margin-top:2px">{{ a.when }}{{ a.ip }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200}}">
+class Component extends DCLogic {
+  state = { theme:'light', role:'founder', step:1, tpl:'safe', sent:false, envStage:1,
+    prefillDismissed:false, edits:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setV(k){ return (e) => this.setState(s => ({ edits: Object.assign({}, s.edits, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+
+    const I = {
+      pen:      this.ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+      check:    this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      arrow:    this.ic('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
+      shield:   this.ic('<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      send:     this.ic('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>'),
+      download: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      link:     this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      dot:      this.ic('<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>'),
+      eye:      this.ic('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>'),
+      coin:     this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      handshake:this.ic('<path d="m11 17 2 2a1.4 1.4 0 0 0 2-2"/><path d="m14 16 2.5 2.5a1.4 1.4 0 0 0 2-2l-5-5"/><path d="M3 10l4-4 4 2 3-1 7 5v4l-3 1"/><path d="M3 10v5l4 3 4-4"/>'),
+      users:    this.ic('<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>'),
+      briefcase:this.ic('<rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+      compass:  this.ic('<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>'),
+      sun:      this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon:     this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-block;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const chipGreen = chip('rgba(21,128,61,.11)', dark ? '#6ee7b7' : '#15803d');
+    const chipAmber = chip('rgba(180,83,9,.11)', dark ? '#fcd34d' : '#b45309');
+    const chipViolet = chip('rgba(124,58,237,.11)', dark ? '#c4b5fd' : V7);
+    const chipGrey = chip(dark ? '#2a2833' : '#f1f0f5', dark ? '#9b96a8' : '#71717a');
+
+    const seg = (on) => 'padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'))
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none');
+    const av = (bg) => 'width:34px;height:34px;border-radius:10px;background:'+bg+';color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:36px;height:36px;border-radius:11px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+
+    // ---------- role → templates ----------
+    const ROLE_TPLS = {
+      founder: [
+        { k:'safe', name:'SAFE', tag:'Financing', color:'#7c3aed', icon:I.coin,
+          when:'Raise on a post-money SAFE without setting a priced round. Use once an investor has verbally committed and terms are agreed.',
+          meta:'2 signers · Y Combinator post-money form' },
+        { k:'termsheet', name:'Term Sheet', tag:'Financing', color:'#1d4ed8', icon:I.briefcase,
+          when:'Set out the headline terms of a priced round before definitive docs. Non-binding except confidentiality and exclusivity.',
+          meta:'2 signers · non-binding' },
+        { k:'cofounder', name:'Co-founder Agreement', tag:'Formation', color:'#0f766e', icon:I.users,
+          when:'Fix equity split, vesting, IP assignment, and departure terms between founders. Sign before the company has real value.',
+          meta:'2–4 signers · counsel reviewed' },
+      ],
+      partner: [
+        { k:'service', name:'White-Label Service Agreement', tag:'Delivery', color:'#7c3aed', icon:I.handshake,
+          when:'Engage a client for delivered work under Axal VC white-label terms. Pulls scope and price straight from an accepted quote.',
+          meta:'2 signers · net 14 default' },
+        { k:'msa', name:'Master Services Agreement', tag:'Delivery', color:'#1d4ed8', icon:I.briefcase,
+          when:'Establish standing terms for a client you expect to work with repeatedly, then bill each project against a short SOW.',
+          meta:'2 signers · 12-month term' },
+        { k:'nda', name:'Mutual NDA', tag:'Pre-engagement', color:'#0f766e', icon:I.shield,
+          when:'Exchange confidential material before scope is agreed. Send this first when a prospect wants to share roadmap or financials.',
+          meta:'2 signers · 3-year term' },
+      ],
+      advisor: [
+        { k:'advisory', name:'Advisory Agreement', tag:'Equity for advice', color:'#7c3aed', icon:I.compass,
+          when:'Formalise an advisory relationship compensated in equity, with vesting tied to a fixed monthly commitment.',
+          meta:'2 signers · FAST-style form' },
+        { k:'retainer', name:'Advisory Retainer', tag:'Cash terms', color:'#1d4ed8', icon:I.coin,
+          when:'Advise on a paid monthly retainer instead of equity. Use where the company can pay cash or you cannot hold equity.',
+          meta:'2 signers · monthly, 30-day notice' },
+        { k:'nda', name:'Mutual NDA', tag:'Pre-engagement', color:'#0f766e', icon:I.shield,
+          when:'Cover early conversations before an advisory relationship is agreed, so the founder can speak freely.',
+          meta:'2 signers · 3-year term' },
+      ],
+    };
+    const roleTpls = ROLE_TPLS[st.role];
+    const tplKey = roleTpls.some(t => t.k === st.tpl) ? st.tpl : roleTpls[0].k;
+
+    const templates = roleTpls.map(t => Object.assign({}, t, {
+      borderColor: dark ? '#2a2833' : '#e8e6ee',
+      iconWrap: iconWrap(t.color),
+      chip: t.tag === 'Financing' ? chipViolet : t.tag === 'Formation' ? chipGreen : chipGrey,
+      go: () => this.setState({ tpl:t.k, step:2, sent:false, envStage:1, prefillDismissed:false, edits:{} }),
+    }));
+
+    // ---------- document definitions ----------
+    const val = (k, d) => (st.edits[k] !== undefined ? st.edits[k] : d);
+
+    const DOCS = {
+      safe: (() => {
+        const investor = val('rname', 'Marguerite Aubry');
+        const email = val('remail', 'm.aubry@stellarpoint.vc');
+        const entity = val('rentity', 'Stellar Point Ventures SCSp');
+        const amount = val('amount', '250,000');
+        const cap = val('cap', '8,000,000');
+        const discount = val('discount', '20%');
+        const proRata = val('prorata', 'Included — investor may participate in the next priced round');
+        return {
+          key:'safe',
+          name:'SAFE',
+          legalTitle:'Simple Agreement for Future Equity',
+          legalSub:'Post-money valuation cap · Y Combinator form · Delaware',
+          reviewSub:'Post-money SAFE on the standard Y Combinator form. Terms below carry into the executed document exactly as written.',
+          termsLabel:'Investment terms',
+          prefillNote:'Recipient and amount pre-filled from your deal record with Stellar Point Ventures — verbal commitment logged Aug 4.',
+          clauses:[
+            { h:'1 · Investment', parts:[
+              { plain:true, text:'THIS CERTIFIES THAT in exchange for the payment of ' },
+              { token:true, text:'$'+amount },
+              { plain:true, text:' by ' },
+              { token:true, text:investor },
+              { plain:true, text:' (the "Investor"), NovaCraft AI, Inc., a Delaware corporation (the "Company"), issues to the Investor the right to certain shares of the Company\u2019s capital stock, subject to the terms set out below.' },
+            ] },
+            { h:'2 · Valuation cap', parts:[
+              { plain:true, text:'"Post-Money Valuation Cap" means ' },
+              { token:true, text:'$'+cap },
+              { plain:true, text:'. The number of shares issued on conversion is calculated by dividing the Purchase Amount by the Conversion Price, being the lower of the price implied by the Post-Money Valuation Cap and the Discount Price.' },
+            ] },
+            { h:'3 · Discount', parts:[
+              { plain:true, text:'"Discount Rate" means ' },
+              { token:true, text:discount },
+              { plain:true, text:' of the price per share of Standard Preferred Stock sold in the Equity Financing.' },
+            ] },
+            { h:'4 · Pro rata rights', parts:[
+              { token:true, text:proRata },
+              { plain:true, text:'.' },
+            ] },
+            { h:'5 · Governing law', parts:[
+              { plain:true, text:'This instrument is governed by the laws of the State of Delaware, without regard to its conflicts of law provisions.' },
+            ] },
+          ],
+          signers:[
+            { role:'The Company', name:'Guillaume Lauzier', entity:'NovaCraft AI, Inc.' },
+            { role:'The Investor', name:investor, entity:entity },
+          ],
+          recipient:[
+            { k:'rname', label:'Investor name', value:investor, ph:'Full legal name', prefilled:true, source:'deal record' },
+            { k:'remail', label:'Email', value:email, ph:'name@firm.com', prefilled:true, source:'deal record' },
+            { k:'rentity', label:'Signing entity', value:entity, ph:'Fund or entity name', prefilled:false },
+          ],
+          terms:[
+            { k:'amount', label:'Investment amount (USD)', value:amount, ph:'250,000', mono:true, prefilled:true, source:'deal record' },
+            { k:'cap', label:'Post-money valuation cap (USD)', value:cap, ph:'8,000,000', mono:true,
+              hint:'Investor converts at the lower of this cap and the discounted round price.' },
+            { k:'discount', label:'Discount rate', kind:'select', value:discount, options:['0% — no discount','10%','15%','20%','25%'] },
+            { k:'prorata', label:'Pro rata rights', kind:'select', value:proRata,
+              options:['Included — investor may participate in the next priced round','Excluded','Side letter — negotiated separately'] },
+          ],
+          summary:[
+            { k:'Instrument', v:'Post-money SAFE (YC form)' },
+            { k:'Investor', v:investor + ' · ' + entity },
+            { k:'Email', v:email },
+            { k:'Investment amount', v:'$'+amount, mono:true },
+            { k:'Post-money cap', v:'$'+cap, mono:true },
+            { k:'Discount rate', v:discount, mono:true },
+            { k:'Pro rata', v:proRata },
+            { k:'Governing law', v:'Delaware' },
+          ],
+          counterName:'Guillaume Lauzier', counterEmail:'guillaume@novacraft.ai',
+          counterRole:'Company', counterInitials:'GL', counterBg:'#7c3aed',
+          recName:investor, recEmail:email, recRole:'Investor', recInitials:'MA', recBg:'#1d4ed8',
+          checks:[
+            'Amount and cap match the terms logged on the deal record',
+            'Company signatory has authority under the current board consent',
+            'Investor entity confirmed as the signing party, not the individual',
+          ],
+        };
+      })(),
+
+      service: (() => {
+        const client = val('rname', 'Guillaume Lauzier');
+        const email = val('remail', 'guillaume@novacraft.ai');
+        const entity = val('rentity', 'NovaCraft AI, Inc.');
+        const price = val('price', '4,200');
+        const timeline = val('timeline', '4 weeks from kickoff · delivery by Sep 12, 2026');
+        const deliverables = val('deliverables', 'Discovery and positioning workshop (3 days); marketing site design across 6 pages, desktop and mobile; CMS build with editor training and documented handoff; two rounds of post-launch revisions within 30 days.');
+        const payment = val('payment', 'Net 14 from invoice · 50% on kickoff, 50% on delivery');
+        return {
+          key:'service',
+          name:'White-Label Service Agreement',
+          legalTitle:'White-Label Service Agreement',
+          legalSub:'Provided through Axal VC · Studio Kern engagement · Berlin, Germany',
+          reviewSub:'Scope, price, and timeline carried over from accepted quote Q-2026-118. Editing any term reopens the quote for client confirmation.',
+          termsLabel:'Engagement terms',
+          prefillNote:'Scope, price, and timeline pre-filled from accepted quote Q-2026-118 — accepted by NovaCraft AI on Jul 14.',
+          clauses:[
+            { h:'1 · Services', parts:[
+              { plain:true, text:'Kern Studio GmbH (the "Provider") will deliver the following to ' },
+              { token:true, text:entity },
+              { plain:true, text:' (the "Client"): ' },
+              { token:true, text:deliverables },
+            ] },
+            { h:'2 · Fees', parts:[
+              { plain:true, text:'The Client shall pay the Provider a fixed fee of ' },
+              { token:true, text:'$'+price },
+              { plain:true, text:', exclusive of VAT where applicable. Payment terms: ' },
+              { token:true, text:payment },
+              { plain:true, text:'.' },
+            ] },
+            { h:'3 · Timeline', parts:[
+              { plain:true, text:'The Provider will complete the Services within ' },
+              { token:true, text:timeline },
+              { plain:true, text:', subject to timely Client feedback at each review point.' },
+            ] },
+            { h:'4 · Intellectual property', parts:[
+              { plain:true, text:'On payment in full, the Provider assigns to the Client all right, title, and interest in the deliverables, excluding the Provider\u2019s pre-existing tools, templates, and know-how, which are licensed to the Client perpetually and royalty-free.' },
+            ] },
+            { h:'5 · Termination', parts:[
+              { plain:true, text:'Either party may terminate on fourteen days\u2019 written notice. The Client shall pay for all work completed to the effective date of termination.' },
+            ] },
+          ],
+          signers:[
+            { role:'The Provider', name:'Anneke Kern', entity:'Kern Studio GmbH' },
+            { role:'The Client', name:client, entity:entity },
+          ],
+          recipient:[
+            { k:'rname', label:'Client signatory', value:client, ph:'Full legal name', prefilled:true, source:'quote' },
+            { k:'remail', label:'Email', value:email, ph:'name@company.com', prefilled:true, source:'quote' },
+            { k:'rentity', label:'Client entity', value:entity, ph:'Company legal name', prefilled:true, source:'quote' },
+          ],
+          terms:[
+            { k:'price', label:'Fixed fee (USD)', value:price, ph:'4,200', mono:true, prefilled:true, source:'quote' },
+            { k:'timeline', label:'Timeline', value:timeline, prefilled:true, source:'quote' },
+            { k:'deliverables', label:'Deliverables', kind:'area', value:deliverables, prefilled:true, source:'quote',
+              hint:'Reproduced verbatim in clause 1. Keep it specific enough to settle a dispute.' },
+            { k:'payment', label:'Payment terms', kind:'select', value:payment,
+              options:['Net 14 from invoice · 50% on kickoff, 50% on delivery','Net 14 from invoice · 100% on delivery','Net 30 from invoice · 100% on delivery','Milestone-based · invoiced per milestone'] },
+          ],
+          summary:[
+            { k:'Agreement', v:'White-Label Service Agreement' },
+            { k:'Client', v:client + ' · ' + entity },
+            { k:'Email', v:email },
+            { k:'Fixed fee', v:'$'+price, mono:true },
+            { k:'Payment terms', v:payment },
+            { k:'Timeline', v:timeline },
+            { k:'Against', v:'Quote Q-2026-118 · accepted Jul 14' },
+            { k:'Governing law', v:'Germany · Berlin courts' },
+          ],
+          counterName:'Anneke Kern', counterEmail:'anneke@studiokern.de',
+          counterRole:'Provider', counterInitials:'AK', counterBg:'#7c3aed',
+          recName:client, recEmail:email, recRole:'Client', recInitials:'GL', recBg:'#1d4ed8',
+          checks:[
+            'Scope matches accepted quote Q-2026-118 line for line',
+            'Fee and payment schedule match the quote the client accepted',
+            'Payout account active — invoice can be raised on delivery',
+          ],
+        };
+      })(),
+
+      advisory: (() => {
+        const founder = val('rname', 'Guillaume Lauzier');
+        const email = val('remail', 'guillaume@novacraft.ai');
+        const entity = val('rentity', 'NovaCraft AI, Inc.');
+        const equity = val('equity', '0.50%');
+        const vesting = val('vesting', '2-year monthly vest · 3-month cliff');
+        const commitment = val('commitment', '4 hours per month · monthly call plus async review');
+        const scope = val('scope', 'Go-to-market strategy, pricing and packaging, and enterprise sales motion. Introductions where relevant, at the advisor\u2019s discretion.');
+        return {
+          key:'advisory',
+          name:'Advisory Agreement',
+          legalTitle:'Advisory Agreement',
+          legalSub:'Equity compensation · FAST-style form · Delaware',
+          reviewSub:'Equity-for-advice terms. Vesting starts on the effective date and is contingent on the monthly commitment being met.',
+          termsLabel:'Advisory terms',
+          prefillNote:'Founder and scope pre-filled from your accepted advisor match with NovaCraft AI — matched Aug 6.',
+          clauses:[
+            { h:'1 · Engagement', parts:[
+              { token:true, text:entity },
+              { plain:true, text:' (the "Company") engages Elena Voss (the "Advisor") to provide advisory services covering: ' },
+              { token:true, text:scope },
+            ] },
+            { h:'2 · Commitment', parts:[
+              { plain:true, text:'The Advisor will make available ' },
+              { token:true, text:commitment },
+              { plain:true, text:'. The parties will review the arrangement at six months.' },
+            ] },
+            { h:'3 · Compensation', parts:[
+              { plain:true, text:'As sole compensation, the Company will grant the Advisor a stock option over ' },
+              { token:true, text:equity },
+              { plain:true, text:' of the Company\u2019s fully diluted capitalisation as at the effective date, vesting on the following schedule: ' },
+              { token:true, text:vesting },
+              { plain:true, text:'. No cash compensation is payable.' },
+            ] },
+            { h:'4 · Confidentiality and IP', parts:[
+              { plain:true, text:'The Advisor will keep Company information confidential and assigns to the Company any work product created specifically in the course of the advisory services.' },
+            ] },
+            { h:'5 · Termination', parts:[
+              { plain:true, text:'Either party may terminate on thirty days\u2019 written notice. Unvested equity is forfeited on termination; vested equity is retained.' },
+            ] },
+          ],
+          signers:[
+            { role:'The Advisor', name:'Elena Voss', entity:'Independent' },
+            { role:'The Company', name:founder, entity:entity },
+          ],
+          recipient:[
+            { k:'rname', label:'Company signatory', value:founder, ph:'Full legal name', prefilled:true, source:'match' },
+            { k:'remail', label:'Email', value:email, ph:'name@company.com', prefilled:true, source:'match' },
+            { k:'rentity', label:'Company entity', value:entity, ph:'Company legal name', prefilled:true, source:'match' },
+          ],
+          terms:[
+            { k:'equity', label:'Equity grant', kind:'select', value:equity,
+              options:['0.10%','0.25%','0.50%','0.75%','1.00%'],
+              hint:'Percentage of fully diluted capitalisation at the effective date.' },
+            { k:'vesting', label:'Vesting schedule', kind:'select', value:vesting,
+              options:['2-year monthly vest · 3-month cliff','2-year monthly vest · no cliff','1-year monthly vest · 3-month cliff','4-year monthly vest · 1-year cliff'] },
+            { k:'commitment', label:'Monthly commitment', kind:'select', value:commitment,
+              options:['2 hours per month · monthly call','4 hours per month · monthly call plus async review','8 hours per month · fortnightly call plus async review'] },
+            { k:'scope', label:'Scope of advice', kind:'area', value:scope, prefilled:true, source:'match',
+              hint:'Reproduced verbatim in clause 1. Narrow scope protects both sides.' },
+          ],
+          summary:[
+            { k:'Agreement', v:'Advisory Agreement (equity)' },
+            { k:'Company', v:entity },
+            { k:'Signatory', v:founder + ' · ' + email },
+            { k:'Equity grant', v:equity, mono:true },
+            { k:'Vesting', v:vesting },
+            { k:'Commitment', v:commitment },
+            { k:'Cash compensation', v:'None' },
+            { k:'Governing law', v:'Delaware' },
+          ],
+          counterName:'Elena Voss', counterEmail:'elena@voss.partners',
+          counterRole:'Advisor', counterInitials:'EV', counterBg:'#7c3aed',
+          recName:founder, recEmail:email, recRole:'Company', recInitials:'GL', recBg:'#1d4ed8',
+          checks:[
+            'Equity grant sits within the pool approved by the current board consent',
+            'Scope and commitment match what was agreed on the intro call',
+            'Company signatory has authority to grant options',
+          ],
+        };
+      })(),
+    };
+
+    // fall back to the closest real doc for templates without bespoke content
+    const DOC_ALIAS = { safe:'safe', termsheet:'safe', cofounder:'safe', service:'service', msa:'service', nda:'service', advisory:'advisory', retainer:'advisory' };
+    const docKey = DOC_ALIAS[tplKey] || 'safe';
+    const base = DOCS[docKey];
+    const chosen = roleTpls.find(t => t.k === tplKey) || roleTpls[0];
+    const doc = Object.assign({}, base, { name: chosen.name });
+
+    // ---------- field wiring ----------
+    const mkField = (f) => {
+      const kind = f.kind || 'text';
+      return Object.assign({}, f, {
+        isText: kind === 'text', isArea: kind === 'area', isSelect: kind === 'select',
+        monoClass: f.mono ? 'sg-num' : '',
+        prefilled: !!f.prefilled, source: f.source || '',
+        hint: f.hint || '',
+        ph: f.ph || '',
+        set: this.setV(f.k),
+        options: (f.options || []).map(o => ({ label:o, selected: o === f.value })),
+      });
+    };
+    const recipientFields = doc.recipient.map(mkField);
+    const termFields = doc.terms.map(mkField);
+    const allFields = doc.recipient.concat(doc.terms);
+    const filledCount = String(allFields.filter(f => String(f.value || '').trim()).length);
+    const fieldCount = String(allFields.length);
+    const complete = allFields.every(f => String(f.value || '').trim());
+
+    // ---------- step rail ----------
+    const STEPS = [
+      { n:'1', label:'Pick a template', note: st.step > 1 ? doc.name : 'Choose a document' },
+      { n:'2', label:'Review & fill', note: st.step > 2 ? filledCount + ' fields set' : 'Terms and recipient' },
+      { n:'3', label:'Send', note: st.sent ? 'Envelope ' + (st.envStage >= 3 ? 'executed' : 'out for signature') : 'Final review' },
+    ];
+    const stepRail = STEPS.map((s, i) => {
+      const n = i + 1;
+      const done = n < st.step;
+      const current = n === st.step;
+      return {
+        n:s.n, label:s.label, note:s.note, done, showNum: !done,
+        ink: current ? (dark ? '#c4b5fd' : V7) : done ? (dark ? '#6ee7b7' : '#15803d') : (dark ? '#9b96a8' : '#71717a'),
+        weight: current ? '700' : '600',
+        dotStyle:'width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;'
+          + (done ? 'background:rgba(21,128,61,.14);color:'+(dark?'#6ee7b7':'#15803d')
+             : current ? 'background:'+V+';color:#fff'
+             : 'background:'+(dark?'#2a2833':'#eeedf2')+';color:'+(dark?'#9b96a8':'#a8a4b4')),
+        line: i < 2,
+        go: () => { if (n < st.step || (n === 2 && st.step === 1)) this.setState({ step:n }); },
+      };
+    });
+
+    // ---------- signers / lifecycle ----------
+    const signerList = [
+      { name:doc.counterName, email:doc.counterEmail, role:doc.counterRole, initials:doc.counterInitials, avStyle:av(doc.counterBg) },
+      { name:doc.recName, email:doc.recEmail, role:doc.recRole, initials:doc.recInitials, avStyle:av(doc.recBg) },
+    ];
+
+    const stage = st.envStage; // 1 sent · 2 viewed · 3 signed
+    const LIFE = [
+      { label:'Sent', when:'Aug 12, 10:22' },
+      { label:'Viewed', when: stage >= 2 ? 'Aug 12, 14:07' : 'Not yet' },
+      { label:'Signed', when: stage >= 3 ? 'Aug 13, 09:41' : 'Awaiting' },
+    ];
+    const lifecycle = LIFE.map((l, i) => {
+      const n = i + 1;
+      const done = n < stage || (stage === 3 && n === 3);
+      const current = n === stage && !done;
+      return {
+        label:l.label, when:l.when,
+        ink: done ? (dark ? '#6ee7b7' : '#15803d') : current ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'),
+        glyph: done || current, icon: done ? I.check : I.dot,
+        dotStyle:'width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;'
+          + (done ? 'background:rgba(21,128,61,.14);color:'+(dark?'#6ee7b7':'#15803d')
+             : current ? 'background:rgba(124,58,237,.14);color:'+(dark?'#c4b5fd':V7)
+             : 'background:'+(dark?'#2a2833':'#eeedf2')+';color:transparent'),
+        line: i < 2,
+      };
+    });
+
+    const allSigned = stage >= 3;
+    const signerStatus = [
+      Object.assign({}, signerList[0], {
+        state:'Signed', chip:chipGreen, when:'Aug 12, 10:22', canRemind:false,
+      }),
+      Object.assign({}, signerList[1], {
+        state: allSigned ? 'Signed' : (stage >= 2 ? 'Viewed' : 'Sent'),
+        chip: allSigned ? chipGreen : (stage >= 2 ? chipViolet : chipGrey),
+        when: allSigned ? 'Aug 13, 09:41' : (stage >= 2 ? 'Aug 12, 14:07' : 'Aug 12, 10:22'),
+        canRemind: !allSigned,
+      }),
+    ];
+
+    const AUDIT_ALL = [
+      { what:'Envelope created and sent by ' + doc.counterName, when:'Aug 12, 10:22 CET', ip:' · 84.226.11.4' },
+      { what:doc.counterName + ' signed', when:'Aug 12, 10:23 CET', ip:' · 84.226.11.4' },
+      { what:doc.recName + ' opened the signing link', when:'Aug 12, 14:07 CET', ip:' · 194.230.55.9' },
+      { what:doc.recName + ' signed', when:'Aug 13, 09:41 CET', ip:' · 194.230.55.9' },
+      { what:'Executed PDF generated and filed to data room', when:'Aug 13, 09:41 CET', ip:'' },
+    ];
+    const auditCount = stage >= 3 ? 5 : stage >= 2 ? 3 : 2;
+    const auditTrail = AUDIT_ALL.slice(0, auditCount).reverse().map((a, i, arr) => Object.assign({}, a, { line: i < arr.length - 1 }));
+
+    const ROLES = [{ k:'founder', l:'Founder' }, { k:'partner', l:'Partner' }, { k:'advisor', l:'Advisor' }];
+    const roleTabs = ROLES.map(r => ({ label:r.l, style: seg(st.role === r.k),
+      go: () => this.setState({ role:r.k, step:1, sent:false, envStage:1, edits:{}, prefillDismissed:false }) }));
+
+    const S1 = {
+      founder: { h:'What are you sending?', s:'Templates available to you as a founder. Each is counsel-reviewed and pre-wired to the platform\u2019s signing engine — pick one and the fields fill from context where we already hold the data.' },
+      partner: { h:'What are you sending?', s:'Templates available to you as a service partner. Scope and pricing pull straight from an accepted quote, so the agreement matches what the client already said yes to.' },
+      advisor: { h:'What are you sending?', s:'Templates available to you as an advisor. Both compensation routes are covered — equity for advice, or a cash retainer where equity is not appropriate.' },
+    }[st.role];
+
+    return {
+      themeClass: dark ? 'sg-dark' : '',
+      chromeSub: st.step === 1 ? ROLES.find(r => r.k === st.role).l + ' templates'
+        : (st.sent ? doc.name + ' · out for signature' : doc.name + ' · draft'),
+      penIcon:I.pen, checkIcon:I.check, arrowIcon:I.arrow, shieldIcon:I.shield,
+      sendIcon:I.send, downloadIcon:I.download, linkIcon:I.link,
+      themeIcon: dark ? I.sun : I.moon,
+      themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+
+      roleTabs, stepRail,
+      isStep1: st.step === 1, isStep2: st.step === 2, isStep3: st.step === 3,
+      s1Heading:S1.h, s1Sub:S1.s, templates,
+
+      doc, recipientFields, termFields, filledCount, fieldCount, chipViolet,
+      prefillShown: !st.prefillDismissed,
+      dismissPrefill: () => this.setState({ prefillDismissed:true }),
+      backToStep1: () => this.setState({ step:1 }),
+      backToStep2: () => this.setState({ step:2 }),
+      continueLabel: complete ? 'Continue to review' : 'Fill all fields to continue',
+      continueStyle: 'margin-top:18px;padding:13px 0;border-radius:11px;text-align:center;font-size:13.5px;font-weight:700;'
+        + (complete ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#a8a4b4')+';cursor:not-allowed'),
+      toStep3: () => { if (complete) this.setState({ step:3 }); },
+
+      summaryRows: doc.summary.map(r => Object.assign({}, r, { monoClass: r.mono ? 'sg-num' : '' })),
+      signerList, sendChecks: doc.checks,
+      sent: st.sent,
+      sendEnvelope: () => this.setState({ sent:true, envStage:1 }),
+      resetFlow: () => this.setState({ step:1, sent:false, envStage:1, edits:{}, prefillDismissed:false }),
+      advanceEnvelope: () => this.setState(s => ({ envStage: Math.min(3, s.envStage + 1) })),
+
+      envHeading: allSigned ? 'Fully executed' : (stage >= 2 ? 'Viewed — awaiting signature' : 'Out for signature'),
+      envId:'ENV-2026-0288', sentWhen:'Aug 12, 10:22',
+      lifecycle, allSigned, signerStatus, auditTrail,
+      outstandingNote: allSigned ? 'All signatures collected' : '1 of 2 outstanding',
+      outstandingHeadline: stage >= 2 ? doc.recName + ' has opened it' : 'Waiting on ' + doc.recName,
+      outstandingBody: stage >= 2
+        ? 'Opened Aug 12 at 14:07 and not yet signed. The link stays live until the envelope is voided or expires on Aug 26.'
+        : 'The signing link was delivered Aug 12 at 10:22 and has not been opened yet. It expires Aug 26.',
+    };
+  }
+}
+</script>
+</body>
+</html>

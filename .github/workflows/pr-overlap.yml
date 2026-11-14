@@ -1,0 +1,47 @@
+name: Advisory PR overlap
+on:
+  schedule:
+    - cron: '31 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: pr-overlap
+  cancel-in-progress: false
+jobs:
+  report:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+          # Read-only credential permits fetching refs/pull/*/head; no PR code runs.
+          persist-credentials: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Report bounded overlaps and textual conflicts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # D5580: the dated advisory baseline snapshot; uploaded below, never committed.
+        run: |
+          stamp="$(date -u +%Y%m%dT%H%MZ)"
+          echo "PR_OVERLAP_STAMP=$stamp" >> "$GITHUB_ENV"
+          node scripts/pr-overlap.mjs "--snapshot=$RUNNER_TEMP/pr-overlap/pr-overlap-$stamp.json"
+      - name: Upload the advisory baseline snapshot
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-overlap-snapshot-${{ env.PR_OVERLAP_STAMP }}
+          path: ${{ runner.temp }}/pr-overlap/
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,17 @@
+{
+  "GET /api/networkfx/syndicates/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/networkfx/syndicates/:id/close": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/networkfx/syndicates/:id/join": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

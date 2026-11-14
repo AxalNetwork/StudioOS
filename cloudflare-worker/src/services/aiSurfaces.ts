@@ -1,0 +1,152 @@
+/**
+ * D552 — THE PAGES AN AI RUN IS RECORDED AGAINST.
+ *
+ * `ai_usage_logs.surface` (migration 319, D404) is the app path a run was asked
+ * from, and the AI rail's "This page this month" is a sum over it. Until D552
+ * only two callers wrote it — the rail's read-back (`routes/ai.ts`) and the
+ * zone drafts (`routes/research.ts`), both forwarding the path the page sent —
+ * so every other model call landed in the month's unattributed group and a
+ * page's figure was a fraction of what that page had cost.
+ *
+ * Every other call site now records ONE FIXED NAME, taken from this object and
+ * nowhere else:
+ *
+ *   - The name is the app path of the page that owns the feature, so it lives
+ *     in the same namespace as the paths the rail already records, and passes
+ *     `aiRouter`'s `SURFACE_RE` unchanged (a test pins that).
+ *   - A feature reached from more than one page records the page that owns it.
+ *     Research Ask is answered on `/research/ask` and also from two desks; it
+ *     is recorded as `/research/ask`, because a server route cannot tell which
+ *     button was pressed without trusting the request, and a fixed name is the
+ *     point.
+ *   - `GET /api/ai/me/spend?surface=` accepts these names, and since D552
+ *     step 3 any other page path in the exact form the router records (the
+ *     rail's own pages), so the route never needs a second list.
+ *
+ * `cloudflare-worker/test/ai_surface_d552.test.ts` scans `src/` and fails when
+ * a call into the router does not pass a `surface`, or passes a quoted string
+ * instead of a name from here. Add the page here first, then the call.
+ *
+ * NO VALUE IMPORT INTO `aiRouter.ts`. That module is loaded by one test as
+ * bytes with its single `import type` stripped; this list is read by the
+ * callers and the spend route, never by the router.
+ */
+export const AI_SURFACE = {
+  /** Validate · fill proposals (`/api/founder/validate/propose`) and the citations they fetch. */
+  validate: '/validate',
+  /** Validate · Customer research's Interviews — transcribing an interview recording (D704: the page became the module). */
+  validateInterviews: '/validate/customer-research',
+  /** Research · Ask — the grounded answer (`POST /api/research/ask`). */
+  researchAsk: '/research/ask',
+  /** Research · Companies — the competitor analysis (`/api/competitors/*`). */
+  researchCompanies: '/research/companies',
+  /** Grow · Brand — landing autofill, palette and tagline suggestions (`/api/brand/*`). */
+  buildBrand: '/build/brand',
+  /** Raise · Pitch deck — the deck draft and "Ask Eadwyn to draft from project" (#3930; was "Fill from project") (`/api/decks/generate`, `/apply-method`, `/:id/autofill`), D767. */
+  raisePitch: '/raise/pitch',
+  /** Raise · Pitch · Review — the deck reviewer's section map and review (`/api/deck-reviewer/*`). */
+  raisePitchReview: '/raise/pitch/review',
+  /** Raise · Investor narrative — Eadwyn's positioning proposal (`POST /api/cycles/raise/narrative/positioning/draft`), D911. */
+  raiseNarrative: '/raise/investor-narrative',
+  /** D1147: PMF input explanation and interview questions, never score writes. */
+  raiseReadiness: '/raise/fundraising-readiness',
+  /** D1179: sourced plan readings and roadmap milestone wording. */
+  raiseUseOfFunds: '/raise/use-of-funds',
+  /** D1341: Email — Eadwyn's draft from the member's ticked records (`POST /api/mail/drafts`), charged in AI tokens. */
+  mailDraft: '/email',
+  /** D1241: Deal flow · Compare — Eadwyn's comparison note from SCORING's bands, saved only on press (`POST /api/deals/flow/compare-note`). */
+  dealsCompare: '/deals/compare',
+  /** Grow · Publish to… — Eadwyn's post text for the ticked places (`POST /api/publish/ask`), #4046. It writes nothing. */
+  growPublish: '/grow',
+  /** D4488: Distribution draft proposals. */
+  growDistribution: '/grow/distribution',
+  /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
+  buildPlan: '/build/plan',
+  /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */
+  raiseCapTable: '/raise/cap-table',
+  /** Raise · Capital relationships — Eadwyn's proposals from a note and its message drafts (`POST /api/cycles/raise/capital-relationships/proposals`, `/drafts`), D1193. */
+  raiseCapitalRelationships: '/raise/capital-relationships',
+  /** Raise · Data room — search inside the room on its own index (`POST /api/data-room/:uid/search`, `/search/index`, `/shared/:uid/search`), #3938. */
+  raiseDataRoom: '/raise/data-room',
+  /** Grow · Partner network — the founder's press ranks the venture's partners against a need (`POST /api/cycles/grow/partners/rank`), #3938 GR17. */
+  growPartnerNetwork: '/grow/partner-network',
+  /** Partner · Pipeline · Leads — the firm's press ranks its open leads against its audience fit (`POST /api/partner/pipeline/leads/rank`), #3938 IN10. */
+  partnerLeads: '/pipeline/leads',
+  /** Spin-Out Lab · Co-founder match — the founder's press ranks the browse cards against what they look for (`POST /api/cofounder/browse/rank`), #3938 NE1. */
+  cofounderMatch: '/spinout-lab/cofounder-match',
+  /** Build · Team › Advisors — the founder's press ranks the matched advisors against a need (`POST /api/advisors/match/rank`), #3938 NE1. */
+  advisorMatch: '/build/team',
+  /** Network · Introductions — the member's press ranks the people a who-knows read answers against a need (`POST /api/relationships/who-knows/rank`), #3938 NE1. */
+  networkIntroductions: '/network/introductions',
+  /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
+  studio: '/studio',
+  /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
+  onboardingChat: '/onboarding/chat',
+  /** Onboarding · Persona — the first-message persona pick (`POST /api/personas/classify`), D1478 §3937. */
+  onboardingPersona: '/onboarding/persona',
+  /** Articles · the editor — Eadwyn's writing options (`POST /api/articles/:id/assist`), D1409. */
+  articles: '/articles/draft',
+  /** Events · Syndication — Eadwyn's proposed copy for a channel (`POST /api/events/:id/syndication/assist`), D1493. */
+  eventSyndication: '/my/events',
+  /** #3935: Events · the editor — the drawn cover (EV2) and its checks (`POST /api/events/:id/cover/draw`). */
+  eventCover: '/events/edit',
+  /** #3935: Learning · Studio — a course's drawn cover (LE8) and its checks (`POST /api/admin/learning/courses/:uid/cover/draw`). */
+  courseCover: '/learning/studio',
+  /** HQ · Publications — the drafted headline summary (`/api/admin/publications/draft`). */
+  adminPublications: '/admin/publications',
+  /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */
+  growUpdate: '/grow/update',
+  /** Monitoring — the last hour's summary (`GET /api/monitoring/anomalies`), a system call (D766). */
+  monitoring: '/monitoring',
+  /** HQ · X — the image screen on upload and the drafted alt text (`/api/admin/x/posts/:id/*`), system calls (D766). */
+  adminX: '/admin/x',
+  /** HQ · Platform — the `axal-search` index's embeddings: upserts, the hourly re-embed and query embeddings, system calls (D766). */
+  searchIndex: '/admin/platform',
+  /** Legal & Capital — the legal document's suggestions, the diligence summary and the spin-out's proposed equity split (`/api/legalcap/*`), member presses (D766). */
+  legalCapital: '/legal-capital',
+  /** Pipeline — the decision gate's recommendation (`/api/pipeline/decision-gate/review`), a member press (D766). */
+  pipeline: '/pipeline',
+  /** Network Effects — the syndicate's recommendations and the marketplace match (`/api/networkfx/*`), member presses (D766). */
+  networkEffects: '/network-effects',
+} as const;
+
+export type AiSurface = (typeof AI_SURFACE)[keyof typeof AI_SURFACE];
+
+/** Every fixed name, in declaration order. Frozen: it is an allow-list. */
+export const AI_SURFACES: readonly AiSurface[] = Object.freeze(Object.values(AI_SURFACE));
+
+/** True for exactly the names above — no trimming, no trailing-slash folding. */
+export function isAiSurface(value: unknown): value is AiSurface {
+  return typeof value === 'string' && (AI_SURFACES as readonly string[]).includes(value);
+}
+
+/**
+ * D704 (#1666) — PAGES THAT BECAME MODULES. `/validate/interviews`,
+ * `/validate/pain-map` and `/validate/hypotheses` stop being pages; each
+ * feature moved into a Validate module (D689 D-b). Runs already recorded on an
+ * old path stay as they were (no row is rewritten), and the spend reads count
+ * them under the module that holds the feature now: the per-page figure of
+ * `GET /api/ai/me/spend?surface=` and `/account/usage`'s By page breakdown.
+ * The caller's own rows only, as every spend read is scoped.
+ *
+ * Read by those two spend reads only, never by the router, which records the
+ * path it is given.
+ */
+export const AI_SURFACE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  '/validate/interviews': '/validate/customer-research',
+  '/validate/pain-map': '/validate/problem-discovery',
+  '/validate/hypotheses': '/validate/experiments',
+});
+
+/** The module an old page path now counts under, or the path itself. */
+export function surfaceCountsAs(surface: string): string {
+  return Object.hasOwn(AI_SURFACE_ALIASES, surface) ? AI_SURFACE_ALIASES[surface] : surface;
+}
+
+/**
+ * The old page path whose rows a read of `surface` also counts, or `surface`
+ * itself when none aliases to it. A read of an old path counts only that path.
+ */
+export function surfaceAlsoCounts(surface: string): string {
+  return Object.keys(AI_SURFACE_ALIASES).find((old) => AI_SURFACE_ALIASES[old] === surface) ?? surface;
+}

@@ -1,0 +1,50 @@
+{
+  "skill": "dashboard-information-hierarchy",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "audience": "Operations lead",
+        "decision": "Which orders need intervention?",
+        "metrics": [
+          {
+            "name": "Late orders",
+            "value": 8,
+            "updated": "2026-10-01"
+          },
+          {
+            "name": "Lifetime orders",
+            "value": 9000
+          }
+        ],
+        "freshness_sla": null
+      },
+      "project.summary": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Late orders",
+      "8",
+      "stale"
+    ],
+    "must_say_not_recorded": [
+      "freshness SLA"
+    ],
+    "must_not_include": [
+      "live dashboard verified"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why freshness SLA is missing rather than inventing it.",
+    "Do not assert: live dashboard verified.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Late orders; 8; stale. freshness SLA: Not recorded. Human review required."
+}

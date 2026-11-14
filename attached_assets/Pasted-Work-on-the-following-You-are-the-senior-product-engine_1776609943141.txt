@@ -1,0 +1,40 @@
+Work on the following:  You are the senior product engineer for Axal StudioOS. Completely redesign and improve the **Diligence & Scoring Engine** page (currently too basic) to make it a professional 100-point startup scoring system — "The Brain".
+
+Requirements:
+
+1. **New Scoring Categories (total 100 pts + AI Bonus)**
+   - A. Market Opportunity (25 pts)
+   - B. Founder / Team (20 pts)
+   - C. Product / Technology (20 pts)
+   - D. Traction & Validation (15 pts)
+   - E. Capital Efficiency & Financials (10 pts)
+   - F. Strategic Fit & Moat (10 pts)
+   - AI Bonus Layer (+/- 10 pts)
+
+2. **Frontend Improvements**
+   - Keep the clean card layout from the screenshot
+   - Add real-time live scoring (total updates instantly as user changes values)
+   - Use sliders + number inputs for each sub-factor
+   - Show progress bar for overall score (color-coded: red <60, yellow 60-79, green 80+)
+   - Add tooltips with explanations for each factor
+   - Add "Save Score to Project" button (links to existing Pipeline Board)
+   - Show AI-generated explanation of the final score (use existing Cloudflare AI / Replit AI)
+
+3. **Backend**
+   - Create or update endpoint: POST /api/scoring/run
+   - Return: total_score, category_breakdown, ai_explanation, recommendation ("Strong", "Promising", "Needs Work", "High Risk")
+   - Use the existing AI Worker for the explanation
+
+4. **Data Flow**
+   - Optional "Link to Project" dropdown (pull from existing deals/projects)
+   - After scoring, option to save the score + explanation to the linked project
+
+Build this step-by-step:
+1. First create the new backend endpoint /api/scoring/run with smart weighted scoring logic and AI explanation.
+2. Then completely redesign the frontend page (use the existing style but with improved layout, sliders, real-time total, progress bar, and AI explanation box).
+3. Then add "Save to Project" functionality.
+4. Finally test with sample inputs and ensure real-time scoring works perfectly.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

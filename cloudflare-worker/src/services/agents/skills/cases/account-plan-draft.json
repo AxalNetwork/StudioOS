@@ -1,0 +1,37 @@
+{
+  "skill": "account-plan-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "account": "Northgate Dental",
+        "sites_using": 3,
+        "sites_total": 8,
+        "requests": [
+          "SSO"
+        ]
+      },
+      "network.relationships": [
+        {
+          "name": "Priya Shah",
+          "at": "Northgate Dental",
+          "role": "Operations director"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Priya Shah",
+      "3"
+    ],
+    "must_say_not_recorded": [
+      "renewal date"
+    ],
+    "must_not_include": [
+      "will expand"
+    ]
+  }
+}

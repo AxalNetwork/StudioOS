@@ -1,0 +1,12 @@
+{
+  "ALL /api/messages": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "ALL /api/messages/*": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

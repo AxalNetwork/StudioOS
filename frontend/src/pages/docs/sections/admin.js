@@ -1,0 +1,191 @@
+export default {
+  id: 'admin',
+  title: 'Admin',
+  icon: 'LayoutDashboard',
+  // Task #2 (DD) — admin-only docs section. DocsLayout filters this
+  // out for non-admin viewers; search index excludes it as well.
+  roles: ['admin'],
+  subsections: [
+    {
+      id: 'overview',
+      title: 'Admin overview',
+      overview:
+        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. Each admin tool is a page at its own address, under the row of the admin sidebar it belongs to: Accounts (All accounts, Persona segments), Approvals (KYC & KYB, Partner profiles), Programs, Community (Directory, Wellbeing), Contracts, Fund admin, Insights and Licences. The Super Admin also has HQ's rows, such as Platform, Revenue and Security.",
+      howto: [
+        'Open a row of the admin sidebar (admins only); its page lists the tools under it.',
+        'Each page has its own header with a breadcrumb back to its row, and its own tabs where it has them.',
+        'Use "View as" to step into a user’s view; exit from the violet bar at the top.',
+        'If you administer a studio licence, open My Licence → Contract to see program agreement status, what each program is waiting on, and any signed PDFs you can download.',
+        'At HQ, use the legal Needs HQ filters in Licences to find agreements that need attention. Open the licence’s Agreement section to prepare an agreement or review it before sending for signature.',
+      ],
+      tips: [
+        'Bookmark the page you use most — every tool has its own address, so a bookmark opens it directly.',
+        'An old /admin?tab= link still works: it forwards to the tool’s page, which says once where it now lives.',
+      ],
+      pitfalls: [
+        'Forgetting to exit "View as" before reading reports causes scoped data — exit first.',
+        'Bulk actions are powerful and not always reversible; double-check the filter before applying.',
+      ],
+      related: [
+        { label: 'Users & roles', href: '#admin/users' },
+        { label: 'Trust management', href: '#admin/trust' },
+        { label: 'Audit', href: '#admin/audit' },
+      ],
+    },
+    {
+      id: 'users',
+      title: 'Users & roles',
+      overview:
+        "All accounts, under Accounts, lists every account in the studio with role, tier, status, and last-active timestamp. From here you can edit profile fields, suspend accounts, trigger a passwordless re-invite, or impersonate for support.",
+      howto: [
+        'Open Accounts → All accounts (/admin/accounts/all).',
+        'Filter by role, tier, or status.',
+        'Click any user to see their full record and recent actions.',
+        'Use "Impersonate" to support; it routes through the audit log.',
+      ],
+      tips: [
+        'Suspend instead of delete when in doubt — suspension is reversible.',
+        'Use "Resend invite" if a user reports they never received the original.',
+      ],
+      pitfalls: [
+        'Role changes via the UI are limited to non-admin roles; admin-role changes are direct database operations.',
+        'Impersonation is logged with both the actor and the target — never use it casually.',
+      ],
+      related: [
+        { label: 'Account roles explained', href: '#getting-started/roles' },
+        { label: 'Audit', href: '#admin/audit' },
+      ],
+    },
+    {
+      id: 'trust',
+      title: 'Trust management',
+      overview:
+        "Trust management is where admins approve, revoke, or escalate badges and trust signals visible in the Trust Center. Each badge has a documented checklist of evidence; admins must accept or reject each item before granting a badge.",
+      howto: [
+        'Each account’s trust score is a column of All accounts, under Accounts.',
+        'Pick a pending badge request; review the supporting evidence.',
+        'Approve, reject (with a reason), or request more evidence.',
+        'Revoke a previously granted badge from the same screen if circumstances change.',
+      ],
+      tips: [
+        'Reject with a clear reason — the founder sees it and can resubmit.',
+        'Use the "history" view on any badge to see prior approvals and rejections.',
+      ],
+      pitfalls: [
+        'Approving a badge with incomplete evidence undermines investor trust in the system.',
+        'Revoking without notifying the founder can blindside them mid-fundraise — write to them in parallel.',
+      ],
+      related: [
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+      ],
+    },
+    {
+      id: 'audit',
+      title: 'Audit log',
+      overview:
+        "The platform-wide audit log records every meaningful action with a hashed actor ID, timestamp, target, and action type. It’s the source of truth for compliance and security investigations. The Super Admin reads it on HQ → Security, merged newest-first with refusals, step-ups, impersonations and licence events.",
+      howto: [
+        'Open HQ → Security (/admin/security; Super Admin only).',
+        'Use the ledger’s filter bar to narrow it to an actor, an event or an outcome.',
+        'Refused sign-ins, impersonations and suspensions carry a tint, so they can be scanned for.',
+      ],
+      tips: [
+        'Combine actor and target filters to investigate a specific incident.',
+        'The actor field is hashed for privacy — use the joined "user" panel to identify the human.',
+      ],
+      pitfalls: [
+        'Audit log is append-only — there is no edit or delete; treat the log as evidence-grade.',
+        'Exports can be large; pick a tight date range when possible.',
+      ],
+      related: [
+        { label: 'Activity & audit log', href: '#account/activity' },
+      ],
+    },
+    {
+      id: 'feature-flags',
+      title: 'Feature flags and platform switches',
+      // D202 — this article used to describe a flags console (per-cohort and
+      // per-role scopes, saved cohorts, "off for new sessions") that has never
+      // existed. It now says what does.
+      //
+      // D203 — and it said there was no operator switch at all, which stopped
+      // being true when HQ · Platform → Switches shipped. It moves with the
+      // store, in the same change, rather than a PR later.
+      overview:
+        "There is no feature-flag console that stages a module to one cohort, one role or one territory. What the platform has is switches: a handful set when it is deployed — question reranking off, session charging, Stripe Tax, the Cloudflare queue, live market sources and live diligence connectors — one the AI router throws by itself when the monthly AI budget runs out, and one the Super Admin can also throw from the product: Eadwyn off. Your own settings are yours alone and switch nothing for anyone else.",
+      howto: [
+        'The Super Admin sees every switch, read-only, under HQ → Platform → Feature flags: whether it is on, what set it, and what is true while it is on.',
+        'To switch Eadwyn off without a deployment, open HQ → Platform → Switches, give a reason, confirm, and throw it. Releasing it works the same way. Both are recorded in the audit log with who did it and why.',
+        'A throw takes effect at once on the instance that recorded it and on every other instance within 30 seconds. From then on, every conversation with Eadwyn on HQ answers with a notice that it is unavailable.',
+        'Changing any other switch is an engineering change — a Worker variable, then a deployment. Nothing in the product changes one.',
+        'The AI budget trip clears when its key expires. Nothing in the product clears it sooner.',
+      ],
+      tips: [
+        'Each switch is read the way the code that obeys it reads it, so what HQ → Platform shows is what the platform is doing.',
+        'A switch shown as unreadable means its store did not answer; it is not a claim the switch is off. For Eadwyn off, an unreadable store fails open: Eadwyn keeps answering, and only a deployment can switch it off until the store answers again.',
+        'A switch thrown from Switches can only switch something off. Releasing it never lifts the deployment\'s own switch: if the deployment holds Eadwyn off, it stays off until the deployment changes.',
+      ],
+      pitfalls: [
+        'Every switch is deployment-wide. There is no per-cohort, per-role or per-territory setting, so there is nothing to canary — plan a risky change as its own deployment.',
+        'A switch thrown from Switches reaches HQ\'s own deployment only. A branch runs on its own database, so its Eadwyn keeps answering; pushing a switch to the branches is not built.',
+        'A market source is live only when its setting is exactly "live". "1" or "on" leaves it serving sample data.',
+      ],
+      related: [
+        { label: 'Audit log', href: '#admin/audit' },
+      ],
+    },
+    {
+      id: 'events-ops',
+      title: 'Events operations',
+      // Task #7 — admin runbook for the events system + its cross-system badges.
+      overview:
+        "The events system spans an admin-published public feed, host-run rosters with QR check-in, agendas, and invitations. Attendance and agenda membership also drive cross-system participation badges that feed each member's assessment XP and level.",
+      howto: [
+        'A new event is publicly visible only when it is public + published + admin-published — approve it from the admin events queue to set the admin gate.',
+        'Hosts manage their own roster (approve / decline / promote from waitlist) and run QR check-in from the Manage screen.',
+        'Check-in flips a registration to "attended". The first attended registration grants the member Founding Attendee; five or more grants Networker.',
+        'Adding a founder as a speaker on a Demo Day agenda grants that founder the Demo Day Presenter badge.',
+        'Invite suggestions on the Manage screen rank members by values alignment + complementary skills against the host; they exclude the host and anyone already on the roster or invited.',
+      ],
+      tips: [
+        'Badge grants are idempotent and best-effort: re-running a check-in never double-awards, and a badge failure never blocks check-in.',
+        'Event suggestions and invite suggestions only consider members who have completed an assessment (they need canonical value/skill vectors).',
+        'Use the type field deliberately — "demo_day" is what gates the Demo Day Presenter badge and steers founder/investor event suggestions.',
+      ],
+      pitfalls: [
+        'A new events page needs no routing change in wrangler.toml: the Worker answers every page path from the app shell, and a path-scoped route there would take those URLs away from it. Add the route to the app and deploy.',
+        'Event-participation badges live in migration 112; if you stand up a fresh prod D1, apply it (and redeploy) or the badges silently never appear.',
+        'Suggestions are an enhancement layer — an empty list usually means too few assessed members, not a bug.',
+      ],
+      related: [
+        { label: 'Assessment & archetypes ops', href: '#admin/assessment-ops' },
+        { label: 'Feature flags and platform switches', href: '#admin/feature-flags' },
+      ],
+    },
+    {
+      id: 'assessment-ops',
+      title: 'Assessment & archetypes ops',
+      // Task #7 — admin runbook for the assessment engine + how archetypes
+      // surface across the rest of the platform.
+      overview:
+        "The assessment engine scores each member into a values + skills vector, assigns a founder archetype, and awards XP/badges. Archetypes are consent-gated: a member's archetype is only visible to others once they publish their result.",
+      howto: [
+        'Members complete a track in the Play experience; scoring assigns an archetype and awards milestone badges + XP.',
+        'A member publishes a result to make their archetype visible on shared surfaces (event rosters, the network view).',
+        'Published archetypes appear automatically as a compact chip beside members on the event roster and Top Referrers list — no per-surface wiring.',
+        'Event suggestions read the member\'s latest track + archetype to bias which upcoming events surface first.',
+      ],
+      tips: [
+        'Encourage members to publish — an unpublished archetype is invisible to everyone but the member and admins, so cross-system surfacing stays empty.',
+        'Archetype chips and XP both derive from the same canonical vectors; there is one source of truth per member.',
+      ],
+      pitfalls: [
+        'Never link to a member\'s unpublished archetype from a shared surface — the consent gate returns nothing for non-owners, by design.',
+        'Assessment XP and event-badge XP share the same XP/level curve; event badges add to the same total rather than a separate tally.',
+      ],
+      related: [
+        { label: 'Events operations', href: '#admin/events-ops' },
+      ],
+    },
+  ],
+};

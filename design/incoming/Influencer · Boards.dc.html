@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Programs · Influencer</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Influencer program</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The member’s Influencer section, the public @handle page, the public program page and its application, the Refer &amp; Earn card, and Admin › Programs › Influencers. IN0 to IN12. Drawn for a founder; the section keeps the viewer’s role accent and adds no colour.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="13">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Influencer Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 900}px` }; };
+    const G = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return { groups: [
+      G('IN0', 'Sidebar and shell', [F('in0', 'Founder', 1440, 640), F('in0b', 'Investor · the same row in any role', 1440, 640)], 'The Influencer row (megaphone) shows only for admitted influencers, under the profile’s own rows. The header carries the handle chip with Copy, the tier badge and Share.'),
+      G('IN1', 'Overview', [F('in1', '', 1440, 1500), F('in1s', 'States', 1440, 571)], 'Money is per currency and never summed. Eadwyn’s line restates the week’s figures; it never promises.'),
+      G('IN2', 'Links', [F('in2', '', 1440, 1160)]),
+      G('IN3', 'Offers', [F('in3', 'Offers and their states', 1440, 1080), F('in3b', 'Ask HQ for an offer', 1440, 980)]),
+      G('IN4', 'Earnings', [F('in4', '', 1440, 1320)], 'Request payout stays off until the identity check, the tax form and a payout method are all done.'),
+      G('IN5', 'Audience', [F('in5', '', 1440, 1180)], 'Totals only. Any group under 5 reads “Fewer than 5”.'),
+      G('IN6', 'Resources', [F('in6', '', 1440, 1040)]),
+      G('IN7', 'Public @handle page · axal.vc/@jane', [F('in7', '', 1440, 1240), F('in7s', 'States and the link preview', 1440, 595)], 'The disclosure sits in plain sight under the offer. Prices are read from Stripe.'),
+      G('IN8', 'Public program page · /influencers', [F('in8', '', 1440, 1820)], 'Signed out, Apply asks the visitor to create an account first, then opens the application.'),
+      G('IN9', 'Application', [F('in9', 'Three steps', 1700, 760), F('in9r', 'Submitted · declined · HQ asked for more', 1440, 266)], 'Submit stays off until every rule is ticked.'),
+      G('IN10', 'Refer & Earn entry', [F('in10', '', 1440, 250)]),
+      G('IN11', 'Admin › Programs › Influencers', [F('in11a', 'Applications with the answers drawer', 1440, 980), F('in11b', 'Influencers and flagged sign-ups', 1440, 1040), F('in11c', 'Offers and tier settings', 1440, 1000), F('in11d', 'Super Admin · money columns', 1100, 235)], 'Admins see “HQ reads” in the money columns; only the Super Admin sees amounts. Every row action asks for a reason.'),
+      G('IN12', 'Phone and dark', [F('in1p', 'Overview', 390, 844), F('in4p', 'Earnings', 390, 844), F('in7p', '@handle page', 390, 1500), F('in9p', 'Application', 390, 844), F('in1-d', 'Overview · dark', 1440, 1500), F('in4-d', 'Earnings · dark', 1440, 1320), F('in7-d', '@handle page · dark', 1440, 1240), F('in9-d', 'Application · dark', 1700, 760)])
+    ] };
+  }
+}
+</script>
+</body></html>

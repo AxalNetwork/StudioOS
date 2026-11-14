@@ -1,0 +1,29 @@
+#29 - Clear Submit & PII Feedback
+What & Why
+Submit looks broken when the server actually rejected it. The submit endpoint runs a PII linter and a weekly rate cap, but failures come back as raw toast.error strings with no in-UI status change, so authors can't tell what happened. This task turns each rejection into a clear, targeted message and makes success transition the editor visibly.
+Verified backend reality (correct the original assumptions):
+* The PII linter returns findings[] with kind, severity, match, and context (~40 chars of surrounding text) — it does NOT currently expose an exact character offset/length in the response, though the regex match index is available internally. Either extend the linter response to emit offset+length, or highlight by matching the returned match/context text.
+* The weekly rate-limit response includes the limit (per_week) but does NOT currently include a next_available_at timestamp — extend the worker response if the "next slot opens {when}" copy is wanted; otherwise show "you can submit N more this week."
+Done looks like
+* A PII rejection highlights the offending text inside the editor and shows a non-dismissable banner: "Submission blocked: remove the highlighted personal data."
+* A rate-limit rejection shows a banner telling the author how many submissions remain this week (and, if the worker is extended, when the next slot opens).
+* On success the editor transitions immediately into a read-only "In review" mode and shows a confirmation listing next steps — no manual refresh.
+* Generic toast.error('Error') calls are replaced with the specific server-provided message.
+Out of scope
+* Left-rail grouping and status strip (handled in the state-UI task it builds on).
+* Markdown editor / inline images (editor-upgrades task).
+Steps
+1. In the submit handler, parse the server's pii_blocked findings and highlight the matching text in the editor, plus a non-dismissable blocking banner.
+2. If exact offsets are needed for highlighting, extend the worker's PII lint response to include each finding's character offset and length.
+3. Handle the rate-limit rejection with a clear banner derived from the submission log; optionally extend the worker response with the next-available timestamp.
+4. On success, switch the editor to read-only "In review" mode and show a confirmation with next steps.
+5. Replace generic error toasts with the specific server message across the submit path.
+Relevant files
+* frontend/src/pages/ArticleAuthorPage.jsx
+* cloudflare-worker/src/routes/articles.ts
+* cloudflare-worker/src/services/telegramRedactCheck.ts
+* frontend/src/lib/api.js:2299-2334
+Dependencies
+
+Show draft, in-review, and published state clearly
+Main

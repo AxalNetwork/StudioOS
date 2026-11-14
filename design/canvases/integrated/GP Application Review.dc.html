@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .gp-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .gp-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#8b8798}
+    .gp-btn{cursor:pointer;transition:background .12s,border-color .12s,filter .12s}.gp-btn:hover{filter:brightness(.97)}
+    .gp-row{cursor:pointer;transition:background .12s}.gp-row:hover{background:#faf9fc}
+    .gp-row[data-sel="yes"]{background:#f7f5fd!important;border-left-color:#6d28d9!important}
+    .gp-scroll{scrollbar-width:thin}
+    input,textarea,select{font-family:Inter,system-ui,sans-serif}
+    ::placeholder{color:#a8a4b4}
+    @media (max-width:1180px){.gp-split{grid-template-columns:1fr!important}.gp-side{position:static!important;max-height:none!important}.gp-cmp{grid-template-columns:1fr!important}}
+    @media (max-width:1020px){.gp-hide{display:none!important}}
+    @media (max-width:860px){.gp-3{grid-template-columns:1fr 1fr!important}}
+  </style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column">
+
+  <!-- TOP BAR -->
+  <div style="border-bottom:1px solid #ececf1;background:#fff;padding:0 26px;position:sticky;top:0;z-index:60">
+    <div style="max-width:1560px;margin:0 auto;display:flex;align-items:center;gap:14px;height:56px;flex-wrap:wrap">
+      <a href="LP Investor Workspace.dc.html" class="gp-btn" style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#71717a;flex:none">← LP workspace</a>
+      <div style="width:1px;height:20px;background:#ececf1;flex:none"></div>
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div style="width:25px;height:25px;border-radius:8px;background:#18181b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">GP</div>
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.015em;white-space:nowrap">Application Review</div>
+        <span style="{{ internalChip }}">Internal · not LP-visible</span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+        <div class="gp-hide" style="font-size:11.5px;color:#8b8798">Axal VC Spin-Out Lab Fund I</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 11px 5px 6px;border:1px solid #ececf1;border-radius:99px">
+          <div style="width:22px;height:22px;border-radius:7px;background:#6d28d9;color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center">GL</div>
+          <div style="font-size:12px;font-weight:600">{{ reviewer }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUEUE SUMMARY -->
+  <div style="border-bottom:1px solid #ececf1;background:#fff;padding:0 26px">
+    <div style="max-width:1560px;margin:0 auto;display:flex;align-items:stretch;gap:0;overflow-x:auto">
+      <sc-for list="{{ summary }}" as="s" hint-placeholder-count="5">
+        <div class="gp-btn" onClick="{{ s.go }}" style="{{ s.style }}">
+          <div class="gp-mono" style="font-size:21px;font-weight:800;letter-spacing:-.03em;color:{{ s.tone }}">{{ s.v }}</div>
+          <div class="gp-lbl" style="margin-top:3px;font-size:9.5px;white-space:nowrap">{{ s.k }}</div>
+        </div>
+      </sc-for>
+      <div style="flex:1;min-width:20px;border-bottom:1px solid #ececf1"></div>
+      <div class="gp-hide" style="flex:none;display:flex;flex-direction:column;justify-content:center;padding:13px 0 13px 22px;border-bottom:1px solid #ececf1;text-align:right">
+        <div class="gp-mono" style="font-size:13px;font-weight:700">{{ medianDays }}</div>
+        <div class="gp-lbl" style="font-size:9.5px;margin-top:2px">Median decision time · decided applications</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div style="flex:1;max-width:1560px;margin:0 auto;width:100%;box-sizing:border-box;padding:20px 26px 70px">
+
+    <!-- ===== COMPARISON ===== -->
+    <sc-if value="{{ compareMode }}">
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:20px 24px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px">
+          <span class="gp-lbl">Comparing 2 applications</span>
+          <div class="gp-btn" onClick="{{ closeCompare }}" style="padding:6px 13px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid #ececf1;color:#71717a">Close comparison</div>
+        </div>
+        <div class="gp-cmp" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <sc-for list="{{ compareApps }}" as="ca" hint-placeholder-count="2">
+            <div style="border:1px solid #ececf1;border-radius:13px;padding:17px 19px">
+              <div style="display:flex;align-items:center;gap:11px">
+                <div style="{{ ca.avStyle }}">{{ ca.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:14.5px;font-weight:800">{{ ca.name }}</div>
+                  <div style="font-size:11.5px;color:#71717a;margin-top:1px">{{ ca.firm }}</div>
+                </div>
+                <span style="{{ ca.statusChip }}">{{ ca.status }}</span>
+              </div>
+              <div class="gp-mono" style="font-size:20px;font-weight:800;color:#6d28d9;margin-top:13px">{{ ca.commit }}</div>
+              <div class="gp-lbl" style="font-size:9px;margin-top:1px">Indicated commitment</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
+                <sc-for list="{{ ca.signals }}" as="sg" hint-placeholder-count="6">
+                  <div style="border:1px solid #f0eff3;border-radius:9px;padding:9px 11px;background:#faf9fc">
+                    <div class="gp-lbl" style="font-size:8.5px">{{ sg.k }}</div>
+                    <div style="display:flex;align-items:center;gap:5px;margin-top:5px">
+                      <span style="width:6px;height:6px;border-radius:50%;flex:none;background:{{ sg.tone }}"></span>
+                      <div style="font-size:11.5px;font-weight:700">{{ sg.v }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f0eff3">
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <sc-for list="{{ ca.keyFields }}" as="kf" hint-placeholder-count="4">
+                    <div style="display:flex;gap:10px;font-size:11.5px"><span style="flex:none;width:120px;color:#8b8798;font-weight:600">{{ kf.k }}</span><span style="color:#3f3f46;line-height:1.5">{{ kf.v }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f0eff3">
+                <div class="gp-lbl" style="margin-bottom:6px">Rationale</div>
+                <div style="font-size:12px;color:#3f3f46;line-height:1.65">{{ ca.rationale }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <div class="gp-split" style="display:grid;grid-template-columns:1.05fr 1.35fr;gap:18px;align-items:start">
+
+      <!-- ===== QUEUE ===== -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;overflow:hidden">
+        <div style="padding:13px 18px;border-bottom:1px solid #ececf1;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="gp-lbl">Queue</span>
+          <span class="gp-mono" style="font-size:11px;color:#8b8798">{{ shownCount }} of {{ totalCount }}</span>
+          <div style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">
+            <sc-for list="{{ sorts }}" as="so" hint-placeholder-count="2">
+              <div class="gp-btn" onClick="{{ so.go }}" style="{{ so.style }}">{{ so.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:10px 18px;border-bottom:1px solid #ececf1;display:flex;align-items:center;gap:10px">
+          <div data-appall="1" onClick="{{ toggleSelectAll }}" style="{{ selectAllStyle }}">{{ selectAllGlyph }}</div>
+          <input value="{{ search }}" onChange="{{ setSearch }}" placeholder="Search by name or firm…" style="{{ searchInputStyle }}">
+        </div>
+        <div style="padding:11px 18px;border-bottom:1px solid #ececf1;display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ filters }}" as="fl" hint-placeholder-count="6">
+            <div class="gp-btn" onClick="{{ fl.go }}" style="{{ fl.style }}">{{ fl.label }} <span class="gp-mono" style="opacity:.6">{{ fl.n }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ hasSelection }}">
+          <div style="padding:10px 18px;border-bottom:1px solid #ececf1;background:#faf9fc;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <span style="font-size:11.5px;font-weight:700;color:#3f3f46;white-space:nowrap">{{ selectedCount }} selected</span>
+            <div class="gp-btn" onClick="{{ bulkApprove }}" style="padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;background:#15803d;color:#fff">Approve</div>
+            <div class="gp-btn" onClick="{{ bulkDecline }}" style="padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;background:#fff;color:#b91c1c;border:1px solid rgba(185,28,28,.25)">Decline</div>
+            <div class="gp-btn" onClick="{{ openCompare }}" style="{{ compareBtnStyle }}">Compare</div>
+            <div class="gp-btn" onClick="{{ exportCsv }}" style="padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid #ececf1;color:#3f3f46">Export CSV</div>
+            <div class="gp-btn" onClick="{{ clearSelection }}" style="margin-left:auto;font-size:11px;color:#8b8798;font-weight:600">Clear</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noSelectionExport }}">
+          <div style="padding:9px 18px;border-bottom:1px solid #ececf1;display:flex">
+            <div class="gp-btn" onClick="{{ exportCsv }}" style="font-size:11.5px;font-weight:600;color:#71717a">Export {{ shownCount }} shown as CSV</div>
+          </div>
+        </sc-if>
+        <div class="gp-scroll" style="max-height:calc(100vh - 320px);overflow-y:auto">
+          <sc-for list="{{ queue }}" as="q" hint-placeholder-count="7">
+            <div class="gp-row" data-app="{{ q.k }}" data-sel="{{ q.selFlag }}" onClick="{{ selectRow }}" style="{{ q.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <div data-appcheck="{{ q.k }}" onClick="{{ toggleSelectRow }}" style="{{ q.checkStyle }}">{{ q.checkGlyph }}</div>
+                <div style="{{ q.avStyle }}">{{ q.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <div style="font-size:13.5px;font-weight:700">{{ q.name }}</div>
+                    <sc-if value="{{ q.flagged }}"><span style="{{ q.flagChip }}">{{ q.flagText }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ q.firm }} · {{ q.type }}</div>
+                </div>
+                <span style="{{ q.statusChip }}">{{ q.status }}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;margin-top:10px;padding-left:56px;flex-wrap:wrap">
+                <div class="gp-mono" style="font-size:12.5px;font-weight:700;color:#18181b">{{ q.commit }}</div>
+                <div style="font-size:11.5px;color:#8b8798">{{ q.geo }}</div>
+                <div class="gp-mono" style="margin-left:auto;font-size:11px;color:{{ q.ageTone }}">{{ q.age }}</div>
+              </div>
+              <sc-if value="{{ q.hasReason }}">
+                <div style="{{ q.reasonStyle }}">{{ q.reasonText }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <sc-if value="{{ queueEmpty }}">
+            <div style="padding:44px 24px;text-align:center">
+              <div style="font-size:13.5px;font-weight:700;color:#52525b">Nothing in this view</div>
+              <div style="font-size:12px;color:#8b8798;margin-top:5px">No applications match the current filter or search.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- ===== DETAIL ===== -->
+      <div class="gp-side" style="position:sticky;top:126px;max-height:calc(100vh - 150px);overflow-y:auto;display:flex;flex-direction:column;gap:14px">
+
+        <!-- header -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:22px 24px">
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <div style="{{ sel.avStyleLg }}">{{ sel.initials }}</div>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <div style="font-size:18px;font-weight:800;letter-spacing:-.022em">{{ sel.name }}</div>
+                <span style="{{ sel.statusChip }}">{{ sel.status }}</span>
+              </div>
+              <div style="font-size:12.5px;color:#71717a;margin-top:3px">{{ sel.firm }} · {{ sel.role }}</div>
+              <div style="font-size:12px;color:#8b8798;margin-top:2px">{{ sel.email }} · {{ sel.geo }}</div>
+            </div>
+            <div style="text-align:right;flex:none">
+              <div class="gp-mono" style="font-size:20px;font-weight:800;letter-spacing:-.028em;color:#6d28d9">{{ sel.commit }}</div>
+              <div class="gp-lbl" style="font-size:9px;margin-top:2px">Indicated commitment</div>
+            </div>
+          </div>
+          <sc-if value="{{ sel.hasFlags }}">
+            <div style="{{ sel.flagBoxStyle }}">
+              <span style="width:14px;height:14px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ warnIcon }}"></span>
+              <div style="min-width:0">
+                <div style="font-size:12px;font-weight:700">{{ sel.flagTitle }}</div>
+                <div style="font-size:11.5px;line-height:1.55;margin-top:3px;opacity:.85">{{ sel.flagBody }}</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- qualification signals -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:20px 24px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px">
+            <span class="gp-lbl">Qualification signals</span>
+            <span style="font-size:11px;color:#8b8798">Derived from submitted data — not a score</span>
+          </div>
+          <div class="gp-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <sc-for list="{{ sel.signals }}" as="sg" hint-placeholder-count="6">
+              <div style="border:1px solid #f0eff3;border-radius:11px;padding:12px 14px;background:#faf9fc">
+                <div class="gp-lbl" style="font-size:9px">{{ sg.k }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+                  <span style="width:7px;height:7px;border-radius:50%;flex:none;background:{{ sg.tone }}"></span>
+                  <div style="font-size:12.5px;font-weight:700">{{ sg.v }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- submitted responses -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;overflow:hidden">
+          <div style="padding:14px 24px;border-bottom:1px solid #ececf1"><span class="gp-lbl">Submitted application</span></div>
+          <sc-for list="{{ sel.fields }}" as="fd" hint-placeholder-count="8">
+            <div style="display:flex;gap:16px;padding:12px 24px;border-bottom:1px solid #f4f3f7;align-items:flex-start">
+              <div style="flex:none;width:158px;font-size:11.5px;color:#8b8798;font-weight:600">{{ fd.k }}</div>
+              <div style="min-width:0;flex:1;font-size:12.5px;color:#3f3f46;line-height:1.6">{{ fd.v }}</div>
+            </div>
+          </sc-for>
+          <div style="padding:16px 24px">
+            <div class="gp-lbl" style="margin-bottom:8px">Why this fund</div>
+            <div style="font-size:13px;color:#3f3f46;line-height:1.7">{{ sel.rationale }}</div>
+          </div>
+        </div>
+
+        <!-- decision -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:20px 24px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">
+            <span class="gp-lbl">Decision</span>
+            <span class="gp-mono" style="font-size:11px;color:#8b8798">{{ sel.reviewMeta }}</span>
+          </div>
+          <div style="font-size:12px;color:#8b8798;line-height:1.55;margin-bottom:14px">Status changes are logged against your name and cannot be silently amended. Approvals grant reporting access immediately.</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <sc-for list="{{ actions }}" as="ac" hint-placeholder-count="4">
+              <div class="gp-btn" onClick="{{ ac.go }}" style="{{ ac.style }}">{{ ac.label }}</div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ sel.showDownstream }}">
+            <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f0eff3">
+              <div class="gp-lbl" style="margin-bottom:10px">Downstream — triggered by approval</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ sel.downstream }}" as="dn" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:flex-start;gap:9px">
+                    <span style="{{ dn.dot }}"></span>
+                    <div style="min-width:0">
+                      <div style="font-size:12px;font-weight:700;color:{{ dn.ink }}">{{ dn.label }}</div>
+                      <div style="font-size:11px;color:#8b8798;line-height:1.5;margin-top:1px">{{ dn.note }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f0eff3">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <span class="gp-lbl">Internal review note</span>
+              <span style="{{ internalChipSm }}">Internal only</span>
+            </div>
+            <textarea value="{{ noteDraft }}" onChange="{{ setNote }}" rows="3" placeholder="Record the reasoning behind this decision — what you verified, what remains open, and what the applicant was told." style="{{ textareaStyle }}"></textarea>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap">
+              <div class="gp-btn" onClick="{{ saveNote }}" style="{{ saveNoteStyle }}">Save note</div>
+              <sc-if value="{{ noteSaved }}"><span style="font-size:11.5px;font-weight:600;color:#15803d">Note saved to the record.</span></sc-if>
+            </div>
+          </div>
+        </div>
+
+        <!-- history -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:15px;padding:20px 24px">
+          <div class="gp-lbl" style="margin-bottom:14px">Status history</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ sel.history }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex;gap:13px">
+                <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                  <div style="{{ h.dot }}"></div>
+                  <sc-if value="{{ h.line }}"><div style="width:1.5px;flex:1;min-height:22px;background:#f0eff3"></div></sc-if>
+                </div>
+                <div style="padding-bottom:16px;min-width:0;flex:1">
+                  <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                    <div style="font-size:12.5px;font-weight:700;color:{{ h.ink }}">{{ h.label }}</div>
+                    <div class="gp-mono" style="font-size:10.5px;color:#a8a4b4">{{ h.when }}</div>
+                  </div>
+                  <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:3px">{{ h.note }}</div>
+                  <sc-if value="{{ h.by }}"><div class="gp-mono" style="font-size:10.5px;color:#a8a4b4;margin-top:3px">{{ h.byText }}</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560}}">
+class Component extends DCLogic {
+  state = { filter:'Needs action', sort:'Oldest first', sel:'marchetti', notes:{}, noteDraft:'', noteSaved:false, statuses:{},
+    search:'', selectedIds:{}, compareMode:false, compareIds:[] };
+  set(k,v){ this.setState({ [k]:v }); }
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  parseDate(str){
+    const m = /([A-Za-z]{3}) (\d{1,2}), (\d{1,2}):(\d{2})/.exec(str || '');
+    if (!m) return null;
+    const MO = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    if (!(m[1] in MO)) return null;
+    return new Date(2026, MO[m[1]], +m[2], +m[3], +m[4]);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const P = '#6d28d9';
+    const chip = (bg,fg,bd) => 'display:inline-block;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg+';border:1px solid '+(bd||'transparent')+';white-space:nowrap';
+    const S = {
+      'New':            chip('rgba(109,40,217,.09)','#6d28d9','rgba(109,40,217,.2)'),
+      'In review':      chip('rgba(180,83,9,.09)','#b45309','rgba(180,83,9,.2)'),
+      'Needs follow-up':chip('rgba(180,83,9,.09)','#b45309','rgba(180,83,9,.2)'),
+      'Approved':       chip('rgba(21,128,61,.09)','#15803d','rgba(21,128,61,.22)'),
+      'Declined':       chip('#f4f3f7','#71717a','#e8e6ee'),
+    };
+    const EDGE = { 'New':P, 'In review':'#b45309', 'Needs follow-up':'#b45309', 'Approved':'#15803d', 'Declined':'#e8e6ee' };
+    const av = (bg,sz,fs) => 'width:'+sz+'px;height:'+sz+'px;border-radius:'+(sz>40?'13px':'10px')+';background:'+bg+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:'+fs+'px;font-weight:700;flex:none';
+
+    // ---- applications ----
+    const APPS = [
+      { k:'marchetti', name:'Sofia Marchetti', initials:'SM', avBg:'#0f766e', firm:'Marchetti Family Office', role:'Principal',
+        email:'sofia@marchettifo.com', geo:'Milan, Italy', type:'Family office', commit:'$500K', status:'New',
+        submitted:'Aug 4, 2026', age:'2 days', ageDays:2,
+        signals:[
+          { k:'Accreditation', v:'Self-attested', tone:'#b45309' },
+          { k:'KYC / AML', v:'Not started', tone:'#a8a4b4' },
+          { k:'Commitment vs. min', v:'10× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'Above $250K', tone:'#15803d' },
+          { k:'Prior relationship', v:'Warm — GP intro', tone:'#15803d' },
+          { k:'Application completeness', v:'Complete', tone:'#15803d' },
+        ],
+        fields:[
+          { k:'Investor type', v:'Family office' },
+          { k:'Entity of record', v:'Marchetti Family Office SRL · Italy' },
+          { k:'Indicated commitment', v:'$500,000 · single close' },
+          { k:'Preference areas', v:'B2B SaaS · Enterprise Software · Vertical AI' },
+          { k:'Prior pre-seed exposure', v:'Yes — 14 direct pre-seed positions since 2021' },
+          { k:'Source', v:'Introduced by Guillaume Lauzier, June 2026' },
+          { k:'Accreditation basis', v:'Qualified investor under Italian regulation · attested, not yet verified' },
+          { k:'Reporting preference', v:'Quarterly · English' },
+        ],
+        rationale:'We have taken fourteen direct pre-seed positions and consistently found the diligence base too thin at that stage. The proposition here is that formation happens inside an observable environment, which changes what we can underwrite rather than how much we pay. We would want allocation rights and would expect to participate in follow-ons.',
+        history:[
+          { label:'Application submitted', when:'Aug 4, 14:22', note:'Complete application, all required fields provided.', by:'' },
+          { label:'Awaiting review', when:'—', note:'No reviewer assigned yet.', by:'' },
+        ] },
+      { k:'reyes', name:'David Reyes', initials:'DR', avBg:'#b45309', firm:'Independent', role:'Angel investor',
+        email:'d.reyes@protonmail.com', geo:'New York, USA', type:'Angel', commit:'$100K', status:'In review',
+        submitted:'Jul 30, 2026', age:'7 days', ageDays:7,
+        signals:[
+          { k:'Accreditation', v:'Verified · third party', tone:'#15803d' },
+          { k:'KYC / AML', v:'Cleared', tone:'#15803d' },
+          { k:'Commitment vs. min', v:'2× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'Below $250K', tone:'#b45309' },
+          { k:'Prior relationship', v:'Cold inbound', tone:'#b45309' },
+          { k:'Application completeness', v:'Complete', tone:'#15803d' },
+        ],
+        fields:[
+          { k:'Investor type', v:'Angel · high-net-worth individual' },
+          { k:'Entity of record', v:'Individual' },
+          { k:'Indicated commitment', v:'$100,000 · single close' },
+          { k:'Preference areas', v:'Fintech · AI Infrastructure · Developer Tools' },
+          { k:'Prior pre-seed exposure', v:'Yes — approximately 40 angel checks since 2018' },
+          { k:'Source', v:'Inbound via the public fund page' },
+          { k:'Accreditation basis', v:'Verified by Parallel Markets · Jul 31, 2026' },
+          { k:'Reporting preference', v:'Quarterly · English' },
+        ],
+        rationale:'Forty angel checks written largely on founder judgement and very little else. I am interested in the reverse: a portfolio where the underwriting is documented and I do not have to be the diligence function. Happy to sit below the allocation threshold — I am not looking for decision rights.',
+        history:[
+          { label:'Application submitted', when:'Jul 30, 09:41', note:'Inbound from the public fund page.', by:'' },
+          { label:'In review', when:'Jul 31, 11:05', note:'Accreditation verification requested and returned same day.', by:'Guillaume Lauzier' },
+          { label:'KYC cleared', when:'Aug 1, 16:20', note:'OFAC, EU, and UN screening returned clean.', by:'Hana Kaur' },
+        ] },
+      { k:'brandt', name:'Institutional — Brandt Ventures', initials:'BV', avBg:'#334155', firm:'Brandt Ventures', role:'Partner · Anna Brandt',
+        email:'a.brandt@brandtvc.com', geo:'Berlin, Germany', type:'Fund of funds', commit:'$2.5M', status:'In review',
+        submitted:'Jul 24, 2026', age:'13 days', ageDays:13,
+        signals:[
+          { k:'Accreditation', v:'Institutional', tone:'#15803d' },
+          { k:'KYC / AML', v:'In progress', tone:'#b45309' },
+          { k:'Commitment vs. min', v:'50× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'Above $250K', tone:'#15803d' },
+          { k:'Prior relationship', v:'Warm — LP referral', tone:'#15803d' },
+          { k:'Application completeness', v:'Side-letter requested', tone:'#b45309' },
+        ],
+        fields:[
+          { k:'Investor type', v:'Fund of funds · institutional' },
+          { k:'Entity of record', v:'Brandt Ventures Fund II GmbH & Co. KG' },
+          { k:'Indicated commitment', v:'$2,500,000 · staged over two closes' },
+          { k:'Preference areas', v:'Deep Tech · AI Infrastructure · Climate Tech' },
+          { k:'Prior pre-seed exposure', v:'Yes — nine emerging-manager commitments' },
+          { k:'Source', v:'Referred by an existing Fund I LP' },
+          { k:'Accreditation basis', v:'Institutional investor · documentation supplied' },
+          { k:'Conditions raised', v:'Requests a side letter covering quarterly position-level detail and MFN on fees' },
+        ],
+        rationale:'We back emerging managers where the sourcing edge is structural rather than relational. The Lab is the most legible version of that we have seen at pre-seed. Our committee will want position-level reporting quarterly, and we would expect MFN treatment given the size relative to the current fund.',
+        history:[
+          { label:'Application submitted', when:'Jul 24, 10:02', note:'Referred by an existing Fund I LP.', by:'' },
+          { label:'In review', when:'Jul 25, 09:15', note:'Largest single application to date — flagged for GP attention.', by:'Guillaume Lauzier' },
+          { label:'Note added', when:'Jul 29, 17:44', note:'Side letter and MFN request needs counsel review before any decision. Do not approve pending that.', by:'Guillaume Lauzier' },
+        ] },
+      { k:'okonkwo', name:'Nadia Okonkwo', initials:'NO', avBg:'#6d28d9', firm:'Okonkwo Capital', role:'Founder',
+        email:'nadia@okonkwocap.com', geo:'London, UK', type:'High-net-worth individual', commit:'$250K', status:'Needs follow-up',
+        submitted:'Jul 21, 2026', age:'16 days', ageDays:16,
+        signals:[
+          { k:'Accreditation', v:'Documents outstanding', tone:'#b45309' },
+          { k:'KYC / AML', v:'Not started', tone:'#a8a4b4' },
+          { k:'Commitment vs. min', v:'5× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'At $250K threshold', tone:'#15803d' },
+          { k:'Prior relationship', v:'Warm — advisor intro', tone:'#15803d' },
+          { k:'Application completeness', v:'Incomplete', tone:'#b45309' },
+        ],
+        fields:[
+          { k:'Investor type', v:'High-net-worth individual' },
+          { k:'Entity of record', v:'Not yet specified — individual or SPV undecided' },
+          { k:'Indicated commitment', v:'$250,000 · exactly at the allocation threshold' },
+          { k:'Preference areas', v:'B2B SaaS · Health Tech' },
+          { k:'Prior pre-seed exposure', v:'Limited — three prior investments' },
+          { k:'Source', v:'Introduced by Elena Voss, Lab advisor' },
+          { k:'Accreditation basis', v:'Not supplied — income letter or net-worth attestation requested Jul 23' },
+          { k:'Outstanding', v:'Accreditation evidence · entity of record' },
+        ],
+        rationale:'I have made three investments and want structured exposure rather than continuing opportunistically. Elena described the programme in detail and I would like to commit at the level that carries allocation rights, since understanding how these decisions get made is part of what I am buying.',
+        history:[
+          { label:'Application submitted', when:'Jul 21, 19:30', note:'Introduced by Elena Voss.', by:'' },
+          { label:'In review', when:'Jul 22, 08:50', note:'Accreditation basis left blank.', by:'Hana Kaur' },
+          { label:'Needs follow-up', when:'Jul 23, 14:10', note:'Emailed requesting income letter or net-worth attestation, and asked whether they will invest individually or through an SPV. No response as of Aug 6.', by:'Hana Kaur' },
+        ] },
+      { k:'takeda', name:'Kenji Takeda', initials:'KT', avBg:'#0f766e', firm:'Takeda Strategic', role:'Managing Director',
+        email:'k.takeda@takedastrategic.jp', geo:'Tokyo, Japan', type:'Corporate / strategic', commit:'$750K', status:'New',
+        submitted:'Aug 5, 2026', age:'1 day', ageDays:1,
+        signals:[
+          { k:'Accreditation', v:'Institutional', tone:'#15803d' },
+          { k:'KYC / AML', v:'Not started', tone:'#a8a4b4' },
+          { k:'Commitment vs. min', v:'15× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'Above $250K', tone:'#15803d' },
+          { k:'Prior relationship', v:'Cold inbound', tone:'#b45309' },
+          { k:'Strategic conflict', v:'Requires review', tone:'#b45309' },
+        ],
+        fields:[
+          { k:'Investor type', v:'Corporate / strategic' },
+          { k:'Entity of record', v:'Takeda Strategic Investments KK' },
+          { k:'Indicated commitment', v:'$750,000 · single close' },
+          { k:'Preference areas', v:'Robotics / Automation · Enterprise Software · Data Infrastructure' },
+          { k:'Prior pre-seed exposure', v:'Yes — corporate venture programme since 2019' },
+          { k:'Source', v:'Inbound via LinkedIn' },
+          { k:'Stated objective', v:'Portfolio return plus early visibility on automation and robotics companies' },
+          { k:'Reporting preference', v:'Quarterly · English' },
+        ],
+        rationale:'Our corporate venture programme has struggled to see companies early enough in automation. A fund position gives us visibility at formation without competing with the founders for control. We would want to understand what information rights a strategic LP does and does not receive.',
+        history:[
+          { label:'Application submitted', when:'Aug 5, 03:14', note:'Inbound via LinkedIn.', by:'' },
+          { label:'Awaiting review', when:'—', note:'Strategic-investor conflict policy applies. No reviewer assigned yet.', by:'' },
+        ] },
+      { k:'lindqvist', name:'Erik Lindqvist', initials:'EL', avBg:'#15803d', firm:'Lindqvist Holdings', role:'Principal',
+        email:'erik@lindqvistholdings.se', geo:'Stockholm, Sweden', type:'Family office', commit:'$300K', status:'Approved',
+        submitted:'Jul 12, 2026', age:'25 days', ageDays:25,
+        signals:[
+          { k:'Accreditation', v:'Verified · third party', tone:'#15803d' },
+          { k:'KYC / AML', v:'Cleared', tone:'#15803d' },
+          { k:'Commitment vs. min', v:'6× minimum', tone:'#15803d' },
+          { k:'Allocation threshold', v:'Above $250K', tone:'#15803d' },
+          { k:'Prior relationship', v:'Warm — GP intro', tone:'#15803d' },
+          { k:'Subscription docs', v:'Countersigned', tone:'#15803d' },
+        ],
+        fields:[
+          { k:'Investor type', v:'Family office' },
+          { k:'Entity of record', v:'Lindqvist Holdings AB · Sweden' },
+          { k:'Indicated commitment', v:'$300,000 · single close' },
+          { k:'Preference areas', v:'Climate Tech · Deep Tech · Bio / Life Sciences' },
+          { k:'Prior pre-seed exposure', v:'Yes — eight positions, two via emerging managers' },
+          { k:'Source', v:'Introduced by Guillaume Lauzier, May 2026' },
+          { k:'Accreditation basis', v:'Verified · professional client under Swedish regulation' },
+          { k:'Status', v:'Subscription countersigned Jul 18 · first capital call satisfied' },
+        ],
+        rationale:'Climate and deep tech are where we have most conviction and least ability to diligence at pre-seed. A fund whose selection happens after twenty-eight days of observed execution is a better instrument for us than direct investing at that stage.',
+        history:[
+          { label:'Application submitted', when:'Jul 12, 11:20', note:'Introduced by the GP.', by:'' },
+          { label:'In review', when:'Jul 13, 09:00', note:'Accreditation and KYC initiated.', by:'Hana Kaur' },
+          { label:'KYC cleared', when:'Jul 15, 13:45', note:'Screening clean. Professional client status verified.', by:'Hana Kaur' },
+          { label:'Approved', when:'Jul 16, 10:30', note:'Strong sector alignment, verified status, warm origin. Approved at full access with allocation rights.', by:'Guillaume Lauzier' },
+        ] },
+      { k:'hartley', name:'Miles Hartley', initials:'MH', avBg:'#71717a', firm:'Hartley Trading', role:'Proprietary trader',
+        email:'miles@hartleytrading.io', geo:'Dubai, UAE', type:'High-net-worth individual', commit:'$50K', status:'Declined',
+        submitted:'Jul 8, 2026', age:'29 days', ageDays:29,
+        signals:[
+          { k:'Accreditation', v:'Unverifiable', tone:'#b45309' },
+          { k:'KYC / AML', v:'Source of funds unclear', tone:'#b45309' },
+          { k:'Commitment vs. min', v:'At minimum', tone:'#a8a4b4' },
+          { k:'Allocation threshold', v:'Below $250K', tone:'#a8a4b4' },
+          { k:'Prior relationship', v:'Cold inbound', tone:'#b45309' },
+          { k:'Horizon alignment', v:'Mismatch', tone:'#b45309' },
+        ],
+        fields:[
+          { k:'Investor type', v:'High-net-worth individual' },
+          { k:'Entity of record', v:'Individual' },
+          { k:'Indicated commitment', v:'$50,000 · at the stated minimum' },
+          { k:'Preference areas', v:'AI / ML · Fintech' },
+          { k:'Prior pre-seed exposure', v:'None stated' },
+          { k:'Source', v:'Cold inbound' },
+          { k:'Accreditation basis', v:'Attested but no supporting documentation supplied after two requests' },
+          { k:'Stated horizon', v:'Asked about secondary liquidity within 18 months' },
+        ],
+        rationale:'Looking for exposure to early AI companies with a route to liquidity inside a couple of years. Can move quickly on the paperwork.',
+        history:[
+          { label:'Application submitted', when:'Jul 8, 22:05', note:'Cold inbound.', by:'' },
+          { label:'In review', when:'Jul 9, 10:15', note:'Accreditation documentation requested.', by:'Hana Kaur' },
+          { label:'Needs follow-up', when:'Jul 14, 09:30', note:'Second request for source-of-funds documentation. No substantive response.', by:'Hana Kaur' },
+          { label:'Declined', when:'Jul 20, 15:00', note:'Declined on two grounds: accreditation could not be verified after two requests, and the stated 18-month liquidity expectation is incompatible with a ten-year closed-end fund. Communicated by email with the horizon mismatch explained.', by:'Guillaume Lauzier' },
+        ] },
+    ];
+
+    const cur = (a) => st.statuses[a.k] || a.status;
+    const withStatus = APPS.map(a => Object.assign({}, a, { status: cur(a) }));
+
+    // ---- median decision time — real, from history timestamps of actually-decided applications ----
+    const decisionDays = (a) => {
+      const submitted = a.history.find(h => h.label === 'Application submitted');
+      const decision = a.history.slice().reverse().find(h => h.label === a.status);
+      if (!submitted || !decision) return null;
+      const d1 = this.parseDate(submitted.when), d2 = this.parseDate(decision.when);
+      if (!d1 || !d2) return null;
+      return Math.round((d2 - d1) / 86400000 * 10) / 10;
+    };
+    const decidedDurations = withStatus.filter(a => a.status==='Approved' || a.status==='Declined').map(decisionDays).filter(v => v != null);
+    const median = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a,b)=>a-b); const mid = Math.floor(s.length/2); return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2; };
+    const medianVal = median(decidedDurations);
+    const medianDays = medianVal == null ? '—' : (medianVal.toFixed(1) + ' days');
+
+    // ---- filters ----
+    const count = (f) => f==='All' ? withStatus.length
+      : f==='Needs action' ? withStatus.filter(a => a.status==='New' || a.status==='In review' || a.status==='Needs follow-up').length
+      : withStatus.filter(a => a.status===f).length;
+    const FILTERS = ['Needs action','New','In review','Needs follow-up','Approved','Declined','All'];
+    const filters = FILTERS.map(f => ({
+      label:f, n:count(f), go: () => this.set('filter', f),
+      style:'padding:6px 11px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid '
+        + (st.filter===f ? P : '#ececf1') + ';background:' + (st.filter===f ? 'rgba(109,40,217,.06)' : '#fff')
+        + ';color:' + (st.filter===f ? P : '#71717a'),
+    }));
+
+    const SORTS = ['Oldest first','Largest first'];
+    const sorts = SORTS.map(s => ({
+      label:s, go: () => this.set('sort', s),
+      style:'padding:5px 10px;border-radius:7px;font-size:11px;font-weight:600;border:1px solid '
+        + (st.sort===s ? P : '#ececf1') + ';background:' + (st.sort===s ? 'rgba(109,40,217,.06)' : '#fff')
+        + ';color:' + (st.sort===s ? P : '#8b8798'),
+    }));
+
+    const money = (m) => parseFloat(m.replace(/[$,MK]/g,'')) * (m.indexOf('M') > -1 ? 1000 : 1);
+    let list = withStatus.filter(a =>
+      st.filter==='All' ? true
+      : st.filter==='Needs action' ? (a.status==='New' || a.status==='In review' || a.status==='Needs follow-up')
+      : a.status===st.filter);
+    const q = st.search.trim().toLowerCase();
+    if (q) list = list.filter(a => (a.name + ' ' + a.firm).toLowerCase().indexOf(q) > -1);
+    list = list.slice().sort((a,b) => st.sort==='Largest first' ? money(b.commit) - money(a.commit) : b.ageDays - a.ageDays);
+
+    const flagOf = (a) => {
+      if (a.status==='Needs follow-up') return { text:'Awaiting applicant', title:'Follow-up outstanding', body:'Requested information has not been supplied. Consider a second contact or closing the application.' };
+      if (a.k==='brandt') return { text:'Counsel review', title:'Side letter and MFN request', body:'A side letter covering position-level reporting and MFN on fees needs counsel review before any decision is recorded.' };
+      if (a.k==='takeda') return { text:'Conflict policy', title:'Strategic investor — conflict policy applies', body:'A corporate LP seeking early visibility on portfolio sectors. Information rights need to be settled before approval.' };
+      if (a.ageDays >= 7 && (a.status==='New' || a.status==='In review')) return { text:'Ageing', title:'Ageing in the queue', body:'Open beyond the five-business-day review commitment. Decide or set expectations with the applicant.' };
+      return null;
+    };
+    // one-line outcome reason for closed applications, read straight from the matching decision history entry
+    const reasonOf = (a) => {
+      if (a.status !== 'Approved' && a.status !== 'Declined') return null;
+      const entry = a.history.slice().reverse().find(h => h.label === a.status);
+      if (!entry || !entry.note) return null;
+      return entry.note.length > 78 ? entry.note.slice(0, 76) + '…' : entry.note;
+    };
+
+    const queue = list.map(a => {
+      const fl = flagOf(a);
+      const reason = reasonOf(a);
+      const checked = !!st.selectedIds[a.k];
+      return {
+        k:a.k,
+        name:a.name, initials:a.initials, firm:a.firm, type:a.type, commit:a.commit, geo:a.geo,
+        status:a.status, statusChip:S[a.status],
+        avStyle:av(a.avBg, 32, 11.5),
+        checkStyle:'width:16px;height:16px;border-radius:5px;margin-top:2px;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;border:1.5px solid '+(checked?P:'#d4d0dc')+';background:'+(checked?P:'#fff'),
+        checkGlyph: checked ? '✓' : '',
+        // selection highlight is driven by the [data-sel] CSS rule, not the style string,
+        // because style holes on sc-for children do not re-apply in this runtime
+        selFlag: st.sel===a.k ? 'yes' : 'no',
+        rowStyle:'padding:14px 18px;border-bottom:1px solid #f4f3f7;background:transparent;border-left:2px solid ' + EDGE[a.status],
+        age: a.ageDays===1 ? '1 day' : a.ageDays + ' days',
+        ageTone: a.ageDays >= 14 ? '#b91c1c' : a.ageDays >= 7 ? '#b45309' : '#a8a4b4',
+        flagged: !!fl, flagText: fl ? fl.text : '',
+        flagChip: chip('rgba(180,83,9,.08)','#b45309','rgba(180,83,9,.2)'),
+        hasReason: !!reason, reasonText: reason || '',
+        reasonStyle:'padding-left:56px;margin-top:6px;font-size:11px;line-height:1.5;color:'+(a.status==='Approved'?'#15803d':'#8b8798'),
+      };
+    });
+
+    // ---- selection (checkboxes) ----
+    const selectedIds = Object.keys(st.selectedIds).filter(k => st.selectedIds[k]);
+    const selectedCount = selectedIds.length;
+    const hasSelection = selectedCount > 0;
+    const allShownSelected = queue.length > 0 && queue.every(qi => st.selectedIds[qi.k]);
+    const selectAllStyle = 'width:16px;height:16px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;border:1.5px solid '+(allShownSelected?P:'#d4d0dc')+';background:'+(allShownSelected?P:'#fff');
+    const selectAllGlyph = allShownSelected ? '✓' : '';
+    const searchInputStyle = 'flex:1;padding:7px 11px;border-radius:8px;border:1px solid #ececf1;background:#faf9fc;font-size:12px;color:#18181b;outline:none;box-sizing:border-box';
+    const compareBtnStyle = 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;' + (selectedCount===2 ? 'background:'+P+';color:#fff' : 'background:#f4f3f7;color:#c7c3d1;cursor:not-allowed');
+
+    // ---- CSV export ----
+    const toCsv = (apps) => {
+      const rows = [['Name','Firm','Investor type','Commitment','Status','Submitted','Geography']];
+      apps.forEach(a => rows.push([a.name, a.firm, a.type, a.commit, a.status, a.submitted, a.geo]));
+      return rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+    };
+    const exportCsv = () => {
+      const apps = selectedCount > 0 ? withStatus.filter(a => st.selectedIds[a.k]) : list;
+      const blob = new Blob([toCsv(apps)], { type:'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = 'gp-applications.csv';
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    // ---- comparison ----
+    const compareApps = (st.compareIds || []).map(id => withStatus.find(a => a.k===id)).filter(Boolean).map(a => Object.assign({}, a, {
+      avStyle: av(a.avBg, 40, 13), statusChip: S[a.status], keyFields: a.fields.slice(0, 4),
+    }));
+
+    // ---- selected detail ----
+    const raw = withStatus.find(a => a.k===st.sel) || withStatus[0];
+    const fl = flagOf(raw);
+    const savedNote = st.notes[raw.k];
+    const lastReview = raw.history.slice().reverse().find(h => h.by);
+    const hist = raw.history.slice();
+    if (savedNote) hist.push({ label:'Note added', when:'Aug 6, just now', note:savedNote, by:this.reviewerName() });
+
+    const dotOn  = 'width:11px;height:11px;border-radius:50%;background:#6d28d9;flex:none;margin-top:3px';
+    const dotOk  = 'width:11px;height:11px;border-radius:50%;background:#15803d;flex:none;margin-top:3px';
+    const dotOff = 'width:11px;height:11px;border-radius:50%;background:#e4e2ea;flex:none;margin-top:3px';
+
+    // downstream effects triggered by approval — derived from the applicant's own submitted signals/fields, not asserted
+    const subDone = raw.fields.some(f => /countersigned/i.test(f.v));
+    const kycDone = raw.signals.some(s => s.k==='KYC / AML' && /cleared/i.test(s.v));
+    const downstream = raw.status === 'Approved' ? [
+      { label:'Subscription agreement', ink: subDone?'#15803d':'#b45309', dot: subDone?dotOk:('width:9px;height:9px;border-radius:50%;background:#b45309;flex:none;margin-top:3px'),
+        note: subDone ? 'Countersigned — on file in the data room.' : 'Generated from the application data; awaiting signature.' },
+      { label:'KYC / AML clearance', ink: kycDone?'#15803d':'#b45309', dot: kycDone?dotOk:('width:9px;height:9px;border-radius:50%;background:#b45309;flex:none;margin-top:3px'),
+        note: kycDone ? 'Screening cleared prior to approval.' : 'Screening not yet complete — required before capital is called.' },
+      { label:'LP reporting access', ink:'#15803d', dot:dotOk, note:'Granted immediately on approval.' },
+    ] : [];
+
+    const sel = Object.assign({}, raw, {
+      avStyleLg: av(raw.avBg, 46, 15),
+      statusChip: S[raw.status],
+      hasFlags: !!fl,
+      flagTitle: fl ? fl.title : '', flagBody: fl ? fl.body : '',
+      flagBoxStyle:'display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:12px 14px;border-radius:11px;background:rgba(180,83,9,.06);border:1px solid rgba(180,83,9,.16);color:#b45309',
+      reviewMeta: lastReview ? 'Last action by ' + lastReview.by + ' · ' + lastReview.when : 'No reviewer assigned',
+      showDownstream: raw.status === 'Approved', downstream,
+      history: hist.map((h,i) => Object.assign({}, h, {
+        line: i < hist.length - 1,
+        dot: h.label==='Approved' ? dotOk : (h.when==='—' ? dotOff : dotOn),
+        ink: h.when==='—' ? '#a8a4b4' : '#18181b',
+        byText: h.by ? h.by : '',
+      })),
+    });
+
+    // ---- single-app actions ----
+    const setStatus = (v) => () => this.setState(s => ({ statuses: Object.assign({}, s.statuses, { [s.sel]: v }), noteSaved:false }));
+    const btn = (bg,fg,bd) => 'padding:9px 16px;border-radius:9px;font-size:12px;font-weight:700;background:'+bg+';color:'+fg+';border:1px solid '+(bd||'transparent');
+    const actions = [
+      { label:'Approve',            go:setStatus('Approved'),        style: raw.status==='Approved' ? btn('rgba(21,128,61,.1)','#15803d','rgba(21,128,61,.3)') : btn('#15803d','#fff') },
+      { label:'Mark in review',     go:setStatus('In review'),       style: btn('#fff','#3f3f46','#ececf1') },
+      { label:'Request follow-up',  go:setStatus('Needs follow-up'), style: btn('rgba(180,83,9,.06)','#b45309','rgba(180,83,9,.25)') },
+      { label:'Decline',            go:setStatus('Declined'),        style: btn('#fff','#b91c1c','rgba(185,28,28,.25)') },
+    ];
+
+    // ---- bulk actions ----
+    const bulkSetStatus = (v) => () => {
+      this.setState(s => {
+        const next = Object.assign({}, s.statuses);
+        Object.keys(s.selectedIds).forEach(id => { if (s.selectedIds[id]) next[id] = v; });
+        return { statuses: next, selectedIds: {} };
+      });
+    };
+
+    // ---- summary ----
+    const sum = (f, tone) => ({ k:f, v:String(count(f)), tone, go: () => this.set('filter', f),
+      style:'flex:none;padding:13px 22px 13px 0;margin-right:22px;border-bottom:2px solid '+(st.filter===f?P:'#ececf1')+';min-width:74px' });
+    const summary = [
+      sum('Needs action','#6d28d9'), sum('New','#18181b'), sum('In review','#b45309'),
+      sum('Needs follow-up','#b45309'), sum('Approved','#15803d'), sum('Declined','#8b8798'),
+    ];
+
+    return {
+      reviewer:this.reviewerName(),
+      internalChip: chip('rgba(185,28,28,.07)','#b91c1c','rgba(185,28,28,.18)'),
+      internalChipSm: chip('rgba(185,28,28,.07)','#b91c1c','rgba(185,28,28,.18)'),
+      warnIcon: this.ic('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'),
+      summary, medianDays,
+      filters, sorts, queue, queueEmpty: queue.length===0,
+      search: st.search, setSearch: (e) => this.setState({ search: e.target.value }), searchInputStyle,
+      selectAllStyle, selectAllGlyph,
+      toggleSelectAll: (e) => {
+        e.stopPropagation();
+        this.setState(s => {
+          const ids = queue.map(qi => qi.k);
+          const allSel = ids.length > 0 && ids.every(id => s.selectedIds[id]);
+          const next = Object.assign({}, s.selectedIds);
+          ids.forEach(id => { next[id] = !allSel; });
+          return { selectedIds: next };
+        });
+      },
+      hasSelection, noSelectionExport: !hasSelection, selectedCount:String(selectedCount),
+      toggleSelectRow: (e) => {
+        e.stopPropagation();
+        const el = e.currentTarget || e.target;
+        const node = el.closest ? el.closest('[data-appcheck]') : el;
+        const id = node && node.getAttribute ? node.getAttribute('data-appcheck') : null;
+        if (id) this.setState(s => ({ selectedIds: Object.assign({}, s.selectedIds, { [id]: !s.selectedIds[id] }) }));
+      },
+      bulkApprove: bulkSetStatus('Approved'), bulkDecline: bulkSetStatus('Declined'),
+      clearSelection: () => this.setState({ selectedIds:{} }),
+      compareBtnStyle,
+      openCompare: () => {
+        if (selectedCount !== 2) return;
+        this.setState({ compareMode:true, compareIds:selectedIds, selectedIds:{} });
+      },
+      closeCompare: () => this.setState({ compareMode:false, compareIds:[] }),
+      compareMode: st.compareMode, compareApps,
+      exportCsv,
+      // one shared handler reading the id off the row — per-item closures go stale when the list re-orders
+      selectRow: (e) => {
+        const el = e.currentTarget || e.target;
+        const node = el.closest ? el.closest('[data-app]') : el;
+        const id = node && node.getAttribute ? node.getAttribute('data-app') : null;
+        if (id) this.setState({ sel:id, noteDraft:'', noteSaved:false });
+      },
+      shownCount:String(queue.length), totalCount:String(withStatus.length),
+      sel, actions,
+      noteDraft:st.noteDraft, noteSaved:st.noteSaved,
+      setNote: (e) => this.setState({ noteDraft:e.target.value, noteSaved:false }),
+      saveNote: () => { const t = (st.noteDraft||'').trim(); if (t) this.setState(s => ({ notes: Object.assign({}, s.notes, { [s.sel]: t }), noteDraft:'', noteSaved:true })); },
+      saveNoteStyle: (st.noteDraft||'').trim()
+        ? 'padding:9px 16px;border-radius:9px;font-size:12px;font-weight:700;background:#6d28d9;color:#fff;border:none'
+        : 'padding:9px 16px;border-radius:9px;font-size:12px;font-weight:700;background:#f4f3f7;color:#a8a4b4;border:none;cursor:not-allowed',
+      textareaStyle:'width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid #e4e2ea;background:#faf9fc;font-size:12.5px;color:#18181b;line-height:1.6;outline:none;resize:vertical',
+    };
+  }
+
+  reviewerName(){ return 'Guillaume Lauzier'; }
+}
+</script>
+</body>
+</html>

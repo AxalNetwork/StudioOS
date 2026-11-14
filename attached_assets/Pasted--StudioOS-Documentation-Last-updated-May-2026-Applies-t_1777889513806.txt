@@ -1,0 +1,606 @@
+# StudioOS — Documentation
+
+*Last updated: May 2026 · Applies to StudioOS v1.0+*
+
+Welcome to **StudioOS**, the venture studio operating system that powers Axal VC's 30-Day Spin-Out Engine. This document is the single source of truth for everyone using the platform — whether you're a founder spinning out a company, an LP tracking your portfolio, a service partner looking for deal flow, or a venture studio licensing the platform.
+
+If you're new, start with the [Quickstart](#quickstart) for your role. If you already know what you're doing, jump straight to [Plans & Pricing](#plans--pricing) or the [Glossary](#glossary).
+
+---
+
+## Table of contents
+
+1. [Quickstart](#quickstart)
+2. [How StudioOS works](#how-studioos-works)
+3. [For Founders](#for-founders)
+4. [For Investors & LPs](#for-investors--lps)
+5. [For Partners (Service Providers)](#for-partners-service-providers)
+6. [Plans & Pricing](#plans--pricing)
+7. [Account & Billing](#account--billing)
+8. [Security & Privacy](#security--privacy)
+9. [Notifications & Search](#notifications--search)
+10. [API & Integrations](#api--integrations)
+11. [Support & SLAs](#support--slas)
+12. [Glossary](#glossary)
+13. [Changelog](#changelog)
+
+---
+
+## Quickstart
+
+### 1. Create your account
+Go to **axal.vc/register**, enter your email, and pass the Cloudflare Turnstile check. We'll send a verification link via email.
+
+### 2. Verify your email
+Click the link within 24 hours. The link is single-use and SHA-256-hashed at rest, so it cannot be replayed. If it expires, request a new one — you can resend up to 3 times per hour.
+
+### 3. Set up TOTP (passwordless 2FA)
+After verification, scan the QR code with **Google Authenticator**, **1Password**, **Authy**, or any TOTP-compliant app. We do not use passwords — every login requires a fresh 6-digit code from your authenticator. Save the recovery codes shown after setup somewhere safe.
+
+### 4. Pick your role
+On first login, you'll be routed to one of three portals based on the role assigned to your account:
+
+- **Founder Portal** — you're applying or running a spin-out venture
+- **Investor Portal** — you're a Limited Partner (LP) or co-investor
+- **Partner Portal** — you're a service provider (legal, accounting, design, GTM, etc.)
+
+Admins (studio operators) see all three plus the Admin Console and can switch between views via the violet **Portal Switcher** bar at the top.
+
+### 5. Complete your profile
+Each portal asks 4–8 onboarding questions — tailored to your role. Your answers populate scoring inputs (founders), LP commitment terms (investors), or service catalog entries (partners).
+
+You're in. Bookmark **axal.vc/dashboard** and continue below.
+
+---
+
+## How StudioOS works
+
+StudioOS is built around **seven engines** that handle the full lifecycle of venture creation:
+
+1. **Intelligence Engine** — Market pulse, sector signals, competitive intelligence, studio benchmarks, conviction picks.
+2. **Scoring & Diligence Engine** — Our proprietary 100-point scoring algorithm + automated diligence checks (legal, technical, financial).
+3. **AI Advisory Suite** — On-demand AI advisor for strategy, GTM, fundraising, hiring; financial planner with burn/runway projections; diligence checker.
+4. **Deal & Match Engine** — Deal flow CRM (applied → scored → active → funded), partner matchmaking, referral system.
+5. **Legal & Compliance Engine** — 18 templates spanning GP governance, fund formation (LPA, PPM, Subscription, Management Co.), portfolio execution (SAFE, term sheets, SPAs, bylaws, equity splits, IP, voting rights), and compliance (Form ADV, AML/KYC, 83(b)).
+6. **Operations & Support Hub** — Ticketing (auto-syncs to GitHub Issues), activity & audit log, real-time pipeline updates via WebSockets.
+7. **Capital & Investment Engine** — Capital calls, LP investor portal, fund management (`vc_funds`), distributions ledger, TVPI/DPI tracking, secondary liquidity marketplace.
+
+Every action you take in StudioOS is recorded in the **activity log** (audit-grade), encrypted at rest, and gated by a strict role-based access control (RBAC) model. The platform runs on FastAPI (canonical API) with a Cloudflare Workers edge layer for WebSockets, caching, and queue draining.
+
+---
+
+## For Founders
+
+You're here to spin out a company in 30 days. Here's the entire flow.
+
+### Submitting your venture
+Open **Founder Portal → Submit Idea**. The multi-step form captures:
+
+- Problem & market hypothesis
+- TAM/SAM estimates and urgency signals
+- Team (founders, expertise, prior execution)
+- Product plan (MVP timeline, technical complexity, dependencies)
+- Capital plan (cost to MVP, time to revenue, burn risk)
+- Strategic fit with Axal's thesis
+- Distribution & go-to-market
+
+Submitting auto-triggers scoring within seconds. You don't need to wait for a human reviewer to see the result.
+
+### The 100-point score
+Your score is broken down across six dimensions:
+
+| Dimension | Max points | What we measure |
+|---|---|---|
+| Market | 25 | TAM/SAM (10), Urgency (10), Trend (5) |
+| Team | 20 | Expertise (8), Execution (8), Network (4) |
+| Product | 15 | MVP time (7), Complexity (5), Dependencies (3) |
+| Capital | 15 | Cost to MVP (7), Time to revenue (5), Burn risk (3) |
+| Strategic Fit | 15 | Alignment with thesis (10), Synergy (5) |
+| Distribution | 10 | Channels (5), Virality (5) |
+
+**Outcomes:**
+
+- **≥85 → Tier 1 (Immediate Spinout)** — moved to BUILD stage, mentor & legal docs auto-staged
+- **70–84 → Tier 2 (Conditional)** — needs additional diligence; you can iterate on weak dimensions and re-submit
+- **<70 → Rejected** — feedback delivered with the lowest-scoring dimensions explained
+
+You can re-submit after material changes; we keep all historical `score_snapshots` for audit purposes.
+
+### The 30-day playbook
+Tier 1 ventures enter the 4-week Builder Kit:
+
+- **Week 1 — Brand & narrative.** Logo, brand kit, pitch deck (AI-assisted), one-pager, domain procurement.
+- **Week 2 — Legal & financial.** Incorporation wizard (Delaware C-Corp, Swiss SA, or your jurisdiction), cap table setup, founder vesting (4-year, 1-year cliff default), 83(b) elections, IP assignment.
+- **Week 3 — Product & GTM.** MVP scoping, hiring plan, GTM strategy, first-customer outreach templates.
+- **Week 4 — Fundraising.** SAFE templates, data room, term sheet, pitch practice with AI advisor, investor list.
+
+Progress is tracked on your **Project Detail** page with a 4-week tracker. The pipeline updates in real-time over WebSockets — your mentors and the studio team see your status without you sending status updates.
+
+### AI Advisory
+At any point you can ask the **AI Advisor** strategy questions (GTM, fundraising tactics, product trade-offs, hiring), run a **Financial Plan** (burn/runway/projection scenarios), or trigger a **Diligence Check** (validates your scoring inputs, legal docs, team, financials before investor presentations). The advisor uses OpenAI by default; if it's unavailable, deterministic templates fall back so you always get a response.
+
+### Legal templates
+Founders get free use of these during their spin-out (gated to the Spin-Out tier):
+
+- SAFE (post-money, MFN, valuation cap)
+- Term sheet
+- Stock Purchase Agreement
+- Bylaws
+- Founder equity split & vesting agreement
+- IP assignment & confidentiality
+- Voting rights
+- 83(b) election letter
+
+All templates are AI-personalized to your venture and reviewable in the **Legal** module. **Important:** templates are starting points, not legal advice. Your spin-out includes a partner attorney review before signing.
+
+### Liquidity (post-spin-out)
+Once your company is independent, you can list founder/team shares on the **Secondary Marketplace** under Liquidity. Listings get an AI-generated fair-value badge (Llama 3.1 8B + cents-clamped valuation). Buyer matching is anonymized — no emails or exact capital amounts are shipped to the AI; only role, sector, and capital band.
+
+### Refer & Earn
+Bring another founder into the studio: send them your invite link from **Refer & Earn**. If they're accepted into a Tier 1 spin-out, you earn equity bonuses or cash referral fees per the program terms. CSV import available for bulk outreach (≤500 rows, 1 MB).
+
+### Module reference (sidebar)
+Every page available in the Founder Portal sidebar, grouped by category.
+
+**CORE**
+
+- **Dashboard** — Your home view: active projects, pending tasks, key metrics across your spin-out, recent activity feed.
+- **Projects** — Every venture you've submitted or are running. Click into any project for the detail view, 4-week tracker, scoring history, and team roster.
+- **Pipeline Board** — Kanban-style view of your venture's stage progression (Applied → Scored → Build → Spin-Out → Independent). Drag cards to advance; updates broadcast in real-time over WebSocket.
+- **Studio Ops** — Operational dashboard for spin-out execution: weekly checklist, blockers, mentor assignments, resource access (Stripe Atlas, hosting credits, AWS credits, design tools).
+- **Spin-Outs** — Filtered view of ventures in active spin-out (Tier 1, weeks 1–4). Tracks completion of all 30-day playbook milestones with a progress ring per venture.
+
+**INTELLIGENCE**
+
+- **AI Advisory Suite** — On-demand AI advisor for strategy, GTM, fundraising, hiring, product trade-offs. Conversational; persists chat history per project for continuity.
+- **Brand & Landing** — Week-1 brand kit generator. Outputs logo (multi-variant), color palette, typography, hero copy, and a deployable landing page (auto-published to a temporary domain).
+- **Pitch Deck** — AI-assisted deck builder with 10–12 slide templates (problem, solution, market, traction, team, ask). Exports to PDF, Google Slides, or Keynote.
+- **Financial Model** — Burn/runway/projections workbook. Auto-fills from your scoring inputs; generates 36-month forecasts, sensitivity analysis, and a one-page financial summary for investor decks.
+- **Customer Discovery** — Interview script library, response tracker, persona builder, Jobs-To-Be-Done framework, and a scoring rubric for problem-solution fit signals.
+- **Roadmap** — Product roadmap canvas. Quarter-based timeline, dependency mapping, milestone tracking. Syncs to GitHub milestones if connected.
+- **Metrics** — Your venture's KPIs (MRR, retention, CAC, LTV, NPS, activation, churn). Configurable widgets; auto-pulls from connected Stripe / HubSpot / Mixpanel / Google Analytics.
+
+**LEGAL & COMPLIANCE**
+
+- **Legal & Capital** — All 18 legal templates (SAFE, term sheet, SPA, bylaws, vesting, IP assignment, 83(b), voting rights), document library, e-signature flow, and incorporation wizard.
+
+**NETWORK & GROWTH**
+
+- **Refer & Earn** — Your referral dashboard: invite link, CSV import (≤500 rows), template editor, social share buttons (X, LinkedIn, WhatsApp, Email), earnings ledger.
+- **Relationships** — Lightweight CRM for your founder network: investors met, mentors, advisors, customer prospects. Tags, last-contact dates, follow-up reminders.
+- **Network Effects** — Visualization of your referral tree, viral coefficient, and second-degree introductions made through StudioOS. Useful for measuring your network's contribution to your spin-out.
+
+**CAPITAL & LIQUIDITY**
+
+- **Liquidity & Exits** — Secondary marketplace listing for your shares (post-spin-out), exit pipeline tracking, AI fair-value badges, anonymized buyer matching.
+- **Payouts** — Your equity payouts, referral earnings, and any cash distributions from the studio. Tax forms (1099 / W-8 / W-9) available for download per fiscal year.
+
+**SUPPORT**
+
+- **Activity Log** — Your personal audit trail: every action you've taken (submissions, edits, signs, payments). 30-day retention default.
+- **Support** — File a ticket (auto-syncs to GitHub Issues), browse the knowledge base, schedule office hours.
+
+**Founder Portal** — Your role-scoped landing page with quick actions (Submit Idea, Continue Spin-Out, View Score). Always one click away from the sidebar's bottom anchor.
+
+**Settings** — Account, security (TOTP rotation), notifications, integrations, billing (Stripe Customer Portal), webhooks.
+
+---
+
+## For Investors & LPs
+
+The Investor Portal is your single pane of glass for everything happening across Axal funds.
+
+### LP Portal
+Once your LPA is signed and your commitment recorded in `limited_partners`, you'll see:
+
+- **Commitment summary** — total commitment, called capital, uncalled capital, contributions to date.
+- **Distributions ledger** — every distribution received, with `fund_distributions` records for audit. Distributions are calculated atomically per liquidity event with idempotency (no double-pay even on retried jobs).
+- **TVPI / DPI charts** — live total-value-to-paid-in and distributions-to-paid-in, computed from your fund's NAV + realized distributions.
+- **Capital call history** — pro-rata notices with payment status, delivered via Gmail when issued.
+
+### Signing your LPA
+LPAs are AI-generated (Llama 3.1 8B with deterministic fallback) and viewable inline. Click **Sign LPA** → typed-name signature → click-through authentication. We do not store drawn-signature image base64 (data-minimization policy); the legal record is your typed name + click-through with timestamp + audit log entry. Signed LPAs are downloadable via short-lived (5-minute) HMAC-signed URLs — never persisted in browser cache.
+
+### Capital calls
+When the GP issues a capital call, you receive:
+
+1. An email notice with pro-rata amount and wire instructions
+2. A push notification in your dashboard
+3. An entry on your **Capital Calls** tab with status: pending → wired → cleared
+
+The system updates `vc_funds.deployed_capital` automatically on call execution.
+
+### Co-Invest & SPVs
+Some deals offer co-invest opportunities for select LPs. When a co-invest is opened on a portfolio company, you'll see it in the **Co-Invest** tab with: deal terms, allocation, deadline, and one-click commit. Each commit creates an SPV-scoped subscription with its own dataroom, reserve model, and waterfall simulation.
+
+### Reporting
+LP reports (quarterly + annual) are generated automatically and available in the **Reports** tab. PDFs are pulled from short-lived signed URLs — no inline rendering of legal-grade documents. Export to your fund administrator with one click (CSV + PDF bundle).
+
+### Prospect LP access
+If you're evaluating Axal funds before committing, the **Prospect LP** tier ($499/mo) gives you read-only access to current deal flow, market intel, conviction signals, and studio benchmarks for evaluation purposes — without exposure to PII or signed legal docs.
+
+### Module reference (sidebar)
+Every page available in the Investor Portal sidebar, grouped by category.
+
+**Dashboard** — Your LP/Investor home: portfolio NAV, recent capital calls, pending distributions, fund-level TVPI/DPI snapshot, deal pipeline highlights, upcoming co-invest deadlines.
+
+**INTELLIGENCE**
+
+- **Scoring Engine** — See the 100-point score for any deal in your funds' pipeline. Drill into the dimension breakdown (Market, Team, Product, Capital, Strategic Fit, Distribution) and view the scoring history.
+- **Market Intelligence** — Macro signals, private market data, IPO windows, sector benchmarks, conviction picks. Same data Axal uses internally for thesis development.
+- **AI Matches** — Algorithmic surfacing of deals matching your stated thesis (sector, stage, geography, check size). Useful for co-invest selection and LP-led intros.
+- **Deal Flow** — Read-only deal pipeline. Tier-dependent: Committed LPs see all named deals; Prospect LPs see anonymized snapshots.
+
+**PIPELINE**
+
+- **Projects** — All portfolio companies + active deals you're tracking. Click any card for the venture detail view (financials, team, milestones, scoring, documents).
+- **Pipeline Board** — Kanban view of the deal flow stage progression. Vote on deals (your weight = 3 as an LP) directly from the cards via the embedded `DealVoteWidget`.
+
+**CAPITAL & LIQUIDITY**
+
+- **Capital & Investment** — Capital calls inbox, wire instructions, contribution history. One-click "Mark as Wired" with bank confirmation upload. Auto-updates `vc_funds.deployed_capital` on confirmation.
+- **Funds** — Fund-level dashboard: each fund you're an LP in, with commitment, called/uncalled capital, NAV, TVPI/DPI charts, distribution history, vintage info, and LPA download.
+- **Liquidity & Exits** — Secondary marketplace + exit pipeline. As an LP, you can buy secondary stakes (Co-Invest+ tier) or sell your LP interest (subject to fund LPA terms and GP consent).
+
+**LEGAL & COMPLIANCE**
+
+- **Legal & Capital** — Your signed LPAs, subscription agreements, side letters, K-1s, 1099s, capital account statements. Download via short-lived (5-minute) HMAC-signed URLs.
+- **Identity Verification** — KYC/AML via Sumsub. Mandatory before subscription. Re-verification every 24 months. Status: pending / verified / expired.
+
+**SUPPORT**
+
+- **Activity Log** — Your audit trail (logins, document signs, capital call confirmations, distribution receipts, wire confirmations).
+- **Support** — LP-priority ticket queue (4 business-hour first response), GP office hours scheduling, fund administrator contact.
+
+**Investor Portal** — Role landing page with quick actions (View Capital Call, Sign Pending Doc, Co-Invest Decision, Download Latest Report).
+
+**Settings** — Account, security, notifications, accredited-investor attestation, billing (for Prospect tier), webhooks.
+
+---
+
+## For Partners (Service Providers)
+
+Partners are the ecosystem of legal, accounting, design, GTM, recruiting, and technical service providers that founders engage during and after spin-out. The Partner Portal is your demand-discovery and engagement workspace.
+
+### Partner Directory
+Your public profile in the directory shows: company name, services offered, sectors, geography, ratings/reviews, and case studies. Verified partners get a checkmark badge; Premium partners get top-of-list placement and category sponsorship.
+
+### Live Needs Board (RFP system)
+This is the highest-value module for partners. When founders or studio admins post a need ("need a fractional CFO for a Seed-stage SaaS, $5–10k/mo budget, US/EU"), eligible partners see it in real-time. Verified and Premium partners can submit proposals; Listed partners see anonymized previews only.
+
+Proposals include scope, pricing, timeline, and case studies. Founders pick a winner; the system creates an **Engagement** record that tracks the lifecycle (kickoff → milestones → completion → review).
+
+### Service Catalog
+Define your standardized service packages (e.g., "Fractional CFO — Seed", "Brand sprint — 2 weeks", "Term sheet review — flat fee"). Founders can purchase these directly via Stripe; the platform takes a referral fee per the partner agreement.
+
+### Demand Heatmap
+Premium partners see anonymized demand signals across sectors and stages: which kinds of services are most-requested this month, where pricing is rising, where supply is thin. Use this to expand into adjacent service categories.
+
+### Office Hours
+Premium partners can publish recurring office-hour slots; founders book directly via the integrated calendar. Calls happen over the partner's preferred meeting tool (Google Meet, Zoom, Whereby). Outcomes feed back into the engagement lifecycle.
+
+### Insight Feed & Co-Marketing
+Publish thought-leadership content; the studio amplifies the best pieces to its founder base. Premium partners get co-marketing slots — webinars, joint briefings, sponsored guides.
+
+### Module reference (sidebar)
+Every page available in the Partner Portal sidebar, grouped by category.
+
+**INTELLIGENCE**
+
+- **Dashboard** — Your partner home: active engagements, pending RFP responses, this month's earnings, demand-side trends, upcoming office hours.
+- **Scoring Engine** — Read access to ventures you're engaged with: see their 100-point breakdown so you can tailor your service to weak dimensions (e.g., a venture scoring low on Distribution might need a GTM partner).
+- **Market Intelligence** — Sector signals, industry pulse, and conviction picks (same data Axal uses internally). Verified+ tier.
+- **AI Matches** — Algorithmic match feed: ventures most likely to need your services in the next 30 days, ranked by fit and budget alignment. Premium tier.
+- **Deal Flow** — Read-only view of the deal pipeline. Anonymized for Listed; named for Verified+ with budget bands and engagement signals.
+
+**CORE**
+
+- **Projects** — Ventures you have an active engagement with. Direct messaging, scope tracking, milestone delivery, time logs (if billable hourly).
+- **Pipeline Board** — Kanban view of your engagements (Discovery → Proposal → Active → Delivered → Reviewed). Drag-to-advance.
+
+**NETWORK**
+
+- **Partners** — Your peer directory: discover other partners for cross-referrals (e.g., your legal practice can refer to a CFO peer; the system tracks reciprocal referral health).
+- **Refer & Earn** — Refer founders or other partners; earn commission on accepted spin-outs or partner subscription upgrades.
+- **Relationships** — CRM for founders, mentors, and other partners you've met through StudioOS. Tags, last-contact, follow-up reminders.
+- **Network Effects** — Your referral tree and revenue attribution: who you brought in, what they did, what it earned you. Useful for measuring your network's contribution to your book.
+
+**CAPITAL & LIQUIDITY**
+
+- **Liquidity & Exits** — Marketplace for partner equity stakes (some service partners take equity in lieu of cash; this is where you list/manage those holdings and monitor exits).
+- **Payouts** — Engagement revenue, referral commissions, equity distributions if you took equity. Tax forms downloadable per fiscal year.
+
+**LEGAL & COMPLIANCE**
+
+- **Legal & Capital** — Your engagement contracts, MSAs, NDAs, and IP assignments. Standardized templates available; custom uploads supported.
+
+**SUPPORT**
+
+- **Activity Log** — Audit trail of your actions and engagements.
+- **Support** — Ticket system, partner-specific knowledge base, success-team contact (Premium tier).
+- **Identity Verification** — KYC/AML check via Sumsub; required for Verified and Premium tiers. Includes business registration, tax ID (W-9 / W-8BEN-E), and beneficial ownership disclosure.
+
+**Partner Portal** — Role landing page with quick actions (Browse RFPs, Update Catalog, View Demand Heatmap, Submit Proposal).
+
+**Settings** — Account, security, notifications, integrations, billing, public profile editor (logo, services, case studies, bio, ratings).
+
+---
+
+## Plans & Pricing
+
+StudioOS uses tier-based pricing aligned to how each audience exchanges value with the studio. All prices in USD; EUR/GBP conversion at checkout via Stripe.
+
+### Founder plans
+
+| Plan | Price | Best for | Includes |
+|---|---|---|---|
+| **Apply** | Free | Anyone with an idea | Submit, scoring preview, Academy taster, public market intel |
+| **Spin-Out** | Free w/ equity | Tier 1 ventures | Full Builder Kit, AI advisor (unlimited), 18 legal templates, mentor matching, 30-day playbook, deal flow visibility, support |
+| **Alumni** | $99/mo or $990/yr | Post-spin-out independent companies | Continued AI advisor (capped), Academy, mentor pool, secondary marketplace, integrations, founder community |
+
+### Investor plans
+
+| Plan | Price | Best for | Includes |
+|---|---|---|---|
+| **Committed LP** | Free* | Signed LPs of an Axal fund | Full LP Portal, capital calls, distributions, TVPI/DPI, LPA e-sign, co-invest opportunities, quarterly + annual reports |
+| **Prospect LP** | $499/mo | HNW / family offices evaluating | Read-only deal pipeline, market intel, conviction signals, studio benchmarks (no PII, no signed docs) |
+| **Co-Invest / SPV Member** | $199/mo per SPV | LPs co-investing on specific deals | Per-deal dataroom, reserve modeling, waterfall simulator, SPV-scoped reporting |
+
+*Cost covered by 2% management fee on your commitment.
+
+### Partner plans
+
+| Plan | Price | Best for | Includes |
+|---|---|---|---|
+| **Listed** | Free | New service providers, exposure-stage | Public profile, basic visibility, anonymized demand previews |
+| **Verified** | $199/mo or $1,990/yr | Active service providers | Verified badge, full RFP access, founder direct messaging, demand heatmap (lite), service catalog with Stripe checkout |
+| **Premium** | $499/mo or $4,990/yr | Top-tier providers competing for premium engagements | Featured directory placement, full demand intelligence, office-hours scheduling, co-marketing slots, lead analytics, priority support |
+
+### Studio License (for other VC studios)
+
+| Plan | Price | Best for | Includes |
+|---|---|---|---|
+| **Cloud** | $2,500/mo + $25/active founder | Smaller studios (<20 active founders) | Full white-label, custom domain, all 7 engines, Stripe billing, email support, monthly product updates |
+| **Enterprise** | $7,500–$25,000/mo | Larger studios, multi-fund operators | SSO (Okta / Entra / Google Workspace), custom legal templates, dedicated D1 database, Cloudflare Access perimeter, 99.95% uptime SLA, dedicated CSM, quarterly business reviews |
+
+Annual billing on any tier saves ~17% (12 months for the price of 10).
+
+### What's not included on any tier
+- Legal advice (templates are starting points; engage a partner attorney for review)
+- Tax advice (Stripe Tax handles VAT/sales tax on the platform fee, not on your business)
+- Custodial services (LP capital is wired bank-to-bank, never held by the platform)
+- Securities offerings (the platform does not act as a broker-dealer; consult counsel)
+
+---
+
+## Account & Billing
+
+### Managing your subscription
+Go to **Settings → Billing**. Click **Manage subscription** to open the **Stripe Customer Portal** in a new tab. From there you can:
+
+- Upgrade, downgrade, or cancel
+- Update payment method
+- Change billing address (drives VAT calculation)
+- Download invoices (last 24 months)
+- Apply promo codes
+
+Plan changes take effect immediately on upgrade (prorated charge); downgrades take effect at the end of the current billing period.
+
+### Invoices & receipts
+Every successful payment generates a Stripe-hosted invoice (PDF + HTML view), automatically emailed to your billing email and stored in the Customer Portal. We do not store credit card data — Stripe handles PCI scope end-to-end.
+
+### Failed payments
+We retry failed charges 3 times over 7 days (Stripe Smart Retries). If all retries fail, the subscription enters `past_due` status and gated features are revoked after a 3-day grace period. Restore by updating your payment method.
+
+### Cancellation
+Cancel anytime via the Customer Portal. You retain access through the end of your paid period. After that:
+
+- **Founders (Alumni)** revert to a read-only Apply tier; submitted projects are preserved.
+- **Investors (Co-Invest / Prospect)** lose access to gated dashboards but retain LP Portal access if Committed.
+- **Partners (Verified / Premium)** drop to Listed tier; profile remains live but loses badge and RFP access.
+- **Studio License** customers receive a final data export (D1 dump + signed-URL bundle) within 30 days; access is then revoked.
+
+We do not delete your account on cancellation. To fully delete, see [Security & Privacy → Data deletion](#data-deletion).
+
+### Refunds
+Monthly plans are non-refundable past the 14-day satisfaction window. Annual plans are pro-rata refundable within 30 days. Studio License contracts follow the terms negotiated with your CSM.
+
+---
+
+## Security & Privacy
+
+Security is not a feature — it's the substrate. Here's what we do and what you should do.
+
+### Authentication
+- **TOTP-only** (no passwords). Your authenticator app is your password.
+- Verification tokens SHA-256-hashed at rest with 24-hour expiry.
+- Resend-verification rate-limited to 3/hour per email.
+- JWT session tokens (24-hour expiry) signed with `JWT_SECRET`.
+- Cloudflare Turnstile bot protection on registration.
+
+### Perimeter (Cloudflare Zero Trust)
+Backoffice routes (`/api/admin/*`, `/api/monitoring/*`, `/api/infra/*`) sit behind **Cloudflare Access**. Every request must include a valid `Cf-Access-Jwt-Assertion` header — verified via RS256 against the team JWKS — *before* it reaches the application's role check. This is layered defense: even a leaked admin JWT can't bypass the perimeter.
+
+### Sensitive data access policy
+Four resource categories with strict access predicates (defined in `services/access_policy.py`):
+
+| Resource | Who may view un-masked |
+|---|---|
+| Contracts (Document) | Admin, Partner, owning Founder |
+| `signed_ip` (legal proof IP address) | Admin only |
+| `signed_by` (signer email) | Admin, the signer themselves, doc owner |
+| Personal contact info (email, phone) | Admin, the subject themselves, co-members on the same company (email only) |
+| Company member roster | Admin, members of that company |
+
+These predicates are the only path to unmasked data — there are no ad-hoc role checks scattered through the codebase.
+
+### Data minimization
+- Drawn-signature images (base64 data URLs) are **not** shipped or stored. Legal record = typed name + click-through + timestamp.
+- Contract bodies never round-trip in JSON responses. Wire shape = file pointer + 5-minute HMAC-signed URL only.
+- Search snippets for legal documents are neutral (`{doc_type} • {status} • deal #{id}`) — never first-280-chars of the body.
+- Drawn signatures, full contract bodies, and signer IPs are admin-only.
+
+### Encryption at rest
+- Integration secrets (API keys, webhook secrets) Fernet-encrypted with PBKDF2-HMAC-SHA256 (200k iterations) keys derived from `JWT_SECRET`.
+- Database backups encrypted at the storage layer (Cloudflare D1 / managed Postgres).
+
+### Audit log
+Every API call is recorded in `activity_logs` with latency, status code, endpoint, method, and user. 30-day retention default; longer with Studio Enterprise.
+
+### Data deletion
+You have the right to request full deletion of your account and associated data under GDPR, CCPA, and Swiss data protection law. To exercise this right, email **privacy@axal.vc** from your account email. We will:
+
+1. Acknowledge within 7 days
+2. Complete deletion within 30 days
+3. Send confirmation with the list of data categories deleted
+
+Some records (signed contracts, capital call records, distribution records) are preserved in compliance with financial recordkeeping obligations (typically 7 years) — these are detailed in our Privacy Policy.
+
+### Security disclosure
+Found a vulnerability? Report to **security@axal.vc** with a clear repro. We respond within 48 hours and follow Coordinated Vulnerability Disclosure (CVD). Hall of fame on request.
+
+---
+
+## Notifications & Search
+
+### Notification center
+Bell icon in the top bar. Notifications are delivered via:
+
+- **In-app** (real-time via WebSocket)
+- **Email** (Gmail API, batched if you opt in)
+- **Push** (mobile PWA)
+
+Configure delivery channels per category in **Settings → Notifications**:
+
+- Deal updates (stage advances, scoring updates)
+- Capital calls & distributions
+- RFP invitations (partners)
+- Office hours bookings (partners)
+- Pipeline votes & comments
+- System (security, billing)
+
+### Global search
+Press `⌘K` (macOS) or `Ctrl+K` (Windows/Linux) to open the global search palette. Search across deals, projects, founders, partners, documents, and tickets. Results respect your role's RBAC — you cannot see what you do not have access to.
+
+Document search uses semantic vector embeddings; snippets are neutral (no contract body leakage).
+
+---
+
+## API & Integrations
+
+### Available integrations
+StudioOS integrates with major studio tooling out of the box:
+
+- **HubSpot** — push deal pipeline + founder records to HubSpot CRM
+- **Salesforce** — same as HubSpot, for enterprise studios
+- **Sumsub** — KYC/AML onboarding for LPs
+- **Stripe Atlas** — incorporation handoff during Week 2
+- **Cooley GO** — legal template alignment with Cooley's library
+- **PitchBook** — market intelligence enrichment
+- **Custom** — bring your own webhook + API key
+
+Connect at **Integrations** (admin or partner role only). Secrets stored Fernet-encrypted; previews shown masked. Webhook signatures validated via HMAC-SHA256 (`X-Axal-Signature` header).
+
+### API access
+Every entitlement-gated route is also accessible programmatically:
+
+- **Base URL**: `https://studioos.guillaumelauzier.workers.dev/api` (edge) or your origin
+- **Auth**: `Authorization: Bearer <jwt>` header on every request
+- **Rate limits**: same buckets as the UI (60 req/min user, 10 req/min AI, 1000 req/min global)
+- **Idempotency**: `Idempotency-Key` header on `POST` to prevent dup-execution
+
+API documentation (OpenAPI) at `/api/docs` (FastAPI auto-generated). For the Cloudflare Worker surface, see `cloudflare-worker/SETUP.md`.
+
+### Webhooks
+Subscribe to events at **Settings → Webhooks**:
+
+- `deal.scored` (when scoring completes)
+- `deal.stage_advanced`
+- `capital_call.issued`
+- `distribution.executed`
+- `rfp.posted`
+- `engagement.completed`
+- `subscription.changed`
+
+Payloads signed via HMAC-SHA256 with your webhook secret. Retries: 3 attempts with exponential backoff (1m, 5m, 30m).
+
+### Jekyll Bridge (advanced)
+For studios with a public marketing site that needs to surface authenticated portfolio data, the Jekyll Bridge mounts a frontend script that handles JWT auth, session management, impersonation, and role-based data loading. Set `JEKYLL_ORIGIN` to lock CORS to your domain. See **API Bridge** page (admin only).
+
+---
+
+## Support & SLAs
+
+### Support tickets
+**Settings → Support** or the floating help button. Filing a ticket:
+
+1. Auto-creates a GitHub Issue on `AxalNetwork/StudioOS`
+2. Routes to the right engineer based on the labeled module
+3. Sends you status updates as the issue progresses
+4. Closes when the engineer resolves and you confirm
+
+### Response targets
+
+| Plan | First response | Resolution target |
+|---|---|---|
+| Apply / Listed (free) | Best-effort, community forum | Best-effort |
+| Founder Spin-Out | 24 business hours | 5 business days |
+| Alumni / Verified Partner | 12 business hours | 3 business days |
+| Premium / Co-Invest / Prospect LP | 4 business hours | 2 business days |
+| Committed LP | 4 business hours | 2 business days |
+| Studio License Cloud | 2 business hours | 1 business day |
+| Studio License Enterprise | 30 minutes (24/7) | 4 hours, 99.95% uptime SLA |
+
+### Crisis playbooks
+Founders facing existential issues (cap table emergency, lawsuit, co-founder dispute, runway crisis) can trigger a **Crisis Playbook** from the dashboard. This routes to a senior operator within 1 hour and unlocks emergency legal/financial templates.
+
+### Office hours
+Studio operators host office hours twice a week (Tuesdays + Thursdays). Book a 15-minute slot under **Office Hours** in the sidebar. Premium Partners can also publish their own office hours.
+
+### Status page
+Live system status: **status.axal.vc**. Includes API uptime, queue lag, AI worker latency, D1 health, WebSocket connection rate. Subscribe to incident updates via email or RSS.
+
+---
+
+## Glossary
+
+- **AML/KYC** — Anti-Money-Laundering / Know-Your-Customer checks; mandatory for LP onboarding.
+- **Capital call** — Notice from the GP requesting LPs wire a portion of their commitment.
+- **Carry / Carried interest** — The GP's share of profits, typically 20% above a hurdle rate.
+- **D1** — Cloudflare's SQLite-at-the-edge database, our edge persistence layer.
+- **DPI** — Distributions to Paid-In; ratio of cash returned to LPs vs. cash called.
+- **Durable Object** — Cloudflare's stateful primitive used for WebSocket fan-out (PipelineRoom, OnboardingChat).
+- **Entitlement** — A computed boolean flag indicating whether a user can access a gated feature, derived from their subscription tier.
+- **GP** — General Partner; the studio operating entity (Axal Management, LLC for Axal VC).
+- **LP** — Limited Partner; an investor in the fund.
+- **LPA** — Limited Partnership Agreement; the master fund document.
+- **PPM** — Private Placement Memorandum.
+- **RBAC** — Role-Based Access Control.
+- **RFP** — Request For Proposal; how founders solicit partner services.
+- **SAFE** — Simple Agreement for Future Equity; standard early-stage fundraising instrument.
+- **Spin-out** — A startup that exits the studio as an independent company.
+- **SPV** — Special Purpose Vehicle; a fund structure for a single deal or co-invest.
+- **Tier 1 / Tier 2 / Rejected** — Scoring outcomes (≥85 / 70–84 / <70).
+- **TOTP** — Time-based One-Time Password; our 2FA method (no passwords).
+- **TVPI** — Total Value to Paid-In; ratio of fund NAV + distributions vs. cash called.
+- **Waterfall** — The distribution priority among LPs and the GP.
+
+---
+
+## Changelog
+
+This page is versioned. Major doc updates appear here.
+
+- **May 2026** — Added complete **Module reference** sections for Founder, Investor, and Partner portals — every sidebar item now documented with its purpose, tier requirements, and category grouping. Removed Admin section (now internal-only).
+- **May 2026** — Initial publication of full user documentation. Added Plans & Pricing aligned to four-audience strategy. Documented Security & Privacy policies, API surface, integrations.
+- **Apr 2026** — Cloudflare Zero Trust perimeter, sensitive-data access policy, storage cleanup (signed URLs, neutral search snippets).
+- **Apr 2026** — Pipeline community voting with role-weighted tallies.
+- **Apr 2026** — VC Fund / LP core (`vc_funds`, `limited_partners`, `fund_distributions`).
+- **Apr 2026** — Liquidity & Secondary Marketplace launched.
+- **Apr 2026** — Refer & Earn enhancements (Quick Share, Contacts CSV, editable templates).
+
+---
+
+*Questions, corrections, or suggestions for this documentation? File a ticket at **Settings → Support** with the label `docs`. Major contributions credited in the changelog.*
+
+*StudioOS is © 2026 Axal Management, LLC. Proprietary. All rights reserved.*

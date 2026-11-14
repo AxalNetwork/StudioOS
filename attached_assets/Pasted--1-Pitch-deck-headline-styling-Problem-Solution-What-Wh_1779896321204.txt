@@ -1,0 +1,34 @@
+#1 - Pitch deck headline styling — Problem & Solution
+
+What & Why
+
+On the Problem and Solution slides of the Spin-Out Demo Day deck, the slide "headline" today is just the entire 60–75 word problem-statement / solution paragraph rendered in display type at 36px. That isn't a headline — it's body copy in heading clothing. The result is a wall of serif text with no clear visual anchor, no comfortable reading hierarchy, and copy that has to be auto-trimmed to fit. We want a true editorial pitch-deck headline: one short phrase, dominant on the slide, with the longer prose demoted to clearly smaller supporting body copy.
+
+Done looks like
+
+On both the Problem slide and the Solution slide, a single short phrase sits at the top-left of the slide as the dominant visual anchor.
+That phrase renders in the deck's editorial serif (Playfair Display in the default editorial variant) at roughly 38–44pt (~52–58px on the 16:9 canvas).
+Line-height is comfortable (~1.1) and the headline never wraps to more than two lines on a typical phrase.
+If a user writes a headline that would wrap more than twice, an inline nudge tells them to shorten the headline (we do not shrink the font to fit).
+The longer problem-statement / solution prose still appears, but as clearly smaller body copy beneath the headline — visibly subordinate (around 15–17px, normal body weight, looser line-height).
+Eyebrow ("01 · PROBLEM" / "04 · SOLUTION") and supporting labels ("PAIN 01 / FROM INTERVIEWS", "CAPABILITIES", "BUILT IN / FORM FACTOR / COST TO SHIP") remain in the existing small mono treatment — still clearly smaller than the headline.
+The Solution slide's existing "Capabilities" panel no longer duplicates the same paragraph that now appears above it as body copy.
+Both slides feel balanced: one dominant phrase, supporting prose, structured side panels.
+Out of scope
+
+Other slides in the deck (Cover, Roadmap, Market, Team, Ask, etc.) — only Problem and Solution change in this task.
+Other deck templates beyond axal_spinout_demoday_app.tsx.
+Changing the PDF / server-rendered deck export path.
+Backend schema migrations — the short headline is derived client-side from existing project fields (with the option to override via the existing Edit Project modal in a follow-up).
+Steps
+
+Headline source — Derive the short headline for each slide from the existing project fields: prefer the first sentence of problem.body / solution.body, capped at a small word limit (around 12 words). Treat anything past that cap as "too long" and surface the existing nudge pattern instead of silently truncating.
+Typography — Introduce a larger headline size in the deck's shared heading component (or a slide-local heading) at roughly 56px in the default variant, scaled appropriately for the manifesto variant. Keep the editorial serif, weight 500, tight tracking, line-height ~1.1.
+Body demotion — Render the remaining sentences of problem.body / solution.body as smaller supporting body copy directly under the headline. Make sure it is visibly smaller (around 16px) and uses the existing body type treatment so the hierarchy is unambiguous.
+Length guidance — Update the existing "trimmed to N words" hint so the message matches the new model: nudge the user to shorten the headline (first sentence) rather than the whole paragraph.
+De-dup Solution panel — On the Solution slide, the "Capabilities" card currently re-prints the full solution paragraph when s.capabilities is empty. Replace that fallback with the capability bullets only (or a short empty-state) so the body paragraph isn't shown twice on one slide.
+Visual check — Open the deck preview for a project with long Problem / Solution copy (like the "VJs TV" example in the screenshots) and confirm the headline is the dominant element, body copy reads as secondary, and no awkward wraps occur at the standard 16:9 deck size.
+Relevant files
+
+frontend/src/decks/templates/axal_spinout_demoday_app.tsx:670-705,1509-1600,1720-1790
+frontend/src/lib/pitchCopyLength.js

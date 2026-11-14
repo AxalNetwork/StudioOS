@@ -1,0 +1,37 @@
+{
+  "GET /api/news": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/news/:slug": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/news/cover/:id": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/news/draft/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/news/:id/cover": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/news/:id/retract": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "PUT /api/news/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sector page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#6d28d9;text-decoration:none}
+a:hover{color:#4c1d95;text-decoration:underline}
+:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.f-d{font-family:'Space Grotesk','Inter',system-ui,sans-serif}
+.f-m{font-family:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.eye{font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1.3;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+.h2{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:21px;line-height:1.25;font-weight:600;letter-spacing:-.015em;color:#18181b}
+.h3{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:16px;line-height:1.3;font-weight:600;letter-spacing:-.01em;color:#18181b}
+.sub{margin:0;font-size:14px;line-height:1.55;color:#6b6577;max-width:760px}
+.cap{margin:0;font-size:12px;line-height:1.5;color:#6b6577}
+.cap .f-m{font-size:11.5px;color:#3f3a49}
+.card{background:#ffffff;border:1px solid #ececf1;border-radius:12px;box-sizing:border-box}
+.nr{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;background:#f4f3f7;color:#3f3a49;border:1px solid #e7e5ee;font-size:12px;font-weight:600;line-height:1;white-space:nowrap}
+.chip-v{background:#f4f0fe;color:#6d28d9;border-color:#ddd0fb}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:9px;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box}
+.btn-g{background:#ffffff;color:#18181b;border:1px solid #e2e1e8}
+a.btn:hover{text-decoration:none}
+.lnk{font-size:14px;font-weight:600;color:#6d28d9}
+.th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577}
+.trow{border-bottom:1px solid #f1f0f4}
+.trow:hover{background:#faf8ff}
+.ghost{background:#e6e2ef}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:760px){
+.r-topnav{order:3;flex-basis:100% !important}
+.h1{font-size:30px !important}
+}
+</style>
+</helmet>
+<div style="background:#f4f3f7;color:#18181b;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased">
+
+<header style="background:#ffffff;border-bottom:1px solid #ececf1">
+<div style="max-width:1240px;margin:0 auto;padding:10px clamp(16px,4vw,32px);display:flex;flex-wrap:wrap;align-items:center;gap:6px 28px">
+<a href="Main.dc.html" data-route="/research" style="display:flex;align-items:center;gap:10px;min-height:44px;color:#18181b;text-decoration:none">
+<img src="/_blob/4d1a19f3daba48c312b4e17b9df70aea" alt="" width="24" height="24" style="display:block;width:24px;height:24px;object-fit:contain">
+<span class="f-d" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">StudioOS</span>
+<span style="font-size:14px;font-weight:500;color:#6b6577">Research</span>
+</a>
+<nav aria-label="Research sections" class="r-topnav" style="display:flex;gap:4px;flex:1 1 auto;min-width:0;overflow-x:auto">
+<a href="Main.dc.html" data-route="/research" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Overview</a>
+<a href="Companies.dc.html" data-route="/research/companies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Companies</a>
+<a href="Markets.dc.html" data-route="/research/markets" aria-current="true" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#6d28d9;background:#f4f0fe;box-shadow:inset 0 0 0 1px #ddd0fb">Markets</a>
+<a href="Geography.dc.html" data-route="/research/geographies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Geographies</a>
+<a href="Funds.dc.html" data-route="/research/funds" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Funds</a>
+</nav>
+<a href="#" data-route="/login" class="btn btn-g" style="margin-left:auto">Sign in</a>
+</div>
+</header>
+
+<main style="max-width:1240px;margin:0 auto;padding:28px clamp(16px,4vw,32px) 64px;display:flex;flex-direction:column;gap:40px">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+<nav aria-label="Breadcrumb"><ol style="display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;font-size:13px;color:#6b6577"><li><a href="Main.dc.html" data-route="/research">Research</a></li><li aria-hidden="true">/</li><li><a href="Markets.dc.html" data-route="/research/markets">Markets</a></li><li aria-hidden="true">/</li><li aria-current="page" style="color:#18181b;font-weight:600">Cybersecurity</li></ol></nav>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div class="eye">Tracked sector</div>
+<h1 class="f-d h1" style="margin:0;font-size:40px;line-height:1.1;font-weight:600;letter-spacing:-0.025em">Cybersecurity</h1>
+<p class="sub" style="font-size:16px;color:#3f3a49">Read every few hours from about 35 public sources, worldwide, and kept month by month since May 2026.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<a href="#companies" class="chip" style="min-height:44px;padding:0 14px;background:#ffffff;text-decoration:none"><span class="f-m" style="color:#18181b">[n]</span>&#160;directory companies</a>
+<a href="#funds" class="chip" style="min-height:44px;padding:0 14px;background:#ffffff;text-decoration:none"><span class="f-m" style="color:#18181b">[n]</span>&#160;funds name it in their focus</a>
+<a href="#signals" class="chip" style="min-height:44px;padding:0 14px;background:#ffffff;text-decoration:none"><span class="f-m" style="color:#18181b">[n]</span>&#160;signals</a>
+<a href="#submarkets" class="chip" style="min-height:44px;padding:0 14px;background:#ffffff;text-decoration:none"><span class="f-m" style="color:#18181b">[n]</span>&#160;taxonomy markets</a>
+<a href="#build" class="chip" style="min-height:44px;padding:0 14px;background:#ffffff;text-decoration:none">What to build</a>
+</div>
+<p class="cap"><span class="f-m">market_intel_indexes</span> · sector = Cybersecurity · global · computed [computed_at]</p>
+</div>
+
+<section id="indexes" aria-labelledby="sc-idx" style="display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="sc-idx" class="h2">Six dimensions, month by month</h2>
+<p class="sub" style="margin-top:4px">Each index runs from 0 to 100. October is month to date, so its point moves until the month closes.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:12px">
+<sc-for list="{{ dims }}" as="d" hint-placeholder-count="6">
+<figure class="card" style="margin:0;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<figcaption style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:6px 12px">
+<span style="display:flex;flex-direction:column;gap:2px"><span class="h3">{{ d.name }}</span><span class="cap">{{ d.reads }}</span></span>
+<span style="display:flex;align-items:baseline;gap:8px"><span class="f-m" style="font-size:24px;line-height:1.1;font-weight:600;color:#18181b">[index]</span><span class="f-m" style="font-size:12.5px;color:#3f3a49">[Δ%] vs Sep</span></span>
+</figcaption>
+<div aria-hidden="true" style="display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:8px;row-gap:6px">
+<div class="f-m" style="position:relative;height:130px;font-size:10.5px;color:#6b6577">
+<span style="position:absolute;right:0;top:0;transform:translateY(-50%)">100</span>
+<span style="position:absolute;right:0;top:50%;transform:translateY(-50%)">50</span>
+<span style="position:absolute;right:0;top:100%;transform:translateY(-50%)">0</span>
+</div>
+<div style="position:relative;height:130px">
+<span style="position:absolute;left:0;right:0;top:0;border-top:1px solid #f1f0f4"></span>
+<span style="position:absolute;left:0;right:0;top:50%;border-top:1px solid #f1f0f4"></span>
+<span style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #d9d6e2"></span>
+<span style="position:absolute;left:6px;right:6px;top:44%;border-top:2px dashed #d6d1e2"></span>
+<span style="position:absolute;left:0;right:0;top:44%;transform:translateY(-50%);display:flex;justify-content:space-between;align-items:center">
+<sc-for list="{{ months }}" as="m" hint-placeholder-count="6"><span style="display:block;width:8px;height:8px;border-radius:50%;background:#ffffff;{{ m.dot }}"></span></sc-for>
+</span>
+</div>
+<span></span>
+<div class="f-m" style="display:flex;justify-content:space-between;font-size:10.5px;color:#6b6577">
+<sc-for list="{{ months }}" as="m" hint-placeholder-count="6"><span>{{ m.label }}</span></sc-for>
+</div>
+</div>
+<p class="cap" style="padding-top:10px;border-top:1px solid #f1f0f4">{{ d.name }} index · monthly · <span class="f-m">market_intel_indexes</span> · <span class="f-m">[n]</span> sources this month</p>
+</figure>
+</sc-for>
+</div>
+<p class="cap">A dimension with no source reporting in a month shows a gap marked Not recorded at that month, never a point at 50.</p>
+</section>
+
+<section id="sources" aria-labelledby="sc-src" style="display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="sc-src" class="h2">What each index reads</h2>
+<p class="sub" style="margin-top:4px">The public sources behind each dimension, and their share of this sector’s rows since May 2026.</p>
+</div>
+<div class="card" style="padding:6px 20px 16px">
+<sc-for list="{{ mix }}" as="x" hint-placeholder-count="6">
+<div class="trow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:10px 28px;align-items:center;padding:14px 0">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px"><span class="h3" style="font-size:15px">{{ x.name }}</span><span class="cap"><span class="f-m" style="color:#18181b">{{ x.count }}</span> sources · <span class="f-m" style="color:#18181b">[n]</span> rows</span></div>
+<div aria-hidden="true" style="display:flex;gap:2px;height:12px">
+<sc-for list="{{ x.segs }}" as="g" hint-placeholder-count="6"><span style="display:block;flex:1 1 0;border-radius:2px;background:{{ g.fill }}"></span></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ x.sources }}" as="s" hint-placeholder-count="6"><span class="chip">{{ s.name }}</span></sc-for>
+</div>
+</div>
+</sc-for>
+<p class="cap" style="margin-top:12px">Source names from the market intelligence registry. Shares: rows per source, <span class="f-m">market_intel_rows</span>, sector = Cybersecurity, since 2026-05-12.</p>
+</div>
+</section>
+
+<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:20px">
+<section id="signals" aria-labelledby="sc-sig" class="card" style="flex:999 1 560px;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px">
+<div>
+<h2 id="sc-sig" class="h2" style="font-size:19px">Signals in Cybersecurity</h2>
+<p class="cap" style="margin-top:2px">Curated opportunity signals filed under this sector, newest first.</p>
+</div>
+<a href="#" data-route="/signals?sector=cybersecurity" class="lnk" style="font-size:13.5px">All signals →</a>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ signals }}" as="s" hint-placeholder-count="3">
+<article class="trow" style="display:flex;flex-direction:column;gap:6px;padding:14px 0">
+<div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip chip-v">[Signal type]</span><span class="chip">[Region] · [Country]</span></div>
+<h3 class="h3" style="font-size:15.5px"><a href="#" data-route="/signals/[id]" style="color:#18181b">[Signal title]</a></h3>
+<p style="margin:0;font-size:13.5px;color:#3f3a49"><span style="font-weight:600;color:#18181b">Why now: </span>[Why now, in one sentence]</p>
+<p class="cap">Confidence [level] · updated [date]</p>
+</article>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">signals</span> · sector = Cybersecurity · as of [updated_at]</p>
+</section>
+<section id="submarkets" aria-labelledby="sc-sub" class="card" style="flex:1 1 340px;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div>
+<h2 id="sc-sub" class="h2" style="font-size:19px">Sub-markets</h2>
+<p class="cap" style="margin-top:2px">Markets in the Axal taxonomy grouped under Cybersecurity, by company count.</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ subs }}" as="m" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr) 56px;align-items:center;gap:10px;min-height:32px">
+<span style="font-size:13.5px;color:#3f3a49">[Market name]</span>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ m.w }}"></span>
+<span class="f-m" style="font-size:12.5px;color:#18181b;text-align:right">[count]</span>
+</div>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">research_market_directory</span> · as of 2026-09-30 · the taxonomy source’s counts, not market size</p>
+</section>
+</div>
+
+<section id="companies" aria-labelledby="sc-co" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="sc-co" class="h2">Companies in this sector</h2>
+<p class="sub" style="margin-top:4px">Directory companies whose sector label maps to Cybersecurity, and where they are based.</p>
+</div>
+<a href="Companies.dc.html" data-route="/research/companies?sector=cybersecurity" class="lnk">See all [n] in Companies →</a>
+</div>
+<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
+<figure class="card" style="flex:1 1 340px;min-width:0;margin:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+<figcaption style="display:flex;flex-direction:column;gap:2px"><span class="h3">By country</span><span class="cap">Companies per country, largest first</span></figcaption>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ countryBars }}" as="b" hint-placeholder-count="8">
+<div style="display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr) 40px;align-items:center;gap:10px;min-height:24px">
+<a href="Geography.dc.html" style="font-size:13px;color:#3f3a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.label }}</a>
+<span class="ghost" style="display:block;height:12px;border-radius:0 4px 4px 0;width:{{ b.w }}"></span>
+<span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</sc-for>
+<div style="display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr) 40px;align-items:center;gap:10px;min-height:28px;margin-top:4px;padding-top:8px;border-top:1px solid #f1f0f4">
+<span style="font-size:13px;color:#3f3a49">Other countries</span><span></span><span class="f-m" style="font-size:12px;color:#6b6577;text-align:right">[n]</span>
+</div>
+</div>
+<p class="cap"><span class="f-m">research_company_directory</span> · mapped by sector label · as of 2026-09-30</p>
+</figure>
+<div class="card" style="flex:999 1 560px;min-width:0;overflow:hidden">
+<div style="overflow-x:auto">
+<div role="table" aria-labelledby="sc-co" style="min-width:600px">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.3fr) 76px minmax(0,1fr);gap:14px;align-items:end;padding:12px 18px;background:#fafafb;border-bottom:1px solid #ececf1">
+<span role="columnheader" class="th">Company</span><span role="columnheader" class="th">Country</span><span role="columnheader" class="th" style="text-align:right">Founded</span><span role="columnheader" class="th" style="text-align:right">Employees</span>
+</div>
+<sc-for list="{{ companies }}" as="c" hint-placeholder-count="8">
+<div role="row" class="trow" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.3fr) 76px minmax(0,1fr);gap:14px;align-items:center;padding:8px 18px;min-height:56px;box-sizing:border-box">
+<span role="cell" style="display:flex;flex-direction:column;min-width:0"><a href="Company.dc.html" style="font-weight:600;color:#18181b">[Company name]</a><span style="font-size:12.5px;color:#6b6577">[Sector label]</span></span>
+<span role="cell"><a href="Geography.dc.html" style="color:#3f3a49">[Country]</a></span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b">[year]</span>
+<span role="cell" style="text-align:right"><sc-if value="{{ c.emp }}" hint-placeholder-val="{{ false }}"><span class="f-m" style="color:#18181b">[count]</span></sc-if><sc-if value="{{ c.noEmp }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#6b6577">Not recorded</span></sc-if></span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="funds" aria-labelledby="sc-fd" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px">
+<div>
+<h2 id="sc-fd" class="h2">Funds focused on Cybersecurity</h2>
+<p class="sub" style="margin-top:4px">Funds whose stated focus mentions the sector. Focus is free text, so the match is on the keyword as the source wrote it.</p>
+</div>
+<a href="Funds.dc.html" data-route="/research/funds?focus=cybersecurity" class="lnk">See all [n] in Funds →</a>
+</div>
+<div class="card" style="overflow:hidden">
+<div style="overflow-x:auto">
+<div role="table" aria-labelledby="sc-fd" style="min-width:720px">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) 96px 84px minmax(0,1fr);gap:14px;align-items:end;padding:12px 18px;background:#fafafb;border-bottom:1px solid #ececf1">
+<span role="columnheader" class="th">Fund</span><span role="columnheader" class="th">HQ</span><span role="columnheader" class="th" style="text-align:right">Size</span><span role="columnheader" class="th" style="text-align:right">Vintage</span><span role="columnheader" class="th">EIF / EIFO</span>
+</div>
+<sc-for list="{{ funds }}" as="f" hint-placeholder-count="6">
+<div role="row" class="trow" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.2fr) 96px 84px minmax(0,1fr);gap:14px;align-items:center;padding:8px 18px;min-height:56px;box-sizing:border-box">
+<span role="cell" style="display:flex;flex-direction:column;min-width:0"><a href="Funds.dc.html" style="font-weight:600;color:#18181b">[Fund name]</a><span style="font-size:12.5px;color:#6b6577">[Focus, as written]</span></span>
+<span role="cell">[HQ]</span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b">€[size]M</span>
+<span role="cell" style="text-align:right"><sc-if value="{{ f.vintage }}" hint-placeholder-val="{{ true }}"><span class="f-m" style="color:#18181b">[year]</span></sc-if><sc-if value="{{ f.noVintage }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#6b6577">Not recorded</span></sc-if></span>
+<span role="cell"><sc-if value="{{ f.eif }}" hint-placeholder-val="{{ false }}"><span class="chip chip-v" style="min-height:22px;font-size:11.5px">EIF</span></sc-if><sc-if value="{{ f.lpsNr }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#6b6577">LPs not recorded</span></sc-if></span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+<p class="cap"><span class="f-m">research_fund_directory</span> · focus matched on “cybersecurity” and “security” · sizes in euros as reported · as of [latest as_of]</p>
+</section>
+
+<section id="build" aria-labelledby="sc-build" style="display:flex;flex-direction:column;gap:14px">
+<div>
+<h2 id="sc-build" class="h2">What entrepreneurs could build here</h2>
+<p class="sub" style="margin-top:4px">Taken from the build opportunity in each Cybersecurity signal, with the signal it came from.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:12px">
+<sc-for list="{{ builds }}" as="b" hint-placeholder-count="3">
+<article class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<h3 class="h3" style="font-size:16.5px">[What to build, in one line]</h3>
+<dl style="margin:0;display:flex;flex-direction:column;gap:10px">
+<div><dt class="eye" style="font-size:10.5px">First workflow</dt><dd style="margin:3px 0 0;font-size:13.5px;color:#3f3a49">[The wedge: the first job it does]</dd></div>
+<div><dt class="eye" style="font-size:10.5px">Who buys</dt><dd style="margin:3px 0 0;font-size:13.5px;color:#3f3a49">[Ideal customer, in plain words]</dd></div>
+<div><dt class="eye" style="font-size:10.5px">Why it might not work</dt><dd style="margin:3px 0 0;font-size:13.5px;color:#3f3a49">[Risks, as the signal states them]</dd></div>
+</dl>
+<p class="cap" style="margin-top:auto;padding-top:10px;border-top:1px solid #f1f0f4">From the signal <a href="#" data-route="/signals/[id]" style="font-weight:600">[Signal title]</a> · confidence [level]</p>
+</article>
+</sc-for>
+</div>
+<p class="cap"><span class="f-m">signals.build_opportunity</span> · headline, wedge, customer and risks · as of [updated_at]</p>
+</section>
+
+</main>
+
+<footer style="border-top:1px solid #e7e5ee;background:#ffffff">
+<div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,4vw,32px) 32px">
+<p class="cap" style="max-width:820px">Indexes blend about 35 public sources and are worldwide only. Companies come from Wikidata; funds from two public fund lists; signals are curated by the StudioOS team. What no source holds reads “Not recorded”.</p>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":4400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Which sources feed which dimension, as the market intelligence registry maps them.
+    const MIX = [
+      ['Demand', 'Search interest, app stores, launches, discussion', ['Google Trends', 'Apple App Store', 'Google Play', 'Product Hunt', 'Hacker News', 'Reddit', 'Shopify Partners']],
+      ['Supply', 'New products, code, patents, filings', ['Apple App Store', 'Google Play', 'AWS Marketplace', 'Product Hunt', 'Shopify Partners', 'GitHub', 'Crunchbase', 'SEC EDGAR', 'USPTO patents', 'EPO patents']],
+      ['Capital', 'Funding filings, public finance series', ['Crunchbase', 'SEC EDGAR', 'FRED', 'World Bank', 'OECD', 'Eurostat']],
+      ['Talent', 'Labour statistics, developer questions', ['BLS', 'Eurostat', 'Stack Exchange']],
+      ['Research', 'Papers, citations, code, patents', ['arXiv', 'OpenAlex', 'Crossref', 'Papers with Code', 'GitHub', 'USPTO patents', 'EPO patents', 'OECD']],
+      ['Sentiment', 'News tone, community discussion', ['GDELT news', 'Google Trends', 'Hacker News', 'Reddit', 'Stack Exchange']]
+    ];
+    const MONTHS = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+    // Shares are unknown until read, so every segment is the same neutral width.
+    const segs = (n) => Array.from({ length: n }, (_, i) => ({ fill: i % 2 ? '#d9d4e5' : '#e6e2ef' }));
+    const ranked = (n, label) => Array.from({ length: n }, (_, i) => ({ label, w: Math.round(100 - i * 72 / (n - 1)) + '%' }));
+    return {
+      dims: MIX.map(([name, reads]) => ({ name, reads })),
+      // October is month to date: its marker is dashed until the month closes.
+      months: MONTHS.map((label, i) => ({
+        label,
+        dot: i === 5 ? 'border:2px dashed #a9a2bb' : 'border:2px solid #cfc9dc'
+      })),
+      mix: MIX.map(([name, reads, sources]) => ({ name, count: String(sources.length), segs: segs(sources.length), sources: sources.map((s) => ({ name: s })) })),
+      signals: [1, 2, 3].map((k) => ({ k })),
+      subs: [{ w: '100%' }, { w: '70%' }, { w: '44%' }, { w: '26%' }],
+      countryBars: ranked(8, '[Country]'),
+      companies: Array.from({ length: 8 }, (_, i) => ({ emp: i === 0 || i === 3, noEmp: !(i === 0 || i === 3) })),
+      funds: Array.from({ length: 6 }, (_, i) => ({ vintage: i !== 1 && i !== 4, noVintage: i === 1 || i === 4, eif: i === 2, lpsNr: i !== 2 })),
+      builds: [1, 2, 3].map((k) => ({ k }))
+    };
+  }
+}
+</script>
+</body>
+</html>

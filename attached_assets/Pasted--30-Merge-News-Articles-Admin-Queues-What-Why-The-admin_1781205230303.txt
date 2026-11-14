@@ -1,0 +1,30 @@
+#30 - Merge News & Articles Admin Queues
+What & Why
+The admin sidebar ships two entries — News Queue (/admin/news) and Articles Queue (/admin/articles) — over the SAME underlying articles table, with parallel news/adminNews and articles/adminArticles API surfaces. This is double maintenance and confusing. Consolidate into a single "Content Queue" while keeping legacy /news/:slug URLs and the /api/news aliases working (external links still exist).
+Done looks like
+* The admin sidebar shows one "Content Queue" entry routed to /admin/articles; the separate News Queue entry is gone.
+* The Content Queue page has working status tabs (All, Submitted, In review, Changes requested, Approved, Published, Rejected), each filtering via the admin articles queue endpoint.
+* The standalone news author page is removed; any inbound link to it redirects to the article editor.
+* Existing public /news/:slug URLs still resolve, and the legacy /api/news surface still works but is marked deprecated (deprecation response header).
+Out of scope
+* Editor changes on the author side (other tasks).
+* Deleting news.ts / admin_news.ts outright — they must remain as thin aliases.
+Steps
+1. In the sidebar config, remove the News Queue entry and rename the remaining one to "Content Queue".
+2. Add status-filter tabs to the articles admin queue page, each calling the admin articles queue endpoint with the matching status.
+3. Remove the standalone news author page and its route; redirect any inbound links to the article editor route.
+4. Keep the news worker routes as thin aliases that delegate to the article handlers, and add a deprecation response header so the legacy surface is visible without breaking /news/:slug.
+Relevant files
+* frontend/src/sidebarConfig.js
+* frontend/src/pages/admin/ArticlesQueuePage.jsx
+* frontend/src/pages/admin/AdminNewsQueue.jsx
+* frontend/src/pages/NewsAuthorPage.jsx
+* frontend/src/App.jsx
+* cloudflare-worker/src/routes/news.ts
+* cloudflare-worker/src/routes/admin_news.ts
+* cloudflare-worker/src/routes/admin_articles.ts
+* frontend/src/lib/api.js:2250-2296
+Dependencies
+
+Give clear feedback when an article is submitted
+Main

@@ -1,0 +1,91 @@
+import React from 'react';
+import { Slide16x9, Editable, DeckProps, v, fmtUSD } from '../DeckBase';
+
+export const Deck_narrative_brand: React.FC<DeckProps> = ({ data, editable, onEdit }) => {
+  const F = '"Fraunces", Georgia, serif';
+  const SANS = 'Inter, system-ui, sans-serif';
+  const INK = '#1C1917';
+  const PAPER = '#FAFAF7';
+  const ACCENT = '#A16207';
+  return <>
+    <Slide16x9 font={F} ink={INK} bg={PAPER}>
+      <div style={{ margin: 'auto', textAlign: 'center' }}>
+        <Editable path="company" value={v(data,'company')} editable={editable} onEdit={onEdit}
+          placeholder="[Company]" style={{ fontSize: 224, fontWeight: 700, letterSpacing: -4, lineHeight: 1 }} />
+        <Editable path="tagline" value={v(data,'tagline')} editable={editable} onEdit={onEdit}
+          placeholder="[A line of poetry]"
+          style={{ fontSize: 44, fontStyle: 'italic', marginTop: 48, color: ACCENT }} />
+      </div>
+    </Slide16x9>
+
+    <Slide16x9 font={F} ink={INK} bg={PAPER}>
+      <div style={{ margin: 'auto', maxWidth: 1400 }}>
+        <div style={{ fontFamily: SANS, fontSize: 22, color: ACCENT, letterSpacing: 8 }}>MANIFESTO</div>
+        <Editable path="manifesto" value={v(data,'manifesto')} editable={editable} onEdit={onEdit}
+          placeholder="[A short manifesto]"
+          style={{ fontSize: 64, fontStyle: 'italic', lineHeight: 1.35, marginTop: 48 }} />
+      </div>
+    </Slide16x9>
+
+    {[
+      ['The world today',   'world_today',       '[What you see in the world]'],
+      ['The shift',         'shift',             '[The change you believe is happening]'],
+      ['Our belief',        'our_belief',        '[What we will build because of it]'],
+    ].map(([label, key, ph]) => (
+      <Slide16x9 key={key} font={F} ink={INK} bg={PAPER}>
+        <div style={{ fontFamily: SANS, fontSize: 22, color: ACCENT, letterSpacing: 6 }}>{label.toUpperCase()}</div>
+        <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit}
+          placeholder={ph}
+          style={{ fontSize: 80, fontWeight: 500, lineHeight: 1.25, marginTop: 64, maxWidth: 1500 }} />
+      </Slide16x9>
+    ))}
+
+    {[1,2].map((n) => (
+      <Slide16x9 key={n} font={F} ink={INK} bg="#0C0A09">
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                       color: '#A8A29E', fontFamily: SANS }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, letterSpacing: 6 }}>PRODUCT</div>
+            <div style={{ fontSize: 36, marginTop: 16, fontFamily: F }}>📷 [Full-bleed product image {n}]</div>
+          </div>
+        </div>
+      </Slide16x9>
+    ))}
+
+    <Slide16x9 font={F} ink={INK} bg={PAPER}>
+      <div style={{ fontFamily: SANS, fontSize: 22, color: ACCENT, letterSpacing: 6 }}>CUSTOMER VOICE</div>
+      <Editable path="customer_quote" value={v(data,'customer_quote')} editable={editable} onEdit={onEdit}
+        placeholder="[Customer quote]"
+        style={{ fontSize: 64, fontStyle: 'italic', lineHeight: 1.3, marginTop: 64, maxWidth: 1500 }} />
+      <Editable path="customer_attribution" value={v(data,'customer_attribution')} editable={editable} onEdit={onEdit}
+        placeholder="— [Name, role, company]"
+        style={{ fontFamily: SANS, fontSize: 26, marginTop: 32, color: '#78716C' }} />
+    </Slide16x9>
+
+    {[
+      ['Traction', 'traction'],
+      ['Market',   'market'],
+      ['Brand world', 'brand_world'],
+      ['Team — our story', 'team_story'],
+      ['What comes next',   'roadmap'],
+    ].map(([label, key]) => (
+      <Slide16x9 key={key} font={F} ink={INK} bg={PAPER}>
+        <div style={{ fontFamily: SANS, fontSize: 22, color: ACCENT, letterSpacing: 6 }}>{label.toUpperCase()}</div>
+        <Editable path={key} value={v(data,key)} editable={editable} onEdit={onEdit}
+          placeholder={`[${label}]`}
+          style={{ fontSize: 56, fontWeight: 500, lineHeight: 1.3, marginTop: 56, maxWidth: 1500 }} />
+      </Slide16x9>
+    ))}
+
+    <Slide16x9 font={F} ink={INK} bg={PAPER}>
+      <div style={{ margin: 'auto', textAlign: 'center' }}>
+        <div style={{ fontFamily: SANS, fontSize: 22, color: ACCENT, letterSpacing: 6 }}>JOIN US</div>
+        <Editable path="ask_amount" value={fmtUSD(v(data,'ask_amount'))} editable={editable} onEdit={onEdit}
+          style={{ fontSize: 192, fontWeight: 700, marginTop: 32 }} />
+        <Editable path="contact" value={v(data,'contact')} editable={editable} onEdit={onEdit}
+          placeholder="founders@example.com"
+          style={{ fontFamily: SANS, fontSize: 32, marginTop: 32, color: '#78716C' }} />
+      </div>
+    </Slide16x9>
+  </>;
+};

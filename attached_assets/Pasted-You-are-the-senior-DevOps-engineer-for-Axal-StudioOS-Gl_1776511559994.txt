@@ -1,0 +1,59 @@
+You are the senior DevOps engineer for Axal StudioOS (Global Network Partner + high-throughput VC platform). The full platform is already built in this Replit (FastAPI backend with routers, Cloudflare Workers, D1 database with all tables, AI Workers, Queues, job queue, Replit Auth, RBAC, Partner Dashboard, Refer & Earn, Pipeline Board, VC Fund, spin-out automation, liquidity, etc.).
+
+Add complete **production-ready configuration files** with these exact requirements:
+
+1. **wrangler.toml** (full Cloudflare configuration)
+   - Create / update wrangler.toml in the root with:
+     - name = "axal-studioos"
+     - main = "backend/main.py" (or the correct entrypoint)
+     - compatibility_date = "2026-04-01"
+     - [vars] section for any public variables
+     - [[d1_databases]] binding for the main D1 database (name = "axal_d1", database_id placeholder)
+     - [[queues]] binding for the job queue (name = "studioos-queue")
+     - [ai] section with default model bindings
+     - [[kv_namespaces]] if needed for caching
+     - [observability] section (logs + traces)
+     - [r2] if we ever add file storage
+     - Environment-specific configs (production vs preview)
+     - All required bindings for: D1, Queues, AI Workers, KV (for sessions/rate-limiting), and Replit Auth integration
+
+2. **.env.example**
+   - Create .env.example in the root with ALL required environment variables:
+     - REPLIT_AUTH_SECRET (or equivalent)
+     - STRIPE_ATLAS_API_KEY
+     - Any legal provider keys (Sumsub, etc.)
+     - Webhook secrets
+     - Rate limit settings
+     - AI model preferences
+     - Database and queue names
+     - Clear comments explaining each variable and where to get the real values
+
+3. **CI/CD Workflow**
+   - Create .github/workflows/deploy.yml (GitHub Actions) that:
+     - Triggers on push to main
+     - Runs on ubuntu-latest
+     - Installs Wrangler + dependencies
+     - Runs linting / basic tests
+     - Deploys to Cloudflare Workers + Pages (using wrangler deploy)
+     - Uses secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+     - Includes preview deployment for PRs
+     - Adds Slack/Email notification on failure (optional but recommended)
+
+4. **Additional Production Polish**
+   - Update package.json / pyproject.toml with production scripts ("deploy": "wrangler deploy", "preview": "wrangler deploy --env preview")
+   - Add a .gitignore that properly ignores .env, node_modules, __pycache__, etc.
+   - Create a PRODUCTION.md or update README.md with:
+     - One-command deploy instructions
+     - Secrets checklist
+     - How to set up the D1 database and Queues in Cloudflare dashboard
+     - Post-deploy checklist (first user, seed data, etc.)
+
+Build this step-by-step:
+1. First create wrangler.toml with all bindings.
+2. Then create .env.example.
+3. Then create the GitHub Actions CI/CD workflow.
+4. Finally add the supporting scripts, .gitignore updates, and README section.
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.

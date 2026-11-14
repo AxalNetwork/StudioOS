@@ -1,0 +1,65 @@
+/**
+ * D1228 (#2384) — KYC & KYB's tabs, its addresses, its status words and the
+ * words of the blocks that have no read yet, from the owner's canvas "KYC &
+ * KYB" (KYC1–KYC17). Pure, so `frontend/test/kyc_kyb_d1228.test.mjs` holds
+ * each rule.
+ *
+ * WHAT IS READ TODAY. People and the case read part 1's and part 2's routes
+ * (D1233, `peopleModel.js`); Businesses and its case read part 3's routes
+ * (D1234, `businessModel.js`); Renewals and Audit read part 4's routes
+ * (D1235, `governanceModel.js`). No tab remains a waiting placeholder.
+ */
+
+export const BASE = '/admin/kyc';
+
+export const PAGE_LINE = 'Check who people and businesses are before they sign, invest or get paid. Every look and every decision is recorded.';
+
+/** The canvas's four tabs, in its order, each at its own address. */
+export const TABS = Object.freeze([
+  { key: 'people', label: 'People', path: BASE },
+  { key: 'businesses', label: 'Businesses', path: `${BASE}/businesses` },
+  { key: 'renewals', label: 'Renewals', path: `${BASE}/renewals` },
+  { key: 'audit', label: 'Audit', path: `${BASE}/audit` },
+]);
+
+const ID = /^[1-9][0-9]{0,15}$/;
+
+/** One person's case (KYC3). An id that is not a positive integer opens People. */
+export function personHref(id) {
+  const s = String(id ?? '');
+  return ID.test(s) ? `${BASE}/people/${s}` : BASE;
+}
+
+const BUSINESS = /^(company|account|import|studio)-[1-9][0-9]{0,9}$/;
+
+/**
+ * What an address names: the tab, and on a case the person's id or the
+ * business's uid (D1234). Anything unknown under the page is People; a
+ * malformed id opens its tab with no case.
+ */
+export function viewOf(pathname = '') {
+  const p = String(pathname).replace(/\/+$/, '');
+  if (p !== BASE && !p.startsWith(`${BASE}/`)) return { tab: 'people', person: null, business: null };
+  const [word, id, extra] = p.slice(BASE.length + 1).split('/');
+  if (word === 'people') return { tab: 'people', person: id && extra === undefined && ID.test(id) ? id : null, business: null };
+  if (word === 'businesses') return { tab: 'businesses', person: null, business: id && extra === undefined && BUSINESS.test(id) ? id : null };
+  const tab = TABS.find((t) => t.key === word && t.key !== 'people');
+  return { tab: tab ? tab.key : 'people', person: null, business: null };
+}
+
+/** The canvas's six status words, the six statuses the store holds since part 1 (D1229 §1). */
+export const STATUS_WORD = Object.freeze({
+  not_started: 'Not started',
+  pending: 'Waiting',
+  needs_info: 'Needs information',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  expired: 'Expired',
+});
+export const statusWord = (s) => STATUS_WORD[s] || 'Not recorded';
+
+export const NOT_YET = 'Not read here yet';
+
+/** What the canvas draws that no read carries yet. Never a zero, never "none". */
+export const WAITS = Object.freeze({
+});

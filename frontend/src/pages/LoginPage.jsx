@@ -1,0 +1,790 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-react';
+import { api } from '../lib/api';
+import { googleSignInApi } from '../lib/api/googleSignIn.js';
+import { track } from '../lib/funnel';
+import { signInContextFor, storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
+import useForcedLightTheme from '../hooks/useForcedLightTheme';
+import { loadTurnstile } from '../lib/turnstile';
+import {
+  loadGis, gisReady, whenIdle, newPopupState,
+  writePopupStateCookie, clearPopupStateCookie, openCodePopup,
+  popupRequestBody, applyGoogleSession, popupShouldRedirect, wantsGoogleCanary,
+} from '../lib/googlePopup';
+import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
+
+// Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
+// SMS is intentionally NOT offered as a primary sign-in factor — it lives
+// only in Settings → Security as a backup verification factor for account
+// recovery. See cloudflare-worker/src/routes/auth_sms.ts.
+//
+// Turnstile is REQUIRED here (matches /register). It must never be removed.
+// Backend `/api/auth/login` verifies the token via verifyTurnstile() and
+// fails closed in production when the secret is unset.
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+
+// Task #51 — "Continue with Google" error → toast copy. Mirrors the codes
+// raised by routes/auth_google.ts::callbackError() so the user gets a
+// human-readable explanation when the callback couldn't sign them in.
+// D722 — the same map serves Google's window: the codes POST
+// /api/auth/google/popup answers with, and GIS's own failure types
+// (popup_failed_to_open, popup_closed, access_denied), so both ways in say
+// the same thing for the same cause.
+const GOOGLE_ERROR_COPY = {
+  not_configured: 'Google sign-in is not enabled on this environment.',
+  cancelled: 'Google sign-in was cancelled.',
+  access_denied: 'Google sign-in was cancelled.',
+  popup_closed: 'Google sign-in was cancelled. Nothing was changed.',
+  popup_failed_to_open: 'Your browser blocked the Google window, so Google is opening in this tab.',
+  provider_error: "Google didn't confirm your sign-in. Please try again.",
+  missing_code: 'Google sign-in failed. Please try again.',
+  bad_state: 'This sign-in attempt expired. Press Continue with Google again.',
+  bad_request: 'Google sign-in failed. Please try again.',
+  bad_origin: 'Google sign-in failed. Please try again.',
+  // The switch was turned off after this tab loaded, or the window's answer
+  // was refused before any exchange (a rate limit): the redirect takes over.
+  popup_off: 'Continuing with Google in this tab instead.',
+  popup_fallback: 'Continuing with Google in this tab instead.',
+  exchange_failed: "Google didn't confirm your sign-in. Please try again.",
+  token_invalid: "We couldn't verify your Google account. Please try again.",
+  email_unverified_at_google: 'Your Google email is not verified. Verify it with Google, then retry.',
+  // Rule 2 links a verified address on its own, so the old "then link Google
+  // in Settings" step is gone: confirming the address once is all it takes.
+  link_blocked_unverified: "An Axal VC account already uses this email, but the address isn't confirmed yet. Use 'Email me a sign-in link' once to confirm it; after that, Continue with Google works.",
+  // Rules 2 and 4 need Google to vouch for the inbox (gmail.com or a Workspace
+  // account); for any other address the email link proves it, and Settings
+  // binds Google from inside that session.
+  link_requires_email_proof: "Google doesn't host this address, so it can't prove the inbox is yours. Use 'Email me a sign-in link' once, then press Link Google under Account → Security; after that, Continue with Google works.",
+  // The page fills in both addresses when it has them (differentAccountCopy).
+  different_account: 'Google signed in a different account from the email you typed. Choose that account in the Google window, or clear the email field.',
+  account_inactive: 'Your Axal VC account is inactive. Contact support.',
+  internal_error: 'Something went wrong on our side. Please try again.',
+  unreachable: "We couldn't reach Axal VC. Check your connection and try again.",
+  // A 403 with no code of ours: the request arrived, and something in front of
+  // the route refused it — a Cloudflare challenge, or the CSRF check on a
+  // stale session cookie.
+  security_check: "A security check stopped this sign-in. Reload the page and try again, or use 'Email me a sign-in link'.",
+  rate_limited: 'Too many Google sign-in attempts from this network. Wait a minute, then press Continue with Google again.',
+};
+
+function differentAccountCopy(typed, googleEmail) {
+  if (!typed || !googleEmail) return GOOGLE_ERROR_COPY.different_account;
+  return `You typed ${typed}, but Google signed in ${googleEmail}. Choose ${typed} in the Google window, or clear the email field to continue as ${googleEmail}.`;
+}
+
+// What the person reads when POST /api/auth/google/popup does not sign them
+// in. The server's code picks the sentence; a refusal with no code we know
+// keeps the server's own sentence. No status at all is a network that never
+// answered; a 403 with no code is not ours (a Cloudflare challenge, the CSRF
+// check); a 429 names no bucket to the person. (A 429 normally never reaches
+// this: `popupShouldRedirect` continues through the redirect first.)
+function googlePopupErrorCopy(e, typed) {
+  const code = e?.code;
+  if (code === 'different_account') return differentAccountCopy(typed, e?.data?.google_email);
+  if (code && GOOGLE_ERROR_COPY[code]) return GOOGLE_ERROR_COPY[code];
+  if (code === 'timeout') return e.message;
+  if (!e?.status) return GOOGLE_ERROR_COPY.unreachable;
+  if (e.status === 403 && !code) return GOOGLE_ERROR_COPY.security_check;
+  if (e.status === 429) return GOOGLE_ERROR_COPY.rate_limited;
+  return e?.message || GOOGLE_ERROR_COPY.provider_error;
+}
+
+// BLOCK-AUTH-01 — copy for the codes raised by GET /api/auth/magic/verify when
+// a magic link can't sign the user in (mirrors routes/auth.ts::fail()).
+const MAGIC_ERROR_COPY = {
+  invalid: 'That sign-in link is invalid. Request a new one below.',
+  expired: 'That sign-in link has expired or was already used. Request a new one below.',
+  rate: 'Too many attempts. Please wait a minute and try again.',
+  // Not the person's fault, so it must not read like it is: `limiter` is what
+  // /magic/verify returns when the rate-limit store could not be consulted at
+  // all. Telling them to wait would be advice that never comes true.
+  limiter: 'We could not check the request limit, so the link was refused. This is a problem on our side — please try the link again in a moment.',
+  inactive: 'Your Axal VC account is inactive. Contact support.',
+  error: 'Something went wrong completing your sign-in. Please try again.',
+};
+
+// Honor a `?next=` return path (e.g. a paid event invitation that bounced the
+// user here to sign in) while refusing open redirects: the value is parsed
+// against this origin and kept only if it stays here (`sameOriginNextPath`:
+// a single leading `/`, no backslash or control character — `/\evil.com` and
+// `/%09/evil.com` both resolve to evil.com in a browser). Everything else
+// falls through to the default landing page chosen by the caller.
+function safeNextPath() {
+  try {
+    return sameOriginNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin);
+  } catch { /* ignore */ }
+  return null;
+}
+
+/**
+ * #4579 (D4579): the area the kept destination belongs to (Grow), so the page can say where signing in leads and what
+ * account it needs; and the sign-up link that keeps the same destination. Null for a direct visit, which keeps the
+ * generic page.
+ */
+function signInContext() {
+  try { return signInContextFor(safeNextPath()); } catch { return null; }
+}
+
+export default function LoginPage() {
+  useForcedLightTheme();
+  const [context] = useState(signInContext);
+  const [email, setEmail] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  // #4577: which field a message is about, so the input it names can say so (aria-invalid); the message itself is always described.
+  const [errorField, setErrorField] = useState(null);
+  useEffect(() => { if (!error) setErrorField(null); }, [error]);
+  // D722 — '' | 'waiting' (Google's window is open) | 'signing' (its code is
+  // with the Worker) | 'redirecting' (the same-tab fallback is under way).
+  const [googleStage, setGoogleStage] = useState('');
+  // `{ clientId }` once GET /api/auth/google/config says this deployment opens
+  // Google's window; null means every click redirects. Refs, not state: the
+  // button never renders differently for it, and the click reads it in the
+  // same turn it opens the window.
+  const googlePopupRef = useRef(null);
+  const googleConfigAskedRef = useRef(false);
+  const googleAttemptRef = useRef(null);
+  const mountedRef = useRef(true);
+  // BLOCK-AUTH-02 — passkey state.
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  // The full WebAuthn probe runs only after a passkey click. Checking property
+  // presence here keeps the native API and browser library off initial render.
+  const passkeySupported = typeof window !== 'undefined' && 'PublicKeyCredential' in window;
+  // Task #10 — passwordless magic-link sign-in (BLOCK-AUTH-01 finally gets UI).
+  const [magicBusy, setMagicBusy] = useState(false);
+  const [magicSentTo, setMagicSentTo] = useState('');
+  const [magicCooldown, setMagicCooldown] = useState(0);
+  // Set when /login answers "Account not set up for TOTP authentication" —
+  // e.g. partners created by deal activation. We swap the raw error for
+  // friendly copy and steer them to the magic link.
+  const [totpMissing, setTotpMissing] = useState(false);
+  const [showAltFactors, setShowAltFactors] = useState(false);
+  // Task #10 — fail-visible Turnstile: true once the 50-attempt (~10s) poll
+  // gives up, so we can explain the disabled button instead of staying silent.
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
+
+  useEffect(() => {
+    if (magicCooldown <= 0) return;
+    const t = setTimeout(() => setMagicCooldown(magicCooldown - 1), 1000);
+    return () => clearTimeout(t);
+  }, [magicCooldown]);
+
+  // Task #1 — persist `?next=` so the MAGIC-LINK path honours it too. The
+  // TOTP and Google paths below read safeNextPath() directly, but the magic
+  // link round-trips through the user's inbox and the worker's /magic/verify
+  // (which lands on the default page); RequireAuth consumes this stored copy
+  // post-auth and routes the user to their invitation target.
+  useEffect(() => {
+    storePendingNext(safeNextPath());
+    // Task #2 — funnel: sign-in page reached.
+    track('login_view');
+  }, []);
+
+  // NO PRE-FLIGHT PROBE, and that is the fix rather than an omission. This page
+  // used to call /api/auth/google/start on mount and render the button only if
+  // that call succeeded. Four unrelated things made it fail, and each one alone
+  // removed the user's primary sign-in method with no way to retry:
+  //   1. that endpoint is deliberately NOT in RATE_LIMIT_EXEMPT (D74), so it is
+  //      subject to the ip bucket AND the PLATFORM-WIDE `global` 1000/min one —
+  //      exhaust it and the button vanishes for every visitor at once;
+  //   2. the probe carried a 6s client deadline, which a slow mobile connection
+  //      trips — the button went missing exactly where the page was slowest;
+  //   3. /start is not a read. It mints an OAuth nonce, does a KV write under a
+  //      2s deadline and sets a cookie — on every page load, to draw a button;
+  //   4. it blocked the page on a round-trip at mount.
+  // Measured 2026-09-21: Google was configured and working (22 of 49 accounts
+  // linked, newest 2026-09-17) while the card claimed it was unavailable.
+  // A capability is not predicted here any more — continueWithGoogle() calls
+  // /start for real and surfaces the server's own answer, including
+  // GOOGLE_ERROR_COPY.not_configured for a genuine 503. The absence is still
+  // stated; it is stated at the moment of the attempt, by the server, rather
+  // than guessed on mount by a request that fails for four other reasons.
+  //
+  // D722 — the one Google request this page makes before a click is NOT that
+  // probe, and the difference is the point. GET /api/auth/google/config is a
+  // pure read of env (no D1, no KV, no cookie), it is rate-limit exempt, it
+  // runs after first paint at idle, and it decides only HOW the button works:
+  // Google's own window when the deployment switched it on, the redirect
+  // otherwise. It never decides WHETHER the button renders. Any failure —
+  // slow, refused, offline — leaves `googlePopupRef` null, which is the
+  // redirect, which is today's behaviour.
+  useEffect(() => {
+    mountedRef.current = true;
+    const cancel = whenIdle(() => askGoogleConfig());
+    return () => { mountedRef.current = false; cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const askGoogleConfig = () => {
+    if (googleConfigAskedRef.current) return;
+    googleConfigAskedRef.current = true;
+    // `/login?google_window=1` is the owner's canary page (GOOGLE_SIGNIN_POPUP
+    // "canary"): only it is offered the window until the switch is "on".
+    googleSignInApi.config({ canary: wantsGoogleCanary(window.location.search) }).then((cfg) => {
+      if (!mountedRef.current) return;
+      if (cfg?.popup === true && typeof cfg.client_id === 'string' && cfg.client_id) {
+        googlePopupRef.current = { clientId: cfg.client_id };
+        loadGis().catch(() => { /* every click redirects until a load succeeds */ });
+      }
+    }).catch(() => { /* the redirect is the answer */ });
+  };
+
+  // Hover, focus or a touch on the button: ask now if the idle call has not
+  // run yet, and start loading Google's script if the window is on.
+  const primeGoogle = () => {
+    askGoogleConfig();
+    if (googlePopupRef.current && !gisReady()) loadGis().catch(() => { /* redirect */ });
+  };
+
+  // One-shot toast for any error the callback bounced us back with.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('google_error');
+    if (code) {
+      setError(GOOGLE_ERROR_COPY[code] || 'Google sign-in failed.');
+      // Task #2 — funnel: OAuth callback bounced the user back with an error.
+      track('login_error', { method: 'google', reason: code.slice(0, 40) });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('google_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+    }
+  }, []);
+
+  // BLOCK-AUTH-01 — surface any magic-link failure bounced back as ?magic_error=.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('magic_error');
+    if (code) {
+      setError(MAGIC_ERROR_COPY[code] || 'That sign-in link could not be used. Request a new one below.');
+      // Task #2 — funnel: magic-link verify failed (expired/re-used/invalid).
+      track('login_error', { method: 'magic', reason: code.slice(0, 40) });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('magic_error');
+      window.history.replaceState({}, '', url.pathname + (url.search ? `?${url.searchParams}` : ''));
+    }
+  }, []);
+
+  // BLOCK-AUTH-02 — sign in with a passkey. Email is optional: a discoverable
+  // (resident) credential lets the authenticator pick the account, so we pass
+  // whatever's typed but don't require it. A passkey assertion mints a
+  // full-assurance session server-side.
+  const signInWithPasskey = async () => {
+    setPasskeyBusy(true); setError('');
+    track('login_submit', { method: 'passkey' });
+    try {
+      const { startAuthentication, browserSupportsWebAuthn } = await import('@simplewebauthn/browser');
+      if (!browserSupportsWebAuthn()) {
+        throw new Error('Passkeys are not supported in this browser. Use an authenticator code or sign-in link.');
+      }
+      const wanted = email.trim() || undefined;
+      const options = await api.passkey.authOptions(wanted);
+      const assertion = await startAuthentication({ optionsJSON: options });
+      const res = await api.passkey.authVerify(wanted, assertion);
+      if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      // Task #2 — funnel: flushed by the tracker's pagehide hook as this
+      // full-page navigation unloads the SPA.
+      track('login_success', { method: 'passkey' });
+      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() is parsed against this origin and kept only if it stays here; defence-in-depth
+    } catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setError('Passkey sign-in was cancelled.');
+        track('login_error', { method: 'passkey', reason: 'cancelled' });
+      } else {
+        setError(e?.message || 'Passkey sign-in failed.');
+        track('login_error', { method: 'passkey' });
+      }
+    } finally { setPasskeyBusy(false); }
+  };
+
+  // D722 — Google's window answered with a code. Only the CURRENT attempt's
+  // answer is used: a second click starts a fresh attempt, and a late answer
+  // from the first window carries the first state, so it is dropped here.
+  const finishGooglePopup = async ({ code, state }, typed) => {
+    if (!state || state !== googleAttemptRef.current) return;
+    googleAttemptRef.current = null;
+    setGoogleStage('signing');
+    try {
+      // lib/googlePopup.js: the body, the Task #4 purge, the session and the
+      // landing are pure functions there, pinned by node tests.
+      const res = await googleSignInApi.popup(popupRequestBody({ code, state, typed }));
+      clearPopupStateCookie();
+      const landing = applyGoogleSession(res, localStorage, { next: safeNextPath() });
+      track('login_success', { method: 'google' });
+      window.location.href = landing; // codeql[js/client-side-unvalidated-url-redirection] -- landing is safeNextPath() (parsed against this origin and kept only if it stays here) or a literal
+    } catch (e) {
+      clearPopupStateCookie();
+      if (popupShouldRedirect(e)) {
+        // Refused before any exchange — a rate limit, the limiter's store, or
+        // the switch turned off since this tab loaded. The redirect still works.
+        track('login_error', { method: 'google', reason: String(e?.code || e?.status || 'popup').slice(0, 40) });
+        continueWithGoogle({ forceRedirect: true, notice: GOOGLE_ERROR_COPY.popup_fallback });
+        return;
+      }
+      setError(googlePopupErrorCopy(e, typed));
+      track('login_error', { method: 'google', reason: String(e?.code || 'popup').slice(0, 40) });
+      setGoogleStage('');
+    }
+  };
+
+  // D722 — Google's window did not give us a code. A blocked window is not a
+  // failure: the same-tab redirect takes over and says why.
+  const failGooglePopup = ({ type, state }) => {
+    if (!state || state !== googleAttemptRef.current) return;
+    googleAttemptRef.current = null;
+    clearPopupStateCookie();
+    if (type === 'popup_failed_to_open') {
+      track('login_error', { method: 'google', reason: 'popup_blocked' });
+      continueWithGoogle({ forceRedirect: true, notice: GOOGLE_ERROR_COPY.popup_failed_to_open });
+      return;
+    }
+    setGoogleStage('');
+    setError(GOOGLE_ERROR_COPY[type] || GOOGLE_ERROR_COPY.provider_error);
+    track('login_error', { method: 'google', reason: String(type || 'popup').slice(0, 40) });
+  };
+
+  // `opts` is read defensively because the button passes its click event.
+  const continueWithGoogle = async (opts) => {
+    const forceRedirect = opts?.forceRedirect === true;
+    const popup = googlePopupRef.current;
+    // D722 — Google's own window. NOTHING IS AWAITED between the click and
+    // requestCode(): a browser opens a window only inside the click that asked
+    // for it, and Safari counts an await as leaving it. The script was loaded
+    // ahead of time; when it is not ready, the redirect below runs instead.
+    if (!forceRedirect && popup && gisReady()) {
+      setError('');
+      track('login_submit', { method: 'google' });
+      const typed = email.trim();
+      const state = newPopupState();
+      googleAttemptRef.current = state;
+      try {
+        writePopupStateCookie(state);
+        openCodePopup({
+          clientId: popup.clientId,
+          state,
+          loginHint: typed,
+          onCode: (r) => { finishGooglePopup(r, typed); },
+          onError: failGooglePopup,
+        });
+        // Google reports a blocked window INSIDE requestCode(), before it
+        // returns (gsi/client: `!this.i && this.error_callback ? …
+        // "popup_failed_to_open"`), so failGooglePopup may already have spent
+        // this attempt and started the redirect. Only a live attempt waits.
+        // The button stays enabled while it does: pressing it again opens a
+        // fresh attempt.
+        if (googleAttemptRef.current === state) setGoogleStage('waiting');
+        return;
+      } catch {
+        // The library is there but refused to build a client — the redirect
+        // still works, so use it rather than report a failure.
+        googleAttemptRef.current = null;
+        clearPopupStateCookie();
+      }
+    }
+    setGoogleStage('redirecting'); setError(opts?.notice || '');
+    // Task #2 — funnel: no login_success counterpart here — the OAuth
+    // callback lands the user signed in; failures bounce back as
+    // ?google_error= (tracked above).
+    if (!opts?.notice) track('login_submit', { method: 'google' });
+    try {
+      // Preserve a `?next=` return path (e.g. a paid event invite) across the
+      // Google round-trip. The worker's /auth/google/start re-sanitizes the
+      // `redirect` param (absolute same-origin path only) before signing it
+      // into the OAuth state, so safeNextPath() here is defence-in-depth.
+      const { url } = await api.googleStartUrl({ action: 'signin', redirect: safeNextPath() || '/studio' });
+      if (!url) throw new Error('No redirect URL returned.');
+      window.location.href = url;
+    } catch (e) {
+      setError(e?.message || 'Google sign-in unavailable.');
+      setGoogleStage('');
+    }
+  };
+
+  // ---- Turnstile widget lifecycle (mirrors RegisterPage) ----
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current) return;
+    loadTurnstile().catch(() => {});
+    if (typeof window.turnstile === 'undefined') {
+      // Cap polling at 50 attempts (~10s) so a blocked Turnstile script
+      // doesn't leak intervals.
+      let attempts = 0;
+      const interval = setInterval(() => {
+        attempts += 1;
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
+          // Task #10 — surface the failure instead of silently leaving the
+          // sign-in button disabled forever (ad blocker / strict network).
+          setTurnstileFailed(true);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+    renderTurnstile();
+
+    function renderTurnstile() {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => { setTurnstileToken(token); setTurnstileFailed(false); },
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'light',
+      });
+    }
+
+    return () => {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, []);
+
+  const resetTurnstile = () => {
+    if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+      try { window.turnstile.reset(turnstileWidgetId.current); } catch {}
+      setTurnstileToken('');
+    }
+  };
+
+  // ---- Task #41 — DEV-ONLY demo-account quick-login ----
+  // The dev FastAPI backend exposes POST /api/auth/dev/quick-login
+  // which mints a JWT for an allowlisted seeded demo account
+  // without TOTP / Turnstile (refused entirely when ENVIRONMENT=production).
+  // The button is gated on Vite's `import.meta.env.DEV` so the production
+  // bundle never includes it. Lands the user on /deals so testers can
+  // immediately drive the LockedFounderCard → Request intro flow.
+  const showDemoQuickLogin = !!import.meta.env.DEV;
+  const [demoLoading, setDemoLoading] = useState('');
+  const demoLogin = async ({ email: demoEmail, landing } = {}) => {
+    setDemoLoading(demoEmail || 'investor'); setError('');
+    try {
+      const res = await fetch('/api/auth/dev/quick-login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(demoEmail ? { email: demoEmail } : {}),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`Demo login unavailable (${res.status}). ${txt}`.trim());
+      }
+      const data = await res.json();
+      if (!data?.token || !data?.user) throw new Error('Invalid response from demo login.');
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = landing || '/deals';
+    } catch (e) {
+      setError(e?.message || 'Demo login failed.');
+    } finally { setDemoLoading(''); }
+  };
+
+  // ---- Submit ----
+  const submit = async () => {
+    if (!email.trim()) { setErrorField('email'); setError('Enter your email.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { setErrorField('email'); setError('Enter a valid email address (e.g. you@example.com).'); return; }
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError('Please complete the verification challenge.');
+      return;
+    }
+    if (totpCode.length !== 6) { setErrorField('totp'); setError('Enter the 6-digit code from your authenticator.'); return; }
+    setLoading(true); setError('');
+    track('login_submit', { method: 'totp' });
+    try {
+      const res = await api.login({ email: email.trim(), totp_code: totpCode, turnstileToken });
+      if (!res?.token || !res?.user) throw new Error('Invalid response from server.');
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      // Task #2 — funnel: flushed by the tracker's pagehide hook as this
+      // full-page navigation unloads the SPA.
+      track('login_success', { method: 'totp' });
+      // Relative path — stays on whichever canonical host the user signed in
+      // on (axal.vc post-flip). The Worker serves the SPA on /studio for
+      // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
+      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() is parsed against this origin and kept only if it stays here; defence-in-depth
+    } catch (e) {
+      const msg = e?.message || 'Sign in failed.';
+      // Task #10 — accounts without a TOTP enrolment (e.g. partners created
+      // by deal activation, magic-link signups) hit this exact server error.
+      // Map it to actionable copy + highlight the magic-link path.
+      if (/not set up for TOTP/i.test(msg)) {
+        setTotpMissing(true);
+        setError("Your account doesn't have an authenticator app yet — that's normal if you joined by signing a partner agreement or via an email link. Use “Email me a sign-in link” below instead.");
+        track('login_error', { method: 'totp', reason: 'totp_missing' });
+      } else {
+        setError(msg);
+        track('login_error', { method: 'totp' });
+      }
+      resetTurnstile();
+    } finally { setLoading(false); }
+  };
+
+  // ---- Task #10 — request a magic sign-in link ----
+  const sendMagicLink = async () => {
+    const target = email.trim();
+    if (!target) { setErrorField('email'); setError('Enter your email above, then request a sign-in link.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(target)) { setErrorField('email'); setError('Enter a valid email address (e.g. you@example.com).'); return; }
+    // Turnstile still gates the request when the widget is working; when it
+    // failed to load, the magic link is deliberately the recovery path
+    // (the endpoint has its own per-IP + per-email rate limits server-side).
+    if (TURNSTILE_SITE_KEY && !turnstileFailed && !turnstileToken) {
+      setError('Please complete the verification challenge first.');
+      return;
+    }
+    if (magicBusy || magicCooldown > 0) return;
+    setMagicBusy(true); setError('');
+    // Task #2 — funnel: "submit" for the magic path = link requested. The
+    // sign-in itself completes server-side on /magic/verify; failures bounce
+    // back as ?magic_error= (tracked above).
+    track('login_submit', { method: 'magic' });
+    try {
+      await api.magicStart(target);
+      setMagicSentTo(target);
+      setMagicCooldown(60);
+    } catch (e) {
+      setError(e?.message || 'Could not send your sign-in link. Please try again in a moment.');
+      track('login_error', { method: 'magic', reason: 'send_failed' });
+    } finally { setMagicBusy(false); }
+  };
+
+  // THE SENTENCE IS DERIVED FROM THE CONTROLS, so it cannot outlive them. It
+  // used to be a hard-coded "Google, passkey, and authenticator codes are also
+  // available" over three conditionally-rendered buttons, which meant the page
+  // promised Google whenever the probe failed and promised a passkey on every
+  // browser without WebAuthn. Anything named here is rendered below; anything
+  // rendered below is named here.
+  const alsoList = [
+    'Google',
+    ...(passkeySupported ? ['passkey'] : []),
+    'authenticator codes',
+  ];
+  // The list always ends with 'authenticator codes', which is plural, so "are"
+  // is never wrong — no branch needed, and none left to rot. The serial comma
+  // belongs to three items and not to two ("passkey, and authenticator codes"
+  // is what a naive join produced), and the list opens a sentence, so its first
+  // letter is the sentence's.
+  const joined = alsoList.length > 2
+    ? `${alsoList.slice(0, -1).join(', ')}, and ${alsoList[alsoList.length - 1]}`
+    : alsoList.join(' and ');
+  const alsoAvailable = joined.charAt(0).toUpperCase() + joined.slice(1);
+  // The collapsed toggle is the same promise in miniature: it named a passkey on
+  // every browser, including the ones that cannot offer one.
+  const altFactorsLabel = passkeySupported ? 'Passkey or authenticator code' : 'Authenticator code';
+  // D722 — while Google's window is open the button stays live (a second press
+  // opens a fresh attempt); it locks only once a sign-in is actually under way.
+  const googleLocked = googleStage === 'signing' || googleStage === 'redirecting';
+  const GOOGLE_LABELS = {
+    waiting: 'Waiting for Google…',
+    signing: 'Signing you in…',
+    redirecting: 'Redirecting…',
+  };
+  const googleLabel = GOOGLE_LABELS[googleStage] || 'Continue with Google';
+
+  return (
+    <AuthShell showApplyCard applyLabel="Create an account →" applyHref={context?.registerHref || '/register'} backgroundSrc="/auth/login-background.webp">
+      <AuthCard>
+        <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
+          {context ? `Sign in to continue to ${context.area.name}` : 'Sign in'}
+        </h1>
+        {context && (
+          <p className="mt-2 text-[13.5px] leading-relaxed text-[#3d3650]" data-testid="login-destination">
+            {context.area.what} {context.area.who}
+          </p>
+        )}
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
+          Passwordless by default — we email you a one-time link.{' '}
+          {`${alsoAvailable} are also available.`}
+        </p>
+
+        {error && (
+          <div id="login-error" role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <label htmlFor="login-email" className={authV2.label}>Email</label>
+            <input
+              id="login-email"
+              type="email"
+              aria-invalid={error && errorField === 'email' ? true : undefined}
+              aria-describedby={error ? 'login-error' : undefined}
+              value={email}
+              autoComplete="email"
+              inputMode="email"
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !showAltFactors && sendMagicLink()}
+              placeholder="you@company.com"
+              className={`${authV2.input} mt-1.5`}
+              style={{ borderColor: authV2.hair }}
+            />
+          </div>
+
+          {TURNSTILE_SITE_KEY && (
+            <div ref={turnstileRef} className="flex justify-center" />
+          )}
+
+          {TURNSTILE_SITE_KEY && turnstileFailed && (
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+              Human verification could not load — usually an ad blocker or strict network.
+              You can still request a sign-in link; the server applies its own rate limits.
+            </div>
+          )}
+
+          {magicSentTo ? (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 space-y-2">
+              <p className="text-xs text-emerald-800">
+                <strong>Sign-in link sent to {magicSentTo}.</strong> Tap the link in the email — it expires in 15 minutes and works once.
+              </p>
+              <button
+                type="button"
+                onClick={sendMagicLink}
+                disabled={magicBusy || magicCooldown > 0}
+                className="w-full text-xs text-emerald-800 hover:text-emerald-900 disabled:opacity-60 py-1 font-medium"
+              >
+                {magicCooldown > 0 ? `Resend available in ${magicCooldown}s` : magicBusy ? 'Sending…' : 'Resend link'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={sendMagicLink}
+              disabled={magicBusy}
+              className={authV2.btnPrimary}
+              style={{ background: authV2.purple, borderColor: authV2.purple }}
+            >
+              <Mail size={14} className="inline mr-2 align-text-bottom" />
+              {magicBusy ? 'Sending link…' : 'Email me a sign-in link'}
+            </button>
+          )}
+
+          {/* ALWAYS RENDERED — never behind a capability probe. See the note on
+              the removed pre-flight above: a button that might fail is strictly
+              better than one that is missing, because a missing one leaves the
+              person no path and nothing to retry. */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
+            <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+          </div>
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            onPointerEnter={primeGoogle}
+            onFocus={primeGoogle}
+            onTouchStart={primeGoogle}
+            disabled={googleLocked}
+            className={authV2.btnSecondary}
+            data-testid="login-google"
+            style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+          >
+            <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+            </svg>
+            {googleLabel}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAltFactors((v) => !v)}
+            className="w-full text-[13px] font-semibold text-[#6b6577] flex items-center justify-center gap-1 py-1"
+          >
+            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>{altFactorsLabel} <ChevronDown size={14} /></>}
+          </button>
+
+          {showAltFactors && (
+            <div className="space-y-4 pt-1 border-t" style={{ borderColor: authV2.hair }}>
+              {passkeySupported && (
+                <button
+                  type="button"
+                  onClick={signInWithPasskey}
+                  disabled={passkeyBusy}
+                  className={authV2.btnSecondary}
+                  style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+                >
+                  <KeyRound size={14} /> {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+                </button>
+              )}
+
+              <div>
+                <label htmlFor="login-totp" className={authV2.label}>Authenticator code</label>
+                <input
+                  id="login-totp"
+                  type="text"
+                  aria-invalid={error && errorField === 'totp' ? true : undefined}
+                  aria-describedby={error ? 'login-error' : undefined}
+                  value={totpCode}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && submit()}
+                  placeholder="000000"
+                  maxLength={6}
+                  className={`${authV2.input} mt-1.5 text-center text-xl tracking-[0.4em] font-mono`}
+                  style={{ borderColor: authV2.hair }}
+                />
+              </div>
+
+              <button
+                onClick={submit}
+                disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken && !turnstileFailed) || totpCode.length !== 6}
+                className={authV2.btnSecondary}
+                style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+              >
+                {loading ? 'Signing in…' : <>Sign in with code <LogIn size={14} /></>}
+              </button>
+
+              {totpMissing && (
+                <p className="text-[11px] text-[#6b6577]">
+                  No authenticator yet? Use the email sign-in link above — that is the normal path for new members.
+                </p>
+              )}
+            </div>
+          )}
+
+          {showDemoQuickLogin && (
+            <div className="pt-2 border-t space-y-2" style={{ borderColor: authV2.hair }}>
+              <button
+                onClick={() => demoLogin()}
+                disabled={!!demoLoading}
+                data-testid="demo-investor-login"
+                className="w-full bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-amber-900"
+              >
+                {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
+              </button>
+               <button
+                 onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin/accounts/all' })}
+                 disabled={!!demoLoading}
+                 data-testid="demo-admin-login"
+                 className="w-full bg-violet-100 hover:bg-violet-200 border border-violet-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-violet-900"
+               >
+                 {demoLoading === 'demo-admin@axal.test' ? 'Signing in…' : 'Sign in as demo admin (dev only)'}
+               </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg p-3 mt-5 border" style={{ background: authV2.purpleTint, borderColor: '#ddd0fb' }}>
+          <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-violet-800 leading-relaxed">
+            Lost your authenticator? Use a recovery code, or visit{' '}
+            <Link to="/auth/recover" className="font-medium underline">account recovery</Link>.
+          </p>
+        </div>
+      </AuthCard>
+    </AuthShell>
+  );
+}

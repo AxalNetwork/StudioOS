@@ -1,0 +1,114 @@
+Objective
+  Many bugs and missing features have been spec'd over the last
+  several PRs. Some are merged; some are still on paper. Generate
+  a single, dated audit document showing what's actually green in
+  production today and what still needs work.
+
+Method
+  For each item below, run a programmatic check (curl / DB query /
+  CI artifact) and record the result. Commit
+  /BETA_READINESS_AUDIT_YYYY-MM-DD.md.
+
+Checklist (each row: item / check / current status / next-action)
+
+  AUTH
+    [ ] Magic-link signup live          → curl /api/auth/magic/start
+    [ ] Passkey registration live        → /api/auth/passkey/register-options
+    [ ] TOTP off password_hash           → SELECT in auth_totp + check users.password_hash NULL
+    [ ] Step-up middleware enforced      → curl admin endpoint without recent step-up
+    [ ] /api/auth/sign-out-everywhere    → endpoint exists + jwt_min_iat bumps
+
+  500s FROM ERROR DASHBOARD
+    [ ] /api/integrations                → returns 200 empty list on new account
+    [ ] /api/calendar/events              → returns 200 empty list
+    [ ] /api/financials/:projectId        → 200 hydrated default
+    [ ] /api/progress/metrics/:projectId  → 200 hydrated default
+    [ ] /api/wellbeing/checkins POST     → 201 on valid body
+    [ ] /api/deals                        → 200 on empty
+    [ ] /api/projects                     → 200 on empty
+    [ ] /api/projects/:id                 → 404 (not 500) for missing
+    [ ] /api/partnernet/summary           → 200 default
+    [ ] /api/capital/portfolio            → 200 hydrated default
+    [ ] /api/monitoring/analytics/overview → 200 (admin-only)
+    [ ] /api/pipeline/active               → 200 on empty
+    [ ] /api/infra/queue                   → 200 graceful default
+    [ ] /api/legalcap/capital/lp-portal    → 200 hydrated default
+    [ ] /api/pipeline/ws/overview          → WebSocket upgrade succeeds
+    [ ] /api/onboarding/ws/*               → WebSocket upgrade succeeds
+    [ ] /api/advisor/explain               → 200 with retry / KV cache
+
+  ADVISOR
+    [ ] Admin persona bank exists         → questionBank.ts grep 'admin.*'
+    [ ] Repeat-question test passes       → npm test advisor.repeat
+    [ ] Workers AI invoked per turn        → response includes model + latency
+    [ ] AI Gateway slug advisor-ongoing    → curl returns gateway header
+    [ ] Free-form question handled        → "what is TALC?" returns LLM reply
+    [ ] Tool-call rate-limit enforced     → burst returns 429
+    [ ] Dynamic question generator        → bank-empty user gets dyn.* question
+
+  CONTRACTS / TRUST
+    [ ] Admin > Contracts union           → list shows esign envelopes
+    [ ] Pairwise NDAs visible             → pairwise_ndas table populated
+    [ ] Sanctions screening live          → screening runs on KYC submit
+    [ ] Founder ↔ Investor 3-way NDA      → intro flow issues envelope
+
+  INTEGRATIONS
+    [ ] Stripe Connect OAuth              → connect round-trip
+    [ ] Stripe MRR pulls into financials → financial_models.source='stripe'
+    [ ] Google Calendar OAuth callback    → succeeds with axal.vc redirect
+    [ ] Outlook OAuth callback             → succeeds with axal.vc redirect
+    [ ] LinkedIn OAuth redirect uri        → uses axal.vc not workers.dev
+    [ ] HubSpot, Carta, Affinity, DocuSign → present on Integrations page
+
+  MARKETING / PUBLIC
+    [ ] Front-page content refresh         → engines/layers/lanes copy live
+    [ ] /spinout-lab expansion             → 4-week + what-founders-get
+    [ ] /about page                         → loads with Guillaume's card
+    [ ] /insights                            → renders seed articles
+    [ ] /directory                           → public directory list works
+    [ ] Hero adapt                            → no "Three lanes —" prefix
+    [ ] Contact form → GitHub Issue          → submission round-trip
+
+  ADMIN UX
+    [ ] FOUNDER_ID + PARTNER_ID generated   → SELECT users where founder_public_id IS NOT NULL
+    [ ] users.last_active_at populated      → recent SELECT
+    [ ] Admin onboarding transcripts visible → /admin/users/:id Onboarding tab
+    [ ] Admin ongoing advisor transcripts    → Ongoing tab present
+
+  PAYMENTS
+    [ ] Stripe checkout end-to-end           → test mode succeeds
+    [ ] Tier flips on subscription.created    → users.subscription_tier updates
+    [ ] Tier flips on subscription.deleted    → reverts to free
+    [ ] Refund flow                            → admin refund issues Stripe refund
+    [ ] Free-tier paywall                      → 402 returned + UI shows upgrade
+
+  SETTINGS
+    [ ] Profile > Identity                    → loads + saves
+    [ ] Profile details                        → loads + saves
+    [ ] Legal entity                            → loads + saves
+    [ ] Digest & quiet hours                   → loads + saves
+    [ ] Visibility                              → loads + saves
+    [ ] Integrations panel                      → loads (not 500)
+    [ ] Developer                                → admin-only, loads
+    [ ] Appearance                               → theme persists
+
+  SECURITY HEADERS
+    [ ] CSP                                       → securityheaders.com A+
+    [ ] HSTS                                      → present
+    [ ] X-Frame-Options                          → DENY
+    [ ] Referrer-Policy                          → strict-origin-when-cross-origin
+
+  OPS
+    [ ] Tail Worker forwarding to R2            → R2 bucket has recent logs
+    [ ] DLQ exists + visible in admin           → admin/monitoring/dlq panel
+    [ ] /api/health deep check                   → returns ok per binding
+    [ ] Cron triggers firing                      → dashboard shows recent runs
+    [ ] Workers Traces enabled                    → trace visible per request
+
+Each row that is NOT shipped becomes a follow-up issue in the
+repository's project board, tagged `beta-blocker` or `beta-nice`.
+
+Acceptance
+  - BETA_READINESS_AUDIT.md committed with the full table + status.
+  - Every red row has an issue opened with a clear next step.
+  - Two-week re-audit scheduled (cron-comment via GitHub Actions).

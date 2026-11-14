@@ -1,0 +1,39 @@
+Don't listen — Replit is oversimplifying and would have you delete useful external sources.
+
+Reality is **both**, not advisor-only:
+
+| Source class | Examples | What it tells you |
+|---|---|---|
+| External | USPTO/EPO patents, arXiv, Papers With Code, GitHub Trending, Product Hunt, AWS Marketplace, App stores, Crunchbase, EDGAR, GDELT, Google Trends, World Bank, OECD | Objective, large-sample market data the advisor can never replicate |
+| Personal Advisor (anonymised) | Sector sentiment, TALC self-positions, founder needs, investor thesis embeddings, partner offers | Community/internal signal — small sample, subjective, fresh |
+
+If you make Personal Advisor the single source of truth:
+
+- **Sample size collapses.** A new platform with 50 founders cannot replace public datasets. Patent counts and arXiv volume don't come from advisor chats.
+- **Selection bias.** Only your users answer; the market does not.
+- **Subjectivity.** Self-reported TAM/MRR/positioning are exactly what the anti-cheat work (Prompt T) is trying to flag — you'd be feeding biased numbers into "market truth".
+- **You'd lose the Citations & Methodology tab.** External URLs are the only thing that gives an investor confidence in the data.
+- **Founder Lens / Investor Lens already need cross-checks.** A founder's self-positioned TALC needs to be validated against external adoption signals (arXiv volume, GitHub stars, app-store ranks).
+
+What's actually correct (matches my earlier Prompt AT):
+
+- **Sector Compass · Founder Lens · Investor Lens · Geography Lens · Citations** → keep external sources as primary. Advisor data overlays as a second series ("internal signal").
+- **Sentiment · TALC positioning · Demand & Supply · Founder-Investor Fit · Partner Pulse · Capital Velocity** → these *are* the advisor-derived sections. They didn't exist before; advisor is their natural source.
+- **Axal Investor Signals** → mix of investor-profile advisor answers + Stripe-confirmed deployment data, with k-anonymity ≥ 5.
+
+What to tell Replit:
+
+```
+Keep external connectors as the primary source for Sector Compass,
+Founder Lens, Investor Lens, Geography Lens, and Citations &
+Methodology. Add Personal Advisor data as a SECOND data stream that
+overlays on existing charts (e.g. "external signal" line +
+"community signal" line on the same chart) AND powers the new
+sections introduced in Prompt AT: Sentiment, TALC, Demand & Supply,
+Founder-Investor Fit, Partner Pulse, Capital Velocity. Do not
+remove or replace the external connector pipeline. Both sources
+write to market_intel_rows with a `source_kind` column so charts
+can filter.
+```
+
+Short answer: **ignore the part where Replit says advisor is the source of truth; accept the part where Replit offers to define field shapes — but those fields are additive to the external pipeline, not a replacement.**

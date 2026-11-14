@@ -1,0 +1,36 @@
+{
+  "skill": "prd-first-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "item": "Recall reminders",
+        "notes": [
+          "Clinics miss 30% of six-month recalls"
+        ]
+      },
+      "validate.records": {
+        "problems": [
+          {
+            "text": "Patients forget their recall visit",
+            "interviews": 5
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Recall reminders",
+      "Patients forget their recall visit"
+    ],
+    "must_say_not_recorded": [
+      "success measure"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

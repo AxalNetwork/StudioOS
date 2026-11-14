@@ -1,0 +1,7 @@
+{
+  "note": "Reviewed missing-column references. Entries describe live gaps; the guard refuses new or stale entries. D1231 removed corporate_profiles.kyb_status by supplying the real KYB case decision path. The two remaining trust-score signals are in services/newsTrust.ts.",
+  "columns": {
+    "partner_deals.founder_user_id": "the trust-score partner-deal signal (services/newsTrust.ts:70). safeFirst degrades to null, so partner_deal_signed never awards its 10 points to anyone. The column is user_id. One of three dead signals in that function \u2014 see partners.owner_user_id and the spinout_lab_state table entry; 35 points of trust score that can never be earned.",
+    "partners.owner_user_id": "the trust-score KYB signal (services/newsTrust.ts:62). safeFirst degrades to null, so kyb_verified never awards its 15 points. partners is an email-keyed directory with no user foreign key at all \u2014 it cannot be joined to a user id, so this is a decision rather than a rename. partner_profiles.user_id is the table that does link the two."
+  }
+}

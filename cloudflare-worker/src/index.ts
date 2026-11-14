@@ -1,0 +1,3488 @@
+/**
+ * Cloudflare Worker — StudioOS production API.
+ *
+ * ARCHITECTURE (live as of 2026-04-28):
+ * The worker IS the production API at axal.vc. It owns:
+ *   1. All `/api/*` route handlers (mounted from `./routes/*.ts`).
+ *   2. WebSocket fan-out via Durable Objects (`PipelineRoom`, `OnboardingChat`).
+ *   3. Cron + Queues consumer that drains the background-job queue.
+ *
+ * The Python FastAPI in `backend/` is the local dev backend used during Replit
+ * iteration. It is NOT deployed to production — D1 (Cloudflare-only) is the
+ * canonical user store, so the worker has to handle requests itself.
+ *
+ * Earlier "audit #4" attempted to make FastAPI canonical and turn this worker
+ * into a proxy via FASTAPI_ORIGIN, but the FastAPI side was never publicly
+ * deployed and the 23 production user accounts already live in D1. We keep
+ * the legacy in-worker routes mounted here as the source of truth.
+ */
+
+import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
+import { isMcpPath, routeMcp } from './mcp/oauth';
+import { assistantGrants, mcpConsent } from './routes/mcp_consent';
+import { developerKeys } from './routes/developer_keys';
+import { connectorApi } from './routes/connector_api';
+import { adminConnectorClients } from './routes/admin_connector_clients';
+import { developerLimits } from './routes/developer_limits';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import type { Env, JobMessage } from './types';
+
+import realtime from './routes/realtime';
+import auth from './routes/auth';
+import authSms from './routes/auth_sms';
+import authRecover from './routes/auth_recover';
+// Task #51 — Optional "Continue with Google" sign-in. Sits alongside
+// /api/auth (magic link + TOTP); never the only path in. See
+// routes/auth_google.ts for the linking precedence and step-up rules.
+import authGoogle from './routes/auth_google';
+import { PRIVATE_LINK_GLOBS, SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
+import authPasskey from './routes/auth_passkey';
+import { recoveryCoolOff } from './middleware/recoveryCoolOff';
+import scoring from './routes/scoring';
+import labReportShares from './routes/lab_report_shares';
+import projects from './routes/projects';
+import accountCompanies from './routes/account_companies';
+import accountPortfolio from './routes/account_portfolio';
+import slugCheck from './routes/slug_check';
+import legal from './routes/legal';
+import legalcap from './routes/legalcap';
+import partners from './routes/partners';
+import adminPartners from './routes/admin_partners';
+import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerFirms from './routes/admin_partner_firms';
+import adminPartnerDealReads from './routes/admin_partner_deal_reads';
+import adminNetworkReads from './routes/admin_network_reads';
+import adminFeatureFlags from './routes/admin_feature_flags';
+import adminPublications from './routes/admin_publications';
+// Task #10 (LD) — Admin team roster + public team endpoint.
+import adminTeam from './routes/admin_team';
+import adminNetworkProfiles from './routes/admin_network_profiles';
+import adminNetwork from './routes/admin_network';
+import adminInvestorCohorts from './routes/admin_investor_cohorts';
+import investorCohorts from './routes/investor_cohorts';
+import profileHistoryRoutes from './routes/profile_history';
+import founderProfileRoutes from './routes/founder_profile';
+import adminProfilingRoutes from './routes/admin_profiling';
+import adminPartnerProfilesRoutes from './routes/admin_partner_profiles';
+import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
+import networkPublic from './routes/network_public';
+// Task #3 — Admin Telegram channels + aggregator + post send.
+import adminTelegram from './routes/admin_telegram';
+import telegramJoin from './routes/telegram_join';
+import adminX from './routes/admin_x';
+import adminSlack from './routes/admin_slack';
+// Task #2 — News with author proposals + admin queue.
+import newsRoutes from './routes/news';
+import articlesRoutes from './routes/articles';
+import articleAssist from './routes/article_assist';
+import adminArticles from './routes/admin_articles';
+import teamPublic from './routes/team_public';
+import contactRoutes from './routes/contact';
+import newsletterRoutes from './routes/newsletter';
+import mailLinkRoutes from './routes/mail_link';
+import testingMailRoutes from './routes/testing_mail';
+import partnerOnboarding from './routes/partner_onboarding';
+import partnerPortal from './routes/partner_portal';
+// Task #10 (AC-1) — Personal advisor backend + write-router.
+import advisorRoutes from './routes/advisor';
+import partnernet from './routes/partnernet';
+import capital from './routes/capital';
+import tickets from './routes/tickets';
+import deals from './routes/deals';
+import dealFlow from './routes/deal_flow';
+import relationships from './routes/relationships';
+import mailAccounts from './routes/mail_accounts';
+import mailDrafts from './routes/mail_drafts';
+import mailShares from './routes/mail_shares';
+import mailPeople from './routes/mail_people';
+import { bindMailTools } from './services/mail/mcpTools';
+import dealContext from './routes/deal_context';
+import deckGrants from './routes/deck_grants';
+import dealInsights from './routes/deal_insights';
+import dealWorkroom from './routes/deal_workroom';
+import dealViews from './routes/deal_views';
+import users from './routes/users';
+import marketIntel from './routes/market_intel';
+import marketIntelPublic from './routes/market_intel_public';
+import { investorProfile } from './routes/investor_signals';
+import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
+import aiRoutes from './routes/ai';
+import aiBudgetRoutes from './routes/ai_budget';
+import railRunRoutes from './routes/rail_run';
+import { developerUsage } from './routes/developer_usage';
+// D1316 (#3474): Builder › MCP and services' overview.
+import { developerAssistants } from './routes/developer_assistants';
+// D791 (#2216): HQ › AI usage, Super Admin with step-up.
+import adminAiUsageRoutes from './routes/admin_ai_usage';
+import aiRailProposalsRoutes from './routes/ai_rail_proposals';
+import { runTotpRemediation } from './services/totpRemediation';
+import { writeDailySnapshot } from './services/analyticsReports';
+// Task #5 (IE) — Backup + DR. Daily KV snapshot to R2.
+import { runDailyKvSnapshot, writeBackupHeartbeat } from './services/backup';
+import advisory from './routes/advisory';
+import activity from './routes/activity';
+import admin from './routes/admin';
+import adminAccounts from './routes/admin_accounts';
+import adminBilling from './routes/admin_billing';
+import adminPromos from './routes/admin_promos';
+import ventureScoreModels from './routes/venture_score_models';
+import adminContracts from './routes/admin_contracts';
+import adminContractDocRegistry from './routes/admin_contract_doc_registry';
+// Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
+import adminForms from './routes/admin_forms';
+import adminIntegrationKeys from './routes/admin_integration_keys';
+import adminMercury from './routes/admin_mercury';
+// D966 (#2630): the owner's repair of Mercury SAFEs accepted before #2629.
+import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
+import adminGithub from './routes/admin_github';
+import githubWebhook from './routes/github';
+import vercelWebhook from './routes/vercel_webhook';
+// Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
+import adminAdvisorAudit from './routes/admin_advisor_audit';
+import adminCohort from './routes/admin_cohort';
+import adminIncorporations from './routes/admin_incorporations';
+import safeIssuances from './routes/safe_issuances';
+import admin83bReview from './routes/admin_83b_review';
+import companyEin from './routes/company_ein';
+import privateData from './routes/private-data';
+import monitoring from './routes/monitoring';
+import infra from './routes/infra';
+import funds from './routes/funds';
+import fundLedger from './routes/fund_ledger';
+import fundFees from './routes/fund_fees';
+import fundAdmin from './routes/fund_admin';
+import closings, { adminClosings } from './routes/closings';
+import companyReceivingAccounts from './routes/company_receiving_accounts';
+import reporting from './routes/reporting';
+import reportingReports from './routes/reporting_reports';
+import fundReporting from './routes/fund_reporting';
+import fundBooklets from './routes/fund_booklets';
+import fundNotices from './routes/fund_notices';
+import fundPerformance from './routes/fund_performance';
+import liquidity from './routes/liquidity';
+import email from './routes/email';
+import pipeline from './routes/pipeline';
+import search, { ensureAcademySchema } from './routes/search';
+import kyc from './routes/kyc';
+import kybAdmin from './routes/kyb_admin';
+import kycGovernance from './routes/kyc_governance';
+import esign from './routes/esign';
+import trust from './routes/trust';
+import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
+import integrations from './routes/integrations';
+import { REGISTRY, getProviderImpl, readinessOf } from './integrations/registry';
+import eadwynRoutes from './routes/eadwyn';
+// Task #2 — HubSpot provider. Side-effect import: the module's top-level
+// `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
+// layer in routes/integrations.ts can dispatch to it.
+import { syncAllHubspotIntegrations } from './integrations/providers/hubspot';
+// Task #3 — Calendly provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllCalendlyIntegrations } from './integrations/providers/calendly';
+// Task #4 — Salesforce provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllSalesforceIntegrations } from './integrations/providers/salesforce';
+// Task #5 — Carta provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllCartaIntegrations } from './integrations/providers/carta';
+// Task #2 — DocuSign provider. Side-effect import so registerProvider() runs at boot.
+import { syncAllDocusignIntegrations } from './integrations/providers/docusign';
+// Task #1 (2026-05-10) — Slack provider (one-way notifications).
+// Side-effect import so registerProvider() runs at boot. No cron/sync —
+// Slack is send-only, driven by services/notify.ts.
+import './integrations/providers/slack';
+// Crunchbase provider — named import (not bare side-effect) so CodeQL's
+// unused-import check sees a real reference. The module's top-level
+// `registerProvider(impl)` still runs as soon as it's loaded.
+import { crunchbaseFetch as _registerCrunchbase } from './integrations/providers/crunchbase';
+void _registerCrunchbase;
+// Task #6 (DG) — Stripe provider. Side-effect import so registerProvider() runs at boot.
+import './integrations/providers/stripe';
+// D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
+import './integrations/providers/github';
+// D1096: the read-only Vercel Integration.
+import './integrations/providers/vercel';
+// D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
+import './integrations/providers/mercury';
+// D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
+import './integrations/providers/notion';
+import './integrations/providers/posthog';
+// D2407 (#2407) — a founder's own Beehiiv newsletter, read-only, through Beehiiv's MCP server: sign-in only.
+import './integrations/providers/beehiiv';
+// D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
+import './integrations/providers/linear';
+// D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
+import './integrations/providers/cloudflare';
+// D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
+import './services/notion/build';
+import crunchbaseRoutes from './routes/crunchbase';
+import network from './routes/network';
+import referEarn from './routes/refer_earn';
+import ventureScores from './routes/venture_scores';
+import networkfx from './routes/networkfx';
+import profiling from './routes/profiling';
+import dashboard from './routes/dashboard';
+import matches from './routes/matches';
+import settings from './routes/settings';
+import personas from './routes/personas';
+import personaSegments from './routes/persona_segments';
+import segmentAggregates from './routes/persona_segment_aggregates';
+import personaMembers from './routes/persona_members';
+import onboarding from './routes/onboarding';
+// Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
+import onboardingChecklist from './routes/onboarding_checklist';
+// Task #7 (IG) — Customer chat for paid tiers (Studio/Institutional/Partner).
+import customerChat from './routes/customer_chat';
+// Task #8 (IH) — Data import + migration tools (Carta/AngelList CSV/Deck
+// PDF+PPTX/Investor portfolio/HubSpot pipeline/Universal CSV).
+import importsRoutes from './routes/imports';
+import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview, renderSitePage } from './routes/brand';
+import decks from './routes/decks';
+import competitors from './routes/competitors';
+import deckReviewer from './routes/deck_reviewer';
+import research from './routes/research';
+import usage from './routes/usage';
+import researchOverview from './routes/research_overview';
+import researchMarkets from './routes/research_markets';
+import researchSectors from './routes/research_sectors';
+import cycleGrow from './routes/cycle_grow';
+// Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
+// + conversion tracking. MUST be mounted BEFORE the `/api/decks`
+// catch-all so its `/share/:token/...` subpaths take precedence over
+// the existing /share/:token reader in decks.ts.
+import deckShareActions from './routes/deck_share_actions';
+// D901 (#2680) — the HTML export and the deck export ledger.
+import deckExports from './routes/deck_exports';
+import deckNotes from './routes/deck_notes';
+// D1570 (#3817): comments on a deck's cards, @mentions, assignee, Resolve, and the approval a share waits for.
+import deckComments from './routes/deck_comments';
+import deckReview from './routes/deck_review';
+import deckSources from './routes/deck_sources';
+import deckCheck from './routes/deck_check';
+import deckGrid from './routes/deck_grid';
+import deckAreas from './routes/deck_areas';
+import deckInstruct from './routes/deck_instruct';
+import deckNarrative from './routes/deck_narrative';
+import deckBatches from './routes/deck_batches';
+import deckDraft from './routes/deck_draft';
+import deckCoedit from './routes/deck_coedit';
+import deckElementModels from './routes/deck_element_models';
+import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
+import deckTemplates from './routes/deck_templates';
+import deckElements from './routes/deck_elements';
+import deckUsage from './routes/deck_usage';
+import deckStage from './routes/deck_stage';
+import deckRemix from './routes/deck_remix';
+import deckTypedValues from './routes/deck_typed_values';
+// D1543 (#3781): the venture-record elements and the logos store (migration 732).
+import deckVentureElements from './routes/deck_venture_elements';
+import deckFigures from './routes/deck_figures';
+import deckNew from './routes/deck_new';
+import deckAssist from './routes/deck_assist';
+import deckDerive from './routes/deck_derive';
+import deckCritic from './routes/deck_critic';
+import deckCritique from './routes/deck_critique';
+import deckQaRoutes from './routes/deck_qa';
+import deckTransform from './routes/deck_transform';
+import deckImages from './routes/deck_images';
+import deckImageEdits from './routes/deck_image_edits';
+import deckRehearsals from './routes/deck_rehearsals';
+// D1565 (#3812): one link per investor, and tailored variants.
+import deckInvestorLinks from './routes/deck_investor_links';
+import deckPublish, { serveDeckEmbed, serveDeckShareCard } from './routes/deck_publish';
+import notificationsRoutes from './routes/notifications';
+import linkedinRoutes from './routes/linkedin';
+import calendarRoutes from './routes/calendar';
+import googleWorkspaceRoutes from './routes/google_workspace';
+// D1319 (#3480): founder publishing to an outside service, pressed by the founder only.
+import publishRoutes from './routes/publish';
+import financialsRoutes from './routes/financials';
+import progressRoutes from './routes/progress';
+import cycleBuildRoutes from './routes/cycle_build';
+import lovableAppLinks from './routes/lovable_app_links';
+import lovableSignups from './routes/lovable_signups';
+import buildGoogleRoutes from './routes/build_google';
+import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
+import buildPlanStateRoutes from './routes/build_plan_state';
+import metricsRoutes from './routes/metrics';
+import revenueRoutes from './routes/revenue';
+import wellbeingRoutes from './routes/wellbeing';
+import complianceRoutes from './routes/compliance';
+import captableRoutes from './routes/captable';
+import captableAccessRoutes from './routes/captable_access';
+import dataRoomRoutes from './routes/data_room';
+import advisorGrantRoutes from './routes/advisor_grants';
+import perksRoutes from './routes/perks';
+import adminLicences from './routes/admin_licences';
+import adminProgramGrants from './routes/admin_program_grants';
+import adminProgramRequests from './routes/admin_program_requests';
+// D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
+import adminPartnerDealTypes from './routes/admin_partner_deal_types';
+import licencePartnerDealTypes from './routes/licence_partner_deal_types';
+import adminDeployments from './routes/admin_deployments';
+import adminStatements from './routes/admin_statements';
+import adminEscalations from './routes/admin_escalations';
+import adminSupportSessions from './routes/admin_support_sessions';
+import branchEscalationRoutes from './routes/branch_escalations';
+import branchApprovalRoutes from './routes/branch_approvals';
+import branchApprovalAssignmentRoutes from './routes/branch_approval_assignments';
+import adminApprovalRoutes from './routes/admin_approvals';
+import branchHomeRoutes from './routes/branch_home';
+import branchTemplateRoutes from './routes/branch_templates';
+import branchInsightsRoutes from './routes/branch_insights';
+import branchDeploymentRoutes from './routes/branch_deployment';
+import branchInvitationRoutes from './routes/branch_invitations';
+import branchSupportSessionRoutes from './routes/branch_support_sessions';
+import adminSuperAdmins from './routes/admin_super_admins';
+import adminCreditRules from './routes/admin_credit_rules';
+import adminTicketReviews from './routes/admin_ticket_reviews';
+import communityTasksRoutes from './routes/community_tasks';
+import learningRoutes from './routes/learning';
+import learningPlanRoutes from './routes/learning_plan';
+import adminLearningRoutes from './routes/admin_learning';
+import learningAssessmentRoutes from './routes/learning_assessment';
+import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
+import learningProgramsRoutes from './routes/learning_programs';
+import adminLearningProgramsRoutes from './routes/admin_learning_programs';
+import learningWebinarsRoutes from './routes/learning_webinars';
+import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
+import { adminLearningVideo, learningVideo } from './routes/learning_video';
+import adminHq from './routes/admin_hq';
+import adminInsightsScopes from './routes/admin_insights_scopes';
+import adminCommunityRoutes from './routes/admin_community';
+import adminRevenue from './routes/admin_revenue';
+import adminContent from './routes/admin_content';
+import adminPlatform from './routes/admin_platform';
+import adminSecurity from './routes/admin_security';
+import adminTrustCenter from './routes/admin_trust_center';
+import trustPublic from './routes/trust_public';
+import { securityReports, adminSecurityReports } from './routes/security_reports';
+import adminHqSupport from './routes/admin_hq_support';
+import adminStudioGlance from './routes/admin_studio_glance';
+import adminInsights from './routes/admin_insights';
+import adminPrograms from './routes/admin_programs';
+import adminProgramProposals from './routes/admin_program_proposals';
+import adminInsightsExport from './routes/admin_insights_export';
+import adminAccountsOverview from './routes/admin_accounts_overview';
+// The holder-facing read of one licence — see routes/licence.ts for why it is
+// not a role branch inside the admin ledger.
+import licence from './routes/licence';
+// D799 — the Administrator's requests to HQ, under the same prefix.
+import licenceRequests from './routes/licence_requests';
+import licencePrograms from './routes/licence_programs';
+import cofounderRoutes from './routes/cofounder';
+import skillsRoutes from './routes/skills';
+import valuesRoutes from './routes/values';
+import radarRoutes from './routes/radar';
+import spinoutLabRoutes from './routes/spinout_lab';
+import spinoutCertificateRoutes, { publicCertificateRoutes } from './routes/spinout_certificates';
+import spinoutModerationRoutes from './routes/spinout_moderation';
+import { labHosts, adminLabHosts } from './routes/lab_hosts';
+// T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
+// portfolio_health/references/comarketing/company/needs/insights routers.
+import advisorsRoutes from './routes/advisors';
+import partnerOfficeHoursRoutes from './routes/partner_office_hours';
+// Task #6 (W-1) — investor paywall surfaces.
+import introductionsRoutes from './routes/introductions';
+import investorSeatsRoutes, { downgradeExpiredInvestorTrials } from './routes/investor_seats';
+import { requireInvestorTierExcept } from './middleware/requireInvestorTier';
+import watchlistRoutes from './routes/watchlist';
+import followsRoutes from './routes/follows';
+import journalRoutes from './routes/journal';
+import portfolioRoutes from './routes/portfolio';
+import referencesRoutes from './routes/references';
+import comarketingRoutes from './routes/comarketing';
+import companyRoutes from './routes/company';
+import companyLifecycle from './routes/company_lifecycle';
+import companyLegal from './routes/company_legal';
+import companyDocuments from './routes/company_documents';
+import projectLifecycle from './routes/project_lifecycle';
+import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
+// #45 — the partner workspace's own stores (migrations 208/209). Mounted under
+// `/api/partner/…` singular, which is a free first segment: `/api/partners` is
+// the public firm directory and a different path, and `/api/pipeline/vote*`
+// below belongs to deal voting rather than to a partner's deal pipeline.
+import partnerPipeline from './routes/partner_pipeline';
+import partnerOffers from './routes/partner_offers';
+import { testing, partnerTesting, adminTesting } from './routes/testing';
+import adminProductTesters from './routes/admin_product_testers';
+import adminSubAccounts from './routes/admin_sub_accounts';
+import adminReferralPartners from './routes/admin_referral_partners';
+import partnerDelivery from './routes/partner_delivery';
+import founderValidate from './routes/founder_validate';
+import cycleValidate from './routes/cycle_validate';
+import cycleRecords from './routes/cycle_records';
+import cycleVerdict from './routes/cycle_verdict';
+import cycleRaise from './routes/cycle_raise';
+import pmfExplain from './routes/pmf_explain';
+import founderValidateStructure from './routes/founder_validate_structure';
+import founderValidateSessions from './routes/founder_validate_sessions';
+import meetingBotCallbacks from './routes/meeting_bot_callbacks';
+import validateConversations from './routes/validate_conversations';
+// D684 (#1575) — interview channels: business Telegram and WhatsApp
+// conversations (S19), Zoom and Google Meet calls from an interview (S18).
+import channels, { channelsAdmin } from './routes/channels';
+import founderValidateMeetings, { zoomWebhook } from './routes/founder_validate_meetings';
+// The operating cadence (#176 FB4) — rituals, the runs that archive them, and
+// the templates they are conducted from. Migration 250.
+import founderCadence from './routes/founder_cadence';
+// Swimlanes and the WIP limit on the execution board (#176 FB2). Migration 253.
+import founderBoard from './routes/founder_board';
+import founderRoadmap from './routes/founder_roadmap';
+import insightsRoutes from './routes/insights';
+// Signals — founder decision-engine over public company data (not a trading UI).
+import signalsRoutes from './routes/signals';
+import founderRiskRoutes from './routes/founder_risk';
+// Task #9 — Venture Risk (10-layer hybrid auto+analyst rating, internal only).
+import ventureRiskRoutes from './routes/venture_risk';
+import servicesRoutes from './routes/services';
+import publicRoutes from './routes/public';
+// Task #39 — Event engine (Worker on D1): authed §8.1, public §8.2, admin §8.3.
+import eventsRoutes from './routes/events';
+import eventsPublicRoutes from './routes/events_public';
+import adminEventsRoutes from './routes/admin_events';
+import adminEventSyndicationRoutes from './routes/admin_event_syndication';
+import eventSyndicationRoutes from './routes/event_syndication';
+import eventSyndicationAssistRoutes from './routes/event_syndication_assist';
+// Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
+// apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
+import jobsRoutes from './routes/jobs';
+import jobsPublicRoutes from './routes/jobs_public';
+import adminJobsRoutes from './routes/admin_jobs';
+// Task #9 — Admin-managed Communities & Circles (Worker on D1): public feed on
+// /api/public/circles, admin CRUD on /api/admin/circles.
+import circlesPublicRoutes from './routes/circles_public';
+import adminCirclesRoutes from './routes/admin_circles';
+// Task #44 — Gamified Assessment engine (player + admin authoring).
+import assessmentRoutes from './routes/assessment';
+import adminAssessmentRoutes from './routes/admin_assessment';
+import consultations, { adminConsultations } from './routes/consultations';
+// Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
+import adminExploring from './routes/admin_exploring';
+import adminLpApplications from './routes/admin_lp_applications';
+import adminCapitalAttestations from './routes/admin_capital_attestations';
+import bestFitSelf from './routes/best_fit';
+// T3 — Reserve allocation + waterfall simulator (Task #46 port).
+import fundSimulatorRoutes from './routes/fund_simulator';
+import { processQueueBatch } from './services/queueWorker';
+// Task #6 — founder subscription tier middleware + billing router (Stripe
+// checkout/portal/webhook + tier endpoints). Both must mount; the billing
+// import was missed in the first pass and left tier checkout/webhook 404.
+import { requireTier } from './middleware/requireTier';
+import billing from './routes/billing';
+import billingCheckout from './routes/billing_checkout';
+// Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
+import catalog, { adminCatalog } from './routes/catalog';
+// Task #16 — Admin Stripe management (webhook endpoints + publishable key).
+import adminStripe from './routes/admin_stripe';
+import adminPayments from './routes/admin_payments';
+import adminMoneyRails from './routes/admin_money_rails';
+import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
+import mercuryPersonalRoutes from './routes/mercury_personal';
+import mercuryAttestationRoutes from './routes/mercury_attestations';
+import mercuryOauthRoutes from './routes/mercury_oauth';
+// D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
+import notionRoutes, { notionCycleRoutes } from './routes/notion';
+import posthogRoutes, { posthogCycleRoutes } from './routes/posthog';
+// D1325 (#3486): the Fill with Eadwyn sheet's read.
+import fillsRoutes from './routes/fills';
+import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
+import connectorsHealth from './routes/connectors_health';
+import connectorsCustomRoutes from './routes/connectors_custom';
+import agentEngineRoutes from './routes/agent_engine';
+import teamAgentsRoutes from './routes/team_agents';
+// D1612 (#3951): the agent skill library, beside team agents.
+import teamSkillsRoutes from './routes/team_skills';
+import cartaInvestorRoutes from './routes/carta_investor';
+import mercuryInvestorRoutes from './routes/mercury_investor';
+import adminBankAccounts from './routes/admin_bank_accounts';
+import adminFundStructure from './routes/admin_fund_structure';
+// PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
+import payments from './routes/payments';
+// One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
+import orders from './routes/orders';
+// Products page — explorer promo status + $0 redemption (catalog + paid
+// checkout reuse /api/catalog + /api/payments above).
+import products from './routes/products';
+import { Jobs } from './models/jobs';
+import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './util/cronHistory';
+import { branchOf, assertBranchAppUrl } from './util/branch';
+// D110 — one table of which thrown sentence is which status, shared with
+// `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { BRANCH_SUSPENDED } from './util/branch';
+import { enqueueReembedChunks } from './util/reembedSweep';
+import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
+import { bindingKey } from './util/schemaBootstrap';
+// Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
+import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
+import { queueConsumer, dlqConsumer } from './queue-consumer';
+import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
+import { rateLimitMiddleware } from './middleware/rateLimit';
+import { observabilityMiddleware } from './middleware/observability';
+import { securityHeadersMiddleware } from './middleware/securityHeaders';
+import { csrfMiddleware } from './middleware/csrf';
+import { STUDIO_PREFIXES, INVESTOR_PRO_PREFIXES } from './middleware/paywallPrefixes';
+import studioLayout from './routes/studio_layout';
+import { lastActiveMiddleware } from './middleware/lastActive';
+import { requireCfAccess } from './middleware/cfAccess';
+import filesRoutes from './routes/files';
+import ddRoutes from './routes/dd';
+import ic from './routes/ic';
+import lpReports from './routes/lp_reports';
+import portfolioUpdates from './routes/portfolio_updates';
+import portfolioSupport from './routes/portfolio_support';
+import positions from './routes/positions';
+import contacts from './routes/contacts';
+import contactImports from './routes/contact_imports';
+import roundCalls from './routes/round_calls';
+import track from './routes/track';
+import { ROUTE_MODULES } from './routes/_registry';
+import { attachRouteRegistry } from './util/routeRegistry';
+
+const app = new Hono<{ Bindings: Env }>();
+// #4105 — route modules that mount themselves (routes/_registry.ts, generated by
+// scripts/build-route-registry.mjs). Attached before the first `app.route(...)`
+// so a registered router whose `before` names a router mounted below is mounted
+// just above that line; the rest mount at `routeRegistry.mountRemaining()`,
+// after the last mount and before `app.notFound`. See src/util/routeRegistry.ts.
+const routeRegistry = attachRouteRegistry(app, ROUTE_MODULES);
+// D1343: the MCP mail tools run the mail services the entry hands them (services/mail/mcpTools.ts),
+// so the MCP server, which `auth.ts` reaches, imports none of them.
+bindMailTools();
+
+// D811: service HMAC only, before browser CORS/session/CSRF middleware.
+app.use('/api/mail-link/*', securityHeadersMiddleware());
+app.route('/api/mail-link', mailLinkRoutes);
+app.use('/api/testing/mail/*', securityHeadersMiddleware());
+app.route('/api/testing/mail', testingMailRoutes);
+
+// CORS — Epic 11: env-aware allowlist. Production locks the API to the two
+// canonical apex hosts only; preview/dev additionally allow the
+// workers.dev sandbox + localhost so local SPA -> remote-worker iteration
+// still works. The `origin` callback runs per-request and reads
+// `env.ENVIRONMENT` so a single deploy serves both modes correctly.
+// T22.4 — CORS allowlist. Production origins are hardcoded (axal.vc apex +
+// www); the dev allowlist now comes from `env.EXTRA_DEV_ORIGINS` (comma
+// separated) so the workers.dev sandbox URL is NEVER hardcoded into a
+// production deploy. Production env should leave EXTRA_DEV_ORIGINS unset.
+// Task #30 — Production allowlist. `app.axal.vc` and `axal.vc` are both the
+// same-origin SPA: since 2026-09-01 (1d320dda9) each is a whole-host Workers
+// Custom Domain of this Worker, which serves the SPA and `/api/*` on either
+// (no CORS preflight needed for that traffic, but listing them keeps
+// preflight code paths well-behaved). `www.axal.vc` is kept for the `www`
+// alias of the marketing site, which posted to `/api/forms/*` and read
+// `/api/public/status` cross-origin (GitHub Pages no longer serves any
+// production host). `status.axal.vc` is the public status page
+// (Worker-served HTML), allowed for any future widget JS.
+const PROD_ORIGINS = [
+  'https://app.axal.vc',
+  'https://axal.vc',
+  'https://www.axal.vc',
+  'https://status.axal.vc',
+];
+const DEV_LOCALHOSTS = ['http://localhost:5000', 'http://localhost:5173'];
+
+function parseExtraDevOrigins(env: unknown): string[] {
+  const raw = ((env as { EXTRA_DEV_ORIGINS?: string })?.EXTRA_DEV_ORIGINS) || '';
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && /^https?:\/\//.test(s));
+}
+
+app.use(
+  '*',
+  cors({
+    origin: (origin, c) => {
+      const envName = (c.env.ENVIRONMENT || '').toLowerCase();
+      const isProd = envName === 'production' || envName === 'prod';
+      const extraDev = parseExtraDevOrigins(c.env);
+      const allowed = isProd
+        ? [...PROD_ORIGINS, ...extraDev]   // prod respects EXTRA_DEV_ORIGINS only if explicitly set on prod env (should be empty)
+        : [...PROD_ORIGINS, ...DEV_LOCALHOSTS, ...extraDev];
+      // Hono's cors() returns null/undefined to refuse the origin (no
+      // Access-Control-Allow-Origin header emitted). The browser then
+      // blocks the request — exactly the behaviour we want for an unknown
+      // origin in production.
+      return allowed.includes(origin) ? origin : null;
+    },
+    credentials: true,
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    // T6 — `X-CSRF-Token` is the double-submit header the frontend sends
+    // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
+    // requests. Without it in the allowlist, the browser preflight blocks
+    // every POST/PUT/PATCH/DELETE from the SPA in production.
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+  }),
+);
+
+// Defense-in-depth headers on every response (HSTS, nosniff, etc.).
+app.use('*', securityHeadersMiddleware());
+
+// Rate-limit + observability run on every /api/* request. rateLimit resolves
+// the current user once and caches it on context so observability + downstream
+// handlers don't re-query the DB. Both are no-ops outside `/api/*`.
+app.use('/api/*', rateLimitMiddleware());
+app.use('/api/*', observabilityMiddleware());
+// Task #1 (DB) — stamps users.last_active_at, throttled via RATE_LIMITS KV.
+// Mounted AFTER observability so the cached `currentUser` is available; the
+// middleware short-circuits when no user is on context.
+app.use('/api/*', lastActiveMiddleware());
+// T6 — CSRF double-submit on mutating verbs for cookie-auth requests. Bearer
+// auth (impersonation, websockets, signed-download URLs) is exempt by design
+// — see middleware/csrf.ts for the full predicate.
+app.use('/api/*', csrfMiddleware());
+
+// Task #5 (DC) — Hard-block third-party OAuth callbacks that arrive on the
+// `*.workers.dev` sandbox host in production. The provider apps (Google,
+// Microsoft, LinkedIn) are now registered with axal.vc redirect URIs only;
+// any callback hitting workers.dev is either a stale redirect from before
+// the migration or an attacker probing the legacy URL. Returning 410 Gone
+// (vs 404) signals "this URL is permanently retired" so providers stop
+// retrying and any cached browser state self-heals on the next attempt.
+// The non-callback workers.dev surface stays open for preview/debugging.
+//
+// Mounted AFTER observability + rate-limit + CSRF so blocked traffic still
+// shows up in metrics and counts against the per-bucket rate limit (so a
+// stuck retry loop on a stale URL gets throttled instead of free-firing).
+async function oauthCallbackWorkersDevGuard(c: any, next: () => Promise<void>) {
+  const envName = String((c.env?.ENVIRONMENT || '')).toLowerCase();
+  if (envName === 'production' || envName === 'prod') {
+    const host = (c.req.header('host') || '').toLowerCase();
+    if (host.endsWith('.workers.dev')) {
+      console.warn('[OAUTH-GUARD] blocked workers.dev callback', c.req.path, host);
+      return c.text(
+        'This OAuth callback URL is no longer accepted. Please reconnect from https://axal.vc.',
+        410,
+      );
+    }
+  }
+  await next();
+}
+app.use('/api/calendar/google/callback', oauthCallbackWorkersDevGuard);
+app.use('/api/calendar/microsoft/callback', oauthCallbackWorkersDevGuard);
+app.use('/api/linkedin/oauth/callback', oauthCallbackWorkersDevGuard);
+
+// Canonical-host flip — axal.vc is now the primary host. SPA navigations
+// (HTML page loads) hitting app.axal.vc are 301'd to the same path on
+// axal.vc so users, search engines, and external bookmarks all converge
+// on one origin. /api/* traffic is intentionally NOT redirected:
+//   - OAuth callbacks (Google/Microsoft/LinkedIn) are registered with the
+//     provider against app.axal.vc/api/auth/*/callback and MUST keep working
+//     on that host. 301-ing them would break the OAuth handshake (the
+//     provider POSTs back to app.axal.vc; redirecting that POST loses the
+//     body / state).
+//   - The SPA's same-origin /api/* XHRs already work on whichever host
+//     the user loaded; no need to bounce them.
+app.use('*', async (c, next) => {
+  const envName = String((c.env as any)?.ENVIRONMENT || '').toLowerCase();
+  const isProd = envName === 'production' || envName === 'prod';
+  if (!isProd) return next();
+  const host = (c.req.header('host') || '').toLowerCase();
+  if (host !== 'app.axal.vc') return next();
+  if (c.req.path.startsWith('/api/')) return next();
+  const url = new URL(c.req.url);
+  url.host = 'axal.vc';
+  return c.redirect(url.toString(), 301);
+});
+
+// D1315 (#2418): /account/developer… moved to /account/builder…, permanently, the sub-path and query kept.
+for (const path of LEGACY_BUILDER_PATHS) {
+  app.on(['GET', 'HEAD'], path, (c) => {
+    const url = new URL(c.req.url);
+    return c.redirect(builderRedirectTarget(url.pathname, url.search) ?? '/account/builder', 308);
+  });
+}
+
+/**
+ * D751 T9 (#1921): each OAuth connector the catalogue offers (oauth2, an
+ * implementation, not coming soon), read from the same REGISTRY, mapped to
+ * T1's readiness: true set, false unset, null unreadable. Keys and booleans
+ * only: never an env var name, a value or a client id. Never throws.
+ */
+async function connectorsOauth(env: Env): Promise<Record<string, boolean | null>> {
+  const offered = REGISTRY.filter((p) => p.auth_type === 'oauth2' && p.status !== 'coming_soon' && getProviderImpl(p.key));
+  const values = await Promise.all(offered.map((p) => readinessOf(env, p).then((r) => r ?? null, () => null)));
+  return Object.fromEntries(offered.map((p, i) => [p.key, values[i]]));
+}
+
+// Quick health probe used by uptime monitors.
+app.get('/api/health', async (c) =>
+  c.json({
+    status: 'ok',
+    app: 'StudioOS API',
+    runtime: 'Cloudflare Workers',
+    bindings: {
+      db: !!c.env.DB,
+      kv_tokens: !!c.env.TOKENS,
+      kv_rate_limits: !!c.env.RATE_LIMITS,
+      durable_pipeline: !!(c.env as any).PIPELINE_ROOM,
+      durable_onboarding: !!(c.env as any).ONBOARDING_CHAT,
+    },
+    // Task #9 — ticket↔GitHub sync config presence (flags only, no values).
+    github_sync: {
+      token: !!c.env.GITHUB_ACCESS_TOKEN,
+      repo: !!(c.env.GITHUB_REPO_OWNER && c.env.GITHUB_REPO_NAME),
+      webhook_secret: !!c.env.GITHUB_WEBHOOK_SECRET,
+    },
+    connectors_oauth: await connectorsOauth(c.env),
+  }),
+);
+
+// Task #2 — First-party signup-funnel event sink (batched, consent-gated on
+// the client, per-IP `track` rate-limit bucket). Same telemetry philosophy
+// as /api/client-error: unauthenticated, best-effort, always 204.
+app.route('/api/track', track);
+
+// Real-time WebSocket fan-out (Durable Objects). Must stay at the edge.
+app.route('/api', realtime);
+
+// Mount all production API routes. Prefixes mirror the FastAPI routers in
+// `backend/app/api/routes/*.py` so the frontend `/api/...` calls hit the same
+// paths in dev and prod.
+app.route('/api/auth', auth);
+// SMS as a backup 2FA factor (Google Cloud Identity Platform). Mounted on
+// the same /api/auth prefix as the password/TOTP routes so endpoint paths
+// match the docstrings in routes/auth_sms.ts. Hono dispatches the most-
+// specific route first, so this never shadows /api/auth/login etc.
+app.route('/api/auth', authSms);
+// Task #50 — Lost-TOTP recovery flow (layered). Mounted at /api/auth/recover
+// so the existing /api/auth surface remains untouched.
+app.route('/api/auth/recover', authRecover);
+// Task #51 — Google sign-in (optional). Mounted on its own /api/auth/google
+// prefix so it never shadows the magic-link / TOTP routes on /api/auth.
+app.route('/api/auth/google', authGoogle);
+// BLOCK-AUTH-02 — WebAuthn passkeys. Own /api/auth/passkey prefix so the
+// ceremony routes never shadow the password/TOTP/magic routes on /api/auth.
+app.route('/api/auth/passkey', authPasskey);
+
+// Task #50 — 24h cool-off middleware. Blocks the listed sensitive
+// surfaces while user_recovery_state.cooling_off_until is in the future
+// (D189 — it was declared as a column on `users` by 060 and could never
+// land there, the table being at D1's 100-column cap; migration 277)
+// (set by Layer 2c / 2d / 3f / 4 resolutions). Applied as a wildcard
+// BEFORE the route table so the gate runs ahead of every handler.
+// Round-5 review fix — the frontend calls `/api/legal/esign/*` (mounted
+// at line ~479) and admin contract operations live under
+// `/api/admin/contracts`. Without these prefixes the cool-off gate
+// missed actual contract surfaces; the threat-model post-recovery
+// containment requires ALL contract-sensitive routes to be paused.
+const COOL_OFF_PREFIXES = [
+  '/api/billing',
+  '/api/payments',
+  '/api/contracts',
+  '/api/esign',
+  '/api/legal/esign',
+  '/api/admin/contracts',
+  '/api/kyc',
+  '/api/capital',
+  // D709 (#1774) — management-fee terms and issued periods, the class of /api/capital.
+  '/api/fund-fees',
+  '/api/dd',
+  '/api/admin/impersonate',
+  // Task #11 (II) — admin refunds are money-movement; pause them too so a
+  // freshly-recovered admin account can't issue refunds during cool-off.
+  '/api/admin/billing',
+  // Task #9 — minting promo codes (incl. 100%-off) is money-adjacent; pause
+  // promo admin during a freshly-recovered admin's cool-off window.
+  '/api/admin/promos',
+  // Wave 4 — a territory licence carries an annual fee, a revenue share and an
+  // exclusive grant over whole countries. Same class as promos: pause it for a
+  // freshly-recovered admin.
+  '/api/admin/licences',
+  // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
+  '/api/admin/licence-pricing',
+  // D5018 (#5018) — the reference prices behind every program's recommended fee. Same class.
+  '/api/admin/program-pricing',
+  // D5019 (#5019) — named sub-territories that exclusivity scopes are drawn on. Same class.
+  '/api/admin/territory-regions',
+  // D5048 (#5048) — a licence's package and program agreements. Same class.
+  '/api/admin/licence-agreements',
+  // D708 — each Axal entity's bank accounts: the payment instructions every
+  // notice prints. Pause them for a freshly-recovered admin.
+  '/api/admin/bank-accounts',
+  // D716 — the Subscription Booklet: an applicant's submission and HQ's
+  // withdrawal of it. Pause them for a freshly-recovered account.
+  '/api/fund-booklets',
+  // D716 — fund notices ask an LP or an entity for money. Pause them for a
+  // freshly-recovered account.
+  '/api/fund-notices',
+  // D755 — the catalog's writes, token packs included, sell what members pay
+  // for and can mint a pack. Same class as promos.
+  '/api/admin/catalog',
+  // D1009 — checkout keys and webhook settings share the Payments cool-off.
+  '/api/admin/stripe',
+];
+for (const p of COOL_OFF_PREFIXES) {
+  app.use(p, recoveryCoolOff);
+  app.use(`${p}/*`, recoveryCoolOff);
+}
+// D248 — ROUTES, NOT PREFIXES, for the acts that share a prefix with routes
+// that must stay open. `recoveryCoolOff` refuses every method, GETs included,
+// and the loop above adds `${p}/*`, which covers every sibling under p. So each
+// entry here is the one route pattern itself (Hono matches `:param`), and is
+// registered without the wildcard.
+//
+// `/api/admin/impersonate` above covers OPENING a support session. Extending
+// lives under `/api/admin/impersonate-sessions`, which no prefix reached, so a
+// freshly recovered account could not open a session but could extend one it
+// already held. Ending a session is deliberately NOT covered: it is the safe
+// direction, and an owner who has just recovered their account may need to
+// close a session somebody else opened.
+//
+// Admin-over-admin writes this wave touched, decided one by one (D248):
+//   · the Super Admin elevation — grant, revoke and transfer are POST and
+//     DELETE on `/:userId`; the holder list at GET `/` stays readable.
+//   · closing or re-opening an account (D247).
+//   · changing an account's role, the binding-agreement override included.
+//   · force re-auth (`/api/admin/security/force-reauth`) is NOT covered. It
+//     ends sessions and grants nothing; it is the containment tool a
+//     recovered owner is most likely to need, the same argument as End.
+//
+// D259 — the two acts HQ takes INTO a branch's database, decided the same way:
+//   · opening a support session on a branch account. `/api/admin/impersonate`
+//     paused the local open; this one — the same act across a tenancy
+//     boundary — was on neither list, so a Super Admin inside the cool-off
+//     could open a session on a branch account they could not open at HQ.
+//   · moving an account between branches. It closes the account where it
+//     lives and moves which subsidiary earns its revenue share: the money-
+//     adjacent class the licence and promo prefixes above already pause.
+//   Both are the exact route, never `/api/admin/branches/*`: a prefix would
+//   pause whatever lands under it next with no one deciding it — each HQ→branch
+//   act is decided on its own, the way each entry above was.
+//
+// D262 — the next one, and the four acts task 399 asked to be decided:
+//   · unbinding a branch's administrator: it demotes and deactivates an
+//     account in another tenant's database — paused.
+//   · HQ's demote-admin: it takes the admin role off another administrator,
+//     the class of toggle-active and the role route above, and was on neither
+//     list — paused.
+//   · granting limited access, Lab admission and the application decide are
+//     NOT paused. None gives power over an administrator, money or another
+//     tenant, and a limited-access grant cannot sign; KYC verdicts are already
+//     paused by the `/api/kyc` prefix.
+const COOL_OFF_ROUTES = [
+  '/api/admin/impersonate-sessions/:id/extend',
+  '/api/admin/super-admins/:userId',
+  '/api/admin/users/:userId/toggle-active',
+  '/api/admin/users/:userId/role',
+  '/api/admin/branches/:code/support-session',
+  '/api/admin/branches/:code/accounts/:userId/move',
+  '/api/admin/branches/:code/admins/:userId/unbind',
+  // D5043 — finishing a move is the move's second leg, paused as the move is.
+  '/api/admin/account-moves/:uid/retry-invitation',
+  '/api/admin/users/:userId/demote-admin',
+  // D714 — the three fund routes that are wholly Super Admin acts: issuing a
+  // capital call, executing a distribution, and assigning a fund's ledger
+  // administrator. The acts that share a route with reads (a first call
+  // through POST /api/funds/:id/lps, a change of GP of record or carry) take
+  // the same 423 inside `services/fundAdminAccess.ts` instead, so the reads
+  // on those routes stay open.
+  '/api/funds/:id/capital-call',
+  '/api/funds/distributions/execute',
+  '/api/fund-ledger/:id/administrator',
+  // D755 — a Super Admin's adjustment of one member's AI top-up balance: money
+  // added or taken on someone else's behalf. The member-account read beside it
+  // stays open.
+  '/api/ai-budget/members/:userId/adjustments',
+  // D4373 — HQ's refund of a deck generation run: money given back on a
+  // member's behalf, the same class as an adjustment.
+  '/api/ai-budget/deck-batches/:uid/refund',
+  // D966 — the SAFE basis repair writes founders' cap tables: the money-adjacent
+  // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
+  // route, so D710's entity reads under `/api/admin/mercury` stay open.
+  '/api/admin/mercury/safe-basis-repair',
+  // D5039 — recording a payment against a subsidiary statement and voiding one
+  // change what HQ is owed: the money class, behind the step-up. The exact
+  // routes, so the statement ledger and the dispute entry stay open.
+  '/api/admin/statements/:uid/payments',
+  '/api/admin/statements/:uid/void',
+];
+for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
+// Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
+// D1051 (#2902): the checkout quote, start and status. Before `billing` so `/checkout/*` is its.
+app.route('/api/billing', billingCheckout);
+app.route('/api/billing', billing);
+
+// Task — Stripe-backed product catalog read surface. Authenticated read of
+// the D1 mirror (admin sync lives at /api/admin/catalog/sync). Mounted as a
+// sibling of /api/billing so SKUs come from one source, not STRIPE_PRICE_*.
+app.route('/api/catalog', catalog);
+
+// Task #16 — Public runtime Stripe config. Returns publishable key + mode
+// (Test/Live) so the frontend can load Stripe.js without a rebuild when the
+// key changes. No auth required — publishable keys are public. The secret key
+// and webhook secret are NEVER returned here.
+app.get('/api/payments/config', async (c) => {
+  const { getPublishableKey, stripeMode } = await import('./services/catalog');
+  const pk = await getPublishableKey(c.env);
+  return c.json({ publishable_key: pk || null, mode: stripeMode(c.env) });
+});
+
+// PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
+// Server-side only — hands back Stripe `client_secret`s so the SPA can confirm
+// cards via Stripe Elements without ever seeing the Stripe secret key. Sibling
+// of /api/billing so SKUs resolve through the same catalog mirror.
+app.route('/api/payments', payments);
+
+// One-time CART ORDER surface. Combined PaymentIntent for a cart of one_time
+// SKUs; fulfilment (webhook or /confirm) grants user_products + invoice/email.
+// Sibling of /api/payments so SKUs resolve through the same catalog mirror.
+app.route('/api/orders', orders);
+
+// Products page — explorer promo status + $0 redemption. Sibling of
+// /api/payments; paid checkout on the same page flows through the payments
+// surface above.
+app.route('/api/products', products);
+
+// Task #6 — Studio-tier paywall mounts. Wildcards run BEFORE the route
+// registration so a 402 short-circuits the handler. Bypass roles
+// (admin/partner/investor/mentor) are exempt inside the middleware itself.
+// Growth-tier mutation gates live inline at the specific handler (decks,
+// captable, mentors booking, scoring run, comarketing, compliance create).
+// D1421: the prefixes live in middleware/paywallPrefixes.ts, shared with the Studio module registry.
+for (const p of STUDIO_PREFIXES) {
+  app.use(p, requireTier('studio'));
+  app.use(`${p}/*`, requireTier('studio'));
+}
+
+// Task #6 (W-1) — Investor paywall gates. Mounted BEFORE the route table so
+// the middleware always wraps the handlers. The middleware is a no-op for
+// non-investor callers (admin/partner/mentor bypass; founder/etc. pass
+// through unchanged) and only enforces tier when caller.role === 'investor'.
+// D614/D1149/D1237: precise exemptions allow Free room quota, join/leave,
+// and an authorized header/key strip. The deal list, child reads and diligence
+// stay Professional; join enforces its one-room allowance in the INSERT.
+const investorPro = requireInvestorTierExcept('professional');
+for (const p of INVESTOR_PRO_PREFIXES) {
+  app.use(p, investorPro);
+  app.use(`${p}/*`, investorPro);
+}
+
+app.route('/api/scoring', scoring);
+// D588 (#1215) — a founder shares one official scoring run with one named account.
+app.route('/api/lab-report-shares', labReportShares);
+// D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
+// Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
+app.route('/api', accountCompanies);
+// D1415: the Portfolio reads — switcher, settings scope, path resolution.
+app.route('/api', accountPortfolio);
+// D1591 (#3858): is a company or project address free, while the member types it.
+app.route('/api', slugCheck);
+// D1137 — a venture's move to a company and its owner transfer.
+app.route('/api/projects', projectLifecycle);
+app.route('/api/projects', projects);
+app.route('/api/legal', legal);
+app.route('/api/legalcap', legalcap);
+app.route('/api/partners', partners);
+// Task #8 (X-1) — Partner deal engine. Admin endpoints under
+// /api/admin/partners (separate from legacy /api/partners) and the
+// public token-gated onboarding flow under /api/partner-onboard.
+// D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
+app.route('/api/admin/partners', adminPartnersReads);
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnerDealReads);
+// D979 (#2765): the Firms tab's list (search, filters, sort, pages, exact total) and one firm's drawer. Read only.
+app.route('/api/admin/partners', adminPartnerFirms);
+app.route('/api/admin/partners', adminPartners);
+// D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetworkReads);
+app.route('/api/admin/network', adminNetwork);
+// D1509 (#3760): HQ's Grid switches — grid_generate, one per element, one per model (migration 723).
+app.route('/api/admin/feature-flags', adminFeatureFlags);
+// D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
+app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
+app.route('/api/investor-cohorts', investorCohorts);
+app.route('/api/admin/publications', adminPublications);
+app.route('/api/partner-onboard', partnerOnboarding);
+app.route('/api/partner-portal', partnerPortal);
+// Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
+app.route('/api/advisor', advisorRoutes);
+app.route('/api/partnernet', partnernet);
+app.route('/api/capital', capital);
+app.route('/api/tickets', tickets);
+// D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
+app.route('/api/deals/flow', dealFlow);
+// D1340 (#3548): the member's own mailboxes and the send — never Axal's house token.
+app.route('/api/mail', mailAccounts);
+// D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
+app.route('/api/mail', mailDrafts);
+// D1342 (#3550): Network members' address shares — the other's address only while both have shared.
+app.route('/api/mail', mailShares);
+app.route('/api/mail', mailPeople);
+app.route('/api/deals', dealViews);
+// D1587 (#3834): the investor's granted deck on their deal page, and the founder's grants. Before dealContext.
+app.route('/api/deals', deckGrants);
+app.route('/api/deals', dealContext);
+app.route('/api/deals', dealInsights);
+// D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
+app.route('/api/deals', dealWorkroom);
+app.route('/api/deals', deals);
+app.route('/api/users', users);
+app.route('/api/market-intel', marketIntel);
+// Public (no-auth) companion of /api/market-intel — the public publications,
+// and the retired sector digest's unsubscribe and pause links (D670), which
+// now only say the digest has stopped. Mounted as a sibling so it sits
+// OUTSIDE the requireAuth middleware applied to /api/market-intel.
+app.route('/api/market-intel-public', marketIntelPublic);
+app.route('/api/investor-profile', investorProfile);
+// Task #31 — Dashboard personal assistant is Anthropic-only and is
+// gated behind ENABLE_ANTHROPIC_DEV=1 on non-production stages. We
+// can't read env at module init time, so the gate runs as a
+// per-request middleware in front of the mount; in production STAGE
+// callers get a canonical 404 instead of reaching the route. The
+// assistant route itself also self-checks in `anthropicDevAllowed()`.
+app.use('/api/assistant/*', async (c, next) => {
+  const env = c.env as unknown as { STAGE?: string; ENVIRONMENT?: string; ENABLE_ANTHROPIC_DEV?: string };
+  const prod = env.STAGE === 'production' || env.ENVIRONMENT === 'production';
+  if (prod || env.ENABLE_ANTHROPIC_DEV !== '1') {
+    return c.json({ error: 'not_found' }, 404);
+  }
+  await next();
+});
+app.route('/api/assistant', assistantRoutes);
+
+// Task #176 (Phase 4) — read-only view of the caller's own AI gateway usage.
+// Mounted OUTSIDE the /api/assistant/* gate above: that middleware guards a
+// dev-only Anthropic path, and this endpoint reports on the production
+// Workers AI router, which is a different thing that happens to sit nearby.
+app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+// D1326 (#3487): D720 §7's run path, with its `form` handler.
+app.route('/api/ai/rail', railRunRoutes);
+app.route('/api/fills', fillsRoutes);
+app.route('/api/ai', aiRoutes);
+app.route('/api/ai-budget', aiBudgetRoutes);
+// D845 (#2471): the member's own usage reports over api_usage_events.
+app.route('/api/developer/usage', developerUsage);
+app.route('/api/developer/assistants', developerAssistants);
+app.route('/api/admin/ai-usage', adminAiUsageRoutes);
+app.route('/api/advisory', advisory);
+app.route('/api/activity', activity);
+// Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and
+// /api/infra was REMOVED. The Access app is configured on the apex only, while
+// the SPA uses a relative API base (BASE='/api' in frontend/src/lib/api.js), so
+// app.axal.vc/api/admin/* fetches could not carry the Cf-Access-Jwt-Assertion
+// header — requireCfAccess() then fail-closed with 403 for legitimate admins and
+// took the entire admin/monitoring/infra UI down. These route groups remain
+// protected by the in-app requireAdmin/requireAuth RBAC (the inner perimeter).
+// Do NOT re-add requireCfAccess() here without first completing the re-engage
+// checklist in documentation/architecture/GOTCHAS.md item (h): every worker-gated path must also be a path
+// in the Access app AND admin traffic must be routed to the gated host, or the
+// admin API goes down again.
+
+// D480 — registry store before the contracts catch-all (/:uid shadowing).
+app.route('/api/admin/contracts/registry', adminContractDocRegistry);
+// Mount the more-specific /admin/contracts prefix FIRST so it takes
+// precedence over the generic /admin router (which has no contract routes).
+app.route('/api/admin/contracts', adminContracts);
+// D1215 (#3212): the closings desk, before the /api/admin catch-all.
+app.route('/api/admin/closings', adminClosings);
+// Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
+app.route('/api/admin/forms', adminForms);
+app.route('/api/admin/integration-keys', adminIntegrationKeys);
+// D966 (#2630): POST /safe-basis-repair, founders' Raise SAFEs; it reads no entity account.
+app.route('/api/admin/mercury', adminMercurySafeBasis);
+// D710 (#1775): Mercury, read-only, for fund administration.
+app.route('/api/admin/mercury', adminMercury);
+app.route('/api/admin/github', adminGithub);
+app.route('/api/github', githubWebhook);
+app.route('/api/admin/advisor-audit', adminAdvisorAudit);
+// Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
+app.route('/api/admin/cohort', adminCohort);
+// D601 (#998) — HQ records a formation order's packet and its state filing.
+app.route('/api/admin/incorporations', adminIncorporations);
+// D578 (#1205) — a startup's SAFEs: recorded terms, status from the envelope.
+app.route('/api/safe-issuances', safeIssuances);
+// D580 (#1207) — 83(b) operator review: assign an operator, record a review.
+app.route('/api/admin/83b-review', admin83bReview);
+// D579 (#1206) — a startup's EIN, encrypted at rest; founders, company editors and admins.
+app.route('/api/company-ein', companyEin);
+// Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
+// the generic /api/admin router so the more-specific prefix wins.
+app.route('/api/admin/team', adminTeam);
+// Task #1 — Network profiles. Mounted BEFORE catch-all /api/admin so
+// /api/admin/network-profiles/* resolves here.
+app.route('/api/admin/network-profiles', adminNetworkProfiles);
+// Task #3 — mount Telegram BEFORE the catch-all `/api/admin` so the
+// nested `/api/admin/telegram/*` routes resolve here rather than 404ing
+// inside the generic admin router.
+app.route('/api/admin/telegram', adminTelegram);
+// D684 — the channels bot's setWebhook, super admin only. Before the catch-all
+// `/api/admin` for the same reason as the line above.
+app.route('/api/admin/channels', channelsAdmin);
+// D557 (#1158) — authoring the Learning center; Super Admin only.
+app.route('/api/admin/learning', adminLearningRoutes);
+// D559 (#1160) — authoring exercises and exams, and reviewing submissions.
+app.route('/api/admin/learning', adminLearningAssessmentRoutes);
+// D558 (#1159) — authoring programs: contents, assigned admins, enrolments.
+app.route('/api/admin/learning', adminLearningProgramsRoutes);
+// D560 (#1161) — authoring webinars: schedule, publish, cancel, recording, attendance.
+app.route('/api/admin/learning', adminLearningWebinarsRoutes);
+// D561 — the Super Admin's video upload to R2.
+app.route('/api/admin/learning', adminLearningVideo);
+// User-facing Telegram channel join request — pings the studio Slack
+// inbox so an admin can issue the invite link manually. Mounted under
+// /api/telegram (not /api/admin) since any authenticated user can ask.
+app.route('/api/telegram', telegramJoin);
+// Task #4 — same mount-before-catch-all precedence as Telegram.
+app.route('/api/admin/x', adminX);
+// Slack bus (Phase 1, 2026-05-26) — org-wide channel poster status +
+// per-channel test action. Mounted BEFORE catch-all /api/admin so the
+// /api/admin/slack/* routes resolve here.
+app.route('/api/admin/slack', adminSlack);
+// Task #1 (Articles) — the admin review queue over `articles`. Mounted BEFORE
+// catch-all /api/admin so the nested /api/admin/articles/* routes resolve here.
+//
+// D166 RETIRED `/api/admin/news`, which was mounted here and read the SAME
+// table. It was not a redundant alias: its publish handler accepted
+// `in_review` as well as `approved`, so an admin could skip the recorded
+// approve step entirely. The path now 404s rather than falling through.
+app.route('/api/admin/articles', adminArticles);
+// Task #11 (II) — Admin billing actions (Stripe refunds). Mounted BEFORE the
+// catch-all /api/admin so /api/admin/billing/* resolves here, not in the
+// generic admin router. Step-up + requireAdmin enforced per-route.
+app.route('/api/admin/billing', adminBilling);
+// Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
+// /api/admin so /api/admin/catalog/* resolves here. Super Admin gates per-route (D1009).
+app.route('/api/admin/catalog', adminCatalog);
+// Task #16 — Admin Stripe management (webhook + publishable key). Mounted
+// BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
+app.route('/api/admin/stripe', adminStripe);
+// D1011 (#2830): the Payments page's change log and webhook deliveries; Super Admin only.
+app.route('/api/admin/payments', adminPayments);
+// D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
+app.route('/api/admin/money-rails', adminMoneyRails);
+app.route('/api/admin/partner-settlements', adminPartnerSettlements);
+app.route('/api/partner-settlements', partnerSettlements);
+// D713 (#1778) — a member's own Mercury: status and payment matches. Read-only.
+app.route('/api/mercury/personal', mercuryPersonalRoutes);
+// D752 — an investor's proof of capital: dated statements from their own Mercury, read-only, HQ only.
+app.route('/api/mercury/attestations', mercuryAttestationRoutes);
+// D840 part 4 — an investor's own Mercury feeds their sections, read-only, HQ only.
+app.route('/api/mercury/investor', mercuryInvestorRoutes);
+app.route('/api/carta/investor', cartaInvestorRoutes);
+// D708 — each Axal entity's bank accounts, Super Admin only. Before the
+// catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
+app.route('/api/admin/bank-accounts', adminBankAccounts);
+// D717 (#1782) — the entity and money map, read-only, HQ only. Before the catch-all.
+app.route('/api/admin/fund-structure', adminFundStructure);
+// Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
+app.route('/api/admin/promos', adminPromos);
+// D1259: HQ › Scoring's model versions, Publish and country indices; part 3's venture_scores.ts shares the prefix.
+app.route('/api/venture-scores', ventureScoreModels);
+// Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
+// so /api/admin/events/* resolves here, not in the generic admin router.
+app.route('/api/admin/events', adminEventsRoutes);
+// D1490 — HQ › Platform › Event syndication; before the /api/admin catch-all.
+app.route('/api/admin/event-syndication', adminEventSyndicationRoutes);
+// Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
+// /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
+app.route('/api/admin/jobs', adminJobsRoutes);
+// Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
+// so /api/admin/circles/* resolves here, not in the generic admin router.
+app.route('/api/admin/circles', adminCirclesRoutes);
+// D932 — Admin · Community's reads (Recent activity). Any admin; before the
+// catch-all like the consoles above.
+app.route('/api/admin/community', adminCommunityRoutes);
+app.route('/api/admin/assessment', adminAssessmentRoutes);
+// Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
+// the specific prefixes resolve here, not in the generic admin router.
+app.route('/api/admin/consultations', adminConsultations);
+// Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
+// /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
+app.route('/api/admin/exploring', adminExploring);
+// GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
+app.route('/api/admin/lp-applications', adminLpApplications);
+// D752 — admins on HQ read an investor's shared proof of funds; audited before it answers. Before the catch-all.
+app.route('/api/admin/capital-attestations', adminCapitalAttestations);
+// Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
+// /api/admin/licences/* resolves here, not in the generic admin router.
+// D110 — the Deploy step and the Platform Deployments zone. Mounted at
+// /api/admin so it can own BOTH `/licences/:uid/deploy` and `/deployments`,
+// and BEFORE the licence ledger so the deploy path resolves here rather than
+// falling into `admin_licences`'s `/:uid` catch-all. Deploying is
+// infrastructure, not a licence change: the licence is unchanged by it.
+app.route('/api/admin', adminDeployments);
+// D111 — statements and promo ceilings. Mounted with the deployments router,
+// before the /api/admin catch-all, for the same reason.
+app.route('/api/admin', adminStatements);
+app.route('/api/admin', adminEscalations);
+// D120 — the cross-host support session. Mounted here with the rest of the
+// HQ→branch writes and BEFORE the `/api/admin` catch-all, so `/branches/:code/
+// support-session` reaches its own handler rather than admin.ts's fallback.
+app.route('/api/admin', adminSupportSessions);
+// The branch tier's own surface. Its own prefix rather than `/api/admin`,
+// because it is not an HQ console route and must not inherit the elevation
+// checks or the cool-off prefixes that apply there (D112).
+app.route('/api/branch', branchEscalationRoutes);
+// D130 — the approvals board, same prefix and same tier gate. A separate file
+// from the escalations lane because they are different concerns: one reads the
+// four queues this branch decides, the other is what it asked HQ.
+app.route('/api/branch', branchApprovalRoutes);
+// D470 — assignment is a side record, not a decision and not a thread. Its
+// own file so the board route stays a read.
+app.route('/api/branch', branchApprovalAssignmentRoutes);
+// D1040 — HQ's inbox: the same board, assignment and history on requireAdmin,
+// without the branch tier gate.
+app.route('/api/admin/approvals', adminApprovalRoutes);
+// D131 — S1's digest. A third file on the same prefix because it composes what
+// the other two read rather than owning a store of its own.
+app.route('/api/branch', branchHomeRoutes);
+
+// S5 + S10 (D147) — HQ's master contract library as this branch holds it.
+// Same mount as the other three branch reads; `requireBranchTier` inside
+// refuses it on HQ, where the library itself lives.
+app.route('/api/branch', branchTemplateRoutes);
+
+// S6 (D148) — this territory's own stats, and the anonymised median HQ pushed.
+app.route('/api/branch', branchInsightsRoutes);
+// S14 (D209) — what this branch Worker is and is not. HQ's half is
+// GET /api/admin/platform/topology; both answer from services/topology.ts.
+app.route('/api/branch', branchDeploymentRoutes);
+// D441 — accepting a move onto this branch. Same prefix, no session: the
+// token is the credential, and the person has no account here yet.
+app.route('/api/branch', branchInvitationRoutes);
+// D446 — S13's audit line. The branch reads the support sessions its own
+// database recorded. Same prefix as the other branch reads.
+app.route('/api/branch', branchSupportSessionRoutes);
+app.route('/api/admin/licences', adminLicences);
+// D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+// D983: the program requests, mounted before part 1's routes so `/requests` is never read as a licence.
+app.route('/api/admin/program-grants/requests', adminProgramRequests);
+app.route('/api/admin/program-grants', adminProgramGrants);
+app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
+// Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
+// catch-all for the same reason as the licence ledger above.
+app.route('/api/admin/super-admins', adminSuperAdmins);
+// D540 — the credit reward rules and their grants. Super-admin-only, and
+// before the catch-all like the rest of the HQ tier.
+app.route('/api/admin/credit-rules', adminCreditRules);
+// D544 — the review queue for feature requests and suggested tasks.
+// Super-admin-only, before the catch-all.
+app.route('/api/admin/ticket-reviews', adminTicketReviews);
+// HQ · Home — the franchisor's overview. Super-admin-only, mounted before
+// the catch-all like everything else in the HQ tier.
+app.route('/api/admin/hq', adminHq);
+// D893 — Admin › Insights' Scope select: HQ-held and each deployed
+// subsidiary. Super Admin on HQ, before the catch-all.
+app.route('/api/admin/insights/scopes', adminInsightsScopes);
+// HQ · Revenue — the money rails. Super-admin-only, and before the
+// catch-all for the same reason as the rest of the HQ tier.
+app.route('/api/admin/revenue', adminRevenue);
+// HQ · Content and Platform (canvas H6). Super-admin-only, and before the
+// catch-all like the rest of the HQ tier. Note the near-collision:
+// `/api/admin/articles` is the plain-admin Content QUEUE, which reviews one
+// piece at a time. This is the cross-tenant pipeline view above it.
+app.route('/api/admin/content', adminContent);
+app.route('/api/admin/platform', adminPlatform);
+// D1075 — the public trust center's content store (Super Admin writes) and
+// members' security reports. Mounted before the desk below so the desk's
+// router never answers for them.
+app.route('/api/admin/security/trust-center', adminTrustCenter);
+app.route('/api/admin/security/reports', adminSecurityReports);
+// HQ · Security — the cross-tenant security desk. Super-admin-only.
+app.route('/api/admin/security', adminSecurity);
+// HQ · Support — the three queues as one read (D204, canvas H22). Super-admin-
+// only, and before the catch-all like the rest of the HQ tier.
+app.route('/api/admin/hq-support', adminHqSupport);
+// Studio glance — both tiers, before the /api/admin catch-all (D443).
+app.route('/api/admin/studio', adminStudioGlance);
+// D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
+app.route('/api/admin/insights/export', adminInsightsExport);
+app.route('/api/admin/insights', adminInsights);
+// D1301 (#3397): Admin › Accounts' overview, counted as Insights counts.
+app.route('/api/admin/accounts/overview', adminAccountsOverview);
+// D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+// D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
+app.route('/api/admin/programs/proposals', adminProgramProposals);
+app.route('/api/admin/programs', adminPrograms);
+app.route('/api/licence', licencePartnerDealTypes);
+app.route('/api/licence', licenceRequests);
+app.route('/api/licence', licencePrograms);
+app.route('/api/licence', licence);
+app.route('/api/best-fit', bestFitSelf);
+// D1303 (#3400): All accounts' bulk resend, saved views and export.
+app.route('/api/admin/accounts', adminAccounts);
+app.route('/api/admin', admin);
+app.route('/api/private-data', privateData);
+app.route('/api/monitoring', monitoring);
+app.route('/api/infra', infra);
+// Task #33 — One-time signed R2 download endpoint (`/api/files/dl/:token`).
+// Token-gated only — no admin/auth at the route layer because the token
+// itself is the authorisation. See services/signedDownload.ts.
+app.route('/api/files', filesRoutes);
+app.route('/api/dd', ddRoutes);
+// Investor lifecycle features (IC decisions, LP reporting, portfolio-company
+// update inbox, cap-table/ownership). Gating: /api/ic is professional-tier
+// (INVESTOR_PRO_PREFIXES); /api/lp-reports + /api/positions sit in
+// STUDIO_PREFIXES to keep founders out (admin/investor bypass); the dual-
+// audience /api/portfolio-updates enforces access per-role in-route.
+app.route('/api/ic', ic);
+app.route('/api/lp-reports', lpReports);
+app.route('/api/portfolio-updates', portfolioUpdates);
+// The support ledger (IP3) is NOT in STUDIO_PREFIXES, unlike /api/positions
+// beside it. A founder reaching an investor's value-add desk has not hit a
+// paywall, they have hit someone else's surface, and 402 "upgrade to see this"
+// would be the wrong sentence. `canViewLpData` answers 403 in-route instead.
+app.route('/api/portfolio-support', portfolioSupport);
+app.route('/api/positions', positions);
+// Contacts — unified inbound relationship hub (founder CRM). Role-gated
+// in-route (founder/admin); no paywall prefix so it's core-available.
+// D1351 (#3566): the member's own book — LinkedIn's Connections.csv, suggested
+// duplicates, notes and follow-ups — on /import/* and /book/*, ahead of the CRM.
+app.route('/api/contacts', contactImports);
+app.route('/api/contacts', contacts);
+app.route('/api/round-calls', roundCalls);
+app.route('/api/funds', funds);
+app.route('/api/fund-ledger', fundLedger);
+app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
+// D714 — the fund administration console: which fund acts this admin may take.
+app.route('/api/fund-admin', fundAdmin);
+// D1217 (#3214): the company's receiving account, its own module, mounted before the Closing router (S01, 2026-10-26).
+app.route('/api/closings/company-receiving-accounts', companyReceivingAccounts);
+// D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
+app.route('/api/closings', closings);
+// D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
+app.route('/api/reporting', reporting);
+// D1059 (#2929): a report from the Grow modules, sent with frozen figures, corrected as a revision, with its statements.
+app.route('/api/reporting', reportingReports);
+app.route('/api/fund-reporting', fundReporting);
+// D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
+app.route('/api/fund-booklets', fundBooklets);
+// D716 — fund notices: an Admin previews, the Super Admin issues, the LP reads their own.
+app.route('/api/fund-notices', fundNotices);
+app.route('/api/fund-performance', fundPerformance);
+app.route('/api/liquidity', liquidity);
+app.route('/api/email', email);
+app.route('/api/pipeline', pipeline);
+app.route('/api/search', search);
+app.route('/api/onboarding', onboarding);
+// Task #6 (IF) — mounts /api/onboarding/checklist + /api/onboarding/meta.
+// Sits on the same prefix as the legacy wizard router; Hono dispatches the
+// most specific path first so /progress + /complete keep going to the
+// original handler.
+app.route('/api/onboarding', onboardingChecklist);
+// Task #7 (IG) — Customer chat (paid tiers). Tier gating is enforced
+// inline (isEligible) so admin/mentor bypass + Partner-tier access work
+// without listing the prefix in STUDIO_PREFIXES (which would block
+// partners).
+app.route('/api/customer-chat', customerChat);
+// Task #8 (IH) — Data imports. Outside STUDIO_PREFIXES — tier limits are
+// enforced inline (Free=1/mo, Growth=10/mo, Studio=unlimited; admin/
+// partner/investor/mentor bypass).
+app.route('/api/imports', importsRoutes);
+app.route('/api/brand', brand);
+// Task #6 — viewer onboarding routes mounted FIRST so subpaths under
+// /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
+// resolve to the new handlers before falling through to the catch-all.
+app.route('/api/decks', deckShareActions);
+// D901 (#2680): before decks.ts, so its middleware records the PDF and
+// PowerPoint file that POST /api/decks/:id/export answers.
+app.route('/api/decks', deckExports);
+// D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
+app.route('/api/decks', deckNotes);
+// D1570 (#3817): `/:id/comments…`, `/:id/approval`, `/:id/approvers` and `/:id/approve`, before `decks`.
+app.route('/api/decks', deckComments);
+// D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
+app.route('/api/decks', deckReview);
+// D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.
+app.route('/api/decks', deckCheck);
+// D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
+app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
+// D1512 (#3764): Generate into areas (quote, admit, proposals, accept, discard).
+app.route('/api/decks', deckAreas);
+// D1521 (#3773): an instruction on the grid selection (quote, then one run into area proposals).
+app.route('/api/decks', deckInstruct);
+// D1516 (#3768): New deck from the narrative (outline with the grid plan and quote; one deck_build run).
+app.route('/api/decks', deckNarrative);
+// D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
+app.route('/api/decks', deckDraft);
+// D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
+app.route('/api/decks', deckCoedit);
+// D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
+app.route('/api/decks', deckElementModels);
+// D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
+app.route('/api/decks', deckModelPresets);
+app.route('/api/admin/ai/deck-models', adminDeckModels);
+app.route('/api/decks', deckTemplates);
+app.route('/api/decks', deckElements);
+// D1524 (#3776): the AIRail's plain usage meter (`/:id/usage`).
+app.route('/api/decks', deckUsage);
+// D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
+app.route('/api/decks', deckStage);
+// D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
+app.route('/api/decks', deckRemix);
+// D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
+app.route('/api/decks', deckTypedValues);
+// D1543 (#3781): `/:id/venture-elements[/:element]` and `/:id/logos…`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckVentureElements);
+// D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
+app.route('/api/decks', deckFigures);
+// D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
+app.route('/api/decks', deckSources);
+// D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
+app.route('/api/decks', deckNew);
+// D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
+app.route('/api/decks', deckAssist);
+// D1583 (#3830): teaser, one-pager and memo from one version; before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckDerive);
+// D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
+app.route('/api/decks', deckCritic);
+// D1552 (#3799): ⋯ › Whole deck › Fix with critique (code checks, the vision pass, fixes as proposals).
+app.route('/api/decks', deckCritique);
+// D1559 (#3806): likely investor questions, real objections first, answers bound to records; before `decks`.
+app.route('/api/decks', deckQaRoutes);
+// D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.
+app.route('/api/decks', deckTransform);
+// D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+// D1544 (#3784): an image's edits (vary, edit, erase, expand) and their revert, before `decks`.
+app.route('/api/decks', deckImageEdits);
+app.route('/api/decks', deckImages);
+// D1564 (#3811): `/:id/investor-links/:shareId/publish` and the email gate `/share/:token/email`, before `decks`
+// (above deckInvestorLinks, whose paths it shares none of, so #4105's registered routers stay just above `decks`).
+app.route('/api/decks', deckPublish);
+// D1580 F1 (#3827): rehearse a deck version and read its report.
+app.route('/api/decks', deckRehearsals);
+// D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckInvestorLinks);
+// #4105: deck_quotes.ts (D1556), deck_reports.ts (D1540, with HQ's queue at
+// /api/admin/deck-reports) and deck_stage_norms.ts (D1589, whose `GET
+// /stage-norms` this router's `GET /:id` would answer) mount themselves here,
+// just above `decks`, in that file-name order, through their `mount` exports'
+// `before: [decks]` (routes/_registry.ts).
+app.route('/api/decks', decks);
+// Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
+// Reviewer (document conversion + investor-style review). Both are
+// Cloudflare-native: D1 + R2 + Workers AI, no paid third-party APIs.
+app.route('/api/competitors', competitors);
+app.route('/api/deck-reviewer', deckReviewer);
+// Research · Library and · Ask — a per-user document store and questions
+// answered only from it. Every read is scoped `WHERE owner_user_id = ?`, and
+// its vectors are deliberately unreachable from /api/search: see the
+// VALID_TYPES comment in routes/search.ts.
+// D536 — mounted before /api/research so its one path is never shadowed.
+app.route('/api/research/overview', researchOverview);
+// D533 — Research · Markets and · Geographies, read through the crosswalk in
+// services/researchTaxonomy.ts. Paths do not overlap research.ts's.
+app.route('/api/research', researchMarkets);
+app.route('/api/research', researchSectors);
+// D664 (#1477): the Grow cycle's overview, module reads and store writes.
+// D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
+app.route('/api/cycles', notionCycleRoutes);
+// D1609 (#3731): each module's From PostHog, ahead of the cycle routers for the same reason.
+app.route('/api/cycles', posthogCycleRoutes);
+app.route('/api/cycles/grow', cycleGrow);
+app.route('/api/research', research);
+// D642 — usage is keyed on the caller, across all their companies.
+app.route('/api/usage', usage);
+
+// Public landing page HTML (no /api prefix). Founders publish via the
+// authenticated /api/brand/landing/by-project/:pid/publish endpoint;
+// this route renders the page for un-authenticated visitors.
+// Task #20 — public visual preview of a landing template (no auth, noindex).
+// Registered before /landing/:slug so the two-segment path matches first.
+app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, c.req.param('style'), c.get('cspNonce' as never) as string | undefined));
+app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
+// Task #4 — private preview URL for unpublished drafts (noindex).
+app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
+// Task #2 — branded multi-page site URLs: /p/{startup}/{page} resolves the
+// editable site slug + page slug; /p/{startup} renders the site's home page.
+// Requires the axal.vc/p{,/*} apex routes in wrangler.toml (both blocks).
+app.get('/p/:site/:page', async (c) => renderSitePage(c.env, c.req.param('site'), c.req.param('page'), c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
+app.get('/p/:site', async (c) => renderSitePage(c.env, c.req.param('site'), null, c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
+// Task #15 — Cloudflare Access on sensitive R2 read endpoints. Soft no-op in
+// dev/preview; production wrangler secrets engage the gate. Per-route auth
+// checks (requireAdmin/requireAuth) still run as the inner perimeter.
+// NOTE: eSign document downloads are deliberately NOT behind CF Access. The
+// `/api/legal/esign/:id/document` route also serves non-admin envelope OWNERS,
+// and the sibling PUBLIC route `/api/legal/esign/sign/:token/document` serves
+// email-only recipients with no account — neither is on the staff SSO
+// allow-list, and a Cloudflare Access path wildcard (`*/document`) would catch
+// the public route too. eSign docs therefore stay RBAC-only. KYC docs are
+// admin-only (requireAdmin, no owner/public sibling) so they CAN be gated.
+app.use('/api/kyc/admin/:userId/document', requireCfAccess());
+app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
+// Note: when the incorporation-packet / certificate-of-formation download
+// endpoint is wired (downstream task), it should also carry the same
+// requireCfAccess() middleware (it's admin-only, so safe to gate).
+
+app.route('/api/kyc/businesses', kybAdmin);
+// D1232 (#3240): renewals, periods and the audit, ahead of kyc.ts's `/admin/:userId`.
+app.route('/api/kyc', kycGovernance);
+app.route('/api/kyc', kyc);
+// Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
+app.route('/api/trust', trust);
+// Frontend (`frontend/src/lib/api.js`) calls `/api/legal/esign/...` — mount
+// the esign router under that path, NOT `/api/esign`. Mounting it inside
+// `/api/legal` would be cleaner but `legal.ts` is its own router, so we just
+// register esign at the path the UI already uses.
+app.route('/api/legal/esign', esign);
+// D1356 (#3571): who on my teams knows a person — private by default, shared by opt-in.
+app.route('/api/relationships', relationships);
+app.route('/api/network', network);
+// Task #9 — Refer & Earn payouts via Stripe Connect Express (import at top).
+app.route('/api/refer-earn', referEarn);
+// D1256 (#3279): the venture scorecard's reads, reviews, corrections, weighting and sharing.
+app.route('/api/venture-scores', ventureScores);
+app.route('/api/networkfx', networkfx);
+app.route('/api/profiling', profiling);
+// D357 — Profiling v2 "me" routes: the caller's own snapshot history and
+// their archetype publish consent (routes/profile_history.ts).
+app.route('/api/profile', profileHistoryRoutes);
+// D702 — the founder's profile pages: /me, /venture, /preview (routes/founder_profile.ts).
+app.route('/api/profile', founderProfileRoutes);
+// D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
+app.route('/api/admin/profiling', adminProfilingRoutes);
+// D990 — Partner profiles: the list, the counts and one profile by reference (routes/admin_partner_profiles.ts).
+app.route('/api/admin/partner-profiles', adminPartnerProfilesRoutes);
+// D1075 — Help's Security category: a private report only HQ's Super Admins read.
+app.route('/api/help/security-reports', securityReports);
+// D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
+app.route('/api/help', helpCenterRoutes);
+app.route('/api/admin/help', adminHelpCenter);
+app.route('/api/dashboard', dashboard);
+// D1421 (#3699): the Studio's module catalogue and the member's saved layout.
+app.route('/api/studio', studioLayout);
+// Task #39 — Event engine authed routes (§8.1).
+// D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
+app.route('/api/events', eventSyndicationRoutes);
+// D1493 (#3906) — Ask proposes a channel's copy (`/:id/syndication/assist…`), before events.ts.
+app.route('/api/events', eventSyndicationAssistRoutes);
+app.route('/api/events', eventsRoutes);
+// Task #68 — Job Board founder routes (post/manage roles, read applicants).
+app.route('/api/jobs', jobsRoutes);
+// Task #44 — Gamified Assessment player routes (§7.1).
+app.route('/api/assessment', assessmentRoutes);
+app.route('/api/matches', matches);
+app.route('/api/consultations', consultations);
+app.route('/api/settings', settings);
+// D650: the old path and the canonical connector path share this router.
+// D666: an AI assistant's grants (#1496). Mounted before the connector
+// router so `/api/connectors/assistants` never reaches its `/:key` routes.
+app.route('/api/connectors/assistants', assistantGrants);
+// D848 (#2469): the member's connections and their health, ahead of `/:key`.
+app.route('/api/connectors/health', connectorsHealth);
+// D852 (#2475): a member's own remote MCP servers, behind CUSTOM_MCP_ENABLED; ahead of the connectors router.
+app.route('/api/connectors/custom', connectorsCustomRoutes);
+app.route('/api/mcp/consent', mcpConsent);
+// D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
+app.route('/api/developer/keys', developerKeys);
+// D1361: the connector API, read-only REST over the MCP tools for a member API key (a Lovable custom connector).
+app.route('/api/connector/v1', connectorApi);
+// D1361: the Lovable connector's OAuth client, minted and rotated by a Super Admin.
+app.route('/api/admin/connector-clients', adminConnectorClients);
+// D849 (#2472): the limits in force on the member's connections and keys.
+app.route('/api/developer/limits', developerLimits);
+// D840 (#2346): Sign in with Mercury, ahead of the integrations router.
+app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
+// D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
+app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
+// D1086 (#2951): Notion's sources, ahead of the integrations router so `notion` is never read as a connection uid.
+app.route('/api/connectors/notion', notionRoutes);
+// D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
+app.route('/api/connectors/webhook/vercel', vercelWebhook);
+// D1385 (#3731): "Your PostHog projects" (`/:uid/posthog-projects`), ahead of the generic routes.
+app.route('/api/connectors', posthogRoutes);
+app.route('/api/connectors', integrations);
+app.route('/api/integrations', integrations);
+// D652 — the Worker AI rail's conversations and their connectors (#1464).
+app.route('/api/eadwyn', eadwynRoutes);
+app.route('/api/crunchbase', crunchbaseRoutes);
+// D1001 (#2816): a segment's answers and working styles as suppressed counts,
+// mounted by D1005 (#2820), before the profile router as D1001 asks.
+app.route('/api/personas/segments', segmentAggregates);
+// D1000 (#2815): the segment profiles, before the personas routes.
+app.route('/api/personas/segments', personaSegments);
+// D1002 (#2817): members, bulk move, ask to finish and activity, before the personas routes.
+app.route('/api/personas/admin', personaMembers);
+app.route('/api/personas', personas);
+app.route('/api/notifications', notificationsRoutes);
+app.route('/api/linkedin', linkedinRoutes);
+app.route('/api/calendar', calendarRoutes);
+app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
+app.route('/api/publish', publishRoutes);
+// T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
+app.route('/api/financials', financialsRoutes);
+// Task #1 (AG) — kept alphabetically adjacent to /api/financials.
+app.route('/api/founder-risk', founderRiskRoutes);
+// Task #9 — Venture Risk (internal deal-team 10-layer rating).
+app.route('/api/venture-risk', ventureRiskRoutes);
+app.route('/api/progress', progressRoutes);
+// D1083 (#2948): the Lovable app link on an experiment or on Prototype / MVP,
+// at /api/cycles/{validate,build}/lovable/app-link, before either cycle's router.
+app.route('/api/cycles', lovableAppLinks);
+// D1312 (#3432): the public sign-up address a Lovable landing page's form posts to (the token is the authorisation).
+app.route('/api/validate/lovable-signups', lovableSignups);
+// D1067: pause, resume and "new evidence since" before D1065's plan router.
+app.route('/api/cycles/build/plan', buildPlanStateRoutes);
+app.route('/api/cycles/build/plan', buildPlanRoutes);
+app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
+// D1093 (#2958): Google Workspace on Build — sync, From Google and the spec Doc decisions.
+app.route('/api/cycles/build/google', buildGoogleRoutes);
+app.route('/api/cycles/build', cycleBuildRoutes);
+// Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
+app.route('/api/metrics', metricsRoutes);
+// D363 — the Spin-Out Lab revenue ledger (migration 311).
+app.route('/api/revenue', revenueRoutes);
+app.route('/api/wellbeing', wellbeingRoutes);
+// T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
+app.route('/api/compliance', complianceRoutes);
+// D1019 (#2856): who sees what. Before /api/captable, whose `/:projectId` would take "access".
+app.route('/api/captable/access', captableAccessRoutes);
+app.route('/api/captable', captableRoutes);
+app.route('/api/data-room', dataRoomRoutes);
+// Task #55 — a founder opens a client record to a named advisor, scope by
+// scope. The shape is `data_room_grants`; the gate is the grant AND the
+// advisor's current role, re-checked on every read.
+app.route('/api/advisor-grants', advisorGrantRoutes);
+// D1345: old clients get an explicit move after the Messages router and stores retire.
+const messagesRetired = (c: any) => c.json({ code: 'messages_retired', detail: 'Messages is now Email.', moved_to: '/email' }, 410);
+app.all('/api/messages', messagesRetired);
+app.all('/api/messages/*', messagesRetired);
+app.route('/api/perks', perksRoutes);
+// D545 — the approved community tasks the chat's Tasks panel lists.
+app.route('/api/community-tasks', communityTasksRoutes);
+// #3959 — a member's own learning plan. Before learningRoutes, so `plan` is never a course slug.
+app.route('/api/learning/plan', learningPlanRoutes);
+// D557 (#1158) — the Learning center, member side.
+app.route('/api/learning', learningRoutes);
+// D559 (#1160) — exercises and exams, graded on the server.
+app.route('/api/learning', learningAssessmentRoutes);
+// D558 (#1159) — programs: self-enrolment, and the assigned admin's read-only learner view.
+app.route('/api/learning', learningProgramsRoutes);
+// D560 (#1161) — webinars: registration within capacity, a time-gated join link, recordings.
+app.route('/api/learning', learningWebinarsRoutes);
+// D561 — gated video playback from R2, with Range.
+app.route('/api/learning', learningVideo);
+app.route('/api/cofounder', cofounderRoutes);
+// Task #11 — User Skill Profile (self ratings + connection-gated endorsements
+// + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.
+app.route('/api/skills', skillsRoutes);
+// Task #12 — Personal-Values Assessment (survey, submit, vector + summary).
+app.route('/api/values', valuesRoutes);
+// Task #13 — Radar / Spider-Graph Service (8-axis radar, team coverage, gap analysis).
+app.route('/api/radar', radarRoutes);
+// Spin-Out Lab — guided 4-week sprint, gated on evidence. Open to founders
+// with or without an entity; see routes/spinout_lab.ts.
+app.route('/api/spinout-lab', spinoutLabRoutes);
+// Graduation-certificate registry (admin issue/revoke + owner read).
+app.route('/api/spinout-lab', spinoutCertificateRoutes);
+// Lab participant moderation (admin only). Moves spinout_lab_active,
+// never users.is_active — see the route file header.
+app.route('/api/admin/spinout-moderation', spinoutModerationRoutes);
+// D377 — who hosts Spin-Out Lab office hours: the applicant side (apply from
+// your own partner or advisor profile, and the approved-only directory Office
+// Hours reads) and the admin review queue. See routes/lab_hosts.ts.
+app.route('/api/spinout-lab/hosts', labHosts);
+app.route('/api/admin/lab-hosts', adminLabHosts);
+// T13 — Advisors (formerly Mentors) + Partner Office Hours.
+// `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
+app.route('/api/advisors', advisorsRoutes);
+app.route('/api/mentors', advisorsRoutes);
+app.route('/api/partner-office-hours', partnerOfficeHoursRoutes);
+
+// Task #6 (W-1) — investor paywall: introductions (quota-gated) + seats
+// (Institutional). Tier gates for pipeline/deals/calendar are
+// applied above (mounted before the route table to wrap all handlers).
+app.route('/api/introductions', introductionsRoutes);
+app.route('/api/investor-seats', investorSeatsRoutes);
+// T14 — Watchlist (incl. /api/antiportfolio), Decision Journal, Portfolio Health,
+// Reference Checks. watchlistRoutes mounts both /watchlist and /antiportfolio so
+// it sits at the /api root.
+app.route('/api', watchlistRoutes);
+// Task #66 — follow graph for people + startups (open to any signed-in user).
+app.route('/api/follows', followsRoutes);
+app.route('/api/journal', journalRoutes);
+app.route('/api/portfolio', portfolioRoutes);
+// Task #1 (AG) — public profile facade (no auth) sits between /api/portfolio
+// and /api/references alphabetically.
+// Task #39 — Event engine public routes (§8.2, no auth, Turnstile-gated).
+// Mounted BEFORE publicRoutes so /api/public/events* + /api/public/invite*
+// resolve here (no path collision with the profile facade).
+app.route('/api/public', eventsPublicRoutes);
+// Task #68 — Job Board public feed + apply. Mount BEFORE the generic
+// publicRoutes so /api/public/jobs* resolves to the job board.
+app.route('/api/public', jobsPublicRoutes);
+// Task #9 — Communities & Circles public feed. Mount BEFORE the generic
+// publicRoutes so /api/public/circles resolves to the circles feed.
+app.route('/api/public', circlesPublicRoutes);
+// Mounted BEFORE publicRoutes so /api/public/verify/:token resolves to the
+// certificate verifier rather than falling through.
+app.route('/api/public', publicCertificateRoutes);
+app.route('/api/public', publicRoutes);
+// D1075 — the public trust center's reads and subprocessor notices (routes/trust_public.ts).
+app.route('/api/public', trustPublic);
+// Task #10 (LD) — Public team roster. Mounted under /api/public so it
+// sits OUTSIDE auth and outside the admin routers' requireAdmin gates. /api/public/team
+// was written for the Jekyll marketing build that used to curl it into
+// _data/team.json; that build is gone (the Worker serves axal.vc), and the
+// SPA's /team and /about read it directly.
+app.route('/api/public', teamPublic);
+// Task #1 — Public photo proxy for network_profiles (mentor/partner
+// roster). Mounted under /api/public, so no auth or admin gate runs in front
+// of it; the route itself serves only active profiles.
+app.route('/api/public', networkPublic);
+// Public contact form → D1 `contact_submissions` + an email to the firm (D680;
+// never GitHub, whose repo is public). No auth; Turnstile + honeypot +
+// validation + global per-IP rate cap.
+app.route('/api', contactRoutes);
+// D810 — newsletter lists: the public signup, confirm, preferences and
+// unsubscribe routes, and a member's /api/me/newsletters.
+app.route('/api', newsletterRoutes);
+// Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
+// to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
+app.route('/api/news', newsRoutes);
+// Task #1 (Articles) — Public + author-facing /api/articles. Shares the
+// articles tables with /api/news; adds role filter, by-author endpoint,
+// and sector taxonomy. Public GETs are CORS-open + edge-cached 60d.
+// D1409 (#3695): Eadwyn's writing options on an article (`/:id/assist…`), before `articles` with it at /api/articles.
+app.route('/api/articles', articleAssist);
+app.route('/api/articles', articlesRoutes);
+app.route('/api/references', referencesRoutes);
+// Task #1 (AG) — service offerings (founder marketplace) alphabetically
+// after /api/references and before /api/spinout-lab/comarketing.
+app.route('/api/services', servicesRoutes);
+// T15 — Co-marketing, Company Profiles, Founder Needs / Quotes / Engagements,
+// Insights. companyRoutes mounts /company/* + /companies (root /api).
+app.route('/api/comarketing', comarketingRoutes);
+// D1137 — archive, restore and the primary-admin transfer.
+app.route('/api', companyLifecycle);
+// D1415: the company's legal record, officers, locations, sealed tax ID and slug.
+app.route('/api', companyLegal);
+// D1592 (#3860): the company's documents (the four named slots, other, its ventures'), upload and download.
+app.route('/api', companyDocuments);
+app.route('/api', companyRoutes);
+// D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+// D1529 (#3845, #3742 E1): goals, tasks and dependencies; 404 `agent_engine_off` until AGENT_ENGINE is on.
+// Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
+app.route('/api/teams', agentEngineRoutes);
+app.route('/api/teams', teamAgentsRoutes);
+// D1612 (#3951): `/skills…` and `/agents/:uid/skills`, behind the same TEAM_AGENTS_ENABLED switch.
+app.route('/api/teams', teamSkillsRoutes);
+app.route('/api/needs', needsRoutes);
+app.route('/api/quotes', quotesRouter);
+app.route('/api/engagements', engagementsRouter);
+// #45 — the partner side of those same deals: what a firm records ABOUT its
+// quotes and engagements (negotiation stage, retainer scope, hours logged).
+// Scoped to the caller's own firm throughout; a row belonging to another firm
+// answers 404, never 403.
+app.route('/api/partner/pipeline', partnerPipeline);
+// #45 — what the firm publishes ABOUT itself: which surfaces it appears on,
+// the proof it can show (gated on a consent only the client can give), and the
+// fit rules a pass quotes instead of going silent.
+app.route('/api/partner/offers', partnerOffers);
+// D812 (#2258): product testing — members, a partner's own programmes, and HQ's review.
+app.route('/api/testing', testing);
+app.route('/api/partner/testing', partnerTesting);
+app.route('/api/admin/testing', adminTesting);
+// D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
+app.route('/api/admin/product-testers', adminProductTesters);
+// D1302 (#3399): an account's sub-accounts (Product tester, LP), read where each lives, for Admin › Accounts.
+app.route('/api/admin/sub-accounts', adminSubAccounts);
+// D958 (#2791): referral partners and their custom terms, HQ only.
+app.route('/api/admin/referral-partners', adminReferralPartners);
+// #45 — what the firm records about work in flight: milestones, blockers,
+// what was shipped, who holds a seat inside a client's systems, and the
+// recurring update. Health is derived over five of those tables at read time
+// and is never stored.
+app.route('/api/partner/delivery', partnerDelivery);
+// D657 — interview sessions: recording, live and final speech-to-text.
+app.route('/api/founder/validate', founderValidateSessions);
+app.route('/api/meeting-bots', meetingBotCallbacks);
+// D858 (#2503): what a session's and a venture's conversations show, read only.
+app.route('/api/validate', validateConversations);
+app.route('/api/founder/validate', founderValidate);
+// D684 — Zoom and Meet calls scheduled from an interview (S18). The Zoom
+// webhook mounts before the channels router, which owns the rest of
+// `/api/channels`: member routes plus the public Telegram and WhatsApp webhooks
+// (each verifies its provider's signature or secret before reading anything).
+app.route('/api/founder/validate', founderValidateMeetings);
+app.route('/api/channels', zoomWebhook);
+app.route('/api/channels', channels);
+// D659 (#1472) — the Validate cycle's shared read (#1469's contract: four
+// figures, six cards, a records table per module) and the manual writes for
+// migration 440's records. Same two predicates as the founder board.
+// D693 (#1702) — Verdict's decisions, through the one writer in
+// `services/verdict.ts`. Mounted before the cycle's own router.
+app.route('/api/cycles/validate/decisions', cycleVerdict);
+app.route('/api/cycles/validate', cycleValidate);
+app.route('/api/cycles', cycleRecords);
+app.route('/api/cycles/raise/pmf/explain', pmfExplain);
+app.route('/api/cycles/raise', cycleRaise);
+// D658 (#1471) — a structured interview's placements, decided one at a time.
+app.route('/api/founder/validate', founderValidateStructure);
+// `/build/cadence`'s store. Read by whoever may read the interviews; written by
+// the venture's own and admins — the same two predicates Validate uses, imported
+// rather than re-derived.
+app.route('/api/founder/cadence', founderCadence);
+// `/build/board`'s lanes. The CARDS are `mvp_tasks`, which `pipeline.ts` owns and
+// keys on `deal_id` — a `projects.id`, the same misnaming D86 recorded. This router
+// is the founder's own view of them, gated by the Validate predicates.
+app.route('/api/founder/board', founderBoard);
+app.route('/api/founder/roadmap', founderRoadmap);
+app.route('/api/insights', insightsRoutes);
+// Signals — founder-actionable opportunity engine over public-market evidence.
+app.route('/api/signals', signalsRoutes);
+// T3 — Reserve allocation + waterfall simulator (admin/investor only).
+app.route('/api/fund-sim', fundSimulatorRoutes);
+
+// #4105 — the registry's slot: every registered router not already mounted
+// ahead of a hand-written line (votes.ts's /api/pipeline/votes and /vote among
+// them). It stays after the last `app.route(...)` above and before the 404.
+routeRegistry.mountRemaining();
+
+app.notFound((c) => c.json({ detail: 'Not found' }, 404));
+
+// Map the auth helpers' plain `throw new Error('Unauthorized'/'Forbidden'/...)`
+// to the right HTTP status. Without this, RBAC failures surface as 500s and
+// the frontend can't distinguish "log in again" from "the server crashed".
+
+app.onError((err: any, c) => {
+  const msg = (err?.message ?? '') as string;
+  // BLOCK-AUTH-03 — step-up gate. Carries a machine-readable code + the TTL so
+  // the SPA can prompt for a fresh TOTP, POST /api/auth/step-up, then retry.
+  // D135 — the frozen refusal carries the notice that caused it, for the same
+  // reason the step-up carries its TTL: the status alone leaves the holder with
+  // nothing to act on.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  // D5249 — enrol-first: the body names where to enrol.
+  if (msg === ADMIN_MFA_REQUIRED) return c.json(adminMfaRequiredBody(), 403);
+  // D142 — the branch twin. Without this line the gate's 423 fell through to
+  // the table below and shipped as `{detail}` alone, which no client can key
+  // on; `api.js` keys strictly on `code`.
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
+  if (msg === STEP_UP_REQUIRED) {
+    // D134 — the body comes from `util/authErrors.ts` so `mapError`, which
+    // every route file that calls it reaches instead of this handler, answers
+    // with the same object.
+    return c.json(stepUpRefusalBody(err), 403);
+  }
+  const mapped = AUTH_ERROR_STATUSES[msg];
+  if (mapped) return c.json({ detail: msg }, mapped);
+  console.error('[edge] unhandled error:', err);
+  return c.json({ detail: 'Internal server error' }, 500);
+});
+
+// JWT_SECRET strength check runs at the very top of every request handler.
+// In prod a weak/missing secret aborts the request with a generic 503.
+import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
+// A gate that refuses by THROWING a Response — the tier upsells, the fund
+// 404 — never reached the client without this: Hono re-throws non-Errors
+// past app.onError. See util/thrownResponse.ts.
+import { withThrownResponses } from './util/thrownResponse';
+// D1539 (#3789): imported here, not inside `scheduled`, so the handler names
+// only this function (mercury_member_privacy_d752 reads its words).
+import { pruneCardBlobs } from './services/decks/cardBlobs';
+
+// Phase 0.1 — D1 schema migration for the partner→investor split.
+// Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
+// fetch entry point because workers have no startup hook; the cold-start
+// penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
+const INVESTOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const INVESTOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
+async function ensureInvestorSchema(env: Env): Promise<void> {
+  const key = bindingKey(env);
+  if (INVESTOR_SCHEMA_READY.get(key)) return;
+  // A cold isolate can receive several requests before its first D1 operation
+  // settles. Share the migration work inside that isolate rather than issuing
+  // overlapping CREATE/ALTER/rebuild statements for every concurrent request —
+  // per DATABASE, so a second binding is not handed the first one's promise and
+  // told a users-table rebuild it never saw has already happened (#204).
+  const pending = INVESTOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
+  try {
+    await env.DB.exec(
+      "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    );
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_user ON investors(user_id)");
+    await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_investors_type ON investors(investor_type)");
+    // SQLite/D1 lacks ADD COLUMN IF NOT EXISTS. Probe pragma instead.
+    const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+    const hasInvestorId = (cols.results || []).some(r => r.name === 'investor_id');
+    if (!hasInvestorId) {
+      try { await env.DB.exec("ALTER TABLE users ADD COLUMN investor_id INTEGER"); } catch {}
+    }
+    // Phase 0.1 — relax the legacy users.role CHECK constraint that excluded
+    // 'investor'. SQLite/D1 has no ALTER TABLE DROP/MODIFY CONSTRAINT, so on
+    // existing prod DBs we must rebuild the table. To avoid drifting from
+    // schema.sql + every migration that has touched `users`, we derive the new
+    // table DDL from the LIVE definition (sqlite_master) and rewrite ONLY the
+    // table name (to a temp) and the role CHECK (to also accept 'investor').
+    // Every column, default, FK, UNIQUE/CHECK and (replayed) index is preserved
+    // — nothing is hardcoded, so no founder/investor/subscription/PII/linkedin/
+    // public-id data or index is lost the first time the rebuild commits.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request in this isolate, or role changes to
+    // 'investor' 500 forever behind a permanently-latched INVESTOR_SCHEMA_READY.
+    let investorRebuildOk = true;
+    try {
+      await rebuildUsersRoleCheckForInvestor(env);
+    } catch (e) {
+      investorRebuildOk = false;
+      console.warn('[boot] users role-CHECK investor rebuild failed (will retry next request):', (e as Error).message);
+    }
+    // Promote partner users with an LP record to investor; create investor row.
+    try {
+      await env.DB.exec(
+        "UPDATE users SET role = 'investor' WHERE role = 'partner' AND id IN (SELECT DISTINCT u.id FROM users u JOIN limited_partners lp ON lp.user_id = u.id OR lower(lp.email) = lower(u.email))"
+      );
+      await env.DB.exec(
+        "INSERT INTO investors (uid, user_id, investor_type, accreditation_status) SELECT lower(hex(randomblob(16))), u.id, 'lp', 'verified' FROM users u WHERE u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM investors i WHERE i.user_id = u.id)"
+      );
+      await env.DB.exec(
+        "UPDATE users SET investor_id = (SELECT i.id FROM investors i WHERE i.user_id = users.id LIMIT 1) WHERE role = 'investor' AND investor_id IS NULL"
+      );
+    } catch (e) {
+      console.warn('[boot] investor promote step skipped:', (e as Error).message);
+    }
+    if (investorRebuildOk) INVESTOR_SCHEMA_READY.set(key, true);
+  } catch (e) {
+    console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
+  } finally {
+    INVESTOR_SCHEMA_IN_FLIGHT.delete(key);
+  }
+  })();
+  INVESTOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
+}
+
+// Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
+// Mirrors ensureInvestorSchema: the mentor tables/columns live OUTSIDE the
+// migrations chain (sql/t13_t14_t15.sql is applied manually), and a role-CHECK
+// relax needs a live-DDL-derived table rebuild, so a plain forward SQL migration
+// cannot do this safely (it would abort on any chain-only DB). Every step is
+// existence-checked + try/catch so a partially-migrated prod DB can never abort
+// the boot path.
+const ADVISOR_SCHEMA_READY = new WeakMap<object, boolean>();
+const ADVISOR_SCHEMA_IN_FLIGHT = new WeakMap<object, Promise<void>>();
+async function ensureAdvisorSchema(env: Env): Promise<void> {
+  const key = bindingKey(env);
+  if (ADVISOR_SCHEMA_READY.get(key)) return;
+  // See ensureInvestorSchema: concurrent first requests must not race the
+  // live-DDL migration path against each other, and the coalescing is per
+  // database so two bindings cannot share one rebuild.
+  const pending = ADVISOR_SCHEMA_IN_FLIGHT.get(key);
+  if (pending) return pending;
+  const started = (async () => {
+  try {
+    // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
+    // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
+    // must retry on the next request or advisor role changes 500 forever.
+    let advisorRebuildOk = true;
+    try { await rebuildUsersRoleCheckForAdvisor(env); }
+    catch (e) {
+      advisorRebuildOk = false;
+      console.warn('[boot] users role-CHECK advisor rebuild failed (will retry next request):', (e as Error).message);
+    }
+    // (b) structural renames — only when the old table exists and the new does not.
+    const RENAMES: [string, string][] = [
+      ['mentors', 'advisors'],
+      ['mentor_office_hour_slots', 'advisor_office_hour_slots'],
+      ['mentor_bookings', 'advisor_bookings'],
+      ['mentor_reviews', 'advisor_reviews'],
+      ['mentor_slots', 'advisor_slots'],
+    ];
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      ).all<{ name: string }>();
+      const names = new Set((rows.results || []).map(r => r.name));
+      for (const [oldName, newName] of RENAMES) {
+        if (names.has(oldName) && !names.has(newName)) {
+          try { await env.DB.exec(`ALTER TABLE ${oldName} RENAME TO ${newName}`); }
+          catch (e) { console.warn(`[boot] rename ${oldName}→${newName} skipped: ${(e as Error).message}`); }
+        }
+      }
+    } catch (e) { console.warn('[boot] advisor table-rename scan skipped:', (e as Error).message); }
+    // (c) rename users.mentor_id → advisor_id when present.
+    try {
+      const cols = await env.DB.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+      const colNames = (cols.results || []).map(r => r.name);
+      if (colNames.includes('mentor_id') && !colNames.includes('advisor_id')) {
+        try { await env.DB.exec("ALTER TABLE users RENAME COLUMN mentor_id TO advisor_id"); }
+        catch (e) { console.warn('[boot] users.mentor_id rename skipped:', (e as Error).message); }
+      }
+    } catch (e) { console.warn('[boot] users column scan skipped:', (e as Error).message); }
+    // (d) flip stored role data mentor→advisor.
+    try { await env.DB.exec("UPDATE users SET role = 'advisor' WHERE role = 'mentor'"); }
+    catch (e) { console.warn('[boot] advisor role flip skipped:', (e as Error).message); }
+    // (e) reviewer_role stored data (table freshly renamed above).
+    try { await env.DB.exec("UPDATE advisor_reviews SET reviewer_role = 'advisor' WHERE reviewer_role = 'mentor'"); } catch {}
+    // (f) remap advisor question-id prefixes so existing answers/sources are not orphaned.
+    try { await env.DB.exec("UPDATE OR IGNORE advisor_answers SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
+    try { await env.DB.exec("UPDATE OR IGNORE field_sources SET question_id = 'advisor.' || substr(question_id, 8) WHERE question_id LIKE 'mentor.%'"); } catch {}
+    // (g) rename the spinout-lab milestone key so existing week-3 progress is preserved.
+    try { await env.DB.exec("UPDATE OR IGNORE spinout_lab_milestones SET milestone_key = 'advisor_meeting_booked' WHERE milestone_key = 'mentor_meeting_booked'"); } catch {}
+    if (advisorRebuildOk) ADVISOR_SCHEMA_READY.set(key, true);
+  } catch (e) {
+    console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
+  } finally {
+    ADVISOR_SCHEMA_IN_FLIGHT.delete(key);
+  }
+  })();
+  ADVISOR_SCHEMA_IN_FLIGHT.set(key, started);
+  return started;
+}
+
+/**
+ * Role-schema repairs are deliberately available for stale development
+ * databases, but they include live users-table rebuilds and must never delay
+ * static delivery or anonymous read traffic on a fresh production isolate.
+ * Role-dependent routes retain the blocking guard below; the feature routes
+ * that mutate or consume the exploring schema also call their own narrow
+ * bootstrap functions.
+ */
+const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
+  '/api/public/stats',
+  // D678: the model registry the Intelligence page reads; no D1 at all.
+  '/api/public/ai-models',
+  // D786: the Pricing page's models, priced; no D1 either.
+  '/api/public/ai/models',
+  // D722: whether /login may open Google's window — env only, no D1. Held up
+  // by a cold isolate's users-table repair, it would only ever mean the
+  // redirect instead of the window.
+  '/api/auth/google/config',
+  '/api/public/circles',
+  '/api/public/partners',
+  '/api/public/status',
+  '/api/public/changelog',
+  // D1075: the trust center's reads touch only migration 584's tables.
+  '/api/public/trust',
+  '/api/public/trust/changes',
+  '/api/public/trust/matrix',
+  /^\/api\/public\/events(?:\.ics|\/[^/]+(?:\/ics)?)?$/,
+  /^\/api\/public\/invite\/[^/]+$/,
+  /^\/api\/public\/jobs(?:\/[^/]+)?$/,
+  /^\/api\/public\/verify\/[^/]+$/,
+  /^\/api\/public\/u\/[^/]+$/,
+  /^\/api\/public\/startup\/[^/]+$/,
+  /^\/api\/public\/p\/[^/]+$/,
+  /^\/api\/public\/authors\/[^/]+$/,
+  /^\/api\/public\/team(?:\/[^/]+\/photo)?$/,
+  /^\/api\/public\/network\/[^/]+\/photo$/,
+];
+
+function requiresBlockingRoleSchemaBootstrap(pathname: string, method: string): boolean {
+  if (!pathname.startsWith('/api/')) return false;
+  if (
+    pathname === '/api/health' ||
+    pathname === '/api/track' ||
+    pathname === '/api/client-error'
+  ) {
+    return false;
+  }
+  const isSafeAnonymousRead = ROLE_SCHEMA_SAFE_ANONYMOUS_READS.some((route) =>
+    typeof route === 'string' ? route === pathname : route.test(pathname),
+  );
+  return !(method === 'GET' && isSafeAnonymousRead);
+}
+
+export default {
+  fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
+    // Task #37 — hardened static-asset serving. wrangler.toml lists
+    // `/assets/*` in `run_worker_first`, so hashed SPA assets are routed
+    // through the Worker BEFORE any DB/secret work. We serve the real file
+    // from the ASSETS binding, but if the SPA fallback returned index.html
+    // (`text/html`) for a MISSING hashed asset, we convert it to a real 404.
+    // Otherwise the browser executes HTML as a JS/CSS module and the page
+    // renders blank — the recurring Safari blank page: an open tab or a
+    // cached shell from before a deploy can reference a build hash this Worker
+    // no longer serves (the shell used to come from GitHub Pages; since
+    // 2026-09-01 the Worker serves it on both hosts, so only stale clients
+    // and the asset-retention window are in play). A clean 404 lets the client boot-watchdog (index.html)
+    // and the stale-chunk recovery (main.jsx) reload onto the current build
+    // instead of blanking.
+    const { pathname } = new URL(request.url);
+    // D811: Mail authenticates through its own HMAC, with no role-schema
+    // bootstrap or unrelated JWT/scoring secret precondition.
+    if (pathname === '/api/mail-link' || pathname.startsWith('/api/mail-link/')
+      || pathname === '/api/testing/mail' || pathname.startsWith('/api/testing/mail/')) {
+      return withThrownResponses(() => app.fetch(request, env, ctx));
+    }
+    // D666 (#1496): the MCP server and its OAuth endpoints, before anything
+    // else. With MCP_SERVER_ENABLED off each of these paths answers 404 and
+    // the provider is never built; every other path goes on exactly as before.
+    if (isMcpPath(pathname)) return routeMcp(request, env, ctx);
+    if (request.method === 'GET' && env.ASSETS) {
+      if (pathname.startsWith('/assets/')) {
+        const assetRes = await env.ASSETS.fetch(request);
+        const ctype = assetRes.headers.get('content-type') || '';
+        if (/text\/html/i.test(ctype)) {
+          return new Response('Asset not found\n', {
+            status: 404,
+            headers: {
+              'content-type': 'text/plain; charset=utf-8',
+              'cache-control': 'no-store',
+            },
+          });
+        }
+        return assetRes;
+      }
+    }
+    // D1439 (#3914): a shared record link previews as itself. Before Hono, so
+    // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
+    // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
+    // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
+    // "Sign in to view" card with no D1 call.
+    // D1564 (#3811): `/embed/:token`, a published deck framed only by the
+    // origins its founder listed (`frame-ancestors`, no `X-Frame-Options`); the
+    // SPA's `_headers` deny stays for every other path.
+    if (pathname.startsWith('/embed/')) return serveDeckEmbed(request, env);
+    if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      // D1564: a published link's own card, only while public views are on (owner decision T); null keeps Part D's static card.
+      const own = await serveDeckShareCard(request, env);
+      if (own) return own;
+      const card = await serveSocialCard(request, env);
+      if (card) return card;
+    }
+    // Static asset fallback and public page rendering need neither JWT secrets
+    // nor role-schema repairs. With an apex-wide route, running those D1
+    // migrations before a document/manifest response made cold traffic contend
+    // on the users table and contributed to edge 504s.
+    if (!pathname.startsWith('/api/')) {
+      return withThrownResponses(() => app.fetch(request, env, ctx));
+    }
+    try {
+      assertJwtSecretStrength(env);
+      // T9 — SCORING_HMAC_SECRET is hard-required in production so the
+      // score-integrity key cannot silently collide with JWT_SECRET. Dev
+      // logs a one-shot warning instead of throwing.
+      assertScoringHmacSecret(env);
+      // D106 — on a branch, every URL var must name the branch's own host.
+      // HQ has no BRANCH_CODE, so this is a no-op there and the 503 below is
+      // reachable on a branch only.
+      assertBranchAppUrl(env);
+    } catch (err) {
+      console.error('[boot] secret assertion failed:', (err as Error).message);
+      return new Response(
+        JSON.stringify({ ok: false, error: { code: 503, type: 'config_error', message: 'Service misconfigured' } }),
+        { status: 503, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    // Block role-dependent APIs on the migration safety net only. Health,
+    // verified anonymous public reads, and telemetry endpoints are safe without
+    // these schemas and must stay responsive during cold starts and D1 contention.
+    if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
+      if (!INVESTOR_SCHEMA_READY.get(bindingKey(env))) {
+        await ensureInvestorSchema(env);
+      }
+      if (!ADVISOR_SCHEMA_READY.get(bindingKey(env))) {
+        await ensureAdvisorSchema(env);
+      }
+      if (!exploringSchemaReady(env)) {
+        await ensureExploringSchema(env);
+      }
+    }
+    return withThrownResponses(() => app.fetch(request, env, ctx));
+  },
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const work = (async () => {
+      // The raw cron expression is stored as trigger_name, so the record is
+      // keyed by expression: the key CRON_TRIGGERS (util/cronHistory) reads
+      // it by. The display name is resolved at read time.
+      const triggerKey = event.cron || '* * * * *';
+      const LEASE_KEY = 'cron:queue:lease';
+      // D201 — the lease names the minute and expression it is running, so a
+      // tick that finds it held can record WHICH tick holds it.
+      const leaseHolder = leaseHolderValue(crypto.randomUUID(), event.scheduledTime, triggerKey);
+      let heldBy: string | null = null;
+      try {
+        const existing = await env.RATE_LIMITS.get(LEASE_KEY);
+        if (existing) heldBy = existing;
+        else await env.RATE_LIMITS.put(LEASE_KEY, leaseHolder, { expirationTtl: 90 });
+      } catch (e) {
+        console.error('[cron] lease acquire failed', e);
+      }
+      if (heldBy) {
+        // Epic 11 — `console.info` (vs `console.log`) survives the CI
+        // grep that bans `console.log` from worker source. Wrangler tail
+        // surfaces info-level logs identically.
+        console.info('[cron] drain skipped — lease held');
+        // D201 — A TICK THAT RUNS NOTHING STILL LEAVES A ROW. It used to
+        // return without one, so when two expressions fired in one minute
+        // the record showed which won the lease, not whether the work ran,
+        // and five of the six declared triggers read as silent on HQ while
+        // their minute's work ran under the every-minute ticker's name. The
+        // row says `deduped` when the holder was scheduled for this same
+        // minute and `skipped` when it was not. This is outside the lease
+        // try/catch on purpose: a failure recording the row must never fall
+        // through into running the batch beside the tick that holds the
+        // lease. The helper never throws.
+        await recordLeaseHeldFire(env, {
+          triggerName: triggerKey,
+          scheduledTime: event.scheduledTime,
+          holder: heldBy,
+        });
+        return;
+      }
+
+      // Task #7 (IE) — record cron run start in D1 for observability dashboard.
+      const cronStartedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      let cronSummary: string[] = [];
+      let cronError: string | null = null;
+      // D4703 (#4703): every sub-task below catches its own failure so the next
+      // one runs. That kept the tick alive and made the row read `completed`
+      // over a sub-task that had failed. Each catch now names itself here, and
+      // the row is `partial` with those names in `error`.
+      const cronTaskFailures: string[] = [];
+      const taskFailed = (task: string, ...detail: unknown[]) => {
+        cronTaskFailures.push(task);
+        console.error('[cron] sub-task failed:', task, ...detail);
+      };
+
+      // D239 — EVERY GATE BELOW ASKS "WHICH SCHEDULED MINUTE IS THIS?", so it
+      // reads the event's own time, fixed BEFORE the queue drain. It read the
+      // wall clock AFTER the drain until D239, so a drain that crossed a
+      // minute boundary made the tick look at the next minute: the 03:00
+      // tick finishing its drain at 03:01 skipped every 03:00 block, and
+      // nothing recorded it. The wall clock stays for stamps of the sweep's
+      // own acts (D122's rule; the classification is in D239's entry).
+      const now = new Date(Number.isFinite(event.scheduledTime) ? event.scheduledTime : Date.now());
+      try {
+        const r = await processQueueBatch(env, 25);
+        if (r.processed || r.failed) {
+          console.info(`[cron] drain processed=${r.processed} failed=${r.failed}`);
+          cronSummary.push(`drain processed=${r.processed} failed=${r.failed}`);
+        }
+        // D106 — PLATFORM CONTENT IS HQ'S WORK, AND N BRANCHES MUST NOT EACH
+        // DO IT. Two cadences below fetch from the open internet: the Founder
+        // Signals refresh and the whole market-intel connector block. Under one
+        // Worker per branch each would run N times — N× the external API quota
+        // against the same public sources, N copies of identical rows in N
+        // databases. (The market-intel watchlist digest was the platform-wide
+        // mail this gate also held; D670 retired it.)
+        //
+        // THE CRON TRIM IN THE GENERATED CONFIG DOES NOT DO THIS, and it is
+        // worth saying plainly because it looks as though it might. A branch
+        // keeps `* * * * *` (it needs the queue drain), and every block here
+        // gates on the WALL CLOCK rather than on which expression fired — so
+        // dropping HQ's other four expressions removes some duplicate
+        // invocations within a minute and stops not one of these cadences.
+        // The gate has to be here.
+        //
+        // Everything not gated stays per branch on purpose: the queue drain,
+        // job cleanup, trust and partner-deal expiry, the trash sweep, TOTP
+        // remediation, notification flushes and the score audits all act on
+        // this deployment's own rows and would be wrong to centralise.
+        const hqCadences = branchOf(env) === null;
+        // D1075: subprocessor notices left by a Publish (a send that failed is
+        // retried after an hour). HQ only: the trust center is axal.vc's.
+        if (hqCadences && now.getUTCMinutes() % 5 === 4) {
+          try {
+            const { sendSubprocessorNotices } = await import('./services/subprocessorNotices');
+            const r = await sendSubprocessorNotices(env, { now: now.getTime() });
+            if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
+          } catch {
+            taskFailed('subprocessor notices');
+          }
+        }
+        // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
+        // this lease. NOT GATED ON
+        // `hqCadences`: each deployment's agents and runs are its own rows.
+        // D4387 (#4387): the sweep runs whenever team agents are on, so an
+        // agent paused at its cap resumes when the month turns even with the
+        // engine off; `sweepAgents` itself still admits nothing while the
+        // engine is off or halted. Duties and alerts stay the engine's.
+        if (now.getUTCMinutes() % 5 === 1 && env.TEAM_AGENTS_ENABLED === 'true') {
+          try {
+            const { sweepAgents } = await import('./agents/sweep');
+            const r = await sweepAgents(env, now);
+            if (r.resent || r.admitted || r.cap_resumed) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted} cap_resumed=${r.cap_resumed}`);
+          } catch {
+            taskFailed('agent sweep');
+          }
+          if (env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
+            // D1530 (#3849, E5): the due duties, claim before act.
+            try {
+              const { sweepAgentDuties } = await import('./agents/sweep');
+              const d = await sweepAgentDuties(env, now);
+              if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
+                cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+              }
+            } catch {
+              taskFailed('agent duties');
+            }
+            // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+            try {
+              const { sweepAgentAlerts } = await import('./services/agents/alerts');
+              const a = await sweepAgentAlerts(env, now);
+              const sent = Object.values(a).reduce((x, y) => x + y, 0);
+              if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+            } catch {
+              taskFailed('agent alerts');
+            }
+          }
+        }
+        // D1259: a published venture model rescores the next batch of ventures
+        // each minute until every venture has its new rows. HQ only: only HQ
+        // publishes.
+        if (hqCadences) {
+          try {
+            const { continuePublication } = await import('./services/ventureScoring/publish');
+            const r = await continuePublication(env, now.toISOString().slice(0, 10));
+            if (r.scored || r.failed) cronSummary.push(`venture model recompute scored=${r.scored} failed=${r.failed}`);
+          } catch {
+            taskFailed('venture model recompute');
+          }
+        }
+        // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        // D1537 (#3786): the error budget, once an hour at :17. HQ only:
+        // the alert goes to HQ's admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          const { noteErrorBudgetAlert } = await import('./services/deckErrorBudgetCron');
+          if (await noteErrorBudgetAlert(env, now)) cronSummary.push('error budget alert sent');
+        }
+        if (hqCadences && now.getUTCMinutes() % 5 === 3) {
+          try {
+            const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
+            await sweepMeetingBotOperations(env, now.getTime());
+          } catch {
+            taskFailed('meeting bot operations');
+          }
+        }
+        // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
+        // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
+        // the alerts go to HQ's Super Admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() % 15 === 11) {
+          try {
+            const { sweepPlatformCapacity } = await import('./services/platformCapacityHistory');
+            await sweepPlatformCapacity(env, now, { snapshot: now.getUTCHours() === 4 && now.getUTCMinutes() === 11 });
+          } catch {
+            taskFailed('platform capacity');
+          }
+        }
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
+          await Jobs.cleanup(env);
+        }
+        // D1256 (#3279) — the venture scorecard. Every 15 minutes, ventures
+        // whose people's connectors synced since their last row; at 04:20 the
+        // nightly recompute; at 04:30 on a quarter's first day the fairness
+        // check for HQ. Every tier: each deployment scores its own ventures.
+        if (now.getUTCMinutes() % 15 === 7 || (now.getUTCHours() === 4 && (now.getUTCMinutes() === 20 || now.getUTCMinutes() === 30))) {
+          try {
+            const jobs = await import('./services/ventureScoring/jobs');
+            if (now.getUTCMinutes() % 15 === 7) {
+              const r = await jobs.syncRecompute(env, now);
+              if (r.ventures) console.info(`[cron] venture scores after sync ventures=${r.ventures} failed=${r.failed}`);
+            }
+            if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+              const r = await jobs.nightlyRecompute(env, now);
+              console.info(`[cron] venture scores nightly ventures=${r.ventures} failed=${r.failed}`);
+            }
+            if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30 && jobs.isQuarterStart(now)) {
+              const r = await jobs.runFairness(env, now);
+              console.info(`[cron] venture score fairness written=${r.written} gaps=${r.gaps}`);
+            }
+          } catch {
+            taskFailed('venture scores');
+          }
+        }
+        // D561 — Learning videos no item uses any more, and the videos of
+        // items archived for over 30 days, are removed from R2 once a day.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 40) {
+          try {
+            const { sweepLearningVideos } = await import('./services/learningVideo');
+            const r = await sweepLearningVideos(env, now);
+            if (r.deleted || r.stream_deleted || r.kept_unverified) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted} copied_deleted=${r.copied_deleted} kept_unverified=${r.kept_unverified} stream_deleted=${r.stream_deleted}`);
+          } catch (e) {
+            taskFailed('learning video sweep', e);
+          }
+        }
+        // D684 — interview channels. Every five minutes, each provider that
+        // must poll (Google Meet transcripts) runs its sweep; at 03:50 the
+        // pending-conversation store is purged past its 30 days. Every tier:
+        // a branch's members and their conversations are its own.
+        // D4703 (#4703): failed calendar deletes are retried hourly, oldest first.
+        if (now.getUTCMinutes() === 17) {
+          try {
+            const { retryFailedCalendarDeletes } = await import('./services/calendar/sync');
+            const r = await retryFailedCalendarDeletes(env, 20);
+            if (r.tried) cronSummary.push(`calendar delete retries tried=${r.tried} cleared=${r.cleared}`);
+          } catch (e) {
+            taskFailed('calendar delete retry', e instanceof Error ? e.message : 'error');
+          }
+        }
+        if (now.getUTCMinutes() % 5 === 2) {
+          try {
+            const { retryCalendarCopies } = await import('./services/calendar/sync');
+            const tried = await retryCalendarCopies(env);
+            if (tried) cronSummary.push(`calendar copy retries tried=${tried}`);
+          } catch {
+            taskFailed('calendar copy retry', 'calendar_copy_retry_failed');
+          }
+          try {
+            const { runChannelSweeps } = await import('./services/channels/jobs');
+            await runChannelSweeps(env, now);
+            // Assigned chats that gained messages and went quiet are
+            // structured again (at most every six hours each).
+            const { sweepQuietChats } = await import('./services/sessionAutoStructure');
+            await sweepQuietChats(env, now);
+          } catch (e) {
+            taskFailed('channel sweeps', e instanceof Error ? e.message : 'error');
+          }
+          // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
+          try {
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
+            const r = await purgeRehearsalAudio(env, now);
+            if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
+          } catch (e) {
+            taskFailed('rehearsal audio purge', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D685 §5.6 — recordings a closed tab left behind: drafts never
+        // started (24 h), silent recordings paused (10 min), uploads that never
+        // finished processed with what arrived (30 min), and runs that
+        // stopped moving resumed from their stage (15 min, §5.9.3). Every
+        // minute; each rule reads a bounded batch.
+        try {
+          const { sweepInterviewSessions } = await import('./services/sessionSweeper');
+          const r = await sweepInterviewSessions(env, now);
+          if (r.drafts || r.paused || r.resumed || r.recovered) console.info(`[cron] interview sessions drafts=${r.drafts} paused=${r.paused} resumed=${r.resumed} recovered=${r.recovered}`);
+        } catch (e) {
+          taskFailed('interview session sweep', e instanceof Error ? e.message : 'error');
+        }
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 50) {
+          try {
+            const { purgeExpired } = await import('./services/channels/threads');
+            const r = await purgeExpired(env, now);
+            if (r.threads || r.messages) console.info(`[cron] channel purge threads=${r.threads} messages=${r.messages}`);
+          } catch (e) {
+            taskFailed('channel purge', e instanceof Error ? e.message : 'error');
+          }
+          // D877 (#2524) — a call's audio past its founder's retention; the text stays.
+          try {
+            const { purgeExpiredCallAudio } = await import('./services/callAudioRetention');
+            const r = await purgeExpiredCallAudio(env, now);
+            if (r.sessions) console.info(`[cron] call audio purge sessions=${r.sessions} objects=${r.objects}`);
+          } catch (e) {
+            taskFailed('call audio purge', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D572 part 3b — the partner leaderboard's daily standings, so the
+        // board's "change" has an earlier standing to compare with. Every
+        // tier: a branch's partners are its own. Idempotent per day.
+        // D691 (#1698) — Grow's daily step: obligation reminders and KPI
+        // alerts, in the app only. Each is claimed before it is sent, so a
+        // second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
+          try {
+            const { runGrowDaily } = await import('./services/growDaily');
+            const r = await runGrowDaily(env, now.getTime());
+            if (r.reminders || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+            cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+          } catch (e) {
+            taskFailed('grow daily', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1539 (#3789) — the deck card blob prune: a blob no version names,
+        // first written over an hour ago, goes (at most 500 a run).
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
+          try {
+            const r = await pruneCardBlobs(env);
+            if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
+            cronSummary.push(`deck card blobs pruned=${r.deleted}`);
+          } catch (e) {
+            taskFailed('deck card blob prune', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
+        // periods that have come, and the team's reminders, each claimed
+        // before it is sent so a second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 40) {
+          try {
+            const { runReportingDaily } = await import('./services/reportingDuties');
+            const r = await runReportingDaily(env, now.getTime());
+            if (r.duties || r.periods || r.reminders) console.info(`[cron] reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+            cronSummary.push(`reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+          } catch (e) {
+            taskFailed('reporting daily', e instanceof Error ? e.message : 'error');
+          }
+        }
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
+          try {
+            const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');
+            const r = await writeLeaderboardSnapshots(env, now.getTime());
+            if (r.written || r.failed.length) console.info(`[cron] leaderboard snapshots written=${r.written} failed=${r.failed.length}`);
+          } catch (e) {
+            taskFailed('leaderboard snapshots', e);
+          }
+        }
+        // D4292 (#4292) — the influencer commission hold: pending subscription
+        // commissions 30 days past their invoice become payable, then each
+        // referrer's milestone bonuses fire once. Daily at 05:30 UTC; idempotent.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 30) {
+          try {
+            const { sweepPendingCommissions } = await import('./services/influencerCommission');
+            const r = await sweepPendingCommissions(env, now.getTime());
+            if (r.payable || r.bonuses || r.custom) console.info(`[cron] influencer commissions payable=${r.payable} bonuses=${r.bonuses} custom=${r.custom}`);
+          } catch (e) {
+            taskFailed('influencer commission sweep', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D484 — publish approved articles whose scheduled time has passed.
+        // Every minute, on every tier: a branch's articles are its own, and an
+        // article with no `publish_at` is never touched.
+        try {
+          const { publishDueArticles } = await import('./routes/admin_articles');
+          const p = await publishDueArticles(env, now);
+          if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
+        } catch (e) {
+          taskFailed('scheduled article publish', e);
+        }
+        // Cohort Timing & Gating — every-minute tick: materializes monthly
+        // cycles, unlocks weeks at their Delaware-midnight boundaries,
+        // evaluates pass/fail at each week deadline, finalizes lapsed grace
+        // extensions, and sends 48h/24h/3h reminders. Every job run is
+        // claimed via scheduled_jobs_audit.idempotency_key so re-runs are
+        // no-ops. Cheap on idle ticks (indexed due-window SELECTs).
+        try {
+          const { runCohortTimingTick } = await import('./services/cohortTiming');
+          await runCohortTimingTick(env, now);
+        } catch (e) {
+          taskFailed('cohort timing tick', e);
+        }
+        // Task #5 — Cohort application lifecycle tick: closes application
+        // windows 7 days before the 1st (23:59:59 ET), sends 3d/24h close
+        // reminders, runs the below-minimum capacity check (postpone +
+        // roll-forward), and activates approved founders at Delaware
+        // midnight on the 1st. Idempotent via scheduled_jobs_audit claims
+        // and the per-user notification ledger.
+        try {
+          const { runCohortApplicationsTick } = await import('./services/cohortApplications');
+          await runCohortApplicationsTick(env, now);
+        } catch (e) {
+          taskFailed('cohort applications tick', e);
+        }
+        // D4657 (#4657): Lab progress reconciliation. A few enrolled founders
+        // per tick: record milestones their saved work proves but no request
+        // recorded (a closed tab), and pay grants an interrupted request left
+        // unpaid. Idempotent; bounded by RECONCILE_TICK_LIMIT.
+        try {
+          const { runLabReconcileTick } = await import('./services/labProgress');
+          await runLabReconcileTick(env, { nowMs: now.getTime() });
+        } catch (e) {
+          taskFailed('lab reconcile tick', e);
+        }
+        // D4663 (#4663, owner decision A): graduation closes the Lab, so the
+        // reconciler above never sees a graduate whose final request died
+        // before the credential was issued. A few such graduates per tick get
+        // the credential and its bonus here. Idempotent; bounded by
+        // CERT_BACKFILL_TICK_LIMIT; recorded in spinout_certificate_backfill_*.
+        try {
+          const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
+          const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
+          // D5360: the same tick pays lost graduation bonuses; a tick that only paid bonuses is logged too.
+          if (b.scanned || b.bonus.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid} bonus_skipped=${b.bonus.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid}`);
+          }
+        } catch (e) {
+          taskFailed('certificate backfill tick', e);
+        }
+        // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
+        // HMAC on every approved official snapshot; mismatches get flagged
+        // for admin review and disappear from LP/partner views immediately.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 30) {
+          // Full-pagination audit: queueWorker pages through every non-sandbox
+          // approved snapshot using id-cursor (no LIMIT cap on coverage).
+          try { await Jobs.enqueue(env, 'score_hash_audit', { page_size: 500 }); } catch {}
+        }
+        // D671: the daily 14:00 UTC digest of flagged-but-unreviewed scores
+        // is retired at the owner's request. It re-sent the same unreviewed
+        // list every day. Flagged scores still wait in Monitoring › Integrity,
+        // and the one-time alert when a score is first flagged still goes out.
+        // Founder Signals live ingestion — nightly at 04:20 UTC. Fetches real
+        // evidence from the free public sources (HN/Algolia, Stack Exchange,
+        // GitHub, Federal Register, SEC EDGAR FTS) and persists promoted
+        // signals + their evidence into D1, replacing the illustrative seed
+        // corpus. D670 retired the /signals page; Research's overview, markets,
+        // sectors and founder desk read this table, so the refresh stays.
+        // Idempotent; a failed night just leaves yesterday's real data (or the
+        // labeled examples) in place.
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const { runRefresh } = await import('./services/signals/engine');
+            const r = await runRefresh(env);
+            console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
+          } catch (e) {
+            taskFailed('signals ingestion', e);
+          }
+        }
+        // D712 (#1777) — the fund reporting queue at 05:20 UTC, HQ only: it
+        // builds each administered fund's quarterly pack once it is due (the
+        // 5th day after the quarter ends) and missing in every status, as
+        // drafts that only a Super Admin issues. A second tick builds nothing.
+        // It logs ids and counts only, never a figure.
+        if (hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 20) {
+          try {
+            const { runReportingSchedule } = await import('./services/fundReportDrafts');
+            const r = await runReportingSchedule(env, now);
+            const built = r.results.filter((x) => x.result === 'built').map((x) => x.fund_id);
+            console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
+          } catch (e) {
+            taskFailed('fund reporting', (e as Error)?.message);
+          }
+        }
+        // D1536 (#3785) — Monday 05:55 UTC, HQ only: the Workers AI catalogue
+        // against Cloudflare's live model list. Without CF_AI_CATALOGUE_TOKEN it
+        // logs why and skips; a failed read writes nothing and tells no one.
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 5 && now.getUTCMinutes() === 55) {
+          try {
+            const { runCatalogueDrift } = await import('./services/ai/catalogueDrift');
+            await runCatalogueDrift(env);
+          } catch (e) {
+            taskFailed('ai catalogue drift', (e as Error)?.message);
+          }
+        }
+        // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
+        // expires past-due `legal_obligations` (TTL elapsed) and pairwise
+        // NDAs past their `valid_until`, then runs the KYC/KYB resync stub
+        // (no-op until Persona/Sumsub are wired). All side-effects are
+        // idempotent so re-runs after a missed minute are safe.
+        // Task #163 — renewal warnings at 04:15 UTC, TWENTY MINUTES BEFORE
+        // the expiry sweep below. Ordering matters on the day an item is due:
+        // running after 04:35 would mean the row had already been flipped to
+        // 'expired' and the last warning would be the one nobody got.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 15) {
+          try {
+            const r = await renewalSweep(env, now);
+            if (r.claimed || r.notified) {
+              console.info(`[cron] renewal notices scanned=${r.scanned} claimed=${r.claimed} notified=${r.notified}`);
+            }
+          } catch (e) { taskFailed('renewal sweep', e); }
+        }
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 35) {
+          try {
+            const r = await expireTrustArtifacts(env);
+            if (r.obligations_expired || r.ndas_expired) {
+              console.info(`[cron] trust expiry obligations=${r.obligations_expired} ndas=${r.ndas_expired}`);
+            }
+            const k = await resyncKycKyb(env);
+            if (k.scanned) {
+              console.info(`[cron] trust kyc resync scanned=${k.scanned} updated=${k.updated}`);
+            }
+          } catch (e) { taskFailed('trust expiry', e); }
+        }
+        // D122 — close the audit row an HQ support session leaves on a branch.
+        // NOT gated on `hqCadences`, and that is the design rather than an
+        // oversight: `admin_user_id = 0` is a value HQ can never write, so the
+        // sweep's own predicate is the tier discriminator and a better one — it
+        // selects rows by what they are, not by which deployment is asking. On
+        // HQ it matches nothing and rides the ix_imp_admin prefix. Every five
+        // minutes bounds how long a spent session keeps inflating HQ's
+        // "Impersonations live" count; it does not affect what the row says,
+        // because `ended_at` is computed from `started_at`, not from now.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { closeExpiredSupportSessions } = await import('./util/supportSessionSweep');
+            const s = await closeExpiredSupportSessions(env);
+            if (s.closed) console.info(`[cron] support sessions closed=${s.closed}`);
+          } catch (e) { taskFailed('support session sweep', e); }
+        }
+        // D135 — the compliance ladder's middle rung. A notice whose deadline
+        // has passed unanswered freezes the account it was addressed to.
+        //
+        // NO NEW CRON EXPRESSION. `* * * * *` already fires every minute and
+        // every block here gates on the WALL CLOCK, never on which expression
+        // fired, so this is one `if` and nothing in wrangler.toml — the same
+        // correction D106 recorded when a trim of the expression list was
+        // mistaken for a change in cadence.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent one block up and for
+        // its stated reason: `admin_notices` is HQ's table and a branch holds
+        // none, so the sweep's own predicate IS the tier discriminator and a
+        // better one — it selects rows by what they are, not by which
+        // deployment is asking. On a branch it matches nothing and costs an
+        // index probe.
+        //
+        // EVERY FIVE MINUTES, NOT EVERY MINUTE, because `froze_at` is stamped
+        // with the notice's own deadline rather than the sweep's clock: the
+        // cadence bounds how long an account keeps writing past its deadline,
+        // and does not affect what any row says.
+        //
+        // IT NEVER TERMINATES. The reversible rung is the clock's; ending an
+        // account stays a deliberate human act.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { freezeOverdueNotices } = await import('./services/complianceLadder');
+            const f = await freezeOverdueNotices(env);
+            if (!f.readable) {
+              console.warn('[cron] compliance sweep could not read admin_notices');
+            } else if (f.froze || f.suspended) {
+              console.info(`[cron] compliance froze=${f.froze} suspended=${f.suspended} notified=${f.notified}`);
+            }
+          } catch (e) { taskFailed('compliance sweep', e); }
+        }
+        // D143 — a breached HQ SLA tells somebody. `hq_escalations.due_at` has
+        // been written since migration 259 and read by nothing: `slaBand()`
+        // derives the badge on every read, and a subsidiary that escalated
+        // something and heard nothing was waiting on an answer no clock chased.
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent two blocks up and for
+        // its stated reason: `hq_escalations` is HQ's table and a branch holds
+        // none of its rows, so the sweep's own predicate IS the tier
+        // discriminator and a better one — it selects rows by what they are, not
+        // by which deployment is asking.
+        //
+        // EVERY FIFTEEN MINUTES, AND UNLIKE THE LADDER ABOVE THE CADENCE IS
+        // VISIBLE. `froze_at` carries the notice's own deadline, so that sweep's
+        // interval bounds nothing a row says; here the act being recorded is the
+        // NOTIFICATION, so the interval IS the worst case for how late HQ hears.
+        // Fifteen minutes against an SLA measured in hours (`SLA_HOURS`,
+        // rpc/hqOps.ts) is slack of about a percent, at a fifth of the cost of
+        // the every-minute shape.
+        //
+        // IT NEVER ANSWERS AN ESCALATION — it reports that a deadline passed.
+        // Answering stays a deliberate act on PATCH /api/admin/escalations/:uid.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const { reportBreachedEscalations } = await import('./services/hqEscalationSla');
+            const s = await reportBreachedEscalations(env);
+            if (!s.readable) {
+              console.warn('[cron] hq SLA sweep could not read hq_escalations');
+            } else if (s.reported) {
+              console.info(`[cron] hq SLA breached=${s.breached} reported=${s.reported} notified=${s.notified}`);
+            }
+          } catch (e) { taskFailed('hq SLA sweep', e); }
+        }
+        // D200 — the security_events ledger keeps 90 days. Migration 282's own
+        // seal refuses any delete INSIDE that window, so this sweep can only
+        // ever remove rows the trigger admits; the two comparisons are
+        // complementary by construction (`<` here, `>=` in the trigger).
+        //
+        // NOT GATED ON `hqCadences`, on the D122 precedent: the table is
+        // per-deployment and every tier prunes its own, so the rows' own age
+        // is the discriminator and a branch pruning its ledger is exactly
+        // right. DAILY, and the cadence bounds nothing a row says — a row is
+        // readable until it ages out whether the sweep runs at 04:50 or a day
+        // late. `branch_licence_copy.test.ts` pins this block in its ungated
+        // list, so a later edit that tidies it under the HQ gate fails the
+        // build.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 50) {
+          try {
+            const { pruneSecurityEvents } = await import('./services/securityEvents');
+            const p = await pruneSecurityEvents(env);
+            if (!p.readable) console.warn('[cron] security_events prune could not read the ledger');
+            else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
+          } catch (e) { taskFailed('security_events prune', e); }
+        }
+        // D250 — SCHEDULED TELEGRAM AND X POSTS ARE SENT. Both consoles have
+        // offered "Schedule" since they were built and nothing sent a
+        // scheduled post; it sat at 'scheduled' for ever. EVERY MINUTE, on
+        // D239's clock (the tick's scheduled minute), because a post is
+        // scheduled to the minute. GATED ON `hqCadences`: both consoles are
+        // Super-Admin-only and the bot credentials are HQ's, so a branch has
+        // nothing to send. The send is the console's own (services/
+        // scheduledPosts.ts says why), and the sweep never throws past this.
+        if (hqCadences) {
+          try {
+            const { sweepScheduledPosts } = await import('./services/scheduledPosts');
+            const p = await sweepScheduledPosts(env, now);
+            if (p.due || p.stale_failed || p.stale_unknown || p.unreadable_failed || p.unreadable_draft || p.errors.length) {
+              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} stale_unknown=${p.stale_unknown} unreadable_failed=${p.unreadable_failed} unreadable_draft=${p.unreadable_draft} left_for_next_tick=${p.left_for_next_tick}`);
+              if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
+            }
+          } catch (e) { taskFailed('scheduled posts sweep', e); }
+        }
+        // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
+        // `unknown`: not known whether it arrived. Never re-sent, never
+        // `failed`. Every fifth minute, on every deployment (a founder's
+        // sends are not HQ's); the reads close stranded rows too. Never throws.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { releaseStrandedSends } = await import('./services/publishCore');
+            const n = await releaseStrandedSends(env);
+            if (n) console.info(`[cron] publish stranded=${n}`);
+          } catch (e) { taskFailed('publish stranded sweep', (e as Error)?.name); }
+        }
+        // D710 (#1775) — Mercury's read-only sync of each Axal entity's
+        // accounts and transactions, then the matchers. Hourly at minute 17, a
+        // minute no other block uses. GATED ON `hqCadences`: these are HQ's
+        // entities in HQ's database, and the function itself does nothing on
+        // a branch. Reports, never throws.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          try {
+            const { syncAllMercuryEntityConnections } = await import('./services/mercury/sync');
+            const r = await syncAllMercuryEntityConnections(env);
+            if (r.scanned > 0) console.info(`[cron] mercury sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+          } catch (e) { taskFailed('mercury sync', e); }
+        }
+        // D272 — licence pushes that did not land are re-sent, each at most
+        // once per hour (LICENCE_PUSH_RETRY_WINDOW_MINUTES, per row), so a
+        // branch that already holds a copy stops keeping an old licence
+        // until the next transition happens to push. GATED ON `hqCadences`:
+        // only HQ holds the ledger and the branch bindings. Every ten minutes,
+        // at a minute no other block uses; reports, never throws.
+        if (hqCadences && now.getUTCMinutes() % 10 === 3) {
+          try {
+            const { retryPendingLicencePushes } = await import('./services/licencePush');
+            const r = await retryPendingLicencePushes(env, now);
+            if (!r.available) console.warn('[cron] licence push retry', r.reason);
+            else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
+          } catch (e) { taskFailed('licence push retry', e); }
+          // D5361 — incomplete termination consequences use the same five-minute
+          // lease as a manual resume, so a crashed request no longer waits for
+          // an operator and a racing clock cannot repeat an event or notice.
+          try {
+            const { resumeIncompleteLicenceTerminations } = await import('./routes/admin_licences_lifecycle');
+            const r = await resumeIncompleteLicenceTerminations(env, now);
+            if (!r.available) console.warn('[cron] licence termination resume', r.reason);
+            else if (r.tried || r.skipped) console.info(`[cron] licence termination resume tried=${r.tried} complete=${r.complete} incomplete=${r.incomplete} skipped=${r.skipped}`);
+          } catch (e) { taskFailed('licence termination resume', e); }
+          // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
+          try {
+            const { retryOutbox } = await import('./services/programOutbox');
+            const o = await retryOutbox(env, now);
+            if (!o.available) console.warn('[cron] program outbox retry', o.reason);
+            else if (o.tried) console.info(`[cron] program outbox retry tried=${o.tried} sent=${o.sent}`);
+          } catch (e) { taskFailed('program outbox retry', e); }
+        }
+        // D237 — cron_run_history keeps 30 days, and always each trigger's
+        // newest row (the reasons and the batch cap are in
+        // util/cronHistory.ts). NOT GATED ON `hqCadences`, on the D122
+        // precedent: every deployment writes its own table, so every tier
+        // prunes its own. `branch_licence_copy.test.ts` pins it in the
+        // ungated list. DAILY at 03:45, a minute no other block uses.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 45) {
+          try {
+            const { pruneCronRunHistory } = await import('./util/cronHistory');
+            const p = await pruneCronRunHistory(env);
+            if (!p.readable) console.warn('[cron] cron_run_history prune could not read the table');
+            else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
+          } catch (e) { taskFailed('cron_run_history prune', e); }
+        }
+        // D358 — the Profiling v2 evolution loop (PROFILING_V2.md §7.8). Every
+        // minute of 03:00–03:59 UTC except :15 and :45 (heavier jobs), one
+        // bounded tick: Session 8's evidence pass once a day, then each person
+        // with something new — evidence, a hysteresis clock running, an engine
+        // bump, or a month since their last evaluation — is recomputed, and a
+        // displayed-archetype change is recorded and notified once. A pass
+        // that does not finish tonight resumes tomorrow at its cursor. NOT
+        // GATED ON `hqCadences`: profiles live in this deployment's own D1.
+        if (now.getUTCHours() === 3) {
+          const { isNightlyTick, runProfileEvolutionTick } = await import('./services/profileEvolution');
+          if (isNightlyTick(now)) {
+            try {
+              const t = await runProfileEvolutionTick(env, now);
+              if (t.processed || t.failed) {
+                console.info(`[cron] profile evolution stage=${t.stage} processed=${t.processed} evaluated=${t.evaluated} events=${t.events} failed=${t.failed}${t.pass_complete ? ' pass_complete' : ''}`);
+              }
+            } catch (e) { taskFailed('profile evolution', e); }
+          }
+        }
+        // D148 — the anonymised platform median, computed at HQ and pushed to
+        // every branch. `branch_benchmarks` was created by migration 256 and
+        // had no writer at all (#252); this is it.
+        //
+        // GATED ON `hqCadences`, WHICH IS THE OPPOSITE CALL FROM THE THREE
+        // BLOCKS ABOVE, and the reason is the direction of the work. Those
+        // sweeps act on THIS deployment's own rows, so their WHERE clause is
+        // the tier discriminator. This one fans out to every branch, and a
+        // branch has no branches — `publishBenchmarks` refuses on one outright
+        // rather than quietly fanning out to nothing, so the gate and the
+        // function agree instead of one covering for the other.
+        //
+        // DAILY, AND THE CADENCE BOUNDS NOTHING A ROW SAYS. Every published row
+        // carries its own `period` and HQ's `pushed_at`, so a branch reading a
+        // day-old median knows it is a day old. The alternative — an hourly
+        // recompute of a quarterly figure — would be N remote calls an hour to
+        // move a number that moves in weeks.
+        //
+        // IT PUBLISHES NOTHING BELOW THREE ANSWERING BRANCHES, by construction
+        // rather than by this block's choice: `MIN_BRANCHES` lives with the
+        // argument for it. With no branch provisioned the fan-out returns an
+        // empty list and this costs one scan of `env` a day.
+        if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 55) {
+          try {
+            const { publishBenchmarks, currentPeriod } = await import('./services/branchBenchmarks');
+            const r = await publishBenchmarks(env, currentPeriod(now));
+            if (r.withheld_reason) {
+              console.info(`[cron] benchmarks withheld (${r.answered}/${r.total} answered): ${r.withheld_reason}`);
+            } else {
+              console.info(`[cron] benchmarks period=${r.period} published=${r.published} answered=${r.answered}/${r.total}`);
+            }
+          } catch (e) { taskFailed('benchmark publish', e); }
+        }
+        // D266 — a branch reports its previous and current quarter to HQ at
+        // 05:10 UTC, so HQ's statements say "reported, unmeasurable" rather
+        // than "not reported" (services/usageReport.ts has the why).
+        //
+        // THE ONE BLOCK GATED ON `!hqCadences`, and the gate is the design:
+        // HQ keeps the ledger this report feeds, so HQ has nothing to report
+        // to itself, and `pushUsageReport` refuses there anyway. The negation
+        // is what a test anchors on, so a later tidy into the HQ group — where
+        // it would run on the one deployment that must not — is caught.
+        //
+        // DAILY, AND TWO QUARTERS. The report is a restatement, upserted per
+        // (licence, period, stream), so a daily run keeps the current quarter
+        // current and lets the previous one take its final figure after it
+        // closes. 05:xx is unused on both tiers.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 10) {
+          try {
+            const { pushUsageReport } = await import('./services/usageReport');
+            const r = await pushUsageReport(env, now);
+            const detail = r.periods.map((p) => `${p.period}=${p.sent ? 'sent' : 'not sent'}`).join(' ');
+            if (r.sent) console.info(`[cron] usage report ${detail}`);
+            else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
+          } catch (e) { taskFailed('usage report', e); }
+        }
+        // D1156: each branch reports only program aggregates daily, independent of revenue.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 15) {
+          try {
+            const { pushProgramUsage } = await import('./services/programUsage');
+            const r = await pushProgramUsage(env, now);
+            console.info(`[cron] program report sent=${r.sent} programs=${r.sent ? r.programs : 0}`);
+          } catch { taskFailed('program report'); }
+        }
+        // D492 / D493 — the nightly consent sweeps at 05:05 UTC, per
+        // deployment (both act on this deployment's own rows). Both are
+        // idempotent ledgers: a founder is told once per advisor-cohort
+        // episode, a pre-368 relationship's subject once. The same sweeps also
+        // run on the reads that matter, so this is the backstop for people
+        // who open neither page.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 5) {
+          try {
+            const { syncCohortAdvisorNotices } = await import('./services/cohortAdvisorAccess');
+            const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
+            if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
+          } catch (e) { taskFailed('cohort advisor notices', e); }
+          // D959 — investor cohort access: closes grants past their last day, then tells founders.
+          try {
+            const { syncInvestorCohortNotices } = await import('./services/investorCohortAccess');
+            const r = await syncInvestorCohortNotices(env, { limit: 2000 });
+            if (r.started || r.ended || r.expired) console.info(`[cron] investor cohort notices started=${r.started} ended=${r.ended} expired=${r.expired}`);
+          } catch (e) { taskFailed('investor cohort notices', e); }
+          try {
+            const { noticeLegacyRelationships } = await import('./routes/partnernet');
+            const r = await noticeLegacyRelationships(env, 500);
+            if (r.rows) console.info(`[cron] legacy relationship notices rows=${r.rows} notices=${r.notices}`);
+          } catch (e) { taskFailed('legacy relationship notices', e); }
+        }
+        // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
+        // with Stripe Connect in the referrals redesign. Referral rewards are
+        // milestone labels reviewed by a human in the admin queue, so there is
+        // no ledger left to sweep.
+        // Task #8 (X-1) — daily partner deal expiry sweep at 04:40 UTC.
+        // Flips deals past their term to 'expired' and revokes tier
+        // grants on the partner + every redeemer (paid upgrades that
+        // replaced a grant are preserved by status guards). Idempotent.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 40) {
+          try {
+            const { expirePartnerDeals } = await import('./services/partnerDeals');
+            const r = await expirePartnerDeals(env);
+            if (r.deals_expired) {
+              console.info(
+                `[cron] partner deal expiry deals=${r.deals_expired} ` +
+                `founder_revoked=${r.founder_grants_revoked} ` +
+                `investor_revoked=${r.investor_grants_revoked} ` +
+                `redemptions_revoked=${r.redemptions_revoked}`,
+              );
+            }
+          } catch (e) { taskFailed('partner deal expiry', e); }
+        }
+        // Task #38 — daily rev-share attribution-window warning sweep
+        // at 04:45 UTC. Finds deal_sourcing_revshare redemptions whose
+        // 365-day window closes in 30 / 7 / 1 days, sends an email +
+        // in-app notification per (redemption, threshold) tuple, and
+        // a digest summary to admins. Idempotent via the
+        // partner_revshare_window_notifications dedupe table.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 45) {
+          try {
+            const { notifyExpiringRevshareWindows } = await import('./services/partnerDeals');
+            const r = await notifyExpiringRevshareWindows(env);
+            if (r.warnings_sent) {
+              console.info(
+                `[cron] revshare window warnings sent=${r.warnings_sent} ` +
+                `partner_emails=${r.partner_emails_sent} admin_digest=${r.admin_digest_sent}`,
+              );
+            }
+          } catch (e) { taskFailed('revshare window warnings', e); }
+        }
+        // Task #6 (W-1) — daily investor trial downgrade at 04:25 UTC.
+        // Idempotent: only flips users whose trial_ends_at is in the past
+        // AND status='trialing'. Re-runs harmlessly when none are due.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 25) {
+          try {
+            const r = await downgradeExpiredInvestorTrials(env);
+            if (r.scanned) {
+              console.info(`[cron] investor trial downgrade scanned=${r.scanned} downgraded=${r.downgraded}`);
+            }
+          } catch (e) {
+            taskFailed('investor trial downgrade', e);
+          }
+        }
+        // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
+        // conversations past their tier's TTL (90d free / 1y paid /
+        // 5y admin opt-in). CASCADE deletes messages + feedback.
+        // Task #31 — only runs on dev/preview stages where the assistant
+        // route is mounted; in production the assistant tables are
+        // expected to be empty so the sweep is a no-op anyway.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 10) {
+          const e2 = env as unknown as { STAGE?: string; ENVIRONMENT?: string; ENABLE_ANTHROPIC_DEV?: string };
+          const prod = e2.STAGE === 'production' || e2.ENVIRONMENT === 'production';
+          if (!prod && e2.ENABLE_ANTHROPIC_DEV === '1') {
+            try {
+              const r = await sweepExpiredConversations(env);
+              console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
+            } catch (e) {
+              taskFailed('assistant retention sweep', e);
+            }
+          }
+        }
+        // Task #6 — daily TOTP remediation backstop at 04:20 UTC. The
+        // canonical trigger is the admin /maintenance/totp-remediation
+        // endpoint run at deploy time; this cron is the belt-and-braces
+        // sweep that catches anything missed (e.g. users created between
+        // the deploy and the manual run). Idempotent — short-circuits
+        // immediately when no legacy rows remain.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const r = await runTotpRemediation(env);
+            if (r.scanned || r.migrated || r.failed) {
+              console.info(`[cron] totp remediation scanned=${r.scanned} migrated=${r.migrated} emailed=${r.emailed} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('totp remediation', e);
+          }
+        }
+        // Task #7 (AM) — daily project trash sweep at 04:30 UTC. Hard-deletes
+        // projects that have been soft-deleted (deleted_at) for more than
+        // 30 days. Idempotent — short-circuits when no aged rows remain.
+        // The DELETE handler in routes/projects.ts handles the soft-delete
+        // path; this cron is the auto-purge backstop. Task #9 (AO) may
+        // adjust the schedule via wrangler.toml as needed.
+        // Task #6 (AT-1) + Task #3 (CE) — Market Intelligence reducer.
+        // Runs at 02:15 UTC nightly AND every 6h (08:15 / 14:15 / 20:15)
+        // so opt-outs propagate within 6 hours per CE acceptance spec.
+        // Re-aggregates per-answer signals into k≥5 cells, recomputes
+        // fit_match cosine pairs, and purges any signals from users who
+        // flipped `mi_contribution_optout=1` since the last sweep.
+        if ([2, 8, 14, 20].includes(now.getUTCHours()) && now.getUTCMinutes() === 15) {
+          try { await Jobs.enqueue(env, 'mi_reduce', {}); }
+          catch (e) { taskFailed('mi_reduce enqueue', e); }
+        }
+        // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
+        // funnel rows are pseudonymous but still subject to GDPR storage
+        // limitation; 180 days is ample for cohort comparisons (window is
+        // documented in documentation/architecture/ANALYTICS_FUNNEL.md alongside the manual purge SQL).
+        // Best-effort: a cold DB without the table just logs and moves on.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const r = await env.DB.prepare(
+              "DELETE FROM funnel_events WHERE created_at < datetime('now', '-180 days')",
+            ).run();
+            const purged = (r as any)?.meta?.changes || 0;
+            if (purged) console.info(`[cron] funnel_events purge deleted=${purged}`);
+          } catch (e) {
+            taskFailed('funnel_events purge', e);
+          }
+        }
+        // Task #5 (IE) — Daily KV snapshot to R2 at 02:00 UTC. D1
+        // backup is taken separately by .github/workflows/backup-d1.yml
+        // (wrangler d1 export → R2) since the worker runtime has no
+        // native D1 export. Best-effort: failures log + page but never
+        // raise; the next 24h tick retries.
+        if (now.getUTCHours() === 2 && now.getUTCMinutes() === 0) {
+          try {
+            const r = await runDailyKvSnapshot(env);
+            console.info(`[cron] kv snapshot configured=${r.configured} ok=${r.ok} failed=${r.failed}`);
+            // Only advance the KV heartbeat when at least one snapshot
+            // actually landed and none failed. This prevents a "fresh"
+            // heartbeat from masking a regression where every target
+            // 404s or refuses (ephemeral guard).
+            if (r.ok > 0 && r.failed === 0) {
+              await writeBackupHeartbeat(env, 'worker_cron', 'kv', {
+                snapshots: r.objects,
+                configured: r.configured,
+              });
+            }
+          } catch (e) {
+            taskFailed('kv snapshot', e);
+          }
+        }
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
+          try {
+            const { sweepTrashedProjects } = await import('./services/projectTrash');
+            const r = await sweepTrashedProjects(env, 30);
+            if (r.scanned || r.deleted || r.failed) {
+              console.info(`[cron] project trash sweep scanned=${r.scanned} deleted=${r.deleted} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('project trash sweep', e);
+          }
+        }
+        // Task #5 (AV) — hourly Vectorize re-embed for axal-search.
+        // Walks every entity table, finds rows with id > last watermark
+        // and enqueues `embed_entity` jobs so new content lands in the
+        // search index within ~1h. Watermark stored in RATE_LIMITS KV
+        // (axal-search:watermark:<type>). Best-effort — failures here
+        // never raise; the next tick retries.
+        //
+        // Staggered to minute 7 (not minute 0) so this heavy sweep doesn't
+        // collide with the top-of-hour burst of other minute-0 / hour-boundary
+        // cron work, which together saturated D1 ("D1 DB is overloaded").
+        if (now.getUTCMinutes() === 7) {
+          try {
+            // Defense-in-depth: guarantee academy_lessons exists before the
+            // per-type SELECT below (a migration also creates it, but a warm
+            // isolate that booted on a pre-migration D1 would still 404). The
+            // per-type loop also skips a genuinely-missing table gracefully.
+            await ensureAcademySchema(env);
+            const { ALL_ENTITY_TYPES } = await import('./services/vectorize');
+            const TABLE_BY_TYPE: Record<string, string> = {
+              project: 'projects', deal: 'deals', founder: 'founders',
+              partner: 'users', document: 'legal_documents',
+              academy_lesson: 'academy_lessons', advisor: 'advisors',
+              investor: 'users',
+              // Private per-user documents. They are swept here — this is the
+              // only path that keeps their index current — but deliberately
+              // absent from the search route's own map, because that one's
+              // domain is what search may RETURN. The two maps look alike and
+              // are not the same list; see `routes/search.ts`'s VALID_TYPES.
+              research_doc: 'research_documents',
+            };
+            // Lowered from 200 → 100 and batched: at most 2 batched INSERTs
+            // per type instead of up to 200 sequential single-row writes.
+            const PER_TYPE_LIMIT = 100;
+            const ENQUEUE_CHUNK = 50;
+            // Persist per-type sweep counts to system_metrics so the admin Cron
+            // tab can show whether the hourly re-index is keeping up, instead of
+            // having to grep Worker tail logs. Best-effort — never throws, never
+            // blocks the sweep. Idle types (nothing enqueued/failed/skipped) are
+            // not recorded, to avoid bloating system_metrics with zero rows.
+            const recordReembed = async (type: string, enqueued: number, failed: number, skipped: number) => {
+              if (enqueued === 0 && failed === 0 && skipped === 0) return;
+              try {
+                await env.DB.prepare(
+                  `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('reembed', ?, ?)`,
+                ).bind(enqueued, JSON.stringify({ type, enqueued, failed, skipped })).run();
+              } catch (e) {
+                taskFailed('reembed metric write', (e as Error).message);
+              }
+            };
+            for (const type of ALL_ENTITY_TYPES) {
+              const table = TABLE_BY_TYPE[type];
+              if (!table) continue;
+              const wmKey = `axal-search:watermark:${type}`;
+              let since = 0;
+              try {
+                const v = await env.RATE_LIMITS.get(wmKey);
+                since = v ? Number(v) || 0 : 0;
+              } catch { /* best-effort */ }
+              try {
+                // `users` is shared by partner+investor — filter by role
+                // (mirrors /search/backfill) so we never enqueue an
+                // unrelated user under the wrong type and contaminate
+                // findPartner / findInvestor results.
+                const where = type === 'investor'
+                  ? `id > ? AND role = 'investor' ORDER BY id ASC LIMIT ?`
+                  : type === 'partner'
+                  ? `id > ? AND role = 'partner' ORDER BY id ASC LIMIT ?`
+                  : `id > ? ORDER BY id ASC LIMIT ?`;
+                let rows;
+                try {
+                  rows = await env.DB.prepare(
+                    `SELECT id FROM ${table} WHERE ${where}`,
+                  ).bind(since, PER_TYPE_LIMIT).all<{ id: number }>();
+                } catch (e) {
+                  // Only `academy_lessons` is an optional/lazily-created table:
+                  // skip it quietly if genuinely absent. A `no such table` on
+                  // any CORE table is a real schema problem and must still
+                  // surface as a cron error rather than be silently swallowed.
+                  if (type === 'academy_lesson' && /no such table/i.test((e as Error).message)) {
+                    console.info(`[cron] axal-search re-embed type=${type} skipped — table ${table} absent`);
+                    await recordReembed(type, 0, 0, 1);
+                    continue;
+                  }
+                  throw e;
+                }
+                const ids = (rows.results || []).map((r) => Number(r.id));
+                if (!ids.length) continue;
+                // Enqueue in batched chunks (one D1 round-trip per chunk).
+                // Advance the watermark only to the highest *successfully*
+                // enqueued ID: if a chunk fails, stop so the next tick
+                // retries the missed tail rather than silently dropping rows.
+                const { lastOk, okCount, failed } = await enqueueReembedChunks(
+                  env, type, ids, since, ENQUEUE_CHUNK,
+                );
+                if (lastOk > since) {
+                  try { await env.RATE_LIMITS.put(wmKey, String(lastOk), { expirationTtl: 90 * 86400 }); } catch {}
+                }
+                console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
+                await recordReembed(type, okCount, failed, 0);
+              } catch (e) {
+                taskFailed('axal-search re-embed', type, e);
+              }
+            }
+            try {
+              const { sweepResearchIndex } = await import('./services/researchIndexSweep');
+              const r = await sweepResearchIndex(env, now);
+              if (r.pending_scanned || r.legacy_scanned || r.pending_failed) {
+                console.info(`[cron] research index recovery pending=${r.pending_scanned} enqueued=${r.pending_enqueued} requeued=${r.pending_requeued} failed=${r.pending_failed} legacy=${r.legacy_scanned}/${r.legacy_enqueued}`);
+              }
+            } catch (e) {
+              taskFailed('research index recovery', e);
+            }
+          } catch (e) {
+            taskFailed('axal-search re-embed', e);
+          }
+        }
+        // Task #2 — HubSpot 30-minute reconcile. Drift between StudioOS
+        // deal stages and HubSpot pipelines gets picked up here even when
+        // webhooks are dropped. Cron fires every minute; gate on minute % 30.
+        if (now.getUTCMinutes() % 30 === 0) {
+          try {
+            const r = await syncAllHubspotIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] hubspot sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('hubspot sync', e);
+          }
+        }
+        // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time
+        // booking events; this is the safety-net for portals where webhooks
+        // are dropped or disabled.
+        if (now.getUTCMinutes() % 15 === 0) {
+          try {
+            const r = await syncAllCalendlyIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] calendly sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('calendly sync', e);
+          }
+        }
+        // Task #4 — Salesforce 30-minute polling fallback. Mirrors stage
+        // changes from Opportunity.LastModifiedDate back into local
+        // deals.status when CometD/Platform Events aren't wired.
+        if (now.getUTCMinutes() % 30 === 0) {
+          try {
+            const r = await syncAllSalesforceIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] salesforce sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('salesforce sync', e);
+          }
+        }
+        // Task #5 — Carta cap-table sync every 6 hours at HH:00 (00/06/12/18 UTC).
+        // Cron fires every minute; gate on hour%6==0 + minute==0.
+        if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() === 0) {
+          try {
+            const r = await syncAllCartaIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] carta sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('carta sync', e);
+          }
+        }
+        // Task #2 — DocuSign reconcile sweep every 30 minutes (HH:05 / HH:35).
+        // Polls in-flight envelopes so a missed Connect webhook delivery
+        // can't leave us stuck on `sent` forever. The 30-min cadence
+        // matches the HubSpot/Salesforce reconcile sweep cadence and the
+        // task spec; the +5-minute offset spreads load away from the
+        // top/bottom-of-hour batches.
+        if (now.getUTCMinutes() % 30 === 5) {
+          try {
+            const r = await syncAllDocusignIntegrations(env);
+            if (r.scanned > 0) {
+              console.info(`[cron] docusign sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('docusign sync', e);
+          }
+        }
+        // Task #14 (AA-1) — Market Intelligence aggregator cron.
+        // Per-cadence dispatch + nightly composite recompute.
+        //   • hourly sources   → top of hour (minute === 0)
+        //   • daily sources    → 02:30 UTC
+        //   • weekly sources   → Sunday 02:45 UTC (UTC day 0)
+        //   • recomputeIndexes → 03:15 UTC nightly (after daily runs settle)
+        // D106 — the market-intel block is HQ's. `runSourcesByCadence` and
+        // `runFreeConnectors` call the open internet, and `recomputeIndexes`
+        // aggregates what they wrote, so on a branch it would recompute over
+        // nothing. A branch reads market intelligence from HQ (PR 6's `HQ`
+        // binding); it does not gather it. The guard is on the condition
+        // rather than around the try/catch so a skip is a skip, not an error
+        // the catch below would log as a market-intel failure.
+        try {
+          const { runSourcesByCadence, recomputeIndexes, runFreeConnectors } = await import('./services/market_intel/aggregator');
+          await import('./services/market_intel/sources'); // ensures registerSource() ran
+          if (hqCadences && now.getUTCMinutes() === 0) {
+            const r = await runSourcesByCadence(env, 'hourly');
+            if (r.scanned) console.info(`[cron] mi hourly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          // Task #5 (AK) — every 6h (00:05/06:05/12:05/18:05 UTC), run
+          // ALL free connectors regardless of their declared cadence.
+          // The hourly slot above already pulls free hourly sources at
+          // :00 — overlapping by minute is acceptable since connectors
+          // are idempotent on (source_key, sector, ts) and the quota
+          // ledger short-circuits duplicate writes within the same day.
+          // This satisfies the spec contract that free sources refresh
+          // every 6h end-to-end.
+          if (hqCadences && [0, 6, 12, 18].includes(now.getUTCHours()) && now.getUTCMinutes() === 5) {
+            for (const cad of ['hourly', 'daily', 'weekly'] as const) {
+              const r = await runFreeConnectors(env, cad);
+              if (r.scanned) console.info(`[cron] mi free-connectors-6h cadence=${cad} scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+            }
+          }
+          if (hqCadences && now.getUTCHours() === 2 && now.getUTCMinutes() === 30) {
+            const r = await runSourcesByCadence(env, 'daily');
+            if (r.scanned) console.info(`[cron] mi daily scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          if (hqCadences && now.getUTCDay() === 0 && now.getUTCHours() === 2 && now.getUTCMinutes() === 45) {
+            const r = await runSourcesByCadence(env, 'weekly');
+            if (r.scanned) console.info(`[cron] mi weekly scanned=${r.scanned} ok=${r.ok} failed=${r.failed} inserted=${r.inserted}`);
+          }
+          // Task #5 (AK) — daily 04:00 UTC: the index recompute. The 03:15
+          // slot was kept through #14 for historical compatibility but the AK
+          // spec pins this surface to a single nightly refresh window so
+          // operators have one timestamp to monitor for staleness. (The
+          // investor-signals snapshot refresh that shared this slot went with
+          // the /market-intel page, D670.)
+          if (hqCadences && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+            const r = await recomputeIndexes(env);
+            console.info(`[cron] mi recompute sectors=${r.sectors} rows_written=${r.rows_written}`);
+          }
+          // Institutional quarterly Axal-VC PDF — stub trigger. The PDF
+          // renderer + R2 dropbox land with AA-2; this cron simply logs
+          // the eligible window so we have an audit trail before the
+          // generator ships. Fires on the 1st of Jan/Apr/Jul/Oct at 04:00.
+          if (hqCadences && now.getUTCDate() === 1 && [0, 3, 6, 9].includes(now.getUTCMonth()) && now.getUTCHours() === 4 && now.getUTCMinutes() === 0) {
+            console.info(`[cron] mi quarterly_pdf eligible_period=${now.getUTCFullYear()}Q${Math.floor(now.getUTCMonth() / 3) + 1} (renderer pending AA-2)`);
+          }
+        } catch (e) {
+          taskFailed('market intel', e);
+        }
+        // D670 — the market-intel watchlist digest (Task #30: a weekly email on
+        // Mondays and a monthly one on the 1st, 09:00 UTC) is retired with the
+        // /market-intel page. Nothing here sends it any more.
+        // Task #14 — flush pending digest emails. Cheap on idle ticks
+        // (single GROUP BY query) and only sends to users whose local
+        // time is currently 09:00 with cadence-matched weekday. The
+        // every-minute cron means each user's slot fires once per day.
+        try {
+          const { flushPendingDigests } = await import('./services/notify');
+          const r = await flushPendingDigests(env);
+          if (r.sent > 0) {
+            console.info(`[cron] notification digest sent users=${r.sent} rows=${r.rows}`);
+          }
+        } catch (e) {
+          taskFailed('notification digest', e);
+        }
+        // Task #6 — event reminder sweep every 5 minutes. Walks events
+        // starting within 24h and fires reminder_24h / reminder_1h to each
+        // registered/confirmed principal exactly once (insert-ledger-first
+        // idempotency). Cheap on idle ticks: exits O(1) when no event is
+        // inside the window.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { sweepEventReminders } = await import('./services/eventReminders');
+            const r = await sweepEventReminders(env, now);
+            if (r.sent > 0) {
+              console.info(`[cron] event reminders events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
+            }
+          } catch (e) {
+            taskFailed('event reminder sweep', e);
+          }
+          // #3959: learning plan reminders, one per item and occurrence (insert-ledger-first), through notify().
+          try {
+            const { sendPlanReminders } = await import('./services/learningPlan');
+            const sent = await sendPlanReminders(env, now.getTime());
+            if (sent > 0) console.info(`[cron] learning plan reminders sent=${sent}`);
+          } catch (e) {
+            taskFailed('learning plan reminder sweep', e);
+          }
+        }
+        // Task #14's watchlist follow-up reminder sweep stood here (and its
+        // service, services/watchlistReminders.ts, is deleted). Each
+        // reminder linked to the Watchlist page, which the owner removed
+        // (2026-10-20), so the sweep no longer runs.
+        // Task #13 — daily analytics snapshot at 02:05 UTC. Captures
+        // yesterday's Overview + Financial rollup into `analytics_snapshots`
+        // (USD baseline) so admin historical comparisons survive the
+        // nightly system_metrics cleanup. Idempotent on re-run via the
+        // table's UNIQUE(snapshot_date) constraint.
+        if (now.getUTCHours() === 2 && now.getUTCMinutes() === 5) {
+          try {
+            const r = await writeDailySnapshot(env);
+            if (r.written) {
+              console.info(`[cron] analytics snapshot written for ${r.snapshot_date}`);
+            } else if (r.reason) {
+              console.error(`[cron] analytics snapshot skipped for ${r.snapshot_date}: ${r.reason}`);
+            }
+          } catch (e) {
+            taskFailed('analytics snapshot', e);
+          }
+        }
+      } catch (e: any) {
+        cronError = e?.message || 'cron batch error';
+        console.error('[cron] unhandled batch error', e);
+      } finally {
+        // Task #7 (IE) — persist cron run summary to D1. The retry-on-overload
+        // INSERT lives in util/cronHistory so the scheduled handler's final
+        // write is exercised end-to-end by cron_history_write.test.ts.
+        try {
+          await writeCronRunHistory(env, {
+            triggerName: triggerKey,
+            startedAt: cronStartedAt,
+            cronError,
+            failedTasks: cronTaskFailures,
+            summary: cronSummary,
+          });
+        } catch (dbErr) {
+          console.error('[cron] cron history write failed', dbErr);
+        }
+        try {
+          const cur = await env.RATE_LIMITS.get(LEASE_KEY);
+          if (cur === leaseHolder) await env.RATE_LIMITS.delete(LEASE_KEY);
+        } catch {}
+      }
+    })();
+
+    ctx.waitUntil(work);
+    await work;
+  },
+  async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
+    // D1528 (#3847): the agent queue's branch comes FIRST, before the `dlq`
+    // test, and its own DLQ goes to agentDlqConsumer (which ends the run and
+    // mirrors the message). Task #7 (IE) — every other DLQ batch goes to
+    // dlqConsumer so exhausted CF Queue messages are mirrored to D1 for admin
+    // inspection + retry. `agents/agentQueue.ts`'s dispatchQueue holds the order.
+    await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
+  },
+};
+
+// Durable Object class re-exports — REQUIRED by the Workers runtime so it
+// can find the classes named in wrangler.toml's [[durable_objects.bindings]].
+export { PipelineRoom } from './durable-objects/pipeline-room';
+export { OnboardingChat } from './durable-objects/onboarding-chat';
+// D1577 (#3824): the deck's co-editing room, bound as DECK_PRESENCE (the owner approved its cost, decision L).
+export { DeckPresence } from './durable-objects/deck-presence';
+
+// D108 — the two RPC entrypoints, re-exported here because a service
+// binding's `entrypoint` resolves against the Worker's MODULE EXPORTS, the
+// same reason the two Durable Objects above are re-exported rather than left
+// in their own files. Both ship on every deploy — one codebase — and each
+// method refuses on the tier it does not belong to.
+export { HqEntrypoint, BranchEntrypoint } from './rpc';
+
+export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';
+export { DeckRemote } from './durable-objects/deck-remote';
+// D5581 part 2 (#5581): WorkGraph leases, bound as WORK_GRAPH_LEASE; kept apart from #5618's Merge Control.
+export { WorkGraphLease } from './durable-objects/work-graph-lease';
+
+// D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
+// named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
+export { AgentScope } from './agents/doRuntime';
+export { AgentTaskWorkflow } from './agents/taskWorkflow';
+// #3852 (#3742 E0): the `sdk` runtime's Agent, an evaluation behind the same seam; used only while AGENT_RUNTIME is `sdk`.
+export { ScopeAgent } from './agents/sdkRuntime';

@@ -1,0 +1,161 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { WORKSPACES } from '../src/lib/adminPlacement.js';
+
+const root = resolve(process.cwd());
+const read = (p) => readFileSync(resolve(root, p), 'utf8');
+
+// The comment scanner from ui_assist_rail_and_sidebar.test.mjs: a regex
+// stripper reads the `/*` inside a route path as a block-comment opener and
+// eats the rest of the file, which silently turns these assertions into
+// "no match found, therefore clean".
+function scan(src) {
+  let out = '';
+  for (let i = 0; i < src.length; ) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (c === '/' && d === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '`') {
+      const q = c; out += c;
+      for (i++; i < src.length; ) {
+        if (src[i] === '\\') { out += src.slice(i, i + 2); i += 2; continue; }
+        out += src[i];
+        const end = src[i] === q; i++;
+        if (end) break;
+      }
+      continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
+// FundAccountingPage.jsx stood here; the owner removed Fund Ops' Accounting
+// tab (/funds/accounting) on 2026-10-20.
+const FUND_PAGES = ['frontend/src/pages/FundPerformancePage.jsx'];
+// Portfolio Growth is guarded for the fixture rules but not the fund-metric
+// ones: it reports introductions, which have no multiples or ratios.
+const PORTFOLIO_PAGES = ['frontend/src/pages/PortfolioGrowthPage.jsx'];
+
+// --- the fixture is gone, and cannot come back ---------------------------
+
+test('the fabricated fund fixture is deleted', () => {
+  // data/fundAnalytics.js shipped four funds that do not exist, with invented
+  // NAV, IRR, TVPI, RVPI and DPI, under copy calling them "LP-ready returns".
+  assert.equal(existsSync(resolve(root, 'frontend/src/data/fundAnalytics.js')), false);
+});
+
+test('the fabricated portfolio fixture is deleted', () => {
+  // data/portfolioAnalytics.js invented growth initiatives and industry
+  // benchmarks for named portfolio companies. Neither has a table behind it.
+  assert.equal(existsSync(resolve(root, 'frontend/src/data/portfolioAnalytics.js')), false);
+});
+
+test('Portfolio Growth reads the previously unserved introductions endpoint', () => {
+  // GET /api/introductions/ was live with zero consumers anywhere in the app
+  // — a working endpoint sitting next to a mock of itself.
+  const src = scan(read(PORTFOLIO_PAGES[0]));
+  assert.doesNotMatch(src, /from\s+'\.\.\/data\//, 'must read from an API, not from src/data');
+  assert.match(src, /api\.listIntroductions\(/);
+  assert.match(src, /api\.introductionsQuota\(/);
+  // The withdrawn sections must not creep back without a table to stand on.
+  assert.doesNotMatch(src, /GROWTH_INITIATIVES|GROWTH_BENCHMARKS|industryMedian/);
+});
+
+test('no fund surface imports a static data fixture', () => {
+  for (const p of FUND_PAGES) {
+    const src = scan(read(p));
+    assert.doesNotMatch(src, /from\s+'\.\.\/data\//, `${p} must read from an API, not from src/data`);
+    assert.match(src, /from\s+'\.\.\/lib\/fundAnalytics'/, `${p} must use the live analytics client`);
+  }
+});
+
+// --- what the pages may not assert --------------------------------------
+
+test('no fiduciary figure is hardcoded into a fund or portfolio page', () => {
+  // A literal multiple or percentage in this file is, by construction, not a
+  // number that came from D1. Cash amounts are formatted from cents, so any
+  // bare 2.77x / 28.1% here would be a fabricated one.
+  for (const p of [...FUND_PAGES, ...PORTFOLIO_PAGES]) {
+    const src = scan(read(p));
+    assert.doesNotMatch(src, /\d+\.\d+x/, `${p} hardcodes a multiple`);
+    assert.doesNotMatch(src, /\b\d{1,3}\.\d%/, `${p} hardcodes a percentage`);
+  }
+});
+
+test('a metric with no source is named, never blanked or zeroed', () => {
+  const lib = scan(read('frontend/src/lib/fundAnalytics.js'));
+  // The literal used to be declared here and, identically, in `lib/dealFlow.js`.
+  // D117 gave it one home, so this follows the reference one hop instead of
+  // matching a string that has moved — and asserts the thing the old version
+  // could not: that `fmtCents` actually ANSWERS with it. A file can mention
+  // "Not recorded" in a comment and still return a zero.
+  assert.match(lib, /import \{ NOT_RECORDED \} from '\.\/absence'/,
+    'fundAnalytics must reach for the shared constant, not re-declare it');
+  assert.match(scan(read('frontend/src/lib/absence.js')), /NOT_RECORDED = 'Not recorded'/,
+    'the absence has to be said out loud');
+  assert.match(lib.slice(lib.indexOf('export function fmtCents')), /return NOT_RECORDED/,
+    'fmtCents must answer a null with the absence, never a zero');
+  // An em-dash or a 0 in place of a null reads as a measured result.
+  for (const fn of ['fmtMultiple', 'fmtRate']) {
+    const body = lib.slice(lib.indexOf(`export function ${fn}`));
+    assert.match(body.slice(0, 220), /return null/, `${fn} must return null, not a placeholder glyph`);
+  }
+  for (const p of FUND_PAGES) {
+    assert.match(scan(read(p)), /<Unrecorded/, `${p} must render the refusal explicitly`);
+  }
+});
+
+test('every refusal carries the reason the server gave', () => {
+  // "Not recorded" with no explanation sends the GP to support. The server
+  // ships an `unavailable` map; the pages must actually thread it through.
+  for (const p of FUND_PAGES) {
+    assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
+  }
+  assert.match(scan(read('frontend/src/pages/investor/FundLedgerPanel.jsx')), /<EmptyState>\{fund\.reason\}/, 'ledger must render the server reason');
+});
+
+// --- money ---------------------------------------------------------------
+
+test('fund money crosses the wire as integer cents', () => {
+  const lib = scan(read('frontend/src/lib/fundAnalytics.js'));
+  assert.match(lib, /fmtCents/);
+  // Divide by 100 for display is fine; parseFloat on a money field is not.
+  for (const p of [...FUND_PAGES, ...PORTFOLIO_PAGES, 'frontend/src/lib/fundAnalytics.js']) {
+    assert.doesNotMatch(scan(read(p)), /parseFloat\s*\(/, `${p} must not float-parse money`);
+  }
+});
+
+// --- the pages stay reachable -------------------------------------------
+
+test('Performance stays an investor\'s page and Fund admin\'s tab; Accounting and LP Reporting are gone (owner, 2026-10-20)', () => {
+  // D1160 (#3067): Fund Ops is retired. An investor's /funds/performance draws the page itself; an admin's forwards to Fund admin.
+  assert.ok(!existsSync('frontend/src/pages/FundOpsWorkspace.jsx'));
+  const app = scan(read('frontend/src/App.jsx'));
+  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\}/);
+  // D1164 (#3071): Fund admin's tab is NAV & performance (FND10–FND12); FundPerformanceView stays the investor's page.
+  assert.match(scan(read('frontend/src/pages/admin/fundAdmin/FundAdminConsole.jsx')), /<PerformanceTab /);
+  assert.match(scan(read('frontend/src/pages/FundPerformancePage.jsx')), /export function FundPerformanceView/);
+  assert.doesNotMatch(app, /FundAccountingPage|LPReportingPage/);
+  assert.doesNotMatch(app, /path="\/funds\/accounting"|path="\/lp-reports"/);
+  // Portfolio Growth stays a tab; withdrawing two sections is not withdrawing
+  // the surface, and the nav must not point at a hole.
+  const pw = scan(read('frontend/src/pages/PortfolioWorkspace.jsx'));
+  assert.match(pw, /<PortfolioGrowthPage embedded/);
+  // #2297 retired the /portfolio/growth address; the tab's door is
+  // /portfolio/value-add, the same surface.
+  // Reachability, not row-ness. The investor shell collapsed the four portfolio
+  // rows into one row on /portfolio/health, so Growth's door is now this
+  // workspace's tab bar rather than a nav entry of its own. Assert the door.
+  assert.match(pw, /to: '\/portfolio\/value-add'/);
+  // Re-aimed in D284: the row that satisfied this was the admin's Portfolio
+  // Health row, which left the sidebar for the Workspaces launcher with the
+  // other working pages. The property is unchanged — something still lands
+  // on the portfolio workspace — and either door satisfies it.
+  const sidebar = scan(read('frontend/src/sidebarConfig.js'));
+  const viaRow = /to: '\/portfolio\/health'/.test(sidebar);
+  const viaLauncher = WORKSPACES.some((w) => w.route === '/portfolio/health');
+  assert.ok(viaRow || viaLauncher, 'nothing lands on the portfolio workspace');
+});

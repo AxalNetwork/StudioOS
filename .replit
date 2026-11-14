@@ -1,0 +1,108 @@
+modules = ["web", "python-3.11", "bash", "nodejs-22"]
+[agent]
+expertMode = true
+integrations = ["github:1.0.0"]
+stack = "BEST_EFFORT_FALLBACK"
+
+[nix]
+channel = "stable-25_05"
+packages = ["cacert", "cargo", "freetype", "grpc", "lcms2", "libffi", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "rustc", "tcl", "tk", "wrangler_1", "zlib"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend API"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "retention"
+
+[[workflows.workflow]]
+name = "Backend API"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+# --reload-dir scopes uvicorn's file watcher to backend/ only. Without it,
+# --reload defaults to walking the ENTIRE working directory (repo root) on
+# every reload check — including .local/, node_modules/, frontend/, .git/,
+# and any other tooling-managed directory that comes and goes during a
+# session. When one of those gets deleted mid-scan, the watcher's rglob()
+# throws FileNotFoundError and takes the whole backend process down (not
+# just skips a reload — the process exits), which the frontend experiences
+# as every /api/* call failing at once: a blank preview with no code defect
+# anywhere. Scoping to the one directory the app's source actually lives in
+# is the fix, not a workaround — nothing outside backend/ should ever
+# trigger or block a reload here.
+args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend"
+waitForPort = 8000
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "retention"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run test:retention"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+# Port 8000 (FastAPI dev backend) is NOT mapped externally.
+# Frontend Vite proxy forwards /api/* to localhost:8000 internally only.
+
+[deployment]
+deploymentTarget = "autoscale"
+build = ["bash", "build-deploy.sh"]
+run = ["bash", "run-deploy.sh"]
+
+[userenv]
+
+[userenv.shared]
+GOOGLE_REDIRECT_URI = "https://developers.google.com/oauthplayground"
+GITHUB_REPO_OWNER = "AxalNetwork"
+GITHUB_REPO_NAME = "StudioOS"
+DEV_EMAIL_OVERRIDE = "dev-orders@axal.vc"
+
+[userenv.development]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000

@@ -1,0 +1,50 @@
+{
+  "$id": "deckJudge",
+  "title": "POST /api/decks/areas/:uid/judge/quote and POST /api/decks/areas/:uid/judge (D1525, #3783)",
+  "description": "What the deck v2 adapter's `judge` method passes through. Without `run`, the quote: `ai` with the judge's hold (input tokens only), its model label and family, the writers' families and how many variants it ranks; or `ai: false` with the reason (a writer of the judge's family, a writer that cannot be read, fewer than two variants with words). With `run`, the ranking: each judged variant's rank and Clef's probability (null when it sent none), its \"Ranked n of m\" line, the best, the score AUTO-5 holds against the threshold, the panel's agreement, and what the run charged (null when not recorded); or `ranked: false` with the reason. A model id never rides on the reply. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "ai": { "type": "boolean" },
+    "ranked": { "type": "boolean" },
+    "proposal_uid": { "type": "string" },
+    "reason": { "type": ["string", "null"] },
+    "message": { "type": ["string", "null"] },
+    "hold_microusd": { "type": "integer", "minimum": 0 },
+    "model_label": { "type": ["string", "null"] },
+    "family": { "type": ["string", "null"] },
+    "writer_families": { "type": "array", "items": { "type": ["string", "null"] } },
+    "of": { "type": "integer", "minimum": 2, "maximum": 3 },
+    "ranking": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "rank", "probability", "line"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "rank": { "type": ["integer", "null"], "minimum": 1, "maximum": 3 },
+          "probability": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "line": { "type": "string" }
+        }
+      }
+    },
+    "best": { "type": "integer", "minimum": 1, "maximum": 3 },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "clears": { "type": "boolean" },
+    "panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["best", "agrees", "line"],
+      "properties": {
+        "best": { "type": ["integer", "null"], "minimum": 1, "maximum": 3 },
+        "agrees": { "type": ["boolean", "null"] },
+        "line": { "type": "string" }
+      }
+    },
+    "charged_microusd": { "type": ["integer", "null"], "minimum": 0 }
+  }
+}

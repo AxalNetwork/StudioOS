@@ -1,0 +1,26 @@
+Move demo video into Solution slide
+What & Why
+On the Spin-Out Demo Day deck, the Solution slide's right-hand card shows a decorative architecture diagram ("Architecture · MVP blueprint" with EXPERIENCE / WORKFLOW / DATA · AI blocks). Replace that card's contents with the product demo video player (the same player used on the standalone Product Demo slide, including its "Demo loop pending" empty state), relabel the card "Product demo", and delete the now-redundant standalone Product Demo slide. This consolidates the deck and puts the demo front-and-center alongside the solution copy.
+Done looks like
+* The Solution slide's right-hand card no longer shows the architecture diagram. Instead it shows the demo video (YouTube/Vimeo embed, uploaded file, or screenshot) when one is set, and the same "Demo loop pending" placeholder with the play icon when nothing is set.
+* The card's bottom label reads "Product demo" (replacing "Architecture · MVP blueprint").
+* The standalone Product Demo slide ("See it in motion.") is gone from the deck — both in the in-app deck view and anywhere slides are listed/exported.
+* The deck's slide-count safety test passes with the updated, reduced slide list.
+Out of scope
+* Showing the demo video inside exported PDF / PowerPoint decks (tracked separately).
+* Validating/warning on unrecognized demo URLs (tracked separately).
+* Any change to how founders enter the demo URL/screenshot in Projects — the same product_demo fields feed the relocated card.
+Steps
+1. Repoint the Solution card to the demo player — In the Solution slide, replace the architecture-diagram card contents with the demo video rendering logic currently in the Product Demo slide (embed vs. uploaded file vs. screenshot vs. "Demo loop pending" placeholder), reading from the existing product_demo data. Change the card's caption label from "Architecture · MVP blueprint" to "Product demo". Keep it sized to the existing right-column card; the Product Demo slide's separate body paragraph and "Caption" sub-card are not required in this smaller card.
+2. Remove the standalone Product Demo slide — Drop the product_demo entry from the deck's slide registry and retire its slide component (and the now-unused architecture diagram component if nothing else uses it).
+3. Update the slide-list lock test — Adjust the deck test that asserts the exact slide count and slot positions so it reflects the removed Product Demo slide and still pins the last slide; ensure npm run test:drift / the deck test suite passes.
+Relevant files
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:1751-1833
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2666-2710
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2841-2857
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:1252-1273
+* frontend/test/spinout_demoday_deck.test.mjs:195-200
+Dependencies
+
+Brand the Spin-Out deck from the founder's brand kit (and remove the BRAND slide)
+Main

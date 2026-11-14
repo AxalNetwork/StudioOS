@@ -1,0 +1,10 @@
+### Licence terms schedule Worker contract (D797, #2230)
+
+A licence's terms beyond migration 187's fee and shares: the two licensors, territory, renewal and notice, money (with a share per stream and the platform-licence royalty), deal terms, seats, brand and reporting, one row per licence in `licence_terms` (migration 512). `sections` gives each term its contract section, the Licences canvas's number unless HQ recorded another. Every term is nullable, and null is "not recorded", never zero. The field list, its types, ranges and labels are `services/licenceTerms.ts`. No UI yet: D800 and D801 draw it through `frontend/src/lib/api/licenceTerms.js`.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/admin/licences/:uid/terms` | Super Admin | `{ licence_uid, terms, sections }`. `terms` has every key, a missing one `null`, or is `null` when HQ has recorded none. `sections` maps a term key to its contract section (`"carry_share_bps": "§7.3"`). |
+| `PUT /api/admin/licences/:uid/terms` | Super Admin, a TOTP session and a recent step-up (`requireSuperAdminWriteBar`) | `{ terms?, sections?, reason }`. Only the keys named change, and `null` clears one. 400 `invalid_terms` names the first bad field (and lists them all in `errors`), 400 `reason_required`, 403 `step_up_required`. It appends one `licence_events` `terms_changed`, with `{ schedule, reason, changed: { <key>: { before, after } } }` and the reason as its note, then pushes the branch copy. It answers the saved `terms`, `sections`, `changed` and `pushed`. |
+| `GET /api/licence/mine` | the licence's principal or delegate (`licence_admins`) | Adds `terms` (or `null`), `terms_reason` ("HQ has not recorded this licence's terms yet.", "…could not be read just now.") and `sections`. On a branch it reads `branch_licence.terms_json`, which the push and the pull carry (`assembleLicenceRecord`, `applyLicenceCopy`). A copy pushed before migration 512 reads `terms: null` with "HQ has not pushed this licence's terms yet." |
+

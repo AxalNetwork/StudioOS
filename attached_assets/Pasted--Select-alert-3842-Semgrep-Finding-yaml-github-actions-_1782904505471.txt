@@ -1,0 +1,126 @@
+
+Select alert #3842
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3842 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :75
+main
+
+Select alert #3841
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3841 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :74
+main
+
+Select alert #3840
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3840 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :53
+main
+
+Select alert #3839
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3839 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :52
+main
+
+Select alert #3838
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3838 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :32
+main
+
+Select alert #3837
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3837 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/ci.yml :31
+main
+
+Select alert #3836
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3836 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/beta-readiness-reaudit.y... :36
+main
+
+Select alert #3835
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3835 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/beta-readiness-reaudit.y... :21
+main
+
+Select alert #3834
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3834 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/backup-d1.yml :43
+main
+
+Select alert #3833
+Semgrep Finding: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+Warning
+#3833 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/backup-d1.yml :41
+main
+
+Select alert #3832
+Semgrep Finding: yaml.github-actions.security.gha-workflow-env-secret.gha-workflow-env-secret
+Warning
+#3832 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/backup-d1.yml :33
+main
+
+Select alert #3831
+Semgrep Finding: yaml.github-actions.security.gha-workflow-env-secret.gha-workflow-env-secret
+Warning
+#3831 opened 15 hours ago • Detected by Semgrep OSS in .github/workflows/backup-d1.yml :32
+main
+
+Select alert #3830
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3830 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :84
+main
+
+Select alert #3829
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3829 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :73
+main
+
+Select alert #3828
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3828 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :58
+main
+
+Select alert #3827
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3827 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :39
+main
+
+Select alert #3826
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3826 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :27
+main
+
+Select alert #3825
+Semgrep Finding: package_managers.dependabot.dependabot-missing-cooldown.dependabot-missing-cooldown
+Warning
+#3825 opened 15 hours ago • Detected by Semgrep OSS in .github/dependabot.yml :16
+main
+
+Select alert #3869
+Semgrep Finding: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+Note
+#3869 opened 15 hours ago • Detected by Semgrep OSS in frontend/.../lib/log.js :128
+main
+
+Select alert #3868
+Semgrep Finding: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+Note
+#3868 opened 15 hours ago • Detected by Semgrep OSS in frontend/.../lib/log.js :121
+main
+
+Select alert #3824
+Semgrep Finding: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+Note
+#3824 opened yesterday • Detected by Semgrep OSS in cloudflare-worker/.../util/reembedSweep.ts :47
+main

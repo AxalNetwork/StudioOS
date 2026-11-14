@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    body{margin:0}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .ub{container-type:inline-size}
+    @container (max-width:760px){
+      .ub-side,.ub-nav,.ub-th{display:none!important}.ub-shell,.ub-split{grid-template-columns:minmax(0,1fr)!important}
+      .ub-main{padding:14px 14px 40px!important}.ub-g2,.ub-g3,.ub-g4{grid-template-columns:minmax(0,1fr)!important}
+      .ub-drop{display:flex!important}.ub-h1{font-size:20px!important}.ub-filters{flex-wrap:wrap!important}
+      .ub-tr{grid-template-columns:1fr 1fr!important;gap:3px 10px!important}.ub-tr>:first-child{grid-column:1/-1}
+      .ub-top,.ub-tip,.ub-cd{display:none!important}.ub-mhead,.ub-cp{display:block!important}.ub-mtabs{display:flex!important}
+    }
+  </style>
+</helmet>
+<div class="ub" style="background:#f4f3f7;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;min-height:100%">
+<div class="ub-shell" style="display:grid;grid-template-columns:186px minmax(0,1fr);min-height:100%">
+  <aside class="ub-side" style="background:#fff;border-right:1px solid #ececf1;padding:18px 10px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:8px;padding:2px 10px 14px"><span style="width:22px;height:22px;border-radius:6px;background:#7c3aed"></span><span style="font-weight:700;font-size:16px;letter-spacing:-.02em">Axal VC</span></div>
+    <sc-if value="{{ isHQ }}" hint-placeholder-val="{{ false }}"><div style="margin:0 10px 12px;padding:6px 8px;border-radius:7px;background:#881337;color:#fff;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.04em">AXAL VC HQ</div></sc-if>
+    <sc-for list="{{ side }}" as="s" hint-placeholder-count="8"><div style="{{ s.style }}">{{ s.t }}</div></sc-for>
+  </aside>
+
+  <div style="min-width:0;display:flex;flex-direction:column">
+    <div class="ub-mhead" style="display:none;flex:none;position:relative;height:52px;background-image:url('uploads/spin-out-lab-04622b47.png');background-size:cover;background-position:center 18%"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,12,38,.22),rgba(20,12,38,.55))"></div><div style="position:absolute;left:22px;right:22px;top:0;bottom:0;display:flex;align-items:center;justify-content:space-between;color:#fff"><div style="display:flex;align-items:center;gap:6px"><img src="axal-logo.png" alt="Axal VC" width="15" height="15" style="width:15px;height:15px;object-fit:contain;filter:brightness(0) invert(1)"><span style="font-size:12px;font-weight:800">Axal VC</span></div><span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-height:28px;display:inline-flex;align-items:center;font-size:11px;font-weight:700;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:99px;padding:0 10px">[Company]</span><div style="display:flex;align-items:center;gap:9px"><a href="/studio" aria-label="Studio" style="width:18px;height:18px;display:block;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ icStudio }}"></a><span style="width:18px;height:18px;display:block;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))" dangerouslySetInnerHTML="{{ icBell }}"></span><span style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.92);display:grid;place-items:center;font-size:10px;font-weight:800;color:#6d28d9">[AB]</span></div></div></div>
+    <div class="ub-top" style="height:52px;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px">
+      <span style="font-size:13px;color:#6b6577;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ crumb }}</span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;font:600 11px 'Roboto Mono',monospace;color:#6d28d9;flex:none">[AB]</span>
+    </div>
+
+    <main class="ub-main" style="padding:22px 28px 56px;min-width:0">
+      <div class="ub-split" style="display:grid;grid-template-columns:{{ splitCols }};gap:16px;align-items:start">
+        <sc-if value="{{ isAccount }}" hint-placeholder-val="{{ true }}">
+          <nav class="ub-nav" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:2px">
+            <sc-for list="{{ acNav }}" as="n" hint-placeholder-count="9"><span style="{{ n.style }}">{{ n.t }}</span></sc-for>
+          </nav>
+        </sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <sc-if value="{{ isAccount }}" hint-placeholder-val="{{ true }}"><div class="ub-drop" style="display:none;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;background:#fff;border:1px solid #ececf1;border-radius:12px;font-size:14px;font-weight:600"><span><span style="font-size:11px;color:#6b6577;text-transform:uppercase;letter-spacing:.08em;margin-right:8px">Section</span>{{ dropLabel }}</span><span style="color:#6b6577">▾</span></div></sc-if>
+
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px 20px;flex-wrap:wrap">
+            <div style="min-width:0"><h1 class="ub-h1" style="margin:0;font-size:24px;line-height:1.15;font-weight:800;letter-spacing:-.02em">{{ h1 }}</h1><div style="margin-top:4px;font-size:13.5px;line-height:1.5;color:#6b6577;max-width:760px">{{ sub }}</div></div>
+            <sc-if value="{{ isHQ }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:4px;background:#fff;border:1px solid #ececf1;border-radius:10px;padding:3px"><sc-for list="{{ hqRange }}" as="r" hint-placeholder-count="3"><span style="{{ r.s }}">{{ r.t }}</span></sc-for></div></sc-if>
+          </div>
+
+          <!-- B1 · USAGE OVERVIEW -->
+          <sc-if value="{{ is.usage }}" hint-placeholder-val="{{ true }}">
+            <div class="ub-g2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="{{ lbl }}">Spend this month</span><a href="/account/usage/cost" style="{{ link }}">Open cost →</a></div>
+                <span style="font:500 28px 'Roboto Mono',monospace;letter-spacing:-.02em">[$135.22]</span>
+                <span style="font-size:12.5px;color:#4a4553"><span style="font-family:'Roboto Mono',monospace">[27]%</span> of your <span style="font-family:'Roboto Mono',monospace">[$500]</span> limit</span>
+                <div style="{{ track }}"><div style="{{ fill27 }}"></div></div>
+              </div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="{{ lbl }}">Token balance</span><a href="/account/billing" style="{{ link }}">Open billing →</a></div>
+                <span style="font:500 28px 'Roboto Mono',monospace;letter-spacing:-.02em">[$0.00] <span style="font:500 13px 'Space Grotesk',sans-serif;color:#6b6577;letter-spacing:0">AI tokens</span></span>
+                <span style="font-size:12.5px;color:#4a4553"><span style="font-family:'Roboto Mono',monospace">[$64.77]</span> left of this month's plan allowance</span>
+                <span style="{{ ST.grey }};align-self:flex-start">Auto-reload off</span>
+              </div>
+            </div>
+            <span style="{{ sec }}">Spend breakdown</span>
+            <div class="ub-g2" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start">
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Daily cost, last 30 days</span><a href="/account/usage/cost" style="{{ link }}">Open cost →</a></div>
+                <div style="position:relative"><div class="ub-cd" dangerouslySetInnerHTML="{{ stackSm }}"></div><div class="ub-cp" style="display:none" dangerouslySetInnerHTML="{{ stackPh }}"></div>
+                  <div class="ub-tip" style="position:absolute;left:62%;top:6px;width:178px;background:#fff;border:1px solid #ececf1;border-radius:10px;box-shadow:0 6px 18px rgba(24,24,27,.10);padding:9px 11px;display:flex;flex-direction:column;gap:4px">
+                    <span style="font:500 11px 'Roboto Mono',monospace;color:#6b6577">[22 Oct] · [$6.12]</span>
+                    <sc-for list="{{ tip }}" as="m" hint-placeholder-count="7"><span style="display:flex;justify-content:space-between;gap:8px;font-size:11px"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="{{ m.dot }}"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.n }}</span></span><span style="font-family:'Roboto Mono',monospace">{{ m.v }}</span></span></sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px 14px"><sc-for list="{{ legend }}" as="m" hint-placeholder-count="7"><span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#4a4553"><span style="{{ m.dot }}"></span>{{ m.n }}</span></sc-for></div>
+              </div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Token usage, input vs output</span><a href="/account/usage/cost" style="{{ link }}">Open cost →</a></div>
+                <div class="ub-cd" dangerouslySetInnerHTML="{{ lines }}"></div><div class="ub-cp" style="display:none" dangerouslySetInnerHTML="{{ linesPh }}"></div>
+                <div style="display:flex;gap:14px;font-size:11.5px;color:#4a4553"><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:2px;background:#18181b"></span>Input</span><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:2px dashed #9a96a8"></span>Output</span></div>
+              </div>
+            </div>
+            <span style="{{ sec }}">Billing and limits</span>
+            <div class="ub-g2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start">
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Limits</span><a href="/account/usage/limits" style="{{ link }}">Open limits →</a></div>
+                <sc-for list="{{ limRows }}" as="r" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:5px"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span style="font-weight:600">{{ r.k }}</span><span style="font-family:'Roboto Mono',monospace">{{ r.v }}</span></div><div style="{{ track }}"><div style="{{ r.fill }}"></div></div><span style="font-size:11.5px;color:#6b6577">{{ r.note }}</span></div></sc-for>
+              </div>
+              <div style="{{ card }};overflow:hidden">
+                <div style="padding:14px 18px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Recent invoices</span><a href="/account/billing" style="{{ link }}">Open billing →</a></div>
+                <sc-for list="{{ invRecent }}" as="i" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:70px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:11px 18px;border-bottom:1px solid #f4f3f7;font-size:12.5px"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ i.d }}</span><span style="font-weight:600;min-width:0">{{ i.t }}</span><span style="{{ i.ps }}">{{ i.st }}</span><span style="font:500 12.5px 'Roboto Mono',monospace;text-align:right">{{ i.a }}</span></div></sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- B2 · COST -->
+          <sc-if value="{{ is.cost }}" hint-placeholder-val="{{ false }}">
+            <div class="ub-filters" style="{{ card }};padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <span style="{{ flab }}">Range</span><div style="display:flex;gap:3px;background:#f4f3f7;border-radius:9px;padding:3px"><sc-for list="{{ ranges }}" as="r" hint-placeholder-count="3"><span style="{{ r.s }}">{{ r.t }}</span></sc-for></div>
+              <span style="{{ flab }}">Group by</span><div style="display:flex;gap:3px;background:#f4f3f7;border-radius:9px;padding:3px"><sc-for list="{{ groups }}" as="r" hint-placeholder-count="3"><span style="{{ r.s }}">{{ r.t }}</span></sc-for></div>
+              <span style="{{ flab }}">Model</span><span style="{{ dd }}">All models ▾</span>
+              <span style="margin-left:auto;display:flex;gap:6px"><span style="{{ btn.ghost }}">Reset</span><span style="{{ btn.ghost }}">Download CSV</span></span>
+            </div>
+            <div class="ub-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px"><sc-for list="{{ costTotals }}" as="t" hint-placeholder-count="4"><div style="{{ card }};padding:14px 16px"><div style="{{ lbl }}">{{ t.k }}</div><div style="font:500 22px 'Roboto Mono',monospace;margin-top:6px">{{ t.v }}</div></div></sc-for></div>
+            <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">Daily cost</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">[1 Oct] – [30 Oct] · UTC</span></div>
+              <div style="position:relative"><div class="ub-cd" dangerouslySetInnerHTML="{{ stackLg }}"></div><div class="ub-cp" style="display:none" dangerouslySetInnerHTML="{{ stackPh }}"></div>
+                <div class="ub-tip" style="position:absolute;left:66%;top:8px;width:190px;background:#fff;border:1px solid #ececf1;border-radius:10px;box-shadow:0 6px 18px rgba(24,24,27,.10);padding:9px 11px;display:flex;flex-direction:column;gap:4px">
+                  <span style="font:500 11px 'Roboto Mono',monospace;color:#6b6577">[22 Oct] · [$6.12]</span>
+                  <sc-for list="{{ tip }}" as="m" hint-placeholder-count="7"><span style="display:flex;justify-content:space-between;gap:8px;font-size:11px"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="{{ m.dot }}"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.n }}</span></span><span style="font-family:'Roboto Mono',monospace">{{ m.v }}</span></span></sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 14px"><sc-for list="{{ legend }}" as="m" hint-placeholder-count="7"><span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#4a4553"><span style="{{ m.dot }}"></span>{{ m.n }}</span></sc-for></div>
+            </div>
+            <div style="{{ card }};overflow:hidden">
+              <div class="ub-th" style="{{ costGrid }};padding:9px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577;text-transform:uppercase"><span>Model</span><span style="text-align:right">Runs</span><span style="text-align:right">Input tokens</span><span style="text-align:right">Output tokens</span><span style="text-align:right">Other units</span><span style="text-align:right">Charged</span></div>
+              <sc-for list="{{ costRows }}" as="r" hint-placeholder-count="7"><div class="ub-tr" style="{{ costGrid }};padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:12.5px"><span style="display:flex;align-items:center;gap:8px;font-weight:600;min-width:0"><span style="{{ r.dot }}"></span>{{ r.n }}</span><span style="{{ num }}">{{ r.runs }}</span><span style="{{ r.inS }}">{{ r.inp }}</span><span style="{{ r.outS }}">{{ r.out }}</span><span style="{{ r.othS }}">{{ r.oth }}</span><span style="{{ num }};font-weight:600">{{ r.ch }}</span></div></sc-for>
+              <div class="ub-tr" style="{{ costGrid }};padding:11px 16px;background:#faf9fc;align-items:center;font-size:12.5px;font-weight:700"><span>Total</span><span style="{{ num }}">[n]</span><span style="{{ num }}">[3.4M]</span><span style="{{ num }}">[910k]</span><span style="{{ num }}">[312] min · [24] images</span><span style="{{ num }}">[$135.22]</span></div>
+              <div style="padding:10px 16px;font-size:11.5px;color:#6b6577">Not recorded: streamed replies recorded no output count. They are charged on the input they read.</div>
+            </div>
+          </sc-if>
+
+          <!-- B3 · BILLING -->
+          <sc-if value="{{ is.billing }}" hint-placeholder-val="{{ false }}">
+            <div class="ub-g2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+              <div style="{{ card }};padding:16px 18px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Token balance</span><span style="font:500 28px 'Roboto Mono',monospace;letter-spacing:-.02em">[$0.00] <span style="font:500 13px 'Space Grotesk',sans-serif;color:#6b6577;letter-spacing:0">AI tokens</span></span></div><span style="{{ btn.primary }}">Buy tokens</span></div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">Included with your plan</span><span style="font-size:13.5px"><span style="font-family:'Roboto Mono',monospace;font-weight:500">[$64.39]</span> of <span style="font-family:'Roboto Mono',monospace">[$200.00]</span> left this month, resets <span style="font-family:'Roboto Mono',monospace">[1 Nov]</span></span><div style="{{ track }}"><div style="{{ fill68 }}"></div></div></div>
+            </div>
+            <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+              <span style="font-weight:700;font-size:14px">Buy tokens</span>
+              <div class="ub-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px"><sc-for list="{{ packs }}" as="p" hint-placeholder-count="4"><div style="{{ p.wrap }}"><span style="font:500 22px 'Roboto Mono',monospace">{{ p.a }}</span><span style="font-size:12px;color:#6b6577">of AI tokens</span><sc-if value="{{ p.offer }}" hint-placeholder-val="{{ false }}"><span style="{{ ST.violet }};align-self:flex-start">{{ p.offer }}</span></sc-if><span style="{{ btn.ghost }};text-align:center;margin-top:auto">Buy</span></div></sc-for></div>
+              <span style="font-size:11.5px;color:#6b6577">$1 of tokens buys $1 of AI use at the posted rates. Tax does not buy tokens. Tokens you buy never expire.</span>
+            </div>
+            <div class="ub-g2" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:12px;align-items:start">
+              <div style="display:flex;flex-direction:column;gap:12px">
+                <div style="{{ card }};padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:4px"><span style="{{ lbl }}">Plan</span><span style="font-weight:700;font-size:14px">[Founder · Validate + Build]</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">[$20 / month] · renews [1 Nov]</span></div><span style="{{ btn.ghost }}">Manage billing</span></div>
+                <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="{{ lbl }}">Payment details</span><span style="{{ btn.ghost }}">Manage in Stripe ↗</span></div><span style="font-size:13px;font-weight:600">[Visa] <span style="font-family:'Roboto Mono',monospace">•••• [4242]</span> <span style="font-weight:400;color:#6b6577">· expires [08/28]</span></span><span style="font-size:12.5px;color:#4a4553">[Address line], [City], [Postal code], [Country]</span></div>
+              </div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span style="font-weight:700;font-size:14px">Auto-reload</span><span style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#4a4553">Reload automatically<span style="{{ togOff.w }}"><span style="{{ togOff.k }}"></span></span></span></div>
+                <span style="font-size:13px;line-height:1.7;opacity:.5">When my token balance falls below <span style="{{ dd }}">[$5] ▾</span>, buy the <span style="{{ dd }}">[$25] pack ▾</span></span>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12.5px;opacity:.5"><span>Charges <b style="font-weight:600">[Visa] <span style="font-family:'Roboto Mono',monospace">•••• [4242]</span></b></span><span style="{{ link }}">Change card</span></div>
+                <span style="font-size:12.5px;color:#4a4553;opacity:.5">Stops at your monthly spend limit of <span style="font-family:'Roboto Mono',monospace">[$500]</span>. <a href="/account/usage/limits" style="{{ link }}">Open limits</a></span>
+                <span style="font-size:12.5px;color:#6b6577;opacity:.5">This month: <span style="font-family:'Roboto Mono',monospace">[2]</span> reloads, <span style="font-family:'Roboto Mono',monospace">[$50]</span></span>
+                <span style="font-size:11.5px;color:#6b6577">Off until you turn it on. Turn on the switch to set when it reloads.</span>
+              </div>
+            </div>
+            <div style="{{ card }};overflow:hidden">
+              <div style="padding:14px 18px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px">Invoices</span><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">1–25 of [N]</span></div>
+              <div class="ub-th" style="display:grid;grid-template-columns:110px minmax(0,1fr) 110px 110px 70px;gap:12px;padding:9px 18px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 10.5px 'Roboto Mono',monospace;letter-spacing:.06em;color:#6b6577;text-transform:uppercase"><span>Date</span><span>Description</span><span style="text-align:right">Amount</span><span>Status</span><span>PDF</span></div>
+              <sc-for list="{{ invAll }}" as="i" hint-placeholder-count="5"><div class="ub-tr" style="display:grid;grid-template-columns:110px minmax(0,1fr) 110px 110px 70px;gap:12px;padding:10px 18px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:12.5px"><span style="font:400 12px 'Roboto Mono',monospace;color:#6b6577">{{ i.d }}</span><span style="font-weight:600">{{ i.t }}</span><span style="{{ num }}">{{ i.a }}</span><span><span style="{{ i.ps }}">{{ i.st }}</span></span><span style="{{ link }}">PDF ↓</span></div></sc-for>
+            </div>
+          </sc-if>
+
+          <!-- B4 · LIMITS -->
+          <sc-if value="{{ is.limits }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ card }};padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+              <span style="font-weight:700;font-size:15px">Monthly spend limit</span>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="display:flex;align-items:center;gap:6px;border:1px solid #dedce4;border-radius:9px;padding:8px 12px;min-width:160px;font:500 14px 'Roboto Mono',monospace"><span style="color:#6b6577">$</span>[500]</span><span style="{{ btn.primary }}">Save</span><span style="{{ btn.ghost }}">Remove</span></div>
+              <div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span><span style="font-family:'Roboto Mono',monospace">[$135.22]</span> spent this month</span><span style="font-family:'Roboto Mono',monospace">[27]%</span></div><div style="{{ track }}"><div style="{{ fill27 }}"></div></div></div>
+              <div style="display:flex;gap:18px;flex-wrap:wrap"><sc-for list="{{ notes }}" as="n" hint-placeholder-count="3"><span style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="{{ n.w }}"><span style="{{ n.k }}"></span></span>{{ n.t }}</span></sc-for></div>
+              <span style="font-size:12px;color:#6b6577">Notices arrive in your bell and by email.</span>
+              <span style="font-size:13px;color:#4a4553;border-top:1px solid #ececf1;padding-top:12px">Runs, and auto-reloads, that would pass it are stopped until <span style="font-family:'Roboto Mono',monospace">[1 Nov]</span>.</span>
+            </div>
+            <div class="ub-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start">
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">Plan allowance · read-only</span><span style="font-size:13px"><span style="font-family:'Roboto Mono',monospace;font-weight:500">[$200.00]</span> a month</span><span style="font-size:12.5px;color:#4a4553"><span style="font-family:'Roboto Mono',monospace">[$135.61]</span> used · resets <span style="font-family:'Roboto Mono',monospace">[1 Nov]</span></span><div style="{{ track }}"><div style="{{ fill68 }}"></div></div></div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="{{ lbl }}">Auto-reload · read-only</span><a href="/account/billing" style="{{ link }}">Open billing →</a></div><span style="{{ ST.grey }};align-self:flex-start">Off</span><span style="font-size:12.5px;color:#4a4553">When on, buys the <span style="font-family:'Roboto Mono',monospace">[$25]</span> pack below <span style="font-family:'Roboto Mono',monospace">[$5]</span>.</span><span style="font-size:11.5px;color:#6b6577">The spend limit above is also auto-reload's limit.</span></div>
+              <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:8px"><span style="{{ lbl }}">Token pack orders today</span><span style="font:500 22px 'Roboto Mono',monospace">[1] <span style="font-size:13px;color:#6b6577">of [5]</span></span><div style="{{ track }}"><div style="{{ fill20 }}"></div></div><span style="font-size:11.5px;color:#6b6577">Auto-reloads count toward it.</span></div>
+            </div>
+          </sc-if>
+
+          <!-- B5 · HQ AI USAGE -->
+          <sc-if value="{{ is.hq }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px"><sc-for list="{{ hqTotals }}" as="t" hint-placeholder-count="5"><div style="{{ card }};padding:14px 16px"><div style="{{ lbl }}">{{ t.k }}</div><div style="font:500 22px 'Roboto Mono',monospace;margin-top:6px">{{ t.v }}</div><div style="font-size:11.5px;color:#6b6577;margin-top:2px">{{ t.n }}</div></div></sc-for></div>
+            <div style="{{ card }};padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px">Daily, by model</span><span style="display:flex;align-items:center;gap:10px"><div style="display:flex;gap:3px;background:#f4f3f7;border-radius:9px;padding:3px"><sc-for list="{{ hqToggle }}" as="r" hint-placeholder-count="2"><span style="{{ r.s }}">{{ r.t }}</span></sc-for></div><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">[1 Oct] – [30 Oct] · UTC</span></span></div>
+              <div dangerouslySetInnerHTML="{{ stackLg }}"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 14px"><sc-for list="{{ legend }}" as="m" hint-placeholder-count="7"><span style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#4a4553"><span style="{{ m.dot }}"></span>{{ m.n }}</span></sc-for></div>
+            </div>
+            <span style="{{ sec }}">Splits</span>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start"><sc-for list="{{ splits }}" as="s" hint-placeholder-count="3"><div style="{{ card }};overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;font-weight:700;font-size:13.5px">{{ s.t }}</div><div style="{{ splitGrid }};padding:8px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 9.5px 'Roboto Mono',monospace;letter-spacing:.05em;color:#6b6577;text-transform:uppercase"><span>{{ s.k }}</span><span style="text-align:right">Runs</span><span style="text-align:right">CF cost</span><span style="text-align:right">Charged</span><span style="text-align:right">Margin</span></div><sc-for list="{{ s.rows }}" as="r" hint-placeholder-count="5"><div style="{{ splitGrid }};padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:12px;align-items:center"><span style="display:flex;align-items:center;gap:7px;min-width:0;font-weight:600"><sc-if value="{{ r.dot }}" hint-placeholder-val="{{ false }}"><span style="{{ r.dot }}"></span></sc-if><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.n }}</span></span><span style="{{ num }}">[n]</span><span style="{{ num }}">[$n]</span><span style="{{ num }}">[$n]</span><span style="{{ num }}">[$n]</span></div></sc-for></div></sc-for></div>
+            <span style="{{ sec }}">Members</span>
+            <div style="{{ card }};overflow:hidden">
+              <div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                <div style="display:flex;gap:3px;background:#f4f3f7;border-radius:9px;padding:3px"><sc-for list="{{ memTabs }}" as="r" hint-placeholder-count="2"><span style="{{ r.s }}">{{ r.t }}</span></sc-for></div>
+                <span style="display:flex;align-items:center;gap:8px;border:1px solid #dedce4;border-radius:9px;padding:7px 11px;min-width:300px;font-size:12.5px;color:#9a96a8"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9a96a8" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>Search by email or user ID</span>
+                <span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">1–25 of [N]</span>
+              </div>
+              <div style="{{ memGrid }};padding:9px 16px;background:#faf9fc;border-bottom:1px solid #ececf1;font:600 9.5px 'Roboto Mono',monospace;letter-spacing:.05em;color:#6b6577;text-transform:uppercase"><sc-for list="{{ memHead }}" as="c" hint-placeholder-count="10"><span style="{{ c.s }}">{{ c.t }}<sc-if value="{{ c.sort }}" hint-placeholder-val="{{ false }}"><span style="{{ c.ss }}"> {{ c.sort }}</span></sc-if></span></sc-for></div>
+              <sc-for list="{{ members }}" as="r" hint-placeholder-count="6"><div style="{{ r.style }}"><span style="font:500 11.5px 'Roboto Mono',monospace">{{ r.id }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#4a4553;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.email }}</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-weight:600;font-size:12.5px">{{ r.name }}</span><span style="font-size:11px;color:#6b6577;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.role }} · {{ r.plan }}</span></span><span style="{{ num }}">{{ r.runs }}</span><span style="{{ num }}">{{ r.cf }}</span><span style="{{ num }};font-weight:600">{{ r.ch }}</span><span style="{{ num }}">{{ r.mg }}</span><span style="{{ num }}">{{ r.tb }}</span><span style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ r.flags }}" as="f" hint-placeholder-count="1"><span style="{{ f.s }}">{{ f.t }}</span></sc-for></span><span style="display:flex;gap:5px;justify-content:flex-end"><sc-for list="{{ r.acts }}" as="x" hint-placeholder-count="2"><span style="{{ x.s }}">{{ x.t }}</span></sc-for></span></div></sc-for>
+              <div style="padding:10px 16px;font-size:11.5px;color:#6b6577">A row opens the member panel. Money columns sort; Charged is sorted high to low.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:440px minmax(0,1fr);gap:12px;align-items:start">
+              <div style="background:#fff;border:1px solid #ececf1;border-left:3px solid #881337;border-radius:12px;box-shadow:-12px 0 34px rgba(24,24,27,.10);overflow:hidden">
+                <div style="padding:14px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font:600 10px 'Roboto Mono',monospace;letter-spacing:.08em;color:#881337;text-transform:uppercase">Member panel · side drawer</span><span style="font-weight:800;font-size:15px">{{ panel.name }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#4a4553">{{ panel.id }} · {{ panel.email }}</span><span style="font-size:12px;color:#6b6577">{{ panel.role }} · {{ panel.plan }} · joined <span style="font-family:'Roboto Mono',monospace">{{ panel.joined }}</span></span></div><span style="font-size:18px;color:#6b6577;line-height:1">×</span></div>
+                <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+                  <div style="display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">Cloudflare cost against charged · by model</span><div style="border:1px solid #ececf1;border-radius:9px;overflow:hidden"><sc-for list="{{ panel.byModel }}" as="m" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:minmax(0,1.6fr) 1fr 1fr;gap:8px;padding:7px 10px;border-bottom:1px solid #f4f3f7;font-size:11.5px;align-items:center"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="{{ m.dot }}"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.n }}</span></span><span style="{{ num }}">[$n] cost</span><span style="{{ num }};font-weight:600">[$n] charged</span></div></sc-for></div></div>
+                  <div style="display:flex;flex-direction:column;gap:6px"><span style="{{ lbl }}">By day</span><div dangerouslySetInnerHTML="{{ pair }}"></div><div style="display:flex;gap:14px;font-size:11px;color:#4a4553"><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;height:2px;background:#18181b"></span>Charged</span><span style="display:flex;align-items:center;gap:6px"><span style="width:14px;border-top:2px dashed #9a96a8"></span>Cloudflare cost</span></div></div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><sc-for list="{{ panel.money }}" as="m" hint-placeholder-count="4"><div style="border:1px solid #ececf1;border-radius:9px;padding:9px 11px"><div style="font-size:10.5px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.06em">{{ m.k }}</div><div style="font:500 13.5px 'Roboto Mono',monospace;margin-top:3px">{{ m.v }}</div><div style="font-size:11px;color:#6b6577">{{ m.n }}</div></div></sc-for></div>
+                  <div style="display:flex;flex-direction:column;gap:6px"><span style="display:flex;justify-content:space-between;align-items:center"><span style="{{ lbl }}">Pause and cap</span><span style="{{ ST.amber }}">{{ panel.state }}</span></span><sc-for list="{{ panel.hist }}" as="x" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;font-size:11.5px;padding:6px 0;border-bottom:1px solid #f4f3f7"><span style="font-family:'Roboto Mono',monospace;color:#6b6577">{{ x.when }}</span><span><b style="font-weight:600">{{ x.what }}</b> · {{ x.who }} · <span style="color:#6b6577">{{ x.why }}</span></span></div></sc-for></div>
+                  <div style="display:flex;gap:6px"><span style="{{ btn.ghost }}">Open account</span><span style="{{ btn.ghost }}">Set cap</span><span style="{{ btn.danger }}">Pause AI</span></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+                <div style="{{ card }};overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">Fastest rising · today against the 7-day average</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">second tab</span></div><sc-for list="{{ rising }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:70px minmax(0,1.3fr) 90px 90px 60px minmax(0,1fr);gap:10px;padding:9px 16px;border-bottom:1px solid #f4f3f7;font-size:12px;align-items:center"><span style="font:500 11.5px 'Roboto Mono',monospace">{{ r.id }}</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#4a4553;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.email }}</span><span style="{{ num }}">{{ r.today }} today</span><span style="{{ num }};color:#6b6577">{{ r.avg }} avg</span><span style="{{ num }};font-weight:700">{{ r.x }}</span><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end"><sc-for list="{{ r.flags }}" as="f" hint-placeholder-count="1"><span style="{{ f.s }}">{{ f.t }}</span></sc-for></span></div></sc-for></div>
+                <div style="{{ card }};overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid #ececf1;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:13.5px">Flags</span><span style="font:400 11.5px 'Roboto Mono',monospace;color:#6b6577">1–25 of [N]</span></div><sc-for list="{{ flags }}" as="f" hint-placeholder-count="5"><div style="padding:10px 16px;border-bottom:1px solid #f4f3f7;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="{{ f.s }}">{{ f.k }}</span><span style="font:500 11.5px 'Roboto Mono',monospace">[#1042] · [member@example.com]</span><span style="font:400 11px 'Roboto Mono',monospace;color:#6b6577">since {{ f.since }}</span></span><span style="font-size:12px;color:#4a4553">{{ f.why }}</span></div><span style="display:flex;gap:6px"><span style="{{ btn.ghost }}">Review</span><span style="{{ btn.danger }}">Pause AI</span><span style="{{ btn.quiet }}">Dismiss</span></span></div></sc-for></div>
+                <div style="background:#fff;border:1px solid #fecaca;border-radius:12px;box-shadow:0 14px 34px rgba(24,24,27,.12);overflow:hidden;max-width:460px"><div style="padding:13px 16px;border-bottom:1px solid #fecaca;background:#fef2f2;font-weight:700;font-size:13.5px;color:#b91c1c">Pause AI for [#1042]?</div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><span style="font-size:11.5px;font-weight:600;color:#6b6577">Reason · required</span><span style="border:1px solid #dedce4;border-radius:8px;padding:9px 11px;font-size:13px;color:#9a96a8;min-height:52px">[Why this member's AI is paused]</span><span style="font-size:12.5px;color:#4a4553">Nothing is charged while paused.</span><div style="display:flex;justify-content:flex-end;gap:6px"><span style="{{ btn.ghost }}">Cancel</span><span style="{{ btn.dangerSolid }}">Pause AI</span></div></div></div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- VARIANTS -->
+          <sc-if value="{{ hasVariants }}" hint-placeholder-val="{{ false }}">
+            <span style="{{ sec }}">Variants</span>
+            <div class="ub-g3" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><sc-for list="{{ variants }}" as="v" hint-placeholder-count="3"><div style="{{ card }};padding:13px 15px;display:flex;flex-direction:column;gap:7px"><span style="{{ lbl }}">{{ v.t }}</span><sc-if value="{{ v.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ps }};align-self:flex-start">{{ v.pill }}</span></sc-if><sc-if value="{{ v.d }}" hint-placeholder-val="{{ true }}"><span style="font-size:12.5px;line-height:1.5;color:#4a4553">{{ v.d }}</span></sc-if><sc-if value="{{ v.btn }}" hint-placeholder-val="{{ false }}"><span style="{{ v.bs }};align-self:flex-start">{{ v.btn }}</span></sc-if></div></sc-for></div>
+          </sc-if>
+
+          <!-- STATES -->
+          <span style="{{ sec }}">States on this board</span>
+          <div class="ub-g4" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+            <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:8px"><span style="font-weight:700;font-size:12.5px">Loading</span><div style="height:10px;width:70%;border-radius:99px;background:#ececf1"></div><div style="height:10px;width:92%;border-radius:99px;background:#f4f3f7"></div><div style="height:10px;width:56%;border-radius:99px;background:#f4f3f7"></div></div>
+            <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:700;font-size:12.5px">Empty</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ st.empty }}</span><span style="font-size:12px;font-weight:700;color:#6d28d9">{{ st.cta }}</span></div>
+            <div style="{{ card }};padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:700;font-size:12.5px">Not recorded</span><span style="{{ ST.nr }};align-self:flex-start">Not recorded</span><span style="font-size:12.5px;line-height:1.5;color:#6b6577">{{ st.nr }}</span></div>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-weight:700;font-size:12.5px;color:#b91c1c">Unreadable</span><span style="font-size:12.5px;line-height:1.5;color:#b91c1c">{{ st.un }}</span><span style="font-size:12px;font-weight:700;color:#b91c1c">Try again</span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <div class="ub-mtabs" style="display:none;position:sticky;bottom:0;border-top:1px solid #ececf1;padding-bottom:4px;background:#fff"><sc-for list="{{ mtabs }}" as="t" hint-placeholder-count="5"><span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0 0;font-size:9.5px;font-weight:700;color:#9a95a6"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ t.icon }}"></span>{{ t.t }}</span></sc-for></div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;usage&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;usage&quot;,&quot;cost&quot;,&quot;billing&quot;,&quot;limits&quot;,&quot;hq&quot;]}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.screen ?? 'usage';
+    const pill = (fg, bg, bd, dash) => 'font-size:11px;font-weight:600;border-radius:99px;padding:2px 8px;white-space:nowrap;color:' + fg + ';background:' + bg + ';border:1px ' + (dash ? 'dashed ' : 'solid ') + bd;
+    const ST = { grey: pill('#6b6577', '#f4f3f7', '#ececf1'), violet: pill('#6d28d9', '#f4f0fe', '#ddd0fb'), ok: pill('#047857', '#ecfdf5', '#a7f3d0'), amber: pill('#92400e', '#fffbeb', '#fcd34d'), bad: pill('#b91c1c', '#fef2f2', '#fecaca'), nr: pill('#6b6577', '#f4f3f7', '#d4d1dc', 1) };
+    const btn = { primary: 'font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border-radius:9px;padding:8px 13px;white-space:nowrap', ghost: 'font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:9px;border:1px solid #ececf1;background:#fff;white-space:nowrap', quiet: 'font-size:12.5px;font-weight:600;padding:7px 8px;color:#6b6577;white-space:nowrap', danger: 'font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:9px;border:1px solid #fecaca;color:#b91c1c;background:#fff;white-space:nowrap', dangerSolid: 'font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:9px;color:#fff;background:#b91c1c;white-space:nowrap' };
+    const isHQ = s === 'hq', isAccount = !isHQ;
+    const MODELS = [['Llama 3.3 70B Fast', '#7c3aed', .34], ['GLM 4.7 Flash', '#a78bfa', .16], ['Gemma 4 26B', '#0f766e', .13], ['Kimi K2.6', '#d97706', .11], ['Whisper Large v3 Turbo', '#475569', .1], ['FLUX.1 schnell', '#db2777', .07], ['Llama Guard 3 8B', '#c4b5fd', .09]];
+    const dot = (c) => 'width:9px;height:9px;border-radius:3px;flex:none;background:' + c;
+    const legend = MODELS.map(m => ({ n: m[0], dot: dot(m[1]) }));
+    const tip = MODELS.map(m => ({ n: m[0], dot: dot(m[1]), v: '[$0.00]' }));
+    const stack = (W, H, hi, fs) => {
+      const L = 44, B = 20, n = 30, g = 3, bw = (W - L - g * (n - 1)) / n, ch = H - B - 6;
+      let o = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block" font-family="Roboto Mono, monospace" font-size="' + (fs || 10) + '" fill="#6b6577">';
+      [0.25, 0.5, 0.75, 1].forEach((f, i) => { const y = 6 + ch * (1 - f); o += '<line x1="' + L + '" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="#ececf1"/><text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end">[$' + ['n', 'n', 'n', 'n'][i] + ']</text>'; });
+      for (let d = 0; d < n; d++) {
+        let t = 0.36 + 0.22 * Math.sin(d * 0.45) + 0.16 * Math.sin(d * 1.25 + 1) + 0.14 * (d / 29); t = Math.max(0.14, Math.min(0.96, t));
+        const x = L + d * (bw + g); let y = 6 + ch;
+        if (d === hi) o += '<rect x="' + (x - 1.5) + '" y="4" width="' + (bw + 3) + '" height="' + (ch + 4) + '" rx="3" fill="#f4f0fe"/>';
+        MODELS.forEach(m => { const h = t * ch * m[2]; y -= h; o += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + m[1] + '"/>'; });
+      }
+      [['[1 Oct]', 0], ['[15 Oct]', 14], ['[30 Oct]', 29]].forEach(([l, d]) => { o += '<text x="' + (L + d * (bw + g) + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle">' + l + '</text>'; });
+      return { __html: o + '</svg>' };
+    };
+    const mkLines = (W, fs) => {
+      const H = 190, L = 8, n = 30, ch = 150, top = 14;
+      const pt = (d, f) => (L + d * ((W - 70 - L) / (n - 1))).toFixed(1) + ',' + (top + ch * (1 - f)).toFixed(1);
+      const inp = [], out = [];
+      for (let d = 0; d < n; d++) { inp.push(pt(d, 0.45 + 0.2 * Math.sin(d * 0.4) + 0.12 * (d / 29))); out.push(pt(d, 0.18 + 0.08 * Math.sin(d * 0.55 + 1) + 0.05 * (d / 29))); }
+      const li = inp[n - 1].split(','), lo = out[n - 1].split(',');
+      let o = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block" font-family="Roboto Mono, monospace" font-size="' + fs + '">';
+      [0.25, 0.5, 0.75].forEach(f => { const y = top + ch * (1 - f); o += '<line x1="' + L + '" x2="' + (W - 70) + '" y1="' + y + '" y2="' + y + '" stroke="#ececf1"/>'; });
+      o += '<polyline points="' + inp.join(' ') + '" fill="none" stroke="#18181b" stroke-width="2"/><polyline points="' + out.join(' ') + '" fill="none" stroke="#9a96a8" stroke-width="2" stroke-dasharray="4 3"/>';
+      o += '<circle cx="' + li[0] + '" cy="' + li[1] + '" r="3" fill="#18181b"/><text x="' + (+li[0] + 8) + '" y="' + (+li[1] + 3) + '" fill="#18181b">[1.2M] in</text>';
+      o += '<circle cx="' + lo[0] + '" cy="' + lo[1] + '" r="3" fill="#9a96a8"/><text x="' + (+lo[0] + 8) + '" y="' + (+lo[1] + 3) + '" fill="#6b6577">[340k] out</text>';
+      o += '<text x="' + L + '" y="' + (H - 4) + '" fill="#6b6577">[1 Oct]</text><text x="' + (W - 70) + '" y="' + (H - 4) + '" fill="#6b6577" text-anchor="end">[30 Oct]</text>';
+      return { __html: o + '</svg>' };
+    };
+    const linesSvg = mkLines(420, 10);
+    const track = 'height:6px;border-radius:99px;background:#f0eff3;overflow:hidden';
+    const fill = (p, c) => 'height:6px;border-radius:99px;width:' + p + '%;background:' + (c || '#7c3aed');
+    const tog = (on) => ({ w: 'width:34px;height:20px;border-radius:99px;position:relative;flex:none;display:inline-block;vertical-align:middle;background:' + (on ? '#7c3aed' : '#d4d1dc'), k: 'position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;' + (on ? 'right:2px' : 'left:2px') });
+    const seg = (on) => 'font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px;white-space:nowrap;' + (on ? 'background:#fff;color:#18181b;box-shadow:0 1px 2px rgba(24,24,27,.08)' : 'color:#6b6577');
+    const SIDE = isHQ ? ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'] : ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const act = isHQ ? 'Platform' : '';
+    const side = SIDE.map(t => ({ t, style: 'padding:8px 10px;border-radius:8px;font-weight:500;font-size:13px;' + (t === act ? 'color:#881337;background:#fdf2f6' : 'color:#6b6577') }));
+    const navOn = { usage: 'Overview', cost: 'Cost', limits: 'Limits', billing: 'Billing' }[s];
+    const acNav = [['Profile and identity', 0], ['Notifications', 0], ['Sign-in and security', 0], ['Billing', 0], ['Usage', 0], ['Overview', 1], ['Cost', 1], ['Limits', 1], ['Connectors', 0], ['Following', 0]].map(([t, sub]) => {
+      const on = t === navOn || (t === 'Usage' && ['usage', 'cost', 'limits'].includes(s));
+      return { t, style: 'padding:' + (sub ? '6px 12px 6px 24px' : '9px 12px') + ';border-radius:8px;font-size:' + (sub ? '12.5px' : '13px') + ';font-weight:' + (on ? 700 : 500) + ';color:' + (on ? '#6d28d9' : sub ? '#6b6577' : '#18181b') + ';background:' + (on && (sub || t === 'Billing') ? '#f4f0fe' : 'transparent') };
+    });
+    const HEAD = {
+      usage: ['Usage', "How your AI spend is tracking against your limits, and what you're billed.", 'Account › Usage', 'Usage · Overview'],
+      cost: ['Cost', 'Cost of your AI usage over time. All dates are UTC.', 'Account › Usage › Cost', 'Usage · Cost'],
+      billing: ['Billing', 'Your token balance, plan, auto-reload, payment details and invoices.', 'Account › Billing', 'Billing'],
+      limits: ['Limits', 'What stops spend, and when it resets.', 'Account › Usage › Limits', 'Usage · Limits'],
+      hq: ['AI usage', 'Every member\u2019s AI runs: what they cost on Cloudflare, what they were charged, and the margin.', 'HQ › Platform › AI usage', ''],
+    }[s];
+    const STATES = {
+      usage: ['No AI runs yet this month.', 'Open Studio', 'Spend limit: none is set, so no share of a limit is shown.', 'Usage could not be read.'],
+      cost: ['No AI runs in this range.', 'Change the range', 'Output tokens: streamed replies recorded no count.', 'Cost could not be read.'],
+      billing: ['No invoices yet.', 'Buy tokens', 'Billing address: Stripe holds none for this card.', 'Billing could not be read from Stripe.'],
+      limits: ['No limit set.', 'Set a limit', 'Plan allowance: there is no plan, so there is no allowance.', 'Limits could not be read.'],
+      hq: ['No AI runs in this range.', 'Change the range', 'Margin: runs answered from cache recorded no cost.', 'The run log could not be read.'],
+    }[s];
+    const V = (t, d, o) => Object.assign({ t, d, pill: '', ps: '', btn: '', bs: '' }, o || {});
+    const icm = (p) => ({ __html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const MI = { Validate: '<path d="M20 6 9 17l-5-5"/>', Build: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>', Raise: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', Grow: '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>', More: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>' };
+    const VARIANTS = {
+      usage: [V('Spend this month · no limit', '[$135.22] this month. No limit set.', { btn: 'Set a limit', bs: btn.ghost }), V('Token balance · auto-reload on', '[$0.00] AI tokens. Reloads the [$25] pack below [$5].', { pill: 'Auto-reload on', ps: ST.ok }), V('Token balance · no payment method', '[$0.00] AI tokens. Save a card to buy tokens.', { pill: 'No payment method', ps: ST.amber })],
+      billing: [V('Included with your plan · no plan', 'No plan: top up as you go.'), V('Auto-reload · on', 'Reloads the [$25] pack when your balance falls below [$5]. This month: [2] reloads, [$50].', { pill: 'On', ps: ST.ok }), V('Auto-reload · paused', "Paused: this month's spend limit is reached. Resumes [1 Nov].", { pill: 'Paused', ps: ST.amber }), V('Auto-reload · card declined', 'Auto-reload is off: your card was declined. Update it.', { pill: 'Declined', ps: ST.bad, btn: 'Update card', bs: btn.danger }), V('Auto-reload · no card', 'Save a card to turn on auto-reload.', { btn: 'Add a card', bs: btn.ghost }), V('Auto-reload · no spend limit', 'No spend limit: reloads continue each time your balance runs low.'), V('Payment details · empty', 'No payment method on file.', { btn: 'Add a card', bs: btn.ghost }), V('Buy tokens · offers', 'A pack may carry "+[20]% bonus, ends [12 Nov]" or "First purchase only".', { pill: '+[20]% bonus, ends [12 Nov]', ps: ST.violet })],
+      limits: [V('Monthly spend limit · empty', 'No limit set. Runs continue while your plan allowance and token balance last.', { btn: 'Set a limit', bs: btn.ghost })],
+    }[s] || [];
+    const inv = (d, t, st, a) => ({ d, t, st, a, ps: st === 'Paid' ? ST.ok : ST.grey });
+    const INV = [inv('[30 Oct]', 'AI tokens, [$25] pack', 'Paid', '[$25.00]'), inv('[22 Oct]', 'AI tokens, auto-reload [$25]', 'Paid', '[$25.00]'), inv('[1 Oct]', '[Validate + Build] · monthly', 'Paid', '[$20.00]'), inv('[18 Sep]', 'AI tokens, [$10] pack', 'Refunded', '[$10.00]'), inv('[1 Sep]', '[Validate + Build] · monthly', 'Paid', '[$20.00]')];
+    const num = "font-family:'Roboto Mono',monospace;text-align:right";
+    const mut = num + ';color:#6b6577;font-size:11.5px';
+    const nrS = ST.nr + ';justify-self:end';
+    const C = (i, inp, out, oth, cf, ch, o) => Object.assign({ n: MODELS[i][0], dot: dot(MODELS[i][1]), runs: '[n]', inp, out, oth, cf, ch, inS: num, outS: num, othS: num }, o || {});
+    const costRows = [C(0, '[1.6M]', '[420k]', 'Tokens only', '[$41.20]', '[$51.50]', { othS: mut }), C(1, '[620k]', '[180k]', 'Tokens only', '[$12.40]', '[$15.50]', { othS: mut }), C(2, '[480k]', '[140k]', 'Tokens only', '[$10.10]', '[$12.63]', { othS: mut }), C(3, '[310k]', '[95k]', 'Tokens only', '[$14.60]', '[$18.25]', { othS: mut }), C(4, 'By the minute', 'By the minute', '[312] min', '[$9.68]', '[$12.10]', { inS: mut, outS: mut }), C(5, 'By the image', 'By the image', '[24] images', '[$3.78]', '[$4.72]', { inS: mut, outS: mut }), C(6, '[390k]', 'Not recorded', 'Tokens only', '[$16.42]', '[$20.52]', { outS: nrS, othS: mut })];
+    const R = (n, v, c) => ({ n, v, dot: c ? dot(c) : '' });
+    const flagP = { Spike: ST.amber, Refusals: ST.bad, 'Held runs': ST.violet, 'Refund after spend': ST.bad, 'New account heavy use': ST.amber };
+    const F = (k) => ({ t: k, s: flagP[k] });
+    const A = (t, s) => ({ t, s });
+    const FL = (k, why, since) => ({ k, s: flagP[k], why, since });
+    const flags = [FL('Spike', 'Spend today is [n]× the 7-day average.', '[30 Oct] · [09:12]'), FL('Refusals', '[n] runs refused by the safety check in [24] hours.', '[29 Oct]'), FL('Held runs', '[n] runs cost more than they held; waiting for HQ.', '[28 Oct]'), FL('Refund after spend', 'Refund requested after [$n] of tokens were used.', '[27 Oct]'), FL('New account heavy use', 'Account opened [3] days ago; [$n] charged so far.', '[26 Oct]')];
+    const SR = (n, c) => ({ n, dot: c ? dot(c) : '' });
+    const splits = [
+      { t: 'By model', k: 'Model', rows: MODELS.slice(0, 5).map(m => SR(m[0], m[1])) },
+      { t: 'By role', k: 'Role', rows: ['Founder', 'Investor', 'Advisor', 'Operating Partner', 'Admin'].map(n => SR(n)) },
+      { t: 'By plan', k: 'Plan', rows: ['Free', 'Validate + Build', 'Raise + Grow', 'Investor Pro', 'Other'].map(n => SR(n)) },
+    ];
+    const MEMGRID = 'display:grid;grid-template-columns:72px minmax(0,1.2fr) minmax(0,1.3fr) 52px 78px 78px 72px 96px 120px 150px;gap:10px';
+    const MR = (id, role, plan, o) => Object.assign({ id, email: '[member@example.com]', name: '[Display name]', role, plan, runs: '[n]', cf: '[$n]', ch: '[$n]', mg: '[$n]', tb: '[$n]', flags: [], acts: [A('Set cap', btn.ghost), A('Pause AI', btn.danger)], bg: '#fff', sel: 'none' }, o || {});
+    const members = [MR('[#1042]', 'Founder', '[Raise + Grow]', { flags: [F('Spike')], bg: '#fdf2f6', sel: 'inset 3px 0 0 #881337' }), MR('[#1187]', 'Investor', '[Pro]'), MR('[#0931]', 'Founder', '[Validate + Build]', { flags: [{ t: 'Paused', s: ST.grey }], acts: [A('Resume AI', btn.primary)], bg: '#faf9fc' }), MR('[#1305]', 'Operating Partner', '[Pro]'), MR('[#0877]', 'Advisor', '[Pro]', { flags: [F('Refusals')] }), MR('[#1411]', 'Founder', '[Free]', { flags: [F('New account heavy use')] })].map(r => Object.assign(r, { style: MEMGRID + ';padding:10px 16px;border-bottom:1px solid #f4f3f7;align-items:center;font-size:12px;background:' + r.bg + ';box-shadow:' + r.sel }));
+    const hc = (t, r, sort) => ({ t, sort: sort || '', s: r ? 'text-align:right' : '', ss: sort === '↓' ? 'color:#881337' : 'color:#9a96a8' });
+    const memHead = [hc('User ID'), hc('Email'), hc('Member'), hc('Runs', 1), hc('CF cost', 1, '↕'), hc('Charged', 1, '↓'), hc('Margin', 1, '↕'), hc('Tokens bought', 1, '↕'), hc('Flags'), hc('')];
+    const rising = [{ id: '[#1411]', email: '[member@example.com]', today: '[$18.40]', avg: '[$2.00]', x: '×[9.2]', flags: [F('New account heavy use')] }, { id: '[#0877]', email: '[member@example.com]', today: '[$12.10]', avg: '[$2.95]', x: '×[4.1]', flags: [F('Spike')] }, { id: '[#1042]', email: '[member@example.com]', today: '[$9.80]', avg: '[$3.77]', x: '×[2.6]', flags: [] }];
+    const panel = { id: '[#1042]', email: '[member@example.com]', name: '[Display name]', role: 'Founder', plan: '[Raise + Grow]', joined: '[12 Mar 2026]', byModel: MODELS.slice(0, 5).map(m => ({ n: m[0], dot: dot(m[1]) })), money: [{ k: 'Token balance', v: '[$n]', n: 'AI tokens' }, { k: 'Purchases in range', v: '[n] · [$n]', n: 'packs and auto-reloads' }, { k: 'Plan allowance', v: '[$200.00]', n: '[42]% used' }, { k: 'Spend limit', v: '[$500]', n: '[27]% used' }], state: 'Cap · [$300] a month', hist: [{ when: '[28 Oct] · [14:02]', what: 'Cap set to [$300] a month', who: '[Admin name]', why: '[Reason]' }, { when: '[13 Oct] · [09:40]', what: 'AI resumed', who: '[Admin name]', why: '[Reason]' }, { when: '[12 Oct] · [18:15]', what: 'AI paused', who: '[Admin name]', why: '[Reason]' }] };
+    const mkPair = (W, fs) => {
+      const H = 150, L = 8, n = 30, ch = 112, top = 12, R = W - 82;
+      const pt = (d, f) => (L + d * ((R - L) / (n - 1))).toFixed(1) + ',' + (top + ch * (1 - f)).toFixed(1);
+      const a = [], b = [];
+      for (let d = 0; d < n; d++) { a.push(pt(d, 0.42 + 0.22 * Math.sin(d * 0.42) + 0.14 * (d / 29))); b.push(pt(d, 0.32 + 0.17 * Math.sin(d * 0.42) + 0.1 * (d / 29))); }
+      const la = a[n - 1].split(','), lb = b[n - 1].split(',');
+      let o = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block" font-family="Roboto Mono, monospace" font-size="' + fs + '">';
+      [0.25, 0.5, 0.75].forEach(f => { const y = top + ch * (1 - f); o += '<line x1="' + L + '" x2="' + R + '" y1="' + y + '" y2="' + y + '" stroke="#ececf1"/>'; });
+      o += '<polyline points="' + a.join(' ') + '" fill="none" stroke="#18181b" stroke-width="2"/><polyline points="' + b.join(' ') + '" fill="none" stroke="#9a96a8" stroke-width="2" stroke-dasharray="4 3"/>';
+      o += '<text x="' + (+la[0] + 6) + '" y="' + (+la[1] + 3) + '" fill="#18181b">[$n] charged</text><text x="' + (+lb[0] + 6) + '" y="' + (+lb[1] + 12) + '" fill="#6b6577">[$n] cost</text>';
+      o += '<text x="' + L + '" y="' + (H - 4) + '" fill="#6b6577">[1 Oct]</text><text x="' + R + '" y="' + (H - 4) + '" fill="#6b6577" text-anchor="end">[30 Oct]</text>';
+      return { __html: o + '</svg>' };
+    };
+    const flags2 = { usage: false, cost: false, billing: false, limits: false, hq: false }; flags2[s] = true;
+    return {
+      is: flags2, isHQ, isAccount, splitCols: isAccount ? '200px minmax(0,1fr)' : 'minmax(0,1fr)',
+      side, acNav, h1: HEAD[0], sub: HEAD[1], crumb: HEAD[2], dropLabel: HEAD[3],
+      ST, btn, card: 'background:#fff;border:1px solid #ececf1;border-radius:12px', lbl: 'font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em',
+      sec: 'font-size:11px;font-weight:700;color:#6b6577;text-transform:uppercase;letter-spacing:.09em;margin-top:4px', link: 'font-size:12px;font-weight:700;color:#6d28d9;white-space:nowrap',
+      flab: 'font-size:11px;font-weight:600;color:#6b6577;text-transform:uppercase;letter-spacing:.08em', dd: "display:inline-block;font:500 12.5px 'Roboto Mono',monospace;border:1px solid #dedce4;border-radius:8px;padding:4px 9px;background:#fff;white-space:nowrap",
+      track, fill27: fill(27), fill68: fill(68), fill20: fill(20), num,
+      legend, tip, stackSm: stack(560, 200, 21), stackLg: stack(1000, 230, 21), lines: linesSvg,
+      limRows: [{ k: 'Plan allowance used', v: '[42]%', fill: fill(42), note: '[$84.00] of [$200.00] · resets [1 Nov]' }, { k: 'Monthly spend limit used', v: '[27]%', fill: fill(27), note: '[$135.22] of [$500]' }, { k: 'Token-pack orders today', v: '[1] of [5]', fill: fill(20), note: 'Auto-reloads count toward it.' }],
+      invRecent: INV.slice(0, 3), invAll: INV,
+      ranges: ['Month to date', 'Last 30 days', 'Previous month'].map((t, i) => ({ t, s: seg(i === 0) })), groups: ['Model', 'Page', 'Option'].map((t, i) => ({ t, s: seg(i === 0) })),
+      costTotals: [{ k: 'Total charged', v: '[$135.22]' }, { k: 'Token cost', v: '[$118.40]' }, { k: 'Audio and speech cost', v: '[$12.10]' }, { k: 'Image cost', v: '[$4.72]' }],
+      costGrid: 'display:grid;grid-template-columns:minmax(0,1.7fr) 80px 120px 120px 170px 120px;gap:12px', costRows,
+      packs: [['[$10]', ''], ['[$25]', '+[20]% bonus, ends [12 Nov]'], ['[$50]', 'First purchase only'], ['[$100]', '']].map(([a, offer], i) => ({ a, offer, wrap: 'border:1px solid ' + (i === 1 ? '#ddd0fb' : '#ececf1') + ';background:' + (i === 1 ? '#faf8ff' : '#fff') + ';border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;min-height:118px' })),
+      togOff: tog(false), stackPh: stack(340, 200, 21, 11), linesPh: mkLines(340, 11), icStudio: icm('<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>'), icBell: icm('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'), mtabs: Object.keys(MI).map(t => ({ t, icon: icm(MI[t]) })), notes: ['Notify me at 50%', '80%', '100%'].map((t, i) => Object.assign({ t }, tog(i < 2))),
+      hqRange: ['7 days', '30 days', 'Month to date'].map((t, i) => ({ t, s: seg(i === 1) })),
+      hqTotals: [{ k: 'Runs', v: '[n]', n: 'in the range' }, { k: 'Cloudflare cost', v: '[$n]', n: 'paid to Cloudflare' }, { k: 'Charged to customers', v: '[$n]', n: 'at the posted rates' }, { k: 'Margin', v: '[$n]', n: '[25]% of Cloudflare cost' }, { k: 'AI tokens bought', v: '[$n]', n: 'packs and auto-reloads' }], hqToggle: ['Cloudflare cost', 'Charged'].map((t, i) => ({ t, s: seg(i === 1) })), memTabs: ['All members', 'Fastest rising'].map((t, i) => ({ t, s: seg(i === 0) })),
+      splits, flags, members, memHead, rising, panel, pair: mkPair(400, 10), splitGrid: 'display:grid;grid-template-columns:minmax(0,1.5fr) repeat(4,minmax(0,1fr));gap:8px', memGrid: MEMGRID,
+      hasVariants: VARIANTS.length > 0, variants: VARIANTS,
+      st: { empty: STATES[0], cta: STATES[1], nr: STATES[2], un: STATES[3] },
+    };
+  }
+}
+</script>
+</body>
+</html>

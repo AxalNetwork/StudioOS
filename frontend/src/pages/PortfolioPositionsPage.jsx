@@ -1,0 +1,344 @@
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
+import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
+
+const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
+const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
+
+export default function PortfolioPositionsPage({ embedded = false }) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+  const location = useLocation();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [detail, setDetail] = useState(null); // { project, rounds, cap_table_snapshot }
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [prefillName, setPrefillName] = useState('');
+  const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+  // D464 — the governed write path, offered where the book is read: a mark and
+  // a distribution are admin writes (the routes refuse anyone else), and the
+  // detail drawer already reads both histories back.
+  const [markForm, setMarkForm] = useState(null);
+  const [distForm, setDistForm] = useState(null);
+
+  // Task #83 — when we arrive from an IC "invest" decision the startup + round
+  // are handed over via router state; prefill the form and open it so the admin
+  // only has to fill the economics. Runs once on the incoming navigation.
+  useEffect(() => {
+    const p = location.state?.prefill;
+    if (!p || !isAdmin) return;
+    setForm((f) => ({
+      ...f,
+      project_id: p.project_id != null ? String(p.project_id) : f.project_id,
+      round_name: p.round_name || f.round_name,
+    }));
+    setPrefillName(p.startup_name || '');
+    setCreating(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  const load = () => {
+    setLoading(true);
+    api.positionsList()
+      .then((res) => setItems(Array.isArray(res?.items) ? res.items : []))
+      .catch((e) => setErr(e.message || 'Failed to load'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const openDetail = async (projectUid) => {
+    if (!projectUid) return;
+    setErr(null);
+    try { setDetail(await api.positionsByProject(projectUid)); }
+    catch (e) { setErr(e.message || 'Failed to load company'); }
+  };
+
+  const onCreate = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    try {
+      await api.positionCreate({
+        project_id: Number(form.project_id), round_name: form.round_name,
+        invested_amount: form.invested_amount || undefined, shares: form.shares || undefined,
+        price_per_share: form.price_per_share || undefined, ownership_pct: form.ownership_pct || undefined,
+        position_date: form.position_date || undefined,
+      });
+      setCreating(false);
+      setForm({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
+      load();
+    } catch (e2) { setErr(e2.message || 'Failed to record'); }
+    finally { setBusy(false); }
+  };
+
+  const submitMark = async (e) => {
+    e.preventDefault();
+    if (!markForm || !detail?.project?.uid) return;
+    setMarkForm({ ...markForm, busy: true, error: '' });
+    try {
+      await api.positionMarkCreate(detail.project.uid, {
+        fmv: Number(markForm.fmv),
+        as_of_date: markForm.as_of_date,
+        basis: markForm.basis,
+        event: markForm.event || undefined,
+      });
+      setMarkForm(null);
+      await openDetail(detail.project.uid);
+    } catch (cause) {
+      setMarkForm({ ...markForm, busy: false, error: cause?.message || 'The mark could not be recorded.' });
+    }
+  };
+
+  const submitDist = async (e) => {
+    e.preventDefault();
+    if (!distForm || !detail?.project?.uid) return;
+    setDistForm({ ...distForm, busy: true, error: '' });
+    try {
+      await api.positionDistributionCreate(detail.project.uid, {
+        amount: Number(distForm.amount),
+        distribution_date: distForm.distribution_date,
+        kind: distForm.kind,
+        note: distForm.note || undefined,
+      });
+      setDistForm(null);
+      await openDetail(detail.project.uid);
+    } catch (cause) {
+      setDistForm({ ...distForm, busy: false, error: cause?.message || 'The distribution could not be recorded.' });
+    }
+  };
+
+  const field = (key, placeholder, extra = {}) => (
+    <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} {...extra}
+      className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+  );
+
+  return (
+    <div className={embedded ? '' : 'max-w-5xl mx-auto'}>
+      <div className="flex items-center justify-between mb-6">
+        {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <PieChart size={22} /> Cap Table &amp; Ownership
+          </h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Ownership and dilution across rounds for each portfolio company.
+          </p>
+        </div>
+        )}
+        <div className="flex items-center gap-2">
+          <button onClick={load} className="p-2 text-gray-500 hover:text-gray-800" title="Refresh"><RefreshCw size={16} /></button>
+          {isAdmin && (
+            <button onClick={() => setCreating((v) => !v)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm">
+              {creating ? <X size={14} /> : <Plus size={14} />} {creating ? 'Cancel' : 'Record Round'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {err && <div className="mb-4 px-4 py-2 bg-rose-50 text-rose-700 rounded-lg text-sm">{err}</div>}
+
+      {isAdmin && creating && (
+        <form onSubmit={onCreate} className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+          {prefillName && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-xs">
+              Prefilled from the IC decision for <strong>{prefillName}</strong>. Fill in the economics to record the position.
+            </div>
+          )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {field('project_id', 'Startup ID', { required: true, inputMode: 'numeric' })}
+            {field('round_name', 'Round (e.g. Seed)', { required: true })}
+            {field('invested_amount', 'Invested $', { inputMode: 'decimal' })}
+            {field('ownership_pct', 'Ownership %', { inputMode: 'decimal' })}
+            {field('shares', 'Shares', { inputMode: 'decimal' })}
+            {field('price_per_share', 'Price / share', { inputMode: 'decimal' })}
+            {field('position_date', 'Date (YYYY-MM-DD)')}
+          </div>
+          <button disabled={busy} className="mt-3 px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-sm">
+            {busy ? 'Saving…' : 'Record'}
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="text-gray-500 text-center py-16">Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="text-gray-500 text-center py-16">No positions recorded yet.</div>
+      ) : (
+        <div className="overflow-x-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                <th className="px-4 py-3">Company</th>
+                <th className="px-4 py-3">Total invested</th>
+                <th className="px-4 py-3">Rounds</th>
+                <th className="px-4 py-3">Latest ownership</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => (
+                <tr key={it.project_id} className="border-b border-gray-50 dark:border-gray-800/50">
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{it.project?.name || `Startup ${it.project_id}`}</td>
+                  <td className="px-4 py-3">{fmtMoney(it.total_invested)}</td>
+                  <td className="px-4 py-3">{it.rounds}</td>
+                  <td className="px-4 py-3">{fmtPct(it.latest_ownership_pct)} {it.latest_round ? <span className="text-gray-400">({it.latest_round})</span> : null}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => openDetail(it.project?.uid)} className="text-violet-600 hover:underline text-xs">View dilution</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {detail && (
+        <Sheet label={detail.project?.name || "Position"} title={detail.project?.name || "Position"} width={520} testId="portfolio-position-sheet" onClose={() => setDetail(null)}>
+          <div className="p-6">
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Dilution by round</h3>
+            {(detail.rounds || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-4">No rounds recorded.</div>
+            ) : (
+              <table className="w-full text-sm mb-6">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Round</th><th className="py-2">Invested</th><th className="py-2">Ownership</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.rounds.map((r) => (
+                    <tr key={r.uid} className="border-b border-gray-50 dark:border-gray-800/50">
+                      <td className="py-2">{r.round_name}</td>
+                      <td className="py-2">{fmtMoney(r.invested_amount)}</td>
+                      <td className="py-2">{fmtPct(r.ownership_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Current cap table</h3>
+            {(detail.cap_table_snapshot || []).length === 0 ? (
+              <div className="text-sm text-gray-500">No cap-table snapshot (connect Carta or add holders).</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Holder</th><th className="py-2">Type</th><th className="py-2">Ownership</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.cap_table_snapshot.map((h, i) => (
+                    <tr key={i} className="border-b border-gray-50 dark:border-gray-800/50">
+                      <td className="py-2">{h.name}</td>
+                      <td className="py-2">{h.security_type || '—'}</td>
+                      <td className="py-2">{fmtPct(h.ownership_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* D464 — the marks and distributions the detail read already
+                returns, with the governed write path offered beside them. */}
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Marks</h3>
+            {(detail.marks || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No mark is recorded — the position carries at cost.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">As of</th><th className="py-2">FMV</th><th className="py-2">Basis</th><th className="py-2">Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.marks.map((m) => (
+                    <tr key={m.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-mark-${m.uid}`}>
+                      <td className="py-2">{m.as_of_date}</td>
+                      <td className="py-2">{fmtMoney(m.fmv)}</td>
+                      <td className="py-2">{m.basis ? m.basis.replace(/_/g, ' ') : '—'}</td>
+                      <td className="py-2">{m.event || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              markForm ? (
+                <form onSubmit={submitMark} className="mb-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-mark">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={markForm.fmv} onChange={(e) => setMarkForm({ ...markForm, fmv: e.target.value })} placeholder="FMV ($)" inputMode="decimal" required data-testid="input-mark-fmv" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <input type="date" value={markForm.as_of_date} onChange={(e) => setMarkForm({ ...markForm, as_of_date: e.target.value })} required data-testid="input-mark-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <select value={markForm.basis} onChange={(e) => setMarkForm({ ...markForm, basis: e.target.value })} data-testid="select-mark-basis" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
+                      {[['gp_estimate', 'GP estimate'], ['round_price', 'Round price'], ['secondary', 'Secondary'], ['write_down', 'Write-down'], ['cost', 'Cost']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <input value={markForm.event} onChange={(e) => setMarkForm({ ...markForm, event: e.target.value })} placeholder="Event (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                  </div>
+                  {markForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{markForm.error}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button disabled={markForm.busy} data-testid="button-mark-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{markForm.busy ? 'Recording…' : 'Record mark'}</button>
+                    <button type="button" onClick={() => setMarkForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" onClick={() => setMarkForm({ fmv: '', as_of_date: new Date().toISOString().slice(0, 10), basis: 'gp_estimate', event: '', busy: false, error: '' })} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a mark
+                </button>
+              )
+            )}
+
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 mt-6">Distributions</h3>
+            {(detail.distributions || []).length === 0 ? (
+              <div className="text-sm text-gray-500 mb-2">No distribution is recorded.</div>
+            ) : (
+              <table className="w-full text-sm mb-2">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    <th className="py-2">Date</th><th className="py-2">Amount</th><th className="py-2">Kind</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.distributions.map((d) => (
+                    <tr key={d.uid} className="border-b border-gray-50 dark:border-gray-800/50" data-testid={`row-distribution-${d.uid}`}>
+                      <td className="py-2">{d.distribution_date}</td>
+                      <td className="py-2">{fmtMoney(d.amount)}</td>
+                      <td className="py-2">{d.kind ? d.kind.replace(/_/g, ' ') : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {isAdmin && (
+              distForm ? (
+                <form onSubmit={submitDist} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-distribution">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={distForm.amount} onChange={(e) => setDistForm({ ...distForm, amount: e.target.value })} placeholder="Amount ($)" inputMode="decimal" required data-testid="input-dist-amount" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <input type="date" value={distForm.distribution_date} onChange={(e) => setDistForm({ ...distForm, distribution_date: e.target.value })} required data-testid="input-dist-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                    <select value={distForm.kind} onChange={(e) => setDistForm({ ...distForm, kind: e.target.value })} data-testid="select-dist-kind" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
+                      {[['exit', 'Exit'], ['secondary', 'Secondary'], ['dividend', 'Dividend'], ['recapitalization', 'Recapitalization']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <input value={distForm.note} onChange={(e) => setDistForm({ ...distForm, note: e.target.value })} placeholder="Note (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
+                  </div>
+                  {distForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{distForm.error}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button disabled={distForm.busy} data-testid="button-dist-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{distForm.busy ? 'Recording…' : 'Record distribution'}</button>
+                    <button type="button" onClick={() => setDistForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <button type="button" onClick={() => setDistForm({ amount: '', distribution_date: new Date().toISOString().slice(0, 10), kind: 'exit', note: '', busy: false, error: '' })} data-testid="button-dist-open" className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                  Record a distribution
+                </button>
+              )
+            )}
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}

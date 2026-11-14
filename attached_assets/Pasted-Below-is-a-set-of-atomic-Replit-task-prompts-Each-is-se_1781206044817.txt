@@ -1,0 +1,132 @@
+Below is a set of atomic Replit task prompts. Each is self-contained, scoped to one PR, and aligned with the CLAUDE.mdrule that new features land in cloudflare-worker/src/routes/ + cloudflare-worker/sql/ first, with the React SPA in frontend/.
+
+Task 1 — Skill taxonomy & personal-values taxonomy (data model)
+Goal. Establish the canonical reference data that every downstream feature (matching, radar graph, deck spider) reads from.
+Deliverables
+* cloudflare-worker/sql/migrations/skills_values_taxonomy.sql creating:
+    * skill_categories(id, slug, name, weight_default, axis_for_radar BOOLEAN) — 8 radar axes (Product, Engineering, Design, GTM/Sales, Marketing/Brand, Finance/Ops, Legal/Compliance, Capital/Network).
+    * skills(id, category_id, slug, name, description, seniority_levels JSON).
+    * value_dimensions(id, slug, name, polarity_low, polarity_high, description) — Schwartz-inspired (Achievement, Benevolence, Autonomy, Security, Stimulation, Tradition, Power, Universalism, Conformity, Hedonism) + founder-specific (Mission-vs-Profit, Speed-vs-Quality, Risk-Appetite, Optionality-vs-Conviction, Transparency).
+* Seed data committed as a separate SQL file seed_skills_values.sql (idempotent INSERT OR IGNORE).
+* Document the schema in cloudflare-worker/sql/README.md.
+Acceptance
+* npx wrangler d1 execute studioos-db --local --file=... runs cleanly twice (idempotent).
+* SELECT COUNT(*) returns ≥120 skills across the 8 radar categories and ≥15 value dimensions.
+
+Task 2 — User skill profile (self + peer ratings)
+Goal. Let each user record skill proficiency and let trusted contacts endorse them.
+Deliverables
+* SQL: user_skills(user_id, skill_id, self_level INT 0-5, evidence_url, years FLOAT, updated_at)and skill_endorsements(endorser_user_id, endorsee_user_id, skill_id, level INT 0-5, note, created_at).
+* Worker route cloudflare-worker/src/routes/skills.ts:
+    * GET /api/skills/taxonomy (cacheable, ETag).
+    * GET/PUT /api/skills/me — bulk upsert of self ratings.
+    * POST /api/skills/endorse — endorse another user (must be a connection).
+    * GET /api/skills/:userId/aggregate — returns {self, peer_avg, peer_count, blended} per skill where blended = 0.4*self + 0.6*peer_avg (fallback to self if no endorsements).
+* Wire into frontend/src/lib/api.js and add frontend/src/pages/SkillsProfilePage.jsx with a tag-picker UI grouped by category.
+Acceptance
+* Drift smoke test (npm run test:drift) passes.
+* Peer endorsement is rejected for non-connected users (403).
+
+Task 3 — Personal-values assessment
+Goal. Capture each user's value vector for compatibility scoring.
+Deliverables
+* SQL: user_values(user_id, dimension_id, score INT -2..+2, confidence INT 1-5, updated_at).
+* Worker route cloudflare-worker/src/routes/values.ts:
+    * GET /api/values/survey — returns a 25-question paired-statement survey mapped to dimensions.
+    * POST /api/values/me — accepts survey responses, computes per-dimension score, stores.
+    * GET /api/values/me — returns the vector + a textual "values summary" (3 dominant + 1 secondary dimension).
+* frontend/src/pages/ValuesAssessmentPage.jsx — slider/forced-choice UI; can be retaken every 90 days.
+Acceptance
+* Same payload submitted twice yields the same vector (deterministic scoring).
+* Survey takes ≤5 minutes (measured in QA).
+
+Task 4 — Radar / spider-graph computation service
+Goal. A single source of truth for the 8-axis radar used in user profiles, the Axal VC spin-out deck, and the coverage view.
+Deliverables
+* Worker module cloudflare-worker/src/lib/radar.ts exporting computeRadar(userIds: string[]): RadarSeries[]:
+    * Per-axis score = weighted mean of blended skill scores in that category, normalised 0–100.
+    * For teams (≥2 users) also returns coverage per axis = max(member_scores) and gap_axes (axes where coverage < 60).
+* Worker route cloudflare-worker/src/routes/radar.ts:
+    * GET /api/radar/user/:userId
+    * GET /api/radar/team?ids=u1,u2,u3 (used by the deck and by co-founder match preview).
+* Caching: 5-minute KV cache keyed on (user_set_hash, taxonomy_version).
+Acceptance
+* A solo founder with strong Engineering+Product but no GTM returns gap_axes: ["gtm_sales","marketing_brand", ...].
+* Identical input → identical output (no randomness).
+
+Task 5 — Co-founder matching
+Goal. Rank candidate co-founders for a given user using complementarity on skills and compatibility on values.
+Deliverables
+* Worker route cloudflare-worker/src/routes/matches.ts (extend existing) adding GET /api/matches/cofounder?userId=...&limit=20.
+* Scoring (documented in cloudflare-worker/src/routes/_match_scoring.md):
+    * skill_complement = mean over axes of max(0, partner_axis - user_axis) rewarding coverage of the user's gap_axes.
+    * values_alignment = 1 - normalized_euclidean(user_values, partner_values) weighted by confidence.
+    * final = 0.55*skill_complement + 0.35*values_alignment + 0.10*proximity_signals (shared geography, mutual connections, sector overlap).
+* Response includes the per-axis delta so the UI can render a paired radar.
+* frontend/src/pages/CofounderPage.jsx — display top matches with a side-by-side radar (uses /api/radar/team).
+Acceptance
+* Two profiles with identical skills but opposite values score lower than complementary skills + aligned values.
+* Filter by availability and location_pref works.
+
+Task 6 — Partner (commercial/strategic) matching
+Goal. Match founders with operating partners, mentors, and service providers in the network.
+Deliverables
+* Extend partners.ts route with GET /api/matches/partner?userId=...&intent=distribution|tech|legal|hiring|....
+* Scoring weights differ from co-founder:
+    * domain_fit = 0.5 (skill match on the requested intent's axis only)
+    * track_record = 0.25 (endorsements, prior portfolio)
+    * values_alignment = 0.15
+    * availability_capacity = 0.10
+* Partner-side opt-in flag partners.accepting_intros BOOLEAN.
+Acceptance
+* A founder requesting intent=legal does not see a GTM partner ranked top.
+* Partners with accepting_intros=false are excluded.
+
+Task 7 — Investor matching
+Goal. Match founders to investors using thesis fit + values + stage.
+Deliverables
+* SQL extension: investor_thesis(user_id, sectors JSON, stages JSON, check_size_min, check_size_max, geo JSON, anti_thesis JSON, value_weights JSON).
+* Worker route addition GET /api/matches/investor?companyId=...:
+    * thesis_fit = 0.45 (sector ∩, stage ∩, geo ∩, check-size band)
+    * traction_fit = 0.20 (company metrics vs investor's historical mins)
+    * values_alignment = 0.20 (founder vector vs investor value_weights)
+    * network_warmth = 0.15 (mutual intros via introductions table)
+* Hard-exclude: anything matching anti_thesis.
+Acceptance
+* An angel writing $25k won't appear for a Series B raise.
+* A founder with a mission-driven values vector ranks higher with mission-tagged investors.
+
+Task 8 — Axal VC spin-out deck radar autofill
+Goal. The spin-out deck pulls a real radar from the live founding team instead of placeholder polygons.
+Deliverables
+* In frontend/src/decks/ (or wherever the spin-out deck lives — see AXAL_SPINOUT_DECK_AUDIT_2026-05-30.md), add a <TeamCoverageRadar /> component that calls /api/radar/team.
+* Render the team polygon + a dashed "ideal coverage" reference polygon (constant 70 per axis).
+* Annotate each gap axis with a tag chip listing the top 2 suggested roles to hire (drawn from Task 5's complement scoring).
+* Update DECK_AUTOFILL_AUDIT.md to mark "team radar" as autofilled.
+Acceptance
+* Deck preview renders with real data for an existing spin-out (e.g. seed founder set) within 1.5s p95.
+* PDF export keeps the radar vector-clean (SVG, not bitmap).
+
+Task 9 — Coverage analytics for Axal partners
+Goal. Internal dashboard view for Axal partners to see portfolio-wide skill gaps.
+Deliverables
+* Worker route GET /api/radar/portfolio?fundId=... returning per-company radar + portfolio-level aggregate.
+* Page frontend/src/pages/PortfolioCoveragePage.jsx — heatmap (companies × 8 axes) + flag of companies with ≥3 gap axes.
+Acceptance
+* Sorting heatmap by "Engineering" reorders rows correctly.
+* Aggregate equals the mean of per-company values (sanity check).
+
+Task 10 — Privacy, consent & taxonomy versioning
+Goal. Make the system safe to ship and evolvable.
+Deliverables
+* taxonomy_version row recorded on every user_skills.updated_at / user_values.updated_at; recompute is triggered when version bumps.
+* User-facing toggle: "Include me in matching" (defaults off until profile ≥60% complete).
+* Audit log entry every time a match list is generated for an admin.
+* Privacy doc update in SECURITY.md: what's stored, what's shared with whom, retention.
+Acceptance
+* A user with the toggle off never appears as a candidate in /api/matches/*.
+* Bumping taxonomy version invalidates cached radar within 60s.
+
+Suggested execution order
+1 → 2 → 3 → 4 → 8 (deck unblock) → 5 → 6 → 7 → 9 → 10.
+Want me to turn any of these into a real PR on claude/beautiful-faraday-sxq4n2, starting with Task 1 (taxonomy + seeds)?

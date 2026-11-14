@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Advisor · Practice · v2 · #4874</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Practice — one calm operating system for an advisory business</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Opportunity → Engagement → Session → Delivery → Collection, with the client as the connective object. The overview is a cockpit: Needs attention first (every row links to its record, and an unreadable source says so instead of becoming zero), then Today, practice health with each figure’s basis, and recent clients. Engagements are commercial relationships on a lane board, and a signed engagement can’t end without an outcome. One Client Sheet opens from any client name, and agreements move in from the legacy Contracts screen. Sessions separate the calendar from scheduling setup. Delivery treats versions as immutable, with their original recipients. Earnings says “recorded”, never “you received”. Everything uses the Advisor emerald system. Ask Eadwyn leads with practice prompts; models and pricing sit under AI settings.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · Advisor licence · clients, engagements, sessions and amounts are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Practice v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PX-00', 'Practice overview', 'A · The cockpit: Needs attention, Today, five health cards each with their basis, recent clients, and sources under a disclosure. No implementation-history copy. B · Sessions unreadable: that row says “could not be read · Try again”, sessions drop out of Today rather than reading as zero, and Ask Eadwyn is open with practice prompts and AI settings collapsed.', [F('PX00', 'A · Cockpit', 1150), F('PX00b', 'B · One source unreadable + Ask Eadwyn', 1150)]],
+      ['PX-01', 'First-use Practice', 'A single setup checklist (2 of 5) whose primary action moves to the next missing step, then “What happens next”.', [F('PX01', false, 820)]],
+      ['PX-02', 'Opportunities', 'A · An inbox of requests, with the client’s message in the cyan provenance seam, the requested time, session type and price, and Accept / Decline. A resolved request shows your decision separately from what happened later. B · The empty state.', [F('PX02', 'A · Inbox', 1100), C('PX02b', 'B · No requests yet', 760, 200)]],
+      ['PX-03', 'Engagements', 'A · A lane board (Drafting, Proposed, Signed, Ended); renewal due is amber inside Signed. B · The engagement sheet with tabs and the change-client warning. C · An ended signed engagement asks for its outcome: Renewed / Did not renew / Ended for another reason. D · The Agreement tab, absorbed from legacy Contracts.', [F('PX03', 'A · Board', 900), F('PX03b', 'B · Engagement sheet', 900), F('PX03c', 'C · Outcome required', 900), F('PX03d', 'D · Agreement tab', 900)]],
+      ['PX-04', 'Client Sheet', 'One 548px sheet opened from any client name: overview, client-shared data with the access log (cyan seam), a note marked Private to you, and recent activity.', [F('PX04', false, 1000)]],
+      ['PX-05', 'Sessions', 'A · Upcoming / Past / Cancelled, with price states (Priced, Free = $0 recorded, Unpriced). Scheduling setup is separate: availability, session types, booking links with opens and attributed bookings. B · The availability editor keeps Save disabled until the current schedule has loaded.', [F('PX05', 'A · Sessions + setup', 1150), C('PX05b', 'B · Editor while loading', 620, 260)]],
+      ['PX-06', 'Delivery', 'A · Work products by state, with post-session reviews independent of deliverables. B · Deliverable detail: latest version, then immutable history with each original recipient. C · Add version requires a note and a document. D · Send confirmation naming recipient and version.', [F('PX06', 'A · Work products', 900), F('PX06b', 'B · Versions', 900), C('PX06c', 'C · Add version', 580, 420), C('PX06d', 'D · Send confirmation', 580, 320)]],
+      ['PX-07', 'Earnings', 'A · Recorded billed, recorded collected, outstanding, platform fees and paid out, each with its basis; the ledger fixes rate and fee when a record is priced; a period-scoped note; payout setup separate from payout history. B · Unsaved-note guard when switching periods.', [F('PX07', 'A · Ledger', 1050), C('PX07b', 'B · Unsaved changes', 560, 240)]],
+      ['PX-08', 'States', 'Loading, successful empty, unreadable, not recorded and withheld per source; unreadable payouts; the pricing vocabulary.', [C('PX08', false, 1400, 380)]],
+      ['PX-09', 'Advisor preview', 'An admin-only one-line banner (“writes still run as Super Admin”) with Impersonate advisor, kept secondary to the product.', [F('PX09', false, 1150)]],
+      ['PX-10', 'Phone 390', 'A · Overview with the section row and the primary action full width. B · Session records. C · The Client Sheet as a full-height bottom sheet.', [P('PX10a', 'A · Overview'), P('PX10b', 'B · Sessions'), P('PX10c', 'C · Client Sheet')]],
+      ['PX-11', 'Dark mode', 'Engagements on #0b1220 / #111827 with emerald-400.', [F('PX11', false, 900)]],
+      ['PX-12', 'Component inventory', 'Action row, client card, engagement card, session card, version card, metric card, state chips, provenance note, empty and unreadable.', [C('PX12', false, 1400, 560)]],
+      ['PX-13', 'Existing vs proposed, accessibility, Eadwyn', 'What the advisor tables record today and what needs backend work.', [W('PX13')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

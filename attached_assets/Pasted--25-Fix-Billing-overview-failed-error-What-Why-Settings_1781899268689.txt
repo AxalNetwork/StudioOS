@@ -1,0 +1,33 @@
+#25 - Fix Billing overview_failed error
+What & Why
+Settings → Billing shows "error: overview_failed" in production. The production API endpoint GET /api/billing/overview (Cloudflare Worker) returns a 502 with { error: "overview_failed" } whenever any of its core Stripe calls throws, and that single failure blanks the entire Billing tab.
+Root cause (confirmed by reading the code + the now-merged Stripe go-live cutover): the handler returns a clean empty payload when there is no customer or no Stripe key, but once a customer id is stored and the live secret key is active, it makes four Stripe calls (subscriptions, payment methods, customer object, invoices) and any throw bubbles to a catch-all 502. After the test→live cutover, users still carry Stripe customer ids that were created in test mode; the live key cannot find them, so Stripe returns resource_missing ("No such customer"), the call throws, and the whole overview 502s. (Other Stripe failures — an invalid/restricted key, a transient 5xx — produce the same opaque error.) The frontend already has correct empty and "not configured" states; it only shows the raw code because the API hard-fails instead of degrading.
+Goal: make Billing load reliably and reflect real Stripe data — never take the whole page down over one recoverable Stripe condition, while still failing loudly for a genuine misconfiguration.
+Done looks like
+* Opening Settings → Billing in production no longer shows "error: overview_failed". The page renders.
+* A user whose stored Stripe customer no longer exists under the active (live) account sees the normal "No billing activity yet" empty state, not an error. Their stale customer link is cleared so the next purchase creates a fresh live customer and their real Stripe subscriptions, cards, invoices, and payment history then appear.
+* If one Stripe section (e.g. invoices) has a transient failure, the rest of the overview still renders rather than the whole tab failing.
+* A genuine hard misconfiguration (invalid/expired/wrong-mode secret key) still surfaces clearly, but as a friendly "billing is temporarily unavailable" message in the UI — never the raw overview_failed code.
+* The happy path (real live customer with data) is unchanged: subscriptions, cards, upcoming invoice, recent invoices, and one-off payment history all display.
+Out of scope
+* Building Stripe billing into the dev FastAPI backend — billing is Worker-only by architecture (FastAPI is never deployed); the dev preview Billing tab remaining non-functional is expected.
+* The broader Stripe live-mode operational follow-ups (catalog auto-sync, tax, etc.) tracked in other tasks.
+* Any redesign of the Billing UI beyond the error/empty messaging needed here.
+Steps
+1. Make Stripe errors branchable — In the Worker's Stripe helper, preserve the HTTP status and Stripe error code on the thrown error so callers can tell resource_missing (customer gone / wrong mode) apart from an authentication error apart from a generic failure. Keep all existing callers working.
+2. Harden the overview handler — Wrap the four core Stripe calls so the endpoint never 502s on a recoverable condition: on resource_missing for the customer, return the same clean empty payload as the no-customer path (has_customer: false); degrade other individual section failures to empty (mirroring how the charges/upcoming-invoice calls already tolerate failure) so a partial outage still renders what it can.
+3. Self-heal the stale customer link — When the customer is resource_missing under the active key, clear the stale customer id column for that scope (founder/investor) in the database so the next purchase re-creates the customer in the live account and real data flows from then on.
+4. Distinguish hard misconfiguration — If the failure is an authentication/invalid-key error (not recoverable), return a clear structured error code (not the opaque overview_failed) that the UI maps to a friendly "billing temporarily unavailable" message; preserve "explicit error, no silent fallback" for true misconfig.
+5. Frontend messaging — Update the Billing dashboard so a structured billing-unavailable error renders a friendly inline message instead of flashing the raw code, and confirm the existing empty state shows correctly after self-heal. Note: the frontend already branches on has_customer === false and stripe_configured === false; keep that contract intact.
+6. Tests + changelogs — Add a Worker unit test (mirroring the existing test patterns) covering: resource_missing → graceful empty overview + stale id cleared; one section failing → others still returned; happy path unchanged. Update both changelogs (technical CHANGELOG.md and plain-English frontend/public/CHANGELOG-user.md).
+Critical constraints: this is the production path only (Worker on D1); the self-heal writes to D1. Do not change the response contract fields (scope, has_customer, stripe_configured, subscriptions, payment_methods, upcoming_invoice, invoices, charges) the frontend depends on. Verify via the Worker test suite (the dev FastAPI backend has no billing route to exercise).
+Relevant files
+* cloudflare-worker/src/routes/billing.ts:718-801
+* cloudflare-worker/src/routes/billing.ts:45-84
+* cloudflare-worker/src/routes/billing.ts:543-551
+* cloudflare-worker/src/routes/payments.ts:45-55
+* frontend/src/components/BillingDashboard.jsx:39-200
+* frontend/src/lib/api.js:1780-1781
+* cloudflare-worker/test/catalog.test.ts
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

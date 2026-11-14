@@ -1,0 +1,788 @@
+export interface Env {
+  TIKTOK_APP_APPROVED?: string;
+  FACEBOOK_APP_APPROVED?: string;
+  FACEBOOK_LOGIN_CONFIG_ID?: string;
+  TIKTOK_CLIENT_KEY?: string;
+  TIKTOK_CLIENT_SECRET?: string;
+  // D666 (#1496): the StudioOS MCP server and its OAuth provider. Off unless
+  // "true"; with it off every MCP and OAuth path answers 404 and the provider
+  // is never built. OAUTH_KV holds clients, grants, tokens and parked consent
+  // requests. MCP_PUBLIC_ORIGIN is the origin the resource is named by
+  // (default https://axal.vc), so a preview Worker can be connected too.
+  MCP_SERVER_ENABLED?: string;
+  /** D841 (#2464): member API keys; anything but "true" answers 404 on /api/developer/keys. */
+  API_KEYS_ENABLED?: string;
+  OAUTH_KV?: KVNamespace;
+  MCP_PUBLIC_ORIGIN?: string;
+  // D653: stays off until owner/counsel authorize private founder round calls.
+  ROUND_CALLS_ENABLED?: string;
+  DB: D1Database;
+  TOKENS: KVNamespace;
+  RATE_LIMITS: KVNamespace;
+  // Task #37 — Workers Static Assets binding (the Vite-built SPA in ./docs).
+  // Optional so unit tests that construct a bare Env still typecheck; the
+  // fetch handler guards on `env.ASSETS` before using it.
+  ASSETS?: Fetcher;
+  JWT_SECRET: string;
+  // Dedicated HMAC key for Epic 5 score signing. REQUIRED in production
+  // (T9): boot fails fast if missing or <32 bytes. In dev/preview it MAY
+  // be omitted, in which case the worker falls back to JWT_SECRET and
+  // logs a one-shot startup warning. See `assertScoringHmacSecret` in
+  // `auth.ts` for enforcement.
+  SCORING_HMAC_SECRET?: string;
+  // Task #3 — Telegram Bot API token (`AxalNewsBot`). Provisioned via
+  // `wrangler secret put TELEGRAM_BOT_TOKEN --env production` (NEVER
+  // committed). When unset, /api/admin/telegram/* send endpoints return
+  // 503 `{code:'telegram_token_missing'}` — no silent fallback. The
+  // schema + admin UI stay fully usable for draft authoring regardless.
+  TELEGRAM_BOT_TOKEN?: string;
+  // D684 (#1575) — interview channels. Platform secrets only: a member's own
+  // WhatsApp business token lives encrypted on their `integrations` row, and
+  // Telegram Business needs none. Every one is `wrangler secret put … --env
+  // production`, never committed; a provider whose secrets are missing reports
+  // itself unavailable (services/channels/connections.ts `availability`).
+  // TELEGRAM_CHANNEL_* is a SEPARATE bot from TELEGRAM_BOT_TOKEN (the admin
+  // broadcaster): members connect it to their Telegram Business account.
+  TELEGRAM_CHANNEL_BOT_TOKEN?: string;
+  TELEGRAM_CHANNEL_BOT_USERNAME?: string;
+  /** setWebhook's secret_token; Telegram echoes it in X-Telegram-Bot-Api-Secret-Token. */
+  TELEGRAM_CHANNEL_WEBHOOK_SECRET?: string;
+  /** Meta app (Tech Provider) for WhatsApp Embedded Signup and the Cloud API webhook. */
+  WHATSAPP_APP_ID?: string;
+  /** Signs X-Hub-Signature-256 on every webhook delivery; exchanges signup codes. */
+  WHATSAPP_APP_SECRET?: string;
+  /** The hub.verify_token Meta's subscription GET must echo. */
+  WHATSAPP_VERIFY_TOKEN?: string;
+  WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?: string;
+  // D754 / D756 — wrangler vars, not secrets: "on", "canary" (Super Admins
+  // only) or "off" per chat channel. Absent or unknown reads as "canary".
+  WHATSAPP_CHANNEL?: string;
+  /** D860 (#2505): WhatsApp calls groundwork, on only when exactly "true". */
+  WHATSAPP_CALLS?: string;
+  /** D856 (#2501): the guided WhatsApp setup through Meta's MCP, on only when exactly "on". */
+  WHATSAPP_MCP_SETUP?: string;
+  TELEGRAM_CHANNEL?: string;
+  // D867: private forwarded recordings; absent/unknown is off.
+  TELEGRAM_CAPTURE?: string;
+  // D754 — Axal's own WhatsApp number and its WhatsApp Business Account. Ids,
+  // not secrets; once set, Embedded Signup refuses them, so no member can
+  // claim Axal's number. Unset, the guard does nothing.
+  WHATSAPP_AXAL_PHONE_NUMBER_ID?: string;
+  WHATSAPP_AXAL_WABA_ID?: string;
+  // D754 way B ("Send to Axal", the owner's yes on 2026-10-18): the system
+  // user's token for Axal's own number (a secret), and that number in E.164 for
+  // the wa.me link members open (a public wrangler var). Way B stays hidden and
+  // its webhook branch ignores everything until the three Axal secrets are set.
+  WHATSAPP_AXAL_ACCESS_TOKEN?: string;
+  WHATSAPP_AXAL_DISPLAY_NUMBER?: string;
+  /** Zoom General app (user-managed OAuth) and its webhook secret token. */
+  ZOOM_CLIENT_ID?: string;
+  ZOOM_CLIENT_SECRET?: string;
+  ZOOM_WEBHOOK_SECRET_TOKEN?: string;
+  // D757 — wrangler vars. Who can authorize the Zoom app: "own_account" (the
+  // default), "beta" or "public". Meet transcript import: "on", else off.
+  ZOOM_APP_AUDIENCE?: string;
+  MEET_TRANSCRIPTS_ENABLED?: string;
+  // Task #4 — X (Twitter) admin broadcaster. OAuth 2.0 PKCE client
+  // credentials. Provisioned via
+  //   wrangler secret put X_CLIENT_ID     --env production
+  //   wrangler secret put X_CLIENT_SECRET --env production
+  //   wrangler secret put X_BEARER_TOKEN  --env production  (optional; app-only reads)
+  // When CLIENT_ID/SECRET are unset, all /api/admin/x send paths return
+  // 503 `{code:'x_config_missing'}` and the breaker stays neutral —
+  // draft authoring + linter still work. Per-account daily cap defaults
+  // to 20; override via env var `X_DAILY_CAP`.
+  X_CLIENT_ID?: string;
+  X_CLIENT_SECRET?: string;
+  X_BEARER_TOKEN?: string;
+  X_DAILY_CAP?: string;
+  STUDIOOS_ENV?: string;
+  // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
+  // Used by the boot guards in auth.ts to decide whether to throw on missing
+  // secrets vs warn-and-fallback.
+  ENVIRONMENT?: string;
+  /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
+  PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
+  // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).
+  // Required by `index.ts` proxy handler. The worker returns 503 if missing.
+  FASTAPI_ORIGIN?: string;
+  TURNSTILE_SECRET_KEY?: string;
+  APP_URL: string;
+  // Task #30 — explicit aliases for the SPA+API host and marketing apex.
+  // New code should prefer these; APP_URL stays as the legacy name.
+  PUBLIC_BASE_URL?: string;
+  PUBLIC_MARKETING_URL?: string;
+  // D4356 (#4356): the owner's Mercury referral link for Incorporate's bank step. Used only when it is https on
+  // mercury.com (`services/mercury/oauth.ts` `isMercuryHttps`); else `/api/mercury/personal/status` names Mercury's public site.
+  MERCURY_REFERRAL_URL?: string;
+  // Phase 2 canonical-host flip: post-callback redirects go to axal.vc
+  // (via APP_URL / PUBLIC_BASE_URL), but the Google OAuth redirect_uri
+  // must stay on the host registered in Google Cloud Console
+  // (app.axal.vc). Override here when registering a new host.
+  OAUTH_CALLBACK_BASE_URL?: string;
+  // Branch mode (D104). Set only in a branch Worker's generated config
+  // (`studioos-<code>` at `<code>.axal.vc`); unset on HQ. `BRANCH_CODE` is
+  // the hostname's first label and suffixes the branch's cookie names — see
+  // util/branch.ts. `BRANCH_TERRITORY` is comma-separated ISO 3166-1 alpha-2.
+  BRANCH_CODE?: string;
+  BRANCH_NAME?: string;
+  BRANCH_TERRITORY?: string;
+  // D264 — the branch's Durable Object jurisdiction (eu, us or fedramp),
+  // rendered by scripts/lib/branchConfig.mjs from residency.do_jurisdiction
+  // and applied by util/doNamespace.ts. Unset on HQ and on a branch
+  // provisioned with none; write-once, because an object's jurisdiction is
+  // fixed when it is first created.
+  BRANCH_DO_JURISDICTION?: string;
+  // D452 — git ref or deploy id stamped at provision/deploy time; branch health
+  // returns it so HQ can persist `licence_deployments.last_version` on read.
+  WORKER_DEPLOY_VERSION?: string;
+  // The branch→HQ RPC leg (D111), set only on a branch. `branch-provision.yml`
+  // generates it per deployment, puts the plaintext here and writes its SHA-256
+  // into HQ's `licence_deployments.rpc_secret_hash`. A branch presents it on
+  // every call HQ must be able to attribute — `reportUsage`, and since D244 the
+  // licence pull — and a branch without it refuses before calling HQ, because
+  // HQ would refuse the call anyway (`authenticateBranch`, rpc/hqOps.ts).
+  // Declared here in D244: it had been set on every provisioned branch and
+  // named in this file only in the comment below, so no code could read it.
+  RPC_SECRET?: string;
+  // The HQ→branch RPC leg (D120), the mirror of the branch's own RPC_SECRET.
+  // `branch-provision.yml` generates one value per deployment and splits it:
+  // the plaintext becomes a Worker secret on HQ, the SHA-256 becomes one on the
+  // branch. So exactly one of these is ever set on a given Worker, and a branch
+  // that holds no hash refuses every call claiming to be HQ rather than
+  // defaulting open — see `rpc/branchOps.ts`'s `authenticateHq`.
+  HQ_RPC_SECRET?: string;
+  HQ_RPC_SECRET_HASH?: string;
+  GMAIL_CLIENT_ID?: string;
+  GMAIL_CLIENT_SECRET?: string;
+  GMAIL_REFRESH_TOKEN?: string;
+  // D335 — Web Push (RFC 8291/8292). Both halves of one ECDSA P-256 key pair,
+  // raw-uncompressed-point base64url (the shape `crypto.subtle` imports
+  // directly and the shape a browser's PushManager.subscribe expects for
+  // `applicationServerKey`). Absent in dev/preview — `/push/vapid-key`
+  // answers `{ public_key: null }` rather than defaulting to a shared key,
+  // since a push payload is encrypted to this key and a placeholder would
+  // silently fail every send.
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  // mailto: contact Apple/Google's push services may reach on abuse — RFC
+  // 8292 requires the VAPID JWT to carry one.
+  VAPID_SUBJECT?: string;
+  // Calendar OAuth — Google + Microsoft 365. Optional; absent providers
+  // are treated as unavailable at runtime. MICROSOFT_TENANT_ID defaults
+  // to "common" when unset.
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_CALENDAR_REDIRECT_URI?: string;
+  // Task #51 — "Continue with Google" sign-in / sign-up. SEPARATE OAuth
+  // client from GOOGLE_CLIENT_ID/SECRET (which power Google Calendar +
+  // Mail) because the Calendar client uses incremental-auth scopes for
+  // long-lived refresh tokens, whereas the auth client only ever asks
+  // for `openid email profile` and never stores a refresh token. Mixing
+  // the two would forces the wrong scopes onto sign-in users. When
+  // unset, /api/auth/google/start returns 503 and the SPA shows the
+  // server's "not enabled on this environment" at click time; the button
+  // itself always renders (D185).
+  GOOGLE_AUTH_CLIENT_ID?: string;
+  GOOGLE_AUTH_CLIENT_SECRET?: string;
+  // D722 — "on" lets /login open Google's own window (the GIS code client)
+  // for the client above; "canary" only for /login?google_window=1; anything
+  // else keeps every click on the /start redirect and closes POST /popup. A
+  // wrangler var, "off" in both [vars] and [env.production.vars] until the
+  // owner has registered https://axal.vc and https://app.axal.vc as
+  // Authorized JavaScript origins on that client.
+  GOOGLE_SIGNIN_POPUP?: string;
+  // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
+  // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
+  // spreadsheets scope never forces calendar users to re-consent. Resolution
+  // in `services/fundSheets.ts`: SHEETS-specific → legacy GOOGLE_CLIENT_* →
+  // calendar client as last resort (same Cloud project, different redirect
+  // URI and token table). When none resolve, the Funds page says so instead
+  // of offering a Connect button that cannot complete.
+  GOOGLE_SHEETS_CLIENT_ID?: string;
+  GOOGLE_SHEETS_CLIENT_SECRET?: string;
+  GOOGLE_SHEETS_REDIRECT_URI?: string;
+  // Calendar-specific OAuth client (Task #52). Optional; `services/calendar.ts`
+  // already reads these via `(env as any)` and falls back to GOOGLE_CLIENT_*.
+  GOOGLE_PICKER_API_KEY?: string;
+  GOOGLE_PICKER_APP_ID?: string;
+  GOOGLE_CAL_CLIENT_ID?: string;
+  GOOGLE_CAL_CLIENT_SECRET?: string;
+  MICROSOFT_CLIENT_ID?: string;
+  MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_TENANT_ID?: string;
+  MICROSOFT_CALENDAR_REDIRECT_URI?: string;
+  // D1340 (#3548): the member's own mailboxes. Outlook's own app falls back to
+  // MICROSOFT_CLIENT_*; Gmail's is never the house token (GMAIL_CLIENT_*) and
+  // is offered only when MAIL_GMAIL_ENABLED is 'true' (#3547 Q1).
+  MAIL_MICROSOFT_CLIENT_ID?: string;
+  MAIL_MICROSOFT_CLIENT_SECRET?: string;
+  MAIL_GMAIL_CLIENT_ID?: string;
+  MAIL_GMAIL_CLIENT_SECRET?: string;
+  MAIL_GMAIL_ENABLED?: string;
+  MAIL_OAUTH_REDIRECT_URI?: string;
+  OPENAI_API_KEY?: string;
+  // Task #5 — Anthropic API key powers the Dashboard personal assistant
+  // (cloudflare-worker/src/routes/assistant.ts). When unset the route
+  // returns 503 instead of streaming, so the UI can degrade gracefully.
+  // Task #31 — Anthropic removed from production. ANTHROPIC_API_KEY is
+  // honoured ONLY when ENABLE_ANTHROPIC_DEV=1 AND STAGE !== 'production',
+  // and only by the dev/eval harness under scripts/eval/. The
+  // `scripts/ci/no-anthropic-in-prod.mjs` guard enforces this contract.
+  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_EXPLAIN_MODEL?: string;
+  ENABLE_ANTHROPIC_DEV?: string;
+  STAGE?: string;
+  // Task #31 — ADVISOR_EXPLAIN_PROVIDER is no longer read by the
+  // production worker. Kept in the type for backward compatibility with
+  // any operator scripts that still set it; the value is ignored.
+  ADVISOR_EXPLAIN_PROVIDER?: string;
+  // Task #4 (CG) — Personal Advisor AI Gateway slug. Routes every
+  // advisor LLM call (advisor_explain today, advisor_turn from CB
+  // onwards) through a dedicated Cloudflare AI Gateway so spend,
+  // latency, rate limits and cache analytics for the advisor surface
+  // are tracked independently of the onboarding chatbot. The gateway
+  // itself must be created by the operator in the Cloudflare dashboard
+  // (Workers AI → AI Gateway → New gateway, slug `advisor-ongoing`,
+  // cache TTL 5m for explainers / 0 for turns, rate limit 60/min/user
+  // and 200/min/account). When unset, advisor calls fall through to
+  // the default `env.AI` binding without gateway routing — analytics
+  // simply mix in with the onboarding traffic, but no functionality
+  // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
+  CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  /** D1504 (#3755): the deck's AI Gateway; empty until the owner creates it. */
+  CF_AI_GATEWAY_SLUG_DECK?: string;
+  // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
+  // turns (chat completions, not /explain) in KV bucket
+  // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
+  // number, surfacing a friendly throttle message. Soft-warn fires at
+  // 80% so the UI can show a "approaching daily cap" hint. Default
+  // 100 turns/day per spec. The "USD_DAY" suffix is a misnomer in the
+  // spec — the value is a TURN count, not a dollar amount — but we
+  // keep the spec name verbatim and accept the legacy
+  // `WORKERS_AI_ADVISOR_BUDGET_PER_DAY` alias for back-compat.
+  // D766: read by nothing since the uncalled `services/advisor/aiClient.ts`
+  // was deleted; kept so a deployment that still sets them type-checks.
+  WORKERS_AI_ADVISOR_BUDGET_USD_DAY?: string;
+  WORKERS_AI_ADVISOR_BUDGET_PER_DAY?: string;
+  // Global advisor kill switch (Task #4 AW + Task #5). When either name
+  // is set to "1" or "true" every /api/advisor/* route short-circuits
+  // with a 503 + the canonical "temporarily unavailable" message.
+  // Both names are honoured (logical OR) so a stale
+  // `ADVISOR_V2_DISABLED=0` cannot silently override an operator's
+  // emergency `ADVISOR_DISABLED=1`. Per-user kill lives separately on
+  // `users.advisor_locked`. The Task #5 staged-rollout knobs
+  // (allowlist / percentage / new-signups-after cutoff) were retired
+  // in Task #7 once Phase 3 stuck at 100%.
+  ADVISOR_DISABLED?: string;
+  ADVISOR_V2_DISABLED?: string;
+  GITHUB_ACCESS_TOKEN?: string;
+  GITHUB_REPO_OWNER?: string;
+  GITHUB_REPO_NAME?: string;
+  // Task #9 — ticket↔GitHub sync loop prevention + assignee mapping.
+  // GITHUB_SYNC_BOT_LOGIN: the GitHub login of the identity behind
+  // GITHUB_ACCESS_TOKEN; webhook events from this actor are our own echoes
+  // and are dropped. ADMIN_GITHUB_LOGINS: JSON map of local assignee
+  // (name or email, case-insensitive) → GitHub login, e.g.
+  // {"kim@axal.vc":"kim-axal"}. Unmapped assignees skip the GitHub call.
+  GITHUB_SYNC_BOT_LOGIN?: string;
+  ADMIN_GITHUB_LOGINS?: string;
+  // Shared secret used to verify inbound GitHub webhook deliveries
+  // (X-Hub-Signature-256). Set via the admin GitHub panel or wrangler.
+  GITHUB_WEBHOOK_SECRET?: string;
+  // D655 — the StudioOS GitHub App user-authorization client (Connectors).
+  GITHUB_APP_CLIENT_ID?: string;
+  GITHUB_APP_CLIENT_SECRET?: string;
+  // D655 follow-up (#1884): public App slug; empty or invalid means no install link.
+  GITHUB_APP_SLUG?: string;
+  // D1096 — the read-only Vercel Integration's client (Connectors) and its public slug;
+  // an empty or invalid slug means no install page, so Vercel reads as not set up.
+  VERCEL_CLIENT_ID?: string;
+  VERCEL_CLIENT_SECRET?: string;
+  VERCEL_INTEGRATION_SLUG?: string;
+  // D542 — GitHub logins whose bounty labels the webhook acts on (services/bugBounties.ts).
+  BOUNTY_GRANTERS?: string;
+  PERSONA_API_KEY?: string;
+  SUMSUB_API_KEY?: string;
+  // LinkedIn — used by routes/linkedin.ts (Refer & Earn → "Sign in with
+  // LinkedIn" + Connections-CSV import wizard). Set via `wrangler secret put`.
+  // When any of the three is unset, /api/linkedin/oauth/start returns 503
+  // and the UI hides the OAuth tab while still allowing the CSV-export
+  // walkthrough to function.
+  LINKEDIN_CLIENT_ID?: string;
+  LINKEDIN_CLIENT_SECRET?: string;
+  LINKEDIN_REDIRECT_URI?: string;
+  // Stripe — Axal VC Management LLC's account, called through `stripeCall`
+  // (routes/billing.ts) and its callers; fund code never calls Stripe (D707,
+  // services/moneyRails.ts). Set via `wrangler secret put STRIPE_SECRET_KEY`.
+  // util/paymentMode.ts allows the dev fallback only outside production and
+  // only with no key set.
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  // Task #16 — Stripe publishable key as a Worker env var (optional — the
+  // admin can also set it via PUT /api/admin/stripe/config which stores it
+  // in KV; the KV value takes precedence over this env var). The runtime
+  // config endpoint GET /api/payments/config reads KV-first, then this.
+  STRIPE_PUBLISHABLE_KEY?: string;
+  // Task #12 — master switch for Stripe Tax (automatic_tax). Default OFF.
+  // `automatic_tax[enabled]=true` is only valid on Checkout Sessions, Invoices
+  // and Subscriptions (NOT raw PaymentIntents) and only succeeds once Stripe
+  // Tax is activated in the dashboard (origin address + registrations) AND the
+  // customer has a tax-determinable address. Flipping this on before those ops
+  // steps are done makes Stripe reject the call → checkouts 502. Set to
+  // "1"/"true" via `wrangler secret put STRIPE_TAX_ENABLED --env production`
+  // only after Stripe Tax is live. See documentation/architecture/GOTCHAS.md "Stripe Tax".
+  STRIPE_TAX_ENABLED?: string;
+  // Task #6 (DG) — Stripe Connect platform OAuth client id (`ca_…`).
+  // Issued from the platform's Connect Settings page in the Stripe
+  // dashboard. Together with STRIPE_SECRET_KEY this drives the founder
+  // OAuth handshake at /api/integrations/oauth/stripe/{start,callback}.
+  STRIPE_CONNECT_CLIENT_ID?: string;
+  STRIPE_ATLAS_API_KEY?: string;
+  // Task #6 — founder subscription tier price ids (Stripe).
+  /** D629: owner-created one-time USD AI top-up catalog price. */
+  STRIPE_PRICE_AI_TOPUP?: string;
+  /** D1366: the $1 one-time USD price a custom-amount top-up buys N of. */
+  STRIPE_PRICE_AI_TOPUP_UNIT?: string;
+  /** D1434: the $1 unit price on the live Stripe account, read when STRIPE_SECRET_KEY is live. */
+  STRIPE_PRICE_AI_TOPUP_UNIT_LIVE?: string;
+  STRIPE_PRICE_GROWTH?: string;
+  STRIPE_PRICE_STUDIO?: string;
+  // Task #6 (W-1) — investor paywall price ids. Institutional supports
+  // invoice billing so callers can also flip status via admin tooling
+  // when no card is on file.
+  STRIPE_PRICE_INVESTOR_PRO_MONTHLY?: string;
+  STRIPE_PRICE_INVESTOR_PRO_YEARLY?: string;
+  STRIPE_PRICE_INVESTOR_INST_MONTHLY?: string;
+  STRIPE_PRICE_INVESTOR_INST_YEARLY?: string;
+  // Task #33 — Master keys for column-level cipher (PII / financial / cap-table)
+  // and for one-time signed R2 download URLs. Both MUST be ≥32 bytes in
+  // production. Generate via `openssl rand -hex 32`. Provision per env via
+  //   `npx wrangler secret put KEK_PII --env=production`
+  //   `npx wrangler secret put KEK_R2  --env=production`
+  // Dev/preview workers fall back to JWT_SECRET (with one-shot warning).
+  KEK_PII?: string;
+  /** D852 (#2475): `true` turns on remote MCP servers a member adds; anything else leaves them off. */
+  CUSTOM_MCP_ENABLED?: string;
+  /** D1496 (#3840): `true` turns on team agents (`/api/teams`); anything else answers 404 `team_agents_off`. */
+  TEAM_AGENTS_ENABLED?: string;
+  /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
+  AGENT_ENGINE?: string;
+  /** D5624 (#5624): `true` (with the agent engine on) turns on a team's Landing settings; anything else answers 404 `team_landing_off`. */
+  TEAM_LANDING?: string;
+  /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
+  AGENT_AUTONOMY?: string;
+  /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
+  AGENT_RUNTIME?: string;
+  /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
+  AGENT_SKILL_RUNTIME?: string;
+  /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
+  AGENT_INFERENCE_STUB?: string;
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  AGENT_AI_GATEWAY?: string;
+  /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
+  AGENT_COMPUTE?: string;
+  /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
+  AGENT_COMPUTE_SECRET?: string;
+  /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
+  AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
+  /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
+  AGENT_SCOPE?: DurableObjectNamespace;
+  /** #3852 (E0): the `sdk` runtime's `ScopeAgent` namespace. Used only while `AGENT_RUNTIME` is `sdk`. */
+  AGENT_SCOPE_SDK?: DurableObjectNamespace;
+  /** D1528: the `AgentTaskWorkflow`; the instance id is the run uid. */
+  AGENT_TASK?: Workflow<{ run_uid: string }>;
+  /** D1528: `studioos-agent-queue`; messages are `{ job_type: 'agent_run', payload: { run_uid } }`. */
+  AGENT_QUEUE?: Queue<JobMessage>;
+  /** D4559 (#4559): optional whole-byte overrides for the D1 plan limit and its warning/critical review sizes (services/platformCapacity). Unset: 10 GB / 5 GB / 7.5 GB. */
+  PLATFORM_D1_LIMIT_BYTES?: string;
+  PLATFORM_D1_WARN_BYTES?: string;
+  PLATFORM_D1_CRIT_BYTES?: string;
+  KEK_R2?: string;
+  // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
+  // Kept distinct from KEK_PII so a key rotation on PII columns never
+  // invalidates wellbeing rows.
+  AXAL_ENCRYPTION_SECRET?: string;
+  // D810 (#2256) — the HMAC key for the newsletter's preferences and
+  // unsubscribe links (`services/newsletter.ts`). A Worker secret, set by the
+  // owner (PRODUCTION.md §4). Production refuses those links without it;
+  // dev/preview fall back to JWT_SECRET.
+  NEWSLETTER_TOKEN_KEY?: string;
+  // D811: shared only with the Axal VC Mail Worker; unset means 404.
+  MAIL_LINK_SECRET?: string;
+  // Task #3 (Y-1) — email of the Axal counter-signer that receives
+  // the third leg of the 3-way Founder/Investor/Axal NDA. Defaults to
+  // 'legal@axal.vc' when unset (see services/trustEnvelope.ts).
+  AXAL_COUNTERSIGNER_EMAIL?: string;
+  // Cloudflare Access verification (middleware/cfAccess.ts). Task #33
+  // removed it from /api/admin, /api/monitoring and /api/infra; today it
+  // gates only the two KYC document routes (index.ts). Both MUST be set in
+  // production for that gate to engage; either unset means the middleware is
+  // a no-op (dev / preview).
+  CF_ACCESS_TEAM_DOMAIN?: string;   // e.g. "axal.cloudflareaccess.com"
+  CF_ACCESS_AUD?: string;           // Application AUD tag from the Access dashboard
+  // Task #6 — Google Cloud Identity Platform / Firebase Phone Auth.
+  // GCIP_API_KEY is the Web API key for the Identity Platform project;
+  // when unset, the SMS 2FA endpoints return 503 and the SettingsPage /
+  // LoginPage hide their SMS surfaces. SMS_COUNTRY_ALLOWLIST is a CSV
+  // of ISO-3166 alpha-2 country codes (default: see services/authSms.ts).
+  // GCIP_RECAPTCHA_TOKEN_FALLBACK is a dev/smoke-test escape hatch so
+  // start-enrollment can succeed without a browser-minted reCAPTCHA.
+  GCIP_API_KEY?: string;
+  GCIP_RECAPTCHA_TOKEN_FALLBACK?: string;
+  // Task #6 — GCIP admin credentials for the disable flow. The Identity
+  // Toolkit Admin REST endpoint requires a service-account OAuth2 bearer;
+  // operators provision it as a secret. Project id is the GCP project that
+  // owns the Identity Platform tenant. When either is absent the disable
+  // path still wipes local state but logs a "skipped upstream delete"
+  // warning so it's visible in observability.
+  GCIP_PROJECT_ID?: string;
+  GCIP_ADMIN_BEARER_TOKEN?: string;
+  SMS_COUNTRY_ALLOWLIST?: string;
+  AI?: any;
+  // Task #1 (AX) — Multi-model AI router. Optional dedicated KV namespace
+  // for spend buckets, cache, and the org-wide kill switch. When absent the
+  // router falls back to the existing TOKENS namespace with `ai_spend:` /
+  // `ai_cache:` / `ai_killswitch:` prefixes so it's deployable today.
+  AI_SPEND?: KVNamespace;
+  // Per-user / org-wide spend caps for the AI router. Numeric strings;
+  // defaults: 5 / 50 / 5000 USD respectively (see services/aiRouter.ts).
+  WORKERS_AI_BUDGET_USD_DAY?: string;
+  WORKERS_AI_BUDGET_USD_MONTH?: string;
+  WORKERS_AI_BUDGET_USD_ORG_MONTH?: string;
+  // D760 (#2017) — owner switches (#1008), both off unless set to 'on'.
+  // AI_PARTNER_MODELS offers the partner models new to the platform (Aura,
+  // FLUX.2, Leonardo); AI_PAID_MODELS stops the paid-only models being
+  // demoted by default (D764 applies it). See services/ai/catalogue.ts.
+  AI_PARTNER_MODELS?: string;
+  AI_PAID_MODELS?: string;
+  // D851 (#2474) — model providers on their own APIs (services/aiProviders.ts).
+  // AI_PROVIDER_ANTHROPIC offers the Anthropic rows of PROVIDER_MODELS only
+  // when exactly 'on'. AI_PROVIDER_ANTHROPIC_KEY is the platform's key, a
+  // Worker secret: never in D1, never a member's key, and not ANTHROPIC_API_KEY
+  // above, which is dev-only (Task #31).
+  AI_PROVIDER_ANTHROPIC?: string;
+  // #3778 phase 2 (D1534): the deck's Bria image tools (background removal) through AI Gateway,
+  // offered only when exactly 'on' (`imageToolsOn`). Off until the owner's steps on #1008.
+  AI_PROVIDER_BRIA?: string;
+  // D4316 (#4316): the deck's Upscale (Pruna p-image-upscale) through AI Gateway, its own switch,
+  // exactly 'on' (`imageToolOn`). Off until the owner's 10-day sub-processor notice (#1008).
+  AI_PROVIDER_PRUNA?: string;
+  AI_PROVIDER_ANTHROPIC_KEY?: string;
+  // R2 bucket for KYC documents and other large/private blobs.
+  // Optional so unit-test envs without R2 bindings still type-check.
+  FILES?: R2Bucket;
+  // Task #2 (AU) — R2 bucket for admin-composed publication artifacts
+  // (PDF/CSV/PNG). Public access is OFF; downloads are gated through the
+  // Worker via 24h HMAC-signed URLs. Falls back to FILES on dev envs
+  // where the dedicated bucket isn't bound.
+  PUBLICATIONS?: R2Bucket;
+  // Task #2 (AU) / Task #13 — Cloudflare Browser Rendering binding used
+  // by both the analytics export PDF path and admin publication renders.
+  // When undefined the publication render falls back to inline HTML.
+  // D711 — `quickAction` is the documented Browser Run call (compatibility
+  // date 2026-03-24 or later); services/browserRun.ts prints legal paper
+  // through it. The six older callers still post through `fetch`.
+  BROWSER?: {
+    fetch: (input: string, init?: RequestInit) => Promise<Response>;
+    quickAction?: (action: string, options: Record<string, unknown>) => Promise<Response>;
+  };
+  // Native Cloudflare Queues binding. Optional so unit-test envs and
+  // older deploys that haven't been re-deployed against the updated
+  // wrangler.toml don't crash on absence — the producer falls back to
+  // the legacy D1 `queue_jobs` table when this is undefined.
+  JOB_QUEUE?: Queue<JobMessage>;
+  // D1544 (#3784): Cloudflare Images, to resize a deck image to a model's
+  // reference size before an edit. Optional: without it an edit refuses.
+  IMAGES?: ImagesBinding;
+  // #4176 (D4176): Cloudflare Stream for Learning video. Optional: without it every Stream route answers
+  // 503 stream_unavailable and an item plays from R2 or its link as before.
+  STREAM?: import('./services/learningStream').StreamBinding;
+  // #4176: the tus route (files over 200 MB) calls Stream's REST API with this token and CLOUDFLARE_ACCOUNT_ID.
+  STREAM_API_TOKEN?: string;
+  // #4176: verifies Stream's Webhook-Signature (owner step B).
+  STREAM_WEBHOOK_SECRET?: string;
+  // Feature flag — string "true" enables the native CF Queue path.
+  USE_CF_QUEUE?: string;
+  // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
+  // envs without DO bindings don't crash; the realtime route returns 503
+  // when these are undefined.
+  MEETING_BOT?: string;
+  // D1451 (#5297): a var, not a secret. Only 'on' lets the bot take a Teams link; missing or anything else is off.
+  MEETING_BOT_TEAMS?: string;
+  MEETING_BOT_SECRET?: string;
+  // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
+  MEETING_BOT_VERSION?: string;
+  // D3678 (#3678): Eadwyn AI's own Google Workspace account, for a signed-in Meet join.
+  // The TOTP key never leaves the site Worker (services/meetBotGoogle.ts).
+  MEET_BOT_GOOGLE_EMAIL?: string;
+  MEET_BOT_GOOGLE_PASSWORD?: string;
+  MEET_BOT_GOOGLE_TOTP?: string;
+  MEETING_BOT_ZOOM_CLIENT_ID?: string;
+  MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
+  MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
+  MEETING_BOT_RUN?: DurableObjectNamespace;
+  MEETING_BOT_CONTAINER?: DurableObjectNamespace;
+  MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
+  PIPELINE_ROOM?: DurableObjectNamespace;
+  ONBOARDING_CHAT?: DurableObjectNamespace;
+  // D1577 (#3824): the `DeckPresence` room, bound in all three wrangler.toml tables (the owner
+  // approved its cost, decision L). Optional so a test env without it answers 503 `presence_off`.
+  DECK_PRESENCE?: DurableObjectNamespace;
+  // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
+  DECK_GEN_ROOM?: DurableObjectNamespace;
+  /** D1536 (#3785, deck v2 B9): `do` (the default) or `queue`. While `queue`, every deck run goes to the Queue fallback; otherwise only a run of more than 18 variant steps does. */
+  DECK_GEN_RUNTIME?: string;
+  /** D1536: a read-only Cloudflare API token (Workers AI · Read) for the weekly catalogue drift job, with CLOUDFLARE_ACCOUNT_ID. Unset: the job skips with a logged reason and raises no alert. */
+  CF_AI_CATALOGUE_TOKEN?: string;
+  AI_GOVERNOR?: DurableObjectNamespace;
+  // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
+  DECK_REMOTE?: DurableObjectNamespace;
+  // D5581 part 2 (#5581): WorkGraph leases (`services/workGraphLeases.ts`). Optional: without it every lease call is refused `no_binding`.
+  WORK_GRAPH_LEASE?: DurableObjectNamespace;
+  /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
+  WORK_GRAPH_LEASES?: string;
+  // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
+  // Optional so unit-test envs without the binding still type-check; the
+  // search service no-ops gracefully when undefined.
+  VECTORIZE?: VectorizeIndex;
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions), bound in
+  // wrangler.toml once the owner approved its monthly cost (decision L).
+  // Optional for test envs; absent, quote retrieval answers "not switched on yet".
+  DECK_QUOTES?: VectorizeIndex;
+  // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
+  // wrangler.toml until the owner creates the index (#1008); absent, data room
+  // search answers "not switched on yet".
+  DATAROOM_INDEX?: VectorizeIndex;
+  // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
+  // generation, in micro-USD across every member per UTC day
+  // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.
+  DECK_DAILY_CEILING_MICROUSD?: string;
+  // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
+  // observability middleware writes one data point per HTTP request so the
+  // Admin Analytics → Technical sub-tab can serve true edge-level traffic
+  // and latency. Reads via Cloudflare's GraphQL/SQL API are gated by the
+  // CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_AE_API_TOKEN secrets — when either
+  // is missing, `loadTechnical` falls back to D1 `system_metrics`. The
+  // binding is optional so unit-test envs and older deploys don't crash.
+  ANALYTICS?: AnalyticsEngineDataset;
+  // Task #13 — service token used to query Workers Analytics Engine via
+  // the Cloudflare GraphQL/SQL API. CLOUDFLARE_AE_API_TOKEN must scope
+  // `Account · Account Analytics · Read`. CLOUDFLARE_ACCOUNT_ID is the
+  // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_AE_API_TOKEN?: string;
+  // D161 — the dataset name the SQL reader queries. The generated branch
+  // configs have written this since D105 (scripts/lib/branchConfig.mjs) with
+  // the stated purpose of "keeping the SQL-API reader from hardcoding HQ's",
+  // and until now NOTHING read it: `loadTechnicalFromAnalyticsEngine` had
+  // `FROM studioos_metrics` as a literal. That cost something real — the
+  // preview environment writes to `studioos_metrics_preview`
+  // (wrangler.toml [env.preview]), so a preview deployment's reads could not
+  // see its own writes, and the mismatch was invisible because a failed read
+  // returns null and falls back to D1 `system_metrics`.
+  //
+  // It is a NAME, not a tier discriminator: every branch points at the same
+  // shared `studioos_metrics`, which is D105's whole design — one dataset so
+  // cross-branch figures are possible without a cross-branch read, with the
+  // branch carried per row in blob6 instead. Unset → `studioos_metrics`.
+  AE_DATASET?: string;
+  // Task #7 — Cloudflare API token scoped to `Workers Scripts: Edit`,
+  // used by services/cloudflareSecrets.ts to promote admin-entered
+  // integration keys into real Worker secrets via the CF API. Reuses
+  // CLOUDFLARE_ACCOUNT_ID (above). CF_WORKER_SCRIPT_NAME defaults to
+  // 'studioos' (the production script name from wrangler.toml).
+  CLOUDFLARE_API_TOKEN?: string;
+  CF_WORKER_SCRIPT_NAME?: string;
+  // Task #2 — HubSpot OAuth app credentials. When unset, /oauth/start for
+  // hubspot returns 503 and the connect modal surfaces the error inline.
+  // Provision via `wrangler secret put HUBSPOT_CLIENT_ID --env=production`.
+  HUBSPOT_CLIENT_ID?: string;
+  HUBSPOT_CLIENT_SECRET?: string;
+
+  // -------------------------------------------------------------------------
+  // Task #9 (AO) — full secret surface declared for type safety. All optional
+  // so unit-test envs and partially-configured preview deploys still
+  // type-check; production guarded by per-route ensureCreds() calls and
+  // boot-time `assert*` helpers in auth.ts. Provision via
+  // `wrangler secret put NAME --env production`.
+  // -------------------------------------------------------------------------
+
+  // Stripe — additional price ids. The four investor + two founder tiers
+  // declared above plus these two MI-Pro standalone prices = 8.
+  STRIPE_PRICE_MI_PRO_MONTHLY?: string;
+  STRIPE_PRICE_MI_PRO_YEARLY?: string;
+
+  // Email transport
+  EMAIL_FROM?: string;
+
+  // KEK aliases (PII_KEK_HEX / R2_KEK_HEX) — newer naming used in
+  // .env.example. Existing code reads KEK_PII / KEK_R2; keeping both
+  // declared so a wrangler secret put under either name type-checks.
+  PII_KEK_HEX?: string;
+  R2_KEK_HEX?: string;
+
+  // Sumsub (alternative KYC vendor to Persona)
+  SUMSUB_SECRET?: string;
+  SUMSUB_APP_TOKEN?: string;
+
+  // Salesforce OAuth
+  SF_CLIENT_ID?: string;
+  SF_CLIENT_SECRET?: string;
+  SALESFORCE_CLIENT_ID?: string;
+  SALESFORCE_CLIENT_SECRET?: string;
+
+  // Carta OAuth
+  CARTA_CLIENT_ID?: string;
+  CARTA_CLIENT_SECRET?: string;
+
+  // Calendly OAuth
+  CALENDLY_CLIENT_ID?: string;
+  CALENDLY_CLIENT_SECRET?: string;
+
+  // Crunchbase API
+  CRUNCHBASE_API_KEY?: string;
+
+  // Task #10 — Incorporate wizard live company-name availability check.
+  // All optional: when a key is unset the relevant register degrades to
+  // "could not check — verify manually" rather than erroring.
+  //   COMPANIES_HOUSE_API_KEY — free Companies House REST key (UK), used as
+  //     the Basic-auth username. Falls back to the BROWSER binding when unset.
+  //   OPENCORPORATES_API_KEY  — backs the Delaware (us_de) look-up; also used
+  //     by services/dueDiligence.ts.
+  //   SG_ACRA_RESOURCE_ID     — data.gov.sg ACRA datastore resource id for the
+  //     Singapore look-up (keyless JSON API). Unset → manual check.
+  COMPANIES_HOUSE_API_KEY?: string;
+  OPENCORPORATES_API_KEY?: string;
+  SG_ACRA_RESOURCE_ID?: string;
+  // Task #11 — per-jurisdiction Stripe Checkout price IDs for incorporation.
+  STRIPE_PRICE_INCORP_US_DE_CCORP?: string;
+  STRIPE_PRICE_INCORP_US_DE_LLC?: string;
+  STRIPE_PRICE_INCORP_UK_LTD?: string;
+  STRIPE_PRICE_INCORP_SG_PTE?: string;
+  STRIPE_PRICE_INCORP_EE_OY?: string;
+
+  // Slack OAuth (one-way per-user notifications — see notify.ts).
+  SLACK_CLIENT_ID?: string;
+  SLACK_CLIENT_SECRET?: string;
+
+  // ── Org-wide Slack bus (services/slackBus.ts) ────────────────────────────
+  // Bot token from the Axal StudioOS Slack App (`xoxb-...`). One token
+  // posts to every channel; per-channel routing happens via the
+  // SLACK_CHANNEL_* IDs below. When the token is unset, slackBus is a
+  // no-op (returns ok:false) and never breaks the underlying business
+  // action that called it.
+  SLACK_BOT_TOKEN?: string;
+  // Operator-owned section delivery configuration, stored per environment.
+  AXAL_SECTION_SLACK_TEAM_ID?: string;
+  AXAL_SECTION_SLACK_CHANNELS?: string;
+  // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
+  AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
+  // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
+  // mirror the constants in services/slackBus.ts.
+  SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub
+  SLACK_CHANNEL_FOUNDERS?: string;  // #axal-founders — chat, deals, signups
+  SLACK_CHANNEL_REVIEW?: string;    // #axal-review — KYC, DD, tickets
+  SLACK_CHANNEL_SIGNALS?: string;   // #axal-signals — market intel
+  SLACK_CHANNEL_LAUNCH?: string;    // #axal-launch — spin-outs, milestones
+  // Legacy single-channel customer-chat webhook (used as a fallback when
+  // SLACK_BOT_TOKEN/SLACK_CHANNEL_FOUNDERS are not yet provisioned).
+  AXAL_TEAM_SLACK_WEBHOOK_URL?: string;
+  AXAL_TEAM_SLACK_CHANNEL?: string;
+
+  // DocuSign — Integration Key + RSA private key for JWT grant
+  DOCUSIGN_INTEGRATION_KEY?: string;
+  DOCUSIGN_SECRET?: string;
+  DOCUSIGN_RSA_PRIVATE_KEY?: string;
+
+  // GCP Identity Toolkit / SMS auth (alias surface — see GCIP_* above for
+  // the legacy names the existing code reads).
+  GCP_IDENTITY_API_KEY?: string;
+  GCP_PROJECT_ID?: string;
+  GCP_SERVICE_ACCOUNT_JSON?: string;
+
+  // Tail worker forwarding bucket — declared for type safety in case the
+  // main worker ever needs to read from the same bucket directly. The
+  // tail consumer worker (cloudflare-worker-tail/) writes the events.
+  LOGS?: R2Bucket;
+  // D200 — `studioos-backups`, declared in both wrangler.toml tables; optional
+  // at runtime, which is why services/backup.ts treats its absence as a state.
+  BACKUPS?: R2Bucket;
+  // #4201 (#4152 G1) — `studioos-company-logos`, declared in both wrangler.toml
+  // tables. One PNG or SVG per company; served to members by
+  // `GET /api/company/:uid/logo`. Optional: the logo routes answer 503 without it.
+  COMPANY_LOGOS?: R2Bucket;
+
+  // Wide allowlist for preview/dev CORS, see middleware/cors guard.
+  EXTRA_DEV_ORIGINS?: string;
+}
+
+// Cloudflare Queues message envelope (matches the body shape the producer sends).
+// `idempotency_key` is set by the producer and used by the consumer to dedupe
+// at-least-once redeliveries via a KV-backed seen-set.
+export interface JobMessage {
+  job_type: string;
+  payload: any;
+  idempotency_key: string;
+}
+
+export interface User {
+  id: number;
+  uid: string;
+  email: string;
+  name: string;
+  // 'exploring' = Spin-Out Lab holding role (Task #9 onboarding queue) — it
+  // authenticates like any other role, so it belongs in the union.
+  role: 'admin' | 'founder' | 'partner' | 'investor' | 'advisor' | 'exploring';
+  /** D4472: request-time union of the primary licence and active additional grants. */
+  licences?: Array<'founder' | 'investor' | 'advisor' | 'partner'>;
+  advisor_id?: number | null;
+  investor_id?: number | null;
+  password_hash: string | null;
+  founder_id: number | null;
+  partner_id: number | null;
+  is_active: boolean;
+  email_verified: boolean;
+  verification_token: string | null;
+  verification_token_expires: string | null;
+  kyc_status: string | null;
+  created_at: string;
+  jwt_min_iat?: number | null;
+  // Spin-Out Lab membership (getCurrentUser does SELECT *, so the row carries
+  // it). Lab members may edit their OWN project regardless of account role.
+  spinout_lab_active?: number | null;
+  /** Request-local, non-enumerable marker copied from an impersonation JWT. */
+  support_session?: boolean;
+  // Migration 199 — the franchisor's elevation on `role: 'admin'`. NOT a
+  // column: `users` is at D1's 100-column ceiling, so the elevation is a row
+  // in `super_admins` and `auth.ts hydrateSuperAdmin` copies it here. Optional
+  // because a row nobody hydrated has no value, and `isSuperAdmin` reads a
+  // missing value as 0.
+  is_super_admin?: number | null;
+}
+
+export interface JWTPayload {
+  user_id: number;
+  email: string;
+  role: string;
+  impersonated_by?: number;
+  exp: number;
+  iat: number;
+  jti?: string;
+  /**
+   * D4669 — the `impersonation_sessions` row a support-session token was
+   * minted for. Every request re-reads that row, so ending the session ends
+   * the token.
+   */
+  sid?: number;
+}
+
+export interface UserSessionRow {
+  id: number;
+  jti: string;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+}

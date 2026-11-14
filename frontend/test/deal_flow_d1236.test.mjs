@@ -1,0 +1,106 @@
+// D1236 (#2423) — Deal flow at /deals (DLS1–DLS18): the view and the scope
+// switch in the address, today's list and invitations, SCORING's eleven scopes
+// with no Overall, the round's status words, a row opening its deal only where
+// the investor may read it, and compare picks in the address. D1241 (#3254)
+// retired the last "Not read here yet" waits (New for you and Compare's chart):
+// `deal_flow_part5_d1241.test.mjs` holds them now.
+//
+// Run with:
+//   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deal_flow_d1236.test.mjs
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { CompareView, DealFlowToolbar } from '../src/pages/investor/dealflow/DealFlow.jsx';
+import {
+  BASE, SCOPES, compareHref, compareIds, dealRow, opensDeal, roundWord, viewHref, viewOf,
+} from '../src/pages/investor/dealflow/dealFlowModel.js';
+
+const h = React.createElement;
+const read = (p) => readFileSync(p, 'utf8');
+const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
+
+/* ------------------------------------------------------------------ *
+ * The model
+ * ------------------------------------------------------------------ */
+
+test('the address names the view and the scope; the defaults are board and Mine and stay out of it', () => {
+  assert.deepEqual(viewOf(''), { view: 'board', scope: 'mine' });
+  assert.deepEqual(viewOf('?view=table&scope=all'), { view: 'table', scope: 'all' });
+  assert.deepEqual(viewOf('?view=odd&scope=everyone'), { view: 'board', scope: 'mine' });
+  assert.equal(viewHref({}), BASE);
+  assert.equal(viewHref({ view: 'table', scope: 'mine' }), '/deals?view=table');
+  assert.equal(viewHref({ view: 'board', scope: 'new' }), '/deals?scope=new');
+});
+
+test('compare picks: digits only, no repeats, at most four, in order', () => {
+  assert.deepEqual(compareIds('?ids=12,15,12,x,0,31,40,41'), ['12', '15', '31', '40']);
+  assert.deepEqual(compareIds(''), []);
+  assert.equal(compareHref(['3', '9']), '/deals/compare?ids=3,9');
+  assert.equal(compareHref(['../1']), '/deals/compare');
+});
+
+test('SCORING’s eleven scopes in its order, no Overall; the round’s words; a row opens its deal only under Mine', () => {
+  assert.deepEqual(SCOPES, ['Team', 'Market', 'Product-market fit', 'Technical', 'Traction', 'Financial', 'Risk', 'Geographic', 'Political and regulatory', 'Governance', 'Legal and IP']);
+  assert.ok(!SCOPES.includes('Overall'));
+  assert.deepEqual(['applied', 'scored', 'active', 'funded', 'rejected', 'odd'].map(roundWord), ['In intake', 'Screened', 'Raising', 'Funded', 'Not raising', 'Not recorded']);
+  assert.deepEqual(['mine', 'all', 'new'].map(opensDeal), [true, false, false]);
+});
+
+test('a value the read did not return stays null', () => {
+  const r = dealRow({ id: 7, project_name: 'Acme', status: 'active', amount: null, days_in_stage: null });
+  assert.equal(r.ask, null);
+  assert.equal(r.daysInStage, null);
+  assert.equal(r.round, 'Raising');
+  assert.equal(dealRow({}).name, 'Name not recorded');
+});
+
+/* ------------------------------------------------------------------ *
+ * Rendered
+ * ------------------------------------------------------------------ */
+
+test('the toolbar: the scope switch and the view switch are addresses; New for you has no view switch', () => {
+  const out = html(h(DealFlowToolbar, { view: 'table', scope: 'all' }));
+  assert.match(out, /data-testid="dealflow-scope-mine" href="\/deals\?view=table"/);
+  assert.match(out, /aria-current="page"[^>]*data-testid="dealflow-scope-all"/);
+  assert.ok(out.includes('href="/deals?scope=all"'), 'Board under All deals');
+  const nw = html(h(DealFlowToolbar, { view: 'board', scope: 'new' }));
+  assert.ok(!nw.includes('dealflow-view-table'));
+});
+
+// D1240 (#3253) replaced D1236's table with the firm's own flow, its scores and its
+// settings: `deal_flow_board_d1240.test.mjs` holds the table, the board and their states.
+// D1257's strip on a row list already read stays on `DealsTableView`, covered by
+// `venture_scorecard_panel_d1257.test.mjs`.
+
+// D1241 (#3254): New for you reads every way in (`NewForYou.jsx`), and Compare draws
+// its chart and table from SCORING's batch; `deal_flow_part5_d1241.test.mjs` holds both.
+test('Compare (DLS8): fewer than two picks asks for more, and a missing pick is said', () => {
+  const v = (id, name) => ({ id: String(id), name, round: 'Raising', ask: null, stage: null, scores: { state: 'loading', byScope: {} }, fit: null });
+  const out = html(h(CompareView, { ventures: [v(1, 'A'), v(2, 'B')], missing: 1 }));
+  assert.match(out, /Compare · 2 ventures/);
+  assert.ok(out.includes('data-testid="dealflow-compare-missing"'));
+  assert.ok(!out.includes('dealflow-wait-compare'), 'the chart no longer waits');
+  assert.match(html(h(CompareView, { ventures: [v(1, 'A')] })), /Pick at least two ventures/);
+});
+
+/* ------------------------------------------------------------------ *
+ * Wiring
+ * ------------------------------------------------------------------ */
+
+test('the wiring: the compare route, the root rendering Deal flow over today’s board, the canvas and the docs', () => {
+  const app = read('frontend/src/App.jsx');
+  assert.ok(app.includes(`<Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />`));
+  assert.ok(app.indexOf('path="/deals/compare"') < app.indexOf('path="/deals/:dealId"'), 'declared before the deal page');
+  const routes = read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx');
+  // D4815: the root is My Deal Flow; the zones and the deal rooms are DealFlow's "Other deal activity" line.
+  assert.ok(routes.includes('<DealFlow view={view} scope={scope} />'));
+  assert.ok(routes.includes('<DealCompare ids={compareIds(location.search)} />'));
+  assert.ok(routes.includes('<DealRoomsPanel />'), 'the rooms panel has a route (/deals/rooms)');
+  for (const f of ['Deal Flow List Page.dc.html', 'Deal flow · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
+  assert.ok(read('design/incoming/Deal flow · Boards.dc.html').includes('name="Deal Flow List Page"'));
+  assert.ok(existsSync('documentation/architecture/decisions/D1236.md'));
+  assert.ok(existsSync('documentation/audits/DEAL_FLOW_MAP_2026-10-26.md'));
+});

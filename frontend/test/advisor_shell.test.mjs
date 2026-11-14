@@ -1,0 +1,367 @@
+/**
+ * The Advisor Canvas shell contract.
+ *
+ * Advisor has six top-level rows. Existing concrete pages remain reachable
+ * through their canonical deep links, but incidental pages no longer become
+ * competing sidebar destinations.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+// D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
+import { readRoutesSource } from './_routesSource.mjs';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const src = codeOnly(read('frontend/src/sidebarConfig.js'));
+const advisor = src.slice(src.indexOf('\n  advisor: ['), src.indexOf('\n  exploring: ['));
+
+const rows = [...advisor.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
+  .map((m) => ({ to: m[1], label: m[2] }));
+const targets = rows.map((r) => r.to);
+const labels = rows.map((r) => r.label);
+
+test('the canvas rows are present, in the canvas order', () => {
+  // Two corrections, for two different reasons.
+  //
+  // 'Studio', not 'Home'. `rows` only matches items carrying a `to:`, and the
+  // item pointing at /studio is labelled 'Studio' in every role, here and on
+  // main. 'Home' is the GROUP header above it, which has no `to:` and never
+  // appears in `rows`. Same correction as investor_shell.test.mjs.
+  //
+  // 'Cohorts' is a real new row, added by this migration. The Advisor canvas
+  // declares a Cohorts bucket, so the shell grew a row for it and the
+  // enumeration has to say so. Nothing was relaxed: this still pins the exact
+  // list, in order, and the destinations beside it.
+  assert.deepEqual(labels, [
+    'Studio', 'Spin-Out Lab', 'Practice', 'Cohorts', 'Expertise', 'Network', 'Research',
+  ]);
+  //
+  // EVERY WORKSPACE ROW POINTS AT ITS BUCKET. Practice, Expertise and Research
+  // used to point outside their own buckets — at /advisor/advisory/opportunities,
+  // /office-hours and /signals — because those destinations were claimed by
+  // earlier decisions. Two of the three were also wrapped in
+  // `advisorPrivateWorkspace`, which redirects an admin previewing the Advisor
+  // role to /studio, so for that viewer those rows opened no workspace at all.
+  // The legacy routes stay registered and stay in `match` (asserted below).
+  assert.deepEqual(targets, [
+    '/studio',
+    '/spinout-lab',
+    '/practice',
+    '/cohorts',
+    '/expertise',
+    '/network',
+    '/research',
+  ]);
+});
+
+test('Practice owns the whole advisory subtree, and the workspace tabs to all of it', () => {
+  const practice = rows.find((r) => r.label === 'Practice');
+  assert.ok(practice, 'no Practice row');
+  // The row moved onto its bucket; owning the legacy subtree is now a `match`
+  // entry beside it rather than the destination itself, so a deep link into
+  // /advisor/advisory still lights the Practice row.
+  assert.match(advisor, /match: \['\/practice', '\/advisor\/advisory'\]/,
+    'Practice must still match the legacy advisory subtree');
+
+  // The row may only own them because the workspace links every one. Read it.
+  const ws = read('frontend/src/pages/advisor/AdvisorWorkspaceShell.jsx');
+  for (const [page, target] of [['opportunities', '/practice/opportunities'], ['clients', '/advisor/advisory/clients'], ['engagements', '/practice/engagements'], ['delivery', '/practice/delivery'], ['contracts', '/advisor/advisory/contracts']]) {
+    assert.ok(ws.includes(`to: '${target}'`),
+      `Practice no longer links to ${page}`);
+  }
+});
+
+test('canonical deep links remain registered even when not sidebar rows', () => {
+  const app = readRoutesSource();
+  for (const path of [
+    '/practice/opportunities',
+    '/advisor/advisory/clients',
+    '/practice/engagements',
+    '/practice/delivery',
+    '/advisor/advisory/contracts',
+    '/advisors',
+    '/network',
+    '/research',
+  ]) {
+    assert.ok(app.includes(`path="${path}"`), path);
+  }
+  for (const legacyRow of ['/messages', '/my/jobs', '/advisors', '/market-intel', '/due-diligence']) {
+    assert.ok(!targets.includes(legacyRow), `${legacyRow} became a competing advisor row`);
+  }
+});
+
+test('Expertise owns the canonical advisor profile destination', () => {
+  // The row points at its bucket. `/office-hours` used to be the second half
+  // of this row's ownership and is now retired — it coupled the storefront to
+  // booking and was broken at both, so the two halves went to the buckets that
+  // work: storefront to Expertise, booking to Practice.
+  const app = readRoutesSource();
+  const expertise = advisor.match(/\{ to: '\/expertise'[^}]*\}/)?.[0] ?? '';
+  assert.match(expertise, /label: 'Expertise'/);
+  assert.match(expertise, /match: \['\/expertise', '\/advisors'\]/,
+    'the Expertise row no longer claims a path that redirects elsewhere');
+
+  const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
+  assert.equal(line, undefined);
+
+  // Both components are gone, not merely unmounted. Dead code that is also
+  // broken is worse than removed code.
+  for (const gone of [
+    'frontend/src/pages/OfficeHoursPage.jsx',
+    'frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx',
+  ]) {
+    assert.ok(!existsSync(resolve(process.cwd(), gone)), `${gone} should have been deleted`);
+  }
+  assert.doesNotMatch(app, /\bOfficeHoursPage\b|\bAdvisorExpertiseWorkspace\b/,
+    'and nothing still imports them');
+  // Neither of the two surfaces that merely share the name is touched:
+  // /partner/office-hours is a different licence, /spinout-lab/office-hours a
+  // different tool. Both carry the identical DTO defects and are named as out
+  // of scope rather than quietly swept in.
+  assert.match(app, /path="\/partner\/office-hours"/);
+  assert.match(app, /path="\/spinout-lab\/office-hours"/);
+});
+
+test('Advisor-only framing is isolated from shared roles', () => {
+  const network = read('frontend/src/pages/NetworkPage.jsx');
+  // SignalsPage's `mode === 'advisor'` was the second example; D670 retired it.
+  assert.match(network, /role === 'advisor'/);
+  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /advisorAccent/);
+  assert.doesNotMatch(readRoutesSource(), /<Route path="\/advisor"/);
+});
+
+test('Home is /studio, no role root invented', () => {
+  assert.equal(rows[0].to, '/studio');
+
+  assert.ok(!targets.includes('/home'));
+  assert.ok(!targets.includes('/advisor'), 'no bare /advisor root');
+});
+
+test('Trust stays out of the sidebar', () => {
+  assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});
+
+test('scope Settings stays in the footer; account Portfolio lives in the Account menu', () => {
+  assert.ok(!targets.includes('/company-settings'), 'no retired Company Settings nav row');
+  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
+  // D4416 amends D4152: companies and projects moved from the rail to Account.
+  assert.doesNotMatch(nav, /to="\/account\/portfolio"/, 'no account Portfolio footer');
+  const app = readRoutesSource();
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/, 'Portfolio remains reachable from Account');
+  assert.ok(!/to="\/company-settings"/.test(nav), 'the footer points at the retired address');
+  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The advisor half of the checks the founder and investor shells already make.
+ * Same three defects, reported a third time in the same words — so the same
+ * three checks, scoped to this licence.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('every advisor workspace row lands inside its own bucket', () => {
+  // Not "on its overview" — this check is about a row's bucket, not its
+  // landing. It used to reason that "a bucket root that resolves to its first
+  // zone IS the landing" for advisors, because the four Advisor canvases draw
+  // zone pages and no overview artboard. That stopped being true:
+  // `AdvisorBucketRoutes` now renders a `BucketOverview` on each root and
+  // passes `activeSlug={isRoot ? null : undefined}`, which
+  // `advisor_bucket_overview.test.mjs` pins. A root lights no zone.
+  //
+  // What must not happen is a row pointing OUTSIDE its bucket — which is where
+  // Practice, Expertise and Research were, and two of those destinations bounce
+  // an admin previewing the role to /studio.
+  const shell = codeOnly(read('frontend/src/workspaces/shellConfig.js'));
+  const block = shell.slice(shell.indexOf("  advisor: {\n    accent:"), shell.indexOf('  partner: {'));
+  const prefixes = [...block.matchAll(/prefix: '([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(prefixes, ['/practice', '/cohorts', '/expertise', '/network', '/research'],
+    'the advisor shell no longer declares these five buckets');
+
+  const app = readRoutesSource();
+  for (const prefix of prefixes) {
+    const row = rows.find((r) => r.to === prefix);
+    assert.ok(row, `no advisor row points at ${prefix}`);
+    assert.ok(app.includes(`path="${prefix}"`), `${prefix} has no route`);
+  }
+  // And none of them points back at a destination outside its bucket.
+  for (const outside of ['/advisor/advisory/opportunities', '/office-hours', '/signals', '/cohorts/founders']) {
+    assert.ok(!targets.includes(outside),
+      `an advisor row points at ${outside}, outside the bucket it belongs to`);
+  }
+});
+
+test('every advisor bucket route carries the Worker AI rail', () => {
+  // Fifteen routes rendered through AdvisorBucketRoutes and it filled none of
+  // WorkspaceShell's rail slot, so Practice, Cohorts and Expertise each drew an
+  // empty right-hand column: "some pages doesn't have it, it does show
+  // anything, it looks blank", filed for the third licence.
+  const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.match(bucketRoutes, /rail=\{RAIL && \(\s*<WorkerRail/,
+    'AdvisorBucketRoutes must fill the shell’s rail slot');
+  assert.match(bucketRoutes, /role="advisor"/, 'the rail must carry the advisor accent');
+  for (const workspace of ['Practice', 'Cohorts', 'Expertise']) {
+    assert.ok(bucketRoutes.includes(`workspace: '${workspace}'`), `${workspace} has no rail copy`);
+  }
+  // A zone with no store must not have the rail claiming coverage it cannot
+  // produce — the rail is the one element that must never read as more certain
+  // than the body beside it.
+  assert.match(bucketRoutes, /has no store behind it/,
+    'the rail must say when the zone it describes has nothing behind it');
+
+  // Network and Research reach the advisor through the shared shells, which
+  // have passed a rail since the founder pass. What was missing was the route:
+  // bare /network gave an advisor NetworkPage with no shell at all.
+  const app = readRoutesSource();
+  assert.match(app, /effectiveRole === 'advisor' \? <NetworkWorkspace role="advisor" \/>/,
+    'bare /network must give an advisor the zone shell, not the bare page');
+  assert.match(app, /researchRole === 'advisor' \|\| researchRole === 'partner'/,
+    'bare /research must resolve for an advisor rather than redirecting past it');
+});
+
+test('nothing under pages/advisor hand-builds a rail of its own', () => {
+  // The same shape check the founder and investor suites make. Thirty-nine
+  // hand-built rails accumulated across two licences before anything looked
+  // for them by shape rather than by mount.
+  const dir = 'frontend/src/pages/advisor';
+  const own = [];
+  const walk = (rel) => {
+    for (const f of readdirSync(resolve(process.cwd(), rel), { withFileTypes: true })) {
+      if (f.isDirectory()) walk(`${rel}/${f.name}`);
+      else if (f.name.endsWith('.jsx')
+        && /<aside[^>]*className="[^"]*rail/.test(codeOnly(read(`${rel}/${f.name}`)))) {
+        own.push(`${rel}/${f.name}`);
+      }
+    }
+  };
+  walk(dir);
+  assert.deepEqual(own, [], 'these pages hand-build a rail instead of using the shared one');
+});
+
+test('an advisor never gets two headers or two rails on one page', () => {
+  // PR #392 gave AdvisorBucketRoutes the shell's rail, which was the fix — and
+  // missed that AdvisorWorkspaceShell defaults `rail = true` and draws its own
+  // header too. So /expertise/* and advisor /network/* rendered two of each
+  // inside one another. `embedded` is how an inner shell says the outer one
+  // owns the chrome; the investor pages have had this seam since #391.
+  const inner = codeOnly(read('frontend/src/pages/advisor/AdvisorWorkspaceShell.jsx'));
+  assert.match(inner, /embedded = false,/, 'AdvisorWorkspaceShell must accept an embedded flag');
+  assert.match(inner, /if \(embedded\) return/, 'embedded must suppress the header and the rail');
+
+  // Every component the bucket routes mount inside WorkspaceShell must pass it
+  // through, and every mount site must set it.
+  // Expertise is absent from this list because it no longer has an inner shell
+  // to suppress: its five zones are their own body-only pages, checked below.
+  for (const [file, msg] of [
+    ['frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx', 'Practice'],
+    ['frontend/src/pages/NetworkPage.jsx', 'Network'],
+  ]) {
+    const src = codeOnly(read(file));
+    // `{ embedded = false }` exactly would fail the moment the component takes
+    // a second prop — NetworkPage now also takes the zone action row — so what
+    // is asserted is that `embedded` is a destructured prop defaulting to false,
+    // whatever sits beside it.
+    assert.match(src, /\{[^}]*\bembedded = false\b[^}]*\}/, `${msg} must accept embedded`);
+    assert.match(src, /embedded=\{embedded\}/, `${msg} must pass embedded to its inner shell`);
+  }
+  const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.match(bucketRoutes, /<AdvisorAdvisoryWorkspace embedded \/>/,
+    'the Practice workspace carries its own shell and must be mounted embedded');
+  // Bounded to the mount's own tag rather than pinned to its exact spelling:
+  // it grew the partner arm's zone action row and `<NetworkPage embedded />`
+  // stopped matching correct code. `embedded` present is the rule.
+  const netMount = codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx'))
+    .match(/<NetworkPage\b[\s\S]*?\/>/);
+  assert.ok(netMount, 'the shared network shell no longer mounts NetworkPage');
+  assert.match(netMount[0], /\bembedded\b/,
+    'the shared network shell must mount NetworkPage embedded');
+
+  // The Expertise zone pages take the other route to the same guarantee: they
+  // render a BODY and carry no shell of their own, so there is no second
+  // header or rail to suppress. That has to be checked rather than assumed —
+  // a later zone page that reached for AdvisorWorkspaceShell would bring the
+  // double chrome straight back, and it would be mounted with no `embedded`
+  // to catch it.
+  let zoneCount = 0;
+  for (const zoneDir of [
+    'frontend/src/pages/advisor/expertise',
+    'frontend/src/pages/advisor/practice',
+    'frontend/src/pages/advisor/cohorts',
+  ]) {
+    for (const f of readdirSync(resolve(process.cwd(), zoneDir)).filter((x) => x.endsWith('.jsx'))) {
+      zoneCount += 1;
+      const src = codeOnly(read(`${zoneDir}/${f}`));
+      assert.doesNotMatch(src, /AdvisorWorkspaceShell/,
+        `${f} must render a body only — WorkspaceShell above it already draws the chrome`);
+      assert.doesNotMatch(src, /<WorkerRail/,
+        `${f} must not draw a second Worker AI rail`);
+    }
+  }
+  assert.ok(zoneCount >= 10, 'every backed zone has its own page, plus their shared kits');
+});
+
+test('the advisor preview boundary is stated, and covers every surface that renders a practice', () => {
+  // The boundary is right — an admin in View-as-Advisor has picked a role, not
+  // a person, so there is no practice to scope to. Two things were wrong with
+  // how it was enforced: it redirected to /studio with no explanation, which is
+  // indistinguishable from a broken link and was reported as one; and it
+  // covered /advisor/advisory/* and /office-hours while /practice/* and
+  // /expertise/* rendered the same two components ungated.
+  const app = readRoutesSource();
+  // WAS `advisorRolePreview ? <AdvisorPreviewNotice /> : component`. The notice
+  // now sits ABOVE the component instead of replacing it — see the block at the
+  // foot of this test for why, and for what that does NOT give up.
+  assert.match(app, /advisorRolePreview\s*\n?\s*\? <><AdvisorPreviewNotice \/>\{component\}<\/>/,
+    'the gate must state its reason above the workspace, not instead of it');
+  assert.doesNotMatch(app, /advisorRolePreview \? <Navigate to="\/studio"/,
+    'the silent redirect is back');
+
+  // Every Practice and Expertise zone route carries it. Cohorts deliberately
+  // does not: it renders no personal practice, only Lab-sourced empties.
+  const gated = (app.match(/<AdvisorBucketRoutes preview=\{advisorRolePreview\} \/>/g) || []).length;
+  assert.equal(gated, 18, 'every Practice, Expertise and Cohorts route must carry the gate');
+
+  // COHORTS JOINED THE GATE, and the reason it did not before has expired.
+  // It used to render only Lab-sourced empty cards — nothing personal, so
+  // nothing to scope. Founders, This week and Outcomes read the signed-in
+  // user's OWN assignments, and an admin previewing the Advisor role has
+  // selected no person, so they would see "no batch assigned": a boundary
+  // rendered as an absence, which is the defect this whole pass removes.
+  for (const cohortZone of ['/cohorts/founders', '/cohorts/guidance', '/cohorts/this-week',
+    '/cohorts/calendar', '/cohorts/outcomes']) {
+    const line = app.split('\n').find((l) => l.includes(`path="${cohortZone}"`));
+    assert.ok(line && line.includes('preview={advisorRolePreview}'),
+      `${cohortZone} reads the signed-in advisor's own assignments and must be gated`);
+  }
+
+  // AND THE NOTICE IS A LINE ABOVE THE ZONE, NOT THE ZONE.
+  //
+  // What stood here required `if (preview) return <AdvisorPreviewNotice />;`
+  // under the message "the notice must replace the body, not the whole page".
+  // That was one step out of two. Keeping the shell fixed the redirect; the
+  // body was still a card, on twenty routes, and the reader who reported the
+  // redirect reported the card next — "it's unnecessary".
+  //
+  // The `no batch assigned` argument above is not given up by this. It is about
+  // whether the boundary is STATED, so that an admin does not read a boundary
+  // as an absence; it is not about whether the statement takes over the page.
+  // The strip states it, in words, immediately above the zone it applies to,
+  // and the zone renders underneath. Access is untouched — `requireMyAdvisor`
+  // throws for a caller with no advisor row, so the zone draws its own frame
+  // over no rows rather than over someone else's.
+  const routes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.doesNotMatch(routes, /if \(preview\) return <AdvisorPreviewNotice \/>;/,
+    'the notice is replacing the body again — twenty routes, one card, no product');
+  assert.match(routes, /\{preview && <AdvisorPreviewNotice \/>\}\s*\n\s*\{body\}/,
+    'the notice must render above the zone body, and the body must still render');
+
+  // A strip, not a card: the component itself has to be the size that can sit
+  // above eighteen different pages. A `<Card>` cannot, which is how it became
+  // the page in the first place.
+  const notice = codeOnly(read('frontend/src/pages/advisor/AdvisorPreviewNotice.jsx'));
+  assert.doesNotMatch(notice, /<Card\b/, 'the notice is a card again, so it will read as the page');
+  assert.match(notice, /data-testid="advisor-preview-notice"/, 'the notice lost its testid');
+  assert.match(notice, /Impersonate an advisor to open theirs/,
+    'the one thing only this notice says — how to get in — must survive the shrink');
+});
