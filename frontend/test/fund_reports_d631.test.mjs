@@ -94,3 +94,12 @@ test('legacy report dates can be unrecorded and the existing archive renders str
   assert.equal(contents({ note: 'Existing note.' }), 'Existing note.');
   assert.equal(contents({}), 'Source contents not recorded');
 });
+
+test('reports identify the individual empty or undated entry', async () => {
+  const { reportEntryError } = await import('../src/pages/FundReportPeriodPage.jsx');
+  assert.match(reportEntryError('letter', '   '), /paragraph/);
+  assert.match(reportEntryError('developments', { date: '2026-02-30', title: 'Recorded', body: 'Text' }), /date/);
+  assert.match(reportEntryError('developments', { date: '2026-02-28', title: '', body: 'Text' }), /title/);
+  assert.match(reportEntryError('subsequent', { d: '2026-02-28', e: '' }), /text/);
+  assert.equal(reportEntryError('subsequent', { d: '2026-02-28', e: 'Recorded' }), null);
+});

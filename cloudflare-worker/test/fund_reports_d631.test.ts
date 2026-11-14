@@ -133,3 +133,23 @@ test('legacy unset report dates stay unset instead of invented dates',async()=>{
  assert.equal(result.status,200);assert.deepEqual([result.body.period.period_start,result.body.period.period_end],['','']);
  assert.deepEqual(result.body.period.narrative,{letter:[],developments:[],outlook:[],subsequent:[]});
 });
+
+test('draft deletion requires the matching GP and revision, refuses linked packs and issued periods, and audits once', async () => {
+ const f = await fixture();
+ f.db.exec('CREATE TABLE IF NOT EXISTS fund_report_drafts (report_period_id INTEGER)');
+ const { body: { period }} = await f.request('/10/report-periods', 2, 'POST', draft);
+ const path = `/10/report-periods/${period.id}`;
+ const del = (user: number, revision: string) => f.request(path, user, 'DELETE', { revision });
+ assert.equal((await del(4, period.revision)).status, 404);
+ assert.equal((await del(2, 'stale')).status, 409);
+ f.db.prepare('INSERT INTO fund_report_drafts(report_period_id) VALUES(?)').run(period.id);
+ assert.match((await del(2, period.revision)).body.message, /linked to a reporting pack/);
+ f.db.prepare('DELETE FROM fund_report_drafts WHERE report_period_id=?').run(period.id);
+ assert.equal((await del(2, period.revision)).status, 200);
+ assert.equal((await del(2, period.revision)).status, 404);
+ assert.deepEqual(receipts(f.db).filter((r: any) => r.action === 'fund_report_draft_deleted'),
+  [{ action: 'fund_report_draft_deleted', actor: '2', user_id: 2 }]);
+ const issued = await f.request('/10/report-periods', 2, 'POST', {...draft, issue:true});
+ assert.equal(issued.status, 201);
+ assert.equal((await f.request(`/10/report-periods/${issued.body.period.id}`, 2, 'DELETE', { revision: issued.body.period.revision })).status, 409);
+});

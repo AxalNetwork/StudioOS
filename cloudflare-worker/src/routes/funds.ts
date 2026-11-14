@@ -12,7 +12,7 @@ import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
-import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
+import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod,deleteFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator, fundManageScope } from '../services/fundGpAccess';
 import { assertFundAct, assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
@@ -897,6 +897,18 @@ funds.post('/:id/report-periods', async (c) => {
   const result=await saveFundPeriod(c.env,fundId,gp.user.id,body);
   await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:result.period?.id??null});
   return c.json({ok:true,period:result.period},result.created?201:200);
+ }catch(error){return fundReportError(c,error);}
+});
+
+funds.delete('/:id/report-periods/:periodId', async (c) => {
+ try{
+  const fundId=reportId(c.req.param('id')), periodId=reportId(c.req.param('periodId'));
+  if(!fundId||!periodId)throw new FundReportRefusal('not_found',404);
+  const gp=await requireFundGp(c,fundId);
+  await assertFundAct(c,gp,'fund_report.draft');
+  const body=await c.req.json().catch(()=>null);
+  await deleteFundPeriod(c.env,fundId,periodId,gp.user.id,body?.revision);
+  return c.json({ok:true});
  }catch(error){return fundReportError(c,error);}
 });
 

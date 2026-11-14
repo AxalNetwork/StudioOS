@@ -8,6 +8,7 @@ const SENTENCES={
  issued:'This period is issued and cannot be edited. Issue a correcting period instead.',
  conflict:'The period changed or its label is already used. Read it again before saving.',
  correction:'A correcting period must refer to an issued period of this fund.',
+ linked_pack:'This draft is linked to a reporting pack. Resolve the pack before deleting the period.',
  missing:'This reporting period has not been recorded.',
 } as const;
 export class FundReportRefusal extends Error {
@@ -105,4 +106,30 @@ export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:a
  if(Number(results[0].meta.changes)!==1)throw new FundReportRefusal('conflict',409);
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND period=?').bind(fundId,label).first<any>();
  if(!row)throw new Error('Saved report unreadable');return {created:!previous,period:shapeFundPeriod(row)};
+}
+
+
+export async function deleteFundPeriod(env: Env, fundId: number, periodId: number, actorId: number, revision: unknown) {
+ const read = () => env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
+ const row = await read();
+ if(!row)throw new FundReportRefusal('not_found',404);
+ if(row.status!=='draft')throw new FundReportRefusal('issued',409);
+ const current = shapeFundPeriod(row);
+ if(typeof revision!=='string'||revision!==current?.revision)throw new FundReportRefusal('conflict',409);
+ const where = `fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
+   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)`;
+ const args = [fundId,periodId,row.notes,row.updated_at];
+ const results = await env.DB.batch([
+  env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
+   SELECT ?,?,?,? FROM fund_report_periods WHERE ${where}`)
+   .bind('fund_report_draft_deleted',JSON.stringify({fund_id:fundId,period_id:periodId}),String(actorId),actorId,...args),
+  env.DB.prepare(`DELETE FROM fund_report_periods WHERE ${where}`).bind(...args),
+ ]);
+ if(results.length!==2||results.some(r=>r.success!==true)||results[0].meta.changes!==results[1].meta.changes)throw new Error('Report transaction unreadable');
+ if(Number(results[1].meta.changes)===1)return;
+ const latest=await read();
+ if(!latest)throw new FundReportRefusal('not_found',404);
+ if(latest.status!=='draft')throw new FundReportRefusal('issued',409);
+ if(await env.DB.prepare('SELECT 1 FROM fund_report_drafts WHERE report_period_id=? LIMIT 1').bind(periodId).first())throw new FundReportRefusal('linked_pack',409);
+ throw new FundReportRefusal('conflict',409);
 }
