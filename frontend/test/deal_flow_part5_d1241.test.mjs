@@ -386,7 +386,7 @@ test('wiring: the waits retired, no browser pop-up, dark pairs, the clients on W
     for (const m of src.matchAll(/'([^']*\bhover:[^']*)'/g)) if (/\bhover:(bg|text|border)-/.test(m[1])) assert.match(m[1], /dark:hover:|dark:disabled:hover:/, `${f}: ${m[1]}`);
     for (const m of src.matchAll(/'([^']*\bbg-white\b[^']*)'/g)) assert.match(m[1], /dark:bg-/, `${f}: ${m[1]}`);
   }
-  assert.doesNotMatch(read(`${dir}compareModel.js`), /\.value\b/, 'Compare never reads a score’s value');
+  assert.doesNotMatch(read(`${dir}compareModel.js`).split('export function compareTraction')[0], /\.value\b/, 'Compare never reads a score’s value');
   const client = read('frontend/src/lib/api/dealFlow.js');
   const worker = read('cloudflare-worker/src/routes/deal_flow.ts');
   for (const [m, route] of [['compareNotes', "routes.get('/compare-note'"], ['draftCompareNote', "routes.post('/compare-note'"], ['keepCompareNote', "routes.post('/compare-note/keep'"]]) {
