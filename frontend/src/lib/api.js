@@ -609,6 +609,7 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
       // public profile reads) must never trigger an auth-redirect — a 401
@@ -757,7 +758,6 @@ export async function request(path, options = {}) {
       }
       throw e;
     }
-    if (res.status === 204) return null;
     const data = await res.json().catch(() => {
       throw new Error('Invalid response format from server');
     });
