@@ -285,6 +285,7 @@ investorProfile.put('/me', async (c) => {
   const thesis_text = typeof body.thesis_text === 'string'
     ? body.thesis_text.slice(0, 2000).trim() || null : null;
   const thesis_keywords = thesis_text ? extractKeywords(thesis_text) : [];
+  // #6392: new profiles default to 1; the conflict update preserves absent consent atomically.
   const contribute_to_signals = body.contribute_to_signals === undefined
     ? 1 : (body.contribute_to_signals ? 1 : 0);
   const anti_thesis_sectors = asStrArr(body.anti_thesis_sectors, SECTOR_OPTIONS);
@@ -349,7 +350,7 @@ investorProfile.put('/me', async (c) => {
       ticket_max_usd = excluded.ticket_max_usd,
       thesis_text = excluded.thesis_text,
       thesis_keywords_json = excluded.thesis_keywords_json,
-      contribute_to_signals = excluded.contribute_to_signals,
+      contribute_to_signals = CASE WHEN ? = 1 THEN investor_profiles.contribute_to_signals ELSE excluded.contribute_to_signals END,
       anti_thesis_sectors_json = excluded.anti_thesis_sectors_json,
       anti_thesis_stages_json = excluded.anti_thesis_stages_json,
       value_weights_json = excluded.value_weights_json,
@@ -368,12 +369,12 @@ investorProfile.put('/me', async (c) => {
     thesis_text, JSON.stringify(thesis_keywords), contribute_to_signals,
     JSON.stringify(anti_thesis_sectors), JSON.stringify(anti_thesis_stages), JSON.stringify(value_weights),
     accreditation_status, country, firm_name, lp_intent, lp_target_usd, notes,
-    completed_at, user.id,
+    completed_at, user.id, body.contribute_to_signals === undefined ? 1 : 0,
   ).run();
 
   try {
     const sql = getSQL(c.env);
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('investor_profile_updated', ${`Investor profile updated (sectors=${sectors.length}, stages=${stages.length}, anti=${anti_thesis_sectors.length}, contribute=${contribute_to_signals})`}, ${await hashEmail(user.email)}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('investor_profile_updated', ${`Investor profile updated (sectors=${sectors.length}, stages=${stages.length}, anti=${anti_thesis_sectors.length}, contribute=${body.contribute_to_signals === undefined ? 'unchanged' : contribute_to_signals})`}, ${await hashEmail(user.email)}, ${user.id})`;
   } catch {}
 
   const row = await c.env.DB.prepare(
