@@ -1,3 +1,4 @@
+/** D5979 (#5979): deduplicate section incidents and deliver fenced updates to their verified Slack thread. */
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import { sendVerifiedSection } from './sectionSlackPreview';
@@ -30,8 +31,6 @@ const identifier = /^[a-zA-Z0-9_.:-]{1,160}$/;
 const validSection = (section: string) => section.length <= 80 && sectionPattern.test(section);
 const maxAttempts = 5;
 const retryBase = 15 * 60 * 1000;
-const pending = `channel_id IS NULL OR checkpoint < occurrence_total
-  OR posted_version IS NOT version OR recovered > recovery_posted`;
 
 /** The request only registers a background write. Storage errors stay in that task. */
 export function enqueueSectionIncident(
@@ -65,20 +64,21 @@ async function storeObservation(env: Env, event: Observation) {
           recovered = MAX(recovered, ?),
           impacted_sections = CASE WHEN ? = '[]' THEN impacted_sections ELSE ? END
       WHERE episode_id = ? AND fingerprint = ? AND section_slug = ?
-        AND NOT EXISTS (SELECT 1 FROM section_incident_observations WHERE episode_id = ? AND event_id = ?)`)
+        AND NOT EXISTS (SELECT 1 FROM section_incident_observations o WHERE o.episode_id = ? AND o.event_id = ?)`)
       .bind(event.kind === 'version' ? event.version : null, event.kind === 'version' ? event.version : null,
         Number(event.kind === 'recovery'), JSON.stringify(impacted), JSON.stringify(impacted),
         event.episodeId, event.fingerprint, event.section, event.episodeId, event.eventId),
     env.DB.prepare(`INSERT INTO section_incident_observations (episode_id, event_id, kind)
       SELECT episode_id, ?, ? FROM section_incident_outbox WHERE episode_id = ? AND fingerprint = ? AND section_slug = ?
-      ON CONFLICT (episode_id, event_id) DO NOTHING`)
+      ON CONFLICT DO NOTHING`)
       .bind(event.eventId, event.kind, event.episodeId, event.fingerprint, event.section),
     env.DB.prepare(`UPDATE section_incident_outbox SET occurrence_total =
-      (SELECT COUNT(*) FROM section_incident_observations WHERE episode_id = ? AND kind = 'occurrence')
+      (SELECT COUNT(*) FROM section_incident_observations o WHERE o.episode_id = ? AND o.kind = 'occurrence')
       WHERE episode_id = ? AND fingerprint = ? AND section_slug = ?`)
       .bind(event.episodeId, event.episodeId, event.fingerprint, event.section),
     env.DB.prepare(`UPDATE section_incident_outbox SET state = 'pending'
-      WHERE episode_id = ? AND state = 'delivered' AND (${pending})`).bind(event.episodeId),
+      WHERE episode_id = ? AND state = 'delivered' AND (channel_id IS NULL OR checkpoint < occurrence_total
+          OR posted_version IS NOT version OR recovered > recovery_posted)`).bind(event.episodeId),
   ]);
 }
 
@@ -126,7 +126,8 @@ export async function drainSectionIncidents(env: Env, now = new Date()) {
           attempts = 0, next_at = 0, last_reason = NULL WHERE episode_id = ? AND claim_token = ?`)
           .bind(message.checkpoint ?? episode.checkpoint, message.version ?? episode.posted_version,
             message.recovery ?? episode.recovery_posted, outcome.channel, outcome.ts, episode_id, token),
-        env.DB.prepare(`UPDATE section_incident_outbox SET state = CASE WHEN (${pending}) THEN 'pending' ELSE 'delivered' END,
+        env.DB.prepare(`UPDATE section_incident_outbox SET state = CASE WHEN (channel_id IS NULL OR checkpoint < occurrence_total
+          OR posted_version IS NOT version OR recovered > recovery_posted) THEN 'pending' ELSE 'delivered' END,
           claim_token = NULL, lease_until = NULL WHERE episode_id = ? AND claim_token = ?`).bind(episode_id, token),
       ]);
       continue;
