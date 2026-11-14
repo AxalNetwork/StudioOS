@@ -60,6 +60,15 @@ export type BranchHealth = {
   db_ok: boolean;
   /** Set when WORKER_DEPLOY_VERSION is bound on this Worker; else null. */
   deploy_version: string | null;
+  /**
+   * D5925 (#5925): the HQ revision this branch's own licence copy holds
+   * (`branch_licence.hq_revision`), read from the branch's table rather than
+   * remembered from a push answer. Null when the branch holds no numbered copy.
+   * A build before D5925 omits the key, and HQ reads that as "does not report".
+   */
+  licence_revision?: number | null;
+  /** D5925: whether that copy is complete or was written in part (#4686's `copy_state`); null when not recorded. */
+  licence_copy_state?: 'complete' | 'partial' | null;
   /** Present only when something is wrong; never a stack trace. */
   detail?: string;
 };
@@ -109,16 +118,26 @@ function requireBranch(env: Env): string {
 const nowIso = () => new Date().toISOString();
 
 /** The singleton licence copy's status and age, or nulls. Never throws. */
-async function licenceCopy(env: Env): Promise<{ status: string | null; pushed_at: string | null }> {
+async function licenceCopy(env: Env): Promise<{ status: string | null; pushed_at: string | null; revision: number | null; copy_state: 'complete' | 'partial' | null }> {
+  // D5925: the revision and copy state are read on their own, so a branch
+  // whose table predates those columns still answers its status and age.
+  let revision: number | null = null;
+  let copy_state: 'complete' | 'partial' | null = null;
+  try {
+    const r = await env.DB.prepare('SELECT hq_revision, copy_state FROM branch_licence WHERE id = 1')
+      .first<{ hq_revision: number | null; copy_state: string | null }>();
+    revision = r && Number.isSafeInteger(Number(r.hq_revision)) && Number(r.hq_revision) > 0 ? Number(r.hq_revision) : null;
+    copy_state = r?.copy_state === 'complete' || r?.copy_state === 'partial' ? r.copy_state : null;
+  } catch { /* columns not applied on this branch: not recorded */ }
   try {
     const row = await env.DB.prepare('SELECT status, pushed_at FROM branch_licence WHERE id = 1')
       .first<{ status: string; pushed_at: string }>();
-    return { status: row?.status ?? null, pushed_at: row?.pushed_at ?? null };
+    return { status: row?.status ?? null, pushed_at: row?.pushed_at ?? null, revision, copy_state };
   } catch {
     // Migration 256 not applied, or the push has not happened. Both read as
     // "no copy", which the caller renders as a provisioning state rather than
     // as a licence that does not exist.
-    return { status: null, pushed_at: null };
+    return { status: null, pushed_at: null, revision: null, copy_state: null };
   }
 }
 
@@ -147,6 +166,8 @@ export async function branchHealth(env: Env): Promise<BranchAnswer<BranchHealth>
     db_ok: dbOk,
     licence_status: licence.status,
     licence_pushed_at: licence.pushed_at,
+    licence_revision: licence.revision,
+    licence_copy_state: licence.copy_state,
     deploy_version: deployVersion,
     ...(detail ? { detail } : {}),
     branch,

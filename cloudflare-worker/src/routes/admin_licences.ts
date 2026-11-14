@@ -126,7 +126,7 @@ r.get('/:uid', async (c) => {
     return c.json({
       ...full,
       events: events.results || [],
-      sync: await syncSummary(c.env, licence.id),
+      sync: await syncSummary(c.env, licence.id, licence.uid),
       blockers: await activationBlockers(c.env, licence),
       holds_territory: HOLDS_TERRITORY.includes(licence.status),
       deployment,
