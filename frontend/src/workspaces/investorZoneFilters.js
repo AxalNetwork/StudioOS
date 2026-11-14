@@ -37,10 +37,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * working code.
  */
 
-// `/funds/ledger` fails for one reason across several filters, so the reason
-// is written once and shared by every entry it covers rather than restated per
-// label. (`/funds/calls` shared one too, until D371 built its ledger.)
-const NO_LEDGER_LINES = 'the operational ledger has its own fund and period controls below; LP accounts receive summaries, and only the assigned administrator or an admin may read journal lines';
+// `/funds/ledger` (D6231): Journal and Fees are live views, locked with one
+// shared reason for a reader who is not the fund's administrator; Audit trail
+// has no read behind it. (`/funds/calls` shared a reason too, until D371 built
+// its ledger.)
+export const LEDGER_LINES_LOCKED = 'only the fund’s assigned administrator or an admin reads journal lines and fees; your access reads the summary';
+const NO_LEDGER_AUDIT = 'no audit-trail read exists for the operational ledger; each posted journal line already names who recorded it';
 // `/network/relationships`. Going cold reads `partner_interactions` (the log's
 // MAX). LPs stay unbuilt: an LP register is a fund record, not a relationship.
 const NO_LP_RELATIONSHIP =
@@ -146,11 +148,14 @@ export const INVESTOR_ZONE_FILTERS = {
 
   // `Summary` is real — it reads the fund analytics totals. The other three
   // reached a panel that told you so only after you clicked.
+  // D6231 (#6231): the header row is the ledger panel's one view control.
+  // Journal and Fees are live for the fund's administrator; the page locks
+  // them, with LEDGER_LINES_LOCKED, for a reader who gets the summary only.
   'funds/ledger': [
     { canvas: 'Summary', key: 'summary' },
-    { canvas: 'Journal', unbuilt: NO_LEDGER_LINES },
-    { canvas: 'Fees', unbuilt: NO_LEDGER_LINES },
-    { canvas: 'Audit trail', unbuilt: NO_LEDGER_LINES },
+    { canvas: 'Journal', key: 'journal' },
+    { canvas: 'Fees', key: 'fees' },
+    { canvas: 'Audit trail', unbuilt: NO_LEDGER_AUDIT },
   ],
 
   // Four real predicates over `api.lpReportsList` / `api.fundsReportPeriods`.

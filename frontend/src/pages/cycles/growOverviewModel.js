@@ -13,6 +13,15 @@ export const GROW_AREAS = Object.freeze([
 ]);
 export const growArea = (key = '') => GROW_AREAS.find((a) => a.key === key || a.aliases.includes(key)) || null;
 export const growTabs = (search = '', active = '') => GROW_AREAS.map((a) => ({ key: a.key, name: a.name, href: a.path + projectSearch(search), active: a === growArea(active || '') }));
+const GROW_SUBSECTIONS = [
+  [{ key: 'focus', name: 'Focus' }, { key: 'revenue-and-traction', name: 'KPIs and revenue' }],
+  [{ key: 'customers', name: 'Customers' }, { key: 'product-improvement', name: 'Feedback' }],
+];
+
+export function growSubsections(search, active) {
+  const group = GROW_SUBSECTIONS.find(items => items.some(item => item.key === active));
+  return (group || []).map(item => ({ ...item, href: '/grow/' + item.key + projectSearch(search), active: item.key === active }));
+}
 export const reportingHref = (search = '') => '/grow/reporting' + projectSearch(search);
 
 /** No action survives a loading, refused, unreadable or stale in-flight overview. */
