@@ -17,8 +17,8 @@ const source=path=>readFileSync(new URL('../src/'+path,import.meta.url),'utf8');
 const row={uid:'one',name:'Fixture prospect',company:'Fixture venture',email:'private@example.test',source:'manual',status:'new',utm:{}};
 const summary={available:true,email_reachable:7,opted_in:{whatsapp:2,sms:1},no_consent:3};
 async function setup(Component=CycleRoute,{role='founder',write=role==='founder',permissionFails=false,permissionMalformed=false,tab='prospects',query=''}={}) {
-  const before=globalThis.fetch,calls=[];let revision=0,status='new';
-  globalThis.fetch=async(url,options={})=>{
+  const before=globalThis.fetch,calls=[];let revision=0,status='new',inflight=0;
+  globalThis.fetch=async(url,options={})=>{inflight++;try{
     const path=String(url),method=options.method||'GET',body=options.body?JSON.parse(options.body):null;calls.push({path,method,body});
     let result={};let code=200;
     if(path.includes('/auth/me'))result={id:1,role};
@@ -34,9 +34,14 @@ async function setup(Component=CycleRoute,{role='founder',write=role==='founder'
     else if(path.includes('/grow/prospects?')){const empty=path.includes('source=website');result={available:true,total:empty?0:1+revision,columns:PROSPECT_COLUMNS.map(([key])=>({status:key,count:key===status&&!empty?1+revision:0,cards:key===status&&!empty?[{...row,status}]:[],more:0}))};}
     else if(path.includes('/cycles/grow/campaigns'))result={campaigns:[]};
     return new Response(JSON.stringify(result),{status:code,headers:{'content-type':'application/json'}});
-  };
+  }finally{inflight--;}};
   let ui;
-  try {ui=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role},h(Component,{projectId:7,cycle:'grow',slug:'distribution',tab,campaignNew:tab==='campaigns'}))),`/grow/distribution/${tab==='campaigns'?'campaigns/new':tab}?project_id=7${query}`,{id:1,role});await ui.flush();return {ui,calls,close:async()=>{await ui.unmount();globalThis.fetch=before;__resetEadwynPanelForTest();}};}
+  // The route draws after a chain of reads (auth, the venture, its lazy steps, the pipeline), and every step
+  // below reads again. One flush tick was not always enough on a loaded CI shard, so each flush, click and
+  // fill waits until no read is in flight and a few ticks pass quietly, bounded, before the next assertion.
+  const settled=raw=>async()=>{const end=performance.now()+4000;for(let quiet=0;quiet<3&&performance.now()<end;){await raw.flush();quiet=inflight===0?quiet+1:0;}};
+  const steady=raw=>{const settle=settled(raw),after=fn=>async(...args)=>{await fn(...args);await settle();};return {...raw,flush:settle,click:after(raw.click),fill:after(raw.fill)};};
+  try {ui=steady(await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role},h(Component,{projectId:7,cycle:'grow',slug:'distribution',tab,campaignNew:tab==='campaigns'}))),`/grow/distribution/${tab==='campaigns'?'campaigns/new':tab}?project_id=7${query}`,{id:1,role}));await ui.flush();return {ui,calls,close:async()=>{await ui.unmount();globalThis.fetch=before;__resetEadwynPanelForTest();}};}
   catch(e){await ui?.unmount();globalThis.fetch=before;__resetEadwynPanelForTest();throw e;}
 }
 async function routeContract(Component) {

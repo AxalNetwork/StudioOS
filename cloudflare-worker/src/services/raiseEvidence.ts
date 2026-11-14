@@ -545,6 +545,18 @@ export async function investorEvidence(env:Env,projectId:number,investorUserId:n
   await logOpenEvidence(env,projectId,investorUserId);
   return view;
 }
+/** D6167 (#6167, D4631's `staff` audience): an Admin or an Operating Partner on the deal page reads the projection an
+ *  investor reads, never the founder's own pack: what the founder shared beyond Private, through every grant's folders,
+ *  not as a committed investor. `nda` is the caller's: the admin is exempt, the venture's NDA binds a partner (D4631). */
+const STAFF_AUDIENCE=(staffUserId:number):EvidenceAudience=>({investorUserId:staffUserId,via:[],grantId:null,folders:null,committed:false});
+/** Each staff open is logged as `open_evidence_staff`, apart from investors' `open_evidence`, so the founder's
+ *  "who opened" list (D1266) never counts the studio as an investor. */
+export async function staffEvidence(env:Env,projectId:number,staffUserId:number,nda:boolean){
+  const view=await sharedView(env,projectId,STAFF_AUDIENCE(staffUserId),nda);
+  try{await env.DB.prepare(`INSERT INTO data_room_access_log(project_id,file_id,user_id,action,created_at) VALUES(?,NULL,?,'open_evidence_staff',?)`).bind(projectId,staffUserId,new Date().toISOString()).run();}
+  catch{console.error('[raise_evidence] open_evidence_staff log insert failed');}
+  return {...view,reader:'staff' as const};
+}
 /** The projection an investor reads, and the founder's preview of it: the same rules, with no log. */
 async function sharedView(env:Env,projectId:number,aud:EvidenceAudience,nda:boolean){
   let admitted:CurrentShared[]|null=null,partial=false;

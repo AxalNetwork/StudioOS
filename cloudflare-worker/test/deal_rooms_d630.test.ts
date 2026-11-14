@@ -55,7 +55,7 @@ function freshDb() {
   db.exec('CREATE UNIQUE INDEX idx_deal_invites_pair ON deal_invitations(deal_id, investor_user_id)');
   db.exec(`CREATE TABLE ic_conditions (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, ic_decision_id INTEGER NOT NULL,
     body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL, created_at TEXT,
-    resolved_at TEXT, resolved_by INTEGER)`);
+    resolved_at TEXT, resolved_by INTEGER, owner_user_id INTEGER, owner_label TEXT)`);
   runMigration(db, '335_deal_transfers_and_closing_checklists.sql');
   runMigration(db, '340_deal_transfer_company.sql');
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, investor_tier, investor_subscription_status, investor_dealroom_max)

@@ -280,7 +280,8 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
     writing.current = true; setActionError('');
     try {
       const result = action.key === 'edit'
-        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values)
+        // #6111: with the values the Edit opened with, so an untouched field is not sent.
+        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values, formSpec.current)
         : await cyclesApi.recordAction(cycle, projectId, slug, id, action.key, recordActionBody(action, values));
       if (currentKey.current !== key) return result;
       await finishRecordWrite(result, {
@@ -696,7 +697,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           renderAssistant={uofAssistant}
           fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
-          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values, rowEdit.spec.current)}
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (

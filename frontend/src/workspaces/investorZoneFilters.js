@@ -88,13 +88,6 @@ const NO_ORG_ON_A_RELATIONSHIP =
 // taxonomy on a deal, which the pipeline zone reads and this one does not.
 const KEPT_IN_ANOTHER_STORE =
   'both name records this page never loads: an LP belongs to a fund’s own register, and a pass is a reason stamped on a deal';
-// `/research/library` is a shared surface, so its reasons read the same as
-// founder's — deliberately. One component draws both rows, and a reader moving
-// between licences must not find one absence explained two ways. Ask's
-// `NO_SESSION_RECORD` was the other half of that pairing and is gone from both
-// files together: migration 221 stored the session history it denied.
-const NO_SUCH_KIND =
-  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
 // `/research/markets`. The same absence founder's row states, in this licence's
 // words: all four labels are lifecycle states of a SAVED DEEP-DIVE, which the
 // artboard shows as `Analysis · Method · Run · State`. Two of them look nearly
@@ -250,7 +243,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // Each key narrows a real collection: `scored` and `flags` come from
   // `score_snapshots` (six dimensions, `admin_review_status`, `anomaly_flags`),
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
-  // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
+  // CHECKed pass taxonomy, counted over the firm's own passes
+  // (`GET /api/deals/flow/passes`, D6148).
   // D1260 (#3283): Screening reads the venture scorecard. The canvas's Scored,
   // Rubric and Red flags were the Lab scorer's (a total, six dimensions, its
   // anomaly flags), which investors no longer see; Scorecards is the eleven scopes.
@@ -404,14 +398,13 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Retired', unbuilt: NO_SAVED_DEEP_DIVE },
     { canvas: 'Builder', unbuilt: NO_SAVED_DEEP_DIVE },
   ],
-  // `Diligence` looks like the two live chips partner gets from this same
-  // column and is not one of them. `research_documents.kind` is free text, so
-  // the column check and the write-path check both pass — but the only writer
-  // is the upload form, which offers `Document`, `My playbook` and `About a
-  // client`, and the worker coerces anything else. No row can carry it.
+  // D6282: `Diligence` is live. The upload form offers an investor the
+  // `diligence` kind and the Worker keeps it, so the chip filters on a value a
+  // row can now carry. `Benchmarks` stays off on purpose: a benchmark is a row
+  // in Benchmarking, not a document, and no `benchmark` kind exists.
   'research/library': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Diligence', unbuilt: NO_SUCH_KIND },
+    { canvas: 'Diligence', key: 'diligence' },
     {
       canvas: 'Benchmarks',
       unbuilt: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',

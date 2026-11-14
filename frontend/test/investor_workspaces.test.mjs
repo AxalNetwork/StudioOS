@@ -114,7 +114,7 @@ test('investor-owned deep links keep the investor workspace shell', () => {
   // And the room the redirect's list links into keeps the investor shell.
   assert.match(
     routeBlock(app, '/research/diligence/:grantUid'),
-    /guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceRoom /,
+    /adminToResearch\(guard\(\['investor'\], <DiligenceRoom /,
   );
 });
 
