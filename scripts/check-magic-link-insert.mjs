@@ -529,6 +529,9 @@ async function main() {
       // status and headers still say plenty — so this never throws upward.
       const body = await res.text().catch(() => '');
       refusal = describeRefusal({ status: res.status, headers: res.headers, body });
+      if (process.env.GITHUB_ACTIONS === 'true' && refusal.origin === 'edge' && refusal.status === 403) {
+        console.log('::notice title=StudioOS auth probe::edge-refused');
+      }
       console.error(`check-magic-link-insert: /magic/start REFUSED — ${refusal.line}`);
       if (refusal.snippet) console.error(`  body: ${refusal.snippet}`);
       console.error(`  ${refusal.reading}`);

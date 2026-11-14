@@ -235,3 +235,7 @@
 - name: "security-scan"
   color: "BFDADC"
   description: "Run CodeQL and Semgrep on this PR regardless of changed paths"
+
+- name: "workflow-failure"
+  color: "B60205"
+  description: "Repair issue for a verified GitHub Actions workflow failure"

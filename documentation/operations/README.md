@@ -51,3 +51,4 @@ and a link in `documentation/README.md`.
 | `CLOUDFLARE_DELIVERY_5671.md` | D5671: private registry/secret setup, connectivity versus receipts, canary, fallback and rollback. |
 | `AGENT_COMPUTE_4557.md` | D4557: local image evidence, immutable scheduling gate, preview acceptance and rollback. |
 | `WORKFLOW_SLACK_6370.md` | D6370: configure the sender, validate a workflow attempt and pause delivery. |
+| `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |
