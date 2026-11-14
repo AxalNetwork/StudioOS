@@ -8,6 +8,7 @@ export class SlackOutbox {
   constructor({ sql, transaction, registry, deliver, now = Date.now, jitter = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * 250 }) {
     this.sql = sql; this.transaction = transaction; this.registry = registryOf(registry); this.deliver = deliver; this.now = now; this.jitter = jitter; this.busy = false;
     sql.exec('CREATE TABLE IF NOT EXISTS outbox (logical_key TEXT PRIMARY KEY, channel TEXT NOT NULL, role TEXT NOT NULL, priority INTEGER NOT NULL, state TEXT NOT NULL, not_before INTEGER NOT NULL, payload TEXT NOT NULL)');
+    sql.exec("CREATE INDEX IF NOT EXISTS outbox_runnable_role ON outbox(role, not_before) WHERE state IN ('pending', 'retry')");
     sql.exec('CREATE TABLE IF NOT EXISTS activity (event_key TEXT PRIMARY KEY, bucket INTEGER NOT NULL, payload TEXT NOT NULL, chunk_key TEXT)');
     sql.exec('CREATE TABLE IF NOT EXISTS subjects (subject_key TEXT PRIMARY KEY, revision INTEGER NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS pacing (channel TEXT PRIMARY KEY, not_before INTEGER NOT NULL)');
@@ -16,9 +17,9 @@ export class SlackOutbox {
     for (const r of sql.exec("SELECT logical_key, payload FROM outbox WHERE state = 'sending'").toArray()) { const p = JSON.parse(r.payload); this.save(r.logical_key, { ...p, code: 'restart_after_send_started' }, 'ambiguous'); }
   }
   save(key, value, state, notBefore = 0) { this.sql.exec('UPDATE outbox SET payload = ?, state = ?, not_before = ? WHERE logical_key = ?', JSON.stringify(value), state, notBefore, key); }
-  insert({ key, role, text, parent = null, operation = 'post', priority = 10, items = [] }) {
+  insert({ key, role, text, parent = null, operation = 'post', priority = 10, items = [], createdAt = this.now() }) {
     const channel = this.registry.channels[role]; if (!channel) throw new Error('destination_unapproved');
-    this.sql.exec('INSERT OR IGNORE INTO outbox (logical_key, channel, role, priority, state, not_before, payload) VALUES (?, ?, ?, ?, ?, ?, ?)', key, channel.id, role, priority, 'pending', 0, JSON.stringify({ schema: 1, key, role, text, parent, operation, items, attempts: 0, createdAt: this.now(), registryVersion: this.registry.version }));
+    this.sql.exec('INSERT OR IGNORE INTO outbox (logical_key, channel, role, priority, state, not_before, payload) VALUES (?, ?, ?, ?, ?, ?, ?)', key, channel.id, role, priority, 'pending', 0, JSON.stringify({ schema: 1, key, role, text, parent, operation, items, attempts: 0, createdAt, registryVersion: this.registry.version }));
     return key;
   }
   enqueueHealth(intent) {
@@ -77,11 +78,14 @@ export class SlackOutbox {
     return due.length;
   }
   get(key) { const r = this.sql.exec('SELECT * FROM outbox WHERE logical_key = ?', key).toArray()[0]; return r ? { ...JSON.parse(r.payload), state: r.state, channel: r.channel, notBefore: r.not_before } : null; }
+  enabledRoles() {
+    return JSON.stringify(Object.keys(this.registry.channels).filter(role => this.registry.channels[role].enabled));
+  }
   async tick() {
     if (this.busy) return { state: 'busy' }; this.busy = true;
     try {
       this.flush();
-      const candidates = this.sql.exec("SELECT logical_key, channel, role FROM outbox WHERE state IN ('pending', 'retry') AND not_before <= ? ORDER BY priority, rowid", this.now()).toArray();
+      const candidates = this.sql.exec("SELECT logical_key, channel, role FROM outbox WHERE state IN ('pending', 'retry') AND role IN (SELECT value FROM json_each(?)) AND not_before <= ? ORDER BY priority, rowid", this.enabledRoles(), this.now()).toArray();
       for (const candidate of candidates) {
         const value = this.get(candidate.logical_key), channel = this.registry.channels[value.role];
         if (!channel?.enabled) continue;
@@ -115,12 +119,18 @@ export class SlackOutbox {
   nextWake() {
     let next = Infinity;
     for (const r of this.sql.exec('SELECT bucket FROM activity WHERE chunk_key IS NULL ORDER BY bucket LIMIT 1').toArray()) next = Math.min(next, Math.max(this.now() + 1000, r.bucket + 300000));
-    for (const r of this.sql.exec("SELECT logical_key FROM outbox WHERE state IN ('pending', 'retry')").toArray()) {
-      const value = this.get(r.logical_key), channel = this.registry.channels[value.role];
-      if (!channel?.enabled || value.parent && this.get(value.parent)?.state !== 'acknowledged') continue;
-      const pace = this.sql.exec('SELECT not_before FROM pacing WHERE channel = ?', channel.id).toArray()[0]?.not_before || 0;
-      next = Math.min(next, Math.max(this.now() + 1000, value.notBefore, pace));
-    }
+    // Held routes and blocked replies cannot schedule a send. Compute the first eligible
+    // deadline in SQLite so a disabled workflow backlog does not consume one read per item.
+    const [{ deadline }] = this.sql.exec(`
+      SELECT MIN(MAX(pending.not_before, COALESCE(pacing.not_before, 0))) AS deadline
+      FROM outbox AS pending
+      LEFT JOIN pacing ON pacing.channel = pending.channel
+      LEFT JOIN outbox AS parent ON parent.logical_key = json_extract(pending.payload, '$.parent')
+      WHERE pending.state IN ('pending', 'retry')
+        AND pending.role IN (SELECT value FROM json_each(?))
+        AND (json_extract(pending.payload, '$.parent') IS NULL OR parent.state = 'acknowledged')
+    `, this.enabledRoles()).toArray();
+    if (deadline !== null) next = Math.min(next, Math.max(this.now() + 1000, deadline));
     return Number.isFinite(next) ? next : null;
   }
   summary() {
