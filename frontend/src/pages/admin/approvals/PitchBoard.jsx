@@ -51,7 +51,7 @@ const partnerOf = (p) => p?.partner_company || p?.partner_name || 'The partner';
 
 /** Each state's first page, read alone: its rows, its total and the queue's 30-day attribution. */
 function useStates() {
-  const read = (key) => () => approvalBoardsApi.pitches(key, { limit: PAGE, offset: 0 });
+  const read = (key) => (signal) => approvalBoardsApi.pitches(key, { limit: PAGE, offset: 0, signal });
   const proposed = useLoad(read('proposed'), 'pitches-proposed', { what: 'approvals:comarketing:proposed' });
   const approved = useLoad(read('approved'), 'pitches-approved', { what: 'approvals:comarketing:approved' });
   const published = useLoad(read('published'), 'pitches-published', { what: 'approvals:comarketing:published' });
@@ -260,7 +260,7 @@ export default function PitchBoard({ at }) {
   const [done, setDone] = useState(null);
   const [publish, setPublish] = useState(null);
   const tab = PITCH_TABS.find((t) => t.key === at.tab) || PITCH_TABS[0];
-  const paged = useLoad(() => approvalBoardsApi.pitches(tab.key, { limit: PAGE, offset: page * PAGE }), `pitches-${tab.key}-${page}`, { enabled: page > 0, what: 'approvals:comarketing:page' });
+  const paged = useLoad((signal) => approvalBoardsApi.pitches(tab.key, { limit: PAGE, offset: page * PAGE, signal }), `pitches-${tab.key}-${page}`, { enabled: page > 0, what: 'approvals:comarketing:page' });
   const read = page > 0 ? paged : states[tab.key];
   const from = at.item ? (loc.state?.from || tabPath('co-marketing', 'proposed')) : loc.pathname;
   const count = (k) => {

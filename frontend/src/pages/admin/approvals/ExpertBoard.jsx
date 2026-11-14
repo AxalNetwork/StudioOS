@@ -28,11 +28,12 @@ const NEW_PILL = { label: 'New lane', tone: 'held' };
 export const EXPERT_READ_PAGES = 5;
 
 /** Every expert on the review read, two hundred a page, up to a thousand. */
-export async function readAllExperts(client = approvalBoardsApi) {
+export async function readAllExperts(client = approvalBoardsApi, signal) {
   let items = [];
   let total = null;
   for (let page = 0; page < EXPERT_READ_PAGES; page += 1) {
-    const reply = await client.experts({ state: 'all', limit: 200, offset: page * 200 });
+    signal?.throwIfAborted();
+    const reply = await client.experts({ state: 'all', limit: 200, offset: page * 200, signal });
     const got = Array.isArray(reply?.items) ? reply.items : [];
     items = items.concat(got);
     total = Number.isFinite(Number(reply?.total)) ? Number(reply.total) : null;
@@ -185,7 +186,7 @@ export default function ExpertBoard({ at }) {
   const b = BOARDS['wellbeing-experts'];
   const loc = useLocation();
   const navigate = useNavigate();
-  const read = useLoad(() => readAllExperts(), 'experts', { what: 'approvals:wellbeing' });
+  const read = useLoad((signal) => readAllExperts(approvalBoardsApi, signal), 'experts', { what: 'approvals:wellbeing' });
   const [page, setPage] = useState(0);
   const [done, setDone] = useState(null);
   const tab = EXPERT_TABS.find((t) => t.key === at.tab) || EXPERT_TABS[0];

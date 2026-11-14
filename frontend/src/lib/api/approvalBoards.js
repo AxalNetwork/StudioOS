@@ -29,8 +29,8 @@ const query = (pairs) => {
 };
 
 export const approvalBoardsApi = {
-  testers: ({ status, inProgramme, page, pageSize } = {}) =>
-    request(`/admin/product-testers${query({ status, in_programme: inProgramme, page, page_size: pageSize })}`),
+  testers: ({ status, inProgramme, page, pageSize, signal } = {}) =>
+    request(`/admin/product-testers${query({ status, in_programme: inProgramme, page, page_size: pageSize })}`, { signal }),
   tester: (id) => request(`/admin/product-testers/${enc(id)}`),
   decideTester: (id, action, { note, reason } = {}) => {
     const body = { note: note || null, reason: reason || null };
@@ -41,7 +41,7 @@ export const approvalBoardsApi = {
     if (action === 'remove') return post(`/admin/product-testers/${enc(id)}/remove`, body);
     throw new Error(`Unknown tester decision: ${action}`);
   },
-  pitches: (status, { limit = 25, offset = 0 } = {}) => request(`/comarketing/admin/queue${query({ status, limit, offset })}`),
+  pitches: (status, { limit = 25, offset = 0, signal } = {}) => request(`/comarketing/admin/queue${query({ status, limit, offset })}`, { signal }),
   pitch: (uid) => request(`/comarketing/admin/pitches/${enc(uid)}`),
   decidePitch: (uid, action, { notes, publishedUrl } = {}) => {
     if (action === 'approve') return post(`/comarketing/admin/pitches/${enc(uid)}/approve`, { notes: notes || null });
@@ -49,7 +49,7 @@ export const approvalBoardsApi = {
     if (action === 'publish') return post(`/comarketing/admin/pitches/${enc(uid)}/publish`, { published_url: publishedUrl, notes: notes || null });
     throw new Error(`Unknown pitch decision: ${action}`);
   },
-  experts: ({ state = 'all', limit = 200, offset = 0 } = {}) => request(`/wellbeing/admin/experts${query({ state, limit, offset })}`),
+  experts: ({ state = 'all', limit = 200, offset = 0, signal } = {}) => request(`/wellbeing/admin/experts${query({ state, limit, offset })}`, { signal }),
   expert: (uid) => request(`/wellbeing/admin/experts/${enc(uid)}/review`),
   verifyExpert: (uid, verified, version) => post(`/wellbeing/admin/experts/${enc(uid)}/verify`, verified
     ? { verified: true, credentials_checked: true, expected_version: version }
