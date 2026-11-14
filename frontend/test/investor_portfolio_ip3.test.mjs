@@ -44,6 +44,11 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/investor/InvestorPortfolioValueAdd.jsx');
 const P = codeOnly(PAGE);
+// D4817 part 5 (#5311, PF-05): the page draws in the Portfolio frame, and its
+// pure rules (labels, hours, figures, per-company rollup, the view predicate)
+// moved to `pages/portfolio/valueAddModel.js`. `M` is that model, code only.
+const M = codeOnly(read('frontend/src/pages/portfolio/valueAddModel.js'));
+const PF05 = read('design/incoming/Portfolio v2 Page.dc.html');
 const ROUTE = read('cloudflare-worker/src/routes/portfolio_support.ts');
 // The route ARGUES for its own gate, in a docblock that necessarily says the
 // word `requireAdmin` while being the file that does not use it. `R` is the
@@ -234,12 +239,12 @@ test('all four chips are live and the page implements each one', () => {
   // The shared reason has no uses left and should not linger.
   assert.ok(!FILTERS.includes('NO_SUPPORT_LEDGER'), 'the retired reason constant is back');
 
-  const code = codeOnly(P);
-  assert.match(code, /filter === 'delivered' \? row\.state === 'delivered'/, 'Delivered no longer reads state');
-  assert.match(code, /filter === 'outstanding' \? row\.state === 'promised'/, 'Outstanding no longer reads state');
+  assert.match(M, /filter === 'delivered' \? row\.state === 'delivered'/, 'Delivered no longer reads state');
+  assert.match(M, /filter === 'outstanding' \? row\.state === 'promised'/, 'Outstanding no longer reads state');
+  assert.match(P, /\.filter\(inView\(filter\)\)/, 'the page no longer applies the view predicate');
   // `company` is a VIEW, like IP2's `Rules` — a rollup, not a narrower row set.
-  assert.match(code, /const byCompany = filter === 'company';/, 'the By company view is gone');
-  assert.match(code, /\{byCompany\s*\n?\s*\? <PerCompany/, 'By company no longer swaps the body');
+  assert.match(P, /const byCompany = filter === 'company';/, 'the By company view is gone');
+  assert.match(P, /\{byCompany \? <PerCompany/, 'By company no longer swaps the body');
 });
 
 test('the three ops are wired, and the handler names match what the page passes', () => {
@@ -263,11 +268,11 @@ test('the three ops are wired, and the handler names match what the page passes'
 
 test('an unrecorded hour count is never a zero, on the page or in the total', () => {
   // D56/D68. `null` is "nobody timed this"; `0` is "it took none".
-  assert.match(P, /const hoursLabel = \(value\) => \(value == null \? 'Not recorded'/,
+  assert.match(M, /export const hoursLabel = \(value\) => \(value == null \? NOT_RECORDED/,
     'an untimed entry renders as a number');
   // The strip refuses to print a 0 total when the only reason it is zero is
   // that nothing was timed.
-  assert.match(P, /totals\.entries > 0 && totals\.entries_without_hours === totals\.entries\s*\n?\s*\? 'Not recorded'/,
+  assert.match(M, /if \(entries > 0 && untimed === entries\) return \{ state: 'not_recorded', text: NOT_RECORDED/,
     'a ledger of untimed entries reports 0 hours');
   // The route counts the untimed entries rather than folding them in.
   //
@@ -288,8 +293,7 @@ test('an unrecorded hour count is never a zero, on the page or in the total', ()
   // And the form sends absence as absence.
   assert.match(P, /\.\.\.\(form\.hours === '' \? \{\} : \{ hours: Number\(form\.hours\) \}\)/,
     'the form sends an empty hours field as a value');
-  const panel = fn('PerCompany');
-  assert.match(panel, /row\.entries_without_hours === row\.entries \? 'Not recorded'/,
+  assert.match(M, /hours: Number\(c\.entries_without_hours\) === Number\(c\.entries\)\s*\n\s*\? NOT_RECORDED/,
     'a company whose entries are all untimed shows an hour total');
 });
 
@@ -306,15 +310,19 @@ test('a company is counted as supported only from a recorded entry', () => {
   assert.match(panel, /never because it is in the book, sent an update, or appears in an introduction row/,
     'the counting rule is no longer stated on the page');
   // The strip names the untouched companies, as the artboard does.
-  assert.match(P, /untouched\.map\(\(x\) => x\.name\)\.join\(', '\)/, 'the untouched companies are no longer named');
+  assert.match(M, /untouched\.map\(\(x\) => x\.name\)\.join\(', '\)/, 'the untouched companies are no longer named');
 });
 
 test('an unreadable ledger is not an empty one', () => {
-  assert.match(P, /const unreadable = Boolean\(state\.error\);/, 'the page no longer tracks an unreadable read');
+  // D4817 part 5: each read is the Portfolio model's (loading, ok, unreadable);
+  // `portfolio_value_add_d4817.test.mjs` mounts the page in each state.
+  assert.match(P, /const \{ reads, retry \} = usePortfolioReads\(SOURCES\);/, 'the page no longer tracks its read\'s state');
   assert.match(P, /That is not a claim that no support was given\./,
     'a failed read no longer says what it is not claiming');
-  const ledger = fn('Ledger');
-  assert.match(ledger, /if \(unreadable\) return/, 'the ledger draws its empty state over a failed read');
+  const ledger = fn('Commitments');
+  assert.ok(ledger.indexOf("if (read.state === 'unreadable')") > 0
+    && ledger.indexOf("if (read.state === 'unreadable')") < ledger.indexOf('if (!rows.length)'),
+  'the ledger draws its empty state over a failed read');
   assert.match(ledger, /The ledger is empty because nothing has been logged, not because nothing was done\./,
     'the empty state no longer explains what an empty ledger means');
 });
@@ -340,37 +348,40 @@ test('the AI band is mounted and refuses the four flattering substitutions', () 
 });
 
 test('the strip, the instrument and the header row match the artboard', () => {
-  const board = ip3();
-  const head = /head:\[([^\]]*)\]/.exec(board);
-  assert.ok(head, 'the IP3 artboard no longer declares an instrument head');
-  const columns = head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(columns, ['Company', 'Kind', 'State', 'Hours', 'What happened']);
-  // SCOPED TO THE LEDGER, not to the page. `PerCompany` has a `Hours` column of
-  // its own, so a page-wide `includes` reported the instrument's `Hours` as
-  // present after it had been deleted — the rollup's header stood in for it.
-  // Mutation-checking found exactly that. The artboard's instrument is the
-  // ledger, so the ledger is what has to carry these five.
-  const ledgerBody = fn('Ledger');
-  for (const col of columns) {
-    assert.ok(ledgerBody.includes(`<th>${col}</th>`), `the support ledger lost its ${col} column`);
+  // D4817 part 5 (#5311): PF-05 supersedes IP3's instrument. Its table is
+  // Company · Support item · Owner · State · Created · Delivered · Next /
+  // linked, and its strip the six figures; the build calls Created "Recorded"
+  // (the ledger's `created_at` is when the entry was recorded) and draws
+  // Delivered over every entry (no read carries the Worker's quarter).
+  const start = PF05.indexOf('const valueAdd = () =>');
+  assert.ok(start > 0, 'the PF-05 board is gone from the canvas');
+  const board = PF05.slice(start, PF05.indexOf('\n\n', start));
+  const columns = [...board.matchAll(/<th>([^<]*)<\/th>/g)].map((x) => x[1]).filter(Boolean);
+  assert.deepEqual(columns, ['Company', 'Support item', 'Owner', 'State', 'Created', 'Delivered', 'Next / linked']);
+  const table = fn('Commitments');
+  for (const col of columns.map((c) => (c === 'Created' ? 'Recorded' : c))) {
+    assert.ok(table.includes(`<th scope="col">${col}</th>`), `the commitments table lost its ${col} column`);
   }
-  for (const label of ['Delivered', 'Hours logged', 'Outstanding', 'No support at all']) {
-    assert.ok(P.includes(`label="${label}"`), `the strip lost its ${label} tile`);
+  const strip = [...board.matchAll(/<div><small>([^<]*)<\/small><b/g)].map((x) => x[1]);
+  assert.deepEqual(strip, ['Open commitments', 'In progress', 'Delivered this quarter', 'Introductions made', 'Overdue commitments', 'No support recorded']);
+  for (const label of strip.map((l) => (l === 'Delivered this quarter' ? 'Delivered' : l))) {
+    assert.ok(M.includes(`'${label}'`), `the strip lost its ${label} figure`);
   }
-  const filters = /filters: fil\(\[([^\]]*)\]/.exec(board);
+  const ip3board = ip3();
+  const filters = /filters: fil\(\[([^\]]*)\]/.exec(ip3board);
   for (const label of filters[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''))) {
     assert.ok(FILTERS.includes(`canvas: '${label}'`), `the filter table lost ${label}`);
   }
-  const ops = /ops:\[([^\]]*)\]/.exec(board);
+  const ops = /ops:\[([^\]]*)\]/.exec(ip3board);
   for (const label of ops[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''))) {
     assert.ok(ACTIONS.includes(`label: '${label}'`), `the ops row lost ${label}`);
   }
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Value-add eyebrow is back');
-  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
-  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Value-add desk"/, 'the heading went with the eyebrow');
-  // Three client methods, all against the mounted route.
-  for (const m of ['portfolioSupportList', 'portfolioSupportLog', 'portfolioSupportUpdate']) {
+  // D4817 part 5: the heading and local navigation are the Portfolio frame's.
+  assert.match(P, /<PortfolioFrame\s+tab="value-add"/, 'the page left the Portfolio frame');
+  // Four client methods, all against the mounted route.
+  for (const m of ['portfolioSupportList', 'portfolioSupportLog', 'portfolioSupportUpdate', 'portfolioSupportHistory']) {
     assert.ok(API.includes(`${m}:`), `the ${m} client method is gone`);
   }
 });
@@ -395,12 +406,12 @@ test('a refused write names its own entry and leaves the ledger readable', () =>
   assert.doesNotMatch(move[0], /setState\(\{ loading/, 'a refused write writes over the ledger read again');
   assert.doesNotMatch(move[0], /error: error\?\.message/, 'a refused write is reported as an unreadable ledger again');
   // The notice names the company and offers the next action.
-  assert.match(P, /data-testid=\{`status-ip3-support-\$\{notice\.kind\}`\}/, 'the notice is no longer addressable');
+  assert.match(P, /data-testid=\{`status-va-support-\$\{notice\.kind\}`\}/, 'the notice is no longer addressable');
   assert.match(P, /Reload the ledger/, 'the notice no longer offers a next action');
   // And the row it is about is marked, so a conflict on a long ledger is
   // findable rather than a sentence about an entry the member has to hunt for.
-  assert.match(fn('Ledger'), /noticeFor === row\.uid \? 'is-contested' : undefined/,
-    'the contested row is no longer marked');
+  assert.match(fn('Commitments'), /contested=\{noticeFor === c\.uid\}/, 'the contested row is no longer marked');
+  assert.match(fn('CommitmentRow'), /contested \? 'is-contested' : undefined/, 'the contested row is no longer marked');
   assert.match(rendered(), /company \? `\$\{company\}: ` : ''/, 'the refusal no longer names the record it is about');
 });
 
@@ -414,30 +425,33 @@ test('a transition names the record and the revision it read, and the loser keep
   // On a conflict the server's row replaces the stale one: the page shows the
   // accepted work rather than the copy it opened.
   assert.match(move, /error\?\.code === 'changed_since_open'/, 'the conflict is no longer told apart from any other refusal');
-  assert.match(move, /entries: current\.data\.entries\.map\(\(x\) => \(x\.uid === row\.uid \? \{ \.\.\.x, \.\.\.fresh \} : x\)\),/,
-    'the newer accepted row is no longer adopted');
+  // D4817 part 5: the ledger is read again, so the page shows the accepted row.
+  const conflict = move.slice(move.indexOf("error?.code === 'changed_since_open'"));
+  assert.match(conflict.slice(0, conflict.indexOf('return;')), /reload\(\);/, 'the newer accepted row is no longer read');
+  assert.match(move, /Their change is shown\./, 'the conflict no longer says the accepted change is shown');
   assert.match(move, /Apply yours again if it still applies\./, 'the conflict no longer says what the member can do');
   // One pending save at a time, on both writers.
   assert.match(move, /if \(busy\) return;/, 'a second transition can race the first');
   assert.match(P, /if \(busy\) return; \/\/ D4642/, 'a double-clicked Log support can submit twice');
-  const ledger = fn('Ledger');
+  const ledger = fn('CommitmentRow');
   assert.match(ledger, /disabled=\{!!busy\}/, 'the move buttons are live during a pending save');
-  assert.match(ledger, /onMove\(row, 'delivered'\)/, 'Deliver no longer passes the whole row');
+  assert.match(ledger, /onAsk\(c\.row, 'delivered'\)/, 'Mark delivered no longer passes the whole row');
+  assert.match(ledger, /onConfirm\(c\.row, asking\.next\)/, 'the confirmation no longer passes the whole row');
 });
 
 test('an amendment is attributed on the page, and an unamended entry claims nothing', () => {
-  const ledger = fn('Ledger');
-  assert.match(ledger, /Number\(row\.revision\) > 1/, 'the page no longer tells an amended entry from a fresh one');
+  const ledger = fn('CommitmentRow');
+  assert.match(ledger, /c\.revision > 1/, 'the page no longer tells an amended entry from a fresh one');
   assert.match(ledger, /Not amended since it was recorded/, 'an unamended entry no longer says so');
   assert.match(ledger, /HISTORY_LABEL\[item\.action\]/, "an amendment's own verb is gone");
-  assert.match(P, /const HISTORY_LABEL = \{ amended: 'Amended'/, 'a state-less amendment is labelled as a transition again');
+  assert.match(M, /export const HISTORY_LABEL = \{ amended: 'Amended'/, 'a state-less amendment is labelled as a transition again');
   assert.match(ledger, /a member no longer on the account/, 'an amendment by a departed member reads as unattributed');
   // An unreadable history is not an empty one, and it does not touch the row.
-  const open = /const openHistory = async \(row\) => \{[\s\S]*?\n  \};/.exec(P)[0];
+  const open = /const openHistory = \(row\) => \{[\s\S]*?\n  \};/.exec(P)[0];
   assert.match(open, /if \(history\?\.uid === row\.uid\) \{ setHistory\(null\); return; \}/,
     'a second click re-fetches rather than closing');
-  assert.match(open, /error: error\?\.message \|\| 'This entry\\u2019s history could not be read\.'/,
-    'a failed history read is reported as no amendments');
+  assert.match(P, /\{ uid: row\.uid, loading: false, error: true, items: \[\] \}/, 'a failed history read is reported as no amendments');
+  assert.match(ledger, /open\.error \? <SourceFailure what="This entry’s history"/, 'a failed history read is reported as no amendments');
   assert.match(ledger, /No amendment is recorded\./, 'an empty history is no longer told apart from a failed one');
   assert.ok(API.includes('portfolioSupportHistory:'), 'the history client method is gone');
   assert.match(ROUTE, /r\.get\('\/:uid\/history'/, 'the history read is gone from the route');
