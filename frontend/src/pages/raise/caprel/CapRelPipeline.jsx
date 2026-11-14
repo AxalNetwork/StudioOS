@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PIPELINE_FILTERS, clearFilters, useTabFilters } from './capRelUrlFilters';
@@ -34,10 +35,10 @@ import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.j
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
+const BTN = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[36px] justify-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold disabled:opacity-50';
 const BTN_P = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-violet-700 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500`;
 const BTN_S = `${BTN} border-axal-hairline bg-white text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
 const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
@@ -440,25 +441,27 @@ function List({ items, onOpen, onBulk }) {
           <button type="button" className={BTN_S} onClick={() => setPicked(new Set())}>Clear</button>
         </div>
       ) : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-          <thead><tr className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
-            <th className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
-            {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th key={h} className="px-2 py-2">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
-                <td className="px-2 py-2"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></td>
-                <td className="px-2 py-2"><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
-                <td className="px-2 py-2">{stageLabel(p.stage)}</td>
-                <td className="px-2 py-2">{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
-                <td className="px-2 py-2">{p.next_step || <span className={MUTED}>No next step set</span>}</td>
-                <td className="px-2 py-2 font-mono">{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <ResponsiveRecords>
+          <table role="table" className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+            <thead role="rowgroup"><tr role="row" className={`text-[11px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}>
+              <th role="columnheader" className="w-8 px-2 py-2"><span className="sr-only">Pick</span></th>
+              {['Investor', 'Stage', 'Commitment', 'Next step', 'Due'].map((h) => <th role="columnheader" key={h} className="px-2 py-2">{h}</th>)}
+            </tr></thead>
+            <tbody role="rowgroup">
+              {items.map((p) => (
+                <tr role="row" key={p.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`caprel-row-${p.id}`}>
+                  <td role="cell" className="px-2 py-2"><label className="inline-flex min-h-11 min-w-11 items-center justify-center lg:min-h-0 lg:min-w-0"><input type="checkbox" aria-label={`Pick ${nameOf(p)}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} data-testid={`caprel-pick-${p.id}`} /></label></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Investor</RecordLabel><button type="button" className={`m-0 border-0 bg-transparent p-0 text-left font-semibold ${INK} hover:underline`} onClick={() => onOpen(p)}>{nameOf(p)}</button></td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Stage</RecordLabel>{stageLabel(p.stage)}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Commitment</RecordLabel>{p.stage === 'committed' ? `${statusLabel(p.commit_status)} · ${amountText(p.amount) || 'Amount not recorded'}` : <span className={MUTED}>—</span>}</td>
+                  <td role="cell" className="px-2 py-2"><RecordLabel>Next step</RecordLabel>{p.next_step || <span className={MUTED}>No next step set</span>}</td>
+                  <td role="cell" className="px-2 py-2 font-mono"><RecordLabel>Due</RecordLabel>{p.next_step_due ? String(p.next_step_due).slice(0, 10) : <span className={MUTED}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveRecords>
       </div>
     </div>
   );
