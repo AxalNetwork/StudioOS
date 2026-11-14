@@ -20,7 +20,7 @@
  *   - the expiry rows dropped from the audit: 12, 13.  The UPDATE trigger made a no-op: 12.
  *   - `cost.storageWrites += 1` removed: 13.
  */
-import test, { mock } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
