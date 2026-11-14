@@ -22,3 +22,7 @@ A skill describes how to do a job here; the rules it follows still live in
 force-pushes, edits `main` or dispatches a workflow. `land-pr` is the one skill
 that can end in an agent queueing its own PR, and only by AGENTS.md task-protocol
 step 5: every condition is checked first, and when one fails the owner lands.
+
+A skill describes how to do a job here; the rules it follows still live in
+`AGENTS.md` and `CLAUDE.md`, and win when they disagree. A skill never merges,
+approves, force-pushes or edits `main`.

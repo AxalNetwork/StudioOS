@@ -368,6 +368,8 @@ export interface Env {
   TEAM_AGENTS_ENABLED?: string;
   /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
   AGENT_ENGINE?: string;
+  /** D5624 (#5624): `true` (with the agent engine on) turns on a team's Landing settings; anything else answers 404 `team_landing_off`. */
+  TEAM_LANDING?: string;
   /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
