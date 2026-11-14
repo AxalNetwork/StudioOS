@@ -116,7 +116,7 @@ const GATE = {
   },
   voting: {
     tone: 'green', icon: ShieldCheck, title: 'Full participation active.',
-    body: `You hold allocation and decision rights for Cohort 4, complete reporting access, and follow-on co-invest priority. The allocation window closes ${FUND.demoDay}.`,
+    body: `You hold allocation and decision rights for Cohort 4, complete reporting access, and follow-on co-invest priority. Scheduled demo day: ${FUND.demoDay}.`,
     wrap: 'border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30',
   },
 };
@@ -286,6 +286,12 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   useEffect(() => { load(); }, []);
 
   const derived = useMemo(() => lpAccessState(portal, application), [portal, application]);
+  useEffect(() => {
+    if (hash === '#my-commitment' && (derived.holdings > 0 || err)) {
+      document.getElementById('my-commitment')?.scrollIntoView?.();
+    }
+  }, [hash, derived.holdings, err]);
+
   const state = isAdmin && preview ? preview : derived.state;
   const M = useMemo(() => fundModel(), []);
 

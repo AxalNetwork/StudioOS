@@ -281,6 +281,8 @@ API_KEYS_ENABLED = "false"
 WHATSAPP_CALLS = "false"
 # D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
 WHATSAPP_MCP_SETUP = "off"
+# D5581 part 2 (#5581): WorkGraph leases (WORK_GRAPH_LEASE); "on" only, else every lease call is refused `flag_off`. Off until the owner switches it on.
+WORK_GRAPH_LEASES = "off"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
@@ -476,6 +478,10 @@ class_name = "AgentScope"
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE_SDK"
 class_name = "ScopeAgent"
+# D5581 part 2 (#5581): one WorkGraph lease object per tenant, company and asset; kept apart from #5618's Merge Control. Inert while WORK_GRAPH_LEASES is off.
+[[durable_objects.bindings]]
+name       = "WORK_GRAPH_LEASE"
+class_name = "WorkGraphLease"
 
 [[migrations]]
 tag                = "v1-realtime"
@@ -507,6 +513,10 @@ new_sqlite_classes = ["ScopeAgent"]
 [[migrations]]
 tag = "v7-deck-remote"
 new_sqlite_classes = ["DeckRemote"]
+# D5581 part 2 (#5581): the WorkGraph lease object; append-only.
+[[migrations]]
+tag = "v8-work-graph-lease"
+new_sqlite_classes = ["WorkGraphLease"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -788,6 +798,8 @@ API_KEYS_ENABLED = "false"
 WHATSAPP_CALLS = "false"
 # D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
 WHATSAPP_MCP_SETUP = "off"
+# D5581 part 2 (#5581): WorkGraph leases (WORK_GRAPH_LEASE); "on" only, else every lease call is refused `flag_off`. Off until the owner switches it on.
+WORK_GRAPH_LEASES = "off"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
 # branchOps health returns it so HQ can persist licence_deployments.last_version.
@@ -921,6 +933,10 @@ class_name = "AgentScope"
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE_SDK"
 class_name = "ScopeAgent"
+# D5581 part 2 (#5581): one WorkGraph lease object per tenant, company and asset; kept apart from #5618's Merge Control. Inert while WORK_GRAPH_LEASES is off.
+[[env.production.durable_objects.bindings]]
+name       = "WORK_GRAPH_LEASE"
+class_name = "WorkGraphLease"
 
 [[env.production.migrations]]
 tag                = "v1-realtime"
@@ -949,6 +965,10 @@ new_sqlite_classes = ["ScopeAgent"]
 [[env.production.migrations]]
 tag = "v7-deck-remote"
 new_sqlite_classes = ["DeckRemote"]
+# D5581 part 2 (#5581): the WorkGraph lease object; append-only.
+[[env.production.migrations]]
+tag = "v8-work-graph-lease"
+new_sqlite_classes = ["WorkGraphLease"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -1086,6 +1106,8 @@ API_KEYS_ENABLED = "false"
 WHATSAPP_CALLS = "false"
 # D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
 WHATSAPP_MCP_SETUP = "off"
+# D5581 part 2 (#5581): WorkGraph leases (WORK_GRAPH_LEASE); "on" only, else every lease call is refused `flag_off`. Off until the owner switches it on.
+WORK_GRAPH_LEASES = "off"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
 # `advisor-ongoing-preview`) created in the dashboard. #4566: empty (inert,
@@ -1209,6 +1231,10 @@ class_name = "AgentScope"
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE_SDK"
 class_name = "ScopeAgent"
+# D5581 part 2 (#5581): one WorkGraph lease object per tenant, company and asset; kept apart from #5618's Merge Control. Inert while WORK_GRAPH_LEASES is off.
+[[env.preview.durable_objects.bindings]]
+name       = "WORK_GRAPH_LEASE"
+class_name = "WorkGraphLease"
 
 [[env.preview.migrations]]
 tag                = "v1-realtime"
@@ -1237,6 +1263,10 @@ new_sqlite_classes = ["ScopeAgent"]
 [[env.preview.migrations]]
 tag = "v7-deck-remote"
 new_sqlite_classes = ["DeckRemote"]
+# D5581 part 2 (#5581): the WorkGraph lease object; append-only.
+[[env.preview.migrations]]
+tag = "v8-work-graph-lease"
+new_sqlite_classes = ["WorkGraphLease"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).

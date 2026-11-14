@@ -5,7 +5,7 @@ import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { actRow, refusalText } from './fundAdminModel';
 import { withQuery } from './lpsModel';
-import { Line, NUM, Note, Panel, ReadFailure, Section, TH } from './parts';
+import { Line, NUM, Note, Panel, ReadFailure, Section, TAP, TH } from './parts';
 import { PersonPicker } from './PersonPicker';
 import { ActFlow } from './MoneyFlow';
 import { economicsEffects } from './moneyFlowModel';
@@ -57,7 +57,7 @@ function Err({ text, testId }) {
 function Fact({ k, v, testId }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-axal-hairline px-4 py-2.5 last:border-b-0 sm:px-5 dark:border-gray-800" data-testid={testId}>
-      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{k}</span>
+      <span className="text-[12px] text-axal-muted dark:text-gray-400">{k}</span>
       <span className="min-w-0 break-words text-right text-[12px] font-semibold text-zinc-700 [overflow-wrap:anywhere] dark:text-gray-200">{v ?? <Unrecorded />}</span>
     </div>
   );
@@ -78,7 +78,7 @@ export function FundPage({ apis, access, overview, fundId }) {
   const close = () => { setDialog(null); if (editAsked) navigate(`${location.pathname}${withQuery(location.search, 'edit', undefined)}`, { replace: true }); };
   const done = async (text) => { close(); setNotice(text); await read.reload(); gp.reload(); ledgerAdmin.reload(); };
 
-  const back = <Link className={BTN.link} to="/admin/fund-admin/funds" data-testid="fund-back">← Funds</Link>;
+  const back = <Link className={`${BTN.link} ${TAP}`} to="/admin/fund-admin/funds" data-testid="fund-back">← Funds</Link>;
   if (read.status === 'loading' || read.status === 'idle') {
     return <Section title="Fund" aside={back} testId="fund-page"><Panel label="Fund"><div className="px-4 py-3 sm:px-5"><LoadingRows lines={4} /></div></Panel></Section>;
   }
@@ -244,7 +244,7 @@ export function EconomicsDialog({ apis, access, fund, onClose, onDone }) {
         </div>
         <label className={LABEL}>Reason · required
           <textarea className={`${INPUT} mt-1`} rows={3} maxLength={FUND_REASON_MAX} value={form.reason} onChange={set('reason')} disabled={busy} data-testid="fund-economics-reason" />
-          <span className="mt-1 block text-[11px] font-normal text-axal-muted dark:text-gray-400">Kept on the audit record with the old and new rates.</span>
+          <span className="mt-1 block text-[12px] font-normal text-axal-muted dark:text-gray-400">Kept on the audit record with the old and new rates.</span>
         </label>
         <Err text={error} testId="fund-economics-error" />
         <div className="flex justify-end gap-2">
@@ -327,7 +327,7 @@ export function FactsDialog({ apis, access, fund, onClose, onDone }) {
             </select>
           </label>
         </div>
-        <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">Carry and the management fee change under Economics.</p>
+        <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Carry and the management fee change under Economics.</p>
         <Err text={error} testId="fund-facts-error" />
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN.ghost} onClick={onClose} disabled={busy}>Cancel</button>

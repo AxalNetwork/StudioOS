@@ -2632,6 +2632,21 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 
 Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.
 
+## Landed 2026-11-14 — Validate v2, Build v2, Grow v2, Raise v2, Offers v2, Account v2 and the Network workspace (#4837, #4846, #4861, #4863, #4872, #4955, #4799)
+
+Seven board sets the owner approved on 2026-11-10 and that were never committed, so about twenty build issues waited on them. Six come from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them, byte for byte:
+- **`Validate v2 Page.dc.html`**, **`Validate v2 · Boards.dc.html`**: boards V0 to V16 (D4837).
+- **`Build v2 Page.dc.html`**, **`Build v2 · Boards.dc.html`**: boards BD-0 to BD24, revised 2026-11-09 (D4846).
+- **`Grow v2 Page.dc.html`**, **`Grow v2 · Boards.dc.html`**: boards GR-01 to GR-20 (D4861).
+- **`Raise v2 Page.dc.html`**, **`Raise v2 · Boards.dc.html`**: boards RA-01 to RA-26 and RA-A to RA-D, revised 2026-11-09 (D4863).
+- **`Offers v2 Page.dc.html`**, **`Offers v2 · Boards.dc.html`**: boards OF-01 to OF-10 (D4872).
+- **`Account v2 Page.dc.html`**, **`Account v2 · Boards.dc.html`**: boards AC-0 to AC-11 (D4955).
+
+The seventh is a design of its own, kept in a folder because its files import each other by name:
+- **`network-workspace/`**: `Main.dc.html` (NW1) with `NW1-2-Empty`, `NW2-Relationships`, `NW3-Intro-detail`, `NW5-States`, `NW8-Phone`, `NW10-Dark` and `canvas.json`, which holds the board titles (D4799).
+
+Each decision file records the SHA-256 of what was committed. For Build, Grow, Raise, Offers and Account they equal the digests recorded on the issues on 2026-11-13. None is built as a whole yet. Ventures, people and amounts are sample content.
+
 ## Portfolio audited-gap addendum — owner review required (#4817)
 
 - `Portfolio v2 · Addendum.dc.html` — D4817 review-only collection of additional company rights/reporting/KPI, responsive/dark, source-state and route/access handoff specimens, imported from the existing Portfolio Page. The landed PF boards are retained; production implementation waits for owner review and #5311. See D4817 for the audit-gap map and current backend fit.

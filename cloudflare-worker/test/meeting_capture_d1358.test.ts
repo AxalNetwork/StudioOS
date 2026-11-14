@@ -201,7 +201,8 @@ test('capabilities: connected Zoom imports after the call and says RTMS is not c
   assert.match(meet.reason, /Reconnect Google/);
   assert.deepEqual([teams.connected, teams.can_create_meeting, teams.can_retrieve_transcript, teams.can_join_as_bot], [false, false, false, false]);
   assert.deepEqual(teams.capture_modes, []);
-  assert.match(teams.reason, /no Microsoft Teams connection/);
+  assert.equal(teams.create_available, false, 'D5810: this deployment cannot create Teams meetings');
+  assert.match(teams.reason, /cannot create Teams meetings on this deployment/);
   f.db.prepare('UPDATE google_oauth_tokens SET scope = ? WHERE user_id = ?').run(GOOGLE_MEET_TRANSCRIPT_SCOPE, ME);
   const granted = (await request(f, 'GET', '/meetings/capabilities')).body.providers.google_meet;
   assert.deepEqual([granted.can_retrieve_transcript, granted.reason], [true, null]);

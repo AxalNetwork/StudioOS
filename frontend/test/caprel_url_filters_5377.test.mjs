@@ -258,7 +258,7 @@ test('Commitments: the status and search are the address\'s; reload and Back res
 
   v = await mount(CapRelCommitments, '/raise/capital-relationships/commitments?project_id=3&status=soft&q=north');
   try {
-    assert.deepEqual(v.rows('caprel-commit-row').map((t) => t.split(' ')[0]), ['Northwind']);
+    assert.deepEqual(v.rows('caprel-commit-row').map((t) => t.split(' ').slice(0, 2).join(' ')), ['Investor Northwind']);
     assert.equal(v.prop('caprel-commit-search', 'value'), 'north');
     assert.equal(v.prop('caprel-commit-status', 'value'), 'soft');
     await v.venture(4);
