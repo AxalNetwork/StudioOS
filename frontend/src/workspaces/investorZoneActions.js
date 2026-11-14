@@ -236,17 +236,16 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
     { label: 'Export', kind: 'export' },
   ],
-  // THE DERIVATION NAMED HERE PRODUCES NOTHING, which the filter half of this
-  // row establishes: a relationship stores two account ids, a type and a
-  // free-text `metadata` blob, and the only writer in the product sends
-  // `{partner_id, relationship_type, strength_score}` — no organisation, ever.
-  // "Derived from the relationship book" was true and incomplete; the book has
-  // no organisation to derive one from.
-  // D497 (#1023): where an organisation is recorded (on your side of a tie,
-  // or read from the other person's profile) is question 8 on #1023.
+  // D6258: the list is derived from the relationship book, and since D572
+  // part 3 the book carries each counterpart's own company (`other.company`,
+  // the company they link on their account). So the list is real, and both
+  // ops stay held for what that source is: a company here belongs to the other
+  // person's account, so this page cannot add one, and two entries with the
+  // same name are already one entry, while two spellings are two companies
+  // that only their own members can rename.
   'network/organizations': [
-    { label: 'Add org', unbuilt: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm; where an organisation would be recorded is the owner’s decision, asked on #1023', hover: 'Organisations are not recorded yet: where they would be is not decided.' },
-    { label: 'Merge duplicates', unbuilt: 'no organisation is stored on a relationship, so the list above is empty on every account and has no duplicates to merge; where one would be recorded is the owner’s decision, asked on #1023', hover: 'There are no organisations to merge: where they would be recorded is not decided.' },
+    { label: 'Add org', unbuilt: 'an organisation here is the company the other person links on their own account; nothing on this page can add one for them', hover: 'Each person links their own company on their account.' },
+    { label: 'Merge duplicates', unbuilt: 'the list groups ties by the company name each person links, so one name is already one entry; two spellings are two companies, renamed only by their own members', hover: 'Companies with the same name are already one entry.' },
     { label: 'Export', kind: 'export' },
   ],
 

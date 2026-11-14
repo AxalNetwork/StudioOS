@@ -84,13 +84,24 @@ const relationshipContext = (relationship) => relationship?.context
   || relationship?.metadata?.deal_name
   || relationship?.metadata?.fund_name
   || 'No deal or fund context recorded';
-const orgIdentity = (relationship) => relationship?.organization_name
-  || relationship?.organization?.name
-  || relationship?.other?.organization_name
-  || relationship?.other?.organization?.name
-  || relationship?.metadata?.organization_name
-  || relationship?.metadata?.organization?.name
-  || null;
+/**
+ * The counterpart's own company (D572 part 3, read here since D6258): the
+ * company the other person links on their account (`user_company_links`), the
+ * one they are primary admin of first, else the oldest link. The Worker sends
+ * it as `other.company`, a name or null, read at query time. Null is "not
+ * recorded". A row carrying `companies_unreadable` is a failed read, which
+ * is not the same as no company, so `companiesUnreadable` below is asked
+ * before this is trusted. Nothing here reads a name or an email domain.
+ */
+const orgIdentity = (relationship) => {
+  const name = relationship?.other?.company;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+};
+const companiesUnreadable = (rows) => Array.isArray(rows) && rows.some((row) => row?.companies_unreadable === true);
+/** The Person row's company line: the name, "Not recorded", or the failed read said as one. */
+const companyLine = (relationship) => (relationship?.companies_unreadable === true
+  ? 'Company could not be read'
+  : orgIdentity(relationship) || 'Not recorded');
 const introductionContext = (prop) => {
   const reasons = Array.isArray(prop?.breakdown?.reasons) ? prop.breakdown.reasons : [];
   const reason = reasons.map((item) => typeof item === 'string' ? item : item?.reason || item?.label || item?.detail).find(Boolean);
@@ -270,8 +281,14 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // The `Asked` view's rows: this investor's own asks, newest first as the
   // route returns them.
   const askRows = asks || [];
+  // D6258: the companies read failed, said once for the section and the rows.
+  const orgsUnreadable = companiesUnreadable(relationships);
+  // The Organizations row's one live chip (D6258): `All` is every company a
+  // counterpart links, which is the whole list below, so it narrows nothing
+  // and is always the view shown. The other four keep their reasons.
+  const [orgView, setOrgView] = useState('all');
   const organizations = useMemo(() => {
-    if (!relationships) return [];
+    if (!relationships || orgsUnreadable) return [];
     const grouped = new Map();
     relationships.forEach((item) => {
       const name = orgIdentity(item);
@@ -284,7 +301,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       grouped.set(name, entry);
     });
     return [...grouped.values()].sort((a, b) => b.people.size - a.people.size || a.name.localeCompare(b.name));
-  }, [relationships]);
+  }, [relationships, orgsUnreadable]);
   // #4611 finding 7, same shape one section down: six rows were drawn under a
   // heading that counted every organisation. The zone pages; the overview
   // previews and says so.
@@ -458,7 +475,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 : errors.relationships ? 'last-touch coverage unavailable'
                   : touchCoverage ? `${coldCount} going cold` : 'no touches logged yet';
               return `${ties} ties · ${touch}`;
-            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView, counts: { cold: coldCount } }) : []} actions={investorZoneActions('network/relationships', { handlers: { setReminders: setRemindersOp }, view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), companyLine(r), r.relationship_type] } })} />
             <p className="inw-footnote" data-testid="tile-coldest">
               Coldest {relationships === null ? '— loading' : coldest == null ? '— not recorded (no tie is past the cold window)' : `— ${coldest}d`}
             </p>
@@ -485,7 +502,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
                 {visibleRelationships.map((item) => <div key={item.id}>
                   <div className="inw-table-row max-sm:grid-cols-2!" data-testid={`row-relationship-${item.id}`}>
-                    <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
+                    <strong data-label="Person">{personName(item)}<span className="block font-normal text-[10px] opacity-75" data-testid={`text-relationship-company-${item.id}`}>{companyLine(item)}</span></strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
                     <span data-label="Strength"><i className={`inw-strength ${coldIds.has(item.id) ? 'inw-cold' : Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{coldIds.has(item.id) ? 'Going cold' : Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
                     <span data-label="Context" className="inw-context">{relationshipContext(item)}</span>
                     <time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > COLD_AFTER_DAYS ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
@@ -582,10 +599,18 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
             </section>}
 
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
-              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => (visibleOrganizations.length >= organizations.length
-                ? `${organizations.length} relationship-backed organizations`
-                : `${visibleOrganizations.length} of ${organizations.length} relationship-backed organizations shown`))} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
-              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{visibleOrganizations.map((org) => <div className="inw-org" style={{ flexWrap: 'wrap' }} key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b>{introAction([...org.introTargets.values()])}</div>)}</div>}
+              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => (orgsUnreadable ? 'Companies unreadable'
+                : visibleOrganizations.length >= organizations.length
+                  ? `${organizations.length} relationship-backed organizations`
+                  : `${visibleOrganizations.length} of ${organizations.length} relationship-backed organizations shown`))} role={role} filters={zoneFilters ? zoneFilters({ value: orgView, onChange: setOrgView }) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
+              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : orgsUnreadable ? (
+                <div className="inw-alert" role="status" data-testid="status-organizations-unreadable">
+                  <CircleAlert size={14} />
+                  <span>Your counterparts’ companies could not be read. This is not a claim that none are recorded.{' '}
+                    <button type="button" className="underline" onClick={() => load()} disabled={refreshing} data-testid="button-organizations-retry">Try again</button>
+                  </span>
+                </div>
+              ) : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">None of the people you have a tie with links a company on their account yet.</div> : <div className="inw-org-list">{visibleOrganizations.map((org) => <div className="inw-org" style={{ flexWrap: 'wrap' }} key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b>{introAction([...org.introTargets.values()])}</div>)}</div>}
               {moreOrganizations > 0 ? (inOrgZone ? (
                 <div className="inw-prop-actions" data-testid="organizations-more">
                   <button type="button" onClick={() => setOrgShown((n) => n + ORGANIZATION_PAGE)}>
@@ -597,7 +622,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                   <Link to="/network/organizations">{`Open Organizations to see all ${organizations.length}`}</Link>
                 </p>
               )) : null}
-              <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
+              <p className="inw-footnote" data-testid="text-organizations-source">An organization here is the company the other person links on their own account, read as it stands now. A tie whose counterpart links none is not grouped. Names and email domains are never used to infer a firm.</p>
             </section>}
           </div>}
         </section>
