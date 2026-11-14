@@ -6,6 +6,8 @@ import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
 import { ProRataPanel } from '../RoundClosesPanel';
 import { Dialog, Footer, useWrite } from './CapRelPipeline';
+import CapRelExportMenu from './CapRelExportMenu.jsx';
+import { commitmentsCsv } from './capRelExports.js';
 import { CLOSING, amountText, centsText, tabHref } from './capRelModel';
 import { COMMITMENT_FILTERS, useTabFilters } from './capRelUrlFilters';
 import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, roundBody, sourceGaps } from './capRelTabsModel';
@@ -43,19 +45,20 @@ const STATUS_TONE = {
   not_recorded: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
 };
 
-function useRead(fn, deps) {
+function useRead(fn, projectId) {
   const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', data: null });
+  const [read, setRead] = useState({ status: 'loading', data: null, projectId });
   useEffect(() => {
     let alive = true;
-    setRead((r) => ({ status: 'loading', data: r.data }));
+    setRead((r) => ({ status: 'loading', data: r.projectId === projectId ? r.data : null, projectId }));
     Promise.resolve().then(fn)
-      .then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', data: null }); });
+      .then((data) => { if (alive) setRead({ status: 'ready', data, projectId }); })
+      .catch(() => { if (alive) setRead({ status: 'unreadable', data: null, projectId }); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, n]);
-  return { ...read, reload: () => setN((x) => x + 1) };
+  }, [projectId, n]);
+  const own = read.projectId === projectId ? read : { status: 'loading', data: null };
+  return { ...own, reload: () => setN((x) => x + 1) };
 }
 
 /** Round settings (CRL10): name, target, currency, close date, notes and (D4086) the exemption; the change shows in Activity. */
@@ -223,7 +226,7 @@ function Every({ read, f, setF }) {
 }
 
 function Closes({ projectId }) {
-  const read = useRead(() => api.raiseCloses(projectId), [projectId]);
+  const read = useRead(() => api.raiseCloses(projectId), projectId);
   const [dialog, setDialog] = useState(null);
   const closes = read.data?.closes || [];
   const money = (v) => amountText(v) || 'Not recorded';
@@ -272,7 +275,7 @@ function Mercury({ read }) {
 }
 
 export default function CapRelCommitments({ projectId, search = '' }) {
-  const read = useRead(() => capitalRelationshipsApi.commitments(projectId), [projectId]);
+  const read = useRead(() => capitalRelationshipsApi.commitments(projectId), projectId);
   const [filters, setFilters] = useTabFilters(COMMITMENT_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
   const [err, setErr] = useState('');
@@ -281,7 +284,8 @@ export default function CapRelCommitments({ projectId, search = '' }) {
     <div className="flex flex-col gap-4" data-testid="caprel-commitments">
       <div className="flex flex-wrap items-center gap-2">
         <p className={`m-0 mr-auto text-[13px] ${INK}`}><Link to={tabHref(CLOSING, search)} className="font-semibold underline" data-testid="caprel-closing-door">Open the closing room</Link> for the paper, the lines and what is received.</p>
-        <button type="button" className={BTN_S} onClick={() => setDialog('round')} data-testid="caprel-round-open">Round settings</button>
+        <CapRelExportMenu zone="commitments" csv={read.status === 'ready' ? commitmentsCsv(read.data) : null}
+          buttonClass={BTN_S} otherLabel="Round settings" otherTestId="caprel-round-open" onOther={() => setDialog('round')} />
       </div>
       {err ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="caprel-commitments-error">{err}</p> : null}
       {read.status === 'unreadable' ? <Unreadable what="The commitments" claim="This is not a claim that nobody committed." onRetry={read.reload} /> : null}

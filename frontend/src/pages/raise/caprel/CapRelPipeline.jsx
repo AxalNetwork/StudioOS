@@ -12,6 +12,8 @@ import {
   importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
+import CapRelExportMenu from './CapRelExportMenu.jsx';
+import { pipelineCsv } from './capRelExports.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
 import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -519,8 +521,9 @@ export default function CapRelPipeline({ projectId, search = '' }) {
         </div>
         <div className="flex gap-2">
           <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'proposals' })} data-testid="caprel-proposals-open">Eadwyn’s proposals</button>
-          <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })} data-testid="caprel-import">Import</button>
           <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })} data-testid="caprel-add">Add investor</button>
+          <CapRelExportMenu zone="pipeline" csv={read.status === 'ready' ? pipelineCsv(items) : null}
+            buttonClass={BTN_S} otherLabel="Import investors" otherTestId="caprel-import" onOther={() => setDialog({ kind: 'import' })} />
         </div>
       </div>
 
