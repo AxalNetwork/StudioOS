@@ -126,8 +126,10 @@ export function Skeleton({ rows = 3 }) {
  * The performance summary (`performanceOf`): NAV with mark coverage, the
  * multiples and flows with their definitions, the companies count, and the
  * basis strip. `methodologyTo` is where the strip's Methodology goes.
+ * `change` (D6207) is a node drawn under the hero NAV — the Overview's change
+ * since the last quarter-end — and is never drawn when the hero failed.
  */
-export function PerformanceSummary({ perf, onRetry, loading, methodologyTo = '/portfolio/performance' }) {
+export function PerformanceSummary({ perf, onRetry, loading, change = null, methodologyTo = '/portfolio/performance' }) {
   if (loading) return <section className="pf-card"><Skeleton rows={2} /></section>;
   const failed = perf.nav.state === 'unreadable';
   return (
@@ -140,6 +142,7 @@ export function PerformanceSummary({ perf, onRetry, loading, methodologyTo = '/p
         ) : (
           <>
             {perf.nav.state === 'not_recorded' ? <span className="pf-sub">{perf.nav.reason}</span> : null}
+            {change}
             {perf.coverage ? <span className="pf-sub" data-testid="portfolio-mark-coverage">{perf.coverage}</span> : null}
             {perf.atCost.map((t) => <span key={t} className="pf-sub">{t}.</span>)}
           </>
