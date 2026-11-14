@@ -44,6 +44,13 @@ const worker = raw('cloudflare-worker/src/routes/partner_pipeline.ts');
 const filters = read('frontend/src/workspaces/partnerZoneFilters.js');
 const actions = read('frontend/src/workspaces/partnerZoneActions.js');
 const spec = raw('cloudflare-worker/src/routes/research.ts');
+const sheet = read('frontend/src/pages/partner/pipeline/NegotiationTermsSheet.jsx');
+// D5938: the board this zone is drawn to now, `Pipeline v2` PP05 and PP05b.
+const V2 = raw('design/incoming/Pipeline v2 Page.dc.html');
+const PP05 = V2.slice(V2.indexOf('/* ---------- P3 negotiations ---------- */'), V2.indexOf('const negSheet = '));
+const SHEET_CANVAS = V2.slice(V2.indexOf('const negSheet = '), V2.indexOf("</aside>';", V2.indexOf('const negSheet = ')));
+assert.ok(PP05.includes('const NEG = {'), 'the PP05 board could not be found in the canvas');
+assert.ok(SHEET_CANVAS.includes('cmp3'), 'the PP05b sheet could not be found in the canvas');
 
 const P3 = CANVAS.slice(
   CANVAS.indexOf('<section class="ab" id="p3">'),
@@ -99,63 +106,48 @@ test('the lanes are the board, and the count is a count', () => {
   assert.deepEqual([...lanes.matchAll(/'(Scoping|Terms|Legal|Ready to sign)'/g)].map((m) => m[1]),
     ['Scoping', 'Terms', 'Legal', 'Ready to sign']);
   assert.ok(!/closed/.test(lanes), 'a closed negotiation is being drawn as a lane');
-  // The artboard's own four, and its own `Nothing here` for an empty lane.
-  assert.ok(flat(CANVAS).includes("'Scoping','Terms','Legal','Ready to sign'"),
-    'the artboard’s lane list changed');
-  assert.ok(P3.includes('Nothing here'), 'the artboard’s empty-lane copy is gone');
-  assert.ok(zone.includes('Nothing here'), 'the zone stopped drawing an empty lane');
+  // D5938: the board is PP05 of `Pipeline v2` now, its lanes the recorded
+  // stages and its own "None at this stage" for an empty lane.
+  assert.ok(/const NEG = \{ Scoping: \[[\s\S]*?Terms: \[[\s\S]*?Legal: \[[\s\S]*?'Ready to sign': \[\] \}/.test(PP05),
+    'the PP05 lane list changed');
+  assert.ok(PP05.includes('None at this stage'), 'the PP05 empty-lane copy is gone');
+  assert.ok(zone.includes('None at this stage'), 'the zone stopped drawing an empty lane');
 
-  // THE LIMIT IS NOT PRINTED. The artboard's `n / 5` is its own sample.
-  assert.ok(flat(CANVAS).includes("count:String(cards.length) + ' / 5'"),
-    'the artboard stopped drawing a per-stage limit');
-  // `visible`, NOT `open`. The lanes filtered the unnarrowed list, so the four
-  // chips above them were inert — CodeQL surfaced it as an unused variable,
-  // which is what a computed-but-undrawn narrowing looks like from outside the
-  // React model. `profile_zone_filters.test.mjs` now holds that rule for every
-  // zone in every licence; this pins it for the board it was found on.
-  const lane = between(zoneRaw, 'const cards = visible.filter', '{/* ══ TERMS IN PLAY');
-  assert.ok(!/const cards = open\.filter/.test(zone),
+  // THE LIMIT IS NOT PRINTED. PP05 says so itself: "WIP limits · backend required".
+  assert.ok(PP05.includes('WIP limits · backend required'), 'the canvas stopped marking WIP limits as unbuilt');
+  // `visible`, NOT `open`. The lanes once filtered the unnarrowed list, so the
+  // four chips above them were inert — CodeQL surfaced it as an unused
+  // variable. `profile_zone_filters.test.mjs` holds that rule for every zone;
+  // this pins it for the board it was found on.
+  const lane = between(zoneRaw, 'const lanes = useMemo(', '{/* ══ THE EADWYN COUNTER');
+  assert.ok(/cards: visible\.filter\(\(r\) => r\.negotiation\.stage === key\)/.test(lane),
     'the lanes went back to drawing the unnarrowed board, so the chips select nothing');
-  assert.ok(!/\/ 5|\/5/.test(lane), 'the zone prints the canvas’s own WIP limit as this firm’s');
+  assert.ok(!/cards: open\.filter/.test(zone), 'the lanes draw the unnarrowed board');
+  assert.ok(!/\/ 5|\/5/.test(lane), 'the zone prints a WIP limit nothing stores');
   assert.ok(/\{cards\.length\}/.test(lane), 'the lane stopped counting its own cards');
   const opRow = between(actions, "'pipeline/negotiations': [", '],');
   assert.ok(/unbuilt/.test(opRow), 'the WIP-limit op became live over a limit nothing stores');
 
   // THE ONE OPEN QUESTION IS THE CARD'S REASON FOR EXISTING.
-  assert.ok(flat(P3).includes('a negotiation without a named blocker is a negotiation nobody is running'));
-  assert.ok(/r\.negotiation\.open_question\s*\n?\s*\|\| <Unrecorded>No blocker named<\/Unrecorded>/.test(lane),
+  const card = between(zoneRaw, 'function BoardCard(', 'function StageSelector(');
+  assert.ok(/n\.open_question\s*\n?\s*\|\| <Unrecorded>No blocker named<\/Unrecorded>/.test(card),
     'a card with no blocker named now looks finished');
   // A STALLED CARD IS MARKED, and the threshold is the strip's.
-  assert.ok(/\(r\.negotiation\.days_stalled \?\? 0\) >= 7/.test(lane),
+  assert.ok(/\(n\.days_stalled \?\? 0\) >= 7/.test(card),
     'the card stopped marking a stalled negotiation, or uses a second threshold');
 });
 
-test('the clause table is the artboard’s four columns, and only open terms', () => {
-  const grids = [...P3.matchAll(/grid-template-columns:([^;"]+)/g)].map((m) => m[1].trim());
-  const cols = grids.find((g) => g.includes('1.4fr'));
-  assert.ok(cols, 'the artboard’s clause-table grid is gone');
-  const head = [...P3.matchAll(/class="th"[^>]*>([^<]*)</g)].map((m) => m[1].trim());
-  assert.deepEqual(head, ['Client', 'You asked', 'They asked', 'Where it lands']);
-
-  const inst = between(zone, 'testid="terms-in-play"', '/>');
-  assert.ok(inst.includes(`cols="${cols}"`), `the instrument no longer uses the artboard grid ${cols}`);
-  assert.deepEqual(
-    [...between(inst, 'head={[', ']}').matchAll(/'([^']+)'/g)].map((m) => m[1]), head,
-    'the clause columns drifted from the artboard',
-  );
-  assert.ok(inst.includes('meta="The clause-level view · only here"'),
-    'the artboard’s subtitle for the clause table is gone');
-  assert.ok(P3.includes('The clause-level view · only here'));
-
+test('the terms sheet is PP05b’s three positions, and an empty landing is a state', () => {
+  const head = [...between(SHEET_CANVAS, '<table class="cmp3"><thead><tr>', '</tr></thead>').matchAll(/<th>([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(head, ['Term', 'We proposed', 'They proposed', 'Current position']);
+  const table = between(sheet, 'data-testid="terms-compare"', '</thead>');
+  assert.deepEqual([...table.matchAll(/<th scope="col"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]), head,
+    'the sheet’s columns drifted from PP05b');
   // THREE POSITIONS, AND THE THIRD MAY BE EMPTY WITHOUT THE ROW BEING
-  // INCOMPLETE — that is the whole reason a term carries three.
-  assert.ok(/t\.landing \? \{ text: t\.landing \} : \{ nr: true \}/.test(inst),
-    'a term with no landing is no longer drawn as still open');
-  assert.ok(flat(inst).includes('is not a gap in the record, it is a negotiation still running'),
-    'the note stopped saying why an empty landing is fine');
-  // ONLY OPEN TERMS. A settled clause belongs to the deal, not to the board.
-  assert.ok(/\.filter\(\(t\) => t\.state === 'open'\)/.test(inst),
-    'settled terms are back on the board');
+  // INCOMPLETE — a clause with no landing reads its state ("Open"), not a gap.
+  const current = between(sheet, 'function CurrentPosition(', 'function TermName(');
+  assert.ok(/if \(term\.landing\)/.test(current) && /return <span className="font-extrabold">\{label\}<\/span>;/.test(current),
+    'a term with no landing no longer reads its state');
 });
 
 test('all four chips select, and the close-probability refusal is the current one', () => {
@@ -187,14 +179,21 @@ test('all four chips select, and the close-probability refusal is the current on
     'the limits stopped saying the lane count is not a WIP limit');
 });
 
-test('the AI band is the artboard’s, and the counter is built from the clauses', () => {
-  assert.ok(P3.includes('Proposal · counter drafted'));
-  assert.ok(P3.includes('Send counter'));
+test('the AI band is PP05b’s counter, and the counter is built from the clauses', () => {
+  // D5938: PP05b draws the counter "not sent" with Accept counter draft, Edit
+  // terms and Discard, and no Send. The band draws "Not sent" and its three
+  // controls only while a draft exists (ZoneDraft's `item`).
+  for (const s of ['Eadwyn counter proposal · not sent', 'Accept counter draft', 'Edit terms', 'Discard']) {
+    assert.ok(SHEET_CANVAS.includes(s), `PP05b no longer draws ${s}`);
+  }
+  assert.ok(!/Send counter/.test(PP05 + SHEET_CANVAS), 'the PP05 canvas draws a Send counter');
   const band = between(zone, '<ZoneDraft', '/>');
   assert.ok(band.includes('surface="pipeline/negotiations"'));
-  assert.ok(band.includes('label="Proposal · counter drafted"'));
-  // D4693: the band saves a draft; nothing is sent from here, so it does not say "Send".
-  assert.ok(band.includes('accept="Save counter draft"'));
+  assert.ok(band.includes('label="Eadwyn counter proposal"'));
+  assert.ok(band.includes('status="Not sent"'));
+  assert.ok(band.includes('accept="Accept counter draft"'));
+  assert.ok(band.includes('editLabel="Edit terms"'));
+  assert.ok(!/Send counter/.test(zone), 'the zone offers to send a counter');
 
   assert.ok(spec.includes("'pipeline/negotiations': {"), 'the draft surface is not allow-listed');
   const surface = between(spec, "'pipeline/negotiations': {", "'pipeline/proposals': {");
