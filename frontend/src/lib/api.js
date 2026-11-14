@@ -757,6 +757,7 @@ export async function request(path, options = {}) {
       }
       throw e;
     }
+    if (res.status === 204) return null;
     const data = await res.json().catch(() => {
       throw new Error('Invalid response format from server');
     });
@@ -5159,9 +5160,6 @@ export const api = {
   fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
   fundSimScenarioDelete: (uid) =>
     request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
-  // Reuse the existing /api/capital/funds endpoint for the fund picker —
-  // it returns the canonical VCFund list with id/uid/name/total_commitment.
-  capitalFundsList: () => request('/capital/funds'),
 
   // Task #8 (IH) — Data import + migration tools.
   importsList: () => request('/imports/'),
